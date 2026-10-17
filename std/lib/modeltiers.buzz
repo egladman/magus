@@ -1,0 +1,35 @@
+/// modeltiers is the model-tier declaration a workspace gets when its magusfile declares
+/// none: three tiers, cheapest first, with the bounds and skill variant each one's jobs
+/// run under. Copy it into a magusfile to change any of it.
+///
+/// Every mapping is an exhaustive match, so a tier added to the enum fails the check
+/// until each function covers it. No model is named here: each harness spell maps the
+/// tiers to its own models.
+namespace modeltiers;
+
+import "magus";
+
+export enum ModelTier { economy, standard, principal }
+
+export final defaultTier = ModelTier.standard;
+
+/// bounds caps the context an economy worker may reach. It caps no tier's live jobs: a
+/// default that refused a workspace's next fork would surprise everyone who never asked
+/// for a cap, so maxLive is set only by a magusfile that declares one.
+export fun bounds(tier: ModelTier) > magus\ModelTierBounds {
+    return match (tier) {
+        .economy -> magus\ModelTierBounds{ maxContext = 100000 },
+        .standard -> magus\ModelTierBounds{},
+        .principal -> magus\ModelTierBounds{},
+    };
+}
+
+/// skills is the skill variant a tier's workers load. Economy gets the full bodies: a
+/// smaller model is the reader least able to re-derive the steps the short form drops.
+export fun skills(tier: ModelTier) > magus\SkillVariant {
+    return match (tier) {
+        .economy -> magus\SkillVariant.full,
+        .standard -> magus\SkillVariant.short,
+        .principal -> magus\SkillVariant.short,
+    };
+}

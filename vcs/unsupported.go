@@ -41,6 +41,8 @@ func (jjName) name() string      { return "jj" }
 //     to run before committing, and `magus vcs resolve` runs it.
 //   - hg, sl and jj, CheckoutReporter: not built yet, though hg's shares and jj's
 //     workspaces are registered checkouts too.
+//   - sl, CheckoutProvisioner: Sapling has no secondary checkout (see
+//     saplingVCS.IsSecondaryCheckout).
 //   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
 //     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
 //     workspaces.
@@ -212,6 +214,10 @@ func (declines[N]) RemoveCheckout(context.Context, string, string) error {
 }
 
 func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
+	return nil, decline[N](types.CapCheckoutProvisioner)
+}
+
+func (declines[N]) StrandedRevisions(context.Context, string, ...string) ([]string, error) {
 	return nil, decline[N](types.CapCheckoutProvisioner)
 }
 

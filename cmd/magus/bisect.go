@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/log/attr"
@@ -26,9 +26,9 @@ import (
 //
 // Supported VCSes: git, hg, sl. jj reports ErrUnsupported.
 func affectedBisect(ctx context.Context, root string, args []string) error {
-	var bf *gen.AffectedBisectFlags
+	var bf *flaggen.AffectedBisectFlags
 	if _, err := cmdParse("affected --bisect", args, func(fs *flag.FlagSet) {
-		bf = gen.BindAffectedBisect(fs)
+		bf = flaggen.BindAffectedBisect(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --bisect <project> [flags]")
 			fmt.Fprintln(os.Stderr, "")

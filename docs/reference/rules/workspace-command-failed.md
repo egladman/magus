@@ -14,7 +14,7 @@ A command the workspace's rule could not judge, so only the built-in rules grade
 
 ## Why
 
-A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. The first notice in a session names each failing side and its error; a repeat is one line naming what applied. It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. A workspace cannot set it: magus\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.
+A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. The first notice in a session names each failing side and its error; a repeat is one line naming what applied. It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. Standing alone, the one line is said once per caller: like every advisory not held by its own marker, the same text is not repeated to the same caller in a session. A workspace cannot set it: magus\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.
 
 ## Default and override
 

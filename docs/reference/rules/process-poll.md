@@ -1,12 +1,12 @@
 ---
 title: "process-poll: a process table inspected to wait on magus work the lock already reports"
-description: "An advisory by default: it explains, and blocks nothing, on a process table inspected to wait on magus work the lock already reports."
-tags: [guard, rules, process-poll, advise]
+description: "A deny rule by default: it refuses a process table inspected to wait on magus work the lock already reports, and names what to run instead."
+tags: [guard, rules, process-poll, deny]
 ---
 
 # process-poll
 
-An advisory by default: it explains, and blocks nothing, on a process table inspected to wait on magus work the lock already reports.
+A deny rule by default: it refuses a process table inspected to wait on magus work the lock already reports, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A magus run holds a project lock and announces itself, and `magus status --watch
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"process-poll": "deny"})
+magus\guard.builtins({"process-poll": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,8 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [process-poll]: ...
+deny [process-poll]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [process-poll]: ...` instead.
 
 `magus describe rule process-poll` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

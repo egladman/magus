@@ -13,9 +13,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -206,7 +206,7 @@ func sessionBriefCmd(ctx context.Context, root string) error {
 		if brief.Revision == "" {
 			return nil
 		}
-		return emitNames([]string{brief.Revision})
+		return emitNames(os.Stdout, []string{brief.Revision})
 	}
 	return emitFormatted(opts, brief)
 }
@@ -245,10 +245,10 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
 	brief.Failures = lastRunFailures(root)
-	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
+	brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
-	if base, err := rootmagus.ResolveCacheDir(root, rootmagus.WithLoadedConfig(globalCfg)); err == nil {
+	if base, err := rootmagus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
 				if item.NeedsReview() {
@@ -359,7 +359,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // leases are live. It names those taken in this checkout and the caller's own binding,
 // editing jobs first, up to briefMaxLeases, and counts the rest.
 func briefLeases(ctx context.Context, root string) (leases []briefLease, others int) {
-	store, err := openJobs(root)
+	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return nil, 0
 	}
@@ -367,17 +367,13 @@ func briefLeases(ctx context.Context, root string) (leases []briefLease, others 
 	if err != nil {
 		return nil, 0
 	}
-	claim := trail.SpawnFromEnv().Lease
-	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
-		claim = forwarded
-	}
-	acting, _, _ := checkoutLease(root, claim)
+	acting, _, _ := checkoutLease(ctx, root)
 	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
 			continue
 		}
-		mine := row.ID == acting || row.ID == claim ||
+		mine := row.ID == acting ||
 			(row.CheckoutRoot != "" && filepath.Clean(row.CheckoutRoot) == filepath.Clean(root))
 		if !mine {
 			others++
@@ -464,9 +460,9 @@ func ruleLocations(ctx context.Context, root string, wired ...string) []string {
 	return out
 }
 
-// relativeTo renders absolute paths inside root as workspace-relative ones, which is
+// relativePaths renders absolute paths inside root as workspace-relative ones, which is
 // the spelling every other magus command prints and takes back.
-func relativeTo(root string, paths []string) []string {
+func relativePaths(root string, paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {

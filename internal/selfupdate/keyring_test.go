@@ -35,7 +35,7 @@ func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-magus", "action.yml"))
 	require.NoError(t, err)
 
-	for _, key := range ReleaseKeys.Verifiers() {
+	for _, key := range ReleaseKeys().Verifiers() {
 		keyHex := hex.EncodeToString(key.Pub)
 		assert.Equal(t, 1, strings.Count(string(installer), keyHex),
 			"installer must carry release key %s exactly once", key.ID)
@@ -45,7 +45,7 @@ func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 
 	// A revoked key must be gone from both, or the two install paths keep accepting
 	// what self update has already been told to refuse.
-	for _, key := range ReleaseKeys {
+	for _, key := range ReleaseKeys() {
 		if key.State != KeyRevoked {
 			continue
 		}
@@ -59,7 +59,7 @@ func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 // what an error message names and what the signed index declares, so a change to how
 // it is computed renames a key the field has already seen.
 func TestKeyIDIsDerivedNotDeclared(t *testing.T) {
-	active, err := ReleaseKeys.Active()
+	active, err := ReleaseKeys().Active()
 	require.NoError(t, err)
 	assert.Equal(t, "59160bb7b179dc68", active.ID)
 	assert.Equal(t, active.ID, KeyID(active.Pub), "the ID must follow from the key, never from the file")
@@ -129,7 +129,7 @@ func TestRevokedIDsAreWhatGetsPublished(t *testing.T) {
 		{ID: KeyID(revokedPub), State: KeyRevoked, Pub: revokedPub},
 	}
 	assert.Equal(t, []string{KeyID(revokedPub)}, ring.RevokedIDs())
-	assert.Empty(t, ReleaseKeys.RevokedIDs(), "nothing is revoked today; publishing an ID would strand it")
+	assert.Empty(t, ReleaseKeys().RevokedIDs(), "nothing is revoked today; publishing an ID would strand it")
 }
 
 func mustPair(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
@@ -145,9 +145,9 @@ func mustKey(t *testing.T) ed25519.PublicKey {
 	return pub
 }
 
-// ringOf wraps a test public key as a one-key active ring, the shape every call site
+// activeRing wraps a test public key as a one-key active ring, the shape every call site
 // had before the ring existed.
-func ringOf(pub ed25519.PublicKey) Keyring {
+func activeRing(pub ed25519.PublicKey) Keyring {
 	return Keyring{{ID: KeyID(pub), State: KeyActive, Pub: pub}}
 }
 

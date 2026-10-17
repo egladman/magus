@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 )
 
 // detachRun starts this invocation again without --detach, as its own session leader
@@ -67,7 +67,7 @@ func withoutDetachFlag(args []string) []string {
 			out = append(out, args[i:]...)
 			break
 		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); strings.HasPrefix(a, "-") && key == gen.FlagRunDetach {
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); strings.HasPrefix(a, "-") && key == flaggen.FlagRunDetach {
 			continue
 		}
 		out = append(out, a)

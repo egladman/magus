@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 )
 
 // shorthandName is the de facto short name for magus. Every shipped completion
@@ -27,7 +27,7 @@ func installShorthandCmd(args []string) error {
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = installShorthandUsage
-	sf := gen.BindSelfInstallShorthand(fs)
+	sf := flaggen.BindSelfInstallShorthand(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

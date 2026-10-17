@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -13,18 +14,32 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
-// The reasons the binary judging a call cannot read the tree's guard policy, as
-// unloadCause names them.
+// unloadKind is why the binary judging a call cannot read the tree's guard policy.
+type unloadKind int
+
 const (
-	// causeStale is a load failure shaped like a binary older than the tree: a name the
+	// unloadNone is a tree that loaded, or a failure only its author fixes (a typo).
+	unloadNone unloadKind = iota
+	// unloadStale is a load failure shaped like a binary older than the tree: a name the
 	// magusfile reaches for that this build has never heard of.
-	causeStale = "stale"
-	// causeNoBinary is a load failure in a checkout that holds no ./magus, so whatever
+	unloadStale
+	// unloadNoBinary is a load failure in a checkout that holds no ./magus, so whatever
 	// judges the call is a magus installed somewhere else.
-	causeNoBinary = "no-binary"
+	unloadNoBinary
+	// unloadSkewedSpell is a ./magus built on the other side of a spell's addition or
+	// removal, which may be newer than the tree as well as older.
+	unloadSkewedSpell
 )
+
+// unloadReason is what unloadCause found. Spell is the spell the tree carries and the
+// binary does not ship, "" for none; a checkout with no ./magus can have one too.
+type unloadReason struct {
+	Cause unloadKind
+	Spell string
+}
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
 const (
@@ -41,19 +56,24 @@ const (
 var guardRuleCall = []byte(`magus\guard.`)
 
 // unloadCause says why the working tree's policy did not load in a way only a different
-// binary fixes, or "" when the failure is something else (a typo in a magusfile) or the
-// tree loaded. A checkout holding no ./magus counts whatever the error says: the judge is
-// a PATH binary nobody pinned to this tree.
-func unloadCause(loadFailure error, root string) string {
-	switch {
-	case loadFailure == nil || root == "":
-		return ""
-	case ward.IsStaleBinary(loadFailure):
-		return causeStale
-	case !hasMagusBinary(root):
-		return causeNoBinary
+// binary fixes, unloadNone when the failure is something else (a typo in a magusfile) or
+// the tree loaded. A checkout holding no ./magus counts whatever the error says: the judge
+// is a PATH binary nobody pinned to this tree.
+func unloadCause(loadFailure error, root string) unloadReason {
+	if loadFailure == nil || root == "" {
+		return unloadReason{}
 	}
-	return ""
+	if ward.IsStaleBinary(loadFailure) {
+		return unloadReason{Cause: unloadStale}
+	}
+	spell := skewedSpell(loadFailure, root)
+	switch {
+	case !hasMagusBinary(root):
+		return unloadReason{Cause: unloadNoBinary, Spell: spell}
+	case spell != "":
+		return unloadReason{Cause: unloadSkewedSpell, Spell: spell}
+	}
+	return unloadReason{}
 }
 
 // declaresGuardRule reports whether root's magusfile visibly registers a guard rule. It
@@ -178,6 +198,8 @@ func readOnlyInvocation(c hint.Invocation, dynamic bool, magusAllowed func(args 
 		return false
 	case name == "sed":
 		return !rewritesInPlace(c)
+	case name == "awk" || name == "gawk" || name == "mawk" || name == "nawk":
+		return awkReadOnly(c.Args)
 	case name == "sort":
 		return !slices.ContainsFunc(c.Args, func(a string) bool { return a == "-o" || strings.HasPrefix(a, "--output") })
 	case name == "find":
@@ -195,6 +217,30 @@ func readOnlyInvocation(c hint.Invocation, dynamic bool, magusAllowed func(args 
 		return magusAllowed(c.Args)
 	}
 	return false
+}
+
+// awkReadOnly reports an awk run whose program is on the line and cannot write: no program
+// file, no flag beyond -F and -v, and no redirect, pipe or system() in the program. A `>`
+// comparison reads as a redirect here, which errs toward refusing.
+func awkReadOnly(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "-F" || a == "-v":
+			i++
+		case strings.HasPrefix(a, "-F") || strings.HasPrefix(a, "-v"):
+		case a == "--":
+			return i+1 < len(args) && awkProgramReadOnly(args[i+1])
+		case strings.HasPrefix(a, "-"):
+			return false
+		default:
+			return awkProgramReadOnly(a)
+		}
+	}
+	return false
+}
+
+func awkProgramReadOnly(program string) bool {
+	return !strings.ContainsAny(program, ">|") && !strings.Contains(program, "system")
 }
 
 // gitReadSubcommands read a repository and take no flag that writes one, bar --output,
@@ -299,17 +345,28 @@ func scoutRecord(args []string) bool {
 }
 
 // recoveryLine reports the line that gets a binary able to load this tree: the rebuild, the
-// relink, or the bootstrap it falls back to. Each stands alone on its line. A leased
-// worker's only one is the placement of its base's binary: a worker building a second is
-// the thing the deny exists to prevent.
-func recoveryLine(command string, d Dialect, lease string) bool {
+// relink, or the bootstrap it falls back to, and for anyone the line that finishes or backs
+// out of an interrupted cherry-pick, merge or rebase, or adds a worktree, since a tree left
+// mid-pick links no binary at all. Each stands alone on its line. builds is whether the
+// caller builds this checkout's binary: the root, or the checkout's integrator. Any other
+// leased worker's binary fixes are the placement of its base's, and the fast-forward of its
+// branch to the commit its placed binary was built at (see fastForward): a worker building
+// a second is the thing the deny exists to prevent.
+func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
 	}
 	words := literalWords(call.Args)
-	if lease != "" {
-		return len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
+	if vcsRecoveryLine(words) && onlyEditorAssigns(call.Assigns) {
+		return true
+	}
+	if lease != "" && len(call.Assigns) == 0 && fastForward(hint.Invocation{Name: path.Base(words[0]), Args: words[1:]}) {
+		return true
+	}
+	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
+	if lease != "" && (placement || !builds) {
+		return placement
 	}
 	switch prog := path.Base(words[0]); {
 	case words[0] == "go":
@@ -326,11 +383,41 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 	return false
 }
 
+// vcsRecoveryLine reports a git line that continues or aborts an interrupted cherry-pick,
+// merge, rebase or revert, or adds a worktree.
+func vcsRecoveryLine(words []string) bool {
+	if len(words) < 3 || path.Base(words[0]) != "git" {
+		return false
+	}
+	switch words[1] {
+	case "cherry-pick", "merge", "rebase", "revert":
+		return len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue")
+	case "worktree":
+		return words[2] == "add"
+	}
+	return false
+}
+
+// onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
+// opens for a continued pick's message.
+func onlyEditorAssigns(assigns []*syntax.Assign) bool {
+	for _, a := range assigns {
+		if a.Name == nil || (a.Name.Value != "GIT_EDITOR" && a.Name.Value != "GIT_SEQUENCE_EDITOR") {
+			return false
+		}
+	}
+	return true
+}
+
 // commandCall describes a shell line to denyUnloaded. A line is a change unless it proves
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
 func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
-	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease}
+	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "", command: in.command, dialect: in.dialect}
+	if !call.builds {
+		role, _ := actingRole(ctx, at, in.lease, "")
+		call.builds = role == types.AgentRoleIntegrator
+	}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
 		return call
@@ -338,23 +425,26 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	if in.mcpTool != "" {
 		call.what = "this call to the magus " + in.mcpTool + " tool"
 	}
-	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
-		_, row := actingRole(ctx, at, in.lease)
+		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
 	}
 	return call
 }
 
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it
-// cannot load the tree's guard policy: the cause and the likeliest fix inline, the call,
-// the failures and the fallbacks behind the ref.
-func staleBinaryDenial(call judgedCall, cause string, failures []string, own bool, root string) denial {
+// cannot load the tree's guard policy for reason: the cause and the likeliest fix inline,
+// the call, the failures and the fallbacks behind the ref.
+func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
-	fix := binaryRemedy(own, hasBinary, call.lease)
+	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
-	case cause == causeNoBinary, own && !hasBinary:
+	case reason.Cause == unloadSkewedSpell:
+		problem = "./magus was built from another commit than this tree: it ships no spell " + strconv.Quote(reason.Spell) +
+			", which the tree carries, so it cannot load its guard policy"
+	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
@@ -365,7 +455,10 @@ func staleBinaryDenial(call judgedCall, cause string, failures []string, own boo
 		why.WriteString("\n  " + f)
 	}
 	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
-		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.")
+		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
+		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`. " +
+		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}
@@ -378,18 +471,27 @@ func staleBinaryDenial(call judgedCall, cause string, failures []string, own boo
 type binaryFix struct{ say, why, placeFor string }
 
 // next is the fix's command, served as the deny's next under rule.
-func (f binaryFix) next(rule denyRuleName) []hint.Next {
+func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 	if f.placeFor == "" {
 		return nil
 	}
-	return []hint.Next{placementNext(rule, f.placeFor)}
+	return []types.NextStep{placementNext(rule, f.placeFor)}
 }
 
 // binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
 // leased worker is never told to build: there is one binary per base, and the main
 // session builds it and places a copy in each worker checkout.
-func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
+func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
+	if builds {
+		lease = ""
+	}
 	switch {
+	case lease != "" && own && hasBinary:
+		return binaryFix{
+			say:      "ask the main session to place a ./magus that loads this workspace",
+			why:      workerFastForward + "\n" + onePerBase,
+			placeFor: lease,
+		}
 	case lease != "" && own:
 		return binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",
@@ -420,9 +522,15 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 const placementScript = "hack/dev/bootstrap-worktree.buzz"
 
 // onePerBase is why a worker never builds magus, worded as hack/policy/builds.buzz words it.
-const onePerBase = "The main session places one binary per base commit: it builds ./magus once, in the root checkout, " +
+const onePerBase = "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, " +
 	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
 	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
+
+// workerFastForward is the fix a leased worker runs itself when its placed ./magus was built
+// ahead of its checkout.
+const workerFastForward = "When ./magus was built at a commit ahead of this checkout, fast-forward this checkout's branch to it first, alone on its line: " +
+	"`git merge --ff-only <commit>`, with the commit `./magus version -o template='{{.commit}}'` prints. " +
+	"git refuses it when the branch has diverged from that commit, and then only a placed ./magus fixes this."
 
 // workerBuildVerdict is the verdict for a worker building magus. Its command is
 // placementNext, served apart from it.
@@ -430,7 +538,7 @@ const workerBuildVerdict = "a worker does not build magus; ask the main session 
 
 // placementNext is the command that places the main checkout's ./magus in lease's checkout.
 // The main checkout stays a placeholder: a worker's checkout does not say which one it is.
-func placementNext(rule denyRuleName, lease string) hint.Next {
+func placementNext(rule denyRuleName, lease string) types.NextStep {
 	return hint.NextForDenyRemedy(string(rule), placementArgv(lease), "copies the main checkout's ./magus into this checkout.")
 }
 
@@ -440,7 +548,7 @@ func placementArgv(lease string) []string {
 }
 
 // placesBinary reports whether n is lease's placement of ./magus.
-func placesBinary(n hint.Next, lease string) bool {
+func placesBinary(n types.NextStep, lease string) bool {
 	return lease != "" && slices.Equal(n.Argv, placementArgv(lease))
 }
 

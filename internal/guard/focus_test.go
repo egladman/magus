@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,7 +87,7 @@ func TestFocusReadOperands(t *testing.T) {
 }
 
 func TestFocusVerdictAdvisesWithoutALease(t *testing.T) {
-	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"../libs/ui/theme.css"})
+	got := focusVerdict(appFocus(t), nil, "", "/ws", "/ws/app", []string{"../libs/ui/theme.css"})
 	// The prose is checked by substring below, so it is copied across rather than spelled out.
 	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Why: got.Why, Brief: got.Brief}, got)
 	assert.Contains(t, got.Why, "app, libs/core", "the rationale names the focus, behind the ref")
@@ -106,15 +107,27 @@ func TestFocusVerdictStaysSilentInsideTheFocus(t *testing.T) {
 		"../.claude/skills/x/S.md", // the session's own instructions
 		"/elsewhere/other/x.go",    // outside the workspace: a different rule's business
 	} {
-		assert.Empty(t, focusVerdict(focus, "", "/ws", "/ws/app", []string{op}).Decision, op)
+		assert.Empty(t, focusVerdict(focus, nil, "", "/ws", "/ws/app", []string{op}).Decision, op)
 	}
+}
+
+// A `~` operand read from a project outside the focus was joined under that project as a
+// directory named ~, and so read as that project's file.
+func TestFocusVerdictPlacesAHomePathOutsideTheWorkspace(t *testing.T) {
+	focus, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
+	require.True(t, ok)
+	assert.Empty(t, focusVerdict(focus, nil, "lease-a", "/ws", "/ws/web", []string{"~/.claude/plans/p/RESUME.md"}).Decision)
+
+	home := t.TempDir()
+	assert.Equal(t, []string{filepath.Join(home, ".claude/plans/p/RESUME.md"), "/ws/web/x/y.go"},
+		focusReadPaths("cd ~/.claude/plans && cat p/RESUME.md; cd /ws/web && cat x/y.go", "/ws/app", home))
 }
 
 func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	focus, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
 	require.True(t, ok)
 
-	got := focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"web/server.go"})
+	got := focusVerdict(focus, nil, "lease-a", "/ws", "/ws", []string{"web/server.go"})
 	assert.Equal(t, "deny", got.Decision)
 	assert.Contains(t, got.Reason, "outside the focus lease lease-a was given (app)")
 	// The actor, not the tool: naming the tool reads as permission, and two personas
@@ -126,20 +139,20 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	assert.Empty(t, got.Context, "a deny carries its reason, never a context the host would inject alongside it")
 
 	// The same lease reading its own dependency is not a boundary crossing.
-	assert.Empty(t, focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"libs/core/core.go"}).Decision)
+	assert.Empty(t, focusVerdict(focus, nil, "lease-a", "/ws", "/ws", []string{"libs/core/core.go"}).Decision)
 }
 
 func TestFocusVerdictWideningIsWhatTheLeaseDeclares(t *testing.T) {
 	// The write paths alone deny the read...
 	narrow, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
 	require.True(t, ok)
-	assert.Equal(t, "deny", focusVerdict(narrow, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
+	assert.Equal(t, "deny", focusVerdict(narrow, nil, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
 
 	// ...and a declared focus is the one thing that opens it, without handing the
 	// lease the right to WRITE what it may now read.
 	wide, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**", "libs/ui"})
 	require.True(t, ok)
-	assert.Empty(t, focusVerdict(wide, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
+	assert.Empty(t, focusVerdict(wide, nil, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)
 }
 
 // A lease's read paths widen its write paths; they never replace them. A worker leased
@@ -158,8 +171,19 @@ func TestLeaseFocusReadPathsWidenTheWritePaths(t *testing.T) {
 	assert.False(t, ok, "a lease that declares neither has no focus")
 }
 
+// A pattern opening with a wildcard names no project, yet the lease declared the file.
+func TestFocusVerdictAllowsAWildcardDeclaredPath(t *testing.T) {
+	declared := []string{"app/**", "**/*.md"}
+	focus, ok := project.FocusForPaths(newFocusFixture(), declared)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"app", "libs/core"}, focus.Projects)
+
+	assert.Empty(t, focusVerdict(focus, declared, "lease-a", "/ws", "/ws", []string{"web/README.md"}).Decision)
+	assert.Equal(t, "deny", focusVerdict(focus, declared, "lease-a", "/ws", "/ws", []string{"web/server.go"}).Decision)
+}
+
 func TestFocusVerdictReportsTheFirstOperandThatLeaves(t *testing.T) {
-	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
+	got := focusVerdict(appFocus(t), nil, "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
 	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Why: got.Why, Brief: got.Brief}, got,
 		"one explanation per command, not one per operand")
 }

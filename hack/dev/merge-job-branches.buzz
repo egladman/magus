@@ -12,7 +12,7 @@ import "hack/magusfile/branch-stack" as stack;
 import "assert";
 
 final USAGE = "usage: magus buzz hack/dev/merge-job-branches.buzz -- (--jobs <id,...> | --branches <name,...> | --stack <file|->) [--base <rev>] [--into <branch>] [-o json] [--apply] [--verify]";
-final HELP = "cost: a temporary worktree and one merge per branch; --apply also regenerates once, --verify runs every merged job's checks\n{USAGE}";
+final HELP = "cost: a temporary worktree and one merge per branch; --apply also regenerates once, --verify runs every merged job's checks, and so does --apply once a file settled by job claims\n{USAGE}";
 
 final PRIMARY = "check";
 
@@ -338,16 +338,37 @@ export fun conflictReason(branch: str, into: str, found: [Conflict]) > str {
     return parts.join("\n");
 }
 
-fun settleWithMagus(dir: str, branch: str) > void !> any {
+// CLAIMS_SETTLED starts the line `magus vcs resolve` prints for a file it settled because
+// two jobs that both passed wrote it through disjoint claims.
+final CLAIMS_SETTLED = "vcs resolve: settled ";
+
+// settleWithMagus merges branch into dir with `magus vcs resolve`, returning the files it
+// settled by job claims as resolve names them.
+fun settleWithMagus(dir: str, branch: str) > [str] !> any {
     // vcs resolve raises when a conflict it does not settle is left; what is left is read
-    // from the tree either way.
+    // from the tree either way, and the layer stops there, so its settles do not matter.
+    var said = "";
     try {
-        magus\cmd("vcs", args: ["resolve", "--against", branch], opts: {"dir": dir, "root": dir, "quiet": true});
+        said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: {"dir": dir, "root": dir, "quiet": true}).stdout;
     } catch (e) {
         if (!gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"])) {
             throw "merge-job-branches: merging {branch} did not start: {e}; the tree holds {lines(git(dir, args: ["status", "--porcelain"])).join(", ")}";
         }
     }
+    final settled = mut [<str>];
+    foreach (l in lines(said)) {
+        if (l.startsWith(CLAIMS_SETTLED)) { settled.append(l); }
+    }
+    return settled;
+}
+
+// settledByClaims reports whether a layer of s merged with a file settled by job claims,
+// which no merged branch's own check ran against.
+export fun settledByClaims(s: stack\BranchStack) > bool {
+    foreach (l in s.layers) {
+        if (l.status == "merged" and l.reason.indexOf(CLAIMS_SETTLED) != null) { return true; }
+    }
+    return false;
 }
 
 fun regenerateWithMagus(base: str) > fun (dir: str) > void !> any {
@@ -380,8 +401,9 @@ fun unstaged(dir: str) > [str] !> any {
 // the first source conflict, aborting that merge so the tree holds only the layers before
 // it; the conflicting layer says why and every later one stays planned. It returns the
 // layers with their statuses. settle merges a branch into dir and settles what it can,
-// leaving the merge in progress with only the conflicts nothing could settle.
-export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (dir: str, branch: str) > void !> any) > stack\BranchStack !> any {
+// leaving the merge in progress with only the conflicts nothing could settle, and returns
+// the files it settled by job claims, which the merged layer's reason lists.
+export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (dir: str, branch: str) > [str] !> any) > stack\BranchStack !> any {
     final acc = mut [<stack\StackLayer>];
     final merged = mut [<str>];
     var stopped = "";
@@ -394,7 +416,7 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
         } else if (gitOK(dir, args: ["merge-base", "--is-ancestor", l.branch, "HEAD"])) {
             reason = "already in the tree";
         } else {
-            settle(dir, branch: l.branch);
+            final settled = settle(dir, branch: l.branch);
             final found = conflicts(dir);
             if (found.len() > 0) {
                 final annotated = mut [<Conflict>];
@@ -412,7 +434,9 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
                     git(dir, args: ["commit", "--no-edit", "--no-verify"]);
                 }
                 merged.append(l.branch);
-                reason = "merged as {git(dir, args: ["rev-parse", "--short", "HEAD"])}";
+                final said = mut ["merged as {git(dir, args: ["rev-parse", "--short", "HEAD"])}"];
+                foreach (line in settled) { said.append(line); }
+                reason = said.join("\n");
             }
         }
         acc.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
@@ -675,7 +699,9 @@ export fun main(args: [str]) > void !> any {
             if (!allMerged(result)) { return; }
             regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base));
             git(root, args: ["branch", into, git(dir, args: ["rev-parse", "HEAD"])]);
-            if (verify) { verdicts = verifyLayers(dir, s: result); }
+            // A file settled by job claims is a merge no job's check has seen, so every
+            // merged job's checks run on it whether or not --verify asked.
+            if (verify or settledByClaims(result)) { verdicts = verifyLayers(dir, s: result); }
         });
     } else {
         requireBranch(root, branch: into);
@@ -706,7 +732,7 @@ export fun main(args: [str]) > void !> any {
         if (regenerated != "") { std\print("regenerated output committed apart as {regenerated.sub(0, len: 12)}"); }
     }
     var passed = true;
-    if (verify and verdicts.len() > 0) {
+    if (verdicts.len() > 0) {
         if (format == "text") { std\print(""); }
         passed = printVerdicts(verdicts);
     }
@@ -953,6 +979,28 @@ test "a split stack merged back yields the original change's tree" {
         tree =git(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
     });
     assert\equal(tree, want: git(root, args: ["rev-parse", "change^\{tree\}"]), message: "the merged tree is the change's");
+    fs\removeAll(root);
+}
+
+test "a layer settled by job claims says so, and only then does the merge owe a verify" {
+    final root = fixtureRepo();
+    final plan = planStack(root, names: ["gen-b", "edit-a"]);
+    final line = "{CLAIMS_SETTLED}src/a.txt by job claims: src/a.txt#A (job a) against src/a.txt#B (job b); every job passed";
+    var plain = plan;
+    var claimed = plan;
+    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+        plain = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
+    });
+    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+        claimed = mergeLayers(dir, s: plan, into: "integration", settle: fun (d: str, branch: str) > [str] !> any {
+            settleWithMagus(d, branch: branch);
+            if (branch == "edit-a") { return [line]; }
+            return [<str>];
+        });
+    });
+    assert\equal(settledByClaims(plain), want: false, message: "no file settled by claims");
+    assert\equal(settledByClaims(claimed), want: true, message: "edit-a settled one");
+    assert\equal(claimed.layers[1].reason.split("\n")[1], want: line, message: "the layer lists the settle under its merge");
     fs\removeAll(root);
 }
 

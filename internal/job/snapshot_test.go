@@ -12,7 +12,7 @@ import (
 func TestSnapshotFromContext(t *testing.T) {
 	t.Parallel()
 
-	readErr := errors.New("jobs.json: unexpected end of JSON input")
+	readErr := errors.New("jobs.jsonl line 1: unexpected end of JSON input")
 	row := func() types.Job {
 		return types.Job{ID: "orchestrator/guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	}

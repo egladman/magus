@@ -8,6 +8,7 @@ ci
 ci.provider
 clean
 cmd
+conformance
 describe
 describe.charm
 describe.evaluatedProject
@@ -40,6 +41,7 @@ guard.command
 guard.count
 guard.deny
 guard.once
+guard.profile
 guard.shell
 guard.spawn
 guard.write
@@ -53,6 +55,8 @@ job
 job.clear
 job.exit
 job.list
+job.modelTier
+job.modelTiers
 job.put
 job.register
 job.wait

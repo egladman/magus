@@ -31,6 +31,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [lease-invalid]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [lease-invalid]: ...` instead.
+
 `magus describe rule lease-invalid` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

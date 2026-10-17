@@ -8,9 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module semver -lang buzz -out ../internal/interp/bindings/gen/semver.go
-
-func init() { Register(Semver) }
+//go:generate go run ../cmd/magus-utils bindings -module semver -lang buzz -out ../internal/interp/bindings/gen/semver.go -pkg bindgen
 
 // Semver is the "semver" host module: semantic version parsing and comparison.
 var Semver = Module{

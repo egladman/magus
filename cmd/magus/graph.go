@@ -16,21 +16,25 @@ import (
 	"strings"
 	"time"
 
-	magus "github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -77,7 +81,7 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
 		graphErrorUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 }
 
@@ -111,8 +115,8 @@ func graphUsage() {
 // way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless. A reindex refused
-// because an outer run holds the project's lock (MGS3007) fails the build once the rest is
-// done.
+// because an outer run holds the project's lock (MGS3007), or because the machine's build
+// budget is full (MGS3009), fails the build once the rest is done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
 	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
@@ -183,16 +187,16 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 	}
 	if refused != nil {
-		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock to refresh: %w", refused)
+		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused)
 	}
 	return nil
 }
 
 // reindexRefusals is the part of a reindex failure that fails `graph build`: each project
-// refused because the run this one is nested inside holds its lock (MGS3007). A missing
-// indexer is the machine's state and stays a warning. A refusal is the caller's own nesting,
-// and an exit 0 under magus\cmd's quiet hid that the index it wanted stayed stale. Nil when
-// nothing was refused.
+// refused because the run this one is nested inside holds its lock (MGS3007), or because the
+// machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
+// machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
+// an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
 func reindexRefusals(err error) error {
 	errs := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
@@ -200,7 +204,7 @@ func reindexRefusals(err error) error {
 	}
 	var refused []error
 	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) {
 			refused = append(refused, e)
 		}
 	}
@@ -260,7 +264,7 @@ func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildH
 	var gaps []types.KnowledgeSymbolGap
 	probed := false
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
-		gaps, probed = magus.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
+		gaps, probed = workspacegraph.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
 	}
 	if len(gaps) > 0 {
 		left = append(left, types.DescribeGaps(gaps))
@@ -320,9 +324,9 @@ func ingestSessions(ctx context.Context, root string) {
 // `magus run <target> --graph` and `magus affected <target> --graph` scope to a
 // run (those flags remain as scoped passthroughs).
 func graphDeps(ctx context.Context, root string, args []string) error {
-	var gf *gen.GraphDepsFlags
+	var gf *flaggen.GraphDepsFlags
 	pos, err := cmdParse("graph deps", args, func(fs *flag.FlagSet) {
-		gf = gen.BindGraphDeps(fs)
+		gf = flaggen.BindGraphDeps(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph deps [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
@@ -357,9 +361,9 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
 // makes building implicit: there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
-	var ef *gen.GraphExportFlags
+	var ef *flaggen.GraphExportFlags
 	pos, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
-		ef = gen.BindGraphExport(fs, gen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
+		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -405,7 +409,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}, pos)
 	}
 
-	opts, err := ResolveOutput(global.output, outputGraphML, outputDot)
+	opts, err := output.Parse(global.output, outputGraphML, outputDot)
 	if err != nil {
 		return err
 	}
@@ -461,7 +465,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		for _, n := range out.Nodes {
 			names = append(names, n.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide: a routing summary, not a data dump (counts by kind and relation).
@@ -484,7 +488,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 //
 // Two kinds qualify, for the same reason and not the obvious one. Locally OBSERVED data
 // (run timings, output refs, coverage, loaded agent contact) varies by machine. Git HISTORY (author nodes,
-// per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
+// co_changes edges, per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
 // the sharper problem for a checked-in export: committing anything changes the churn, so
 // the artifact invalidates itself and the drift gate fires on the commit that just fixed
 // it. The @dirs shard calls its inputs deterministic, which is true per HEAD and is not the
@@ -521,7 +525,7 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 
 	links := g.Links[:0]
 	for _, link := range g.Links {
-		if link.Provenance == knowledge.ProvenanceRuntime || link.Relation == types.RelationAuthored {
+		if link.Provenance == knowledge.ProvenanceRuntime || link.Relation == types.RelationAuthored || link.Relation == types.RelationCoChanges {
 			continue
 		}
 		links = append(links, link)
@@ -534,9 +538,9 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // coverage. It reads the graph cache-first rather than git history, the
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
-	var sf *gen.GraphStatsFlags
+	var sf *flaggen.GraphStatsFlags
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
-		sf = gen.BindGraphStats(fs)
+		sf = flaggen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			printOwnDefaults(fs)
@@ -564,7 +568,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		for _, god := range out.Gods {
 			names = append(names, god.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	return statsText(out)
 }
@@ -629,7 +633,7 @@ func inspectForRead(_ context.Context, root string) (graphWorkspace, error) {
 	if m, ok := loadedMagus(); ok {
 		return m, nil
 	}
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +660,7 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		if err != nil {
 			return nil, err
 		}
-		return magus.BuildGlobalKnowledgeGraph(ctx, full, cfg, refresh, slog.Default())
+		return workspacegraph.BuildGlobal(ctx, full, cfg, refresh, slog.Default())
 	}
 	if refresh {
 		// Before paying to rebuild, take the published copy if this workspace names one.
@@ -665,12 +669,12 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		// through the VCS refresh hook's sync-graph job.
 		seedFromPublishedGraph(ctx, ws)
 	}
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
 	if includeSymbols {
-		if err := magus.MergeWorkspaceSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
+		if err := workspacegraph.MergeSymbols(ctx, ws, ws.Root(), cfg, g, slog.Default()); err != nil {
 			return nil, err
 		}
 	}
@@ -690,11 +694,11 @@ func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, r
 }
 
 func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error) {
-	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if err := magus.MergeWorkspaceSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
+	if err := workspacegraph.MergeSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -734,7 +738,7 @@ type graphRenderOptions struct {
 
 // renderWorkspaceGraph emits the project dependency graph; respects -o (text|json|yaml|dot|tree).
 func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opts graphRenderOptions) error {
-	outOpts, err := ResolveOutput(global.output, outputDot, outputTree)
+	outOpts, err := output.Parse(global.output, outputDot, outputTree)
 	if err != nil {
 		return err
 	}
@@ -776,7 +780,7 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		for _, n := range out.Nodes {
 			names = append(names, n.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
 	}
@@ -848,17 +852,17 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		if serve {
 			slog.ErrorContext(ctx, "--targets and --serve cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("Target graphs are small; they always use the URL fragment."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		if globalScope {
 			slog.ErrorContext(ctx, "--targets and --global cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("--targets scopes to this workspace's target graph; use a positional argument to scope to one project."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		if refresh {
 			slog.ErrorContext(ctx, "--targets and --refresh cannot be used together.", attr.Notice("magus graph export --open"),
 				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
@@ -922,7 +926,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -958,7 +962,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 			slices.Sort(paths)
 			slog.ErrorContext(ctx, fmt.Sprintf("unknown project %q", scope), attr.Notice("magus graph export --open --targets"),
 				attr.Why("valid projects:\n  "+strings.Join(paths, "\n  ")))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		out.Projects = filtered
 	}
@@ -983,7 +987,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -1189,18 +1193,18 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		if err := probeLiveBridge(pctx, hostPort); err != nil {
 			slog.ErrorContext(ctx, "the console is not reachable.", attr.Notice("magus graph export --open --follow --print"),
 				attr.Why("start it: "+hint.ServerStart.String()))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
 		slog.ErrorContext(ctx, "", attr.Notice("magus graph export --open --follow"), attr.Error(err),
 			attr.Why("start it yourself to see the server's own output: "+hint.ServerStart.String()))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 
 	code, err := mintConsoleLinkCode()
 	if err != nil {
 		slog.ErrorContext(ctx, "could not mint a sign-in code for the link", attr.Notice("magus graph export --open --follow"), attr.Error(err))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 
 	linkOpts := console.LinkOpts{Host: hostPort, App: "graph", Code: code}
@@ -1219,7 +1223,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	if err := openBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }

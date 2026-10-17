@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
-	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -54,7 +54,7 @@ func TestCheckVCSRefusesWhatCannotServeTheQueue(t *testing.T) {
 		{name: "remote read fails", remote: errors.New("boom"), readsRemote: true, wantErr: "/clone: boom"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			drv := magusmocks.NewMockVCSDriver(t)
+			drv := typestest.NewMockVCSDriver(t)
 			drv.EXPECT().Checkouts(mock.Anything, "/clone").Return(nil, tc.checkouts)
 			if tc.readsRemote {
 				drv.EXPECT().RemoteURL(mock.Anything, "/clone", "origin").Return("https://example.invalid/r.git", tc.remote)

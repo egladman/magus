@@ -37,11 +37,11 @@ proofread explain filler
 Pipe a message to the `commit-message` kind and read the lines it prints:
 
 ```sh
-printf 'Update the parser\n\nIt simply works.\n' | proofread commit-message -format text
+printf 'Update the parser\n\nIt simply works.\n' | proofread commit-message --stdin -o text
 ```
 
-`-format text` prints one line per finding, `path:line:col: CODE rule [decision]
-message`, and a count on stderr when there are findings. Without `-fail-on` the exit
+`-o text` prints one line per finding, `path:line:col: CODE rule [decision]
+message`, and a count on stderr when there are findings. Without `--fail-on` the exit
 code stays 0, so the line is advice.
 
 ## 3. Install a git commit-msg hook
@@ -50,7 +50,7 @@ code stays 0, so the line is advice.
 
    ```sh
    #!/bin/sh
-   exec proofread commit-message -format text -fail-on deny "$1"
+   exec proofread commit-message -o text --fail-on deny "$1"
    ```
 
 2. Mark it executable:
@@ -77,7 +77,7 @@ transaction and pipe it to stdin.
 
    ```ini
    [hooks]
-   pretxncommit.proofread = hg log -r $HG_NODE -T '{desc}' | proofread commit-message -format text -fail-on deny
+   pretxncommit.proofread = hg log -r $HG_NODE -T '{desc}' | proofread commit-message --stdin -o text --fail-on deny
    ```
 
 2. Commit with a message that breaks a rule. A non-zero exit from a `pretxncommit` hook
@@ -92,7 +92,7 @@ messages a change adds, or by hand through an alias.
 
    ```toml
    [aliases]
-   check-message = ["util", "exec", "--", "sh", "-c", "jj log --no-graph -r @ -T description | proofread commit-message -format text -fail-on deny"]
+   check-message = ["util", "exec", "--", "sh", "-c", "jj log --no-graph -r @ -T description | proofread commit-message --stdin -o text --fail-on deny"]
    ```
 
 2. Run `jj check-message` before you push, or call the same pipeline from CI for each
@@ -100,7 +100,7 @@ messages a change adds, or by hand through an alias.
 
 ## 6. Choose what blocks a commit
 
-`-fail-on` sets the bar for the exit code:
+`--fail-on` sets the bar for the exit code:
 
 | Value             | Exit 1 when                                       |
 | ----------------- | ------------------------------------------------- |
@@ -113,19 +113,19 @@ decisions table. A hook that blocks on any non-zero exit blocks on both. Start w
 `deny`, which holds only the rules that are rarely wrong. A finding silenced by a
 `proofread:ignore RULE reason` line in the message, or covered by a baseline, does not
 count toward the bar. To change a rule's decision for commit messages, pass
-`-decisions FILE`; each rule has a page in the reference, such as
+`--decisions FILE`; each rule has a page in the reference, such as
 [filler](../reference/proofread/filler.md).
 
 ## 7. Count which rules help
 
 A rule that authors override more than they obey costs more than it saves. Add
-`-record` to the hook to keep the evidence:
+`--record` to the hook to keep the evidence:
 
 ```sh
-exec proofread commit-message -format text -fail-on deny -record "$1"
+exec proofread commit-message -o text --fail-on deny --record "$1"
 ```
 
-`-record` stores, per message file and rule, the fingerprint of each finding: a hash of
+`--record` stores, per message file and rule, the fingerprint of each finding: a hash of
 the rule, the matched text and the path. On the next run over the same file, a
 fingerprint that disappeared counts as `fixed`, one that a suppression now covers counts
 as `suppressed`, and one still present counts as `reported`. Git reuses
@@ -135,7 +135,7 @@ as `suppressed`, and one still present counts as `reported`. Git reuses
 Read the counts with `stats`:
 
 ```sh
-proofread stats -format text
+proofread stats -o text
 ```
 
 Each rule's `not_useful_rate` is (suppressed + reported) / (suppressed + reported +
@@ -162,19 +162,19 @@ chose and no path. It never leaves your machine, and you never commit it.
 
    ```sh
    git log --author="$(git config user.email)" --format=%B%x00 |
-     proofread voice build -kind commit-message
+     proofread voice build --stdin --kind commit-message
    ```
 
    Each text on stdin ends at a NUL byte. To measure files instead, pass one text per
-   file: `proofread voice build -kind review-reply reply1.md reply2.md`. For a forge
-   export, pass JSON lines with `-field body`, and `-kind-field kind` when each line
+   file: `proofread voice build --kind review-reply reply1.md reply2.md`. For a forge
+   export, pass JSON lines with `--field body`, and `--kind-field kind` when each line
    names its own kind.
 3. Read the summary on stderr. A kind under 30 texts keeps its counts, and
    `voice-drift` does not judge it.
 4. Judge a draft with the file, at the path the summary's `wrote` line names:
 
    ```sh
-   proofread review-reply -voice <voice file> -format text < draft.md
+   proofread review-reply --stdin --voice <voice file> -o text < draft.md
    ```
 
    A `voice-drift` finding names each feature that drifted, whether the draft runs

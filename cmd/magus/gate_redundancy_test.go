@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -57,9 +57,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 	err := g.evaluate(context.Background(), false)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.RedundantGateDeferred), "the refusal carries MGS3010")
-	code, ok := proc.ExitCode(err)
-	require.True(t, ok, "the refusal states its own exit code")
-	assert.Equal(t, 75, code, "EX_TEMPFAIL, the same convention as MGS3009")
+	assert.Equal(t, exit.TempFail, exit.Code(err), "the refusal states EX_TEMPFAIL, the same convention as MGS3009")
 
 	msg := err.Error()
 	assert.Contains(t, msg, "run inv123", "names the green gate's run ref")

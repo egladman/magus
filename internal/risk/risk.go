@@ -3,7 +3,8 @@
 // with what language provers can prove, into a tier: how much of the gate the change
 // needs. The ci gate's redundancy check, CI verdict inheritance, job completion and
 // `magus affected ci`'s gate sizing read the tier; a merge settles a conflicted path by
-// its class alone.
+// its class, or, for two jobs that claimed disjoint declarations of it, by those claims
+// (MergeByClaims).
 //
 // The classes rest on the workspace's declarations. A path a declared output glob or
 // magus itself owns is generated; a path an effective gate_low_risk glob claims is prose
@@ -13,9 +14,12 @@
 package risk
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -476,4 +480,306 @@ func dropTrailingIndent(out *strings.Builder) {
 	trimmed := s[:end]
 	out.Reset()
 	out.WriteString(trimmed)
+}
+
+// OverlappingClaims returns the first pair of claimed declarations, one from each list,
+// that can name one declaration: equal, or one naming the other by types.NamesDeclaration.
+// ok is false when the two lists are disjoint.
+func OverlappingClaims(ours, theirs []string) (a, b string, ok bool) {
+	for _, x := range ours {
+		for _, y := range theirs {
+			if x == y || types.NamesDeclaration(x, y) || types.NamesDeclaration(y, x) {
+				return x, y, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// ClaimSide is one side of a merge: its file content, and the declaration halves of the
+// `path#declaration` write paths of the jobs whose work it carries.
+type ClaimSide struct {
+	Content []byte
+	Claims  []string
+}
+
+// MergeByClaims merges ours and theirs, both descended from base, for sides whose jobs
+// claimed disjoint declarations of file.
+//
+// An edit only one side made merges as that side has it, wherever it is. Where the two
+// sides' edits touch or overlap, which is where a line merge gives up:
+//   - each side's edit must sit in declarations its own claims name;
+//   - import lines either side changed in the file's preamble merge as a set;
+//   - two pure insertions at one base line keep ours, then theirs (types.MergeBothAdded);
+//   - any other overlap does not settle.
+//
+// The result's Regions name each place the sides' edits touched and settled, as
+// types.MergeByClaim, types.MergeBothAdded or types.MergeImportSet. It returns an error
+// naming the region for every case it does not settle, and for a path no diff driver
+// places or input types.Hunks cannot diff.
+func MergeByClaims(file string, base []byte, ours, theirs ClaimSide) (types.MergeResolution, error) {
+	driver, ok := types.MatchDiffDriver(file)
+	if !ok {
+		return types.MergeResolution{}, fmt.Errorf("%s: no diff driver places its declarations", file)
+	}
+	ea, okA := sideEdits(file, base, ours.Content, sideOurs)
+	eb, okB := sideEdits(file, base, theirs.Content, sideTheirs)
+	if !okA || !okB {
+		return types.MergeResolution{}, fmt.Errorf("%s: binary, or too far from the merge base to merge by line", file)
+	}
+	m := claimMerger{
+		path:   file,
+		driver: driver,
+		o:      types.SplitLines(base),
+		sides:  [2][]string{types.SplitLines(ours.Content), types.SplitLines(theirs.Content)},
+		claims: [2][]string{ours.Claims, theirs.Claims},
+		edits:  slices.Concat(ea, eb),
+	}
+	m.declsO = driver.Declarations(m.o)
+	m.decls = [2][]string{driver.Declarations(m.sides[0]), driver.Declarations(m.sides[1])}
+	slices.SortStableFunc(m.edits, func(x, y claimEdit) int {
+		return cmp.Or(cmp.Compare(x.bs, y.bs), cmp.Compare(x.be, y.be), cmp.Compare(x.side, y.side))
+	})
+
+	var out []string
+	pos := 0
+	for _, c := range m.clusters() {
+		start, end := c[0].bs, clusterEnd(c)
+		out = append(out, m.o[pos:start]...)
+		lines, err := m.settle(c, start, end)
+		if err != nil {
+			return types.MergeResolution{}, err
+		}
+		out = append(out, lines...)
+		pos = end
+	}
+	out = append(out, m.o[pos:]...)
+	return types.MergeResolution{Content: []byte(strings.Join(out, "")), Regions: m.regions}, nil
+}
+
+// mergeSide is which of the two merged revisions an edit came from; it indexes the
+// per-side arrays of claimMerger.
+type mergeSide uint8
+
+const (
+	sideOurs mergeSide = iota
+	sideTheirs
+)
+
+func (s mergeSide) String() string {
+	if s == sideOurs {
+		return "ours"
+	}
+	return "theirs"
+}
+
+// claimEdit is one run a side changed: base lines [bs, be) became the side's [ss, se).
+type claimEdit struct {
+	side   mergeSide
+	bs, be int
+	ss, se int
+}
+
+// sideEdits reads side's edits to base off the edit script types.Hunks computes, so the
+// runs are the ones types.MergeThreeWay aligns. With no driver, Hunks reports each changed
+// run whole: the deleted run, then the run inserted in its place.
+func sideEdits(file string, base, side []byte, which mergeSide) ([]claimEdit, bool) {
+	regions, ok := types.Hunks(file, base, side, types.DiffDriver{})
+	if !ok {
+		return nil, false
+	}
+	var out []claimEdit
+	i, j := 0, 0 // the base and side line just past the last edit
+	for _, r := range regions {
+		lo, hi := r.Lines[0]-1, r.Lines[1]
+		if r.Side == types.RegionOld {
+			j += lo - i
+			out = append(out, claimEdit{side: which, bs: lo, be: hi, ss: j, se: j})
+			i = hi
+			continue
+		}
+		// Inserted at the side line a deletion left off at, it replaces that deletion; any
+		// later line has a kept line between the two.
+		if n := len(out); n > 0 && out[n-1].be == i && out[n-1].ss == j && out[n-1].se == j && lo == j {
+			out[n-1].se = hi
+		} else {
+			i += lo - j
+			out = append(out, claimEdit{side: which, bs: i, be: i, ss: lo, se: hi})
+		}
+		j = hi
+	}
+	return out, true
+}
+
+type claimMerger struct {
+	path    string
+	driver  types.DiffDriver
+	o       []string
+	declsO  []string
+	sides   [2][]string
+	decls   [2][]string
+	claims  [2][]string
+	edits   []claimEdit
+	regions []types.MergeRegion
+}
+
+// clusters groups the sorted edits into runs that overlap in base: a shared base line, or
+// insertions at one line. Edits that only meet end to end stay apart, since each applies
+// at its own place.
+func (m *claimMerger) clusters() [][]claimEdit {
+	var out [][]claimEdit
+	for _, e := range m.edits {
+		if n := len(out); n > 0 {
+			c := out[n-1]
+			end := clusterEnd(c)
+			if e.bs < end || (e.bs == e.be && c[0].bs == end && e.bs == end) {
+				out[n-1] = append(c, e)
+				continue
+			}
+		}
+		out = append(out, []claimEdit{e})
+	}
+	return out
+}
+
+func clusterEnd(c []claimEdit) int {
+	end := c[0].be
+	for _, e := range c[1:] {
+		end = max(end, e.be)
+	}
+	return end
+}
+
+// contested reports whether the other side has an edit touching or overlapping e: the
+// edits a line merge stops at.
+func (m *claimMerger) contested(e claimEdit) bool {
+	return slices.ContainsFunc(m.edits, func(f claimEdit) bool {
+		return f.side != e.side && e.bs <= f.be && f.bs <= e.be
+	})
+}
+
+// settle is the merged lines for one cluster spanning base [start, end).
+func (m *claimMerger) settle(c []claimEdit, start, end int) ([]string, error) {
+	if len(c) == 1 {
+		e := c[0]
+		if m.contested(e) && !m.imports(c) {
+			if err := m.claimed(e); err != nil {
+				return nil, err
+			}
+			m.note(m.location(e), types.MergeByClaim)
+		}
+		return m.sides[e.side][e.ss:e.se], nil
+	}
+	if m.imports(c) {
+		m.note(types.Location{Path: m.path, Declaration: types.Preamble}, types.MergeImportSet)
+		return importSet(m.o[start:end], m.render(c, sideOurs, start, end), m.render(c, sideTheirs, start, end)), nil
+	}
+	if start == end {
+		for _, e := range c {
+			if err := m.claimed(e); err != nil {
+				return nil, err
+			}
+		}
+		m.note(m.location(c[0]), types.MergeBothAdded)
+		return slices.Concat(m.render(c, sideOurs, start, end), m.render(c, sideTheirs, start, end)), nil
+	}
+	return nil, fmt.Errorf("%s: both sides changed the same lines", m.location(c[0]))
+}
+
+// render is base [start, end) with one side's edits in c applied.
+func (m *claimMerger) render(c []claimEdit, side mergeSide, start, end int) []string {
+	var out []string
+	pos := start
+	for _, e := range c {
+		if e.side != side {
+			continue
+		}
+		out = append(out, m.o[pos:e.bs]...)
+		out = append(out, m.sides[side][e.ss:e.se]...)
+		pos = e.be
+	}
+	return append(out, m.o[pos:end]...)
+}
+
+// claimed reports the first declaration e reaches that its side's claims do not name.
+func (m *claimMerger) claimed(e claimEdit) error {
+	for _, d := range m.reached(e) {
+		if d == "" || !slices.ContainsFunc(m.claims[e.side], func(c string) bool { return types.NamesDeclaration(c, d) }) {
+			return fmt.Errorf("%s: %s changed it, and none of that side's claims names it", types.Location{Path: m.path, Declaration: orPreamble(d)}, e.side)
+		}
+	}
+	return nil
+}
+
+// reached is every declaration enclosing a line e removed or added, in order.
+func (m *claimMerger) reached(e claimEdit) []string {
+	return slices.Compact(slices.Concat(m.declsO[e.bs:e.be], m.decls[e.side][e.ss:e.se]))
+}
+
+// imports reports whether every line the edits in c removed or added is an import line
+// in the preamble, by the import syntax of the path's driver.
+func (m *claimMerger) imports(c []claimEdit) bool {
+	re := importLines[m.driver.Name]
+	if re == nil {
+		return false
+	}
+	for _, e := range c {
+		if slices.ContainsFunc(m.reached(e), func(d string) bool { return d != "" }) {
+			return false
+		}
+		for _, l := range slices.Concat(m.o[e.bs:e.be], m.sides[e.side][e.ss:e.se]) {
+			if !re.MatchString(l) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (m *claimMerger) note(loc types.Location, kind types.MergeKind) {
+	m.regions = append(m.regions, types.MergeRegion{Locations: []types.Location{loc}, Kind: kind})
+}
+
+func (m *claimMerger) location(e claimEdit) types.Location {
+	d := m.reached(e)
+	if len(d) == 0 {
+		return types.Location{Path: m.path, Declaration: types.Preamble}
+	}
+	return types.Location{Path: m.path, Declaration: orPreamble(d[0])}
+}
+
+func orPreamble(decl string) string {
+	if decl == "" {
+		return types.Preamble
+	}
+	return decl
+}
+
+// importLines matches one import line of each driver's language. Only one-line forms are
+// here, so the opening and closing lines of a block (Go's `import (`, Python's
+// parenthesized from) never match, and an edit to one stays a conflict.
+var importLines = map[string]*regexp.Regexp{
+	"golang":     regexp.MustCompile(`^\s*(import\s+)?([\w.]+\s+)?"[^"]*"\s*$`),
+	"python":     regexp.MustCompile(`^(import\s+[\w.]+(\s+as\s+\w+)?(\s*,\s*[\w.]+(\s+as\s+\w+)?)*|from\s+[\w.]+\s+import\s+[\w*]+(\s+as\s+\w+)?(\s*,\s*\w+(\s+as\s+\w+)?)*)\s*$`),
+	"rust":       regexp.MustCompile(`^(pub(\([^)]*\))?\s+)?use\s+[^;]+;\s*$`),
+	"typescript": regexp.MustCompile(`^import\s+(type\s+)?([^;'"]*\s+from\s+)?['"][^'"]+['"];?\s*$`),
+	"buzz":       regexp.MustCompile(`^import\s+"[^"]+"(\s+as\s+\w+)?;\s*$`),
+}
+
+// importSet merges import lines as a set: ours's lines without the ones theirs removed
+// from base, then the ones theirs added. When both sides kept their lines sorted, so does
+// the result, the order gofmt and most import sorters keep.
+func importSet(o, a, b []string) []string {
+	out := slices.DeleteFunc(slices.Clone(a), func(l string) bool {
+		return slices.Contains(o, l) && !slices.Contains(b, l)
+	})
+	for _, l := range b {
+		if !slices.Contains(o, l) && !slices.Contains(out, l) {
+			out = append(out, l)
+		}
+	}
+	if slices.IsSorted(a) && slices.IsSorted(b) {
+		slices.Sort(out)
+	}
+	return out
 }

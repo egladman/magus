@@ -76,6 +76,12 @@ type HarnessDescriptor struct {
 	Agents         []HarnessAgentFile `json:"agents,omitempty"`
 	Settings       []HarnessSetting   `json:"settings,omitempty"`
 	Limits         HarnessLimits      `json:"limits,omitzero"`
+	// Tools is the host's tool table, nil for a harness that declares none.
+	Tools *HarnessTools `json:"tools,omitempty"`
+	// Models are the rows of the models this host runs, as its harness_models op returns
+	// them; nil for a harness that publishes none. Never read from JSON: the op's rows
+	// are decoded separately, since types.ModelPricing carries no wire tags.
+	Models []types.ModelPricing `json:"-"`
 }
 
 // HarnessLimits are how long the host waits, in milliseconds: on a shell command in the
@@ -146,21 +152,38 @@ type HarnessVerification struct {
 	Status     HarnessStatus `json:"status"`
 	Reason     string        `json:"reason,omitempty"`
 	Guarded    bool          `json:"guarded,omitempty"`
-	MCPStatus  HarnessStatus `json:"mcp_status,omitempty"`
-	MCPReason  string        `json:"mcp_reason,omitempty"`
-	// PromptStatus is whether the host-native approval prompts the descriptor keeps are in
-	// place, empty when it keeps none. Uncovered means an ask verdict reaches nobody there,
+	// MCP is whether the descriptor's MCP setup guidance is valid, zero when it declares none.
+	// Verified never means host wiring: the person owns the host's MCP client config.
+	MCP HarnessCheck `json:"mcp,omitzero"`
+	// Prompt is whether the host-native approval prompts the descriptor keeps are in
+	// place, zero when it keeps none. Uncovered means an ask verdict reaches nobody there,
 	// so the templates refuse the call instead.
-	PromptStatus HarnessStatus `json:"prompt_status,omitempty"`
-	PromptReason string        `json:"prompt_reason,omitempty"`
-	// AgentStatus is whether the subagent files the descriptor renders are current, empty
+	Prompt HarnessCheck `json:"prompt,omitzero"`
+	// Agent is whether the subagent files the descriptor renders are current, zero
 	// when it renders none.
-	AgentStatus HarnessStatus `json:"agent_status,omitempty"`
-	AgentReason string        `json:"agent_reason,omitempty"`
-	// SettingStatus is whether the plain host settings the descriptor keeps are in place,
-	// empty when it keeps none.
-	SettingStatus HarnessStatus `json:"setting_status,omitempty"`
-	SettingReason string        `json:"setting_reason,omitempty"`
+	Agent HarnessCheck `json:"agent,omitzero"`
+	// Setting is whether the plain host settings the descriptor keeps are in place,
+	// zero when it keeps none.
+	Setting HarnessCheck `json:"setting,omitzero"`
+	// Tool is whether the tool rows directory matches the rows the spell declares, zero
+	// when it declares none.
+	Tool HarnessCheck `json:"tool,omitzero"`
+	// Plugin is whether each plugin the workspace enables through the
+	// descriptor's settings is installed for this person, zero when the descriptor enables
+	// none or the workspace has not turned it on. Uncovered names the install command.
+	Plugin HarnessCheck `json:"plugin,omitzero"`
+}
+
+// HarnessCheck is one verdict beside the harness config's own. A zero Status means the
+// descriptor keeps nothing of that kind, so there is nothing to fail.
+type HarnessCheck struct {
+	Status HarnessStatus `json:"status"`
+	Reason string        `json:"reason,omitempty"`
+}
+
+// Failing reports a check that ran and did not verify.
+func (c HarnessCheck) Failing() bool {
+	return c.Status != "" && c.Status != HarnessVerified
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -308,6 +331,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("settings[%d]: %w", i, err)
 		}
 	}
+	if d.Tools != nil {
+		if err := validateHarnessTools(*d.Tools); err != nil {
+			return fmt.Errorf("tools: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -338,7 +366,7 @@ func validateHarnessEntries(group HarnessEntries) error {
 	// One invoking command per group, not every command: an entry may prepare the
 	// environment a magus is found in, like a host's session-start entry that puts the
 	// session root on PATH, and it can only do that without running one. A shipped
-	// template that judges nothing, such as the reply check, is magus's own all the same.
+	// template that judges nothing, such as the checkpoint, is magus's own all the same.
 	if !slices.ContainsFunc(commands, func(command string) bool { return invokesMagus(command) || runsAShippedTemplate(command) }) {
 		return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", commands[0])
 	}
@@ -407,6 +435,15 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 			return plan, err
 		}
 		if err := addPlanFile(&plan, s.Path, file); err != nil {
+			return plan, err
+		}
+	}
+	for _, t := range d.toolFiles() {
+		file, err := planWholeFile(root, t.Path, t.Content)
+		if err != nil {
+			return plan, err
+		}
+		if err := addPlanFile(&plan, t.Path, file); err != nil {
 			return plan, err
 		}
 	}
@@ -526,11 +563,12 @@ func mergeFragment(dst, src map[string]any) map[string]any {
 }
 
 // harnessMergeScript reads a `describe harness -o json` plan on stdin and writes every
-// file it names. It merges text with merge\json, so a key outside the fragment keeps the
-// digits of an integer past 2^53. The fragment itself arrives through json\parse, so an
+// file it names; a current plan omits files, so a rerun after the merge writes nothing. It
+// merges text with merge\json, so a key outside the fragment keeps the digits of an integer
+// past 2^53. The fragment itself arrives through json\parse, so an
 // integer that large inside it, a person's own entry in a managed array included, does
 // not. No single quotes: the command wraps this in one POSIX single-quoted word.
-const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }`
+const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); if (plan["files"] == null) { return; } foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }`
 
 // harnessMergeCommand renders the one command a person runs to bring files current.
 // It reads the plan back from `magus describe harness`, so re-running it after a
@@ -550,7 +588,7 @@ func posixQuote(s string) string {
 // It reports an explicit status so callers cannot mistake an absent hook for a
 // healthy one. Coverage is a config that still carries the declared fragments
 // and invokes magus somehow (a shipped script basename, magus shell, or
-// magus session). A skills-only descriptor has nothing to wire. PromptStatus reports the
+// magus session). A skills-only descriptor has nothing to wire. Prompt reports the
 // host-native approval prompts separately, since a host can guard every call and still
 // never ask the person about one.
 func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, error) {
@@ -564,11 +602,166 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	}
 	result, err := verifyHarnessConfig(ctx, root, d, source)
 	if err == nil {
-		verifyHarnessPrompts(root, d, &result)
-		verifyHarnessAgents(root, d, &result)
-		verifyHarnessSettings(root, d, &result)
+		merge := "; merge what `magus describe harness " + d.ID + "` prints"
+		result.Prompt = verifyEach(root, d.Prompts, planHarnessPrompt, func(p HarnessPrompt) string {
+			return "missing " + promptLocation(p) + ", so the host never asks the person before the call" + merge
+		})
+		result.Agent = verifyEach(root, d.Agents, func(root string, a HarnessAgentFile) (types.HarnessFile, error) {
+			return planWholeFile(root, a.Path, a.Content)
+		}, func(a HarnessAgentFile) string {
+			return a.Path + " is missing or differs from what the spell renders" + merge
+		})
+		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s HarnessSetting) string {
+			return "missing " + settingLocation(s) + merge
+		})
+		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f HarnessAgentFile) (types.HarnessFile, error) {
+			return planWholeFile(root, f.Path, f.Content)
+		}, func(f HarnessAgentFile) string {
+			return f.Path + " is missing or differs from the tool rows the spell declares, so the guard misreads its tools; run `magus agent harness install`"
+		})
+		verifyHarnessPlugins(root, d, &result)
 	}
 	return result, err
+}
+
+// verifyEach plans every item a descriptor keeps and reports the first that fails to plan
+// or still needs changes, with missing naming it. No items leaves the check empty.
+func verifyEach[T any](root string, items []T, plan func(string, T) (types.HarnessFile, error), missing func(T) string) HarnessCheck {
+	if len(items) == 0 {
+		return HarnessCheck{}
+	}
+	for _, item := range items {
+		file, err := plan(root, item)
+		switch {
+		case err != nil:
+			return HarnessCheck{Status: HarnessUncovered, Reason: err.Error()}
+		case len(file.Changes) > 0:
+			return HarnessCheck{Status: HarnessUncovered, Reason: missing(item)}
+		}
+	}
+	return HarnessCheck{Status: HarnessVerified}
+}
+
+// verifyHarnessPlugins reports whether each plugin a descriptor's settings enable is
+// installed for this person. Enabling a plugin in a workspace's settings installs it for
+// nobody: the host keeps what each person installed under their own config dir, so a
+// workspace can read as wired while the plugin never loads. A plugin the workspace has not
+// enabled is not this check's business and leaves the status empty.
+func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerification) {
+	for _, s := range d.Settings {
+		id, ok := enabledPluginID(s)
+		if !ok {
+			continue
+		}
+		if file, err := planHarnessSetting(root, s); err != nil || len(file.Changes) > 0 {
+			continue
+		}
+		installed, err := claudePluginInstalled(id)
+		switch {
+		case err != nil:
+			result.Plugin = HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
+			return
+		case !installed:
+			result.Plugin = HarnessCheck{Status: HarnessUncovered, Reason: pluginMissingReason(d, s, id)}
+			return
+		}
+		result.Plugin = HarnessCheck{Status: HarnessVerified}
+	}
+}
+
+func enabledPluginID(s HarnessSetting) (string, bool) {
+	if len(s.Key) != 2 || s.Key[0] != "enabledPlugins" || s.Value != true {
+		return "", false
+	}
+	return s.Key[1], true
+}
+
+// pluginMissingReason names the one-time install line. The marketplace repo comes from the
+// extraKnownMarketplaces setting the descriptor keeps for the plugin's marketplace, and
+// falls back to the marketplace name when it keeps none.
+func pluginMissingReason(d HarnessDescriptor, enabled HarnessSetting, id string) string {
+	name, marketplace, _ := strings.Cut(id, "@")
+	source := marketplace
+	for _, s := range d.Settings {
+		if len(s.Key) != 2 || s.Key[0] != "extraKnownMarketplaces" || s.Key[1] != marketplace {
+			continue
+		}
+		if repo := marketplaceRepo(s.Value); repo != "" {
+			source = repo
+		}
+	}
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in the host: /plugin install %s --marketplace %s",
+		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
+	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
+		reason += " (marketplace " + marketplace + " is not registered either)"
+	}
+	return reason
+}
+
+func marketplaceRepo(value any) string {
+	spec, _ := value.(map[string]any)
+	source, _ := spec["source"].(map[string]any)
+	repo, _ := source["repo"].(string)
+	return repo
+}
+
+// claudeConfigDir is where the host keeps per-person state: CLAUDE_CONFIG_DIR when set,
+// else ~/.claude.
+func claudeConfigDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".claude"
+	}
+	return filepath.Join(home, ".claude")
+}
+
+// readClaudePluginStore decodes one JSON file of the host's plugin store. An absent file
+// reads as an empty document: a person who never installed a plugin has none.
+func readClaudePluginStore(name string) (map[string]any, error) {
+	path := filepath.Join(claudeConfigDir(), "plugins", name)
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	doc := map[string]any{}
+	if err := decodeHarnessJSON(body, &doc); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return doc, nil
+}
+
+// claudePluginInstalled reads installed_plugins.json, which maps "<plugin>@<marketplace>"
+// to its installs (one per scope; a single object in the first file version). An install in
+// any scope counts: a project-scope install made from another checkout of the same
+// repository must not fail a worktree.
+func claudePluginInstalled(id string) (bool, error) {
+	doc, err := readClaudePluginStore("installed_plugins.json")
+	if err != nil {
+		return false, err
+	}
+	plugins, _ := doc["plugins"].(map[string]any)
+	switch v := plugins[id].(type) {
+	case []any:
+		return len(v) > 0, nil
+	case map[string]any:
+		return len(v) > 0, nil
+	}
+	return false, nil
+}
+
+func claudeMarketplaceKnown(name string) (bool, error) {
+	doc, err := readClaudePluginStore("known_marketplaces.json")
+	if err != nil {
+		return false, err
+	}
+	_, ok := doc[name]
+	return ok, nil
 }
 
 func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {
@@ -825,7 +1018,7 @@ func carriesOwnedMarker(command string) bool {
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
 // `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
-	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "proofread-reply."} {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz"} {
 		if strings.Contains(command, template) {
 			return true
 		}

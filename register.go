@@ -3,10 +3,10 @@ package magus
 import (
 	"context"
 	"fmt"
+	"io"
+	"slices"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -21,13 +21,6 @@ func WithConfigFile(path string) Option {
 	return func(o *workspace.Load) { o.ConfigPath = path }
 }
 
-// WithLoadedConfig injects an already-parsed configuration, bypassing the
-// default magus.yaml discovery. Env-var and flag overrides should be applied
-// before calling this.
-func WithLoadedConfig(cfg config.Config) Option {
-	return workspace.WithLoadedConfig(cfg)
-}
-
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace
 // (OTel instruments record even with telemetry export off), so the server can derive the
 // /dashboard's metrics via [Magus.MetricsCollector]. The CLI leaves it off.
@@ -35,20 +28,74 @@ func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
 }
 
-// WithProvider injects an already-constructed observability provider so several Magus
-// instances (a server's bridge Magus plus each per-workspace registry Magus) share ONE set
-// of OTel instruments and one metrics collector. The provider is owned by the server
-// process, not any single workspace, so workspace eviction never discards accumulated
-// metrics. It supersedes [WithMetricsCollection]: Open adopts the injected provider instead
-// of constructing its own.
-//
-// Keeps the shorter public name even though the internal option it wraps was renamed to
-// WithTelemetryProvider (disambiguating it from [WithoutWorkspaceProviders] and
-// internal/workspace's workspace-provider family): cmd/magus/mcp.go also calls this
-// exported symbol, so renaming it here is a separate, wider change than this package's own
-// internal cleanup.
-func WithProvider(p observability.Provider) Option {
-	return workspace.WithTelemetryProvider(p)
+// WithEnv hands the workspace env, KEY=VALUE pairs as os.Environ returns them, as the
+// environment it reads: the MAGUS_* overrides of its configuration, the remote cache
+// signing key and the cache tool-version mode come from it. Without it the workspace reads
+// no environment, and magus.yaml alone configures it. The processes a run starts inherit
+// this process's environment either way.
+func WithEnv(env []string) Option {
+	env = slices.Clone(env)
+	return func(o *workspace.Load) { o.Env = env }
+}
+
+// WithStderr sends the workspace's notices (lock decisions, a run's text report when no
+// sink is given) and, under -o jsonl, its records to w. Without it they are discarded.
+func WithStderr(w io.Writer) Option {
+	return func(o *workspace.Load) { o.Stderr = w }
+}
+
+// WithCommandLine is the command line the workspace records as this process's: in the
+// owner record of a project lock it takes, and as its identity to the broker. Without it
+// the records hold an empty command line.
+func WithCommandLine(args []string) Option {
+	args = slices.Clone(args)
+	return func(o *workspace.Load) { o.CommandLine = args }
+}
+
+// WithVCSDriver drives d as the workspace's VCS, in place of the built-in one its markers
+// or magus.yaml would pick: a VCS magus does not ship, or a test double. Open fails on a
+// nil d, and when magus.yaml's vcs.name names a different VCS than d does.
+func WithVCSDriver(d types.VCSDriver) Option {
+	return func(o *workspace.Load) { o.VCSDriver, o.VCSDriverGiven = d, true }
+}
+
+// WithCacheBackend stores the remote cache tier in b, in place of a backend a magusfile
+// wires with magus.cache.remote: a store magus does not ship, or a test double. Open fails
+// on a nil b, and when the magusfile also wires a backend, naming both. b is held to the
+// same trust set as a wired backend (cache.remote.trusted_keys in magus.yaml).
+func WithCacheBackend(b types.CacheBackend) Option {
+	return func(o *workspace.Load) { o.CacheBackend, o.CacheBackendGiven = b, true }
+}
+
+// SpawnRule decides whether a job at model tier parent may spawn one at tier child: nil
+// allows it, and an error refuses it, saying why. A tier is the zero value when none was
+// assigned. TierCeiling is the reference rule.
+type SpawnRule func(parent, child types.ModelTier) error
+
+// TierCeiling is the reference SpawnRule: a child's tier is at most its parent's, by the
+// order the workspace's model-tier declaration gives its cases (cheapest first). An
+// unassigned tier on either side bounds nothing, so it allows the spawn; tiers from two
+// different declarations cannot be ordered, so it refuses them.
+func TierCeiling(parent, child types.ModelTier) error {
+	if parent.IsZero() || child.IsZero() {
+		return nil
+	}
+	above, err := child.Above(parent)
+	if err != nil {
+		return fmt.Errorf("magus: spawn rule: %w", err)
+	}
+	if above {
+		return fmt.Errorf("magus: a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
+			parent.Name(), child.Name())
+	}
+	return nil
+}
+
+// WithSpawnRule sets the rule the workspace holds every job spawn to. It is required:
+// there is no default rule, so Open and Inspect fail without one or on a nil one, naming
+// TierCeiling, the reference rule the CLI passes.
+func WithSpawnRule(rule SpawnRule) Option {
+	return func(o *workspace.Load) { o.SpawnRule = rule }
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it
@@ -80,34 +127,55 @@ func WithBrokerPolicy(p types.BrokerPolicy) Option {
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace
 // providers (magus\workspace.provider), leaving only the magusfile-declared projects.
 // For a caller inspecting a tree that is not a working checkout: an exported revision
-// has no installed toolchain for a provider to shell out to. Unrelated to [WithProvider],
-// which injects an observability provider.
+// has no installed toolchain for a provider to shell out to.
 func WithoutWorkspaceProviders() Option {
 	return workspace.WithoutWorkspaceProviders()
 }
 
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.
-type WorkspaceRegistry = workspace.WorkspaceRegistry
+// Fill one with RegisterProject, then hand it to Open or Inspect with
+// [WithWorkspaceRegistry]. Its methods are safe for concurrent use.
+type WorkspaceRegistry struct{ r *workspace.WorkspaceRegistry }
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
-func NewWorkspaceRegistry() *WorkspaceRegistry { return workspace.NewWorkspaceRegistry() }
+func NewWorkspaceRegistry() *WorkspaceRegistry {
+	return &WorkspaceRegistry{r: workspace.NewWorkspaceRegistry()}
+}
+
+// RegisterProject applies opts to the project at path when the workspace opens. A path
+// the workspace does not discover fails the Open.
+func (reg *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption) {
+	reg.r.RegisterProject(path, opts...)
+}
+
+// AddProvider wires the named workspace-provider spell, as magus\workspace.provider does
+// from a magusfile: Open runs it to add the projects it reports.
+func (reg *WorkspaceRegistry) AddProvider(spellName string) { reg.r.AddProvider(spellName) }
+
+// AddHarness wires the named harness spell, as magus\harness.provider does from a
+// magusfile.
+func (reg *WorkspaceRegistry) AddHarness(spellName string) { reg.r.AddHarness(spellName) }
 
 // WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.
 func WithWorkspaceRegistry(reg *WorkspaceRegistry) Option {
-	return func(o *workspace.Load) { o.Registry = reg }
+	return func(o *workspace.Load) { o.Registry = reg.r }
 }
 
 // WithWorkspaceRegistryContext installs reg in ctx so interpreters can retrieve it.
 func WithWorkspaceRegistryContext(ctx context.Context, reg *WorkspaceRegistry) context.Context {
-	return workspace.ContextWithRegistry(ctx, reg)
+	return workspace.ContextWithRegistry(ctx, reg.r)
 }
 
 // WorkspaceRegistryFromContext returns the WorkspaceRegistry from ctx, or nil.
 func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
-	return workspace.WorkspaceRegistryFromContext(ctx)
+	r := workspace.WorkspaceRegistryFromContext(ctx)
+	if r == nil {
+		return nil
+	}
+	return &WorkspaceRegistry{r: r}
 }
 
-func installWorkspaceRegistry(ctx context.Context, reg *WorkspaceRegistry) context.Context {
+func installWorkspaceRegistry(ctx context.Context, reg *workspace.WorkspaceRegistry) context.Context {
 	return workspace.ContextWithRegistry(ctx, reg)
 }
 
@@ -151,6 +219,11 @@ func Drift(policy types.DriftPolicy, reason string) TargetOption {
 // ctx.needs; the composite reports the failure and carries on, and running the target by
 // name still fails. reason states why a failure here does not mean the change is wrong.
 func Advisory(reason string) TargetOption { return workspace.Advisory(reason) }
+
+// HumanOnly marks this target as one a person starts: an agent's run reaching it asks the
+// person through the host's prompt, and a leased worker's is refused. reason states what
+// running it costs.
+func HumanOnly(reason string) TargetOption { return workspace.HumanOnly(reason) }
 
 // IncludeOS and IncludeArch override cache.include.*.enabled for one target, for a
 // target whose artifact varies along one axis but not the other.

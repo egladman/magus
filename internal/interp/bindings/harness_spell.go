@@ -3,16 +3,19 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM; the loader registers from the layer that can
 	agent.RegisterHarnessSpellLoader(loadHarnessFromSpell)
 }
 
@@ -70,7 +73,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessMCPContract, err)
 		}
 	}
-	promptsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessPromptsContract})
+	promptsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessPromptsContract, Params: map[string]any{"human_only": humanOnlyReasons(ctx)}})
 	if err != nil {
 		if !isMissingHarnessOp(err) {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
@@ -80,7 +83,29 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	}
-	agents, err := agent.ShippedAgentParams()
+	// The model rows come first: the agents magus ships run on the one a row names for the
+	// cheapest tier.
+	var tierModels map[string]string
+	modelsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessModelsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+	} else if modelsResp.Data != nil {
+		models, err := decodeHarnessModels(modelsResp.Data)
+		if err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+		d.Models = models
+		if tierModels, err = decodeHarnessTierModels(modelsResp.Data); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+	}
+	model, err := cheapestTierModel(ctx, id, tierModels)
+	if err != nil {
+		return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %w", id, err)
+	}
+	agents, err := agent.ShippedAgentParams(model)
 	if err != nil {
 		return agent.HarnessDescriptor{}, "", false, err
 	}
@@ -92,6 +117,17 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	} else if agentsResp.Data != nil {
 		if err := decodeHarnessJSON(agentsResp.Data, &d.Agents); err != nil {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
+		}
+	}
+	toolsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessToolsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessToolsContract, err)
+		}
+	} else if toolsResp.Data != nil {
+		d.Tools = &agent.HarnessTools{}
+		if err := decodeHarnessJSON(toolsResp.Data, d.Tools); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessToolsContract, err)
 		}
 	}
 	settingsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessSettingsContract})
@@ -115,6 +151,194 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		}
 	}
 	return d, "spell:" + id, true, nil
+}
+
+// cheapestTierModel is the model the agents magus ships run on under harness id: the one
+// the workspace's model tiers map for the cheapest tier, else the one id's own model rows
+// name for that tier (tierModels, tier to exact model id). A model is never inferred from
+// a name.
+//
+// Empty, and the spell renders no model line, where no model is meant: ctx carries no
+// workspace, the workspace turned tiers off, or the harness declares no tier on any row,
+// which is how a spell for a host that takes no per-agent model says so. A harness that
+// declares tiers and has no row for the cheapest one is an error naming the row to add.
+func cheapestTierModel(ctx context.Context, id string, tierModels map[string]string) (string, error) {
+	ws, ok := types.WorkspaceFromContext(ctx).(interface {
+		ModelTiers(ctx context.Context) *types.ModelTierSet
+	})
+	if !ok {
+		return "", nil
+	}
+	set := ws.ModelTiers(ctx)
+	if set == nil {
+		return "", nil
+	}
+	cheapest, ok := set.At(0)
+	if !ok {
+		return "", nil
+	}
+	if alias, err := set.Alias(types.HarnessKey{ID: id}, cheapest); err == nil {
+		return alias, nil
+	}
+	if len(tierModels) == 0 {
+		return "", nil
+	}
+	if model, ok := tierModels[cheapest.Name()]; ok {
+		return model, nil
+	}
+	return "", fmt.Errorf("its %s rows name a model for tiers %s and none for %s, the cheapest tier of the declaration at %s, so "+
+		"add \"tier\": %q to the row of the model its shipped agents should run on, or map %s in that declaration's hosts",
+		spells.HarnessModelsContract, strings.Join(slices.Sorted(maps.Keys(tierModels)), ", "), cheapest.Name(), set.Site(), cheapest.Name(), id)
+}
+
+// harnessTierHosts maps each harness in wired whose model rows declare tiers to its model
+// for every case in cases, for the declaration a workspace gets when its magusfile declares
+// none. A harness whose rows declare some tiers and not a case is an error naming the
+// missing row.
+func harnessTierHosts(ctx context.Context, cases, wired []string) (map[types.HarnessKey][]string, error) {
+	hosts := map[types.HarnessKey][]string{}
+	for _, id := range wired {
+		drv, ok := project.DefaultSpellRegistry().Lookup(id)
+		if !ok {
+			continue
+		}
+		resp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessModelsContract})
+		if err != nil {
+			if isMissingHarnessOp(err) {
+				continue
+			}
+			return nil, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+		if resp.Data == nil {
+			continue
+		}
+		tiers, err := decodeHarnessTierModels(resp.Data)
+		if err != nil {
+			return nil, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessModelsContract, err)
+		}
+		if len(tiers) == 0 {
+			continue
+		}
+		models := make([]string, len(cases))
+		for i, c := range cases {
+			model, ok := tiers[c]
+			if !ok {
+				return nil, fmt.Errorf("harness spell %q: its %s rows name no model for tier %s, so add \"tier\": %q to the row of the model that tier runs on",
+					id, spells.HarnessModelsContract, c, c)
+			}
+			models[i] = model
+		}
+		hosts[types.HarnessKey{ID: id}] = models
+	}
+	return hosts, nil
+}
+
+// harnessModelRow is one row of a harness_models return, in the snake_case the spell
+// writes; types.ModelPricing carries no wire tags.
+type harnessModelRow struct {
+	ID           string  `json:"id"`
+	Window       int64   `json:"window"`
+	Input        float64 `json:"input"`
+	CacheWrite5m float64 `json:"cache_write_5m"`
+	CacheWrite1h float64 `json:"cache_write_1h"`
+	CacheRead    float64 `json:"cache_read"`
+	Output       float64 `json:"output"`
+	PriceStep    int64   `json:"price_step"`
+	StepFactor   float64 `json:"step_factor"`
+	// Tier is the model-tier case this model runs, "" for none. It maps the case to this
+	// exact id, so the session model a host reports resolves to a tier by equality.
+	Tier string `json:"tier"`
+	// Alias is the short name the host takes for this model, matched exactly, "" for none.
+	Alias string `json:"alias"`
+}
+
+// decodeHarnessTierModels reads which exact model id each tier of a harness_models return
+// runs on, nil when no row declares a tier. Two rows declaring one tier are an error: the
+// tier would name no one model.
+func decodeHarnessTierModels(data any) (map[string]string, error) {
+	var rows []harnessModelRow
+	if err := decodeHarnessJSON(data, &rows); err != nil {
+		return nil, err
+	}
+	var tiers map[string]string
+	for _, r := range rows {
+		if r.Tier == "" {
+			continue
+		}
+		if prior, dup := tiers[r.Tier]; dup {
+			return nil, fmt.Errorf("rows %s and %s both declare tier %s", prior, r.ID, r.Tier)
+		}
+		if tiers == nil {
+			tiers = map[string]string{}
+		}
+		tiers[r.Tier] = r.ID
+	}
+	return tiers, nil
+}
+
+// decodeHarnessModels reads a harness_models return into model rows. A row without an id
+// is an error: it could match nothing and would hide a misspelled key. So is a row
+// setting only one of price_step and step_factor, a step no price could honor. An alias
+// without a tier resolves to nothing, and one alias on two rows to no one model, so both are
+// errors.
+func decodeHarnessModels(data any) ([]types.ModelPricing, error) {
+	var rows []harnessModelRow
+	if err := decodeHarnessJSON(data, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]types.ModelPricing, len(rows))
+	aliases := map[string]string{}
+	for i, r := range rows {
+		if strings.TrimSpace(r.ID) == "" {
+			return nil, fmt.Errorf("row %d has no id", i+1)
+		}
+		if r.Alias != "" {
+			if r.Tier == "" {
+				return nil, fmt.Errorf("row %d (%s) sets alias %s without a tier, so the alias names no tier", i+1, r.ID, r.Alias)
+			}
+			if prior, dup := aliases[r.Alias]; dup {
+				return nil, fmt.Errorf("rows %s and %s both declare alias %s", prior, r.ID, r.Alias)
+			}
+			aliases[r.Alias] = r.ID
+		}
+		if (r.PriceStep > 0) != (r.StepFactor > 0) {
+			return nil, fmt.Errorf("row %d (%s) sets one of price_step and step_factor without the other", i+1, r.ID)
+		}
+		out[i] = types.ModelPricing{
+			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: types.USDPerMTok(r.Input), CacheWrite5m: types.USDPerMTok(r.CacheWrite5m),
+			CacheWrite1h: types.USDPerMTok(r.CacheWrite1h), CacheRead: types.USDPerMTok(r.CacheRead), Output: types.USDPerMTok(r.Output),
+		}
+		if r.PriceStep > 0 {
+			out[i].LongContext = &types.PriceStep{Above: r.PriceStep, Multiplier: r.StepFactor}
+		}
+	}
+	return out, nil
+}
+
+// humanOnlyReasons maps each target the workspace on ctx declares human_only to its
+// reason, joining the reasons of one name declared in several projects. A host's native
+// prompt matches a run by target name alone, so the project is not kept. Empty when ctx
+// carries no workspace.
+func humanOnlyReasons(ctx context.Context) map[string]any {
+	out := map[string]any{}
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return out
+	}
+	for _, p := range ws.All() {
+		for _, name := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
+			pol := p.TargetPolicies[name]
+			if !pol.HumanOnly {
+				continue
+			}
+			if prior, ok := out[name].(string); ok {
+				out[name] = prior + "; " + pol.HumanOnlyReason
+				continue
+			}
+			out[name] = pol.HumanOnlyReason
+		}
+	}
+	return out
 }
 
 // decodeHarnessJSON reads a spell's return value into the descriptor field through the

@@ -1,0 +1,64 @@
+# A fork refuses a check its worker could never run because a person runs that target
+# (human_only), whether the row names it as its check or a goal does, and says so instead
+# of recommending a check that only compiles. An ordinary check is accepted.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q
+exec magus init -local -vcs git
+cp $WORK/bench.buzz magusfile.buzz
+exec git add -A
+exec git commit -q -m 'start'
+
+! exec magus job fork wave/bench --criteria 'run it' --write-paths code.go --check 'bench .'
+stderr 'wave/bench''s check `magus run bench \.` is a target a person runs \(human-only\)'
+stderr 'launches paid sessions'
+stderr 'declare a check its worker may run in its place'
+! stderr 'go-vet'
+
+stdin goal.json
+! exec magus job fork --stdin
+stderr 'wave/goal''s goal paid''s check `magus run bench \.` is a target a person runs \(human-only\)'
+
+exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .'
+exec magus ls jobs -o name
+stdout 'wave/lint'
+! stdout 'wave/bench'
+! stdout 'wave/goal'
+
+# An apply that adds the goal to a live row is graded as the fork was, dry run or not.
+! exec magus job apply -f apply.json --dry-run
+stderr 'wave/lint''s goal paid''s check `magus run bench \.` is a target a person runs \(human-only\)'
+! exec magus job apply -f apply.json
+stderr 'wave/lint''s goal paid''s check'
+exec magus ls jobs -o json
+stdout 'wave/lint'
+! stdout 'bench'
+
+-- bench.buzz --
+import "magus";
+
+magus\project({
+    "targets": {
+        "bench": {
+            "skip_cache": "launches paid sessions and records nothing a replay could restore",
+            "human_only": "launches paid sessions",
+        },
+    },
+});
+
+export fun bench(ctx: magus\Context, args: [str]) > void {}
+
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+-- goal.json --
+{"schema_version": 12, "id": "wave/goal", "criteria": "run it", "write_paths": ["code.go"],
+ "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
+-- apply.json --
+{"schema_version": 12, "id": "wave/lint", "criteria": "lint it", "write_paths": ["code.go"],
+ "check": {"target": "lint", "project": "."},
+ "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
+-- code.go --
+package pkg

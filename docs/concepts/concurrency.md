@@ -198,6 +198,11 @@ of this run in a pipe, to finish with the projects this run needs before taking 
 
 `magus status` lists such a run under "waiting on a pipe upstream".
 
+`magus status --wait | magus run ...` reserves the seat it sized for the run reading it:
+the broker holds it until that run's first claim takes it, the run exits, or 30 seconds
+pass without a claim. Without a magus reader, `--wait` holds nothing. A bare run still
+refuses at once with [MGS3009](../reference/codes/sandbox/MGS3009.md).
+
 Stages on different projects run at once and stream. A downstream run waits only until
 the upstream has taken its locks, then starts as soon as it sees they do not overlap
 with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never
@@ -283,8 +288,8 @@ worktrees, so N agents each running `magus affected ci` start N budgets' worth o
 work against one host. Measured on a ten-core workstation: four concurrent gates,
 load average 13.7, and tests failing because they were starved rather than wrong.
 
-So before a step starts, magus takes its concurrency slots and its declared
-`memory_mb` from a budget shared by every magus on the machine: the host's capacity.
+So before a step starts, magus takes its concurrency slots and its memory from a budget
+shared by every magus on the machine: the host's capacity.
 It lives in the [broker](../guides/integrations/server.md): one broker per user means
 one budget per machine, and a run starts one if none is up.
 
@@ -298,17 +303,32 @@ Key properties:
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
-- **Declared, not observed.** It arbitrates what targets say they need
-  ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
-  same verdict whatever else is running. Observed pressure warns separately and
-  never blocks.
+- **Declared or measured, never observed live.** It arbitrates what targets say they
+  need ([`memory_mb`](targets.md) and `slots`) and what their recorded runs measured, so
+  the same command with the same history reaches the same verdict whatever else is
+  running. Observed pressure warns separately and never blocks. A declaration always
+  wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
+  narrows. A target that declares nothing claims, once it has three successful measured
+  runs, 1.25 times their highest peak memory and the 75th percentile of their CPU time
+  over wall time as slots, rounded up; before that, no memory and one slot. A run that
+  kept 90% of its slots busy is saturated: its claim capped it, so it sits out the
+  percentile and the next claim doubles, up to the budget, until a run granted more
+  slots comes back unsaturated. A replayed
+  step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the whole
+  rule, and `magus session -o json` records how each step's claim was sized.
+- **A step runs Go as wide as it claims.** Every process a step starts gets
+  `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
+  and would otherwise take every core the budget counted as free. So a Go target's
+  measured width never exceeds its claim, and saturation above is how it widens.
 - **It does not queue behind another invocation.** A step kept out by another magus
   invocation is refused immediately, exiting **75**
   ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code
   a contended lock uses above, and for the same reason. The refusal names who holds
   the budget (pid, project, target, and directory), so a caller can go see why and
   retry once it frees. A step kept out only by its own process or its own run waits
-  for them, on the same terms as the lock.
+  for them, on the same terms as the lock. `magus status --wait` is the wait a caller
+  asks for: it reserves the seat it sized for the run it pipes into, so that run is not
+  refused, while a bare run still refuses at once.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead

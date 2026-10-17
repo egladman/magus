@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -16,7 +15,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// workspaceWriteRule is the Verdict.Rule an unnamed magus\guard.write answer carries.
+// workspaceWriteRule is the GuardJudgment.Rule an unnamed magus\guard.write answer carries.
 const workspaceWriteRule = workspaceShellPrefix + "write"
 
 // advisoryWriteRuleFailed names the notice that a workspace write rule judged nothing.
@@ -44,7 +43,8 @@ type textEdit struct {
 // gradeWorkspaceWrite asks the workspace's magus\guard.write rule about a write the
 // built-in rules did not deny, strengthen only, the way gradeWorkspaceCommand asks about a
 // command.
-func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict, path string, fields writeFields, lease string, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, path string, fields writeFields, lease string, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
+	verdict = gradeStall(deps, gradeMainWrite(deps, verdict, path, lease, who, at), lease, at)
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
@@ -52,19 +52,25 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	role, row := actingRole(ctx, at, lease)
+	spawned := spawnedAs(facts, who.Agent)
+	role, row := actingRole(ctx, at, lease, spawned)
+	thread, from, window := callerCost(at, who, lease, facts)
 	req := types.WriteRequest{
-		Host:      who.Host,
-		Session:   who.Session,
-		Agent:     who.Agent,
-		Parent:    spawnedAs(facts, who.Agent),
-		Role:      role,
-		Lease:     row,
-		Path:      path,
-		Workspace: writeWorkspace(path, at),
-		Content:   fields.Content,
-		OldText:   fields.OldText,
-		NewText:   fields.NewText,
+		Host:          who.Host,
+		Session:       who.Session,
+		Agent:         who.Agent,
+		Parent:        spawned,
+		Role:          role,
+		Lease:         row,
+		Thread:        thread,
+		ThreadFrom:    from,
+		Orchestration: callerOrchestration(at, who, thread, from, lease),
+		Window:        window,
+		Path:          path,
+		Workspace:     writeWorkspace(path, at),
+		Content:       fields.Content,
+		OldText:       fields.OldText,
+		NewText:       fields.NewText,
 	}
 	bind := func(rule workspace.WriteRule) ruleCall {
 		if rule == nil {
@@ -88,7 +94,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	spared := asked.lapse != nil && isGuardSource(deps, at, path) &&
 		(asked.approvedAnswered() || asked.approvedRuleless || !policyPending(ctx, deps, at))
 	denied := !spared && asked.denyShort(func() judgedCall {
-		return judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
+		return judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease, path: path}
 	}, at)
 	decided := ""
 	if verdict.Decision != decisionPass {
@@ -181,7 +187,7 @@ func writeWorkspace(path string, at location) string {
 	if !filepath.IsAbs(path) {
 		return at.workspace
 	}
-	root, err := magus.FindRoot(filepath.Dir(path))
+	root, err := workspace.FindRoot(filepath.Dir(path))
 	if err != nil {
 		// A file in a directory not created yet: the hook's own checkout is the best fact.
 		return at.workspace

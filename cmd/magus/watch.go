@@ -11,8 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	magus "github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"
 )
@@ -43,7 +42,7 @@ func (f *ignoreFlag) Set(value string) error {
 func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	wf := gen.BindWatch(fs)
+	wf := flaggen.BindWatch(fs)
 	// --ignore stays hand-bound: it is a repeatable custom flag.Value, a shape the
 	// registry has no kind for, so it is also absent from the man page.
 	var ignores ignoreFlag
@@ -139,7 +138,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 
 	// writeBatch converts each absolute path from the watcher to a
 	// workspace-relative slash-separated path before emitting.
-	// Sentinel tokens (e.g. magus.StreamAllSentinel) and any path that
+	// Sentinel tokens (e.g. streamAllSentinel) and any path that
 	// escapes the workspace root are passed through verbatim.
 	//
 	// The flush is the whole point of the function (stdout is block-buffered when
@@ -160,7 +159,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 
 	if wf.Initial {
 		// Sentinel consumed by `magus affected --stdin` to trigger a full build.
-		if err := writeBatch([]string{magus.StreamAllSentinel}); err != nil {
+		if err := writeBatch([]string{streamAllSentinel}); err != nil {
 			return err
 		}
 	}

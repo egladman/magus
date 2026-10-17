@@ -1,24 +1,26 @@
 syntax = "proto3";
 
 // Package magus.insight.v1alpha1 is the versioned wire contract for magus insight: where a
-// codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
+// codebase's attention and risk concentrate. Six lenses ride one message - four read VCS
 // history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
-// server caches, and volatility reads run-outcome history instead. They travel together
-// because the dashboard renders them as one board; splitting them into five RPCs would cost
-// five round trips for one paint and would let the four git lenses disagree about the window
-// they were scanned over.
+// server caches, volatility reads run-outcome history instead, and model_tiers reads the
+// outcomes of finished jobs. They travel together because the dashboard renders them as one
+// board; splitting them into six RPCs would cost six round trips for one paint and would let
+// the four git lenses disagree about the window they were scanned over.
 //
 // It is a sibling of the other console tool-page contracts (magus.status.v1alpha1, magus.activity.v1alpha1,
 // magus.metrics.v1alpha1). It mirrors types.InsightView, which the CLI also renders; the mapping to
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It deliberately does NOT carry the knowledge-graph axis (types.InsightReport's graph_stats):
-// the console read never touches the knowledge graph, and folding it in here would make every
-// dashboard poll pay for a graph load.
+// It carries one knowledge-graph lens, conformance, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conformance is the one that proposes a value for a
+// person to commit, so the dashboard shows it beside the history it is judged against. The
+// server computes it with the cached scan, so a burst of polls pays for one graph load.
 package magus.insight.v1alpha1;
 
 import "google/protobuf/timestamp.proto";
+import "magus/graph/v1alpha1/graph.proto";
 
 // InsightService serves the assembled lenses to the console dashboard. One read-only unary
 // RPC: the four git lenses come from a server-cached scan (~10s TTL) and volatility from a
@@ -30,15 +32,20 @@ service InsightService {
 
 message GetInsightRequest {}
 
-// Insight bundles the five lenses. volatility is absent (not an empty report) when the
+// Insight bundles the six lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which
-// renders "no runs recorded yet" rather than "no volatile targets".
+// renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
+// for the same reason when no job outcome was ever recorded. conformance is absent when the
+// server holds no workspace to read; a workspace without a symbol index sends it with an
+// unknown answer.
 message Insight {
   HotspotOutput hotspots = 1;
   AffinityOutput affinity = 2;
   OwnershipOutput ownership = 3;
   TrendOutput trend = 4;
   VolatilityReport volatility = 5;
+  ModelTierOutput model_tiers = 6;
+  ConformanceOutput conformance = 7;
 }
 
 // Every git lens repeats definition/commits/since because each is independently renderable:
@@ -192,4 +199,103 @@ message VolatilityTarget {
   int32 volatile_count = 7;
   int32 samples = 8;
   google.protobuf.Timestamp last_pass_time = 9; // the most recent passing run, unset when never
+}
+
+// ModelTierOutput is the job-history lens: what each model tier achieved on each kind of
+// job. It reads the outcomes the job store recorded, not git, and it reports only: changing
+// a tier is a person editing the declaration or matrix the doctor check names.
+message ModelTierOutput {
+  string definition = 1;
+  repeated ModelTierRecord rows = 2;
+}
+
+// ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job kind.
+// rank is the tier's place in the current declaration, -1 for one it no longer names.
+// pass_lower is the Wilson lower bound of the pass rate; the per-job fields are means, so a
+// reader sets pass rate beside the work a pass cost: checks run, re-forks of one id, rework
+// rounds (a worker sent more work after handing back) and widenings (write paths added to a
+// taken job).
+message ModelTierRecord {
+  int32 rank = 1;
+  string model_tier = 2;
+  string kind = 3; // check, symbol, paths, script or prose
+  int32 jobs = 4;
+  int32 pass = 5;
+  int32 fail = 6;
+  int32 no_return = 7;
+  double pass_lower = 8;
+  double checks_per_job = 9;
+  double forks_per_id = 10;
+  double rework_per_job = 11;
+  double widenings_per_job = 12;
+  // mean_cost_usd and median_tokens are absent, unknown, unless every counted outcome
+  // carries the figure; zero is a measured zero.
+  optional double mean_cost_usd = 13;
+  optional int64 median_tokens = 14;
+  // first_attempts counts the endings of a job's first attempt and first_pass those that
+  // passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
+  // not_retryable counts the endings classified as needing a change before another attempt.
+  int32 first_attempts = 15;
+  int32 first_pass = 16;
+  double first_pass_lower = 17;
+  int32 not_retryable = 18;
+}
+
+// ConformanceOutput is the code-shape lens: one row per metric and population, judged against the
+// value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
+// person commits a proposed value to the ratchet record, and nothing here sets one. answer is
+// unknown, never a pass, when a symbol index is missing. excluded counts the files the
+// configured exclusions hid, so a widened exclusion stays visible.
+message ConformanceOutput {
+  string definition = 1;
+  repeated ConformanceRow rows = 2;
+  repeated ConformanceKnown stale = 3;
+  int32 excluded = 4;
+  magus.graph.v1alpha1.Answer answer = 5;
+}
+
+// ConformanceKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
+// dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for
+// dep-fanout, the layer or package directory it covers.
+message ConformanceKey {
+  string metric = 1;
+  string population = 2;
+  string scope = 3;
+}
+
+// ConformanceRow is one key's distribution and verdict. live is the configured percentile today;
+// value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
+// bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
+// never looser than value. known counts the accepted items past value, and violations are the
+// rest.
+message ConformanceRow {
+  ConformanceKey key = 1;
+  int32 n = 2;
+  int32 p50 = 3;
+  int32 p90 = 4;
+  int32 p95 = 5;
+  int32 p99 = 6;
+  int32 live = 7;
+  int32 value = 8;
+  int32 anchor = 9;
+  int32 propose = 10;
+  int32 known = 11;
+  string source = 12;
+  repeated ConformanceItem violations = 13;
+}
+
+// ConformanceItem is one file, symbol, package or clone group past its row's value and not known.
+// source is its path:line.
+message ConformanceItem {
+  string id = 1;
+  string source = 2;
+  int32 measure = 3;
+}
+
+// ConformanceKnown is a list of items already past a metric's value and accepted for a reason.
+// In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
+message ConformanceKnown {
+  string metric = 1;
+  repeated string items = 2;
+  string reason = 3;
 }

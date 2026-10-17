@@ -195,11 +195,11 @@ func (r *Ring) close() error {
 	return syscall.Close(r.fd)
 }
 
-func (r *Ring) sqHeadPtr() *uint32 {
+func (r *Ring) sqHead() *uint32 {
 	return (*uint32)(unsafe.Pointer(&r.sqMem[r.params.sqOff.head]))
 }
 
-func (r *Ring) sqTailPtr() *uint32 {
+func (r *Ring) sqTail() *uint32 {
 	return (*uint32)(unsafe.Pointer(&r.sqMem[r.params.sqOff.tail]))
 }
 
@@ -215,11 +215,11 @@ func (r *Ring) sqeAt(slot uint32) *sqe {
 	return (*sqe)(unsafe.Pointer(&r.sqesMem[slot*uint32(unsafe.Sizeof(sqe{}))]))
 }
 
-func (r *Ring) cqHeadPtr() *uint32 {
+func (r *Ring) cqHead() *uint32 {
 	return (*uint32)(unsafe.Pointer(&r.cqMem[r.params.cqOff.head]))
 }
 
-func (r *Ring) cqTailPtr() *uint32 {
+func (r *Ring) cqTail() *uint32 {
 	return (*uint32)(unsafe.Pointer(&r.cqMem[r.params.cqOff.tail]))
 }
 
@@ -238,7 +238,7 @@ func (r *Ring) submitRead(fd int, buf []byte, userData uint64) error {
 		return errors.New("iouring: SubmitRead: empty buffer")
 	}
 
-	tail := atomic.LoadUint32(r.sqTailPtr())
+	tail := atomic.LoadUint32(r.sqTail())
 	slot := tail & r.sqMask()
 
 	s := r.sqeAt(slot)
@@ -253,14 +253,14 @@ func (r *Ring) submitRead(fd int, buf []byte, userData uint64) error {
 	s.userData = userData
 
 	*r.sqArrayEntry(slot) = slot
-	atomic.StoreUint32(r.sqTailPtr(), tail+1)
+	atomic.StoreUint32(r.sqTail(), tail+1)
 	return nil
 }
 
 // submitAndWait submits pending SQEs and blocks until minComplete CQEs are available.
 // io_uring_enter(GETEVENTS) is the release/acquire fence for CQ reads.
 func (r *Ring) submitAndWait(minComplete uint32) (int, error) {
-	toSubmit := atomic.LoadUint32(r.sqTailPtr()) - atomic.LoadUint32(r.sqHeadPtr())
+	toSubmit := atomic.LoadUint32(r.sqTail()) - atomic.LoadUint32(r.sqHead())
 	var n uintptr
 	var errno syscall.Errno
 	for {
@@ -283,12 +283,12 @@ func (r *Ring) submitAndWait(minComplete uint32) (int, error) {
 // drainCompletions visits every available CQE and advances the CQ head.
 // Call only after a successful submitAndWait.
 func (r *Ring) drainCompletions(visit func(CQE)) {
-	head := atomic.LoadUint32(r.cqHeadPtr())
-	tail := atomic.LoadUint32(r.cqTailPtr())
+	head := atomic.LoadUint32(r.cqHead())
+	tail := atomic.LoadUint32(r.cqTail())
 	for head != tail {
 		c := r.cqeAt(head & r.cqMask())
 		visit(CQE{UserData: c.userData, Result: c.res})
 		head++
 	}
-	atomic.StoreUint32(r.cqHeadPtr(), head)
+	atomic.StoreUint32(r.cqHead(), head)
 }

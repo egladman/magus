@@ -4,9 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	json "github.com/egladman/magus/internal/json"
 )
 
 // The label names what each channel said and nothing it did not: an origin with no host and
@@ -44,15 +41,4 @@ func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
 	for _, name := range []string{"", "el", "eli via claude-code", "claude", "s1", "3fa9", "mcp=write", "token laptop (3fa9c1d2)"} {
 		assert.False(t, o.Names(name), name)
 	}
-}
-
-// A review draft written before the review route's author was renamed still restores as a
-// draft its reader can publish; reading it as an unknown author would discard it.
-func TestDiffAuthorReadsTheReviewRouteUnderItsOldName(t *testing.T) {
-	t.Parallel()
-	var c DiffComment
-	require.NoError(t, json.Unmarshal([]byte(`{"id":"c1","path":"a.go","hunk":0,"author":"human","body":"x","resolved":false}`), &c))
-	assert.Equal(t, DiffAuthorUnattributed, c.Author)
-	require.NoError(t, json.Unmarshal([]byte(`{"id":"c2","path":"a.go","hunk":0,"author":"agent","body":"x","resolved":false}`), &c))
-	assert.Equal(t, DiffAuthorAgent, c.Author)
 }

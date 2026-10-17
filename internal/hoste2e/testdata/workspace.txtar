@@ -1,0 +1,51 @@
+The throwaway workspace each host session runs in. newWorkspace replaces @SPELL@ with
+the harness spell under test and @NONCE@ with the session's code-word suffix.
+
+-- magus.yaml --
+# A throwaway workspace for the host end-to-end suite; built-in defaults throughout.
+default_charms: []
+-- .gitignore --
+/.magus/
+/magus
+-- AGENTS.md --
+# Fixture
+
+A throwaway workspace for the magus host end-to-end suite.
+-- probe.txt --
+a file the harness test reads
+-- magusfile.buzz --
+import "magus";
+import "spells/harness/@SPELL@" as host;
+
+magus\harness.provider(host);
+
+fun judgeCommand(req: CommandRequest) > GuardVerdict {
+    if (req.command.indexOf("e2e-deny-probe") != null) {
+        return magus\guard.deny("this harness test refuses the command. Code word: E2E-DENY-@NONCE@");
+    }
+    if (req.command.indexOf("e2e-advise-probe") != null) {
+        return magus\guard.advise("this harness test notes the command. Code word: E2E-ADVISE-@NONCE@");
+    }
+    return magus\guard.allow();
+}
+
+fun judgeWrite(req: WriteRequest) > GuardVerdict {
+    if (req.path.endsWith("blocked.txt")) {
+        return magus\guard.deny("this harness test refuses the write. Code word: E2E-WRITE-@NONCE@");
+    }
+    return magus\guard.allow();
+}
+
+fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
+    return magus\guard.advise("this harness test saw the spawn. Code word: E2E-SPAWN-@NONCE@");
+}
+
+magus\guard.command(judgeCommand);
+magus\guard.write(judgeWrite);
+magus\guard.spawn(judgeSpawn);
+
+magus\project({"no_language": "host e2e fixture"});
+
+export fun generate(ctx: magus\Context, _a: [str]) > void {
+    ctx.writesFiles("gen/out.txt");
+}

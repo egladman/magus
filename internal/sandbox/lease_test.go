@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,25 +23,25 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	t.Helper()
 	root = filesystem.ResolveRulePath(t.TempDir())
 	cacheDir = t.TempDir()
-	// The job store lives in the per-repository state dir, and NarrowToLease resolves it
+	// The job store lives in the per-repository state dir, which stateDir resolves
 	// through the environment, so without this the fixture's rows land in the
 	// developer's own store and the store under test is the real one.
 	testkit.Isolate(t)
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root})
 	switch {
 	case row.ID == "":
 	case row.State == "":
 		// The store stores a row naming no state as declared, so the legacy row an older
-		// magus left is planted as the file it wrote.
+		// magus left is planted as the line it wrote.
 		path, err := store.Path()
 		require.NoError(t, err)
-		body, err := json.Marshal(map[string]any{"jobs": []types.Job{row}})
+		line, err := json.Marshal(row)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, body, 0o644))
+		require.NoError(t, os.WriteFile(path, append(line, '\n'), 0o644))
 	default:
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
@@ -48,11 +49,20 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	return root, cacheDir
 }
 
+// stateDir is the user state dir testkit.Isolate points the environment at. Not
+// fixture.StateBase: internal/fixture imports this package's importers.
+func stateDir(t *testing.T) string {
+	t.Helper()
+	dir, err := xdg.StateDir()
+	require.NoError(t, err)
+	return dir
+}
+
 // narrowed builds the workspace policy for root and narrows it to leaseID's row.
 func narrowed(t *testing.T, root, cacheDir, leaseID string) *Policy {
 	t.Helper()
 	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
-	return NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, leaseID, types.LeaseSourceMarker)
+	return NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, leaseID, types.LeaseSourceMarker)
 }
 
 // TestNarrowToLeaseGrantsOnlyTheWritePaths is the boundary the whole tier rests on: a
@@ -191,7 +201,7 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)
 			base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
 
-			p := NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
+			p := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
 
 			assert.Same(t, base, p)
 			require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "x.txt")))

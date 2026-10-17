@@ -59,9 +59,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -158,6 +158,15 @@ type TargetResult struct {
 	Lease          string `json:"lease,omitempty"`
 	// LeaseFrom repeats the start's, for the reason Lease does.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	// What the target claimed and cost, each omitted when zero as on journal.Event; Sizing
+	// is a journal.Sizing* value, empty on a record older than these fields.
+	StartedMs   int64  `json:"started_ms,omitzero"`
+	Slots       int    `json:"slots,omitzero"`
+	MemoryMB    int    `json:"memory_mb,omitzero"`
+	Sizing      string `json:"sizing,omitzero"`
+	WaitedMs    int64  `json:"waited_ms,omitzero"`
+	MaxRSSBytes int64  `json:"max_rss_bytes,omitzero"`
+	CPUMs       int64  `json:"cpu_ms,omitzero"`
 }
 
 // UnmarshalJSON decodes a result, reading a duration written under either spelling.
@@ -202,7 +211,7 @@ const fileExt = ".jsonl"
 // directory, so a session started in one is visible from another. Keyed through
 // vcs.StateDir so it agrees with every other per-repo store about what a repo is.
 func Dir(root string) (string, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("sessions: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
@@ -325,13 +334,8 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on the CLI
 	// path is positioned to run. See internal/trail, which made the same trade.
-	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("sessions: open %s: %w", w.path, err)
-	}
-	defer func() { _ = f.Close() }()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("sessions: append to %s: %w", w.path, err)
+	if err := file.AppendLines(w.path, [][]byte{line}, 0o644, file.WithoutSync()); err != nil {
+		return fmt.Errorf("sessions: append %s record: %w", kind, err)
 	}
 	w.seq++
 	return nil

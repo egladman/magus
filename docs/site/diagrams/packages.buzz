@@ -1,6 +1,7 @@
 namespace packages;
 
 import "magus";
+import "magus/figure";
 
 // goPackages is every Go package glob matches.
 export fun goPackages(glob: str) > [magus\Dir] !> any {
@@ -10,17 +11,5 @@ export fun goPackages(glob: str) > [magus\Dir] !> any {
 // cmdTools is every command under cmd/ except the magus binary itself: docs generators,
 // codegen and the browser playground, each built by its own target.
 export fun cmdTools() > [magus\Dir] !> any {
-    return [
-        magus\dir("cmd/buzz-playground"),
-        magus\dir("cmd/langservice-manifest"),
-        magus\dir("cmd/magus-configdocs"),
-        magus\dir("cmd/magus-docs"),
-        magus\dir("cmd/magus-examples"),
-        magus\dir("cmd/magus-manpage"),
-        magus\dir("cmd/magus-protodocs"),
-        magus\dir("cmd/magus-skilldocs"),
-        magus\dir("cmd/magus-spelldocs"),
-        magus\dir("cmd/magus-termcast"),
-        magus\dir("cmd/magus-utils"),
-    ];
+    return figure\without(goPackages("cmd/*"), drop: [magus\dir("cmd/magus")]);
 }

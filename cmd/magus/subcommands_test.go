@@ -13,11 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cli"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/cmdline"
 )
 
 // TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
@@ -39,8 +40,8 @@ func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 // rejects: `magus config mcp token print` (the operator token moved to `config token`),
 // `magus notes new <name>`, and a bare `magus ci`. Each had a real head, so nothing failed.
 //
-// Resolution walks internal/cli's tree, the same hand-maintained mirror
-// TestManpageCoversEverySubcommand pins to knownSubcommands at the top level. A mirror is
+// Resolution walks internal/commands' tree, which knownSubcommands is read from at the top
+// level. A mirror is
 // the strongest target available: most families dispatch on a bare switch with no
 // accept-list to read, so an assertion against the router itself needs those switches
 // restructured first. It is only worth as much as the mirror is complete, which is what
@@ -56,12 +57,12 @@ func TestCLICommandPathsResolve(t *testing.T) {
 
 // resolveCommandPath reports whether tokens name a routable subcommand chain.
 func resolveCommandPath(tokens []string) error {
-	children := cli.All
+	children := commands.Root.Children
 	for i, tok := range tokens {
-		idx := slices.IndexFunc(children, func(c cli.Command) bool { return c.Name == tok })
+		idx := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == tok })
 		if idx < 0 {
 			parent := "magus " + strings.Join(tokens[:i], " ")
-			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/cli/registry.go",
+			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/commands/registry.go",
 				tok, strings.TrimSpace(parent))
 		}
 		children = children[idx].Children
@@ -96,7 +97,7 @@ func TestCLICommandLsNounsAreDocumented(t *testing.T) {
 	documented := slices.Sorted(slices.Values(childNames(t, "ls")))
 	routed := slices.Sorted(slices.Values(lsNouns))
 	if !slices.Equal(documented, routed) {
-		t.Errorf("internal/cli documents ls nouns %v, lsCmd routes %v", documented, routed)
+		t.Errorf("internal/commands documents ls nouns %v, lsCmd routes %v", documented, routed)
 	}
 }
 
@@ -108,19 +109,19 @@ func TestCLICommandLsNounsAreDocumented(t *testing.T) {
 func TestCLIDescribeNounsAreAccepted(t *testing.T) {
 	for _, name := range childNames(t, "describe") {
 		if describeAlias[name] == "" {
-			t.Errorf("internal/cli documents `magus describe %s`, which describeAlias does not accept", name)
+			t.Errorf("internal/commands documents `magus describe %s`, which describeAlias does not accept", name)
 		}
 	}
 }
 
 func childNames(t *testing.T, command string) []string {
 	t.Helper()
-	idx := slices.IndexFunc(cli.All, func(c cli.Command) bool { return c.Name == command })
+	idx := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == command })
 	if idx < 0 {
-		t.Fatalf("no cli.All entry for %q", command)
+		t.Fatalf("no commands.Root.Children entry for %q", command)
 	}
-	names := make([]string, 0, len(cli.All[idx].Children))
-	for _, child := range cli.All[idx].Children {
+	names := make([]string, 0, len(commands.Root.Children[idx].Children))
+	for _, child := range commands.Root.Children[idx].Children {
 		names = append(names, child.Name)
 	}
 	return names
@@ -169,39 +170,6 @@ func TestCLICommandQueryOutputForm(t *testing.T) {
 	}
 }
 
-// TestManpageCoversEverySubcommand guards the drift that shipped `magus man` with pages for
-// 21 of 30 subcommands, vcs among them. internal/cli/registry.go is a hand-maintained
-// mirror of subcommands.go, and api_test.go cannot catch divergence: it locks api.lock against
-// API(), which is generated from the same registry.
-func TestManpageCoversEverySubcommand(t *testing.T) {
-	// `magus help` prints what `magus` prints; man(1) has no page for it.
-	const notDocumented = "help"
-
-	documented := make(map[string]bool, len(cli.All))
-	for _, c := range cli.All {
-		documented[c.Name] = true
-	}
-
-	for _, s := range subcommands {
-		if s.Name == notDocumented {
-			continue
-		}
-		if !documented[s.Name] {
-			t.Errorf("subcommand %q has no cli.All entry, so `magus man` installs no page for it "+
-				"and the docs site renders none - add one to internal/cli/registry.go", s.Name)
-		}
-	}
-
-	// A page for a command the dispatcher no longer routes is worse than a missing one:
-	// manpage/magus-churn.1 is a committed artifact of exactly that.
-	for _, c := range cli.All {
-		if !slices.Contains(knownSubcommands, c.Name) {
-			t.Errorf("cli.All documents %q, which knownSubcommands does not route - "+
-				"remove the entry, or restore the subcommand", c.Name)
-		}
-	}
-}
-
 // helpAliases are case labels every hand-rolled dispatcher below repeats to
 // route its own -h/--help/help handling. They are not children of anything and
 // are stripped before comparing a dispatcher's routed set against the registry.
@@ -211,8 +179,8 @@ var helpAliases = []string{"-h", "--help", "help"}
 // directory) and returns the string-literal case labels of its first
 // top-level switch statement, in source order, with helpAliases removed.
 //
-// This is TestDispatchSubCoversKnownSubcommands's technique (main.go's
-// dispatchSub vs subcommands.go's knownSubcommands) applied one level down: a
+// This is TestDispatchSubCoversKnownSubcommands's technique (dispatchSub vs
+// knownSubcommands) applied one level down: a
 // per-command dispatcher that routes a child with no matching entry in that
 // command's registry.Children is invisible to man pages, completions, and
 // --help, which is exactly the class of gap item 1 of the 2026-08 doctrine
@@ -281,13 +249,13 @@ func dispatcherCases(t *testing.T, file, funcName string) []string {
 	return cases
 }
 
-// registryChildren walks cli.All down a dotted command path (e.g. "config",
+// registryChildren walks commands.Root.Children down a dotted command path (e.g. "config",
 // "mcp", "connector") and returns the names of that command's declared
 // Children.
 func registryChildren(t *testing.T, path ...string) []string {
 	t.Helper()
-	cmds := cli.All
-	var cur cli.Command
+	cmds := commands.Root.Children
+	var cur cmdline.Command
 	found := false
 	for i, name := range path {
 		found = false
@@ -322,7 +290,7 @@ func registryChildren(t *testing.T, path ...string) []string {
 func TestDispatcherChildrenAreDeclared(t *testing.T) {
 	tests := []struct {
 		command string   // registry path, for the failure message
-		path    []string // dotted command path into cli.All
+		path    []string // dotted command path into commands.Root.Children
 		file    string
 		fn      string
 		exempt  []string
@@ -416,9 +384,9 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 }
 
 // walkRegistryCommands visits every node in the recursive registry tree
-// (internal/cli.All plus every Children entry, at any depth), calling visit
+// (internal/commands.Root.Children plus every Children entry, at any depth), calling visit
 // with the dotted path of command words leading to it.
-func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path []string, c cli.Command)) {
+func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(path []string, c cmdline.Command)) {
 	for _, c := range cmds {
 		path := append(append([]string{}, prefix...), c.Name)
 		visit(path, c)
@@ -453,8 +421,8 @@ func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path [
 // gives the real CLI. A token that is neither a known global flag nor a
 // matching child name stops the walk; per-command flags are never expected
 // to precede their own subcommand in these examples.
-func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cli.Command, matched bool) {
-	cmds := cli.All
+func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.Command, matched bool) {
+	cmds := commands.Root.Children
 	for i := 0; i < len(args); {
 		tok := args[i]
 		if strings.HasPrefix(tok, "-") {
@@ -493,12 +461,12 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cli.Comm
 // bindUnlessRegistered copies node's own flags onto fs, skipping any name fs
 // already has. A flag documented on the registry can legitimately repeat a
 // GLOBAL flag's name (e.g. "config cache prune --dry-run" repeats the
-// gen.BindFlags-bound --dry-run purely so the man page's per-command Options
+// flaggen.BindFlags-bound --dry-run purely so the man page's per-command Options
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
-func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
-	if !node.HasFlags() {
+func bindUnlessRegistered(fs *flag.FlagSet, node cmdline.Command) {
+	if len(node.Flags) == 0 {
 		return
 	}
 	tmp := flag.NewFlagSet("tmp", flag.ContinueOnError)
@@ -511,7 +479,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 }
 
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
-// registry (internal/cli/registry.go and every command's Children) against
+// registry (internal/commands/registry.go and every command's Children) against
 // the flag set its own resolved command actually binds: the same three
 // binders cmdParse composes (config flags, display flags, the command's own
 // declared Flags), so a bogus or misspelled flag in a documented example is
@@ -540,7 +508,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 	// example like `--tee build.jsonl` leaks global.tee into every later test in
 	// the package, and the next config-view test faithfully tees into the cwd.
 	t.Cleanup(snapshotGlobals())
-	walkRegistryCommands(cli.All, nil, func(path []string, c cli.Command) {
+	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c cmdline.Command) {
 		for _, ex := range c.Examples {
 			t.Run(strings.Join(path, "_")+"/"+ex.Comment, func(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {
@@ -558,7 +526,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 					checked++
 					fs := flag.NewFlagSet(strings.Join(path, " "), flag.ContinueOnError)
 					fs.SetOutput(io.Discard)
-					gen.BindFlags(fs, &config.Config{})
+					flaggen.BindFlags(fs, &config.Config{})
 					bindDisplayFlags(fs)
 
 					cmdPath, matched := resolveRegistryPath(fs, gc.Args)
@@ -587,4 +555,36 @@ func TestRegistryExamplesParse(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
+// dispatchSub routed with no matching entry in the command registry: `magus mcp`
+// worked when typed, but help, did-you-mean, the man pages, and every completion
+// script (all derived from cli.All) never mentioned it. dispatchSub's switch and the
+// registry are two separate declarations that can drift; this closes that gap
+// mechanically instead of relying on someone remembering to update both.
+//
+// It reads dispatchSub's case labels out of the source with go/parser rather than
+// exercising the switch at runtime: running it needs a loaded workspace for most
+// cases, which is more than a unit test should require to check that two name
+// lists agree.
+func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
+	cases := dispatcherCases(t, "subcommands.go", "dispatchSub")
+	if len(cases) == 0 {
+		t.Fatal("found no case clauses in dispatchSub's switch - the parse is wrong, not the switch")
+	}
+
+	// help and version are routed in runCLI before dispatchSub is ever called (see
+	// runCLI's own switch on res.sub), so they belong in knownSubcommands and are
+	// deliberately absent from dispatchSub's case set, not a gap to flag.
+	got := append(cases, "help", "version")
+	slices.Sort(got)
+
+	want := slices.Clone(knownSubcommands)
+	slices.Sort(want)
+
+	if !slices.Equal(got, want) {
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from commands.Root) = %v\n"+
+			"a case dispatchSub routes must have an entry in internal/commands' Root, and vice versa", got, want)
+	}
 }

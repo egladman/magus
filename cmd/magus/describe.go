@@ -7,7 +7,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/spells"
 	"io/fs"
 	"log/slog"
@@ -24,6 +26,8 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -86,7 +90,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			// Removed noun: the knowledge-graph export moved to the graph home.
 			slog.ErrorContext(ctx, fmt.Sprintf("`describe knowledge` moved to `%s`", hint.GraphExport),
 				attr.Notice(""), attr.Component("magus describe"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		slog.ErrorContext(ctx, fmt.Sprintf("unknown noun %q", noun), attr.Notice(""), attr.Component("magus describe"))
 		spellings := make([]string, 0, len(describeAlias)) // every accepted spelling, sorted for a stable suggestion
@@ -98,7 +102,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
 		describeUnknownNounUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 }
 
@@ -155,7 +159,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// Like `magus graph`, accept the graph-only -o formats on top of the common
 	// set; markdown renders the full MAGUS.md doc (the catalog + the graph).
-	opts, err := ResolveOutput(global.output, outputDot, outputMarkdown)
+	opts, err := output.Parse(global.output, outputDot, outputMarkdown)
 	if err != nil {
 		return err
 	}
@@ -196,7 +200,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 				names = append(names, n.Name)
 			}
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	case outputDot:
 		return render.WriteTargetGraphDOT(os.Stdout, out)
 	case outputMarkdown:
@@ -211,7 +215,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		// only route to a project whose targets live in its own index.
 		var routing *types.KnowledgeRouting
 		if len(pos) == 0 {
-			g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, false, nil)
+			g, err := workspacegraph.Build(ctx, ws, ws.Root(), globalCfg, false, nil)
 			if err != nil {
 				return fmt.Errorf("build knowledge graph for the routing index: %w", err)
 			}
@@ -292,13 +296,13 @@ func unknownEntity(kind, name string, all []string) error {
 		msg += fmt.Sprintf("; did you mean %q?", sug)
 	}
 	slog.ErrorContext(context.Background(), msg, attr.Notice(""), attr.Component("magus describe "+kind))
-	return errSilent{exitCode: 2}
+	return exit.Reported(exit.Usage)
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
-	var sf *gen.DescribeSpellsFlags
+	var sf *flaggen.DescribeSpellsFlags
 	pos, err := cmdParse("describe spells", args, func(fs *flag.FlagSet) {
-		sf = gen.BindDescribeSpells(fs)
+		sf = flaggen.BindDescribeSpells(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe spell[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -353,7 +357,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		for _, t := range inventory {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -563,7 +567,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		for _, c := range charms {
 			names = append(names, c.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -623,9 +627,9 @@ func firstLine(s string) string {
 func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
-	var tf *gen.DescribeTargetFlags
+	var tf *flaggen.DescribeTargetFlags
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
-		tf = gen.BindDescribeTarget(fs)
+		tf = flaggen.BindDescribeTarget(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -661,17 +665,17 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			// silently answering one would misread as the other having no output.
 			slog.ErrorContext(ctx, "--explain traces the rendered command and --cache keys the inputs; run them separately",
 				attr.Notice(""), attr.Component("magus describe target"))
-			return errSilent{exitCode: 2}
+			return exit.Reported(exit.Usage)
 		}
 		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms, tf.Inputs)
 	}
 	if tf.NoDefaultCharms {
 		slog.ErrorContext(ctx, "--no-default-charms applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if tf.Inputs {
 		slog.ErrorContext(ctx, "--inputs applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
@@ -741,7 +745,7 @@ type targetCacheLastRun struct {
 func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms, showInputs bool) error {
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	t, err := types.ParseTarget(pos[0])
 	hintCanonicalSpelling(ctx, t)
@@ -765,13 +769,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	}
 	if len(evaluated) == 0 {
 		slog.ErrorContext(ctx, fmt.Sprintf("no project matches %q", pos[0]), attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if against != "" && len(evaluated) > 1 {
 		slog.ErrorContext(ctx, fmt.Sprintf("%q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)",
 			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against)),
 			attr.Notice(""), attr.Component("magus describe target --cache"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	// The key must match what a run computes, so merge magus.yaml default charms
@@ -795,7 +799,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		case errors.Is(err, fs.ErrNotExist):
 			slog.ErrorContext(ctx, fmt.Sprintf("ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them", storedRef),
 				attr.Notice(""), attr.Component("magus describe target --cache"))
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		case err != nil:
 			return fmt.Errorf("magus describe target --cache: read stored key inputs for %s: %w", storedRef, err)
 		}
@@ -839,7 +843,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			if !matches {
 				mismatched = true
 			}
-		} else if rec, rerr := m.LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
+		} else if rec, rerr := viewInternals(m).LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
 			// With no peer named, the peer is this machine's own last run of the target.
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every
@@ -858,7 +862,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			return err
 		}
 		if mismatched {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	case outputName:
@@ -866,11 +870,11 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		for _, r := range reports {
 			names = append(names, r.Ref)
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		if mismatched {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -927,7 +931,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	// --against is a comparison a script should be able to gate on, so a mismatch
 	// exits non-zero (the report above is the explanation, already printed).
 	if mismatched {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -1074,7 +1078,7 @@ func describeTargets(ctx context.Context, root string) error {
 		for _, t := range targets {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1096,9 +1100,9 @@ func describeTargets(ctx context.Context, root string) error {
 }
 
 func describeProjects(ctx context.Context, root string, args []string) error {
-	var pf *gen.DescribeProjectsFlags
+	var pf *flaggen.DescribeProjectsFlags
 	pos, err := cmdParse("describe projects", args, func(fs *flag.FlagSet) {
-		pf = gen.BindDescribeProjects(fs)
+		pf = flaggen.BindDescribeProjects(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1144,7 +1148,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			for _, p := range out.Projects {
 				names = append(names, p.Path)
 			}
-			return emitNames(names)
+			return emitNames(os.Stdout, names)
 		}
 
 		// text / wide
@@ -1222,7 +1226,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		for _, p := range out.Projects {
 			names = append(names, p.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1254,7 +1258,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 func describeTarget(ctx context.Context, root string, pos []string, explain bool) error {
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	t, err := types.ParseTarget(pos[0])
@@ -1289,7 +1293,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		for _, e := range out {
 			names = append(names, e.Project+":"+e.Target)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1444,7 +1448,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		for _, w := range out {
 			names = append(names, w.Root)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1487,11 +1491,11 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
 	for _, wsRoot := range declared {
-		cfg, err := loadWorkspaceCfg(wsRoot)
+		cfg, err := loadWorkspaceConfig(wsRoot)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
-		w, err := magus.Inspect(ctx, wsRoot, magus.WithLoadedConfig(cfg))
+		w, err := magus.Inspect(ctx, wsRoot, append(cliOptions(), workspace.WithLoadedConfig(cfg))...)
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
@@ -1545,7 +1549,7 @@ func describeMCPTools(args []string) error {
 		for _, t := range out.MCPTools {
 			names = append(names, t.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide
@@ -1587,7 +1591,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires at least one <path> argument", attr.Notice(""), attr.Component("magus describe file"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -1620,7 +1624,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		for i, f := range files {
 			names[i] = f.Path
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide

@@ -25,10 +25,9 @@ export fun mgs_listRequiredGlobs() > [Path] {
 }
 
 
-// `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads
-// its line with the commit it was built from, the timestamp, and the Go version it was
-// compiled with. Asking for `patch` extracts the version and sheds all of that, so two
-// machines running the same tool agree on a key. It narrows nothing anyone reasons about.
+// `go version` prints the host platform (`go1.26.0 linux/amd64`). Asking for `patch`
+// extracts the version and sheds it, so two machines running the same tool agree on a
+// key. It narrows nothing anyone reasons about.
 // Shedding `go version`'s GOOS/GOARCH suffix is only safe because the cache manifest
 // carries its own platform field (see internal/cache/manifest.go) and refuses to replay
 // across platforms; that suffix was otherwise the ONLY thing putting platform into the key.
@@ -67,6 +66,12 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // tier beneath the workspace and a bound living there would gate every workspace on one
 // machine from a file nobody else reads. types/project.go states the rule.
 //
+// golangci-lint is observed for the reason scip-go is: a version probe keys every target
+// in the project, so a linter upgrade invalidated every go-test entry, and only the
+// golangci-lint op reads the binary. An observation hashes the whole line, commit and
+// build date included, so two builds of one release key apart; they are rare, and a
+// version probe's cost was every test key.
+//
 // golangci-lint and govulncheck declare no window. Neither has a version below which
 // the ops are known to break, and inventing one to look thorough would fail builds over
 // a bound nobody verified.
@@ -74,7 +79,7 @@ export fun mgs_getTools() > {str: Tool} {
     return {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
                    supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
-        "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
+        "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["--version"]}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
         // Observed for the reason govulncheck is: only the scip op drives it, so its
         // version keys the index and no build or test.
@@ -237,7 +242,7 @@ fun goFmt(target: Target) > Command {
 // in go.mod. `go tool golangci-lint` also required the binary in the module's tool
 // block, and a workspace that had not put it there got "no such tool" - the op
 // could not run at all. On PATH it is pinned by whatever the workspace uses
-// (mise, asdf, a system package), and the spell's version probe records which.
+// (mise, asdf, a system package), and the spell's observe probe records which.
 fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
     return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV, charms = {

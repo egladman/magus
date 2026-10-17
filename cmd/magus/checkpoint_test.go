@@ -6,10 +6,48 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// The checkpoint's spawn ancestry is read from the environment, so its lease must be the
+// environment's claim too: a hook process forwards none, and checkoutLease has to agree with
+// job.ActingLease over trail.SpawnFromEnv for every source.
+func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testing.T) {
+	for name, tc := range map[string]struct{ claim, bound string }{
+		"nothing":                 {},
+		"the claim alone":         {claim: "fleet/f3"},
+		"the binding alone":       {bound: "fleet/bound"},
+		"the binding and a claim": {claim: "fleet/f3", bound: "fleet/bound"},
+		"an invalid claim":        {claim: "not a lease id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := attentionTestRoot(t)
+			cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+			require.NoError(t, err)
+			if tc.bound != "" {
+				bindCheckout(t, cacheDir, tc.bound)
+			}
+			t.Setenv(trail.EnvBaggage, "")
+			if tc.claim != "" {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			}
+
+			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
+			lease, from, err := checkoutLease(context.Background(), root)
+			require.NoError(t, err)
+			assert.Equal(t, wantLease, lease)
+			assert.Equal(t, wantFrom, from)
+		})
+	}
+}
 
 func TestReadCheckpointEnvelopeTakesOnlyThePointers(t *testing.T) {
 	body := `{"hook_event_name":"Stop","session_id":"01a07dab","transcript_path":"/tmp/rollout.jsonl",` +

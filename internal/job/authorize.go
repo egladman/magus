@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -45,13 +46,13 @@ type Actor struct {
 // than letting either win. A process that sets it on itself can lose rights, never gain one.
 const EnvStampedLease = "MAGUS_STAMPED_LEASE"
 
-// ActingActor is the party this process acts as for the checkout whose cache dir is
-// cacheDir: the lease [ActingLease] resolves from the checkout's record and this
-// process's BAGGAGE claim. A process with no lease is the unbound actor, unless
-// [EnvStampedLease] says a transport stamped that absence.
-func ActingActor(cacheDir string) Actor {
+// ActingActor is the party this process acts as for the checkout loc places: the lease
+// [ActingLease] resolves from the checkout's record and this process's BAGGAGE claim. A
+// process with no lease is the unbound actor, unless [EnvStampedLease] says a transport
+// stamped that absence.
+func ActingActor(loc Location) Actor {
 	claim := trail.LeaseFromEnv()
-	lease, _ := ActingLease(cacheDir, claim)
+	lease, _ := ActingLease(loc, claim)
 	if os.Getenv(EnvStampedLease) == "" {
 		return Actor{Lease: lease}
 	}
@@ -59,6 +60,19 @@ func ActingActor(cacheDir string) Actor {
 		return Actor{Unstamped: true}
 	}
 	return Actor{Lease: claim}
+}
+
+// RunLease is the lease [ActingLease] resolves for work running on ctx. The claim is the
+// lease of the process that asked for the work, which ctx carries whenever an entry point
+// stamped it: the CLI stamps its BAGGAGE, and the daemon stamps a client's lease, or the
+// client's lack of one, so a client run never reads the daemon's own environment. Only a
+// ctx no entry point stamped, such as an embedding Go program's, falls back to BAGGAGE.
+func RunLease(ctx context.Context, loc Location) (string, types.LeaseSource) {
+	claim, ok := types.LookupJobLease(ctx)
+	if !ok {
+		claim = trail.LeaseFromEnv()
+	}
+	return ActingLease(loc, claim)
 }
 
 // Bound reports whether this actor is held to a worker's boundary: a worker acting under a
@@ -70,15 +84,10 @@ func (a Actor) Bound() bool { return a.Lease != "" || a.Unstamped }
 // takes its own mutex; the file lock still serializes it against s and every other writer.
 func (s *Store) As(a Actor) *Store {
 	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir,
+		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir, stateBase: s.stateBase,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, outputs: s.outputs, landed: s.landed,
+		build: s.build,
 	}
-}
-
-// RefuseUnstampedVerify is the refusal for an [Actor.Unstamped] caller verifying row id,
-// which [Actor.Verifies] answers only as a bool.
-func RefuseUnstampedVerify(id string) error {
-	return refuse(Actor{Unstamped: true}, id, "verifying a row grades its holder's work, and a caller magus cannot name may be that holder")
 }
 
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether
@@ -102,10 +111,14 @@ const (
 	// row it lands on is by definition not the writer's, and the one write that sets
 	// Unattributed.
 	asObservation
+	// asNarrowing is [NarrowConfigHold] trading a pattern's hold on one config file for
+	// claims on the declarations its holder touched: ungraded, since the claims sit inside
+	// what the pattern already covered, and the one write that stamps its own release.
+	asNarrowing
 )
 
 // graded reports whether the acting party's boundary applies to this write.
-func (g grading) graded() bool { return g != asObservation }
+func (g grading) graded() bool { return g != asObservation && g != asNarrowing }
 
 // RefusedError is a write the store would not apply, naming the rule, the actor it
 // applied to, and what the actor should do instead.
@@ -165,7 +178,7 @@ func refuse(actor Actor, id, rule string) error {
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on (which starts a declared row running), SHRINK its write paths (which is how
+// it landed on (which starts a declared row running, or one its ended session held), SHRINK its write paths (which is how
 // the skill has it release one), and end itself in fail, no_return, or exited. On any other
 // row it may only CREATE a child of itself inside its own boundary, or, as an [asVerdict]
 // write, pass a row below it. Widening a
@@ -196,7 +209,7 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 			}
 		case "state":
 			// Taking a declared job is what starts it, so the exec carries that move.
-			if kind == asExec && prev.State == types.StateDeclared && next.State == types.StateRunning {
+			if kind == asExec && next.State == types.StateRunning && (prev.State == types.StateDeclared || prev.EndedWithSession()) {
 				continue
 			}
 			// StatePass stays refused here on purpose: pass is the claim that the work
@@ -261,6 +274,8 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
 	case !subset(ReadBoundary(next), ReadBoundary(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
+	case !listedIn(next.Breaks, parent.Breaks):
+		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
 	case !subset(parent.DenyPaths, next.DenyPaths):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != types.StateDeclared:
@@ -281,7 +296,7 @@ func runsTheGate(row types.Job) bool {
 }
 
 // gateCommand renders the command whose output will SATISFY a check. A check is resolved
-// against default_charms the way `magus run` resolves it (see bindsTo), so the command
+// against default_charms the way `magus run` resolves it (see ranCheck), so the command
 // is the declaration itself. Built through hint.Run so a subcommand rename is one edit;
 // types renders its own form because it imports no CLI package.
 func gateCommand(c types.LeaseCheck) string {
@@ -347,11 +362,14 @@ func changedFields(prev, next types.Job) []string {
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
 	add("read_paths", !slices.Equal(prev.ReadPaths, next.ReadPaths))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
+	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
 	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
+	add("waivers", !slices.Equal(prev.Waivers, next.Waivers))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
+	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)
 	add("reported_base", prev.ReportedBase != next.ReportedBase)
 	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
 	// that extends its own bound has none.
@@ -378,34 +396,26 @@ func goalsEqual(a, b []types.Goal) bool {
 	return true
 }
 
-// subset reports whether every declaration in inner is one outer also holds, compared as
-// exact strings (a worker rewriting a glob into a wider one must not look contained), with
-// one narrowing allowed one way only: a claim on one declaration of a file (`F#d`) is
-// inside outer's whole-file entry for that file (`F`), never the reverse.
+// listedIn reports whether every entry of inner is one outer also lists, as exact strings.
+// Breaks entries are free text, so unlike [subset] a `#` in one claims nothing.
+func listedIn(inner, outer []string) bool {
+	return !slices.ContainsFunc(inner, func(p string) bool {
+		return !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) })
+	})
+}
+
+// subset reports whether every declaration in inner is within some entry of outer by
+// [types.PathWithin], so a holder may narrow a glob to the files it matches or a file to
+// one declaration of it. A glob rewritten into a wider one is not within the narrower
+// (`internal/**` is not within `internal/job/*.go`).
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		p := strings.TrimSpace(p)
-		if slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == p }) {
-			continue
-		}
-		if !narrowsWholeFile(p, outer) {
+		if !slices.ContainsFunc(outer, func(o string) bool { return types.PathWithin(p, strings.TrimSpace(o)) }) {
 			return false
 		}
 	}
 	return true
-}
-
-// narrowsWholeFile reports whether p claims one declaration of a file that some entry in
-// outer holds whole, the one case [subset] admits beyond exact string equality.
-func narrowsWholeFile(p string, outer []string) bool {
-	file, decl := types.SplitClaim(p)
-	if decl == "" {
-		return false
-	}
-	return slices.ContainsFunc(outer, func(o string) bool {
-		of, od := types.SplitClaim(strings.TrimSpace(o))
-		return od == "" && of == file
-	})
 }
 
 // authorizeDelete refuses a bound holder deleting a row.

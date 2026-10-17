@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -71,7 +72,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	}
 	defer os.RemoveAll(scratch)
 	tree := filepath.Join(scratch, "tree")
-	if err := exportTo(ctx, repoRoot, baseTag, tree); err != nil {
+	if err := exportRevision(ctx, repoRoot, baseTag, tree); err != nil {
 		return CompatReport{}, err
 	}
 
@@ -89,7 +90,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	cfg.Cache.Dir = filepath.Join(scratch, "cache")
 	cfg.Server.Enabled = false
 	cfg.Broker = types.BrokerOff
-	ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
+	ws, err := magus.Inspect(ctx, tree, workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders(), magus.WithSpawnRule(magus.TierCeiling))
 	if c, ok := ws.(io.Closer); ok {
 		_ = c.Close()
 	}
@@ -207,9 +208,9 @@ func classify(err error) (codes []diagnostics.Code, uncoded []string) {
 	return nil, []string{err.Error()}
 }
 
-// exportTo writes rev of the repository at repoRoot into dir through the backend that
+// exportRevision writes rev of the repository at repoRoot into dir through the backend that
 // claims it.
-func exportTo(ctx context.Context, repoRoot, rev, dir string) error {
+func exportRevision(ctx context.Context, repoRoot, rev, dir string) error {
 	res, err := vcs.Resolve(ctx, repoRoot, "", types.VCSOptions{})
 	if err != nil {
 		return fmt.Errorf("release: %w", err)

@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -163,11 +165,10 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 // TestManpageFlagsMatchTheCLI is the gate on the man page's copy of every command's
 // flags.
 //
-// internal/cli/registry.go restates each command's flags because the real ones are
-// bound in closures inside package main, which nothing outside it can import. That copy
-// drifted for as long as it existed: it advertised --simple for months after the flag was
-// deleted, and it still omitted most of what several commands accept. Nothing reported
-// either direction, because a generated man page is only ever compared against itself.
+// internal/commands/registry.go declares each command's flags, and the generated binders
+// bind most of them, but a flag bound by hand (a Custom kind, the config-derived globals)
+// can still disagree with its declaration. A generated man page is only ever compared
+// against itself, so nothing else reports either direction.
 //
 // The comparison runs against the CLI as built, not against its source. Each documented
 // command is invoked with -h, which makes cmdParse bind every flag and then stop at
@@ -181,7 +182,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	globals := globalFlagNames()
 
-	for _, cmd := range cli.All {
+	for _, cmd := range commands.Root.Children {
 		for _, probe := range flagProbes(cmd) {
 			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
 				documented := documentedFlagNames(probe.name, probe.buildFlags, globals)
@@ -206,11 +207,42 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 
 				assert.Equal(t, documented, actual,
 					"the man page's flag list for %q disagrees with what the command binds.\n"+
-						"Fix internal/cli/registry.go - it is a hand-written copy of the real\n"+
-						"flags, and this is the only thing that notices when it goes stale.",
+						"Fix internal/commands/registry.go or the hand-bound flag; this is the\n"+
+						"only thing that notices when the two disagree.",
 					probe.name)
 			})
 		}
+	}
+}
+
+// The guard reads a `job fork` argv by the registry's copy of its flags, where a bool
+// flag takes no value; a flag the command binds differently leaves the guard reading a
+// value as an operand, or an operand as a value.
+func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
+	var fork cmdline.Command
+	for _, group := range commands.Root.Children {
+		for _, child := range group.Children {
+			if group.Name == "job" && child.Name == "fork" {
+				fork = child
+			}
+		}
+	}
+	require.NotEmpty(t, fork.Flags)
+
+	runCLIQuietly(t, "job", "fork", "-h")
+	bound, ok := recordedFlagsUnder("job fork")
+	require.True(t, ok, "job fork did not reach flag parsing under -h")
+	byName := map[string]recordedFlag{}
+	for _, f := range bound {
+		byName[f.Name] = f
+	}
+	for _, declared := range fork.Flags {
+		got, ok := byName[declared.Name]
+		if !assert.True(t, ok, "--%s is in the registry and not bound", declared.Name) {
+			continue
+		}
+		want := recordedFlag{Name: declared.Name, Usage: declared.Doc, Bool: declared.Kind == cmdline.Bool}
+		assert.Equal(t, want, got, "--%s: its doc, and whether it takes a value", declared.Name)
 	}
 }
 
@@ -277,16 +309,16 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 // flagProbes expands one man-page command into the invocations that actually bind flags.
 // A command with subcommands binds nothing itself (`magus server -h` prints its own
 // usage and parses nothing), so its children are what get probed.
-func flagProbes(cmd cli.Command) []flagProbe {
+func flagProbes(cmd cmdline.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
-		if !cmd.HasFlags() {
+		if len(cmd.Flags) == 0 {
 			return nil
 		}
 		return []flagProbe{{name: cmd.Name, argvs: probeArgvs(cmd.Name), buildFlags: cmd.BindFlags}}
 	}
 	var out []flagProbe
 	for _, child := range cmd.Children {
-		if !child.HasFlags() {
+		if len(child.Flags) == 0 {
 			continue
 		}
 		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: probeArgvs(cmd.Name + " " + child.Name), buildFlags: child.BindFlags})
@@ -376,7 +408,7 @@ func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
 	err := checkOutputSupported("buzz", parsed("-o", "json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus buzz: -o is not supported by this command")
-	assert.Equal(t, exitUsage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
+	assert.Equal(t, exit.Usage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
 
 	require.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
 	require.NoError(t, checkOutputSupported("clean", parsed("-o", "json")), "clean returns a report")

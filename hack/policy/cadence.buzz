@@ -8,10 +8,10 @@ import "./hack/policy/verdict" as verdict;
 
 final gateDenial = "a worker mid-change does not run the gate; finish with the narrow validation your brief names and report.\n"
     + "The gate runs once per branch, by the orchestrator or by a worker spawned as "
-    + "`<parent>/integrate <job>`, once your branch is integrated. "
+    + "`<parent>/integrate <job>` in the checkout its row was taken in, once your branch is integrated. "
     + "`magus affected ci --plan` stays open to you: it runs nothing.";
 
-// Caller is who runs a command: role is root or worker (a lease binds it), and title is
+// Caller is who runs a command: role is root, worker (a lease binds it) or integrator, and title is
 // the description it was itself spawned with, empty for a person or the orchestrator.
 export object Caller {
     role: str,
@@ -39,12 +39,14 @@ export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: 
     return magus\guard.allow();
 }
 
-// mayGate: a person or the orchestrator (no lease, no spawn title), or an integrate worker.
+// mayGate: a person or the orchestrator (no lease, no spawn title), or the checkout's
+// integrator, which the guard computes from the spawn title, the lease and the checkout its
+// row was taken in.
 fun mayGate(caller: Caller) > bool {
     if (caller.role != "worker" and caller.title == "") {
         return true;
     }
-    return helpers\titleRole(caller.title) == "integrate";
+    return caller.role == "integrator";
 }
 
 // runsGate: `magus affected ci` or `magus run ci`, with or without a charm, and not the
@@ -132,8 +134,10 @@ test "a worker whose role is not integrate may not run the gate" {
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
     std\assert(judged(gate, caller: person(), checkout: null).decision == "allow", message: "an unattributed caller");
-    final integrator = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
-    std\assert(judged(gate, caller: integrator, checkout: null).decision == "allow", message: "an integrate worker");
+    final integrator = Caller{ role = "integrator", title = "orchestrator/integrate local-command-policy" };
+    std\assert(judged(gate, caller: integrator, checkout: null).decision == "allow", message: "the checkout's integrator");
+    final elsewhere = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
+    std\assert(judged(gate, caller: elsewhere, checkout: null).decision == "deny", message: "an integrate title outside the checkout its row was taken in");
     final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
     final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
     std\assert(judged(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");

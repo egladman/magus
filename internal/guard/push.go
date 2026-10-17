@@ -235,16 +235,16 @@ func builtFrom(version, commit string) bool {
 	return false
 }
 
-// askUnrendered is the rationale of askUnrenderedDeny, beside the push's own verdict.
-const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the push is refused instead. " +
-	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then push again; or push from your own terminal."
+// askUnrendered is the rationale of askUnrenderedDeny, beside the asking rule's own verdict.
+const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the call is refused instead. " +
+	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then try again; or run it from your own terminal."
 
-// askUnrenderedDeny refuses a push of commit whose verdict would be ask when the caller did
-// not declare that it renders one. Such a hook predates the decision, renders it as
-// nothing, and its host reads nothing as allow, so the push is refused instead of
-// published unasked.
-func askUnrenderedDeny(commit string) string {
-	return "this hook predates approval prompts and cannot ask about pushing " + commit + " ungated; merge what `magus describe harness` prints."
+// askUnrenderedDeny refuses a call whose verdict would be ask when the caller did not
+// declare that it renders one. Such a hook predates the decision, renders it as nothing,
+// and its host reads nothing as allow, so the call is refused instead of run unasked.
+// subject names the call as the ask would have, such as "pushing abc1234 ungated".
+func askUnrenderedDeny(subject string) string {
+	return "this hook predates approval prompts and cannot ask about " + subject + "; merge what `magus describe harness` prints."
 }
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
@@ -283,26 +283,77 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	return decisionAsk, head + "Approving publishes it as it stands. " + gate
 }
 
+// movedPushReason refuses a push that follows, on the same line, a command that moves the
+// revision it publishes. The revision is read before the line runs, so no gate record can
+// be matched to the commit that goes out. It is refused for every caller, worker or not:
+// nobody can be asked about a commit that does not exist yet, and the next call grades the
+// real HEAD.
+const movedPushReason = "this line pushes after a command that changes what is pushed: run that command on its own, then push in a separate call.\n" +
+	"A commit, merge, rebase, reset or the like moves the revision after the gate is matched to it; the separate push is graded at the real HEAD."
+
 // pushCoverage is what the gate record says about the revision the push on command
 // publishes, read in the checkout that push runs in, and that revision. gateUnknown when
 // the line relocates the push somewhere this cannot name, so the push keeps its advisory:
-// refusing it would grade a tree nobody proved it publishes.
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (gateCoverage, string) {
+// refusing it would grade a tree nobody proved it publishes. moved reports a push whose
+// line moves the revision first (movedPushReason), and then commit is "".
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool) {
 	push, located := locatePush(command, d, cwd)
 	if !located {
-		return gateUnknown, ""
+		return gateUnknown, "", false
 	}
 	at := hook
 	if push.relocated {
 		at = hookLocationAt(deps, push.dir)
 	}
-	commit := deps.revision(ctx, push.dir, push.rev)
-	cover := gateVerdictAt(at.workspace, commit)
+	commit = deps.revision(ctx, push.dir, push.rev)
+	cover = gateVerdictAt(at.workspace, commit)
 	if cover == gateUnknown {
 		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
 	}
-	return cover, commit
+	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
+	// no run log still has nothing to prove.
+	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
+		return cover, "", true
+	}
+	return cover, commit, false
 }
+
+// revisionMovesBeforePush reports a push on command that runs after a command that changes
+// the revision it publishes, whichever of `;`, `&&`, `||`, a newline or a subshell joins
+// them. The revision is read before any of it runs, so a gate recorded at that HEAD says
+// nothing about the commit the push sends.
+func revisionMovesBeforePush(command string, d Dialect, cwd string) bool {
+	calls, ok := locateCalls(command, d, cwd, func(c hint.Invocation) bool { return isPush(c) || movesRevision(c) }, false)
+	if !ok {
+		return false
+	}
+	moved := false
+	for _, c := range calls {
+		if !isPush(c.inv) {
+			moved = true
+		} else if moved {
+			return true
+		}
+	}
+	return false
+}
+
+// movesRevision reports a git, hg, sl or jj command that changes the revision a later
+// push publishes: it records a commit, replays or joins history, or resets the branch.
+func movesRevision(c hint.Invocation) bool {
+	sub, _ := vcsSubcommand(c)
+	return slices.Contains(revisionMovers[c.Name], sub)
+}
+
+// revisionMovers are, per backend, the subcommands movesRevision reports.
+var revisionMovers = map[string][]string{
+	"git": {"commit", "merge", "cherry-pick", "am", "rebase", "reset", "pull", "revert"},
+	"hg":  hgRevisionMovers,
+	"sl":  hgRevisionMovers,
+	"jj":  {"commit", "describe", "desc", "new", "squash", "rebase", "split", "abandon", "absorb", "duplicate", "revert"},
+}
+
+var hgRevisionMovers = []string{"commit", "ci", "amend", "merge", "rebase", "graft", "import", "histedit", "backout", "fold", "split", "absorb"}
 
 // pushSite is where a push runs and what it publishes.
 type pushSite struct {
@@ -673,11 +724,11 @@ func cdInto(args []*syntax.Word, at shellDir) shellDir {
 		at.known = false
 		return at
 	}
-	return moveTo(at, target)
+	return changeDir(at, target)
 }
 
-// moveTo is at after changing into target. An absolute target is known wherever at was.
-func moveTo(at shellDir, target string) shellDir {
+// changeDir is at after changing into target. An absolute target is known wherever at was.
+func changeDir(at shellDir, target string) shellDir {
 	if filepath.IsAbs(target) {
 		return shellDir{dir: filepath.Clean(target), moved: true, known: true}
 	}
@@ -740,7 +791,7 @@ func gitCallAt(args []*syntax.Word, at shellDir) (shellDir, gitCommand, bool) {
 		if strings.HasPrefix(dir, "~") {
 			return at, g, false
 		}
-		at = moveTo(at, dir)
+		at = changeDir(at, dir)
 	}
 	return at, g, at.known
 }
@@ -775,7 +826,7 @@ func pushFrom(program string, args []*syntax.Word, at shellDir) (pushSite, bool)
 		if !ok || value == "" || strings.HasPrefix(value, "~") {
 			return pushSite{}, false
 		}
-		at = moveTo(at, value)
+		at = changeDir(at, value)
 	}
 	if !at.known {
 		return pushSite{}, false

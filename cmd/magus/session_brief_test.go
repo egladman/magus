@@ -154,7 +154,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	})
 	reg := magus.NewWorkspaceRegistry()
 	reg.AddHarness("brief-host")
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	w.Write("host/hooks.json",
 		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
@@ -164,7 +164,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// for magus running the command glue, answering as a working guard would.
 	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 
-	store, err := openJobs(root)
+	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
 	guardRow := types.Job{
 		ID:           "f2-guard",
@@ -264,7 +264,7 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	root := w.Root()
 	ctx := context.Background()
 
-	store, err := openJobs(root)
+	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
 	landed := types.Job{ID: "landed", State: types.StatePass, CheckoutRoot: root}
 	_, err = store.Update(ctx, landed.ID, func(cur *types.Job) { *cur = landed })
@@ -289,7 +289,7 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	root := w.Root()
 	ctx := context.Background()
 
-	store, err := openJobs(root)
+	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
 	// Existing checkouts: a running row whose checkout is gone is ended on read.
 	for _, row := range []types.Job{
@@ -335,7 +335,7 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	root := w.Root()
 	ctx := context.Background()
 
-	store, err := openJobs(root)
+	store, err := openJobs(t.Context(), root, jobOpen{})
 	require.NoError(t, err)
 	for i := 0; i < briefMaxLeases+5; i++ {
 		row := types.Job{ID: "exited-" + strconv.Itoa(i), State: types.StateExited, CheckoutRoot: root}

@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given for statements that contradict each other or no longer match the tools."
 tags: [agents, skills, magus-context-audit]
 skill_full_bytes: 5888
-skill_short_bytes: 4063
+skill_short_bytes: 3463
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
-| `knowledge-schema-version` | `17` |
-| `skill-content` | `310dbdcd81b6` |
+| `agent-skill-version` | `142` |
+| `knowledge-schema-version` | `23` |
+| `skill-content` | `e58a7b150db9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,36 +54,29 @@ magus agent install --tar | tar -xO -f - magus-context-audit/SKILL.md
 ```
 
 ````markdown
-# Auditing the instructions an agent was given
+# Auditing agent instructions
 
-This is a LENS, like `magus\insight`: it observes and ranks; it does not gate.
-The output is a findings list a human decides on, never an automatic edit.
-
-It looks at the text, not code: everything an agent loads as
-authoritative, from sources magus does not own and cannot read in advance.
-
-An agent reads all of it in one window and cannot tell which line is newer or
-which file wins. When two lines disagree, it picks one arbitrarily or stalls.
+Lens, like `magus\insight`: observes, ranks; does not gate.
+Output: findings list human decides on, never automatic edit.
+Looks at text, not code: everything agent loads as authoritative, from sources magus does not own and cannot read in advance.
+Agent reads all of it in one window; cannot tell which line newer or which file wins.
+When two lines disagree -> agent picks one arbitrarily or stalls.
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list. The riskiest source is usually the one
-nobody remembers is loaded.
+Cannot audit what you cannot list; riskiest source: one nobody remembers loading.
+- repo agent file (`CLAUDE.md`, `AGENTS.md`, ...): always loaded, whole file, never scoped
+- installed skills: whole directory; stale one looks identical to current
+- local workspace-owned skill (`magus-local-development`): loads beside shipped set; nothing generates or verifies it
+- harness memory entries: loaded at session start; point-in-time by nature
+- routing index (`MAGUS.md`): invites reading; only true up to last regeneration
+- hook-injected text: fires on every matching tool call; nothing displays it in one place
+- user-level or global instruction file: invisible from inside repo; outranks nothing
+- tool output agent trusts: deny reasons, usage text, doctor hints
 
-| source | why it bites |
-| --- | --- |
-| the repo's agent file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
-| installed skills | whole directory; a stale one looks identical to a current one |
-| a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
-| the harness's own memory entries | loaded at session start, and POINT-IN-TIME by nature |
-| a routing index (`MAGUS.md`) | invites being read, only true up to the last time it was regenerated |
-| hook-injected text | fires on every matching tool call, and nothing displays it in one place |
-| a user-level or global instruction file | invisible from inside the repo, and outranks nothing |
-| tool output the agent is told to trust | deny reasons, usage text, doctor hints |
+## Check claims against tools, not documents
 
-## Check claims against the tool, not against the other documents
-
- Resolve every claim against something that executes.
+Resolve every claim against something that executes.
 
 ```sh
 magus shell "<the exact command a document recommends>"
@@ -91,60 +84,43 @@ magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
 
-Then RUN the commands the instructions tell an agent to run.
-
-Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
-reading everything. Conflicting lines cluster around recent edits.
+Then run commands instructions tell agent to run.
+Work outward from what changed (diff, changelog, recent decision), not reading everything; conflicts cluster around recent edits.
 
 ```sh
 grep -rn "<the command or rule>" <every source you enumerated>
 ```
 
-## Rank what you find
+## Rank
 
-Every finding carries the command that REPRODUCES it: a finding nobody can re-run is an opinion about a
-document.
-
-Report findings in this order.
-
-1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
-   break one of the two or stall.
-2. Stale claim: it names a command that no longer exists, no longer works,
-   or is now denied.
-3. Split verdict: two sources describe one decision differently (one
-   "advised", the other "denied"), and the agent cannot tell which is current.
-   A local statement contradicting a shipped skill is always this. Check each
-   local statement's `retire-when` while here; the retire-when may already be true.
-4. Orphaned successor: a denial or a deprecated command names a tool no statement
-   documents.
+Every finding carries command that reproduces it; finding nobody can re-run is opinion.
+Order:
+1. Dead end: A forbids X, B requires X, no third path. Agent must break one or stall.
+2. Stale claim: names command that no longer exists, no longer works, or now denied.
+3. Split verdict: two sources describe one decision differently (one "advised", other "denied"); agent cannot tell which current. Local statement contradicting shipped skill: always this. Check each local statement's `retire-when` while here; retire-when may already be true.
+4. Orphaned successor: denial or deprecated command names tool no statement documents.
 5. Silent copies: one statement restated in several places.
 
-## Do not report these
+## Do not report
 
-- **Different altitudes.** A skill giving the full ladder and a hook injection
-  giving one line are one statement at two lengths. That is the design.
-- **A record of history.** "Verified on <date> by doing X" describes what happened,
-  not what to do now. Journal entries are point-in-time by nature.
-- **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
-  to grep and is one statement with a carve-out.
-- **A labeled note** that describes old behavior on purpose.
+- Different altitudes: skill with full ladder, hook injection with one line: one statement, two lengths; by design.
+- Record of history: "Verified on <date> by doing X" describes what happened, not what to do now; journal entries point-in-time by nature.
+- Stated exception: "Never pipe output, EXCEPT <case>" looks like conflict to grep; one statement with carve-out.
+- Labeled note describing old behavior on purpose.
 
-## Recommend, then verify the fix landed
+## Recommend, then verify fix landed
 
-Fix at the SOURCE and let the generator propagate it. For magus's own skills that is
-`internal/agent/skills/*/SKILL.md`, then reinstall.
-
-Reinstall with a binary built from the EDITED source, and confirm the content
-digest moved:
+Fix at source; generator propagates.
+magus's own skills: `internal/agent/skills/*/SKILL.md`, then reinstall.
+Reinstall with binary built from edited source; confirm content digest moved:
 
 ```sh
 magus doctor    # the agent skills check must report a CHANGED digest, or the install did nothing
 ```
 
-A stale binary re-installs the OLD body and reports success.
-
-Prefer DELETING a conflicting line over reconciling it. When a statement must appear twice, make one the source and have
-the other name it, not restate it.
+Stale binary re-installs old body, reports success.
+Prefer deleting conflicting line over reconciling.
+When statement must appear twice -> one is source, other names it, not restates it.
 ````
 
 

@@ -43,8 +43,8 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 }
 
 // mergeHarness plans id and merges the plan into the files with the semantics of the printed
-// command, standing in for the person who runs it. TestHarnessMergeCommandLeavesTheFileCurrent
-// pins that the command and this agree.
+// command, standing in for the person who runs it. cmd/magus's
+// TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the command itself.
 func mergeHarness(t *testing.T, root, id string) types.HarnessPlan {
 	t.Helper()
 	plan, err := PlanHarness(context.Background(), root, id)
@@ -779,8 +779,8 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 
 	before, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.PromptStatus)
-	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
+	assert.Equal(t, HarnessUncovered, before.Prompt.Status)
+	assert.Contains(t, before.Prompt.Reason, ".codex/rules/magus.rules")
 
 	plan := mergeHarness(t, root, "prompter")
 	assert.Equal(t, map[string]types.HarnessFile{
@@ -808,8 +808,8 @@ func TestPlanHarnessPlansNativePrompts(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.PromptStatus)
-	assert.Empty(t, after.PromptReason)
+	assert.Equal(t, HarnessVerified, after.Prompt.Status)
+	assert.Empty(t, after.Prompt.Reason)
 }
 
 // TestPlanHarnessRefusesAPromptThePersonOverrode pins that no plan overwrites a value someone
@@ -828,7 +828,7 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "prompter")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.PromptStatus)
+	assert.Equal(t, HarnessUncovered, result.Prompt.Status)
 }
 
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
@@ -869,14 +869,15 @@ func writeSettingsHarness(t *testing.T) {
 func TestPlanHarnessPlansSettings(t *testing.T) {
 	root := t.TempDir()
 	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
 	config := filepath.Join(root, ".claude", "settings.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
 	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "enabledPlugins": {"other@x": true}}`), 0o644))
 
 	before, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.SettingStatus)
-	assert.Contains(t, before.SettingReason, "extraKnownMarketplaces.magus")
+	assert.Equal(t, HarnessUncovered, before.Setting.Status)
+	assert.Contains(t, before.Setting.Reason, "extraKnownMarketplaces.magus")
 
 	plan := mergeHarness(t, root, "moder")
 	marketplace := map[string]any{"source": map[string]any{"source": "github", "repo": "egladman/magus"}}
@@ -908,8 +909,8 @@ func TestPlanHarnessPlansSettings(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.SettingStatus)
-	assert.Empty(t, after.SettingReason)
+	assert.Equal(t, HarnessVerified, after.Setting.Status)
+	assert.Empty(t, after.Setting.Reason)
 }
 
 // TestPlanHarnessRefusesASettingThePersonChanged pins that no plan overwrites a value
@@ -927,7 +928,125 @@ func TestPlanHarnessRefusesASettingThePersonChanged(t *testing.T) {
 
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.SettingStatus)
+	assert.Equal(t, HarnessUncovered, result.Setting.Status)
+}
+
+// writeClaudePluginStore stands in for the plugin store Claude Code keeps per person, under
+// a config dir of its own so no test reads the machine's.
+func writeClaudePluginStore(t *testing.T, files map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "plugins"), 0o755))
+	for name, body := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "plugins", name), []byte(body), 0o644))
+	}
+}
+
+// TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled pins that settings alone do not
+// make a plugin appear: a workspace that enables it while the person has not installed it
+// is uncovered, and the reason names the one-time install line.
+func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "/plugin install magus --marketplace egladman/magus")
+	assert.Contains(t, result.Plugin.Reason, "magus@magus")
+	assert.Contains(t, result.Plugin.Reason, "not registered")
+}
+
+// TestVerifyHarnessReadsAnInstalledPluginAsCurrent covers both shapes of the install record:
+// the list of installs per scope, and the single object of the first file version.
+func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
+	for name, installed := range map[string]string{
+		"list":   `{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "version": "1.0.0"}]}}`,
+		"object": `{"version": 1, "plugins": {"magus@magus": {"version": "1.0.0"}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeSettingsHarness(t)
+			writeClaudePluginStore(t, map[string]string{"installed_plugins.json": installed})
+			mergeHarness(t, root, "moder")
+
+			result, err := VerifyHarness(untimedProbes(), root, "moder")
+			require.NoError(t, err)
+			assert.Equal(t, HarnessVerified, result.Plugin.Status)
+			assert.Empty(t, result.Plugin.Reason)
+		})
+	}
+}
+
+// TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable pins the silence: an unmerged
+// settings file, or one where the person turned the plugin off, is not an install gap.
+func TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable(t *testing.T) {
+	for name, settings := range map[string]string{
+		"no settings file": "",
+		"other plugin":     `{"enabledPlugins": {"other@x": true}}`,
+		"turned off":       `{"enabledPlugins": {"magus@magus": false}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeSettingsHarness(t)
+			writeClaudePluginStore(t, nil)
+			if settings != "" {
+				path := filepath.Join(root, ".claude", "settings.json")
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte(settings), 0o644))
+			}
+
+			result, err := VerifyHarness(untimedProbes(), root, "moder")
+			require.NoError(t, err)
+			assert.Empty(t, result.Plugin.Status)
+			assert.Empty(t, result.Plugin.Reason)
+		})
+	}
+}
+
+// TestVerifyHarnessPluginInstallLineFollowsTheDescriptor pins that the install line is read
+// from the descriptor's marketplace, not hardcoded to this repository's.
+func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "other-mod", `{
+  "schema_version": 2,
+  "id": "other-mod",
+  "display": {"name": "Other"},
+  "skills": {"paths": [], "form": "both"},
+  "settings": [
+    {"path": ".claude/settings.json", "key": ["extraKnownMarketplaces", "tools"], "value": {"source": {"source": "github", "repo": "acme/tools"}}},
+    {"path": ".claude/settings.json", "key": ["enabledPlugins", "lint@tools"], "value": true}
+  ]
+}`)
+	writeClaudePluginStore(t, map[string]string{
+		"installed_plugins.json":  `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`,
+		"known_marketplaces.json": `{"tools": {}}`,
+	})
+	mergeHarness(t, root, "other-mod")
+
+	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "/plugin install lint --marketplace acme/tools")
+	assert.NotContains(t, result.Plugin.Reason, "not registered")
+}
+
+// TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed pins that a corrupt store is not
+// read as "not installed": magus cannot tell, and says so.
+func TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, map[string]string{"installed_plugins.json": `{not json`})
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUnprobed, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, "installed_plugins.json")
 }
 
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
@@ -1247,7 +1366,7 @@ func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
 	name := harnessSpellName(t, "opencode")
 	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
 	require.NoError(t, err)
-	named := regexp.MustCompile(`"--agent-name",\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	named := regexp.MustCompile(`"--agent-name",\s*"([^"-][^"]*)"`).FindAllStringSubmatch(string(body), -1)
 	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
 	for _, m := range named {
 		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")
@@ -1277,8 +1396,8 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 
 	before, err := VerifyHarness(untimedProbes(), root, "scribe")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, before.AgentStatus)
-	assert.Contains(t, before.AgentReason, ".scribe/agents/magus-scout.md")
+	assert.Equal(t, HarnessUncovered, before.Agent.Status)
+	assert.Contains(t, before.Agent.Reason, ".scribe/agents/magus-scout.md")
 
 	plan := mergeHarness(t, root, "scribe")
 	assert.Equal(t, map[string]types.HarnessFile{
@@ -1292,8 +1411,8 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 
 	after, err := VerifyHarness(untimedProbes(), root, "scribe")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, after.AgentStatus)
-	assert.Empty(t, after.AgentReason)
+	assert.Equal(t, HarnessVerified, after.Agent.Status)
+	assert.Empty(t, after.Agent.Reason)
 }
 
 // A spell that leaves an agent's model to the host names the person's setting once, however
@@ -1343,7 +1462,7 @@ func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 	requireCurrent(t, root, "plain")
 	result, err := VerifyHarness(untimedProbes(), root, "plain")
 	require.NoError(t, err)
-	assert.Empty(t, result.AgentStatus)
+	assert.Empty(t, result.Agent.Status)
 }
 
 func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
@@ -1382,7 +1501,7 @@ func TestShortestForegroundMaxIsFalseWhenNoneDeclaresOne(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestHarnessAcceptsAGroupOfOnlyTheReplyCheck(t *testing.T) {
+func TestHarnessRefusesAnUnmarkedReplyCheck(t *testing.T) {
 	registerHarnessSpell(t, "replycheck", `{
   "schema_version": 2,
   "id": "replycheck",
@@ -1396,8 +1515,9 @@ func TestHarnessAcceptsAGroupOfOnlyTheReplyCheck(t *testing.T) {
 }`)
 	_, _, err := LoadHarness(context.Background(), t.TempDir(), "replycheck")
 
-	require.NoError(t, err, "the reply check is a shipped template, so a stop group holding only it is magus's own")
-	assert.True(t, runsAShippedTemplate("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"))
+	require.ErrorContains(t, err, "ownership marker",
+		"the reply check is a download a person wires on purpose, so a merge never takes it for magus's own")
+	assert.False(t, runsAShippedTemplate("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"))
 	assert.False(t, invokesMagus("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz"),
 		"it judges nothing, so it is not guard coverage")
 }
@@ -1448,27 +1568,33 @@ func requireWired(t *testing.T, path, event, matcher, script string) wiredHook {
 // spell declares for the events that follow a turn: the reply check where the host has a
 // stop event, the person's message where it has a prompt event, and the spawn where it names
 // the spawn tool. The spell tests pin the same entries from the other side.
-func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
+func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t *testing.T) {
 	const reply, guard = "proofread-reply.buzz", "magus-command.buzz"
 
+	// The repository's own configs hand-write the reply check; the config magus ships does not.
 	t.Run("claude-code", func(t *testing.T) {
 		config := dogfoodedHookConfig
 		requireWired(t, config, "Stop", "", reply)
 		requireWired(t, config, "UserPromptSubmit", "", guard)
-		requireWired(t, config, "PreToolUse", "Agent", guard)
+		requireWired(t, config, "PreToolUse", "*", guard)
 		requireWired(t, config, "SubagentStop", "", guard)
 	})
 
 	for _, config := range hostConfigFile["codex"] {
 		t.Run(config, func(t *testing.T) {
-			requireWired(t, config, "Stop", "", reply)
+			requireWired(t, config, "Stop", "", "magus-checkpoint.buzz")
+			for _, h := range wiredOn(t, config, "Stop") {
+				assert.NotContains(t, h.Command, reply, "the shipped Codex config leaves the reply check to the person")
+			}
 			requireWired(t, config, "UserPromptSubmit", "", guard)
-			requireWired(t, config, "PreToolUse", "spawn_agent", guard)
-			assert.Empty(t, wiredOn(t, config, "SubagentStop"),
-				"Codex's SubagentStop payload is readable, but its transcript carries no message.usage record, so the hook would run on every subagent and record nothing")
-			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse"} {
+			// The catch-all entry judges every tool, the spawn tools among them.
+			requireWired(t, config, "PreToolUse", "*", guard)
+			requireWired(t, config, "PostToolUse", "collaborationspawn_agent", guard)
+			requireWired(t, config, "SubagentStart", "", "magus-rehydrate.buzz")
+			requireWired(t, config, "SubagentStop", "", guard)
+			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop"} {
 				for _, h := range wiredOn(t, config, event) {
-					assert.NotContains(t, h.Command, "--reports-skills",
+					assert.NotContains(t, h.Command, "--observes-skill-loads",
 						"Codex documents no hook on a skill load, so a rule that requires one would deny forever")
 				}
 			}
@@ -1480,7 +1606,15 @@ func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
 		stop := requireWired(t, config, "stop", "", reply)
 		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
 		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
-		requireWired(t, config, "preToolUse", "Task", "cursor-hook.buzz")
+		// The catch-all entry judges every tool, Task and Shell among them.
+		requireWired(t, config, "preToolUse", "*", "cursor-hook.buzz")
+		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
+		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
+			for _, h := range wiredOn(t, config, event) {
+				assert.Contains(t, h.Command, "--observes-skill-loads",
+					"Cursor installs the skills, so each tool event reports which one loaded")
+			}
+		}
 		assert.Empty(t, wiredOn(t, config, "subagentStop"),
 			"Cursor's subagentStop names no subagent id, which the usage record is filed under")
 	})

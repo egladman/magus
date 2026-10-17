@@ -346,6 +346,9 @@ type VCSOptions struct {
 	Enabled *bool  // nil = check MAGUS_VCS_ENABLED
 	Name    string // overrides MAGUS_VCS_NAME
 	BaseRef string // overrides MAGUS_VCS_BASE_REF
+	// Driver, when set, is the VCS to drive in place of a built-in one, chosen as
+	// explicitly as a Name is. Name must then be empty or the driver's own name.
+	Driver VCSDriver `json:"-" yaml:"-"`
 }
 
 // VCSSource indicates how the active VCS was chosen.
@@ -1142,14 +1145,16 @@ type GeneratedPathReporter interface {
 
 // CheckoutProvisioner is the capability to create, list and remove secondary checkouts
 // that share the repository's store: what IsSecondaryCheckout detects (a git linked
-// worktree). It manages only the checkouts it created, and nothing runs a hook while it
-// does. Here dir is the exception to VCSDriver's rule: it names the secondary checkout,
-// an absolute path outside the repository, not a directory inside root.
+// worktree, an hg share, a jj workspace). It manages only the checkouts it created, and
+// nothing runs a hook while it does. Here dir is the exception to VCSDriver's rule: it
+// names the secondary checkout, an absolute path outside the repository, not a directory
+// inside root. Sapling has no secondary checkout and declines.
 //
 // Code run in such a checkout can rewrite the files that tell the VCS where its
-// repository is. So any call on a checkout CreateCheckout made in this process reads the
-// repository through what it recorded at creation, never through those files, and
-// fails with a *CheckoutTamperedError once one of them has changed.
+// repository is. So on git any call on a checkout CreateCheckout made in this process
+// reads the repository through what it recorded at creation, never through those files,
+// and fails with a *CheckoutTamperedError once one of them has changed. hg and jj record
+// nothing: a call in their checkouts reads the store the checkout's own files name.
 type CheckoutProvisioner interface {
 	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
 	// absolute, must not exist, and must lie outside root, symlinks resolved, where
@@ -1158,12 +1163,22 @@ type CheckoutProvisioner interface {
 	// can then ask the remote for an object the merge itself wrote.
 	CreateCheckout(ctx context.Context, root, dir, rev string) error
 	// RemoveCheckout removes the checkout at dir and its registration, whether or not the
-	// directory still exists. A checkout CreateCheckout did not make is refused. Commits
-	// made in it stay in the store.
+	// directory still exists. Commits made in it stay in the store. A checkout
+	// CreateCheckout did not make is removed only when that loses nothing: git removes a
+	// linked worktree with no changed or untracked file whose HEAD a branch, tag or
+	// remote-tracking ref reaches, and refuses the main checkout and any other; hg and jj
+	// refuse every one.
 	RemoveCheckout(ctx context.Context, root, dir string) error
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.
 	Checkouts(ctx context.Context, root string) ([]string, error)
+	// StrandedRevisions returns the revisions the checkout at dir has checked out, or
+	// leads to, that removing it would leave nothing naming: none of the repository's
+	// branches or bookmarks, local or remote, no published revision and no revision in
+	// bases reaches them. Each backend answers in its own terms (git refs, hg phases and
+	// bookmarks, jj bookmarks with its empty working-copy commit left out). Empty means
+	// removing the checkout strands no commit.
+	StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error)
 }
 
 // CheckoutTamperedError is a checkout CheckoutProvisioner made no longer holding what

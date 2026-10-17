@@ -3,6 +3,7 @@ package guard
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 
 	"github.com/egladman/magus/internal/hint"
 )
@@ -33,7 +34,7 @@ const (
 	// takes one target and many projects, so the same target run twice on different
 	// project sets is usually one call typed twice. On ONE line the chained-run deny names
 	// the combined call instead. ACROSS two calls it is held to one firing per session (see
-	// internal/guard/splitrun.go), since the session already knows and a second reminder of
+	// internal/guard/split_run.go), since the session already knows and a second reminder of
 	// the same standing fact teaches nothing new.
 	advisorySplitRun hint.MarkerKind = "split-run"
 	// advisorySharedCheckout fires on a SPAWN, which is the one moment the choice between
@@ -74,6 +75,9 @@ const (
 	advisoryCheckpointState denyRuleName = "checkpoint-state"
 	// advisoryReadSymbol is a bounded read inside one declaration; see read.go.
 	advisoryReadSymbol denyRuleName = "read-symbol"
+	// advisorySpawnUnplaced is a subagent's first call that no waiting spawn names; see
+	// joinStartedChild.
+	advisorySpawnUnplaced denyRuleName = "spawn-unplaced"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session
@@ -91,6 +95,21 @@ const (
 func advisoryFocusPath(rel string) hint.MarkerKind {
 	sum := sha256.Sum256([]byte(rel))
 	return advisoryFocus + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+}
+
+// adviceRepeated reports whether this caller was already given this exact advice in this
+// session, marking it given. An advisory enrolled in the gate is held by it instead, and
+// degrades to its brief rather than going quiet.
+//
+// Keyed on the text as well as the rule, so the same rule saying something new (another
+// declaration, another count) still speaks; and on the agent, since a host's subagents
+// share their root's session and each is told for itself.
+func adviceRepeated(markers hint.Gate, agent, rule, text string) bool {
+	if rule == "" || slices.Contains(enrolledAdvisories(), rule) {
+		return false
+	}
+	sum := sha256.Sum256([]byte(agent + "\x00" + rule + "\x00" + text))
+	return markers.MarkFired(hint.MarkerKind("said-" + hex.EncodeToString(sum[:8])))
 }
 
 // leasedPathKey holds the leased-path advisory once per session per LEASE, hashed for the

@@ -1,0 +1,29 @@
+A skill description over the word budget, or a full form's description repeating the short form's.
+-- hit/skill-template whole --
+---
+description: {{if .Full}}Run builds and tests through magus targets before any raw language tool. Examples kept.{{else}}Run builds and tests through magus targets before any raw language tool.{{end}}
+---
+
+# Run
+-- hit/skill-template whole --
+---
+description: Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets. Run builds, tests, lints and codegen through magus targets.
+---
+
+# Run
+-- pass/skill-template whole --
+---
+description: {{if .Full}}Full reference copy of magus-run with worked examples; load it when that skill left a step underspecified.{{else}}Run builds and tests through magus targets before any raw language tool.{{end}}
+---
+
+# Run
+-- pass/skill-template whole --
+# Run
+
+Run it.
+-- pass/skill-template whole --
+---
+description: {{if .Full}}Full reference copy of magus-query, same scope with the worked examples kept. Load it instead of magus-query when magus names it, or when that skill left a step underspecified.{{else}}Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess. A fuller copy with the worked examples kept is installed as magus-query-full; load that one if this leaves a step underspecified.{{end}}
+---
+
+# Query

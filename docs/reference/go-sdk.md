@@ -14,31 +14,30 @@ the other side.
 
 ## Before you `go get` it
 
-> [!WARNING]
-> `go get github.com/egladman/magus` does not resolve on its own, at any
-> tagged version. Read this section before filing that as your own bug.
-
-As of this writing, `go get github.com/egladman/magus` does not resolve on
-its own. The module's `go.mod` requires two nested modules:
+The root module requires two nested modules, each with its own `go.mod`:
 `github.com/egladman/magus/libs/gopherbuzz` and
-`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod`. Both
-carry `v0.1.0` tags (`libs/gopherbuzz/v0.1.0`, `libs/diagnostics/v0.1.0`), but
-the root module still requires them at `v0.0.0` and resolves that through local
-`replace` directives. Those are not transitive, so a downstream consumer
-inherits none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
+`github.com/egladman/magus/libs/diagnostics`. The root `go.mod` requires both at
+`v0.2.0`, and both tags are on the origin (`libs/gopherbuzz/v0.2.0`,
+`libs/diagnostics/v0.2.0`); `git ls-remote --tags origin` lists them. The
+`replace` directives in that `go.mod` point at the working tree for builds inside
+the repository only. A `replace` is never transitive, so your build resolves the
+tagged versions the requires name.
 
-Until the root requires the tagged versions and drops its replaces, clone the
-repository (or vendor `libs/gopherbuzz` and `libs/diagnostics` out of it) and
-add matching `replace` directives to your own `go.mod`:
+This page does not claim `go get` succeeds at any particular release, because
+nobody ran it against one for this page. Check the version you pick in a scratch
+module before you depend on it:
 
-```go
-require github.com/egladman/magus v0.3.0
-
-replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
+```sh
+go mod init example.com/try
+go get github.com/egladman/magus@<version>
+go build ./...
 ```
 
-Everything below assumes that step is done.
+An older root tag may still require the nested modules at `v0.0.0`, which fails
+as `unknown revision libs/gopherbuzz/v0.0.0`. `go install
+github.com/egladman/magus/cmd/magus@<version>` refuses the root module at any
+version, since its `go.mod` carries `replace` directives; install the binary from
+a release instead.
 
 ## `Open` vs `Inspect`
 
@@ -52,20 +51,24 @@ ctx := context.Background()
 
 // Inspect: read-only, no cache. Use this for introspection - listing,
 // describing, classifying files - and nothing else.
-ws, err := magus.Inspect(ctx, "/path/to/workspace")
+ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
 
 // Open: builds an on-disk cache and returns the concrete *magus.Magus,
 // which adds Run. Use this when you intend to execute targets.
-m, err := magus.Open(ctx, "/path/to/workspace")
+m, err := magus.Open(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
 ```
+
+Both require a spawn rule: the rule every job spawn is held to. A workspace has no
+default one, so leaving `WithSpawnRule` out fails the constructor, naming
+`magus.TierCeiling`, the reference rule the CLI passes.
 
 `Inspect` returns `types.WorkspaceRepository`, an interface: a signal that
 an introspection-only caller should keep coding against the interface rather
 than assume a concrete type. `Open` returns `*magus.Magus`, which also
 satisfies `types.WorkspaceRepository` and additionally has `Run`.
 
-`magus.FindRoot(dir)` walks up from `dir` (empty means the current
-directory) to locate the workspace root, the same walk the CLI performs
+`magus.FindRoot(dir)` walks up from `dir` (an empty `dir` is an error; pass
+`os.Getwd()` for the current directory) to locate the workspace root, the same walk the CLI performs
 before either constructor runs.
 
 ## A minimal working example
@@ -79,11 +82,12 @@ import (
     "log"
 
     magus "github.com/egladman/magus"
+    _ "github.com/egladman/magus/buzzengine"
 )
 
 func main() {
     ctx := context.Background()
-    ws, err := magus.Inspect(ctx, "/path/to/workspace")
+    ws, err := magus.Inspect(ctx, "/path/to/workspace", magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         log.Fatal(err)
     }
@@ -94,17 +98,10 @@ func main() {
 }
 ```
 
-Against a workspace whose only project is a bare `magusfile.buzz` declaring
-one `export fun build`, this prints:
-
-```text
-workspace root: /path/to/workspace
-project . (spell="", resolved spells=0)
-```
-
-`resolved spells=0` is not a bug in the example; see
-[what this SDK does not give you](#what-this-sdk-does-not-give-you) before
-you go looking for why `build` never runs.
+The blank import links the engine that evaluates a `magusfile.buzz`. Without
+it, `Inspect` on a workspace with a magusfile returns
+`*types.EngineNotLinkedError`; see
+[linking the Buzz engine](#linking-the-buzz-engine).
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -115,7 +112,7 @@ house rule outright: prefer the narrowest one your code uses.
 | Role               | Methods                                                           | Answers                                                   |
 | ------------------ | ----------------------------------------------------------------- | --------------------------------------------------------- |
 | `WorkspaceReader`  | `Root`, `All`, `Get`, `Graph`, `VCSOptions`, `Where`              | what projects exist, and the project dependency graph     |
-| `TargetExpander`   | `ExpandPath`, `ExpandCwd`, `ExpandAffected`                       | which concrete `path:target` pairs a target pattern names |
+| `TargetExpander`   | `ExpandPath`, `ExpandAffected`                                    | which concrete `path:target` pairs a target pattern names |
 | `AffectedComputer` | `Affected`, `AffectedFromPaths`                                   | which projects a VCS changeset touches                    |
 | `Inspector`        | `List*`, `Evaluate*`, `ClassifyFiles`, `TargetGraph`, `Workspace` | see the axis below                                        |
 
@@ -200,29 +197,101 @@ The returned error wraps `ctx.Err()` directly, so both
 empty or short `List*`/`Evaluate*` result as "the workspace has nothing"
 without checking the error first.
 
+## What the workspace reads from your process
+
+A library workspace reads no ambient process state. Each thing the CLI takes from its
+own process is an option, and leaving one out has a stated result:
+
+| Option                  | What it hands the workspace                                                      | Without it                         |
+| ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------- |
+| `WithEnv(env)`          | the environment: `MAGUS_*` configuration overrides, the remote cache signing key | no environment; `magus.yaml` alone |
+| `WithStderr(w)`         | notices, and a run's text report when no sink is given                           | discarded                          |
+| `WithCommandLine(args)` | the command line a project lock's owner record and the broker identity carry     | an empty command line              |
+| `WithSpawnRule(rule)`   | the rule every job spawn is held to                                              | `Open` and `Inspect` fail          |
+
+Processes a run starts still inherit your process's environment. `FindRoot("")` is
+an error rather than a quiet read of the working directory; pass the directory you
+mean.
+
+## Judging a call before it runs
+
+`*magus.Magus` answers what the agent guard would decide about a call, without a host
+in the loop:
+
+```go
+j, err := m.JudgeCommand(ctx, session, dir, "git push --force")
+if err != nil {
+    return err // no judgment could be made, such as rules that did not load
+}
+if j.Decision == "deny" {
+    fmt.Println(j.Rule, j.Reason)
+}
+```
+
+`JudgeWrite(ctx, session, dir, path)` judges a file an edit is about to write. Both
+return a `types.GuardJudgment`: one decision, the `Rule` that made it, the `Reason`
+written for the agent, and on a deny the `Next` steps that pass. A deny is an answer
+with a nil error; the error is for a judgment that could not be made, such as a
+`*types.EngineNotLinkedError` when the workspace's guard rules need the engine. A rule
+that would ask the person denies, since there is no host to put the question to.
+
+The lease a call acts under rides `ctx` through `types.WithJobLease`, and the session
+names what that agent did before, so a fire-once advice fires once and spawn records
+count. `Run` judges each target the same way before anything runs, as the
+`magus run <target> <project>` line the CLI would be judged by. Pass
+`magus.WithSession(id)` to judge the run against a session; without it the run is
+judged as a caller no host named. A deny returns a `*types.GuardDeniedError` whose
+`Judgment` carries the rule and its next steps, and nothing runs. The SDK never
+retries, re-grades or routes around a refusal on your behalf.
+
+## Swapping a part
+
+Three parts take a second implementation through one option each, and only these
+three, because each has one:
+
+| Option                | Replaces                                                    | Refuses                                                          |
+| --------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| `WithVCSDriver(d)`    | the built-in VCS the workspace's markers would pick         | a nil driver; one that disagrees with `vcs.name` in `magus.yaml` |
+| `WithCacheBackend(b)` | the remote cache tier a magusfile wires                     | a nil backend; a magusfile that also wires one                   |
+| `WithObserver(o)`     | nothing: it reports each graph build and query of one `Run` | nothing                                                          |
+
+`WithVCSDriver` and `WithCacheBackend` are `Open` options; `WithObserver` is a
+`RunOption`, so two runs on one workspace each report to their own observer. A cache
+backend is held to the same trust set as a wired one.
+
+## The Buzz host modules from Go
+
+The `std` package holds the Go side of every Buzz host module, and its exported API is
+in the same lock as the root package. The job, graph and trail doors take typed
+options: `std.MagusPutJob` a `types.JobPut`, whose nil fields leave the row as it is;
+`std.MagusExitJob` a `types.JobResult`; `std.MagusWaitJob` a `*types.JobResult`, nil
+for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
+`std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
+`types.TrailReadOptions`. Each reads the workspace on `ctx` (`types.WithWorkspace`).
+A knowledge answer carries a verdict that keeps unknown apart from absent: zero matches
+with an `unknown` verdict means part of the workspace had no symbol index.
+
+## What the SDK leaves out
+
+- No agent loop. The SDK answers what a loop asks (may this call run, who owns this
+  path, what is this code, what happened, is it done) and never decides what runs next.
+- No model adapter or router; see [scope](../scope.md#where-others-drew-it).
+- No `ExpandCwd`: expand a target against the project you name with `ExpandPath`.
+- No `Serve` or `Stream`: the daemon and the shell pipeline belong to the CLI.
+- No `SetGraphObserver`: pass `WithObserver` to the run you want observed.
+- No exported declaration names a type from an `internal/` package; the
+  `go-api-generate` target fails on one.
+
 ## Testing code that uses the SDK
 
 Test at the narrowest seam your code allows, and move to a real workspace only
 for what a fake cannot tell you.
 
 **Unit tests: fake the role.** A function that takes `types.WorkspaceReader`
-needs a test double with six methods, not a workspace. `types/gen/mocks`
-publishes a mockery mock for each role interface, which suits a test that
-asserts on the call itself (which method, with what arguments, how often).
+needs a test double with six methods, not a workspace. Embed the interface and
+override the method your code calls. Any other method panics on the nil embedded
+value, which tells you the code under test reached for more than you thought.
 Here `countProjects` is your function, taking a `types.WorkspaceReader`:
-
-```go
-func TestCountProjects(t *testing.T) {
-    r := mocks.NewMockWorkspaceReader(t)
-    r.EXPECT().All().Return([]*types.Project{{Path: "api"}, {Path: "web"}})
-
-    assert.Equal(t, 2, countProjects(r))
-}
-```
-
-When a test only needs one method to return something, embed the interface and
-override that method. Any other method panics on the nil embedded value, which
-tells you the code under test reached for more than you thought:
 
 ```go
 type twoProjects struct{ types.WorkspaceReader }
@@ -230,7 +299,15 @@ type twoProjects struct{ types.WorkspaceReader }
 func (twoProjects) All() []*types.Project {
     return []*types.Project{{Path: "api"}, {Path: "web"}}
 }
+
+func TestCountProjects(t *testing.T) {
+    assert.Equal(t, 2, countProjects(twoProjects{}))
+}
 ```
+
+A test that asserts on the call itself (which method, with what arguments, how
+often) wants a generated mock: run mockery over the role interface in your own
+module. The mocks magus generates for `types` are internal to it.
 
 **Integration tests: a real workspace.** `testkit.NewWorkspace(t)` returns a
 temporary directory you fill with `Write`, `WriteTree` and `Magusfile`, and
@@ -246,7 +323,7 @@ func TestProjectsOfAMonorepo(t *testing.T) {
         "api/magusfile.buzz": "",
     })
 
-    m, err := magus.Inspect(t.Context(), ws.Root())
+    m, err := magus.Inspect(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))
     require.NoError(t, err)
 
     assert.Len(t, m.All(), 2)
@@ -285,12 +362,11 @@ type runner interface {
 A test then passes a function that records the targets it was handed. Keep a
 small number of end-to-end tests for the code that builds those targets.
 
-**Magusfile targets do not run in your tests.** As described in
-[what this SDK does not give you](#what-this-sdk-does-not-give-you), a target
-declared in a `magusfile.buzz` is visible to `TargetGraph` but never
-dispatched outside this module. A test that writes one and calls `Run`
-passes without running anything. To exercise a real run, register a spell in
-Go and attach it with `WithSpell`; see `ExampleWorkspaceRegistry_withSpell`.
+**A test that opens a magusfile links the engine.** One file of the test
+binary imports `_ "github.com/egladman/magus/buzzengine"`, or `Open` fails as
+[linking the Buzz engine](#linking-the-buzz-engine) describes. To exercise a
+run with no magusfile, register a spell in Go and attach it with `WithSpell`;
+see `ExampleWorkspaceRegistry_withSpell`.
 
 **Programmatic spells.** `project.DefaultSpellRegistry()` is process-global, so
 two tests that register the same name in parallel race, and a spell left
@@ -306,41 +382,33 @@ tests out of `t.Parallel`.
 call. `*testing.T` and `*testing.B` satisfy it, and so can a small type of your
 own where no test is running, such as an `Example`.
 
-## What this SDK does not give you
+## Linking the Buzz engine
 
 > [!IMPORTANT]
-> A magusfile's custom targets are visible but not runnable through this
-> SDK. Read this before you build anything that depends on dispatching one.
+> A program that opens a workspace with a magusfile must link the Buzz
+> engine. Without it, `Open` and `Inspect` return an error, never a
+> workspace missing that magusfile's targets.
 
-**Buzz magusfile evaluation is not reachable from outside this module.**
 Evaluating a `magusfile.buzz` (running `magus\project(...)`, discovering
-`export fun` targets, binding spells) requires the Buzz interpreter engine
-to be linked in, and that link only happens through two `internal/` packages
-(`internal/interp/engine/buzz`, `internal/interp/bindings`) that only
-`cmd/magus`, built inside this repository, blank-imports. `internal/`
-packages are unreachable from any other module's import graph, so a program
-that imports `github.com/egladman/magus` as a dependency can discover
-projects and read a magusfile's static target graph
-(`Inspector.TargetGraph`, which parses source without executing it), but it
-cannot make magus dispatch a target that magusfile declares: `ListTargets`
-does not list it, no spell gets attached, and attempting to run it is a
-silent no-op rather than an error. There is currently no exported way to
-even ask "is magusfile evaluation available in this process"; you have to
-know this limitation going in.
+`export fun` targets, binding spells) needs the Buzz engine. The root package
+does not link it, so a program that only builds workspaces in Go never pays
+for the VM. A program that loads magusfiles links it with one blank import:
 
-The escape hatch: build the workspace programmatically instead of authoring
-a magusfile, using the exported wire API in the root package:
-`WithSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
-a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
+```go
+import _ "github.com/egladman/magus/buzzengine"
+```
+
+`cmd/magus` makes the same import. Without it, `Open` and `Inspect` on a
+workspace where any project has a magusfile return
+`*types.EngineNotLinkedError` ([MGS1104](codes/capability/MGS1104.md)), whose
+message names the import. A workspace with no magusfile still opens without
+the engine.
+
+The other path builds the workspace in Go instead of authoring a magusfile,
+through the exported wire API in the root package: `WithSpell`, `WithTarget`,
+`WithDependsOn`, and friends, composed via a `WorkspaceRegistry` passed to
+`Open`/`Inspect` as an `Option`. A target a program names with `WithTarget`
+counts as declared, the way an `export fun` does in a magusfile. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
-`internal/spell`, which the exported wrapper functions can reach on your
-behalf even though you cannot import that package directly. This path gets
-you real spell execution without a magusfile; it does not get you
-arbitrary Buzz-authored targets.
-
-**Nothing else in this doc is a workaround for that gap.** If your workspace
-model is "a set of projects bound to built-in spells, described in Go," the
-SDK covers you end to end. If it depends on a hand-authored magusfile's
-custom targets, only the CLI (or a program that vendors and links the
-interpreter packages the way `cmd/magus` does, which requires being inside
-this module) can run it today.
+`internal/spell`, which the exported wrapper functions reach on your behalf
+even though you cannot import that package directly.

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
@@ -43,7 +42,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		return nil, nil
 	}
 	if m.broker == nil {
-		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(os.Args, m.version))
+		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(m.commandLine, m.version))
 		m.ownsBroker = true
 	}
 	opts := []cache.Option{cache.WithMachineAdmission(m.broker)}
@@ -90,7 +89,9 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 // ServiceSession returns a service session routed the way a run's is: through the
 // broker when one is wired, in-process otherwise. The caller owns it and ends it with
 // ReleaseAll; this is how a `magus buzz` script's magus\service leases are hosted.
-func (m *Magus) ServiceSession() *service.Session { return m.newServiceSession(context.Background()) }
+func (w internals) ServiceSession() *service.Session {
+	return w.newServiceSession(context.Background())
+}
 
 // warnNearDuplicateServices emits MGS5001 when a run brings up services that look
 // like near-duplicate copies of one shared service. It is scoped to the run's

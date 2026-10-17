@@ -29,13 +29,19 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 )
 
+// Output is one artifact to render: the file and the package clause it declares.
+// A Path with no Package is an error; nothing guesses the clause from the directory.
+type Output struct {
+	Path    string
+	Package string
+}
+
 // Paths names the artifacts to render. An empty path SKIPS that artifact rather
-// than defaulting one, so a caller asking for two files cannot silently write four.
+// than defaulting one, so a caller asking for two files cannot silently write three.
 type Paths struct {
-	Flags    string // the ConfigFlags table + BindConfigFlags
-	Fields   string // the schema Fields table
-	Bind     string // BindFlags
-	ApplyEnv string // the MAGUS_* environment overlay
+	Fields   Output // the schema Fields table
+	Bind     Output // BindFlags
+	ApplyEnv Output // the MAGUS_* environment overlay
 }
 
 // Write reads the config struct at schema and renders each artifact p names.
@@ -45,37 +51,34 @@ func Write(schema string, p Paths) error {
 		return err
 	}
 
-	if p.Flags != "" {
-		if err := emit.GoTemplate(p.Flags, outputTmpl, flagTmplData{Defs: defs}); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "config: wrote %d defs to %s\n", len(defs), p.Flags)
-	}
-
-	schemaOutputs := []struct {
-		path string
+	outputs := []struct {
+		out  Output
 		tmpl *template.Template
-		data any
+		defs []FlagDef
 	}{
 		{p.Fields, fieldsTmpl, defs},
 		{p.Bind, bindTmpl, bindOnlyFields(defs)},
 		{p.ApplyEnv, applyEnvTmpl, defs},
 	}
-	for _, o := range schemaOutputs {
-		if o.path == "" {
+	for _, o := range outputs {
+		if o.out.Path == "" {
 			continue
 		}
-		if err := emit.GoTemplate(o.path, o.tmpl, o.data); err != nil {
+		if o.out.Package == "" {
+			return fmt.Errorf("%s: no package clause named for it", o.out.Path)
+		}
+		if err := emit.GoTemplate(o.out.Path, o.tmpl, tmplData{Package: o.out.Package, Defs: o.defs}); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "config: wrote %s\n", o.path)
+		fmt.Fprintf(os.Stderr, "config: wrote %s\n", o.out.Path)
 	}
 	return nil
 }
 
-// flagTmplData bundles defs with derived metadata for the flags template.
-type flagTmplData struct {
-	Defs []FlagDef
+// tmplData is what each artifact template renders: its package clause and the defs.
+type tmplData struct {
+	Package string
+	Defs    []FlagDef
 }
 
 // FlagDef describes one config field exposed as a CLI flag.
@@ -87,6 +90,7 @@ type FlagDef struct {
 	GoPath    string // Go field selector, e.g. "cfg.Cache.Dir"
 	YamlPath  string // dotted yaml path, e.g. "cache.dir"
 	Usage     string // sanitized one-line description for flag.Usage
+	Doc       string // the field's first doc paragraph, for the man page's ENVIRONMENT
 	// Floor makes the env var a floor rather than an override: ApplyEnv keeps the
 	// stronger of the configured value and the env's, by the type's WeakerThan. A text
 	// kind only. For a setting a parent process hands its children, which a child's own
@@ -180,7 +184,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		// The flag help leads with the env var, then the field's doc comment when
 		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
 		help := envVar
-		if usage := sanitizeUsage(firstDocLine(field.Doc)); usage != "" {
+		if usage := sanitizeUsage(firstDocLine(fieldDoc(field))); usage != "" {
 			help = envVar + ": " + usage
 		}
 
@@ -192,9 +196,50 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			GoPath:    goSel,
 			YamlPath:  strings.Join(thisYAML, "."),
 			Usage:     help,
+			Doc:       docParagraph(fieldDoc(field), name),
 			Floor:     cli.floor && kind == "text",
 		})
 	}
+}
+
+// fieldDoc is the field's doc comment, or its trailing line comment when it has none.
+func fieldDoc(field *ast.Field) *ast.CommentGroup {
+	if field.Doc != nil {
+		return field.Doc
+	}
+	return field.Comment
+}
+
+// docParagraph returns the first paragraph of cg as one line, without the leading Go
+// identifier a doc comment opens with or its final period, so it reads as a clause
+// the man page can append the default and config key to.
+func docParagraph(cg *ast.CommentGroup, ident string) string {
+	if cg == nil {
+		return ""
+	}
+	var prose []string
+	for _, c := range cg.List {
+		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
+		if line == "" {
+			if len(prose) > 0 {
+				break
+			}
+			continue
+		}
+		prose = append(prose, line)
+	}
+	text := strings.TrimSuffix(strings.Join(prose, " "), ".")
+	if rest, ok := strings.CutPrefix(text, ident+" "); ok {
+		text = rest
+		// "Level is the minimum log level" describes the setting as "The minimum log level".
+		for _, verb := range []string{"is ", "are "} {
+			text = strings.TrimPrefix(text, verb)
+		}
+	}
+	if text == "" {
+		return ""
+	}
+	return strings.ToUpper(text[:1]) + text[1:]
 }
 
 // exprTypeIdent returns the type name; "" for unsupported forms.
@@ -360,55 +405,3 @@ func sanitizeUsage(s string) string {
 	}
 	return s
 }
-
-var outputTmpl = template.Must(template.New("flags").Parse(`// Code generated by magus-utils config; DO NOT EDIT.
-package gen
-
-import (
-	"flag"
-
-	"github.com/egladman/magus/internal/config"
-)
-
-// ConfigFlag documents one config field exposed as a CLI flag.
-type ConfigFlag struct {
-	Flag   string // CLI flag name, e.g. "cache-dir"
-	EnvVar string // matching MAGUS_* env var
-	Kind   string // "string", "int", "bool", "float64", "duration", "text", or "boolptr"
-}
-
-// ConfigFlags is the generated inventory of every config-backed flag.
-// Consumed by magus doctor (env-var typo detection) and the man-page generator.
-// Do not edit by hand — regenerate with: go generate ./cmd/magus/...
-var ConfigFlags = []ConfigFlag{
-{{- range .Defs}}
-	{"{{.Flag}}", "{{.EnvVar}}", "{{.Kind}}"},
-{{- end}}
-}
-
-// BindConfigFlags registers one CLI flag per config field on fs, storing
-// values directly into cfg. Call after config.Load so defaults are already
-// applied; flag.Parse will override only the flags the user explicitly passes.
-//
-// Flags owned by bindGlobalFlags (--concurrency, --output, -v) are excluded
-// here to avoid duplicate flag registration on the same FlagSet.
-// Fields with kind "boolptr" use three-way nil/true/false semantics and are
-// env-only; they are omitted here to avoid losing the nil state via flag.
-func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
-{{- range .Defs}}
-{{- if eq .Kind "string"}}
-	fs.StringVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- else if eq .Kind "int"}}
-	fs.IntVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- else if eq .Kind "bool"}}
-	fs.BoolVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- else if eq .Kind "float64"}}
-	fs.Float64Var(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- else if eq .Kind "duration"}}
-	fs.DurationVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- else if eq .Kind "text"}}
-	fs.TextVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
-{{- end}}
-{{- end}}
-}
-`))

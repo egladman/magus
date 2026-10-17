@@ -3,6 +3,8 @@
 // skills rather than `.claude/skills/**` keeps the hand-authored ones out, but goes
 // stale on its own, so adding a skill fails here rather than ships an installed file
 // magus calls hand-editable.
+//
+// Tier 1, mechanical: the fix is an outputs entry.
 namespace skills;
 
 import "assert";
@@ -23,7 +25,7 @@ export final CATALOG = "internal/agent/catalog.go";
 // declaration that claims them tells an author the one file they are supposed to edit is
 // generated, and hands it to the regenerating merge driver on a conflict. The runner
 // reports one the tree no longer has.
-export final HAND_AUTHORED = ["magus-skill-authoring", "magus-local-development", "shepherd-pull-requests"];
+export final HAND_AUTHORED = ["magus-skill-authoring", "magus-local-development", "idiomatic-adrs", "shepherd-pull-requests"];
 
 // DESTINATIONS are the directories an install writes skills into.
 export final DESTINATIONS = [".claude/skills", ".agents/skills", ".opencode/skills"];
@@ -142,6 +144,7 @@ test "an output claiming a hand-authored skill is reported" {
     assert\equal(support\messages(got), want: [
         "declares .claude/skills/magus-skill-authoring/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/magus-local-development/SKILL.md as a generated output, but magus never writes it",
+        "declares .claude/skills/idiomatic-adrs/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/shepherd-pull-requests/SKILL.md as a generated output, but magus never writes it",
-    ], message: "all three");
+    ], message: "all four");
 }

@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, metricsservice]
 
 MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
 
-Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto:17](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L17). Part of the [daemon API](../../index.md).
+Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metri
 
 GetMetrics returns the current derived snapshot.
 
-`POST /magus.metrics.v1alpha1.MetricsService/GetMetrics`: unary. Source: [metrics.proto:19](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L19).
+`POST /magus.metrics.v1alpha1.MetricsService/GetMetrics`: unary. Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 Takes [GetMetricsRequest](#getmetricsrequest), returns [Snapshot](#snapshot).
 
@@ -25,7 +25,7 @@ Takes [GetMetricsRequest](#getmetricsrequest), returns [Snapshot](#snapshot).
 
 StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on each tick, so the dashboard's charts and utilization grid start populated and stay live.
 
-`POST /magus.metrics.v1alpha1.MetricsService/StreamMetrics`: server streaming. Source: [metrics.proto:22](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L22).
+`POST /magus.metrics.v1alpha1.MetricsService/StreamMetrics`: server streaming. Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 Takes [StreamMetricsRequest](#streammetricsrequest), returns [StreamMetricsResponse](#streammetricsresponse).
 
@@ -35,7 +35,7 @@ Takes [StreamMetricsRequest](#streammetricsrequest), returns [StreamMetricsRespo
 
 Backfill is the ring-buffer history the server sends once, right after a dashboard connects, so the utilization grid and cache-rate trend start populated instead of empty.
 
-Source: [metrics.proto:155](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L155).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field     | Type                       | # | Description  |
 | --------- | -------------------------- | - | ------------ |
@@ -47,7 +47,7 @@ Used by: [StreamMetrics (response)](metrics.md#streammetrics).
 
 Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary host-call family, session-pool health, import and spell resolution, and VM-level counters.
 
-Source: [metrics.proto:114](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L114).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field                       | Type   | #  | Description                          |
 | --------------------------- | ------ | -- | ------------------------------------ |
@@ -78,7 +78,7 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 ### GetMetricsRequest
 
-Source: [metrics.proto:25](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L25).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 No fields.
 
@@ -88,7 +88,7 @@ Used by: [GetMetrics (request)](metrics.md#getmetrics).
 
 Latency is an operation-family rollup: how many happened and how long they took. The percentiles are interpolated from the OTel histogram's buckets server-side, so the dashboard never re-derives them from raw buckets. Every quantity carries its unit in its NAME (AIP-141): a bare p95 cannot tell a reader whether it is seconds or milliseconds, and the dashboard does arithmetic on these.
 
-Source: [metrics.proto:59](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L59).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field         | Type   | # | Description                                  |
 | ------------- | ------ | - | -------------------------------------------- |
@@ -105,7 +105,7 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies, input/output payload sizes, and call duration percentiles.
 
-Source: [metrics.proto:98](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L98).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field                  | Type   | #  | Description                 |
 | ---------------------- | ------ | -- | --------------------------- |
@@ -125,9 +125,9 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 ### Remote
 
-Remote is the remote-cache instrument family: outcome tallies plus transfer latency and volume.
+Remote is the remote-cache instrument family: outcome tallies from magus.cache.remote.ops plus transfer latency and volume.
 
-Source: [metrics.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L70).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field                  | Type   | # | Description                                            |
 | ---------------------- | ------ | - | ------------------------------------------------------ |
@@ -149,7 +149,7 @@ Every field carries EXPLICIT PRESENCE, and that is the whole point of the messag
 
 This is the rule STALENESS\_UNMEASURED, VERDICT\_UNKNOWN and ANCHOR\_STATUS\_UNVERIFIED state in the sibling contracts: an unmeasured value must never render as a measured one. A client MUST render an unset field as a break in the series, never as zero and never by carrying the previous value forward.
 
-Source: [metrics.proto:176](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L176).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field                | Type      | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------- | --------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -168,7 +168,7 @@ Used by: [StreamMetrics (response)](metrics.md#streammetrics).
 
 Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a sandbox was built from, allow/deny check tallies, and dropped environment variables.
 
-Source: [metrics.proto:141](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L141).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field               | Type   | # | Description            |
 | ------------------- | ------ | - | ---------------------- |
@@ -188,26 +188,26 @@ Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (respons
 
 Snapshot is the derived-metrics view at one instant: each OTel instrument family aggregated for the dashboard.
 
-Source: [metrics.proto:38](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L38).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
-| Field          | Type                                 | #  | Description                                                                                                                                                                                                                                    |
-| -------------- | ------------------------------------ | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `capture_time` | Timestamp                            | 1  |                                                                                                                                                                                                                                                |
-| `target`       | [Latency](#latency)                  | 2  | magus.target.duration + magus.target.runs                                                                                                                                                                                                      |
-| `cache`        | [Latency](#latency)                  | 3  | cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}). Named "cache" (not "cache\_op") because "op" collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op. |
-| `pool_wait`    | [Latency](#latency)                  | 4  | magus.pool.wait.duration                                                                                                                                                                                                                       |
-| `graph_query`  | [Latency](#latency)                  | 5  | magus.graph.query.duration + magus.graph.queries                                                                                                                                                                                               |
-| `remote`       | [Remote](#remote)                    | 6  | magus.cache.remote.*                                                                                                                                                                                                                           |
-| `target_stats` | [repeated TargetStat](#targetstat)   | 7  | per-target rollup of magus.target.{duration,runs}                                                                                                                                                                                              |
-| `mcp_tools`    | [repeated MCPToolStat](#mcptoolstat) | 8  | per-tool rollup of magus.mcp.tool.*                                                                                                                                                                                                            |
-| `buzz`         | [Buzz](#buzz)                        | 9  | magus.buzz.* families                                                                                                                                                                                                                          |
-| `sandbox`      | [Sandbox](#sandbox)                  | 10 | magus.sandbox.* filesystem families                                                                                                                                                                                                            |
+| Field          | Type                                 | #  | Description                                                                                                                                                                                                                     |
+| -------------- | ------------------------------------ | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capture_time` | Timestamp                            | 1  |                                                                                                                                                                                                                                 |
+| `target`       | [Latency](#latency)                  | 2  | magus.target.duration                                                                                                                                                                                                           |
+| `cache`        | [Latency](#latency)                  | 3  | cache is the local Cache.Run family (magus.cache.duration + magus.cache.reads). Named "cache" (not "cache\_op") because "op" collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op. |
+| `pool_wait`    | [Latency](#latency)                  | 4  | magus.pool.wait.duration                                                                                                                                                                                                        |
+| `graph_query`  | [Latency](#latency)                  | 5  | magus.graph.query.duration                                                                                                                                                                                                      |
+| `remote`       | [Remote](#remote)                    | 6  | magus.cache.remote.*                                                                                                                                                                                                            |
+| `target_stats` | [repeated TargetStat](#targetstat)   | 7  | per-target rollup of magus.target.duration                                                                                                                                                                                      |
+| `mcp_tools`    | [repeated MCPToolStat](#mcptoolstat) | 8  | per-tool rollup of magus.mcp.tool.*                                                                                                                                                                                             |
+| `buzz`         | [Buzz](#buzz)                        | 9  | magus.buzz.* families                                                                                                                                                                                                           |
+| `sandbox`      | [Sandbox](#sandbox)                  | 10 | magus.sandbox.* filesystem families                                                                                                                                                                                             |
 
 Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (response)](metrics.md#streammetrics).
 
 ### StreamMetricsRequest
 
-Source: [metrics.proto:26](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L26).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 No fields.
 
@@ -215,7 +215,7 @@ Used by: [StreamMetrics (request)](metrics.md#streammetrics).
 
 ### StreamMetricsResponse
 
-Source: [metrics.proto:27](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L27).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field      | Type                  | # | Description   |
 | ---------- | --------------------- | - | ------------- |
@@ -228,7 +228,7 @@ Used by: [StreamMetrics (response)](metrics.md#streammetrics).
 
 TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration histogram's per-(project,spell,target,outcome,cache.hit) data points.
 
-Source: [metrics.proto:83](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L83).
+Source: [metrics.proto](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto).
 
 | Field            | Type   | #  | Description                                               |
 | ---------------- | ------ | -- | --------------------------------------------------------- |
@@ -240,7 +240,7 @@ Source: [metrics.proto:83](https://github.com/egladman/magus/blob/main/proto/mag
 | `p95_seconds`    | double | 6  |                                                           |
 | `p99_seconds`    | double | 7  |                                                           |
 | `cache_hit_rate` | double | 8  | [0,1]; fraction of runs served from cache                 |
-| `success`        | int64  | 9  | runs with outcome=success                                 |
+| `success`        | int64  | 9  | runs with outcome=ok                                      |
 | `errors`         | int64  | 10 | runs with outcome=error                                   |
 
 Used by: [GetMetrics (response)](metrics.md#getmetrics), [StreamMetrics (response)](metrics.md#streammetrics).

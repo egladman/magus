@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,7 +55,7 @@ func configMCPCmd(args []string) error {
 		// Moved to `magus config token`: this is the OPERATOR credential, not an MCP
 		// one, and leaving it here taught every reader the opposite. Same hard-redirect
 		// shape as the list -> ls rename below.
-		return usagef("magus config mcp: the operator token moved to `%s` "+
+		return exit.Usagef("magus config mcp: the operator token moved to `%s` "+
 			"(it is not an MCP credential; for an MCP client use `%s`)", hint.ConfigToken, hint.ConfigMCPConnectorCreate)
 	case "connector":
 		return configMCPConnector(subArgs)
@@ -62,7 +64,7 @@ func configMCPCmd(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config mcp: unknown subcommand %q", sub)
+		return exit.Usagef("magus config mcp: unknown subcommand %q", sub)
 	}
 }
 
@@ -103,18 +105,18 @@ func configMCPConnector(args []string) error {
 		fs.Usage()
 		return nil
 	case "list":
-		return usagef("magus config mcp connector: `list` is now `ls` "+
+		return exit.Usagef("magus config mcp connector: `list` is now `ls` "+
 			"(run `%s`)", hint.ConfigMCPConnectorLs)
 	default:
 		fs.Usage()
-		return usagef("magus config mcp connector: unknown subcommand %q", sub)
+		return exit.Usagef("magus config mcp connector: unknown subcommand %q", sub)
 	}
 }
 
 func configMCPConnectorCreate(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector create", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	cf := gen.BindConfigMCPConnectorCreate(fs)
+	cf := flaggen.BindConfigMCPConnectorCreate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector create [--name <n>] [--expires <dur>]")
 		fmt.Fprintln(os.Stderr, "")
@@ -282,7 +284,7 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 // says on stderr when there is no workspace to record it in.
 func auditMint(action string, rec trail.MintRecord) {
 	if root := resolveRootOrEmpty(""); root != "" {
-		if base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+		if base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 			trail.AppendMint(context.Background(), base, action, rec)
 			return
 		}

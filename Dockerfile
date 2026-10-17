@@ -30,8 +30,10 @@ COPY go.mod go.sum ./
 # but it needs a newer Dockerfile frontend than this has been built against, and this is
 # the one build path that cannot afford an untested flag. TestDockerfilesCopyLocalReplaces
 # fails when a replace directive has no line here, so the list cannot drift unnoticed.
+COPY libs/cmdline/go.mod libs/cmdline/
 COPY libs/diagnostics/go.mod libs/diagnostics/
 COPY libs/gopherbuzz/go.mod libs/gopherbuzz/
+COPY libs/xdg/go.mod libs/xdg/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go mod download

@@ -356,7 +356,6 @@ type stepperSession struct {
 }
 
 func (s *stepperSession) SetStepHook(engine.StepMask, func(engine.StepEvent, engine.Frame)) {}
-func (s *stepperSession) ClearStepHook()                                                    {}
 
 func TestPry_StepCommandsSupported(t *testing.T) {
 	// The three step verbs share one dispatch path; they differ only in the command
@@ -390,7 +389,7 @@ func (s *debugSession) Locals(int) map[string]engine.Value {
 func (s *debugSession) Upvalues(int) map[string]engine.Value { return s.upvalues }
 func (s *debugSession) CallDepth() int                       { return len(s.frames) }
 
-// isolatePryHistory points history at a temp dir so Pry's openHistory(defaultHistoryPath())
+// isolatePryHistory points history at a temp dir so Pry's openDefaultHistory
 // never touches the real user state directory.
 func isolatePryHistory(t *testing.T) {
 	t.Helper()

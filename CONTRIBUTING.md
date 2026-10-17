@@ -85,15 +85,15 @@ promise forbids, and the answer is a second name rather than a redefinition.
 
 **Four compatibility gates catch a break before review does**, one per public interface:
 
-| Interface      | Gate                                                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target                                                   |
-| protobuf       | `buf breaking`, composed into `lint`                                                                                                                         |
-| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                                                                 |
-| Go SDK         | `internal/cli/testdata/api-go.lock`, a drift-gated snapshot of every exported declaration of the root package, `types`, `libs/testkit` and `types/gen/mocks` |
+| Interface      | Gate                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI            | `internal/commands/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and operand                                      |
+| protobuf       | `buf breaking`, composed into `lint`                                                                                                                  |
+| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                                                          |
+| Go SDK         | `internal/commands/testdata/api-go.lock`, a drift-gated snapshot of every exported declaration of the root package, `types`, `libs/testkit` and `std` |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
-removed part of the public interface. Regenerate it with `go generate ./internal/cli/...`
+removed part of the public interface. Regenerate it with `magus run man-generate .`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 
@@ -102,23 +102,20 @@ variable with its full signature, so a changed line is a changed signature for e
 that imports magus. Regenerate it with `magus run go-api-generate .`. The package list lives in
 `publicGoPackages` in `cmd/magus-utils/public_api.go`; add a package there when it becomes public.
 
-**A fifth public interface has no gate: `std/` host-module method names.** A whole-tree
-review in August 2026 established this, and it is worth knowing before you touch a
-descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
-becomes the identifier every magusfile calls, so renaming it breaks them, and
-nothing catches it:
+**A fifth public interface is `std/` host-module method names.** `Method.Name` in a
+`std/` module is run through `std.CamelCase` and becomes the identifier every
+magusfile calls, so renaming it breaks them. `std/gen/std-api.lock` pins every
+member, one `<module>.<member>` line each, and `TestStdAPILocked` fails naming each
+added and each removed one. Regenerate it with `magus run magusfile-api-generate .`
+after an intentional change; the lock is written only by that target. The `magus.*`
+names have their own lock, `internal/interp/bindings/testdata/magus-api.lock`.
 
-- MGS1025's removed-API table covers only the `magus.*` namespace, so it cannot
-  soften a `fs.*` or `os.*` rename, and it is a friendlier error rather than a
-  working alias either way.
-- `internal/interp/bindings/testdata/magus-api.lock` pins only `magus.*` member
-  names. No lock file lists std method names at all.
-
-So a std rename is a silent break that review has to catch by eye. If you make one
-deliberately, it belongs under **Breaking** in the changelog with the old and new
-spellings, and every in-repo caller must move with it: `magusfile.buzz`,
-`spells/`, `docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures
-under `cmd/magus/testdata/`.
+The lock catches a rename but does not soften it: MGS1025's removed-API table covers
+only `magus.*`, and it is a friendlier error rather than a working alias either way.
+A deliberate rename belongs under **Breaking** in the changelog with the old and new
+spellings, and every in-repo caller must move with it: `magusfile.buzz`, `spells/`,
+`docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures under
+`cmd/magus/testdata/`.
 
 The same descriptor's `Doc:` string is not documentation either: it is codegen
 input, reaching the generated `.d.ts`, `docs/reference/buzz/*.md`, and editor
@@ -305,6 +302,121 @@ git config --worktree merge.magus.driver "$PWD/magus vcs merge-driver %O %A %B %
 `git config --worktree` keeps the override local to that checkout. `.git/config`
 is shared by every linked worktree, so an absolute path there would aim all of
 them at one checkout's binary.
+
+## Where a rule lives
+
+A rule has one home. Writing it in two places leaves two copies that drift, and a
+rule kept only in prose holds about half the time. Before choosing where to
+describe a rule, check whether a program can enforce it. Ask the questions in
+order and stop at the first yes.
+
+1. Can a program check it? Then it is an enforcement point, and prose only links
+   to it.
+2. Does it need judgment? Then it is a sentence for a reader. Pick the reader by
+   how often they must see it.
+3. Is it a decision someone may be tempted to reverse? Then it is a record.
+
+### Mechanical rules
+
+| the rule is                                                       | home                                                        | example here                                                                                                                                                           |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a call that cannot be undone                                      | compiled guard rule that denies                             | a whole-tree `git reset --hard` destroys a concurrent agent's work ([The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)) |
+| a call that wastes time, where a command that answers it exists   | compiled guard rule that advises                            | `adviseNewSourceDir` in `internal/guard/dir.go` explains a new source directory and denies nothing                                                                     |
+| a call this repository refuses and a user's task runner would not | a rule in `hack/policy/*.buzz`, wired in the root magusfile | `brief-builds-magus` and `worker-builds-magus` in `hack/policy/builds.buzz`                                                                                            |
+| a property of files, checked at the gate                          | a lint rule in `hack/lint/` or a test                       | `banned-words` and `provider-io-is-buzz` in `hack/lint/`; `adr-template` in `docs/lib/adr.buzz`                                                                        |
+| a name that must keep resolving                                   | a drift test                                                | every command path in a hint is walked against the registry ([Hints belong in `hint`](#hints-belong-in-hint))                                                          |
+| a refusal by the verb that owns the decision                      | a coded error that names the next step                      | a budget magus cannot fit is refused with MGS3009                                                                                                                      |
+| structure the tool reads                                          | a magusfile declaration                                     | a target declares its outputs, and CI runs the target ([Workflow targets, not inline logic](#workflow-targets-not-inline-logic))                                       |
+
+Choosing among them:
+
+- Deny only what cannot be undone. Anything recoverable advises, and the advice
+  carries the command that answers the call.
+- A guard fires at the moment of the edit; a lint or test fires at the gate. Use
+  the guard when the author must not finish the wrong work, and the lint when
+  finding it at CI is soon enough.
+- The verb that owns a decision refuses it. A skill sentence that says "do not
+  pass X to this verb" is a missing error.
+- `ask` is for consent to a costly or publishing act, never for waving a denial
+  through. The push gate asks an unleased session before it publishes a commit no
+  passing gate covers, and a host that cannot prompt gets a deny. A rule whose
+  denial a person might want to clear still denies; the person changes the rule
+  ([A record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals)).
+
+### Rules that need judgment
+
+| the rule is                                          | home                                                                                                               | example here                                                                                                              |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| needed on every edit by every session                | a line in `AGENTS.md`                                                                                              | "Before fixing behavior that looks wrong, find the test that pins it."                                                    |
+| needed for one kind of task, about how to use magus  | a shipped `magus-*` skill                                                                                          | `magus-vcs-hygiene` before a commit                                                                                       |
+| needed for one kind of task, about this repository   | the local `magus-local-development` skill                                                                          | triaging a review finding against magus's own Go                                                                          |
+| a decision with alternatives and a built consequence | an ADR in `docs/decisions/`                                                                                        | ADR 0001 records what it rejected "so they are not re-proposed"                                                           |
+| a measured decision not to build, or to remove       | a row in [A record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals) | the `cd` guard rule, deleted: 207 of 238 denies already passed                                                            |
+| a standing principle about how the tool behaves      | an entry in `docs/doctrine.md` that names its mechanism                                                            | [A refusal carries its reason](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-refusal-carries-its-reason) |
+| an explanation for someone using magus               | a docs page                                                                                                        | [The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)                         |
+
+Choosing among them:
+
+- Reach decides between a line and a skill. A skill loads when a brief names it
+  or a hook demands it, so a rule that must hold on every edit goes in
+  `AGENTS.md`, which every session reads. Every line there costs every session
+  and is deleted when a tool starts saying it. The measured reach of a skill is
+  in the [record of refusals](https://github.com/egladman/magus/blob/main/docs/doctrine.md#a-record-of-refusals).
+- A shipped skill teaches a stable procedure, so it never names this repository.
+  A rule true only here goes in the local skill, stamped with its evidence and a
+  retire-when condition ([`magus-workspace-rules`](https://github.com/egladman/magus/blob/main/.claude/skills/magus-workspace-rules/SKILL.md)).
+- A skill covers what a lint cannot see; it does not restate what the lint
+  teaches on its first failure. The ADR template is the lint's. Whether
+  Alternatives holds real options with reasons is the `idiomatic-adrs` skill's.
+- Consult before you propose. Before adding a flag, rule or check, or reopening
+  a removed one, search the records:
+  `magus query "kind=docsection id=~decisions/ <terms>"` and the refusals table.
+- An ADR records a decision that landed. A refusal row records one line of
+  evidence for something not built, and links to an ADR when one decision has
+  several.
+- A doctrine entry without an enforcing mechanism is a debt and is listed as one.
+  Edit the page in the same commit that changes the behavior.
+
+### Shipped or only this repository
+
+magus ships whatever lives in the binary: compiled guard rules, error text, the
+shipped skills and their hints. It never ships `hack/`, `libs/conventions`, the
+local skill or `AGENTS.md`. A person who only wants a task runner meets the first
+kind and must never be annoyed by it, so a shipped rule needs all of:
+
+- a case for it that does not depend on magus's own data;
+- a correctness property or a documented tool norm, not a taste;
+- near-zero false positives on three repositories that are not this one;
+- advice rather than denial, unless the action cannot be undone;
+- a default that a workspace can change by name with `magus\guard.builtins`.
+
+A rule that fails any of these is repository policy: write it in `hack/lint`,
+`hack/policy` or `.golangci.yml`, and the root magusfile applies it here. Policy
+that proves itself on other trees can graduate into the binary later; the
+reverse never happens by default.
+
+Rules for a user's own workspace use the same homes with different owners.
+[Where guidance belongs](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/skills.md#where-guidance-belongs)
+and the `magus-workspace-rules` skill cover that case.
+
+### Rolling out a stricter rule
+
+The person who adds a rule, or tightens one, pays its cost in the same change. After
+that, a change answers only for what it did.
+
+- A mechanical rule, one whose fix needs no knowledge of the code, is enforced
+  everywhere, and the sweep lands with it.
+- A measured rule, one whose fix is a refactor anyone can do, lands with a baseline
+  listing every item already past it. The baseline only shrinks. `magus run format .`
+  deletes the items that no longer violate and follows an item through a rename or a
+  move when its recorded shape names exactly one candidate, so nobody edits it to keep a
+  passing change passing.
+- A rule whose fix needs knowledge of the code, or a taste, advises and never fails.
+
+A rule's header comment names its tier, then the reason:
+`// Tier 1, mechanical`, `// Tier 2, measured shape` or `// Tier 3, judgment`. A rule
+with parts in two tiers names both. `rules-name-their-tier` in `hack/lint/` fails a rule
+that names none.
 
 ## Naming
 

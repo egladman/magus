@@ -20,9 +20,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -83,7 +85,7 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Equal(t, ReleaseIndex{
@@ -103,7 +105,7 @@ func TestFetchAndVerifyIndex_BadSig(t *testing.T) {
 	badSig := ed25519.Sign(wrongPriv, indexData)
 	srv := startIndexServer(t, indexData, badSig)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature check failed")
@@ -126,7 +128,7 @@ func TestFetchAndVerifyIndex_Unreachable(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err, "unreachable index must return an error, not succeed")
 	// Must not silently fall back to anything.
@@ -162,7 +164,7 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema_version")
@@ -536,7 +538,7 @@ func TestFetchAndVerifyManifestValid(t *testing.T) {
 
 	m, err := FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{Keys: ringOf(pub)},
+		Options{Keys: activeRing(pub)},
 	)
 	require.NoError(t, err)
 	require.Equal(t, Manifest{
@@ -566,7 +568,7 @@ func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 
 	_, err = FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{Keys: ringOf(pub)},
+		Options{Keys: activeRing(pub)},
 	)
 	assert.Error(t, err, "expected signature failure")
 }
@@ -695,7 +697,7 @@ func TestDiscoveryURLOverride(t *testing.T) {
 	// Serve from a custom (non-default) server to prove the override works.
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Len(t, idx.Releases, 1)
@@ -719,7 +721,7 @@ func TestDiscoveryURLFromEnv(t *testing.T) {
 
 	t.Setenv("MAGUS_UPDATE_URL", srv.URL+"/index.json")
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, "v7.0.0", idx.Releases[0].Version)
@@ -744,7 +746,7 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 
@@ -882,4 +884,58 @@ func TestRedirectMayNotLeaveHTTPS(t *testing.T) {
 	if err := check(req("http://127.0.0.1:9/x"), nil); err != nil {
 		t.Errorf("a loopback redirect stays allowed: %v", err)
 	}
+}
+
+func TestStatusErrorClassifiesRetry(t *testing.T) {
+	t.Parallel()
+	tests := map[int]bool{
+		http.StatusNotFound:            false,
+		http.StatusForbidden:           false,
+		http.StatusBadRequest:          false,
+		http.StatusRequestTimeout:      true,
+		http.StatusTooManyRequests:     true,
+		http.StatusInternalServerError: true,
+		http.StatusBadGateway:          true,
+		http.StatusServiceUnavailable:  true,
+	}
+	for code, retryable := range tests {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			t.Parallel()
+			resp := &http.Response{StatusCode: code, Status: fmt.Sprintf("%d %s", code, http.StatusText(code))}
+			err := statusError(resp, "https://example.test/x")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "HTTP "+resp.Status)
+			assert.Equal(t, retryable, types.ClassifyRetry(err).Retryable)
+		})
+	}
+}
+
+func TestFetchLimitedFetchesAMissingReleaseOnce(t *testing.T) {
+	t.Parallel()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := FetchLimited(context.Background(), srv.URL+"/missing", 1<<10, Options{HTTPClient: srv.Client()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+	assert.EqualValues(t, 1, hits.Load())
+}
+
+func TestFetchLimitedFetchesAnOversizedBodyOnce(t *testing.T) {
+	t.Parallel()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write(bytes.Repeat([]byte("x"), 100))
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := FetchLimited(context.Background(), srv.URL, 10, Options{HTTPClient: srv.Client()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeded 10 bytes")
+	assert.EqualValues(t, 1, hits.Load())
 }

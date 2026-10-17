@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -34,7 +35,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/risk"
@@ -62,10 +63,10 @@ func (m *Magus) withRecordedOutput(ctx context.Context) context.Context {
 	if m.records == nil {
 		return ctx
 	}
-	if _, _, ok := procrun.CapturedOutput(ctx); ok {
+	if _, _, ok := spawn.CapturedOutput(ctx); ok {
 		return ctx
 	}
-	return procrun.WithOutputWriters(ctx,
+	return spawn.WithOutputWriters(ctx,
 		report.NewLineNotices(ctx, m.records, "stdout"),
 		report.NewLineNotices(ctx, m.records, "stderr"))
 }
@@ -95,13 +96,9 @@ func collapseOnSuccess(l config.Log) bool {
 
 // Magus is the high-level orchestrator. Read paths and the server's warm caches
 // (warmGraph, symbolStatus) are safe for concurrent use: that is what backs
-// `magus server`, where one Magus is shared across goroutines; concurrent callers
-// should use types.ContextWithGraphObserver rather than a shared default observer.
-// SetGraphObserver and SetServer are NOT concurrency-safe: each mutates shared
-// state with no lock and is meant to be called once, before the workspace is
-// shared (SetGraphObserver mutates the underlying *types.Workspace, which
-// documents itself as safe only for a sole owner). Inspect-constructed
-// workspaces have no cache.
+// `magus server`, where one Magus is shared across goroutines. A run reports its graph
+// traversal to the observer it was given (WithObserver), never to one the workspace
+// holds. Inspect-constructed workspaces have no cache.
 type Magus struct {
 	ws    *types.Workspace
 	cfg   config.Config
@@ -138,10 +135,7 @@ type Magus struct {
 	probeCacheOnce sync.Once
 	probeCache     *cache.Cache
 
-	wsReg *WorkspaceRegistry
-	// policyLog is every file the root magusfile's load read, which is where a workspace
-	// guard rule can come from. Nil until preloadMagusfiles runs.
-	policyLog *interp.SourceLog
+	wsReg *workspace.WorkspaceRegistry
 	// loadReads is what every project's load read beyond its sources: the environment
 	// variables and files a top level consulted. The knowledge store folds them into the
 	// stamp that stands for "this evaluation still holds" (see knowledgeFastStamps), so a
@@ -154,13 +148,16 @@ type Magus struct {
 	magusfileExports map[string][]string
 
 	// binaryAnswerTargets are the targets whose bodies ask the running binary for their
-	// answer (interp.BinaryAnswerTargets). buildStep keys them on the build. Written once
+	// answer (interp.BinaryAnswerTargets). buildStep keys them on answerCatalogs. Written once
 	// by the load, read by every run after.
 	binaryAnswerTargets map[types.TargetRef]bool
 	// driftGateTargets are the targets that declare outputs and branch on the rw charm: without
 	// rw such a target compares its outputs, so its hit must find them as the entry
 	// recorded them (cache.Step.VerifyOutputs). Written once by the load.
 	driftGateTargets map[types.TargetRef]bool
+	// charmReads are the charms each target's body reads by literal name
+	// (ctx.hasCharm("rw")), which keyedWriteGrants consults. Written once by the load.
+	charmReads map[types.TargetRef][]string
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
@@ -175,7 +172,7 @@ type Magus struct {
 	hostMemBytes int64
 
 	tel            observability.Provider
-	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
+	injectedTel    observability.Provider // shared provider supplied via workspace.WithTelemetryProvider; adopted verbatim in Open
 	metricsCollect bool                   // server: build an always-on local metrics collector for the dashboard
 	// broker is this workspace's broker client, nil when the policy is off. ownsBroker is
 	// set when Open made it, and Close then hangs it up.
@@ -185,114 +182,111 @@ type Magus struct {
 	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
 	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
 
-	server Server
+	// environ is the environment WithEnv gave, and getenv reads it; both are empty
+	// without one.
+	environ []string
+	getenv  func(string) string
+	// stderr is where WithStderr sends notices; io.Discard without one.
+	stderr io.Writer
+	// commandLine is WithCommandLine's; empty without one.
+	commandLine []string
+	// spawnRule is WithSpawnRule's, which Open and Inspect require.
+	spawnRule SpawnRule
+	// cacheBackend is WithCacheBackend's; nil without one, when the magusfile may wire
+	// one instead.
+	cacheBackend types.CacheBackend
 }
 
-// Server is the set of HTTP routes `magus server` hosts over this workspace: the MCP
-// endpoint, the console and its API. The CLI injects it under `magus server` ONLY, so
-// ordinary command paths never construct one, and it is an interface so the root magus
-// package need not import the handler packages that depend on it. The concrete
-// *server.Server satisfies it.
-type Server interface {
-	Serve(ctx context.Context) error
-}
-
-// SetServer installs the Server that Serve delegates to. Called once, under `magus
-// server`; other command paths leave it nil so no listener is ever constructed.
-func (m *Magus) SetServer(s Server) { m.server = s }
-
-// Serve runs the injected Server, blocking until ctx is cancelled or the listener
-// fails. It errors if no Server was installed via SetServer.
-func (m *Magus) Serve(ctx context.Context) error {
-	if m.server == nil {
-		return errors.New("magus: no server configured")
+// env reads key from the environment WithEnv gave, "" for a key unset there or with no
+// environment given.
+func (m *Magus) env(key string) string {
+	if m.getenv == nil {
+		return ""
 	}
-	return m.server.Serve(ctx)
+	return m.getenv(key)
 }
 
-// workspaceMarker is the ONE file that declares a workspace root.
-//
-// Deliberately a single name, not a set. The earlier attempt listed go.mod here too,
-// on the theory that it only appears at a repo's top: false in any multi-module repo,
-// including this one (libs/diagnostics/go.mod, libs/gopherbuzz/go.mod). That reintroduced the
-// exact defect it was meant to fix, one level down: running from libs/diagnostics made
-// libs/diagnostics the workspace, so it locked libs/diagnostics/.magus/locks while a root run locked
-// the root's, and the two stopped excluding each other despite touching the same files.
-const workspaceMarker = "magus.yaml"
+// processOptions are the WithEnv, WithStderr, WithCommandLine and WithSpawnRule this
+// workspace was opened with, for a workspace it opens on its own behalf.
+func (m *Magus) processOptions() []Option {
+	return []Option{WithEnv(m.environ), WithStderr(m.noticeWriter()), WithCommandLine(m.commandLine), WithSpawnRule(m.spawnRule)}
+}
 
-// projectMarkers mark a PROJECT, a unit INSIDE a workspace, and say nothing about
-// where the workspace begins.
-//
-// Separating these from the workspace marker is the fix. Treating a magusfile as a
-// root meant the walk halted at the first one it met, so running from a subproject
-// silently redefined the workspace as that subproject: `magus ls` from a nested
-// directory reported one project instead of the real set, and `affected` answered
-// confidently about a workspace that did not exist.
-var projectMarkers = []string{"magusfiles", "magusfile.buzz", "go.mod"}
+// noticeWriter is where WithStderr sends this workspace's notices, io.Discard without one.
+func (m *Magus) noticeWriter() io.Writer {
+	if m.stderr == nil {
+		return io.Discard
+	}
+	return m.stderr
+}
 
-// dirHasMarker reports whether dir carries any of the named markers. A stat error
-// other than "not found" is reported as PRESENT: refusing to walk past a directory we
-// cannot read is safer than silently continuing into whatever is above it and
-// adopting an unrelated tree as the workspace.
-func dirHasMarker(dir string, markers []string) bool {
-	for _, m := range markers {
-		if _, err := os.Stat(filepath.Join(dir, m)); err == nil || !errors.Is(err, fs.ErrNotExist) {
-			return true
+// envGetter is a getenv over env, KEY=VALUE pairs as os.Environ returns them. A key set
+// twice reads its last value, as the process environment does.
+func envGetter(env []string) func(string) string {
+	vals := make(map[string]string, len(env))
+	for _, kv := range env {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			vals[k] = v
 		}
 	}
-	return false
+	return func(k string) string { return vals[k] }
 }
 
-// FindRoot walks up from dir (or cwd when empty) to find the workspace root.
-//
-// The NEAREST magus.yaml wins, because it is the only file that declares "the
-// workspace starts here" and the closest declaration is the governing one, the same
-// rule .git follows, and the reason a git worktree nested inside its parent repo
-// resolves to itself rather than being swallowed by the parent.
-//
-// Absent any magus.yaml, the root is the outermost CONTIGUOUS project marker.
-// Contiguous so a stray magusfile in an unrelated ancestor (a home directory, /tmp)
-// cannot silently adopt everything beneath it, which an unbounded walk would allow.
+// internal/workspace cannot import this package, so the view is registered from here.
+func init() { workspace.SetView(internalView) } //nolint:gochecknoinits // internal/workspace cannot import this package, so the view registers from here
+
+// internalView is workspace.ViewAs's answer: a *Magus as its internals, any other workspace
+// unchanged.
+func internalView(ws types.WorkspaceRepository) types.WorkspaceRepository {
+	if m, ok := ws.(*Magus); ok {
+		return m.internals()
+	}
+	return ws
+}
+
+// internals is a *Magus as magus's own packages see it: the same workspace, with the
+// methods whose signatures name internal types and so stay off the public API. Root puts
+// it, never a bare *Magus, on a context (types.WithWorkspace), where std, the Buzz
+// bindings and the spell import resolvers recover them by assertion; a caller holding a
+// *Magus gets it from workspace.ViewAs.
+type internals struct{ *Magus }
+
+func (m *Magus) internals() internals { return internals{m} }
+
+// KnowledgeGraph returns the workspace knowledge graph req asks for. See
+// Magus.knowledgeGraph.
+func (w internals) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	return w.knowledgeGraph(ctx, req)
+}
+
+// JobLimits is the magus.yaml jobs section, which every door that forks a job enforces.
+func (w internals) JobLimits() config.Jobs { return w.cfg.Jobs }
+
+// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
+// them.
+func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
+
+// CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
+// spawn rule.
+func (w internals) CheckSpawn(parent, child types.ModelTier) error {
+	return w.spawnRule(parent, child)
+}
+
+// Telemetry returns this workspace's observability provider: nil on an Inspect workspace,
+// which builds none, and the shared instance when Open was given one
+// (workspace.WithTelemetryProvider).
+func (w internals) Telemetry() observability.Provider { return w.tel }
+
+// FindRoot walks up from dir to the workspace root. The nearest magus.yaml wins; with
+// none, the root is the outermost contiguous directory holding a project marker
+// (magusfiles/, magusfile.buzz or go.mod). With neither, the error carries
+// [types.NoWorkspaceRoot]. An empty dir is an error: a library has no working directory
+// to fall back to, so pass the directory to start from (os.Getwd's, if that is meant).
 func FindRoot(dir string) (string, error) {
 	if dir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return "", err
-		}
-		dir = cwd
+		return "", errors.New("magus: FindRoot needs a directory to start from, so pass one, such as the result of os.Getwd")
 	}
-	cur, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-
-	var contiguous string
-	runBroken := false
-	for {
-		// Nearest wins: return the moment a declaration is found.
-		if dirHasMarker(cur, []string{workspaceMarker}) {
-			return cur, nil
-		}
-		if !runBroken {
-			if dirHasMarker(cur, projectMarkers) {
-				contiguous = cur
-			} else if contiguous != "" {
-				runBroken = true
-			}
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			break
-		}
-		cur = parent
-	}
-
-	if contiguous != "" {
-		return contiguous, nil
-	}
-	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
-		"magus: could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
-			"run `%s` to bootstrap one", hint.Init)
+	return workspace.FindRoot(dir)
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
@@ -361,8 +355,9 @@ func joinedBranches(err error, file string) []locatedBranch {
 			file = l.Path
 		}
 		if j, ok := e.(interface{ Unwrap() []error }); ok {
-			var out []locatedBranch
-			for _, b := range j.Unwrap() {
+			branches := j.Unwrap()
+			out := make([]locatedBranch, 0, len(branches))
+			for _, b := range branches {
 				out = append(out, joinedBranches(b, file)...)
 			}
 			return out
@@ -378,7 +373,7 @@ func (m *Magus) load(ctx context.Context) error {
 	// resolver (and magusSearchPaths) can read the workspace root. Without this the
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, m.internals())
 	ctx = m.withRecordedOutput(ctx)
 	ctx, sealProbes := interp.WithImportProbes(ctx)
 	defer sealProbes()
@@ -395,6 +390,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return err
 	}
 	m.spellImports = imports
+	// Read before any magusfile adds to the registry, so a magusfile's policy table is
+	// still held to targets that exist.
+	goDeclared := goDeclaredTargets(m)
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
@@ -418,34 +416,49 @@ func (m *Magus) load(ctx context.Context) error {
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
 	}
-	// Only enforceable when the Buzz interpreter is linked in (interp.Available):
-	// without it, preloadMagusfiles cannot discover a project's custom (export fun)
-	// targets, so customTargets is always empty and every per-target policy would
-	// falsely look unknown. cmd/magus links the interpreter unconditionally
-	// (packs_interp.go); a bare library caller that doesn't gets no enforcement here,
-	// same as it gets no magus.project() evaluation at all.
-	if interp.Available() {
-		if err := validateTargetPolicies(m, customTargets); err != nil {
-			return err
-		}
+	if err := validateTargetPolicies(m, customTargets, goDeclared); err != nil {
+		return err
 	}
 	// Fold target-level static facts (cross-project deps, and per-target
 	// magus.inputs/outputs cache footprint) into the project model.
 	if err := m.applyTargetDepsAndFootprint(ctx); err != nil {
 		return err
 	}
+	if err := refuseHumanOnlyInGate(m.All(), m.Get); err != nil {
+		return err
+	}
 	m.autobindMagusfileSpell()
 	return m.spellShadows()
 }
 
-// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
-// them. The import resolvers reach it through the workspace on the context.
-func (m *Magus) SpellImports() *remotespell.Imports { return m.spellImports }
-
-// EvaluationReads returns what this workspace's load read beyond its sources (see
-// loadReads): the inputs, with the tree, the binary and the configuration, that decide
-// whether an evaluation still holds. Empty before preloadMagusfiles ran.
-func (m *Magus) EvaluationReads() readlog.Reads { return m.loadReads.Reads() }
+// refuseHumanOnlyInGate errors when a project's `ci`, or a target its ctx.needs chain
+// reaches, is human_only. The push gate needs a passing `ci`, so an agent could never
+// clear it; a paid suite runs as its own CI step instead.
+func refuseHumanOnlyInGate(projects []*types.Project, lookup func(path string) *types.Project) error {
+	gate := string(types.TargetCI)
+	seen := map[string]bool{}
+	var errs []error
+	for _, p := range projects {
+		_ = types.WalkChain(p, gate, lookup, func(v types.ChainVisit) error {
+			if !v.Project.TargetPolicies[v.Target].HumanOnly {
+				return nil
+			}
+			if seen[v.Key()] {
+				return types.ErrSkipChain
+			}
+			seen[v.Key()] = true
+			what := fmt.Sprintf("`%s` in project %q reaches human_only target %s:%s", gate, p.Path, v.Project.Path, v.Target)
+			if v.Depth == 0 {
+				what = fmt.Sprintf("project %q declares its `%s` human_only", p.Path, gate)
+			}
+			errs = append(errs, fmt.Errorf(
+				"magus: %s, so no agent could pass the gate a push needs: take it out of the gate and run `%s` as its own CI step",
+				what, hint.Run.With(v.Target, v.Project.Path)))
+			return types.ErrSkipChain
+		})
+	}
+	return errors.Join(errs...)
+}
 
 // spellRegistryClient is the client a remote spell pull uses for host: authenticated
 // by its spells.registries entry when there is one, anonymous otherwise. It runs before
@@ -523,9 +536,29 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
+	if vo.VCSDriverGiven {
+		if vo.VCSDriver == nil {
+			return nil, errors.New("magus: WithVCSDriver was given a nil driver, so pass a driver, or leave the option out to use the built-in one")
+		}
+		if cfg.VCS.Name != "" && cfg.VCS.Name != vo.VCSDriver.Name() {
+			return nil, fmt.Errorf("magus: WithVCSDriver gives the %q driver but vcs.name in magus.yaml names %q, so drop one or make them agree",
+				vo.VCSDriver.Name(), cfg.VCS.Name)
+		}
+		ws.VCSOptions.Driver = vo.VCSDriver
+	}
+	if vo.SpawnRule == nil {
+		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
+	}
+	if vo.CacheBackendGiven && vo.CacheBackend == nil {
+		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")
+	}
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
+		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+	if vo.Stderr != nil {
+		m.stderr = vo.Stderr
+	}
 	if isJSONLLog(cfg.Log) {
-		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), cfg.Log.SlogLevel()))
+		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
 	var o workspace.Load
 	for _, fn := range opts {
@@ -541,7 +574,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Registry != nil {
 		m.wsReg = o.Registry
 	} else {
-		m.wsReg = NewWorkspaceRegistry()
+		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
@@ -558,6 +591,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	if o.Preloaded != nil {
 		return *o.Preloaded, nil
 	}
+	getenv := envGetter(o.Env)
 	path := o.ConfigPath
 	if path == "" {
 		path = filepath.Join(root, "magus.yaml")
@@ -568,7 +602,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		// does: MAGUS_BROKER=off must hold for it as for any other. Not validated: the
 		// zero Config under it is not one Validate accepts, and it never was.
 		var zero config.Config
-		if err := configgen.ApplyEnv(&zero, os.Getenv); err != nil {
+		if err := configgen.ApplyEnv(&zero, getenv); err != nil {
 			return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
 		}
 		return zero, nil
@@ -577,7 +611,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		return config.Config{}, err
 	}
 	// LoadFile validated the yaml; the environment overwrites those fields after it.
-	if err := errors.Join(configgen.ApplyEnv(&cfg, os.Getenv), config.Validate(cfg)); err != nil {
+	if err := errors.Join(configgen.ApplyEnv(&cfg, getenv), config.Validate(cfg)); err != nil {
 		return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
 	}
 	return cfg, nil
@@ -592,9 +626,6 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // load names all of them instead of one per fix.
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
-	if !interp.Available() {
-		return customTargets, nil
-	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
@@ -611,11 +642,10 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
 			continue
 		}
-		pctx := interp.WithProjectPath(ctx, p.Path)
-		if filepath.Clean(p.Dir) == filepath.Clean(m.ws.Root) {
-			m.policyLog = &interp.SourceLog{}
-			pctx = interp.WithSourceLog(pctx, m.policyLog)
+		if !interp.Available() && len(srcs) > 0 && len(srcs[0].Files) > 0 {
+			return nil, &types.EngineNotLinkedError{Op: "evaluate " + srcs[0].Files[0]}
 		}
+		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
@@ -641,7 +671,9 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 // surfacing as a load error. customTargets comes from preloadMagusfiles; spell
 // targets come from each project's already-resolved spells (wsReg.Apply having
 // just run), so both "kinds" of known target (per describe.go's byName) count.
-func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
+// goDeclared comes from goDeclaredTargets: a target a Go program names with WithTarget
+// is one it declares, as an export fun is one a magusfile declares.
+func validateTargetPolicies(m *Magus, customTargets, goDeclared map[string][]string) error {
 	for _, p := range m.All() {
 		if len(p.TargetPolicies) == 0 {
 			continue
@@ -653,6 +685,9 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 			}
 		}
 		for _, t := range customTargets[p.Path] {
+			known[t] = struct{}{}
+		}
+		for _, t := range goDeclared[p.Path] {
 			known[t] = struct{}{}
 		}
 		declared := make([]string, 0, len(known))
@@ -686,11 +721,43 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 	return nil
 }
 
+// goDeclaredTargets names each project's policy targets as the Go caller's own registry
+// declares them, keyed by project path. It runs those registrations against scratch
+// projects, so the real ones are untouched until wsReg.Apply; a registration Apply
+// would refuse is Apply's to report.
+func goDeclaredTargets(m *Magus) map[string][]string {
+	probe := policyProbe{WorkspaceRepository: m, scratch: map[string]*types.Project{}}
+	_ = m.wsReg.Apply(probe)
+	out := make(map[string][]string, len(probe.scratch))
+	for path, p := range probe.scratch {
+		for name := range p.TargetPolicies {
+			out[path] = append(out[path], name)
+		}
+	}
+	return out
+}
+
+// policyProbe hands a registry a scratch copy of each project it asks for, and lists none,
+// so Apply resolves no spell.
+type policyProbe struct {
+	types.WorkspaceRepository
+	scratch map[string]*types.Project
+}
+
+func (w policyProbe) Get(path string) *types.Project {
+	p := w.WorkspaceRepository.Get(path)
+	if p == nil {
+		return nil
+	}
+	c := &types.Project{Path: p.Path, Dir: p.Dir}
+	w.scratch[p.Path] = c
+	return c
+}
+
+func (policyProbe) All() []*types.Project { return nil }
+
 // autobindMagusfileSpell binds the "magusfile" spell to projects with a magusfile but no resolved spell.
 func (m *Magus) autobindMagusfileSpell() {
-	if !interp.Available() {
-		return
-	}
 	magusfileSpell, ok := project.DefaultSpellRegistry().Lookup("magusfile")
 	if !ok {
 		return
@@ -724,12 +791,12 @@ var insecureRemoteOverride = ward.Override{
 }
 
 // remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
-// signing-key env var into cache options. A wired remote backend must declare a non-empty
+// signing key (signingSeedB64, read from signingKeyEnv; empty for none) into cache options. A wired remote backend must declare a non-empty
 // trust set, so a shared cache never comes up unverified. The exception is insecure, the
 // explicit opt-out that accepts and produces unsigned artifacts (no trust set, no signing
 // key) for trusted single-repo CI or backend validation. That opt-out has to say why; see
 // [ward.RequireReason].
-func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason string) ([]cache.Option, error) {
+func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason, signingSeedB64 string) ([]cache.Option, error) {
 	if insecure {
 		if err := ward.RequireReason(insecureRemoteOverride, true, insecureReason); err != nil {
 			return nil, fmt.Errorf("magus: %w", err)
@@ -752,8 +819,8 @@ func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason s
 	}
 	opts := []cache.Option{cache.WithTrustedKeys(pubkeys)}
 
-	if seedB64 := os.Getenv(signingKeyEnv); seedB64 != "" {
-		seed, err := base64.StdEncoding.DecodeString(seedB64)
+	if signingSeedB64 != "" {
+		seed, err := base64.StdEncoding.DecodeString(signingSeedB64)
 		if err != nil {
 			return nil, fmt.Errorf("magus: %s is not valid base64: %w", signingKeyEnv, err)
 		}
@@ -778,7 +845,11 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	cfgOpts := []cache.Option{cache.WithLocalWrite(m.cfg.Cache.WriteEnabled())}
+	storeDir, err := config.StoreDir(m.ws.Root, m.cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfgOpts := []cache.Option{cache.WithLocalWrite(m.cfg.Cache.WriteEnabled()), cache.WithStoreDir(storeDir)}
 	// Only a declared value is passed: undeclared, the cache decides from the signing
 	// key, while a declared true is a requirement it must be able to honor.
 	if v := m.cfg.Cache.Remote.Write.Enabled; v != nil {
@@ -796,7 +867,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. When the caller injected a shared provider
-	// (WithProvider), adopt it verbatim and skip construction: the server shares ONE
+	// (workspace.WithTelemetryProvider), adopt it verbatim and skip construction: the server shares ONE
 	// provider across its bridge Magus and every per-workspace registry Magus, so a
 	// build routed to any workspace feeds the same instruments the dashboard reads,
 	// and workspace eviction never discards the accumulated counters. Otherwise build
@@ -828,15 +899,24 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// self-gates, so wiring it is harmless locally; InstrumentRemoteBackend is a
 	// no-op wrapper when telemetry is off. A shared cache is a trust boundary, so it
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
-	// every machine so the misconfiguration can't silently go live.
-	if name := m.wsReg.RemoteBackend(); name != "" {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason)
+	// every machine so the misconfiguration can't silently go live. A backend the caller
+	// gave with WithCacheBackend is held to the same trust set.
+	name := m.wsReg.RemoteBackend()
+	if name != "" && m.cacheBackend != nil {
+		shutdownTel()
+		return nil, fmt.Errorf("magus: WithCacheBackend gives the %q backend and the magusfile wires magus.cache.remote(%q), and a workspace has one remote cache, so drop one",
+			m.cacheBackend.Name(), name)
+	}
+	if name != "" || m.cacheBackend != nil {
+		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure, m.cfg.Cache.Remote.InsecureReason, m.env(signingKeyEnv))
 		if sErr != nil {
 			shutdownTel()
 			return nil, sErr
 		}
 		cfgOpts = append(cfgOpts, trusted...)
-		if opt := remoteBackendOption(ctx, name, tel); opt != nil {
+		if m.cacheBackend != nil {
+			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(m.cacheBackend, tel)))
+		} else if opt := remoteBackendOption(ctx, name, tel); opt != nil {
 			cfgOpts = append(cfgOpts, opt)
 		}
 	}
@@ -856,18 +936,18 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
-	m.limiter().SetHooks(
-		func(waitNs int64, n int) {
-			m.tel.RecordPoolAcquire(ctx, float64(waitNs)/1e9, int64(n))
-		},
-		func(n int) {
-			m.tel.RecordPoolRelease(ctx, int64(n))
-		},
-		func(delta int) {
-			m.tel.RecordPoolWaiting(ctx, int64(delta))
-			m.slotWaits.Add(delta)
-		},
-	)
+	m.limiter().SetHooks(func(ev cache.PoolEvent) {
+		if ev.Queued != 0 {
+			m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
+			m.slotWaits.Add(ev.Queued)
+		}
+		if ev.Running > 0 {
+			m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
+		}
+		if ev.Running != 0 {
+			m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
+		}
+	})
 	return m, nil
 }
 
@@ -891,15 +971,6 @@ func (m *Magus) All() []*types.Project          { return m.ws.All() }
 func (m *Magus) Get(path string) *types.Project { return m.ws.Get(path) }
 func (m *Magus) Graph() (*types.Graph, error)   { return dependency.Build(m.ws) }
 
-// ShellRules returns additive agent-guard rules the root magusfile declared via
-// magus\guard.shell, or nil. `magus shell` reads these after Inspect.
-func (m *Magus) ShellRules() []workspace.ShellRule {
-	if m.wsReg == nil {
-		return nil
-	}
-	return m.wsReg.ShellRules()
-}
-
 // Harnesses returns agent-harness spell names the root magusfile wired via
 // magus\harness.provider, or nil.
 func (m *Magus) Harnesses() []string {
@@ -909,19 +980,14 @@ func (m *Magus) Harnesses() []string {
 	return m.wsReg.Harnesses()
 }
 
-// SetGraphObserver installs an observer on the workspace; pass nil to clear.
-func (m *Magus) SetGraphObserver(o types.Observer) {
-	m.ws.SetGraphObserver(o)
-}
-
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
-// ChangeClassifier is the workspace's change risk classifier (internal/risk), the classes
+// changeClassifier is the workspace's change risk classifier (internal/risk), the classes
 // AssessChange tiers and merge auto-resolution settles by: describe-file roles,
 // the effective gate_low_risk prose globs, and the comment syntax the projects' spells
 // declare. at reads a file at the revision a delta is measured from and working its
 // changed content; with either nil, a comment-only edit classifies as code.
-func (m *Magus) ChangeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
+func (m *Magus) changeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
 	var resolved []*spells.Spell
 	for _, p := range m.All() {
 		resolved = append(resolved, p.ResolvedSpells...)
@@ -947,19 +1013,22 @@ func (m *Magus) ChangeClassifier(at func(ctx context.Context, rev, path string) 
 
 // AutoResolvable reports whether a conflicted path a three-way merge settled may be
 // settled without a person: the edit from base, the merge base's content, to merged is
-// low risk by ChangeClassifier (generated, prose, comment-only), or path is code a
+// low risk by the change classifier (generated, prose, comment-only), or path is code a
 // project's merge_low_risk claims. verdict is the classifier's line for the path,
 // `<path>: <class> (<why>)`, either way.
 func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []byte) (verdict string, ok bool) {
-	v, ok := m.ChangeClassifier(nil, nil).Merge(ctx, path, string(base), string(merged), risk.MergeScopes(m.All()))
+	v, ok := m.changeClassifier(nil, nil).Merge(ctx, path, string(base), string(merged), risk.MergeScopes(m.All()))
 	return v.Line(), ok
 }
 
-// ClassifyEdit is ChangeClassifier's class of one path's edit from old to cur, and why. A
-// nil side is the path absent there, so adding or deleting a file is never comment-only.
-// The merge queue carries an approval over an edit by this class.
-func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) risk.Classified {
-	return m.ChangeClassifier(nil, nil).Edit(ctx, path, old, cur)
+// ClassifyEdit is the change classifier's class of one path's edit from old to cur, and
+// why. class is one of "generated", "prose", "comment-only" and "code", the words the
+// per-path verdict lines print. A nil side is the path absent there, so adding or
+// deleting a file is never comment-only. The merge queue carries an approval over an edit
+// by this class.
+func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) (class, why string) {
+	c := m.changeClassifier(nil, nil).Edit(ctx, path, old, cur)
+	return c.Class.String(), c.Why
 }
 
 // AutoResolve settles a conflicted path the way the merge queue does: MergeThreeWay settles
@@ -1012,9 +1081,6 @@ func (m *Magus) AutoResolveGlobs() []string {
 // whole configuration, and a broad getter is how a command ends up branching on settings that
 // were never meant to reach it.
 func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
-
-// JobLimits is the magus.yaml jobs section, which every door that forks a job enforces.
-func (m *Magus) JobLimits() config.Jobs { return m.cfg.Jobs }
 
 // WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
@@ -1226,6 +1292,26 @@ func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver)
 	return out
 }
 
+// releaseStage is the stage of the workspace's newest release tag, or the zero (unknown)
+// stage when there is no VCS or no tag to read.
+func (m *Magus) releaseStage(ctx context.Context) types.ReleaseStage {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return types.ReleaseStage{}
+	}
+	return releaseStageFrom(ctx, res.VCS, m.ws.Root)
+}
+
+// releaseStageFrom treats a driver that cannot list tags as one with none: the stage is
+// then unknown, which a reader must not mistake for pre-1.0.
+func releaseStageFrom(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
+	tags, err := driver.Tags(ctx, root, "")
+	if err != nil {
+		return types.ReleaseStage{}
+	}
+	return types.NewestReleaseStage(tags)
+}
+
 // untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line
 // is an addition against /dev/null, which is exactly how git renders a new file.
 //
@@ -1364,7 +1450,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	freshErr := m.freshenSymbolIndexes(ctx, touched)
 	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
-	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
+	graph, gerr := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
 	// measured zero on exactly the workspaces that have no index, which is the collapse the
@@ -1507,10 +1593,13 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
-	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: patch}
+	in := conformanceInput{patch: patch}
 	if cfg.baseline != nil {
 		if indexed {
-			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			in.changes, in.removed, in.base = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			if out.API != nil {
+				out.API.Stage = m.releaseStage(ctx)
+			}
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
@@ -1739,6 +1828,18 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	}
+	conformance, base, note, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, in.patch, generated, in.read)
+	if err != nil {
+		fail("knowledge.conformance could not be read", err)
+		return
+	}
+	if patchErr != nil && conformance.RatchetPath != "" {
+		base, note = nil, "conformance: the patch could not be read, so what the change did to "+conformance.RatchetPath+" is unknown"
+	}
+	if note != "" {
+		out.Notes = append(out.Notes, note)
+	}
+	in.conformance, in.ratchetBase = conformance, base
 	attachConformance(byPath, graph, in)
 }
 
@@ -1867,12 +1968,6 @@ func (m *Magus) projectOwner() func(path string) string {
 		return ""
 	}
 }
-
-// Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
-// which builds no cache and no provider). When several Magus instances were opened with a
-// shared provider via [WithProvider] this returns that same instance, so metrics recorded
-// through one are visible through another's [Magus.MetricsCollector].
-func (m *Magus) Telemetry() observability.Provider { return m.tel }
 
 func (m *Magus) Where(dir string) (*types.Project, bool) {
 	return project.Where(m.ws, dir)
@@ -2027,7 +2122,7 @@ func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) er
 
 // Close releases workspace resources (VM pools, the sessions the guard's function
 // rules run on, telemetry); cache and limiter are caller-owned. A provider built by Open is shut down here so its spans/metrics
-// flush rather than being lost on exit. An injected provider (WithProvider) is
+// flush rather than being lost on exit. An injected provider (workspace.WithTelemetryProvider) is
 // left running: it is shared across every workspace the server holds (and the
 // bridge Magus), so one workspace's eviction must not stop telemetry for the
 // rest; the server itself owns and shuts down that provider.
@@ -2149,19 +2244,6 @@ func (m *Magus) suggestProjectPath(path string) string {
 		candidates = append(candidates, p.Path)
 	}
 	return hint.Nearest(path, candidates)
-}
-
-// ExpandCwd resolves t for the project containing cwd; found=false when cwd is not inside any project.
-func (m *Magus) ExpandCwd(t types.Target) (targets []types.Target, found bool, err error) {
-	cwd, cwdErr := os.Getwd()
-	if cwdErr != nil {
-		return nil, false, fmt.Errorf("magus: getwd: %w", cwdErr)
-	}
-	p, ok := m.Where(cwd)
-	if !ok {
-		return nil, false, nil
-	}
-	return []types.Target{{Path: p.Path, Name: t.Name}}, true, nil
 }
 
 // ExpandAffected resolves targets for VCS-affected projects; falls back to all

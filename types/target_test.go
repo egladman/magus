@@ -222,7 +222,7 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 	got := SizedChainMemory(p, "ci", nil, size)
 	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "bench"}, got,
 		"lint+test sized to 3000 now loses to bench, which it beat as declared")
-	assert.ElementsMatch(t, []string{"lint", "test", "bench"}, sized, "ci declares nothing, so it is never sized")
+	assert.ElementsMatch(t, []string{"ci", "lint", "test", "bench"}, sized, "ci declares nothing and is sized too")
 
 	p.TargetPolicies["bench"] = Target{MemoryMB: 1500}
 	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "test", Sizing: MemorySizing{Samples: 7}},
@@ -233,11 +233,46 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 	assert.Equal(t, "test", by)
 }
 
+// TestSizedChainMemorySizesAnUndeclaredMember: a member declaring nothing is sized from
+// 0, so a composed step claims its measured peak beside its peers' declarations, and an
+// unmeasured one still contributes nothing.
+func TestSizedChainMemorySizesAnUndeclaredMember(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:           ".",
+		TargetChains:   map[string][]ChainStep{"ci": Needs("lint", "scip")},
+		TargetPolicies: map[string]Target{"lint": {MemoryMB: 1000}},
+	}
+	measured := map[string]int{"scip": 2000}
+	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing) {
+		if mb, ok := measured[target]; ok {
+			return mb, MemorySizing{Samples: 3}
+		}
+		return declaredMB, MemorySizing{}
+	}
+
+	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "scip", Sizing: MemorySizing{Samples: 3}},
+		SizedChainMemory(p, "ci", nil, size), "scip's measured peak sums with lint's declaration")
+
+	delete(measured, "scip")
+	assert.Equal(t, ChainMemory{MB: 1000, DeclaredBy: "lint"}, SizedChainMemory(p, "ci", nil, size))
+}
+
 func TestMemorySizingString(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "declared", MemorySizing{}.String())
 	assert.Equal(t, "measured over 54 runs", MemorySizing{Samples: 54}.String())
 	assert.Equal(t, "measured over 9 runs of any shape", MemorySizing{Samples: 9, AnyShape: true}.String())
+}
+
+func TestSlotSizingString(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, SlotSizing{}.String(), "nothing recorded says nothing")
+	assert.Equal(t, "declared", SlotSizing{Source: SlotsDeclared}.String())
+	assert.Equal(t, "unmeasured", SlotSizing{Source: SlotsUnmeasured}.String())
+	assert.Equal(t, "for its memory", SlotSizing{Source: SlotsForMemory}.String())
+	assert.Equal(t, "measured over 4 runs", SlotSizing{Source: SlotsMeasured, Samples: 4}.String())
+	assert.Equal(t, "measured over 7 runs of any shape", SlotSizing{Source: SlotsMeasured, Samples: 7, AnyShape: true}.String())
 }
 
 // TestChainBuilderReadsLikeTheBody: Needs(a, b).Needs(c) is `ctx.needs(a, b); ctx.needs(c)`,

@@ -1,10 +1,11 @@
-package gen
+package bindgen
 
 import (
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,9 @@ func TestEveryBoundaryTypeEncodes(t *testing.T) {
 			v := reflect.New(rt).Elem()
 			populate(v)
 
-			encoded := bt.Encode(v.Interface())
+			// populate writes "x" into an enum field too, which no session's enum has
+			// a case for, so the fields cross as their backing strings here.
+			encoded := bt.Encode(v.Interface(), ffi.EnumBacking)
 			require.True(t, encoded.IsMap(), "%s encoded as %s, not a map", rt.Name(), encoded.Kind())
 
 			for _, key := range encoded.MapKeys() {

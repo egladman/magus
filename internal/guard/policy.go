@@ -1,15 +1,17 @@
 package guard
 
 import (
+	"bytes"
 	"cmp"
 	"context"
-	"os"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -33,8 +35,12 @@ const (
 )
 
 // policyMarkerFile holds the last recorded rule set, so a hook call learns whether the
-// policy moved from one small read rather than by scanning the trail.
-const policyMarkerFile = "guard-policy.json"
+// policy moved from one small read rather than by scanning the trail. It is a JSON Lines
+// file whose last line is the marker.
+const policyMarkerFile = "guard-policy.jsonl"
+
+// oldPolicyMarkerFile is the JSON document an older magus kept the marker in.
+const oldPolicyMarkerFile = "guard-policy.json"
 
 // PolicySource is one file a workspace guard rule can come from, named by the ContentID of
 // its working-tree bytes and of its approved bytes. Approved is "" when the approved
@@ -65,12 +71,19 @@ type policyMarker struct {
 	Digest      string `json:"digest"`
 	ShellRules  int    `json:"shell_rules"`
 	SpawnRule   bool   `json:"spawn_rule"`
-	CommandRule bool   `json:"command_rule,omitempty"`
-	WriteRule   bool   `json:"write_rule,omitempty"`
+	CommandRule bool   `json:"command_rule,omitzero"`
+	WriteRule   bool   `json:"write_rule,omitzero"`
 	Pending     bool   `json:"pending"`
 	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
 	// which files the guard loads.
 	Files []string `json:"files,omitempty"`
+}
+
+// policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
+// being the marker. The file is the guard's own state, private to its owner.
+func policyMarkerLog(path string) file.JSONL[policyMarker] {
+	return file.JSONL[policyMarker]{Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
+		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}
 }
 
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
@@ -179,27 +192,38 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 	return m.SpawnRule
 }
 
+// readPolicyMarker is the last marker at path, false when there is none. A marker that cannot
+// be read is logged and read as none.
 func readPolicyMarker(path string) (policyMarker, bool) {
-	body, err := os.ReadFile(path)
+	held, err := policyMarkerLog(path).Load()
 	if err != nil {
+		reportGuardMemo(err)
+	}
+	if len(held) == 0 {
 		return policyMarker{}, false
 	}
-	var m policyMarker
-	if json.Unmarshal(body, &m) != nil {
-		return policyMarker{}, false
-	}
-	return m, true
+	return held[0], true
 }
 
-// writePolicyMarker replaces the marker whole, so a racing hook reads the old record or
-// the new one and never half of each. Losing the race costs a duplicate event, not a
-// missed one.
+// reportGuardMemo logs a memo that could not be read or written. The guard goes on without
+// it, so the log is how a person learns it was not used.
+func reportGuardMemo(err error) {
+	slog.With(attr.Component("magus")).ErrorContext(context.Background(), "guard memo", attr.Error(err))
+}
+
+// writePolicyMarker appends the marker when it differs from the last one, so a racing hook
+// reads the old record or the new one and never half of each. Losing the race costs a
+// duplicate event, not a missed one.
 func writePolicyMarker(path string, m policyMarker) {
-	body, err := json.Marshal(m)
-	if err != nil {
-		return
-	}
-	_ = file.ReplaceFile(path, body, 0o600)
+	_ = policyMarkerLog(path).Update(context.Background(), func(held []policyMarker) []policyMarker {
+		// By encoding: a marker read back has nil where the one written had an empty list.
+		if old, err := json.Marshal(held); len(held) == 1 && err == nil {
+			if next, err := json.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {
+				return nil
+			}
+		}
+		return []policyMarker{m}
+	})
 }
 
 // isGuardSource reports whether path is a file the guard's own policy load reads: the
@@ -211,7 +235,10 @@ func isGuardSource(deps Dependencies, at location, path string) bool {
 	if at.workspace == "" || path == "" {
 		return false
 	}
-	target := resolveFrom(cmp.Or(at.dir, at.workspace), path)
+	target, placed := placePath(path, cmp.Or(at.dir, at.workspace), userHome())
+	if !placed {
+		return false
+	}
 	if samePath(target, filepath.Join(at.workspace, "magusfile.buzz")) {
 		return true
 	}

@@ -2,6 +2,7 @@
 
 import "magus";
 import "../../hack/magusfile/index" as index;
+import "../../hack/magusfile/run-golangci" as golangci;
 
 import "magus/spell/go";
 
@@ -50,11 +51,16 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }
-export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+export fun lint(ctx: magus\Context, args: [str]) > void { go["go-vet"](ctx); }
+// The tree-wide conventions over this module, through .magus/custom-gcl. The root
+// install-linter builds it; this target does not, so a missing binary fails naming it.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    golangci\readLibFiles(ctx);
+    golangci\lintLib("libs/scipbuzz", ctx.hasCharm("rw"));
+}
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 // Runs the suite. Arguments after `--` reach go test after the package pattern.
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(format);
     ctx.writesFiles("coverage.out");
     final testArgs = mut ["-covermode=atomic", "-coverprofile=coverage.out", "./..."];
     foreach (arg in args) {
@@ -65,5 +71,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 // The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
+    ctx.needs(format);
     ctx.needs(lint, build, test);
 }

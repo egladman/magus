@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -103,6 +104,41 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				LastPass:      lastPass,
 			}},
 		},
+		ModelTiers: &types.ModelTierOutput{
+			Definition: types.ModelTiersDefinition,
+			Rows: []types.ModelTierRecord{{
+				Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
+				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
+				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerID: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
+				MeanCostUSD: new(0.07), MedianTokens: new(int64(41_000)),
+				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
+			}},
+		},
+		Conformance: &types.ConformanceOutput{
+			Definition: types.ConformanceDefinition,
+			Rows: []types.ConformanceRow{{
+				Key:        types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"},
+				N:          1,
+				P50:        81,
+				P90:        82,
+				P95:        83,
+				P99:        84,
+				Live:       85,
+				Value:      120,
+				Anchor:     130,
+				Propose:    86,
+				Known:      1,
+				Source:     types.ConformanceFromRatchet,
+				Violations: []types.ConformanceItem{{ID: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+			}},
+			Stale:    []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"a.go#A"}, Reason: "twins"}},
+			Excluded: 3,
+			Answer: types.KnowledgeAnswer{
+				Verdict: types.VerdictUnknown,
+				Reason:  types.ReasonSymbolIndexMissing,
+				Gaps:    []types.KnowledgeSymbolGap{{Project: types.ProjectRef{Path: "libs/x", Name: "x", Dir: "/abs/libs/x"}, State: "stale", Detail: "behind"}},
+			},
+		},
 	}}
 
 	want := &insightv1.Insight{
@@ -170,6 +206,41 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				LastPassTime:  timestamppb.New(lastPass),
 			}},
 		},
+		ModelTiers: &insightv1.ModelTierOutput{
+			Definition: types.ModelTiersDefinition,
+			Rows: []*insightv1.ModelTierRecord{{
+				Rank: 0, ModelTier: "economy", Kind: "check",
+				Jobs: 12, Pass: 9, Fail: 2, NoReturn: 1,
+				PassLower: 0.48, ChecksPerJob: 1.5, ForksPerId: 1.1, ReworkPerJob: 0.25, WideningsPerJob: 0.5,
+				MeanCostUsd: new(0.07), MedianTokens: new(int64(41_000)),
+				FirstAttempts: 10, FirstPass: 7, FirstPassLower: 0.39, NotRetryable: 2,
+			}},
+		},
+		Conformance: &insightv1.ConformanceOutput{
+			Definition: types.ConformanceDefinition,
+			Rows: []*insightv1.ConformanceRow{{
+				Key:        &insightv1.ConformanceKey{Metric: "dep-fanout", Population: "source", Scope: "cmd/magus"},
+				N:          1,
+				P50:        81,
+				P90:        82,
+				P95:        83,
+				P99:        84,
+				Live:       85,
+				Value:      120,
+				Anchor:     130,
+				Propose:    86,
+				Known:      1,
+				Source:     "ratchet",
+				Violations: []*insightv1.ConformanceItem{{Id: "cmd/magus", Source: "cmd/magus:1", Measure: 140}},
+			}},
+			Stale:    []*insightv1.ConformanceKnown{{Metric: "clone-tokens", Items: []string{"a.go#A"}, Reason: "twins"}},
+			Excluded: 3,
+			Answer: &graphv1.Answer{
+				Verdict: "unknown",
+				Reason:  "symbol-index-missing",
+				Gaps:    []*graphv1.SymbolGap{{ProjectPath: "libs/x", ProjectName: "x", State: "stale", Detail: "behind"}},
+			},
+		},
 	}
 
 	got, err := get(t, src)
@@ -191,6 +262,8 @@ func TestGetInsight_NilVolatility(t *testing.T) {
 	}
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
 	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
+	require.Nil(t, got.GetModelTiers(), "so must a nil model-tier lens")
+	require.Nil(t, got.GetConformance(), "and a conformance lens the server never read")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.
@@ -211,6 +284,25 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 	require.Nil(t, hot.GetNodes()[1].GetLastCommitTime())
 	require.Nil(t, hot.GetFiles()[0].GetLastCommitTime())
 	require.Nil(t, got.GetVolatility().GetTargets()[0].GetLastPassTime())
+}
+
+// An unknown cost or token figure is absent on the wire, never a zero a reader takes as
+// measured, and a measured zero stays present.
+func TestGetInsight_UnknownCostIsAbsent(t *testing.T) {
+	got, err := get(t, cannedInsightSource{view: types.InsightView{ModelTiers: &types.ModelTierOutput{
+		Rows: []types.ModelTierRecord{
+			{ModelTier: "economy", Kind: "check"},
+			{ModelTier: "standard", Kind: "check", MeanCostUSD: new(0.0), MedianTokens: new(int64(0))},
+		},
+	}}})
+	require.NoError(t, err)
+	rows := got.GetModelTiers().GetRows()
+	require.Len(t, rows, 2)
+	require.Nil(t, rows[0].MeanCostUsd, "unknown cost")
+	require.Nil(t, rows[0].MedianTokens, "unknown tokens")
+	require.NotNil(t, rows[1].MeanCostUsd, "a measured zero cost")
+	require.NotNil(t, rows[1].MedianTokens, "a measured zero token count")
+	require.Zero(t, rows[1].GetMeanCostUsd())
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {

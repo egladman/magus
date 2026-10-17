@@ -1,13 +1,13 @@
 ---
 title: "option-list"
-description: "A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives."
-tags: [proofread, rules, option-list, advise]
+description: "A rule that is off by default: it reports an agent reply that lays out labeled options or alternatives once a decisions table turns it on."
+tags: [proofread, rules, option-list, off]
 aliases: [reference/prose/option-list]
 ---
 
 # option-list
 
-A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives.
+A rule that is off by default: it reports an agent reply that lays out labeled options or alternatives once a decisions table turns it on.
 
 ## What it catches
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "option-list", "code": "PRF8023", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/option-list/"}
+{"rule": "option-list", "code": "PRF8023", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/option-list/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -60,4 +60,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

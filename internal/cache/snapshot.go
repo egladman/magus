@@ -121,7 +121,10 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	}
 	hash := preHash
 	dst := c.blobPath(preHash)
-	if _, err := os.Stat(dst); errors.Is(err, os.ErrNotExist) {
+	// Touching an existing blob claims it (see blobGrace): the manifest naming it is not
+	// written yet, and another checkout's GC may find it unreferenced meanwhile.
+	now := time.Now()
+	if err := os.Chtimes(dst, now, now); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return OutputRecord{}, err
 		}
@@ -267,7 +270,7 @@ func ownsRecord(s Step, rel string) bool {
 
 // replay restores a manifest's outputs from the local store.
 func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string, error) {
-	return c.replayFrom(ctx, m, root, c.dir)
+	return c.replayFrom(ctx, m, root, c.store)
 }
 
 // replayFrom restores a manifest's outputs into root from the blobs under store (the
@@ -285,7 +288,7 @@ func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string)
 		// escapes root, or whose parent chain traverses a symlink, checked before
 		// the Remove and MkdirAll below, either of which would otherwise follow a
 		// symlink an earlier record planted (record "link"->"../" then "link/evil").
-		if err := ensureReplayDstSafe(root, dst, rec.Path); err != nil {
+		if err := ensureReplayDestinationSafe(root, dst, rec.Path); err != nil {
 			return nil, err
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -379,11 +382,11 @@ func stagingName(dst string) (string, error) {
 	return name, nil
 }
 
-// ensureReplayDstSafe refuses a replay destination that escapes root or whose
+// ensureReplayDestinationSafe refuses a replay destination that escapes root or whose
 // parent chain traverses a symlink. Both would let a write or delete land
 // outside the workspace when the manifest is hostile. A parent component that
 // does not yet exist stops the walk: MkdirAll creates the rest as real dirs.
-func ensureReplayDstSafe(root, dst, recPath string) error {
+func ensureReplayDestinationSafe(root, dst, recPath string) error {
 	rel, err := filepath.Rel(root, dst)
 	if err != nil {
 		return fmt.Errorf("replay: output path %q: %w", recPath, err)

@@ -236,14 +236,16 @@ The same managed block opens with a diff driver for each source language magus r
 *.go diff=golang
 *.ts diff=typescript
 *.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
 ```
 
 A diff driver's hunk-header pattern is how git names the declaration a change lands in,
 the text after the second `@@` of each hunk. A job's footprint reads those names to say
 which functions, types and tests a change touched, and `git diff` prints them for people
-too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript` and `buzz` do
-not, so magus registers their patterns as `diff.typescript.xfuncname` and
-`diff.buzz.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
+too. `golang`, `python`, `rust` and `markdown` ship with git. `typescript`, `buzz` and `yaml`
+do not, so magus registers their patterns as `diff.typescript.xfuncname`,
+`diff.buzz.xfuncname` and `diff.yaml.xfuncname` in git config, beside `merge.magus.driver` and in the same scope.
 Each attribute resolves to the last line that sets it, and a driver line sets only `diff`,
 so a generated `.go` file keeps `merge=magus` and gains `diff=golang`. A workspace load
 restores a missing line or registration, and `magus doctor` fails its
@@ -311,8 +313,12 @@ of the repository, and a hook that runs a generator is written once, on request,
 by whichever worktree's magus loaded last. `magus doctor` reports a registered driver
 whose hooks are missing under `settle-hooks`. Each hook fires once the tree is whole, and the hook
 regenerates more than the driver kept: every project whose declared sources or outputs
-the operation changed runs its `generate` target, deepest projects first, so `docs`
-regenerates before the root that indexes its pages. A clean merge that brings in a
+the operation changed runs its `generate` target, and so does each target the driver
+recorded. All the projects of one target share a single `magus run <target>:rw` run, so
+the scheduler orders them by their declared dependencies and runs the rest in
+parallel; directory depth plays no part. A generator that reads another project's
+generated output declares that project (`depends_on` or `ctx.needs`), or the run may
+build it first. A clean merge that brings in a
 change to a generator's input regenerates its output too, driver or no driver. An
 operation that touches no generator's input runs nothing and prints nothing.
 
@@ -353,6 +359,27 @@ failure that does not stop a commit is magus itself being absent: the hooks dir 
 shared by every worktree of a repository, each with a `./magus` of its own, so a hook
 that finds no binary, or one that predates `vcs resolve --hook`, prints a line saying
 the operation was not regenerated and lets the commit through.
+
+**A sequence of picks can defer the settle.** Set the git config key `magus.settle` to
+`defer` and the settle hooks start no magus at all. The first deferred operation writes
+the revision it started from to `magus-settle-deferred` in the worktree's git
+directory, later ones leave that file as it is, and each prints that it was not
+regenerated. Nothing is regenerated or staged until you run `magus vcs resolve`, which
+regenerates everything that changed from the recorded revision to `HEAD` in one run per
+target, stages the result, and removes the record:
+
+```sh
+git -c magus.settle=defer cherry-pick A B C
+git -c magus.settle=defer cherry-pick D E
+magus vcs resolve
+git commit --amend --no-edit
+```
+
+`-c` defers one command. `git config magus.settle defer` defers every operation until
+`git config --unset magus.settle`. A deferred settle that was never resolved is
+reported by `magus doctor` under `deferred-settle`, with the command that settles it.
+A settle, deferred or not, that another magus process's project lock holds back waits up
+to two minutes for the lock before it gives up and leaves the regeneration owed.
 
 Only git has these hooks. Under Mercurial, Sapling and jj the driver logs the command to
 run before committing, and `magus vcs resolve` runs it. The merge queue never runs them

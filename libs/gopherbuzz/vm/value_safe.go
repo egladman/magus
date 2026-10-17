@@ -138,7 +138,9 @@ func (vm *VM) allocFib(ptr *fibObj) Value             { return heapValue(tagFib,
 func (vm *VM) allocObject(ptr *objectInst) Value      { return heapValue(tagObject, ptr) }
 func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return heapValue(tagObjectDef, ptr) }
 func (vm *VM) allocIterState(ptr *iterStateObj) Value { return heapValue(tagIterState, ptr) }
-func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return heapValue(tagEnumVal, ptr) }
+func (vm *VM) allocEnumVal(_ Value, ptr *enumValObj) Value {
+	return heapValue(tagEnumVal, ptr)
+}
 
 // Ownership is a table concern (see Owner); with objects behind Go pointers the
 // collector frees what a session drops, so claiming and releasing do nothing.

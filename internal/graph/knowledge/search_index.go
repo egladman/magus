@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/textrank"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,7 +17,8 @@ import (
 // interactive.LeafScore once per term, lowercasing id and doc a third time on the
 // substring fallback, and a longest-prefix scan over every project path to find the
 // node's owner. The index does that once per graph, lazily, and a query keeps only the
-// comparisons that depend on the query.
+// comparisons that depend on the query. Free text now ranks through textrank, so the
+// index serves the filters, the id lookup and the in-memory lexical index.
 //
 //	measured: 2000 projects x 8 targets, means of n=6 on 4 cores (benchstat is not
 //	          installed; means taken by hand).
@@ -29,10 +31,6 @@ import (
 //	          strings that are already lowercase, ids mostly, are shared, not copied).
 //	          The first query on a graph pays the build, about one old Resolve call, so a
 //	          one-shot CLI query is not slower; a long-lived graph amortizes it.
-//
-// Scoring is unchanged: scoreNode keeps the old decision logic, and the differential
-// test in search_index_test.go holds Resolve to a straightforward reference copy of the
-// pre-index implementation.
 
 // searchHolder is the lazily built index plus the mutex that coalesces concurrent
 // first-builds. It is a separate object so graphs that share content (share, adopt) share
@@ -54,10 +52,10 @@ func (g *Graph) searchHolder() *searchHolder {
 	return g.search
 }
 
-// searchIdx returns g's search index, building it on first use. Built under the holder's
+// ensureSearchIndex returns g's search index, building it on first use. Built under the holder's
 // mutex for the reason ensureAdj uses adjMu: the server publishes one *Graph to concurrent
 // requests, and a bare nil check would let two first-queries build and publish together.
-func (g *Graph) searchIdx() *searchIndex {
+func (g *Graph) ensureSearchIndex() *searchIndex {
 	h := g.searchHolder()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -67,13 +65,10 @@ func (g *Graph) searchIdx() *searchIndex {
 	return h.ix
 }
 
-// searchEntry is one node as a query sees it. The lowercased fields are what scoreNode
-// used to recompute per call; the slash counts are LeafScore's per-separator penalty,
-// which depends on the path alone.
+// searchEntry is one node as a query's filters see it, its text lowercased once.
 type searchEntry struct {
 	node                 types.KnowledgeNode
 	lcID, lcLabel, lcDoc string
-	idSlashes, lblSlash  int
 }
 
 // projectOwner is the answer to "which project owns this node", the old projectOf pair.
@@ -90,27 +85,35 @@ type searchIndex struct {
 	// only those nodes instead of every node and rejecting most of them.
 	byKind map[string][]int32
 
+	// byID maps a node id to its entry, so a lexical hit finds the node it names.
+	byID map[string]int32
+
 	// owner is parallel to entries. Built apart from the text because most queries never
 	// filter by project, and a one-shot CLI query should not pay for it.
 	ownOnce sync.Once
 	owner   []projectOwner
+
+	// lex is the in-memory lexical index, built on the first free-text query that has no
+	// stored index bound.
+	lexOnce sync.Once
+	lex     *textrank.Index
 }
 
 func buildSearchIndex(nodes map[string]types.KnowledgeNode) *searchIndex {
 	ix := &searchIndex{
 		entries: make([]searchEntry, 0, len(nodes)),
 		byKind:  map[string][]int32{},
+		byID:    make(map[string]int32, len(nodes)),
 	}
 	for id, n := range nodes {
 		n.ID = id // the map key is what Resolve always reported
 		ix.byKind[n.Kind] = append(ix.byKind[n.Kind], int32(len(ix.entries)))
+		ix.byID[id] = int32(len(ix.entries))
 		ix.entries = append(ix.entries, searchEntry{
-			node:      n,
-			lcID:      strings.ToLower(id),
-			lcLabel:   strings.ToLower(n.Label),
-			lcDoc:     strings.ToLower(n.Doc),
-			idSlashes: strings.Count(id, "/"),
-			lblSlash:  strings.Count(n.Label, "/"),
+			node:    n,
+			lcID:    strings.ToLower(id),
+			lcLabel: strings.ToLower(n.Label),
+			lcDoc:   strings.ToLower(n.Doc),
 		})
 	}
 	return ix
@@ -307,6 +310,9 @@ type compiledTerm struct {
 	// span marks a term holding a space, which a negation must test against the joined
 	// "id label doc" text because it can straddle two fields.
 	span bool
+	// path marks a term holding a path separator. It names a place, so a node must contain
+	// it; its words still score.
+	path bool
 }
 
 func compileTerms(terms []string) []compiledTerm {
@@ -319,6 +325,7 @@ func compileTerms(terms []string) []compiledTerm {
 		}
 		out[i].lc = strings.ToLower(t)
 		out[i].span = strings.IndexByte(t, ' ') >= 0
+		out[i].path = strings.ContainsAny(t, `/\`)
 	}
 	return out
 }
@@ -340,25 +347,22 @@ func (g *Graph) compileQuery(q parsedQuery) *compiledQuery {
 	return cq
 }
 
-// leafScoreLower is interactive.LeafScore for a path and query that are already
-// lowercased, with the path's '/' count passed in: the same arithmetic without the two
-// ToLower calls and the Count that made it the hot spot of Resolve. search_index_test.go
-// holds the two together.
-func leafScoreLower(lcPath, lcQuery string, slashes int) int {
-	if lcQuery == "" || !strings.Contains(lcPath, lcQuery) {
-		return 0
-	}
-	leaf := lcPath
-	if i := strings.LastIndexByte(lcPath, '/'); i >= 0 {
-		leaf = lcPath[i+1:]
-	}
-	score := 1
-	if idx := strings.Index(leaf, lcQuery); idx >= 0 {
-		score += 10000
-		if idx == 0 {
-			score += 5000
+// lexicalIndex returns the lexical index over every node of the graph, without section
+// bodies, building it on first use. Retrieve ranks from it when no stored index is bound.
+// A node with no Source is found by the path its id names, and every node by its kind,
+// so `spell:go` finds the node that id names.
+func (ix *searchIndex) lexicalIndex() *textrank.Index {
+	ix.lexOnce.Do(func() {
+		docs := make([]textrank.Document, len(ix.entries))
+		for i := range ix.entries {
+			n := ix.entries[i].node
+			if n.Source == "" {
+				_, n.Source, _ = strings.Cut(n.ID, ":")
+			}
+			docs[i] = lexicalDocument(n, "")
+			docs[i].Fields[textrank.FieldPath] = append(docs[i].Fields[textrank.FieldPath], textrank.Tokens(n.Kind)...)
 		}
-		score += (len(lcQuery) * 1000) / max(len(leaf), 1)
-	}
-	return score - 10*slashes
+		ix.lex = textrank.NewIndex(docs)
+	})
+	return ix.lex
 }

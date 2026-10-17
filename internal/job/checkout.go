@@ -2,6 +2,7 @@ package job
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
@@ -33,23 +33,19 @@ const LeaseMarkerName = "lease"
 // markerKind is the user state directory's subdirectory the markers live under.
 const markerKind = "checkouts"
 
-// MarkerPath is where the checkout record for the checkout whose cache dir is cacheDir
-// lives, or "" when there is no cache dir or no user state dir.
+// MarkerPath is where the checkout record for the checkout whose cache dir is
+// loc.CacheDir lives, under loc.StateBase, or "" when either is empty.
 //
 // NOT in the cache dir. The sandbox grants a run write access to its workspace, and the
 // cache dir sits inside it by default, so a marker there is one a confined run could
 // rewrite to name a broader lease, or delete, and the next run in the checkout, sandbox
 // and guard alike, would act on what it wrote. The sandbox grants the user state dir to
 // nobody.
-func MarkerPath(cacheDir string) string {
-	if cacheDir == "" {
+func (loc Location) MarkerPath() string {
+	if loc.CacheDir == "" || loc.StateBase == "" {
 		return ""
 	}
-	base, err := config.UserStateDir()
-	if err != nil {
-		return ""
-	}
-	key, err := filepath.Abs(cacheDir)
+	key, err := filepath.Abs(loc.CacheDir)
 	if err != nil {
 		return ""
 	}
@@ -57,7 +53,7 @@ func MarkerPath(cacheDir string) string {
 		key = resolved
 	}
 	sum := sha256.Sum256([]byte(key))
-	return filepath.Join(base, "magus", markerKind, hex.EncodeToString(sum[:12]), LeaseMarkerName)
+	return filepath.Join(loc.StateBase, "magus", markerKind, hex.EncodeToString(sum[:12]), LeaseMarkerName)
 }
 
 // LeaseQuery is what a caller knows about itself when it asks which lease it acts under.
@@ -182,7 +178,7 @@ const agentRecordDir = "agents"
 // separators included, and a filename assembled from one is a filename the input picked.
 func (s *Store) record(c Caller) string {
 	if !c.Identified() {
-		return MarkerPath(s.cacheDir)
+		return s.place().MarkerPath()
 	}
 	if s.err != nil || s.path == "" {
 		return ""
@@ -255,8 +251,16 @@ func (s *Store) Binding(c Caller) Binding {
 //
 // Checkout records are not swept: MarkerPath keys one on a hash of its cache dir, and
 // nothing maps the hash back to a checkout.
-func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
+//
+// A pass reads every record, one file per caller that ever bound, so it runs only when
+// this read ended a row, a row the last pass saw is gone, or recordSweepEvery has passed
+// since it (see [Store.recordsSwept]). A checkout removed under a row that is already
+// over, and a record naming a row that never existed, wait for that interval.
+func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
 	if s.err != nil || s.path == "" {
+		return
+	}
+	if !ended && s.recordsSwept(w.now, rows) {
 		return
 	}
 	dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
@@ -264,6 +268,7 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
 	if err != nil {
 		return
 	}
+	defer s.writeRecordsSwept(w.now, rows)
 	for _, e := range entries {
 		path := filepath.Join(dir, e.Name())
 		b := readBinding(path)
@@ -282,6 +287,53 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
 		// the read is overwritten, and the guard's refusal tells that worker to bind again.
 		_ = file.ReplaceFile(path, fmt.Appendf(nil, "%s %s %d\n", tombstoneTag, b.Job, w.now), 0o600)
 	}
+}
+
+// recordSweepEvery is the longest a full pass over the binding records waits once no row
+// it saw has gone.
+const recordSweepEvery = 10 * time.Minute
+
+// recordsSweptFile logs the full passes over the binding records, one line per pass with
+// when it ran and the rows it saw, beside jobs.jsonl, so the interval holds across
+// processes. Only the last line is read.
+const recordsSweptFile = "records-swept.jsonl"
+
+type recordsPass struct {
+	At   int64    `json:"at"`
+	Rows []string `json:"rows"`
+}
+
+// recordsSweptLog keys every pass alike, so the last one is the log's one entry.
+func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
+	return file.JSONL[recordsPass]{Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+		Key: func(recordsPass) string { return "" }}
+}
+
+// recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
+// are still in rows. A history that cannot be read reads as no pass, which costs one early
+// pass.
+func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
+	passes, err := s.recordsSweptLog().Load()
+	if err != nil || len(passes) == 0 {
+		return false
+	}
+	last := passes[0]
+	if since := now - last.At; since < 0 || since >= int64(recordSweepEvery/time.Second) {
+		return false
+	}
+	present := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		present[r.ID] = true
+	}
+	return !slices.ContainsFunc(last.Rows, func(id string) bool { return !present[id] })
+}
+
+func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
+	pass := recordsPass{At: now, Rows: make([]string, len(rows))}
+	for i, r := range rows {
+		pass.Rows[i] = r.ID
+	}
+	_ = s.recordsSweptLog().Update(context.Background(), func([]recordsPass) []recordsPass { return []recordsPass{pass} })
 }
 
 // dropRecord removes the record at path if it still holds b.
@@ -305,8 +357,8 @@ func dropRecord(path string, b Binding) {
 // and no subagent: this checkout's record, else claim. claim is the lease the process says
 // it acts under: trail.LeaseFromEnv for a process reading its own environment, or the
 // lease an adopted run was forwarded with. See [LeaseQuery.Resolve].
-func ActingLease(cacheDir, claim string) (string, types.LeaseSource) {
-	return LeaseQuery{CheckoutJob: readRecord(MarkerPath(cacheDir)), Claim: claim}.Resolve()
+func ActingLease(loc Location, claim string) (string, types.LeaseSource) {
+	return LeaseQuery{CheckoutJob: readRecord(loc.MarkerPath()), Claim: claim}.Resolve()
 }
 
 // HeldIn returns the rows with write paths whose holder recorded its base in the checkout
@@ -342,8 +394,9 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
 }
 
-// RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
-// load, while another live job with write paths is already working in this checkout.
+// sharedCheckoutProblems is every write path of row that covers a file the WORKSPACE has to
+// load while another live job with write paths is already working in this checkout, as
+// CheckoutConfigHeld, each reported against the first load file it covers.
 //
 // THE ONE COLLISION A WORKER CANNOT SEE. Two jobs overlapping costs the two workers
 // involved a conflict they can read; a half-saved magusfile costs every worker in the
@@ -357,49 +410,69 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 // recorded, see WriteProof), nothing about a checkout holding no other live job, and
 // nothing about a job whose write paths cover no load file. Refusing more than magus can
 // prove is how a guard becomes something to route around.
-func RefuseSharedCheckout(store *Store, rows []types.Job, row types.Job) error {
+func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || len(row.WritePaths) == 0 {
 		return nil
 	}
-	held := heldHere(rows, store.root, row.ID)
+	held := heldHere(rows, workingCheckout(store.root, row), row.ID)
 	if len(held) == 0 {
 		return nil
 	}
+	var (
+		ps       types.JobProblems
+		unused   []string
+		measured bool
+	)
+	holder := held[0]
+	// No caller passes a context here yet; the footprint read is the only thing that takes one.
+	ctx := context.Background()
+	reported := map[string]bool{}
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
 	for _, load := range describe.WorkspaceLoadFiles(store.root) {
 		declared, covered := writePathCovering(row.WritePaths, load)
-		if !covered {
+		if !covered || reported[declared] {
 			continue
 		}
-		return fmt.Errorf("job: %s declares %q, which covers %s, and %s is live in this checkout (%s):"+
-			" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
-			" so every job here loses `magus run` until it lands, not just this one,"+
-			" give %s its own worktree and fork it there, or leave %s out of its write paths,"+
-			" `%s` names what else that write path covers",
-			row.ID, declared, load, held[0].ID, store.root, row.ID, load, hint.DescribeFile.With(load))
+		reported[declared] = true
+		if !measured {
+			unused, measured = unusedWritePaths(ctx, store, rows, holder), true
+		}
+		store.requestRelease(ctx, holder.ID, load, []string{declared}, unused)
+		ps = append(ps, types.JobProblem{
+			Code:  types.CheckoutConfigHeld,
+			Field: fmt.Sprintf("write_paths[%d]", slices.Index(row.WritePaths, declared)),
+			Message: fmt.Sprintf("%s declares %q, which covers %s, and %s is live in this checkout (%s; %s, updated %s ago):"+
+				" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
+				" so every job here loses `magus run` until it lands, not just this one. %s",
+				row.ID, declared, load, holder.ID, store.root, holder.State, updatedAgo(holder), describeUnused(holder.ID, unused)),
+			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, fork it with `--depends-on %s` to wait for the holder,"+
+				" or drop %q from write_paths (`%s` names what else it covers)%s",
+				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), holder.ID, declared, hint.DescribeFile.With(load),
+				narrowAdvice(holder.ID, unused)),
+		})
 	}
-	return nil
+	return ps
 }
 
-// RefuseDirectoryWritePaths refuses a fork whose write paths name an existing directory
-// (MGS3018), project roots and the workspace root included. A write path names files: a
-// directory claims every file beneath it, so the job overlaps every job that edits anything
-// there, and the overlap report fills with pairs that share no file. Every fork door runs
-// it, and there is no override.
+// directoryWritePathProblems is every write path of row that names an existing directory,
+// as WritePathIsDirectory, project roots and the workspace root included. A write path names
+// files: a directory claims every file beneath it, so the job overlaps every job that edits
+// anything there, and the overlap report fills with pairs that share no file. Every fork door
+// runs it, and there is no waiver.
 //
 // Declarable: a file, and a path that does not exist yet, which the job creates. A glob
 // whose last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
 // under its directory, so it is judged as that directory, each match when the directory
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
-// A nil store, or one with no workspace root, has no tree to read and refuses nothing.
-func RefuseDirectoryWritePaths(store *Store, row types.Job) error {
+// A nil store, or one with no workspace root, has no tree to read and finds nothing.
+func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var refused []string
-	for _, decl := range row.WritePaths {
+	var ps types.JobProblems
+	for i, decl := range row.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
@@ -413,21 +486,20 @@ func RefuseDirectoryWritePaths(store *Store, row types.Job) error {
 			default:
 				named += fmt.Sprintf(", inside project %q", enclosingProject(store.root, dir))
 			}
-			refused = append(refused, named)
+			ps = append(ps, types.JobProblem{
+				Code:  types.WritePathIsDirectory,
+				Field: fmt.Sprintf("write_paths[%d]", i),
+				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
+					" so the job would overlap every job editing anything there",
+				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
+			})
 		}
 	}
-	if len(refused) == 0 {
-		return nil
-	}
-	return types.DiagnosticErrorf(types.WritePathIsDirectory,
-		"job: %s declares a directory as a write path: %s. A write path names files: a directory, a project"+
-			" root included, claims every file under it, so the job would overlap every job editing anything there."+
-			" List the files the job will edit, and name each file it creates by its path",
-		row.ID, strings.Join(refused, "; "))
+	return ps
 }
 
 // claimedDirs returns the existing directories, workspace-relative, that the write path
-// decl claims whole. See [RefuseDirectoryWritePaths] for how a glob is read.
+// decl claims whole. See [directoryWritePathProblems] for how a glob is read.
 func claimedDirs(root, decl string) []string {
 	decl, _ = types.SplitClaim(decl)
 	if decl == "" {
@@ -491,7 +563,8 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 // write paths, that is working in this checkout or not yet taken by any. An untaken job
 // counts because only `job exec` binds one: two jobs forked back to back are both
 // untaken, and proving the second "alone" would be a claim about a plan nobody has
-// started. See [types.JobWriteProof] for why the three answers are distinct.
+// started. See [types.JobWriteProof] for why the three answers are distinct. A pattern
+// does not reach a file its row released (see [NarrowConfigHold]).
 //
 // A nil Store, or one with no root, answers alone: a caller with no checkout knows of no
 // other holder.
@@ -499,13 +572,14 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	if s == nil || s.root == "" {
 		return types.WriteProofAlone
 	}
-	here, err := filepath.Abs(s.root)
+	here, err := filepath.Abs(workingCheckout(s.root, row))
 	if err != nil {
 		return types.WriteProofAlone
 	}
 	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
+		there := workingCheckout(peer.CheckoutRoot, peer)
 		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
-			peer.CheckoutRoot != "" && peer.CheckoutRoot != here
+			there != "" && !samePath(there, here)
 	})
 	if len(peers) == 0 {
 		return types.WriteProofAlone
@@ -513,7 +587,7 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	for _, peer := range peers {
 		for _, mine := range row.WritePaths {
 			for _, theirs := range peer.WritePaths {
-				if types.PathsIntersect(mine, theirs) {
+				if types.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
 					return types.WriteProofOverlapping
 				}
 			}

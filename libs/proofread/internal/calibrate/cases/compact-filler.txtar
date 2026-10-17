@@ -1,0 +1,14 @@
+Articles, linking verbs, "you", "please", "note that" and "instead" in text only an agent reads.
+-- hit/agent-compact --
+Run the gate before push.
+Cache is stale after edit.
+You run gate first.
+Please read captured log.
+Note that gate reruns.
+Use refs instead of grep.
+-- pass/agent-compact --
+Run gate before push.
+Cache stale after edit -> rerun.
+Read captured log; never rerun to see more.
+Use refs, not grep.
+Call is_valid before commit.

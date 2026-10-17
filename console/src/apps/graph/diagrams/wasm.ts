@@ -42,7 +42,6 @@ export interface Figure {
   readonly eyebrow: string;
   readonly desc: string;
   readonly direction: Direction;
-  readonly generated: boolean;
   // Why the figure draws no directory; "" for one that draws some.
   readonly unscopedWhy: string;
   readonly graphEdges: boolean;
@@ -331,7 +330,6 @@ const EMPTY_FIGURE: Figure = {
   eyebrow: "",
   desc: "",
   direction: "across",
-  generated: false,
   unscopedWhy: "",
   graphEdges: false,
   boxes: [],

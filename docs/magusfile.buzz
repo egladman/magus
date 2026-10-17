@@ -13,7 +13,7 @@ import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
 // Imported for proofread_build: the proofread rule pages render from the linked binary's catalog.
-import "project/../libs/conventions" as convmod;
+import "project/../libs/proofread" as proofreadmod;
 import "project/.." as workspace;
 // The guide embeds these templates verbatim, so a template edit must rerun this project's gates.
 import "project/guides/integrations/agents";
@@ -48,14 +48,14 @@ magus\project({
                 "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spell/**/*.go",
-                "../internal/cli/**/*.go", "../internal/config/**/*.go",
+                "../internal/commands/**/*.go", "../libs/cmdline/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/graph/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
                 "../hack/magusfile/ruledocs.buzz", "../internal/guard/**/*.go",
-                "../libs/conventions/proofread/**/*.go", "../libs/conventions/cmd/proofread/**/*.go",
+                "../libs/proofread/**/*.go",
                 "../cmd/magus-utils/**/*.go"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
@@ -92,7 +92,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
         workspace\file("spells/**/*.buzz"), workspace\file("internal/spell/**/*.go"),
-        workspace\file("internal/cli/**/*.go"), workspace\file("internal/config/**/*.go"),
+        workspace\file("internal/commands/**/*.go"), workspace\file("libs/cmdline/**/*.go"),
+        workspace\file("internal/config/**/*.go"),
         workspace\file("internal/render/**/*.go"), workspace\file("internal/graph/**/*.go"),
         workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-spelldocs/**/*.go"),
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
@@ -101,8 +102,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // ruledocs renders the running binary's guard catalog, which internal/guard compiles in.
         workspace\file("hack/magusfile/ruledocs.buzz"), workspace\file("internal/guard/**/*.go"),
         // The proofread pages render from the linked binary's catalog, which these sources decide.
-        workspace\file("libs/conventions/proofread/**/*.go"),
-        workspace\file("libs/conventions/cmd/proofread/**/*.go"),
+        workspace\file("libs/proofread/**/*.go"),
         workspace\file("cmd/magus-utils/**/*.go"),
         // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
@@ -123,9 +123,9 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     ruledocs\write("reference/rules", rules: magus\describe.rule());
-    ctx.needs(convmod\proofread_build);
+    ctx.needs(proofreadmod\proofread_build);
     ruledocs\writeProofread("reference/proofread",
-        raw: proc\exec("../libs/conventions/gen/proofread", ["rules"], ".", {}).stdout);
+        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".", {}).stdout);
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     fs\mkdirAll("benchmarks");
@@ -265,19 +265,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // format runs dprint over the authored pages.
-// The paths go in argv because dprint would otherwise descend into the agents project's
-// own dprint.json (MGS3001). Keep them in step with dprint.json `includes`: every authored
-// directory except guides/integrations/agents, which formats itself.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    // Keep in step with the dprint args below.
-    ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "decisions/**/*.md", "guides/*.md",
-        "guides/integrations/*.md", "guides/integrations/editor/**/*.md", "guides/jobs/**/*.md",
-        "guides/migrating/**/*.md", "guides/setup/**/*.md", "reference/**/*.md");
-    markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./decisions/**/*.md",
-        "./guides/*.md", "./guides/integrations/*.md", "./guides/integrations/editor/**/*.md",
-        "./guides/jobs/**/*.md", "./guides/migrating/**/*.md", "./guides/setup/**/*.md",
-        "./reference/**/*.md"]});
+    // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
+    // own project.
+    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
+        "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
+        "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
+        "reference/**/*.md");
+    markdown["dprint"](ctx);
 }
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.

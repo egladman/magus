@@ -93,7 +93,7 @@ listed in the same `SHA256SUMS`. It needs no Go toolchain and no magus checkout.
    ```
 
 Judge a pull request description, its title on the first line, with
-`proofread change-description < pr.md`. `proofread rules` prints every rule as JSON, and
+`proofread change-description --stdin < pr.md`. `proofread rules` prints every rule as JSON, and
 `proofread explain blame` prints what one rule catches and why.
 
 `magus self update` never installs proofread: it asks for the archive named for magus and

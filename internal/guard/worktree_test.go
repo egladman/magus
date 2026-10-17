@@ -313,6 +313,55 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 
 // A cherry-pick lands a worker's commits under new ids, amended and with more beside
 // them; what it changed reads the same in the caller's HEAD, so nothing is lost.
+// A checkout a job's fork made is that job's: git removes its lock only with -f -f, which
+// would discard work too, so its owner is sent to magus, and a caller under another job is
+// refused.
+func TestWorktreeRemoveHoldsAJobsCheckoutToItsRoot(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("owned")
+	r.git(r.main, "worktree", "lock", "--reason", vcs.CheckoutLockReason, wt)
+	row := types.Job{ID: "w1", State: types.StatePass, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
+	remove := "git worktree remove -f -f " + wt
+
+	root := Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}
+	for _, line := range []string{remove, "git worktree remove " + wt, "git worktree remove -f " + wt} {
+		v := r.judgeWith(root, r.main, line, row)
+		assertRemovalDenied(t, v, "job w1's fork made and locked")
+		require.Len(t, v.Next, 1, "%q", line)
+		assert.Equal(t, hint.JobWait.Argv("w1"), v.Next[0].Argv, "an ended job's checkout goes through its waiter: %q", line)
+	}
+	declared := row
+	declared.State, declared.CheckoutRoot = types.StateDeclared, ""
+	v := r.judgeWith(root, r.main, remove, declared)
+	require.Len(t, v.Next, 1)
+	assert.Equal(t, hint.JobExit.Argv("w1"), v.Next[0].Argv, "a job not ended yet is ended through exit")
+
+	foreign := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-x"}, lease: "other"}
+	other := types.Job{ID: "other", State: types.StateRunning}
+	assertRemovalDenied(t, r.judgeWith(foreign, r.main, remove, row, other), "job w1's fork made it")
+}
+
+func TestOwnsCheckoutIsTheHoldersAndTheRoots(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("owned")
+	row := types.Job{ID: "w1", State: types.StateRunning, CheckoutRoot: wt, Worktree: &types.JobWorktree{Root: wt, Source: r.main}}
+	other := types.Job{ID: "other", State: types.StateRunning}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row, other}})
+	at := location{cacheDir: t.TempDir(), workspace: r.main}
+	caller := job.Caller{Host: "claude", Session: "s1", Agent: "agent-a1b2c3"}
+
+	assert.True(t, ownsCheckout(ctx, Dependencies{caller: caller, lease: "w1"}, at, wt), "the bound worker")
+	assert.True(t, ownsCheckout(ctx, Dependencies{caller: job.Caller{Host: "claude", Session: "s1"}}, at, wt), "the root")
+	assert.False(t, ownsCheckout(ctx, Dependencies{caller: caller, lease: "other"}, at, wt), "another job's worker")
+
+	spawned := rootSession(t, spawnedW1)
+	spawned.caller = caller
+	assert.True(t, ownsCheckout(ctx, spawned, at, wt), "a worker the root spawned for the job, before its binding is read")
+	unspawned := rootSession(t, nil)
+	unspawned.caller = caller
+	assert.False(t, ownsCheckout(ctx, unspawned, at, wt), "an agent no spawn record attributes to the job")
+}
+
 func TestWorktreeRemovePassesCommitsYourCheckoutHoldsUnderNewHashes(t *testing.T) {
 	r := newWorktreeRepo(t)
 	wt, row := r.workerWorktree(types.StatePass)

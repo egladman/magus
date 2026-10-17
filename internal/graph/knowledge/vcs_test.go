@@ -19,7 +19,7 @@ func TestAssembleVCSAuthors(t *testing.T) {
 		{Path: "b.buzz", LastCommit: "c2", Authors: []string{"Ada"}, Commits: 1},
 		{Path: "ghost.buzz", LastCommit: "c3", Authors: []string{"Cy"}, Commits: 1}, // no file node
 	}
-	out := mergeAll([]Shard{assembleVCS(entries, fileNodePaths, true)}).Output()
+	out := mergeAll([]Shard{assembleVCS(entries, nil, fileNodePaths, true)}).Output()
 
 	// Every author gets an `authored` edge to each node-backed file they touched.
 	assert.True(t, hasEdge(out, "author:Ada", "file:a.buzz", types.RelationAuthored))
@@ -37,7 +37,7 @@ func TestAssembleVCSAuthorshipOff(t *testing.T) {
 	entries := []types.KnowledgeVCS{
 		{Path: "a.buzz", LastCommit: "c1", LastAuthor: "Ada", Authors: []string{"Ada", "Bob"}, Commits: 2},
 	}
-	out := mergeAll([]Shard{assembleVCS(entries, map[string]bool{"a.buzz": true}, false)}).Output()
+	out := mergeAll([]Shard{assembleVCS(entries, nil, map[string]bool{"a.buzz": true}, false)}).Output()
 
 	n, ok := nodeByID(out, "file:a.buzz")
 	require.True(t, ok)
@@ -55,7 +55,7 @@ func TestAssembleVCS(t *testing.T) {
 	}
 	known := map[string]bool{"a.buzz": true, "b.buzz": true}
 
-	s := assembleVCS(entries, known, true)
+	s := assembleVCS(entries, nil, known, true)
 	require.Len(t, s.Nodes, 2, "gone.buzz has no file node, so it is dropped")
 	// Sorted by ID: file:a.buzz before file:b.buzz.
 	assert.Equal(t, types.KnowledgeNode{
@@ -81,7 +81,7 @@ func TestAssembleVCSFoldsAsPartialNode(t *testing.T) {
 	// The buzz shard's fuller file node.
 	g.Merge([]types.KnowledgeNode{{ID: fileID("x.buzz"), Kind: types.KindFile, Label: "x.buzz", Source: "x.buzz"}}, nil)
 	// The @vcs partial folds its attrs on.
-	s := assembleVCS([]types.KnowledgeVCS{{Path: "x.buzz", LastCommit: "abc123", Commits: 2}}, map[string]bool{"x.buzz": true}, true)
+	s := assembleVCS([]types.KnowledgeVCS{{Path: "x.buzz", LastCommit: "abc123", Commits: 2}}, nil, map[string]bool{"x.buzz": true}, true)
 	g.Merge(s.Nodes, s.Edges)
 
 	out := g.Output()
@@ -91,9 +91,29 @@ func TestAssembleVCSFoldsAsPartialNode(t *testing.T) {
 	assert.Equal(t, "abc123", n.Attrs["vcs_last_commit"], "vcs attrs are folded in")
 }
 
+// TestAssembleVCSCoChanges: a coupling becomes one co_changes edge carrying its support and
+// confidence, only when both files have nodes, and the authorship switch does not touch it.
+func TestAssembleVCSCoChanges(t *testing.T) {
+	known := map[string]bool{"a.buzz": true, "b.buzz": true, "c.buzz": true}
+	couplings := []types.KnowledgeCoChange{
+		{A: "b.buzz", B: "c.buzz", Support: 3, Confidence: 0.75},
+		{A: "a.buzz", B: "b.buzz", Support: 2, Confidence: 0.5},
+		{A: "a.buzz", B: "ghost.buzz", Support: 4, Confidence: 1}, // no file node
+	}
+	s := assembleVCS(nil, couplings, known, false)
+
+	assert.Equal(t, []types.KnowledgeEdge{
+		{Source: fileID("a.buzz"), Target: fileID("b.buzz"), Relation: types.RelationCoChanges, Confidence: types.ConfidenceExtracted,
+			Score: 1, Attrs: map[string]string{"support": "2", "confidence": "0.50"}},
+		{Source: fileID("b.buzz"), Target: fileID("c.buzz"), Relation: types.RelationCoChanges, Confidence: types.ConfidenceExtracted,
+			Score: 1, Attrs: map[string]string{"support": "3", "confidence": "0.75"}},
+	}, s.Edges, "the pair with a node-less file is dropped, and edges are sorted by source then target")
+	assert.Empty(t, s.Nodes, "an edge-only shard adds no nodes")
+}
+
 func TestAssembleVCSEmpty(t *testing.T) {
-	assert.Empty(t, assembleVCS(nil, map[string]bool{"a.buzz": true}, true).Nodes)
+	assert.Empty(t, assembleVCS(nil, nil, map[string]bool{"a.buzz": true}, true).Nodes)
 	// An entry with no history yields no attrs, so no node.
-	s := assembleVCS([]types.KnowledgeVCS{{Path: "a.buzz"}}, map[string]bool{"a.buzz": true}, true)
+	s := assembleVCS([]types.KnowledgeVCS{{Path: "a.buzz"}}, nil, map[string]bool{"a.buzz": true}, true)
 	assert.Empty(t, s.Nodes)
 }

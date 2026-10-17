@@ -11,7 +11,7 @@ import (
 )
 
 // TestAllDiagnosticCodesEnumerated guards the hand-maintained allDiagnosticCodes
-// slice against the const block: every declared MGS#### code must be enumerated,
+// slice against the const declarations: every declared MGS#### code must be enumerated,
 // so tooling that lists codes (the knowledge graph builds a node per code) never
 // silently drops one. Mirrors the source-scan idiom in diagnostic_doc_test.go.
 func TestAllDiagnosticCodesEnumerated(t *testing.T) {
@@ -35,7 +35,7 @@ func TestAllDiagnosticCodesEnumerated(t *testing.T) {
 		code := DiagnosticCode(m[1])
 		assert.Truef(t, enumerated[code], "%s is declared but missing from allDiagnosticCodes", code)
 	}
-	assert.Len(t, AllDiagnosticCodes(), len(declared), "allDiagnosticCodes has entries not in the const block")
+	assert.Len(t, AllDiagnosticCodes(), len(declared), "allDiagnosticCodes has entries without a const")
 }
 
 func TestManifestScriptDelegationRoutesToMagusfileDocs(t *testing.T) {

@@ -68,7 +68,7 @@ argv, after `--`:
   guessed host's dialect, because a reply shaped for the wrong host can let a call
   through.
 - `magus shell` flags an entry declares about itself, such as
-  `-- --agent-name claude-code --reports-skills`. The template parses them
+  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
   against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
   named on stderr and left out, and the call is judged anyway; your host shows that
   line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
@@ -122,7 +122,7 @@ over its offset and limit, a limit over 300 counting as whole), so the read rule
 judge a `Read` exactly as they judge the `cat` it replaces.
 
 ```buzz
-// magus guard hook: judges ONE shell command an agent is about to run.
+// magus guard hook: judges ONE tool call an agent is about to make, whatever the tool.
 //
 // It needs neither jq nor a POSIX shell, so the file runs unchanged on Windows.
 //
@@ -133,9 +133,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // reads no workspace member starts in about 10ms, where opening one costs
 // roughly 700ms on every tool call.
 //
-// Contract: reads the host's event as JSON on stdin, selects its command, then
-// feeds the command to `magus shell`. It writes the host's response on stdout
-// and exits 0 either way.
+// Contract: reads the host's event as JSON on stdin and feeds the whole event to
+// `magus shell`, which judges the call by its tool's name and the shape of its
+// input: a command line, a file read or write, a search, a spawn. It writes the
+// host's response on stdout and exits 0 either way.
 //
 // A hook command is an ARGV, not a shell line: the host splits it and runs the
 // program itself, so a `NAME=value` prefix only means anything where something
@@ -155,7 +156,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
-//                    `-- --reports-skills`, and rules that require a skill load
+//                    `-- --observes-skill-loads`, and rules that require a skill load
 //                    stand down where it is absent. An argument this file does not know
 //                    is REPORTED on stderr and left out, and the call is judged anyway:
 //                    a misconfigured entry must not block work, and must not be silent
@@ -168,9 +169,12 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //
 // Override any of the variables below:
 //
-//   HOST_EVENT_PATH  dot-path to the command inside your host's event
-//   HOST_TOOL_PATH   dot-path to the tool name, which decides whether the whole envelope
-//                    is forwarded rather than one field selected out of it
+//   HOST_EVENT_PATH  dot-path to the command inside your host's event, for a host whose
+//                    envelope magus does not read: that one string is forwarded instead
+//                    of the whole event. Unset, the whole event goes, which is what lets
+//                    magus judge every tool and not only a shell
+//   HOST_TOOL_PATH   dot-path to the tool name, which keeps an MCP call whole even where
+//                    HOST_EVENT_PATH selects
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
 //                    subagent's command is graded under the job it was spawned for
@@ -240,21 +244,24 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // permissionDecision "ask" from PreToolUse and prompts. Codex parses that value and does
 // not support it: the hook run is marked failed and the call CONTINUES, so on Codex this
 // file never emits it. There the prompt comes from a rules file the codex harness writes
-// (.codex/rules/magus.rules, a prefix_rule on git push with decision "prompt"), and the
-// PermissionRequest event Codex raises before that prompt reaches this same file, which
-// answers allow for a push the gate covers, leaves an ungated one to the person, and
-// denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
+// (.codex/rules/magus.rules, a prefix_rule with decision "prompt" on each push verb and
+// on each run of a human_only target), and the PermissionRequest event Codex raises
+// before that prompt reaches this same file, which answers allow for a call the guard
+// passes, leaves an ask to the person, and denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 24
+// magus-guard-template: 30
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
-// The mcp rows are real: an mcp__magus__* PreToolUse call carries no tool_input.command,
-// so this file forwards the whole event instead (see hook\wholeEvent), and the same hookSpecificOutput
-// reply it already renders for the command input carries a deny or an advise on this one too.
-// No rule prompts for an MCP call, so Codex's mcp ask is the deny that names the terminal.
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
+// The mcp and path rows are real: every host wires this file to every tool, so an
+// mcp__magus__* call and a file write reach it as whole events (see hook\wholeEvent), and
+// the same hookSpecificOutput reply it renders for a command carries a deny or an advise on
+// those too. No Codex rule prompts for an MCP call or a write, so there the ask is the deny
+// that names the terminal.
 
 import "std";
 import "flags";
@@ -295,22 +302,9 @@ final UNKNOWN_DECISION = `{{else}}{"hookSpecificOutput":{"hookEventName":"PreToo
 final DENY_HEAD = `{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}`;
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
-// The stdin rewrite. magus sets updated_command on a pass or an advise when it closed the
-// command's stdin, and the reply hands the host its whole tool input back with that
-// command in place: Claude Code's updatedInput REPLACES the input, so a field left out
-// (description, timeout, run_in_background) would be dropped. No permissionDecision rides
-// with it, so the rewritten call still meets the host's own permission rules.
-//
-// Read through `index`: magus renders with missingkey=error, and the key is absent from
-// every verdict that carries no rewrite.
-//
-// Codex is never handed one. Its PreToolUse applies updatedInput only beside
-// permissionDecision "allow", which would turn every guard pass into an approval that
-// skips Codex's own prompt.
-final UPDATED_INPUT_SLOT = "__MAGUS_UPDATED_INPUT__";
-final UPDATED_COMMAND = `{{toJson .}}`;
-final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
-final REWRITE_ONLY = `{{with index . "updated_command"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":__MAGUS_UPDATED_INPUT__}}{{end}}`;
+// A stop event reads no hookSpecificOutput: a block with a reason sends the agent back to
+// work, and a systemMessage shows the person a notice and lets the stop through.
+final STOP_REPLY = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
@@ -330,7 +324,7 @@ final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so i
 final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
 
 // The characters that let one command line become several, or become a different
-// one. A push carrying any of them reaches no Codex prefix rule.
+// one. A line carrying any of them reaches no Codex prefix rule.
 final SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "\n"];
 
 
@@ -345,7 +339,7 @@ final ENVELOPE_PREFIX = "\{";
 // cannot state for itself, which today is one thing, whether the config also matches its
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // The valued flags an entry may declare: the host's foreground limits in milliseconds, the
 // timeout a shell command that names none gets and the longest one it may name. They are
@@ -357,6 +351,11 @@ final FOREGROUND_FLAGS = ["--foreground-default-ms", "--foreground-max-ms"];
 // The host this entry is wired into. Valued, and read by this file rather than forwarded
 // as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
 final AGENT_NAME_FLAG = "--agent-name";
+
+// The workspace-relative directory holding the host's tool rows, which the harness spell
+// declares and `magus agent harness install` writes. Forwarded on every call, with the call
+// facts, so a binary too old for it drops it and keeps the rest.
+final TOOL_ROWS_FLAG = "--tool-rows";
 
 
 // findUp returns the nearest ancestor of start holding relative, or "" when there is none.
@@ -372,10 +371,13 @@ fun findUp(relative: str, start: str) > str {
     return "";
 }
 
-// codexPushRule names the Codex prefix rule a bare push reaches, or null for anything
-// else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex
-// would run them unprompted and no answer here may assume it prompts.
-fun codexPushRule(line: str) > str? {
+// codexPromptRule names the Codex prefix rule a bare push or a bare magus run reaches, as
+// the rules file spells its pattern with the spacing removed, or null for anything else:
+// a compound line, `git -C dir push`, a flag before the target, an MCP call. Those reach
+// no rule, so Codex would run them unprompted and no answer here may assume it prompts. A
+// magus run reaches a rule only when the harness wrote one for its target, which it does
+// for each target the workspace declares human_only.
+fun codexPromptRule(line: str) > str? {
     foreach (meta in SHELL_METACHARACTERS) {
         if (line.indexOf(meta) != null) { return null; }
     }
@@ -383,19 +385,17 @@ fun codexPushRule(line: str) > str? {
     if (line == "hg push" or line.startsWith("hg push ")) { return `["hg","push"]`; }
     if (line == "sl push" or line.startsWith("sl push ")) { return `["sl","push"]`; }
     if (line == "jj git push" or line.startsWith("jj git push ")) { return `["jj","git","push"]`; }
+    final words = line.split(" ").filter(fun (index: int, word: str) > bool => word != "");
+    if (words.len() >= 3 and (words[0] == "magus" or words[0] == "./magus")
+            and (words[1] == "run" or words[1] == "affected") and !words[2].startsWith("-")) {
+        return "[\"" + words[0] + "\",\"" + words[1] + "\",\"" + words[2] + "\"]";
+    }
     return null;
 }
 
-// codexPromptBlocker states why Codex will not put this call in front of the person,
-// and "" when its own approval prompt will.
-fun codexPromptBlocker(event: any?, pushRule: str?) > str {
-    final mode = hook\field(event, dotPath: "permission_mode");
-    if (mode == "bypassPermissions" or mode == "dontAsk") {
-        return "this Codex session runs in permission_mode {mode}, which never prompts";
-    }
-    if (pushRule == null) {
-        return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command";
-    }
+// codexRuleMissing states why the project's rules file does not carry rule, and "" when
+// it does.
+fun codexRuleMissing(event: any?, rule: str) > str {
     final rules = findUp(".codex/rules/magus.rules", start: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (rules != "") {
         // A file that is THERE and unreadable is not the same as one that carries no
@@ -403,15 +403,28 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
         // false. Named separately so the person is told what to look at.
         final body = fs\readFile(rules) catch null;
         if (body == null) {
-            return "{rules} exists but could not be read, so whether it carries the prompt rule for this push is unknown";
+            return "{rules} exists but could not be read, so whether it carries the prompt rule for this call is unknown";
         }
         // Compared with the spacing removed, so the rule matches however it is
         // formatted. The leading bracket is what keeps the git rule from being found
         // inside jj's ["jj", "git", "push"].
         final packed = body!.replace(" ", with: "").replace("\t", with: "");
-        if (packed.indexOf(pushRule!) != null) { return ""; }
+        if (packed.indexOf(rule) != null) { return ""; }
     }
-    return "no .codex/rules/magus.rules carries the prompt rule for this push, which magus describe harness codex prints";
+    return "no .codex/rules/magus.rules carries the prompt rule for this call, which magus describe harness codex prints";
+}
+
+// codexPromptBlocker states why Codex will not put this call in front of the person,
+// and "" when its own approval prompt will.
+fun codexPromptBlocker(event: any?, rule: str?) > str {
+    final mode = hook\field(event, dotPath: "permission_mode");
+    if (mode == "bypassPermissions" or mode == "dontAsk") {
+        return "this Codex session runs in permission_mode {mode}, which never prompts";
+    }
+    if (rule == null) {
+        return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command, or a plain magus run of a human-only target";
+    }
+    return codexRuleMissing(event, rule: rule!);
 }
 
 // shellFlags parses this script's own argv: the `magus shell` flags the entry that wired
@@ -444,7 +457,7 @@ fun shellFlags(args: [str]) > [str] {
         // "unsupported argument ;", and this line is the only remedy a misconfigured
         // reader is offered.
         warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
-            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>. Fix the hook command in your host config.");
+            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>, {TOOL_ROWS_FLAG} <dir>. Fix the hook command in your host config.");
     }
     final supported = mut [<str>];
     foreach (name in SUPPORTED_FLAGS) {
@@ -454,9 +467,19 @@ fun shellFlags(args: [str]) > [str] {
 }
 
 fun valuedFlags() > [str] {
-    final valued = mut [AGENT_NAME_FLAG];
+    final valued = mut [AGENT_NAME_FLAG, TOOL_ROWS_FLAG];
     foreach (name in FOREGROUND_FLAGS) { valued.append(name); }
     return valued;
+}
+
+// toolRowsFlags is the tool rows directory this entry declares, with its flag, and none
+// when the argv names none or does not parse: magus then knows no tool and says so.
+fun toolRowsFlags(args: [str]) > [str] {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
+    if (parsed == null) { return [<str>]; }
+    final dir = parsed!.values[TOOL_ROWS_FLAG];
+    if (dir == null) { return [<str>]; }
+    return [TOOL_ROWS_FLAG, dir!];
 }
 
 // foregroundFlags are the host's foreground limits this entry declares, each flag with its
@@ -476,8 +499,8 @@ fun foregroundFlags(args: [str]) > [str] {
 }
 
 // callFlags is what a shell command's tool input asked of the host: to run it in the
-// background, and how long to wait on it. Read off the event because this file forwards
-// the command alone. JSON numbers parse as double.
+// background, and how long to wait on it. The whole event carries both too; these say it
+// where HOST_EVENT_PATH forwards the command alone. JSON numbers parse as double.
 fun callFlags(event: any?) > [str] {
     final facts = mut [<str>];
     if (hook\dig(event, dotPath: "tool_input.run_in_background") == true) {
@@ -524,7 +547,7 @@ object Guard {
 }
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
-// drops them too. Keeping them there meant a binary too old for `--reports-skills`
+// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
 // failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
 // binary too old to accept the flag cannot report a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
@@ -537,6 +560,20 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
         "allow_failure": true,
         "stdin": guard.payload,
     });
+}
+
+// UNKNOWN_FLAG is how magus's flag parser refuses a flag it does not define.
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag reports an attempt refused for a flag the binary predates, the one failure
+// that asking with fewer flags recovers. A deny exits non-zero with the verdict on stdout,
+// and a timeout kill or a crash leaves stdout empty too; asking again judges the call a
+// second time, which a host already out of time cannot afford.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
 // recordMessage hands a message the person typed to `magus shell --message` and reads
@@ -583,30 +620,13 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         + "Rebuild or update THAT binary to restore the guard.";
 }
 
-// A read tool's limit past this reads the whole file, as the read rule counts it.
-final WHOLE_READ_LIMIT = 300;
-
-// readCommand is the shell line a host's Read stands for, "" for any other tool: `cat` of
-// the file, or a sed range over its offset and limit. The read rules then judge it as the
-// command it replaces, the way Cursor's hook already restates its Read.
-fun readCommand(event: any?, tool: str) > str {
-    if (tool != "Read") { return ""; }
-    final input = hook\dig(event, dotPath: "tool_input");
-    var file = hook\field(input, dotPath: "file_path");
-    if (file == "") { file = hook\field(input, dotPath: "path"); }
-    if (file == "") { return ""; }
-    final word = "'" + file.replace("'", with: "'\\''") + "'";
-    final limit = std\parseInt(hook\field(input, dotPath: "limit")) ?? 0;
-    var first = std\parseInt(hook\field(input, dotPath: "offset")) ?? 1;
-    if (first < 1) { first = 1; }
-    if (limit > 0 and limit <= WHOLE_READ_LIMIT) { return "sed -n {first},{first + limit - 1}p {word}"; }
-    if (first > 1) { return "sed -n {first},$p {word}"; }
-    return "cat {word}";
-}
-
-fun contextReply(text: str) > str {
+fun contextReply(eventName: str, text: str) > str {
     final encoded = json\stringify(text) catch `""`;
-    return CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
+    var reply = CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
+    // A host reads hookEventName against the event it ran the hook for, so a post-call
+    // event cannot be answered in the PreToolUse dialect.
+    if (eventName == "PostToolUse") { reply = reply.replace("PreToolUse", with: "PostToolUse"); }
+    return reply;
 }
 
 // noticeReply renders a notice in the dialect of the event that asked for it.
@@ -615,52 +635,50 @@ fun contextReply(text: str) > str {
 // envelope the other events use is one the host rejects outright: on the single event
 // where the notice is the only thing written, it arrived unreadable. There the prose goes
 // to the person on stderr and stdout carries the envelope that leaves the decision alone.
+//
+// A SubagentStop reply has no hookSpecificOutput at all, so its notice goes to stderr and
+// stdout stays empty.
 fun noticeReply(eventName: str, text: str) > str {
     if (eventName == "PermissionRequest") {
         warn(text);
         return PERMISSION_NO_DECISION;
     }
-    return contextReply(text);
+    if (eventName == "SubagentStop") {
+        warn(text);
+        return "";
+    }
+    return contextReply(eventName, text: text);
 }
 
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
 // file assembled may claim --renders-ask; see the header for why Codex never receives
 // permissionDecision "ask".
-fun askBranch(event: any?, codex: bool, pushRule: str?) > str {
+fun askBranch(event: any?, codex: bool, rule: str?) > str {
     final declared = env\get("HOST_ASK_BRANCH") catch "";
     if (declared != "") { return declared; }
     if (!codex) { return ASK_CLAUDE; }
-    final blocker = codexPromptBlocker(event, pushRule: pushRule);
+    final blocker = codexPromptBlocker(event, rule: rule);
     if (blocker == "") { return ASK_CODEX_PROMPTS; }
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
 }
 
-// adviseBranch is the advise arm; updatedInput is the host's tool input with the command's
-// template action in place, "" when this reply carries no rewrite.
-fun adviseBranch(updatedInput: str) > str {
+// adviseBranch is the advise arm.
+fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
     final declared = env\get("HOST_ADVISE_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (updatedInput == "") { return ADVISE_DEFAULT; }
-    return ADVISE_REWRITE.replace(UPDATED_INPUT_SLOT, with: updatedInput);
-}
-
-// passAndAdviseTail renders a pass as nothing, and as the rewrite alone when it carries
-// one. The advise arm here is reached only when adviseBranch rendered none.
-fun passAndAdviseTail(updatedInput: str) > str {
-    if (updatedInput == "") { return PASS_AND_ADVISE_TAIL; }
-    final only = REWRITE_ONLY.replace(UPDATED_INPUT_SLOT, with: updatedInput);
-    return `{{else if eq .decision "advise"}}` + only + `{{else if eq .decision "pass"}}` + only;
+    return ADVISE_DEFAULT;
 }
 
 // permissionResponse answers the approval request Codex raises just before its own
 // prompt. No decision object leaves the prompt to the person; allow skips it, and is
-// answered only for a plain push, because this event fires for every approval Codex
-// asks and a pass from the guard is not the person's consent to anything else.
-fun permissionResponse(pushRule: str?) > str {
+// answered only for a call a magus prompt rule raised, because this event fires for every
+// approval Codex asks and a pass from the guard is not the person's consent to anything
+// else.
+fun permissionResponse(event: any?, rule: str?) > str {
     var covered = PERMISSION_NO_DECISION;
-    if (pushRule != null) { covered = PERMISSION_ALLOW; }
+    if (rule != null and codexRuleMissing(event, rule: rule!) == "") { covered = PERMISSION_ALLOW; }
     return PERMISSION_DENY_HEAD + PERMISSION_NO_DECISION
         + `{{else if eq .decision "pass"}}` + covered
         + `{{else if eq .decision "advise"}}` + covered
@@ -679,7 +697,8 @@ fun main(args: [str]) > void {
         return;
     }
 
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
+    // Empty unless the host names a field: the whole event goes, and magus reads the tool.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -689,43 +708,40 @@ fun main(args: [str]) > void {
     // otherwise, and gets that field judged as a shell command.
     final toolPath = hook\envOr("HOST_TOOL_PATH", fallback: "tool_name");
     final rawEvent = hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath);
+    // A shell command line, which alone has a Codex prompt rule, a background mode and a
+    // timeout: a string at the command field of a call that is not over MCP.
+    final commandPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
+    final shellCall = !hook\wholeEvent(event, dotPath: commandPath, toolPath: toolPath);
 
     // Read BEFORE the availability check below, because the notices that check prints
     // are held to one firing per session and the session id is what keys them.
     final session = hook\field(event, dotPath: sessionPath);
-    // Forwarded because this file selects one field out of the envelope: without it a
-    // subagent's command reaches magus looking like its parent's.
+    // Forwarded for a host whose HOST_EVENT_PATH selects one field out of the envelope:
+    // without it a subagent's command reaches magus looking like its parent's.
     final agent = hook\field(event, dotPath: agentPath);
     final transcript = hook\field(event, dotPath: transcriptPath);
     final eventName = hook\field(event, dotPath: "hook_event_name");
     final toolName = hook\field(event, dotPath: toolPath);
 
-    var pushRule: str? = null;
-    if (!rawEvent) { pushRule = codexPushRule(hook\field(event, dotPath: eventPath)); }
+    var promptRule: str? = null;
+    if (shellCall) { promptRule = codexPromptRule(hook\field(event, dotPath: commandPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
     // is assembled here.
     final codex = agentName == "codex";
-    final read = readCommand(event, tool: toolName);
 
     var response = env\get("HOST_RESPONSE") catch "";
     var capabilities = mut [<str>];
-    var rewrites = false;
     if (response == "" and eventName == "PermissionRequest") {
-        response = permissionResponse(pushRule);
+        response = permissionResponse(event, rule: promptRule);
         capabilities.append("--renders-ask");
+    } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
+        response = STOP_REPLY;
     } else if (response == "") {
-        // Only a shell command the host itself will run can come back rewritten: a Read
-        // restated as `cat` is not what the host runs, and a whole event is not a command.
-        var updatedInput = "";
-        if (!codex and !rawEvent and read == "" and eventName == "PreToolUse") {
-            updatedInput = hook\objectWith(event, dotPath: "tool_input", key: "command", raw: UPDATED_COMMAND) ?? "";
-        }
-        response = DENY_HEAD + askBranch(event, codex: codex, pushRule: pushRule)
-            + adviseBranch(updatedInput) + passAndAdviseTail(updatedInput) + UNKNOWN_DECISION;
+        response = DENY_HEAD + askBranch(event, codex: codex, rule: promptRule)
+            + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         capabilities.append("--renders-ask");
-        rewrites = updatedInput != "";
     }
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
@@ -751,9 +767,7 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    if (read != "") {
-        payload = read + "\n";
-    } else if (!rawEvent) {
+    if (!rawEvent) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
     final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response, dir = cwd };
@@ -763,22 +777,17 @@ fun main(args: [str]) > void {
     // --agent-name, --session and --agent postdate the current magus release, and this template is
     // downloaded and run against whatever binary a reader already has. Passing them
     // unconditionally does not degrade the guard, it BREAKS it: an older binary rejects the
-    // unknown flag, prints its usage to stdout, and exits non-zero, so the host receives no
+    // unknown flag, prints its usage to stderr, and exits non-zero, so the host receives no
     // verdict at all and every deny and advise rule silently stops being enforced.
     //
-    // A DENY exits non-zero (2) with the verdict on stdout, so retrying on a non-zero status
-    // alone would judge every blocked command twice, unattributed and recorded twice in the
-    // activity trail. Emptiness alone cannot tell the cases apart either, because a pass
-    // renders empty on purpose. Both together can: a rejected flag prints its usage to
-    // STDERR and leaves stdout empty, while any real verdict that is not a pass leaves
-    // something on stdout.
+    // Only that refusal is asked again: see rejectedFlag.
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
     //
-    // --rewrites-input, the call facts and the foreground limits are newer than the rest,
-    // so a binary that rejects one is asked again with everything else before it is asked
-    // with nothing: dropping them must not also drop the attribution and the ask.
+    // The call facts and the foreground limits are newer than the rest, so a binary that
+    // rejects one is asked again with everything else before it is asked with nothing:
+    // dropping them must not also drop the attribution and the ask.
     //
     // --transport buzz names this glue as the caller. magus keeps a deny's full text and
     // its once-per-session notices per host, transport and session.
@@ -789,12 +798,13 @@ fun main(args: [str]) > void {
     }
     foreach (flag in capabilities) { attributed.append(flag); }
     final newest = mut [<str>];
-    if (rewrites) { newest.append("--rewrites-input"); }
-    // Only a shell command the host runs has a background or a timeout to report.
-    if (!rawEvent and read == "") {
+    // Only a shell command the host runs has a background or a timeout to report. The
+    // whole event carries the call's own two as well; the host's limits only argv does.
+    if (shellCall) {
         foreach (word in callFlags(event)) { newest.append(word); }
         foreach (word in foregroundFlags(args)) { newest.append(word); }
     }
+    foreach (word in toolRowsFlags(args)) { newest.append(word); }
     var result: proc\ExecResult? = null;
     if (newest.len() > 0) {
         final newer = mut [<str>];
@@ -802,10 +812,10 @@ fun main(args: [str]) > void {
         foreach (word in newest) { newer.append(word); }
         result = judge(guard, extra: newer) catch null;
     }
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (newest.len() == 0 or rejectedFlag(result)) {
         result = judge(guard, extra: attributed) catch null;
     }
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 
@@ -841,8 +851,10 @@ wasteful, not destructive.
 ```buzz
 // magus guard hook: judges ONE file path an agent is about to write.
 //
-// Companion to magus-command.buzz, wired to your host's file-editing tool
-// rather than its shell tool. It needs neither jq nor a POSIX shell.
+// Companion to magus-command.buzz, for a host config that wires its file-editing tool
+// apart from the rest. The shipped harnesses do not: they wire magus-command.buzz to every
+// tool, and it judges a write by the shape of the whole event. It needs neither jq nor a
+// POSIX shell.
 //
 // Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz module
@@ -875,7 +887,7 @@ wasteful, not destructive.
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
 // attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --reports-skills`, the one capability an entry here may declare.
+// `-- --observes-skill-loads`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -902,9 +914,8 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 24
+// magus-guard-template: 30
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";
@@ -955,6 +966,16 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     });
 }
 
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag is magus-command.buzz's: only a flag the binary predates is asked again.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
 fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
@@ -973,7 +994,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
 // a config that also matches its host's skill tool says so, and a rule that wants a skill
 // read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // EntryArgs is what this script's argv says: the host, and the supported flags it named.
 object EntryArgs {
@@ -1006,7 +1027,8 @@ fun readEntryArgs(args: [str]) > EntryArgs {
 fun main(args: [str]) > void {
     final entry = readEntryArgs(args);
     final agentName = entry.agentName;
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    // Empty unless the host names a field: the whole event goes, content included.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -1064,13 +1086,11 @@ fun main(args: [str]) > void {
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
-    // printing usage to stdout and exiting non-zero, which leaves the host with no verdict
+    // printing usage to stderr and exiting non-zero, which leaves the host with no verdict
     // rather than an unattributed one. Try with attribution, fall back to the call this
     // script made before it existed.
     //
-    // The retry tests status AND emptiness together, for the same reason as the command
-    // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
-    // on stdout, so retrying on status alone would judge every blocked write twice.
+    // Only that refusal is asked again: see rejectedFlag.
     //
     // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
     // binary too old for one cannot report a skill load either.
@@ -1081,7 +1101,7 @@ fun main(args: [str]) > void {
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 
@@ -1155,7 +1175,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 24
+// magus-guard-template: 30
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1357,7 +1377,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 24
+// magus-guard-template: 30
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1495,6 +1515,10 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
 //
+// A subagent starts with none of its parent's history, which is the same loss, so the
+// event may also be SubagentStart: the reply then names that event, and the child reads
+// the brief before its first step. Any other event is answered as SessionStart.
+//
 // The rules line is the one host-shaped part, which is why the entry names it rather
 // than magus printing it: magus names the files it ships and can see (AGENTS.md, the
 // installed skill directories), and the file YOUR host reads is yours to name. It
@@ -1505,7 +1529,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 24
+// magus-guard-template: 30
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1519,6 +1543,7 @@ import "lib/hook" as hook;
 
 final RULES_FLAG = "--rules";
 final FORMAT_FLAG = "--format";
+final SUBAGENT_START = "SubagentStart";
 
 // warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
 // file writes on stdout.
@@ -1551,7 +1576,10 @@ fun main(args: [str]) > void {
     }
     // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
     // Guard gives. The working directory stands in when the event names none.
-    final cwd = hook\field(json\parse(io\stdin.readAll() catch "") catch null, dotPath: "cwd");
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final cwd = hook\field(event, dotPath: "cwd");
+    var eventName = "SessionStart";
+    if (hook\field(event, dotPath: "hook_event_name") == SUBAGENT_START) { eventName = SUBAGENT_START; }
     var root = "";
     if (cwd != "") { root = hook\workspaceRootAt(cwd); }
     if (root == "") { root = hook\workspaceRoot(); }
@@ -1588,7 +1616,7 @@ fun main(args: [str]) > void {
     if (format == "json") {
         final context = json\stringify(brief + "\n") catch "";
         if (context == "") { return; }
-        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":`
+        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"{eventName}","additionalContext":`
             + context + "}}") catch void;
         return;
     }
@@ -1646,7 +1674,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 24
+// magus-guard-template: 30
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -1850,8 +1878,8 @@ It declares no `magus-guard-coverage` line, for the reason
 // so the workspace stays CLOSED, and it needs only the proofread release binary:
 // https://github.com/egladman/magus/releases
 //
-// Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply -format
-// json` over it, and hands back at most 5 findings in the shape the named host takes:
+// Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply --stdin
+// -o json` over it, and hands back at most 5 findings in the shape the named host takes:
 //
 //   claude-code  Stop: hookSpecificOutput.additionalContext. Advice only; the stop goes
 //                through and the findings ride into the next turn.
@@ -1859,6 +1887,9 @@ It declares no `magus-guard-coverage` line, for the reason
 //                the reason as a new prompt, once: the next Stop carries stop_hook_active.
 //   cursor       stop: {"followup_message": ...}. Cursor submits it as another turn. It
 //                cannot block, and the hook's loop_limit caps the chain.
+//   opencode     {"prompt": ...}. OpenCode has no stop hook; opencode-plugin.ts calls this on a
+//                root session's idle event, with the codex envelope (last_assistant_message,
+//                stop_hook_active), and sends the prompt back with session.promptAsync.
 //
 // Cursor's stop event carries no reply, so the hook reads it from the conversation's
 // transcript_path: the last assistant message that has text, stopping at the last user
@@ -1880,7 +1911,7 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 //   --agent-name HOST  REQUIRED: the host this entry is wired into, the harness spell's own
 //                      name. Without it nothing is judged and MGS3024 goes to stderr
-//   --decisions FILE   a JSON decisions table passed to proofread as -decisions:
+//   --decisions FILE   a JSON decisions table passed to proofread as --decisions:
 //                      {"rules": {"<rule>": "deny" | "advise" | "off"}}. Keep it to
 //                      "rules": proofread refuses a "paths" glob that matches no file
 //                      argument, and a reply is read from stdin
@@ -1894,7 +1925,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 24
+// magus-guard-template: 30
 
 import "io";
 import "fs";
@@ -1911,6 +1942,7 @@ final PROOFREAD_FLAG = "--proofread";
 final CLAUDE_CODE = "claude-code";
 final CODEX = "codex";
 final CURSOR = "cursor";
+final OPENCODE = "opencode";
 
 // MAX_FINDINGS caps the findings handed back for one reply, in proofread's order.
 final MAX_FINDINGS = 5;
@@ -1923,7 +1955,7 @@ fun warn(message: str) > void {
 
 // knownHost is a host this file has an output shape for.
 fun knownHost(host: str) > bool {
-    return host == CLAUDE_CODE or host == CODEX or host == CURSOR;
+    return host == CLAUDE_CODE or host == CODEX or host == CURSOR or host == OPENCODE;
 }
 
 // Stop is what this hook reads of a stop envelope: the reply, and whether the agent is
@@ -2024,9 +2056,9 @@ fun resolveBin(flagged: str) > str {
 
 // judge runs bin over reply, or finds nothing when it fails.
 fun judge(bin: str, decisions: str, reply: str) > [Finding] {
-    final argv = mut ["agent-reply", "-format", "json"];
+    final argv = mut ["agent-reply", "--stdin", "-o", "json"];
     if (decisions != "") {
-        argv.append("-decisions");
+        argv.append("--decisions");
         argv.append(decisions);
     }
     final run = proc\exec(bin, args: argv,
@@ -2037,8 +2069,8 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
     return parseFindings(run!.stdout);
 }
 
-// lead opens the advice. claude-code keeps the reply it already sent; codex and cursor start
-// another turn, so the agent is told to send the reply again.
+// lead opens the advice. claude-code keeps the reply it already sent; codex, cursor and
+// opencode start another turn, so the agent is told to send the reply again.
 fun lead(host: str) > str {
     if (host == CLAUDE_CODE) {
         return "proofread judged your last reply as agent-reply. These advise; the stop "
@@ -2076,6 +2108,9 @@ fun shaped(host: str, text: str) > str {
     if (host == CURSOR) {
         return json\stringify({"followup_message": text}) catch "";
     }
+    if (host == OPENCODE) {
+        return json\stringify({"prompt": text}) catch "";
+    }
     return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
 }
 
@@ -2107,7 +2142,7 @@ fun main(args: [str]) > void {
         return;
     }
     if (!knownHost(host)) {
-        warn("no reply shape for host \"{host}\"; this hook answers {CLAUDE_CODE}, {CODEX} and {CURSOR}.");
+        warn("no reply shape for host \"{host}\"; this hook answers {CLAUDE_CODE}, {CODEX}, {CURSOR} and {OPENCODE}.");
         return;
     }
     var decisions = parsed!.values[DECISIONS_FLAG] ?? "";
@@ -2169,8 +2204,22 @@ test "cursor findings go back as a followup message" {
     std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null, message: printed);
 }
 
+test "opencode findings go back as a prompt to send again" {
+    final printed = output(Stop{ reply = "Done.", again = false }, host: OPENCODE, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    final prompt: str = doc["prompt"] ?? "";
+    std\assert(prompt.indexOf("- closing-offer (line 3): End on the result") != null, message: printed);
+    std\assert(prompt.indexOf("Send the reply again") != null, message: prompt);
+    std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null and doc["followup_message"] == null, message: printed);
+}
+
+test "an opencode idle envelope is read like codex's stop" {
+    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}", host: OPENCODE);
+    std\assert(stop.reply == "Done." and stop.again, message: "{stop.reply} {stop.again}");
+}
+
 test "a reply made while continuing is not judged, so the agent cannot loop" {
-    foreach (host in [CLAUDE_CODE, CODEX, CURSOR]) {
+    foreach (host in [CLAUDE_CODE, CODEX, CURSOR, OPENCODE]) {
         final printed = output(Stop{ reply = "Done.", again = true }, host: host, judged: judging([offer]));
         std\assert(printed == "", message: "{host}: {printed}");
     }
@@ -2204,8 +2253,8 @@ test "a binary that is missing or fails finds nothing" {
 }
 
 test "only the hosts with a reply shape are known" {
-    std\assert(knownHost(CLAUDE_CODE) and knownHost(CODEX) and knownHost(CURSOR), message: "wired hosts");
-    std\assert(!knownHost("opencode") and !knownHost(""), message: "OpenCode's idle event cannot feed text back");
+    std\assert(knownHost(CLAUDE_CODE) and knownHost(CODEX) and knownHost(CURSOR) and knownHost(OPENCODE), message: "wired hosts");
+    std\assert(!knownHost("windsurf") and !knownHost(""), message: "a host with no shape");
 }
 
 test "a cursor stop that is a follow-up or did not complete judges nothing" {

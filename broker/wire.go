@@ -24,6 +24,8 @@ const (
 	typeClaimReply     = "claim.reply"
 	typeRelease        = "release"
 	typeReleaseReply   = "release.reply"
+	typeReserve        = "reserve"
+	typeReserveReply   = "reserve.reply"
 	typeServiceAcquire = "service.acquire"
 	typeServiceRelease = "service.release"
 	typeServiceStopAll = "service.stopall"
@@ -34,6 +36,11 @@ const (
 	typeShutdownReply  = "shutdown.reply"
 	typeCrashWatch     = "crash.watch"
 	typeCrashReply     = "crash.reply"
+	typeHold           = "hold"
+	typeHoldRelease    = "hold.release"
+	typeHoldReply      = "hold.reply"
+	typeWork           = "work"
+	typeWorkReply      = "work.reply"
 	typeError          = "error"
 )
 
@@ -58,6 +65,14 @@ type hello struct {
 	Dir      string   `json:"dir,omitempty"`
 	Argv     []string `json:"argv,omitempty"`
 	Version  string   `json:"version,omitempty"`
+	// Lease is the job lease the process acts under, from its BAGGAGE; "" for a run
+	// nobody leased, which no validation cap counts.
+	Lease string `json:"lease,omitempty"`
+	// Tree is the root of Lease's job tree and MaxValidations the workspace's
+	// jobs.max_validations: how many runs of that tree's leased workers the broker seats
+	// at once. Zero is no cap.
+	Tree           string `json:"tree,omitempty"`
+	MaxValidations int    `json:"max_validations,omitzero"`
 }
 
 // helloReply is the broker's own identity.
@@ -78,6 +93,37 @@ type claimRequest struct {
 // recorded, and whether to ask again is the client's call.
 type claimReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
+	// Seat is set on a claim kept out by its job tree's validation cap: the run waits,
+	// and this names the runs it waits on.
+	Seat *SeatWait `json:"seat,omitempty"`
+}
+
+// reserveRequest asks for a seat held for another process, Reader, until its first
+// claim. It does not ride the asking connection: `status --wait` exits before the run
+// reading its output may start.
+type reserveRequest struct {
+	Claim  types.MachineClaim `json:"claim"`
+	Reader int                `json:"reader"`
+}
+
+// reserveReply is the verdict. Granted means the seat is held for the reader.
+type reserveReply struct {
+	Verdict types.MachineVerdict `json:"verdict"`
+}
+
+// holdRequest registers a command a client runs under a deadline.
+type holdRequest struct {
+	Hold Hold `json:"hold"`
+}
+
+// holdReply names the hold a request registered or released.
+type holdReply struct {
+	ID string `json:"id"`
+}
+
+// holdReleaseRequest says a held command ended on its own.
+type holdReleaseRequest struct {
+	ID string `json:"id"`
 }
 
 // releaseRequest returns a granted claim. An id the broker does not hold, or one another

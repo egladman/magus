@@ -79,6 +79,7 @@ func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 			require.Len(t, probe.asked, 1)
 			want := tc.want
 			want.Host, want.Session, want.Path, want.Workspace, want.Role = "claude-code", "s1", path, root, types.AgentRoleRoot
+			want.Thread, want.ThreadFrom = types.AgentThreadMain, types.ThreadInferred
 			got := probe.asked[0]
 			got.Workspace = canonicalDir(got.Workspace)
 			want.Workspace = canonicalDir(want.Workspace)
@@ -206,7 +207,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			"slowed":      {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad, ApprovedWriteRule: slowed},
 			"none to ask": {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad},
 		}
-		judge := func(ctx context.Context, deps Dependencies, root string) Verdict {
+		judge := func(ctx context.Context, deps Dependencies, root string) types.GuardJudgment {
 			ctx, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
 			return Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})

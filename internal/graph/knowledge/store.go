@@ -13,6 +13,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -89,6 +90,14 @@ type manifest struct {
 	// IndexesKnown distinguishes a workspace that declares no index from a manifest that
 	// never recorded them, which the encoding of an empty list cannot.
 	IndexesKnown bool `json:"indexes_known,omitempty"`
+	// HumanOnly is what the workspace declared human_only at the same sync as Indexes (see
+	// Inputs.HumanOnly), under the same rule: a function of the inputs the domain stamps
+	// fold, so a read whose domain fast stamp matches may use it in place of evaluating
+	// the workspace.
+	HumanOnly types.HumanOnlyIndex `json:"human_only,omitzero"`
+	// HumanOnlyKnown distinguishes a workspace that declares no human_only target from a
+	// manifest that never recorded one.
+	HumanOnlyKnown bool `json:"human_only_known,omitempty"`
 	// Extra is, per class, the workspace files its assembly read that the tree walk does
 	// not cover, so the caller can fold them into that class's next stamp.
 	Extra map[ShardClass][]string `json:"extra,omitempty"`
@@ -188,6 +197,7 @@ type syncPlan struct {
 	fastStamps Stamps                   // see manifest.FastStamps; nil records none
 	indexes    []SymbolIndexDeclaration // see manifest.Indexes; nil keeps the recorded ones
 	reads      *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
+	humanOnly  *types.HumanOnlyIndex    // see manifest.HumanOnly; nil keeps the recorded one
 	extra      map[ShardClass][]string
 	refresh    bool
 }
@@ -270,6 +280,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		}
 		newMan.Indexes, newMan.IndexesKnown = old.Indexes, old.IndexesKnown
 		newMan.Reads, newMan.ReadsKnown = old.Reads, old.ReadsKnown
+		newMan.HumanOnly, newMan.HumanOnlyKnown = old.HumanOnly, old.HumanOnlyKnown
 		for c, paths := range old.Extra {
 			if !plan.covers(c) {
 				newMan.Extra[c] = paths
@@ -281,6 +292,9 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	}
 	if plan.reads != nil {
 		newMan.Reads, newMan.ReadsKnown = *plan.reads, true
+	}
+	if plan.humanOnly != nil {
+		newMan.HumanOnly, newMan.HumanOnlyKnown = *plan.humanOnly, true
 	}
 	prev := old
 	if plan.refresh {
@@ -355,10 +369,51 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		return nil
 	}
 
+	// The lexical index is rebuilt whenever a domain or symbol shard moved, its text moved
+	// (Text is not fingerprinted, so an edited section body changes no shard), or the
+	// stored index is bound to other shards. It is removed before any shard is written, so
+	// a crash part way leaves no index rather than a stale one under a matching key.
+	lexical := plan.covers(ClassDomain) || plan.covers(ClassSymbols)
+	var staleText []Shard
+	lexicalMoved := false
+	if lexical {
+		writing := map[string]bool{}
+		for _, w := range toWrite {
+			writing[w.shard.Name] = true
+			lexicalMoved = lexicalMoved || lexicalClass(w.shard.Name)
+		}
+		for _, sh := range shards {
+			if lexicalClass(sh.Name) && !writing[sh.Name] && !s.lexicalSidecarCurrent(sh.Name, fps[sh.Name], textDigest(sh.Text)) {
+				staleText = append(staleText, sh)
+			}
+		}
+		for _, name := range pruned {
+			lexicalMoved = lexicalMoved || lexicalClass(name)
+		}
+		lexicalMoved = lexicalMoved || len(staleText) > 0
+		if lexicalMoved {
+			if err := s.removeLexicalIndex(); err != nil {
+				return err
+			}
+		}
+	}
+
 	if err := s.writeShards(ctx, toWrite); err != nil {
 		return err
 	}
+	for _, sh := range staleText {
+		nodes, _ := sh.canonicalContent()
+		if err := s.writeLexicalSidecar(sh.Name, fps[sh.Name], nodes, sh.Text); err != nil {
+			return err
+		}
+	}
 	s.recordPathIDs(ctx, shards, fps, newMan)
+	if lexical && (lexicalMoved || s.lexicalIndexKey() != lexicalShardsKey(&newMan)) {
+		// Best-effort like the routing index: without it a query states that it fell back.
+		if err := s.syncLexicalIndex(ctx, shards, &newMan); err != nil {
+			s.log.DebugContext(ctx, "lexical index not written", attr.Error(err))
+		}
+	}
 
 	// Refresh the derived symbol xref routing index (best-effort: a failure just means
 	// `magus refs` falls back to loading all symbol shards, never a wrong result; the index
@@ -388,6 +443,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) && maps.Equal(old.fastStamps(), newMan.FastStamps) &&
 		slices.Equal(old.indexes(), newMan.Indexes) && old.indexesKnown() == newMan.IndexesKnown &&
 		readsEqual(old.reads(), newMan.Reads) && old.readsKnown() == newMan.ReadsKnown &&
+		reflect.DeepEqual(old.humanOnly(), newMan.HumanOnly) && old.humanOnlyKnown() == newMan.HumanOnlyKnown &&
 		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
 		return nil
 	}
@@ -441,7 +497,8 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 	}
 	recordIndexes := rec.indexes != nil && !man.IndexesKnown
 	recordReads := rec.reads != nil && !man.ReadsKnown
-	if len(missing) == 0 && !recordIndexes && !recordReads {
+	recordHumanOnly := rec.humanOnly != nil && !man.HumanOnlyKnown
+	if len(missing) == 0 && !recordIndexes && !recordReads && !recordHumanOnly {
 		return nil
 	}
 	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
@@ -462,19 +519,23 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 		if recordReads {
 			cur.Reads, cur.ReadsKnown = *rec.reads, true
 		}
+		if recordHumanOnly {
+			cur.HumanOnly, cur.HumanOnlyKnown = *rec.humanOnly, true
+		}
 		return s.writeManifest(*cur)
 	})
 }
 
 // fastStampRecord is what recordFastStamps writes onto a manifest whose shards stay as
 // they are: the fast stamps of the classes a read settled by their full stamps, and, when
-// the caller resolved the evaluation anyway, what it read and the indexes it declared. A
-// nil indexes or reads records none.
+// the caller resolved the evaluation anyway, what it read, the indexes it declared and
+// what it declares human_only. A nil indexes, reads or humanOnly records none.
 type fastStampRecord struct {
-	stamps  Stamps
-	classes []ShardClass
-	indexes []SymbolIndexDeclaration
-	reads   *readlog.Reads
+	stamps    Stamps
+	classes   []ShardClass
+	indexes   []SymbolIndexDeclaration
+	reads     *readlog.Reads
+	humanOnly *types.HumanOnlyIndex
 }
 
 // readsEqual reports whether two evaluation reads name the same inputs.
@@ -847,6 +908,9 @@ func (s *Store) pruneToSize() {
 		if err := os.Remove(f.path); err != nil {
 			continue
 		}
+		// The sidecar goes with its shard: the next sync of its class rewrites both, and
+		// until then a lexical rebuild refuses rather than index the shard without it.
+		_ = os.Remove(s.lexicalSidecarPath(f.path))
 		total -= f.size
 	}
 }
@@ -975,6 +1039,11 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	}
 	if err := file.WriteFileAtomic(s.shardPath(sh.Name), b, 0o644); err != nil {
 		return err
+	}
+	if lexicalClass(sh.Name) {
+		if err := s.writeLexicalSidecar(sh.Name, fp, nodes, sh.Text); err != nil {
+			return err
+		}
 	}
 	s.pushShard(ctx, sh.Name, fp, b)
 	return nil
@@ -1107,9 +1176,10 @@ func (s *Store) readShardKeeping(name string, keep bool) (shardFile, error) {
 }
 
 func (s *Store) removeShard(name string) error {
-	err := os.Remove(s.shardPath(name))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	for _, p := range []string{s.shardPath(name), s.lexicalSidecarPath(s.shardPath(name))} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }
@@ -1177,6 +1247,15 @@ func (m *manifest) reads() readlog.Reads {
 
 func (m *manifest) readsKnown() bool { return m != nil && m.ReadsKnown }
 
+func (m *manifest) humanOnly() types.HumanOnlyIndex {
+	if m == nil {
+		return types.HumanOnlyIndex{}
+	}
+	return m.HumanOnly
+}
+
+func (m *manifest) humanOnlyKnown() bool { return m != nil && m.HumanOnlyKnown }
+
 // EvaluationReads returns what the evaluation the store was last synced from read beyond
 // the tree, and whether that was ever recorded. The caller folds them into the fast domain
 // stamp it computes, so they need no validation of their own: a stamp computed over stale
@@ -1198,6 +1277,19 @@ func (s *Store) SymbolIndexDeclarations(fastDomain string) ([]SymbolIndexDeclara
 		return nil, false
 	}
 	return slices.Clone(man.Indexes), true
+}
+
+// HumanOnly returns what the workspace declared human_only at its last evaluated sync,
+// on SymbolIndexDeclarations' terms: only when fastDomain is the domain fast stamp that
+// sync recorded. Any other stamp, a store that never recorded one, or an empty fastDomain
+// answers false, and the caller evaluates the workspace instead. An index with no Targets
+// and true is a workspace that declares none.
+func (s *Store) HumanOnly(fastDomain string) (types.HumanOnlyIndex, bool) {
+	man := s.readManifestOrNil()
+	if man == nil || fastDomain == "" || man.FastStamps[ClassDomain] != fastDomain || !man.HumanOnlyKnown {
+		return types.HumanOnlyIndex{}, false
+	}
+	return man.HumanOnly, true
 }
 
 func (m *manifest) extra() map[ShardClass][]string {

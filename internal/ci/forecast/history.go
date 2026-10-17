@@ -1,14 +1,15 @@
 // CACHE-SAFETY NOTICE
 //
-// History is serialized to JSON and cached in GitHub Actions (or any other CI
+// History is stored as JSON Lines and cached in GitHub Actions (or any other CI
 // cache backend). The schema is intentionally locked to integer timing data and
 // workspace-relative project paths. The following fields and their types are the
 // COMPLETE allowed set:
 //
-//	History:      version(int), updated_at(time), constants(Constants),
-//	              projects(map[string]map[string]Stats), setup([]int64),
-//	              alpha([]int64), workspace_fallback_ms(int64),
-//	              runs([]Run)
+//	line:         one of workspace(workspace), stats(stats), run(Run), job(JobOutcome),
+//	              and removed(bool)
+//	workspace:    version(int), updated_at(time), constants(Constants), setup([]int64),
+//	              alpha([]int64), workspace_fallback_ms(int64)
+//	stats:        project(string: a workspace-relative path), target(string), and Stats
 //	Constants:    setup_p50_ms(int64), alpha_ms(int64)
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
@@ -16,9 +17,23 @@
 //	              volatile_count(int), recent_outcomes([]Outcome)
 //	Outcome:      result(OutcomeResult, a string: "pass"|"fail"|"volatile"), affected(bool),
 //	              duration_ms(int64), at(time), attempts(int), max_rss_bytes(int64),
-//	              charms([]string: charm names), args_hash(string: 32 bits of a hash)
+//	              cpu_ms(int64), slots(int), charms([]string: charm names),
+//	              args_hash(string: 32 bits of a hash)
 //	Run:          commit(string: a commit id), ref(string), target(string),
 //	              status(string: "passed"|"failed"), at(time)
+//
+//	JobOutcome:   job(string: a job id the workspace chose), model_tier(string: a case
+//	              of the workspace's tier enum), kind, skills, source(enums), model(string:
+//	              a model alias), reason(string: the sentence that chose the tier),
+//	              site(string: the file:line of the declaration that chose it),
+//	              write_files, checks_run, rework_rounds, widenings(int), state(enum),
+//	              usage_tokens(int64), usage_cost_usd(float64), both absent when no host
+//	              reported them, duration_ms, ended(int64), attempt(int), retry(enum),
+//	              parent(string: a job id), parent_attempt, unattributed(int),
+//	              projects([]string: workspace-relative project paths), work(JobWork)
+//	JobWork:      calls, writes, setup_calls, denials(int), setup_context, setup_ms,
+//	              setup_tokens, context_tokens, peak_tokens(int64): counts and context
+//	              sizes the guard observed, never the calls themselves
 //
 // DO NOT add: source code, file contents, env vars, secrets, tokens, PR numbers,
 // author identity, error messages, or stdout/stderr captures. Any new field must
@@ -44,14 +59,15 @@
 package forecast
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"io/fs"
+	"maps"
 	"math"
-	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -65,7 +81,9 @@ import (
 // v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
 // v5 adds Runs, the per-branch log of end-to-end run outcomes.
 // v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
-const HistoryVersion = 6
+// v7 adds Jobs, the log of terminal job outcomes the model-tier lens reads.
+// v8 adds each job outcome's parent, projects and work profile, which the grouping lens reads.
+const HistoryVersion = 8
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -108,6 +126,9 @@ type History struct {
 	// Runs is the rolling log of end-to-end runs, oldest first. See [Run]; query it
 	// with [History.PassedCommit].
 	Runs []Run `json:"runs,omitempty"`
+	// Jobs is the rolling log of terminal job outcomes, oldest first, kept after the job
+	// rows expire. See [History.RecordJob].
+	Jobs []types.JobOutcome `json:"jobs,omitempty"`
 }
 
 // Run is one recorded end-to-end run of a target on a branch: what it ran at, how it
@@ -153,6 +174,11 @@ const (
 // and because the useful reads here (the last passing commit, the current red streak)
 // are all near the head of the log.
 const RunWindow = 100
+
+// JobWindow is the rolling window of job outcomes kept. Larger than RunWindow because a
+// lens scores each (model tier, job kind) pair separately, and a pair needs enough
+// outcomes of its own to say anything.
+const JobWindow = 500
 
 // Constants are the fitted scheduling-cost parameters: per-shard fixed cost and per-added-shard penalty.
 type Constants struct {
@@ -228,7 +254,20 @@ type Outcome struct {
 	// Zero therefore means UNMEASURED, never "used nothing". A consumer that
 	// treats it as a small number will read the targets it knows least about as
 	// the cheapest ones to co-schedule, which is precisely backwards.
-	MaxRSSBytes int64 `json:"max_rss_bytes,omitempty"`
+	MaxRSSBytes int64 `json:"max_rss_bytes,omitzero"`
+	// CPUMs is the CPU time, user plus system, in milliseconds, summed over every
+	// process the target ran and every descendant each of those waited for (see
+	// spawn.ExecResult.CPUMs). Over DurationMs it is the parallelism the run used.
+	//
+	// It counts only processes that ran, so an op replayed from the cache adds
+	// nothing and a fully replayed target records none. Both attempts of a retried
+	// target count, as DurationMs spans both. Omitted, and UNMEASURED, when zero.
+	CPUMs int64 `json:"cpu_ms,omitzero"`
+	// Slots is the claim the run held. A step runs the Go toolchain only that wide
+	// (spawn.SeatJobserver), so CPUMs over DurationMs never exceeds it, and a width near
+	// it says the claim held the run back rather than what the run needed. Omitted, and
+	// UNKNOWN, when zero: such a run's width cannot be read either way.
+	Slots int `json:"slots,omitzero"`
 	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
 	// filed under. Two runs of one target reach different peaks when their shapes
 	// differ (`-- -run TestOne` against the whole suite).
@@ -301,16 +340,6 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 	return time.Duration(p75) * time.Millisecond
 }
 
-// resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
-//
-// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
-// derives from the changed-file list, known at plan time, not at record time. Filling
-// them means threading the affected set onto the outcome, a real change to what the
-// record path knows.
-//
-// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
-// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
-// over-predicts: the safe direction for a shard planner.
 // targetHistories returns every Stats a project recorded for target.
 //
 // The history keys a target as "<spell>/<target>", stamped with the spell that ran it,
@@ -337,6 +366,16 @@ func targetHistories(targets map[string]Stats, target string) []Stats {
 	return out
 }
 
+// resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
+//
+// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
+// derives from the changed-file list, known at plan time, not at record time. Filling
+// them means threading the affected set onto the outcome, a real change to what the
+// record path knows.
+//
+// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
+// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
+// over-predicts: the safe direction for a shard planner.
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
 		found := targetHistories(targets, target)
@@ -470,7 +509,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 		st := targets[s.Target]
 
 		if s.Hit {
-			advanceHitWindow(&st.HitCount, &st.MissCount, true)
+			(&hitWindow{&st.HitCount, &st.MissCount}).Observe(true)
 			st.HitRate = hitRate(st.HitCount, st.MissCount)
 			if len(s.Tags) > 0 {
 				if st.Buckets == nil {
@@ -478,13 +517,13 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 				}
 				for _, tag := range s.Tags {
 					b := st.Buckets[tag]
-					advanceHitWindow(&b.HitCount, &b.MissCount, true)
+					(&hitWindow{&b.HitCount, &b.MissCount}).Observe(true)
 					b.HitRate = hitRate(b.HitCount, b.MissCount)
 					st.Buckets[tag] = b
 				}
 			}
 		} else {
-			advanceHitWindow(&st.HitCount, &st.MissCount, false)
+			(&hitWindow{&st.HitCount, &st.MissCount}).Observe(false)
 			st.HitRate = hitRate(st.HitCount, st.MissCount)
 			st = ApplyDuration(st, s.DurationMs, now)
 			if len(s.Tags) > 0 {
@@ -493,7 +532,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 				}
 				for _, tag := range s.Tags {
 					b := st.Buckets[tag]
-					advanceHitWindow(&b.HitCount, &b.MissCount, false)
+					(&hitWindow{&b.HitCount, &b.MissCount}).Observe(false)
 					b.HitRate = hitRate(b.HitCount, b.MissCount)
 					b.Recent = appendCapped(b.Recent, s.DurationMs)
 					b.Samples++
@@ -546,23 +585,27 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 	h.UpdatedAt = now
 }
 
-// advanceHitWindow increments the hit or miss counter, capped at HitWindow using eviction of the opposite type.
-func advanceHitWindow(hitCount, missCount *int, hit bool) {
+// hitWindow views the persisted HitCount and MissCount of a Stats or BucketStats as one
+// window capped at HitWindow observations.
+type hitWindow struct{ hits, misses *int }
+
+// Observe counts a hit or a miss. Past the cap it evicts one observation of the opposite
+// kind to keep the new one's signal, or of the same kind when the window holds only that.
+func (w *hitWindow) Observe(hit bool) {
 	if hit {
-		*hitCount++
+		*w.hits++
 	} else {
-		*missCount++
+		*w.misses++
 	}
-	if *hitCount+*missCount > HitWindow {
-		// Evict the opposite type to preserve the new observation's signal.
-		if hit && *missCount > 0 {
-			*missCount--
-		} else if !hit && *hitCount > 0 {
-			*hitCount--
+	if *w.hits+*w.misses > HitWindow {
+		if hit && *w.misses > 0 {
+			*w.misses--
+		} else if !hit && *w.hits > 0 {
+			*w.hits--
 		} else if hit {
-			*hitCount-- // window already all hits; cap in place
+			*w.hits--
 		} else {
-			*missCount-- // window already all misses; cap in place
+			*w.misses--
 		}
 	}
 }
@@ -654,6 +697,31 @@ func (h *History) Merge(other *History) {
 			h.Runs = h.Runs[len(h.Runs)-RunWindow:]
 		}
 	}
+	if len(other.Jobs) > 0 {
+		// One attempt of one job ends once, so these three name an outcome; the struct
+		// itself holds slices and pointers and cannot be a key.
+		type outcomeKey struct {
+			job     string
+			ended   int64
+			attempt int
+		}
+		key := func(o types.JobOutcome) outcomeKey { return outcomeKey{o.Job, o.Ended, o.Attempt} }
+		seen := make(map[outcomeKey]struct{}, len(h.Jobs))
+		for _, o := range h.Jobs {
+			seen[key(o)] = struct{}{}
+		}
+		for _, o := range other.Jobs {
+			if _, dup := seen[key(o)]; dup {
+				continue
+			}
+			seen[key(o)] = struct{}{}
+			h.Jobs = append(h.Jobs, o)
+		}
+		slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })
+		if len(h.Jobs) > JobWindow {
+			h.Jobs = h.Jobs[len(h.Jobs)-JobWindow:]
+		}
+	}
 	if h.Version == 0 {
 		h.Version = other.Version
 	}
@@ -692,6 +760,14 @@ func (h *History) RecordRun(run Run, now time.Time) {
 	h.Runs = append(h.Runs, run)
 	if len(h.Runs) > RunWindow {
 		h.Runs = h.Runs[len(h.Runs)-RunWindow:]
+	}
+}
+
+// RecordJob appends one terminal job outcome to the log, trimming to [JobWindow].
+func (h *History) RecordJob(o types.JobOutcome) {
+	h.Jobs = append(h.Jobs, o)
+	if len(h.Jobs) > JobWindow {
+		h.Jobs = h.Jobs[len(h.Jobs)-JobWindow:]
 	}
 }
 
@@ -743,83 +819,218 @@ func (r Run) matches(ref, target string) bool {
 	return target == "" || r.Target == "" || r.Target == target
 }
 
-// Load reads the history file at path; a missing file is not an error (returns a zero History).
+// oldHistoryFile is the JSON document an older magus kept the history in, beside the
+// store. It is named when found, never read; see [file.RefuseOld].
+const oldHistoryFile = "v1.json"
+
+// historyLine is one line of the history store: one entry, or, with Removed set, the
+// end of the entry its key names. Exactly one of the entry fields is set.
+type historyLine struct {
+	Workspace *workspaceEntry   `json:"workspace,omitempty"`
+	Stats     *statsEntry       `json:"stats,omitempty"`
+	Run       *Run              `json:"run,omitempty"`
+	Job       *types.JobOutcome `json:"job,omitempty"`
+	Removed   bool              `json:"removed,omitempty"`
+}
+
+// workspaceEntry is the History fields that are not per project, run or job.
+type workspaceEntry struct {
+	Version             int       `json:"version"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	Constants           Constants `json:"constants"`
+	Setup               []int64   `json:"setup"`
+	Alpha               []int64   `json:"alpha"`
+	WorkspaceFallbackMs int64     `json:"workspace_fallback_ms"`
+}
+
+// statsEntry is the Stats of one (project, target).
+type statsEntry struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Stats   `json:",inline"`
+}
+
+// UnmarshalJSON refuses a line that holds no entry or more than one, which no magus
+// writes.
+func (l *historyLine) UnmarshalJSON(b []byte) error {
+	type plain historyLine
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	set := 0
+	for _, ok := range []bool{p.Workspace != nil, p.Stats != nil, p.Run != nil, p.Job != nil} {
+		if ok {
+			set++
+		}
+	}
+	if set != 1 {
+		return fmt.Errorf("a history line holds one of workspace, stats, run or job, and this one holds %d", set)
+	}
+	*l = historyLine(p)
+	return nil
+}
+
+// key names the entry: the workspace, a (project, target), a run, or one attempt of a job.
+func (l historyLine) key() string {
+	switch {
+	case l.Workspace != nil:
+		return "workspace"
+	case l.Stats != nil:
+		return "stats\x00" + l.Stats.Project + "\x00" + l.Stats.Target
+	case l.Run != nil:
+		r := l.Run
+		return strings.Join([]string{"run", r.Commit, r.Ref, r.Target, string(r.Status), r.At.UTC().Format(time.RFC3339Nano)}, "\x00")
+	case l.Job != nil:
+		return fmt.Sprintf("job\x00%s\x00%d\x00%d", l.Job.Job, l.Job.Ended, l.Job.Attempt)
+	}
+	return ""
+}
+
+func historyLog(path string) file.JSONL[historyLine] {
+	old := filepath.Join(filepath.Dir(path), oldHistoryFile)
+	if old == filepath.Clean(path) {
+		old = ""
+	}
+	return file.JSONL[historyLine]{
+		Path: path,
+		Key:  historyLine.key,
+		Live: func(l historyLine) bool { return !l.Removed },
+		Old:  old,
+	}
+}
+
+// Load reads the history store at path; a missing file is not an error (returns a zero
+// History). A last line no writer finished is an append in flight and is left unread.
 func (h *History) Load(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	b, err := os.ReadFile(path)
+	lines, err := historyLog(path).Load()
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			*h = History{Version: HistoryVersion}
-			return nil
-		}
-		return fmt.Errorf("forecast: read history %q: %w", path, err)
+		return fmt.Errorf("forecast: read history: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return h.decode(path, b)
+	return h.fold(path, lines)
 }
 
-func (h *History) decode(path string, b []byte) error {
-	if err := json.Unmarshal(b, h); err != nil {
-		return fmt.Errorf("forecast: decode history %q: %w", path, err)
+// fold replaces h with the entries lines hold. Runs and jobs come back oldest first,
+// whatever order their lines were last written in.
+func (h *History) fold(path string, lines []historyLine) error {
+	*h = History{Version: HistoryVersion, Projects: make(map[string]map[string]Stats)}
+	for _, l := range lines {
+		switch {
+		case l.Workspace != nil:
+			w := l.Workspace
+			h.Version, h.UpdatedAt, h.Constants = w.Version, w.UpdatedAt, w.Constants
+			h.Setup, h.Alpha, h.WorkspaceFallbackMs = w.Setup, w.Alpha, w.WorkspaceFallbackMs
+		case l.Stats != nil:
+			targets, ok := h.Projects[l.Stats.Project]
+			if !ok {
+				targets = make(map[string]Stats)
+				h.Projects[l.Stats.Project] = targets
+			}
+			targets[l.Stats.Target] = l.Stats.Stats
+		case l.Run != nil:
+			h.Runs = append(h.Runs, *l.Run)
+		case l.Job != nil:
+			h.Jobs = append(h.Jobs, *l.Job)
+		}
 	}
 	if h.Version > HistoryVersion {
 		return fmt.Errorf("forecast: unsupported history version %d in %q (max %d)",
 			h.Version, path, HistoryVersion)
 	}
-	if h.Projects == nil {
-		h.Projects = make(map[string]map[string]Stats)
-	}
+	slices.SortStableFunc(h.Runs, func(a, b Run) int { return a.At.Compare(b.At) })
+	slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })
 	return nil
 }
 
+// lines is h as store lines: the workspace entry, each (project, target) in sorted
+// order, then the runs and jobs oldest first.
+func (h *History) lines() []historyLine {
+	out := []historyLine{{Workspace: &workspaceEntry{
+		Version: h.Version, UpdatedAt: h.UpdatedAt, Constants: h.Constants,
+		Setup: h.Setup, Alpha: h.Alpha, WorkspaceFallbackMs: h.WorkspaceFallbackMs,
+	}}}
+	for _, project := range slices.Sorted(maps.Keys(h.Projects)) {
+		targets := h.Projects[project]
+		for _, target := range slices.Sorted(maps.Keys(targets)) {
+			out = append(out, historyLine{Stats: &statsEntry{Project: project, Target: target, Stats: targets[target]}})
+		}
+	}
+	for i := range h.Runs {
+		out = append(out, historyLine{Run: &h.Runs[i]})
+	}
+	for i := range h.Jobs {
+		out = append(out, historyLine{Job: &h.Jobs[i]})
+	}
+	return out
+}
+
 // UpdateHistory applies fn to the history at path as it stands on disk, under a
-// cross-process lock, and writes the result atomically; fn failing writes nothing.
+// cross-process lock, and appends a line for each entry fn changed and a removal for
+// each it dropped; fn failing writes nothing.
 //
 // The file is shared by every workspace on the host, so a writer that loaded it before
 // a run and saves it after would erase every outcome another run recorded meanwhile.
 // Such a writer keeps what IT learned and replays that here instead. ctx bounds only
 // the wait for the lock.
 func UpdateHistory(ctx context.Context, path string, fn func(*History) error) error {
-	d := file.Doc[History]{Path: path, Decode: func(b []byte, h *History) error { return h.decode(path, b) }}
-	err := d.Update(ctx, func(h *History) error {
-		if h.Projects == nil {
-			h.Projects = make(map[string]map[string]Stats)
-		}
-		if err := fn(h); err != nil {
-			return err
-		}
-		h.Version = HistoryVersion
-		return nil
+	var failed error
+	err := historyLog(path).Update(ctx, func(entries []historyLine) []historyLine {
+		var add []historyLine
+		add, failed = changedLines(path, entries, fn)
+		return add
 	})
-	if err != nil {
+	if err = cmp.Or(failed, err); err != nil {
 		return fmt.Errorf("forecast: update history: %w", err)
 	}
 	return nil
 }
 
-// Save writes h to path atomically, replacing whatever is there. A writer sharing the
-// file with other processes uses [UpdateHistory] instead.
-func (h *History) Save(ctx context.Context, path string) error {
-	if err := ctx.Err(); err != nil {
-		return err
+// changedLines folds entries into a History, applies fn, and returns the lines that
+// differ from entries: a changed or new entry, and a removal for each entry fn dropped.
+// The entries are encoded before fn runs, since fn may write through slices they share.
+func changedLines(path string, entries []historyLine, fn func(*History) error) ([]historyLine, error) {
+	before := make(map[string][]byte, len(entries))
+	for _, e := range entries {
+		b, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		before[e.key()] = b
 	}
-	// Compact, not indented: every run rewrites the whole file, which is shared by every
-	// workspace on the host and runs to megabytes; indenting 6.6MB took 15ms against 6ms.
-	b, err := json.Marshal(h)
-	if err != nil {
-		return fmt.Errorf("forecast: encode history: %w", err)
+	var h History
+	if err := h.fold(path, entries); err != nil {
+		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	if err := fn(&h); err != nil {
+		return nil, err
 	}
-	if err := file.WriteFileAtomic(path, b, 0o644); err != nil {
-		return fmt.Errorf("forecast: write history: %w", err)
+	h.Version = HistoryVersion
+	var add []historyLine
+	kept := make(map[string]bool, len(entries))
+	for _, l := range h.lines() {
+		k := l.key()
+		kept[k] = true
+		b, err := json.Marshal(l)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(b, before[k]) {
+			add = append(add, l)
+		}
 	}
-	return nil
+	for _, e := range entries {
+		if !kept[e.key()] {
+			e.Removed = true
+			add = append(add, e)
+		}
+	}
+	return add, nil
 }
 
 // PredictPeakRSS returns the highest peak resident memory recorded for
@@ -850,44 +1061,49 @@ func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 	return max, max > 0
 }
 
-// MeasuredPeak is the highest peak resident memory among a set of successful runs and
-// how many runs it was taken over.
-type MeasuredPeak struct {
-	MaxBytes int64
-	Runs     int
+// Measurement is a figure taken over a set of successful runs, and how many runs it was
+// taken over: a peak in bytes from [MeasuredRuns.Peak], a width in slots from
+// [MeasuredRuns.Width].
+type Measurement struct {
+	Value int64
+	Runs  int
 }
 
-// fold combines the peaks of two spells serving one target. The step runs both, one
-// after the other, so the peak is the larger; Runs is the smaller, because the
-// least-observed spell bounds how far the maximum can be trusted.
-func (a MeasuredPeak) fold(b MeasuredPeak) MeasuredPeak {
+// fold combines the measurements of two spells serving one target. The step runs both,
+// one after the other, so the figure is the larger; Runs is the smaller, because the
+// least-observed spell bounds how far the figure can be trusted.
+func (a Measurement) fold(b Measurement) Measurement {
 	switch {
 	case b.Runs == 0:
 		return a
 	case a.Runs == 0:
 		return b
 	}
-	return MeasuredPeak{MaxBytes: max(a.MaxBytes, b.MaxBytes), Runs: min(a.Runs, b.Runs)}
+	return Measurement{Value: max(a.Value, b.Value), Runs: min(a.Runs, b.Runs)}
 }
 
-// PeakIndex is the successful measured runs of a [History], copied out so it can be
+// MeasuredRuns is the successful measured runs of a [History], copied out so it can be
 // read while that History goes on recording: a run records outcomes concurrently with
 // the steps it is still sizing.
-type PeakIndex struct {
+type MeasuredRuns struct {
 	projects map[string]map[string]Stats
 }
 
-// PeakIndex snapshots every outcome that passed, on the first attempt or a retry, and
-// recorded a peak. A failed run is left out because it can die early, well below what
-// a finished run reaches, and an unmeasured one because zero means unknown.
-func (h *History) PeakIndex() PeakIndex {
-	x := PeakIndex{projects: map[string]map[string]Stats{}}
+// MeasuredRuns snapshots every outcome that passed, on the first attempt or a retry, and
+// recorded a peak or the CPU time it spent. A failed run is left out because it can die
+// early, well below what a finished run reaches, and an unmeasured one because zero
+// means unknown.
+func (h *History) MeasuredRuns() MeasuredRuns {
+	x := MeasuredRuns{projects: map[string]map[string]Stats{}}
 	for project, targets := range h.Projects {
 		for key, st := range targets {
 			var kept []Outcome
 			for _, o := range st.RecentOutcomes {
-				if o.Result != OutcomeFail && o.MaxRSSBytes > 0 {
-					kept = append(kept, Outcome{Result: o.Result, MaxRSSBytes: o.MaxRSSBytes, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash})
+				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o)) {
+					kept = append(kept, Outcome{
+						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
+						Slots: o.Slots, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
+					})
 				}
 			}
 			if len(kept) == 0 {
@@ -902,21 +1118,89 @@ func (h *History) PeakIndex() PeakIndex {
 	return x
 }
 
-// Peak returns the measured peak of target's runs in project that recorded shape, and
-// of every run of target whatever its shape, which includes the runs from before
-// shapes were recorded. target resolves as [History.PredictPeakRSS] does.
-func (x PeakIndex) Peak(project, target string, shape Shape) (sameShape, anyShape MeasuredPeak) {
+// measuredWidth reports whether o recorded the parallelism it used and the claim it
+// used it under.
+func measuredWidth(o Outcome) bool { return o.CPUMs > 0 && o.DurationMs > 0 && o.Slots > 0 }
+
+// Peak returns the highest peak resident memory, in bytes, of target's runs in project
+// that recorded shape, and of every run of target whatever its shape, which includes the
+// runs from before shapes were recorded. target resolves as [History.PredictPeakRSS]
+// does.
+func (x MeasuredRuns) Peak(project, target string, shape Shape) (sameShape, anyShape Measurement) {
 	for _, s := range targetHistories(x.projects[project], target) {
-		var same, all MeasuredPeak
+		var same, all Measurement
 		for _, o := range s.RecentOutcomes {
-			all.MaxBytes, all.Runs = max(all.MaxBytes, o.MaxRSSBytes), all.Runs+1
+			if o.MaxRSSBytes <= 0 {
+				continue
+			}
+			all.Value, all.Runs = max(all.Value, o.MaxRSSBytes), all.Runs+1
 			if shape.matches(o) {
-				same.MaxBytes, same.Runs = max(same.MaxBytes, o.MaxRSSBytes), same.Runs+1
+				same.Value, same.Runs = max(same.Value, o.MaxRSSBytes), same.Runs+1
 			}
 		}
 		sameShape, anyShape = sameShape.fold(same), anyShape.fold(all)
 	}
 	return sameShape, anyShape
+}
+
+// saturatedMilli is the width, in thousandths of each slot a run held, at which the
+// claim rather than the run set that width.
+const saturatedMilli = 900
+
+// Width returns how many slots target's runs in project should claim, split by shape as
+// [MeasuredRuns.Peak] splits it.
+//
+// A run's width is its CPU time over wall time. One that reached 0.9 of the slots it
+// held is saturated: the claim capped it, so its width is a floor, and the next claim
+// is twice its slots until a run granted more slots than it held comes back
+// unsaturated. Unsaturated runs measured what the target needed, and their 75th
+// percentile, rounded up and never below one, is the width; the figure is the larger of
+// the two. A percentile rather than the maximum, so one run that burst wide does not
+// size every run after it.
+func (x MeasuredRuns) Width(project, target string, shape Shape) (sameShape, anyShape Measurement) {
+	for _, s := range targetHistories(x.projects[project], target) {
+		var same, all []Outcome
+		for _, o := range s.RecentOutcomes {
+			if !measuredWidth(o) {
+				continue
+			}
+			all = append(all, o)
+			if shape.matches(o) {
+				same = append(same, o)
+			}
+		}
+		sameShape, anyShape = sameShape.fold(widthSlots(same)), anyShape.fold(widthSlots(all))
+	}
+	return sameShape, anyShape
+}
+
+// widthSlots sizes a slot claim from runs that each measured a width, as
+// [MeasuredRuns.Width] describes.
+func widthSlots(runs []Outcome) Measurement {
+	if len(runs) == 0 {
+		return Measurement{}
+	}
+	var unsaturated []int64
+	var saturatedClaim, unsaturatedClaim int
+	for _, o := range runs {
+		// Thousandths of a core, so percentile's integer interpolation keeps the
+		// fraction that decides which way a width rounds.
+		milli := o.CPUMs * 1000 / o.DurationMs
+		if milli >= saturatedMilli*int64(o.Slots) {
+			saturatedClaim = max(saturatedClaim, o.Slots)
+			continue
+		}
+		unsaturated = append(unsaturated, milli)
+		unsaturatedClaim = max(unsaturatedClaim, o.Slots)
+	}
+	var width int64
+	if len(unsaturated) > 0 {
+		width = max((percentile(unsaturated, 0.75)+999)/1000, 1)
+	}
+	if saturatedClaim >= unsaturatedClaim && saturatedClaim > 0 {
+		width = max(width, 2*int64(saturatedClaim))
+	}
+	return Measurement{Value: width, Runs: len(runs)}
 }
 
 // FoldTargetHistories combines every spell history a project recorded for target into

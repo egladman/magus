@@ -1938,8 +1938,14 @@ func (p *parser) parseEnumDecl() (*ast.EnumDecl, error) {
 			p.advance()
 		}
 	}
-	if _, err := p.eat(token.RBrace); err != nil {
+	rbrace, err := p.eat(token.RBrace)
+	if err != nil {
 		return nil, err
+	}
+	// Upstream E20 (Parser.zig enumDeclaration). A case-less enum has no value a
+	// variable of its type could hold.
+	if len(decl.Cases) == 0 {
+		return nil, fmt.Errorf("buzz: line %d:%d: enum %s must have at least one case", rbrace.Line, rbrace.Col, decl.Name)
 	}
 	return decl, nil
 }

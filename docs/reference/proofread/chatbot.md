@@ -1,13 +1,13 @@
 ---
 title: "chatbot"
-description: "A deny rule by default: it refuses text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer."
-tags: [proofread, rules, chatbot, advise]
+description: "A rule that is off by default: it reports text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer once a decisions table turns it on."
+tags: [proofread, rules, chatbot, off]
 aliases: [reference/prose/chatbot]
 ---
 
 # chatbot
 
-A deny rule by default: it refuses text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer.
+A rule that is off by default: it reports text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer once a decisions table turns it on.
 
 ## What it catches
 
@@ -31,12 +31,15 @@ The code is `PRF4004`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
+| `agent-compact`      | off     |
 
 ## Changing it
 
@@ -59,7 +62,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "chatbot", "code": "PRF4004", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
+{"rule": "chatbot", "code": "PRF4004", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -68,4 +71,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

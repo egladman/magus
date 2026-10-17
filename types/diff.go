@@ -124,6 +124,10 @@ type DiffAPI struct {
 	Removed   int `json:"removed"   yaml:"removed"`
 	Signature int `json:"signature" yaml:"signature"`
 	Body      int `json:"body"      yaml:"body"`
+	// Stage is where the workspace's releases stand, from its newest tag, so a reader can
+	// tell what a major floor ships as. Unknown (see [ReleaseStage.Known]) when no tag is
+	// visible.
+	Stage ReleaseStage `json:"stage" yaml:"stage"`
 }
 
 // DiffSymbol is one changed symbol with its exposure.
@@ -207,8 +211,9 @@ type DiffOptions struct {
 	// which fills DiffSymbol.Change and Diff.API; BaselineLabel names it for the reader.
 	Baseline      *KnowledgeGraphOutput `json:"-" yaml:"-"`
 	BaselineLabel string                `json:"-" yaml:"-"`
-	// MinCohort and MinShare are the conformance checks' silence gates: how many declarations
-	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
+	// MinCohort and MinShare override knowledge.conformance.gates' silence gates for this review:
+	// how many declarations a norm needs, and the share that must agree. Zero keeps the
+	// configured gate.
 	MinCohort int     `json:"-" yaml:"-"`
 	MinShare  float64 `json:"-" yaml:"-"`
 	// SkipOrder leaves Diff.Order unset. A reader of the order asks for it; a thread brief reads
@@ -231,6 +236,18 @@ const (
 	// CheckParamOrder is a function taking two parameters in the reverse of the order most
 	// functions in its scope that take both do.
 	CheckParamOrder = "param-order"
+	// CheckCallSequence is a function calling the same workspace functions in the same order
+	// as another, past the call-sequence value knowledge.conformance enforces.
+	CheckCallSequence = "call-sequence"
+	// CheckSiblingSprawl is a method or function joining a family of siblings whose names
+	// differ in one complementary word (Hit, Miss, Error).
+	CheckSiblingSprawl = "sibling-sprawl"
+	// CheckSharedLoop is a function shared by callers that do not share its knobs: one
+	// caller's branch or option bends a body the rest also run.
+	CheckSharedLoop = "shared-loop"
+	// CheckImportAlias is an aliased import of a package its importers rename past what
+	// knowledge.conformance enforces, or a new package taking the name of an existing one.
+	CheckImportAlias = "import-alias"
 	// CheckPackageFiles is a new directory holding one source file where most directories of
 	// its language beside it hold more.
 	CheckPackageFiles = "package-files"
@@ -594,23 +611,6 @@ const (
 	DiffAuthorAgent DiffAuthor = "agent"
 )
 
-// UnmarshalText reads an author, including the name the review route's writes had before
-// they were called unattributed.
-//
-// compat(until: no draft file under the diff session store still carries "author":"human"):
-// review drafts persist across a server restart and loadDrafts restores every one, but
-// publishing, deleting and the console's draft list each take only unattributed drafts. A
-// draft restored as "human" would sit in the session unpublishable and unlisted. Observing
-// that it is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
-func (a *DiffAuthor) UnmarshalText(b []byte) error {
-	if string(b) == "human" {
-		*a = DiffAuthorUnattributed
-		return nil
-	}
-	*a = DiffAuthor(b)
-	return nil
-}
-
 // DiffCursor is where a client is looking: a file and, within it, a hunk.
 //
 // The human's cursor is the one that matters and the one an agent READS. An agent has no
@@ -970,11 +970,22 @@ type DiffSuggestion struct {
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 	// Reason is the one line shown beside the affordance. It has to earn the interruption.
 	Reason string `json:"reason" yaml:"reason"`
-	// Accepted records that the human took it, so the agent can tell "not yet seen" from
+	// Status records whether the human took it, so the agent can tell "not yet seen" from
 	// "seen and declined" instead of repeating itself.
-	Accepted bool `json:"accepted" yaml:"accepted"`
-	Declined bool `json:"declined" yaml:"declined"`
+	Status SuggestionStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
+
+// SuggestionStatus is where a DiffSuggestion stands with the human.
+type SuggestionStatus string
+
+const (
+	// SuggestionPending is the zero value: the human has not answered.
+	SuggestionPending SuggestionStatus = ""
+	// SuggestionAccepted means the human took it and the cursor moved.
+	SuggestionAccepted SuggestionStatus = "accepted"
+	// SuggestionDeclined means the human saw it and passed.
+	SuggestionDeclined SuggestionStatus = "declined"
+)
 
 // DiffOutline is what an agent thinks a review thread turns on, in a few topics, held for the
 // person to read before they type their reply.

@@ -156,29 +156,29 @@ func internedStrValue(o *strObj) Value { return heapValue(tagStr, o) }
 // exactly the interface-identity comparison the safe build does.
 func sameObj(a, b Value) bool { return a.obj == b.obj }
 
-// ptrAs casts obj back to *T. tag must match (see file header); the cast is a
+// pointerAs casts obj back to *T. tag must match (see file header); the cast is a
 // no-op the compiler erases, so the asX wrappers below are free.
-func ptrAs[T any](v Value) *T { return (*T)(v.obj) }
+func pointerAs[T any](v Value) *T { return (*T)(v.obj) }
 
-func (v Value) asStr() *strObj             { return ptrAs[strObj](v) }
-func (v Value) asUD() *udObj               { return ptrAs[udObj](v) }
-func (v Value) asList() *listObj           { return ptrAs[listObj](v) }
-func (v Value) asMap() *mapObj             { return ptrAs[mapObj](v) }
-func (v Value) asFun() *funObj             { return ptrAs[funObj](v) }
-func (v Value) asDirect() *directObj       { return ptrAs[directObj](v) }
-func (v Value) asObject() *objectInst      { return ptrAs[objectInst](v) }
-func (v Value) asObjectDef() *objectDefObj { return ptrAs[objectDefObj](v) }
-func (v Value) asEnumDef() *enumDefObj     { return ptrAs[enumDefObj](v) }
-func (v Value) asEnumVal() *enumValObj     { return ptrAs[enumValObj](v) }
-func (v Value) asIterState() *iterStateObj { return ptrAs[iterStateObj](v) }
-func (v Value) asRange() *rangeObj         { return ptrAs[rangeObj](v) }
-func (v Value) asFib() *fibObj             { return ptrAs[fibObj](v) }
-func (v Value) asPat() *patObj             { return ptrAs[patObj](v) }
-func (v Value) asCell() *cellObj           { return ptrAs[cellObj](v) }
-func (v Value) asType() *typeObj           { return ptrAs[typeObj](v) }
+func (v Value) asStr() *strObj             { return pointerAs[strObj](v) }
+func (v Value) asUD() *udObj               { return pointerAs[udObj](v) }
+func (v Value) asList() *listObj           { return pointerAs[listObj](v) }
+func (v Value) asMap() *mapObj             { return pointerAs[mapObj](v) }
+func (v Value) asFun() *funObj             { return pointerAs[funObj](v) }
+func (v Value) asDirect() *directObj       { return pointerAs[directObj](v) }
+func (v Value) asObject() *objectInst      { return pointerAs[objectInst](v) }
+func (v Value) asObjectDef() *objectDefObj { return pointerAs[objectDefObj](v) }
+func (v Value) asEnumDef() *enumDefObj     { return pointerAs[enumDefObj](v) }
+func (v Value) asEnumVal() *enumValObj     { return pointerAs[enumValObj](v) }
+func (v Value) asIterState() *iterStateObj { return pointerAs[iterStateObj](v) }
+func (v Value) asRange() *rangeObj         { return pointerAs[rangeObj](v) }
+func (v Value) asFib() *fibObj             { return pointerAs[fibObj](v) }
+func (v Value) asPat() *patObj             { return pointerAs[patObj](v) }
+func (v Value) asCell() *cellObj           { return pointerAs[cellObj](v) }
+func (v Value) asType() *typeObj           { return pointerAs[typeObj](v) }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
-func (v Value) asObjDecl() *ast.ObjectDecl { return ptrAs[objDeclPayload](v).ObjectDecl }
+func (v Value) asObjDecl() *ast.ObjectDecl { return pointerAs[objDeclPayload](v).ObjectDecl }
 
 // VM-context accessors — zero-cost wrappers in M2 (vm is ignored; the pointer
 // cast is identical to the value-local form). In M3 (buzz_nanbox) they resolve
@@ -208,7 +208,9 @@ func (vm *VM) allocFib(ptr *fibObj) Value             { return heapValue(tagFib,
 func (vm *VM) allocObject(ptr *objectInst) Value      { return heapValue(tagObject, ptr) }
 func (vm *VM) allocObjectDef(ptr *objectDefObj) Value { return heapValue(tagObjectDef, ptr) }
 func (vm *VM) allocIterState(ptr *iterStateObj) Value { return heapValue(tagIterState, ptr) }
-func (vm *VM) allocEnumVal(ptr *enumValObj) Value     { return heapValue(tagEnumVal, ptr) }
+func (vm *VM) allocEnumVal(_ Value, ptr *enumValObj) Value {
+	return heapValue(tagEnumVal, ptr)
+}
 
 // Ownership is a table concern (see Owner); with objects behind Go pointers the
 // collector frees what a session drops, so claiming and releasing do nothing.

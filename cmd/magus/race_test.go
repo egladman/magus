@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestResolveRace(t *testing.T) {
 // the flag into the command registry made it a static string, so this is what
 // stops a new mode from being accepted and undocumented.
 func TestRaceDocNamesEveryMode(t *testing.T) {
-	for _, c := range cli.All {
+	for _, c := range commands.Root.Children {
 		for _, f := range c.Flags {
 			if f.Name != "race" {
 				continue

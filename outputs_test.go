@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -37,7 +37,7 @@ func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus,
 		reg.RegisterProject(projPath, WithOutputs(outputs...))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m, root
@@ -83,7 +83,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -112,7 +112,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	generated := filepath.Join(root, "gen", "fs.go")
@@ -193,12 +193,12 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 
 			reg := NewWorkspaceRegistry()
 			reg.RegisterProject(".", WithSpell(spellName), WithOutputs("gen/**"))
-			m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+			m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 			require.NoError(t, err, "Open")
 			t.Cleanup(func() { _ = m.Close() })
 
 			require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "generate"}}))
-			_, err = m.LastRecordedRun(t.Context(), ".", "generate")
+			_, err = m.internals().LastRecordedRun(t.Context(), ".", "generate")
 			require.NoError(t, err, "the run must leave cache state for clean to drop")
 
 			cleaned, err := m.CleanOutputs(t.Context(), m.All(), false)
@@ -216,10 +216,12 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 
 			assert.Empty(t, checkout.Git("status", "--porcelain"), "clean must leave the tree as committed")
 
-			_, err = m.LastRecordedRun(t.Context(), ".", "generate")
+			_, err = m.internals().LastRecordedRun(t.Context(), ".", "generate")
 			assert.ErrorIs(t, err, fs.ErrNotExist, "clean --cache must drop the manifests")
 			var blobs []string
-			_ = filepath.WalkDir(filepath.Join(m.CacheDir(), "cas"), func(path string, d fs.DirEntry, err error) error {
+			_, _, store := m.CacheDescription()
+			require.NotEmpty(t, store)
+			_ = filepath.WalkDir(filepath.Join(store, "cas"), func(path string, d fs.DirEntry, err error) error {
 				if err == nil && !d.IsDir() {
 					blobs = append(blobs, path)
 				}
@@ -271,9 +273,9 @@ func TestFindOutputProducerReturnsWriterNotOwner(t *testing.T) {
 // into a SIBLING project's tree. It returns the opened workspace and the absolute path of
 // the file producer generates inside site.
 //
-// The body never runs here: the interpreter is a pack only the CLI wires in, so these
-// tests exercise the static half (the derived edge, the glob views, clean). The
-// execution half is cmd/magus's TestCrossProjectOutputReplaysFromCache, which has it.
+// The body never runs here: these tests exercise the static half (the derived edge, the
+// glob views, clean). The execution half is cmd/magus's
+// TestCrossProjectOutputReplaysFromCache.
 func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
@@ -285,13 +287,13 @@ func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 import "fs";
 import "project/../site";
 
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(site.file("generated.txt"));
     fs\writeFile("../site/generated.txt", "hello");
 }
 `)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	// m.Root() is symlink-resolved by project.Discover; build the path on it so it
@@ -412,7 +414,7 @@ export fun other(ctx: magus\Context, args: [str]) > void {
 	}
 	repo.Write("gen/scratch.go", "")
 
-	m, err := Open(t.Context(), root)
+	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -459,7 +461,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "a target reading from and writing into one project must not load")
 	assert.ErrorIs(t, err, types.CrossOutputCycle)
 	assert.Contains(t, err.Error(), "out.html", "the error names the output that closes the cycle")
@@ -502,7 +504,7 @@ func TestTwoWritersClaimingOnePathAreRejected(t *testing.T) {
 		"p2/magusfile.buzz":   crossWriter("site", "shared.txt"),
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "two projects declaring one output path must not load")
 	assert.Contains(t, err.Error(), "shared.txt")
 	assert.Contains(t, err.Error(), "p1")
@@ -523,7 +525,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		"p1/magusfile.buzz": crossWriter("site", "shared.txt"),
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "a writer must not claim a path the owner already declares")
 	assert.Contains(t, err.Error(), "shared.txt")
 	assert.Contains(t, err.Error(), "site")
@@ -540,7 +542,7 @@ func TestDistinctPathsIntoOneTreeAreAllowed(t *testing.T) {
 		"p2/magusfile.buzz":   crossWriter("site", "from-p2.txt"),
 	})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -562,7 +564,7 @@ func TestCrossOutputGlobEscapingOwnerIsRejected(t *testing.T) {
 		"p1/magusfile.buzz":   crossWriter("site", "../../etc/x"),
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.CrossOutputGlobEscapes, "the error carries a researchable code")
 	assert.Contains(t, err.Error(), "must not contain ..")
@@ -618,7 +620,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Open(context.Background(), writeWorkspace(t, tc.files))
+			_, err := Open(context.Background(), writeWorkspace(t, tc.files), WithSpawnRule(TierCeiling))
 			require.Error(t, err)
 			assert.ErrorIs(t, err, tc.code)
 			assert.Contains(t, types.CodeURL(tc.code), "/reference/codes/",
@@ -643,7 +645,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -681,7 +683,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 

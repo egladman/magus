@@ -24,11 +24,10 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go
-
-func init() { Register(Fs) }
+//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go -pkg bindgen
 
 // Fs is the "fs" host module: filesystem and path primitives.
 var Fs = Module{
@@ -388,7 +387,7 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
-	if err := checkSchemaDowngrade(path); err != nil {
+	if err := checkSchemaDowngrade(ctx, path); err != nil {
 		return err
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -518,7 +517,7 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
-	if err := checkSchemaDowngrade(path); err != nil {
+	if err := checkSchemaDowngrade(ctx, path); err != nil {
 		return err
 	}
 	// 0644, matching write_file, so an atomically written file is not readable by a
@@ -733,7 +732,10 @@ const schemaStampWindow = 64 << 10
 //
 // A file with no stamp, an unreadable file, and an absent file all pass. The guard
 // speaks only when it can read a version and that version is ahead of this build.
-func checkSchemaDowngrade(path string) error {
+// So does a file the VCS ignores: nothing commits it, so overwriting it downgrades
+// nothing, and a checkout switched between branches of different schemas would
+// otherwise strand the ignored exports on the newer branch's stamp.
+func checkSchemaDowngrade(ctx context.Context, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -749,6 +751,9 @@ func checkSchemaDowngrade(path string) error {
 	if !ok || stamped <= types.KnowledgeSchemaVersion {
 		return nil
 	}
+	if vcsIgnores(ctx, path) {
+		return nil
+	}
 	self, err := os.Executable()
 	if err != nil {
 		self = "the running magus"
@@ -758,6 +763,19 @@ func checkSchemaDowngrade(path string) error {
 			"so regenerating it here would downgrade committed output. The running binary is %s. "+
 			"Build one from this checkout with `magus run go-build .` and re-run the target with `./magus`.",
 		path, stamped, types.KnowledgeSchemaVersion, self)
+}
+
+// vcsIgnores reports whether the VCS covering path's directory ignores it. A VCS that
+// cannot answer ignores nothing, so the refusal stands: a missed ignore costs a rebuild,
+// a guessed one overwrites committed output.
+func vcsIgnores(ctx context.Context, path string) bool {
+	dir := filepath.Dir(path)
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	ignored, err := res.VCS.IgnoredFiles(ctx, dir, []string{filepath.Base(path)})
+	return err == nil && len(ignored) > 0
 }
 
 // FsWatch is BLOCKING: it watches paths (directories, recursively) and invokes

@@ -108,6 +108,7 @@ func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
 		},
 		Links: []types.KnowledgeEdge{
 			{Source: "author:Ada", Target: "file:a.buzz", Relation: types.RelationAuthored},
+			{Source: "file:a.buzz", Target: "file:b.buzz", Relation: types.RelationCoChanges},
 			{Source: "doc:x.md", Target: "file:a.buzz", Relation: types.RelationDocuments},
 		},
 	}
@@ -126,7 +127,7 @@ func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
 	// surviving as a bare id with everything stripped off it.
 	_, ok := byID["author:Ada"]
 	assert.False(t, ok)
-	require.Len(t, out.Links, 1, "the authored edge goes with it")
+	require.Len(t, out.Links, 1, "the authored and co_changes edges go with it")
 	assert.Equal(t, types.RelationDocuments, out.Links[0].Relation)
 	assert.Equal(t, len(out.Nodes), out.NodeCount)
 	assert.Equal(t, len(out.Links), out.EdgeCount)
@@ -260,4 +261,9 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 
 	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
+
+	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
+	got = reindexRefusals(errors.Join(missing, full))
+	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
+	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 }

@@ -10,12 +10,12 @@ import (
 	"os"
 	"slices"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +24,7 @@ import (
 func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) error {
 	if len(args) == 0 {
 		agentHarnessUsage(os.Stderr)
-		return usagef("magus agent harness: a subcommand is required")
+		return exit.Usagef("magus agent harness: a subcommand is required")
 	}
 	switch args[0] {
 	case "install":
@@ -35,7 +35,7 @@ func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) er
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
+		return exit.Usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
 	}
 }
 
@@ -48,13 +48,13 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness install: positional arguments are not accepted")
+		return exit.Usagef("magus agent harness install: positional arguments are not accepted")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
 		return fmt.Errorf("magus agent harness install: no workspace here: run it from inside one or pass --root <path>")
 	}
-	lease, err := harnessActingLease(ctx, root)
+	lease, _, err := checkoutLease(ctx, root)
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
@@ -74,6 +74,17 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 			if err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun); err != nil {
 				return err
 			}
+		}
+		changed, err := agent.InstallHarnessTools(ctx, root, harnessID, globalCfg.DryRun)
+		if err != nil {
+			return fmt.Errorf("magus agent harness install: %w", err)
+		}
+		verb := "wrote"
+		if globalCfg.DryRun {
+			verb = "would write"
+		}
+		for _, p := range changed {
+			fmt.Fprintf(os.Stdout, "%s %s tool rows: %s\n", verb, harnessID, p)
 		}
 	}
 	return nil
@@ -126,22 +137,16 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	return nil
 }
 
-// harnessActingLease is the lease a harness skill install is refused under: the checkout's
-// binding, else the claim this process was launched with.
-func harnessActingLease(ctx context.Context, root string) (string, error) {
-	lease, _, err := checkoutLease(root, proc.LeaseFromContext(ctx))
-	return lease, err
-}
-
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through
-// job.ActingLease: the checkout's record, else claim. A CLI process knows no host
-// session or subagent, so those sources never answer here.
-func checkoutLease(root, claim string) (string, types.LeaseSource, error) {
-	dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+// job.RunLease: the checkout's record, else the claim of the process that asked for the
+// work (a forwarded call's lease, else BAGGAGE). A CLI process knows no host session or
+// subagent, so those sources never answer here.
+func checkoutLease(ctx context.Context, root string) (string, types.LeaseSource, error) {
+	loc, err := jobPlace(root)
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)
 	}
-	lease, from := job.ActingLease(dir, claim)
+	lease, from := job.RunLease(ctx, loc)
 	return lease, from, nil
 }
 
@@ -166,7 +171,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		return err
 	}
 	if len(pos) > 1 {
-		return usagef("magus describe harness: takes at most one harness id")
+		return exit.Usagef("magus describe harness: takes at most one harness id")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -200,7 +205,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		}
 		return emitFormatted(opts, plans)
 	case outputName:
-		return emitItemNames(plans, func(p types.HarnessPlan) string { return p.ID })
+		return emitItemNames(os.Stdout, plans, func(p types.HarnessPlan) string { return p.ID })
 	}
 	for i, plan := range plans {
 		if i > 0 {
@@ -275,7 +280,7 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness verify: positional arguments are not accepted")
+		return exit.Usagef("magus agent harness verify: positional arguments are not accepted")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -303,11 +308,14 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		}
 		// A missing approval prompt fails even a skills-only host: the guard then refuses
 		// every call that needs the person's approval, and verify is where that is said.
-		if result.PromptStatus != "" && result.PromptStatus != agent.HarnessVerified && firstFail == nil {
-			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.PromptStatus, result.ID, result.PromptReason)
+		if result.Prompt.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.Prompt.Status, result.ID, result.Prompt.Reason)
 		}
-		if result.SettingStatus != "" && result.SettingStatus != agent.HarnessVerified && firstFail == nil {
-			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.SettingStatus, result.ID, result.SettingReason)
+		if result.Setting.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.Setting.Status, result.ID, result.Setting.Reason)
+		}
+		if result.Plugin.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s plugin for %s (%s)", result.Plugin.Status, result.ID, result.Plugin.Reason)
 		}
 	}
 	return firstFail
@@ -324,11 +332,13 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 	}
 	wired := workspaceHarnessNames(ws)
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
+	// A harness's native prompts name the workspace's human_only targets.
+	ctx = types.WithWorkspace(ctx, ws)
 	if id != "" {
 		return []string{id}, ctx, nil
 	}
 	if len(wired) == 0 {
-		return nil, ctx, usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
+		return nil, ctx, exit.Usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
 	}
 	return wired, ctx, nil
 }
@@ -342,11 +352,11 @@ func workspaceHarnessNames(ws types.WorkspaceRepository) []string {
 }
 
 func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) error {
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return writeFormatted(w, opts, typed)
 	}
 	_, err = fmt.Fprintf(w, "%s %s harness: %s", typed.Status, typed.ID, typed.Path)
@@ -356,26 +366,35 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 	if err == nil {
 		_, err = fmt.Fprintln(w)
 	}
-	if err == nil && typed.PromptStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
-		if err == nil && typed.PromptReason != "" {
-			_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
+	if err == nil && typed.Prompt.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.Prompt.Status, typed.ID)
+		if err == nil && typed.Prompt.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Prompt.Reason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}
 	}
-	if err == nil && typed.SettingStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s settings", typed.SettingStatus, typed.ID)
-		if err == nil && typed.SettingReason != "" {
-			_, err = fmt.Fprintf(w, " (%s)", typed.SettingReason)
+	if err == nil && typed.Setting.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s settings", typed.Setting.Status, typed.ID)
+		if err == nil && typed.Setting.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Setting.Reason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}
 	}
-	if err == nil && typed.MCPStatus != "" {
-		_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCPStatus, typed.ID, typed.MCPReason)
+	if err == nil && typed.Plugin.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s plugin", typed.Plugin.Status, typed.ID)
+		if err == nil && typed.Plugin.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Plugin.Reason)
+		}
+		if err == nil {
+			_, err = fmt.Fprintln(w)
+		}
+	}
+	if err == nil && typed.MCP.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCP.Status, typed.ID, typed.MCP.Reason)
 		if err == nil {
 			_, err = fmt.Fprintln(w)
 		}

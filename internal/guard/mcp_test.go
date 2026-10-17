@@ -19,10 +19,10 @@ import (
 func clientScript(script string) map[string]any { return map[string]any{"script": script} }
 
 // TestClientPutRendersEveryMergedField holds the guard's view of a put to the job
-// store's own. A field job.ParseMerge applies and the rendering drops reaches the row with
+// store's own. A field job.DecodePut applies and the rendering drops reaches the row with
 // no rule having read it, and the rebind rule then clears a rewrite of it as a plain shrink.
 //
-// The accepted set is PROBED rather than restated: job.ParseMerge exports no key list, and a
+// The accepted set is PROBED rather than restated: job.DecodePut exports no key list, and a
 // second hand-written one is forgotten in the same direction as the first.
 func TestClientPutRendersEveryMergedField(t *testing.T) {
 	merged := 0
@@ -33,7 +33,7 @@ func TestClientPutRendersEveryMergedField(t *testing.T) {
 		merged++
 		line := buildCall(hint.ToolClient.String(), clientScript(`import "magus"; magus\job.put("a/b", opts: {"`+field+`": "x"});`), "")
 		assert.Contains(t, mcpParams(strings.Fields(line)), field,
-			"job.ParseMerge applies %q, so a put carrying it has to be judged", field)
+			"job.DecodePut applies %q, so a put carrying it has to be judged", field)
 	}
 	require.NotZero(t, merged, "the probe found no merged field at all, so it is measuring nothing")
 }
@@ -62,7 +62,11 @@ func jobMergeApplies(key string) bool {
 		"declared", "magus run test .", []any{"x"}, true,
 		[]any{map[string]any{"id": "g", "check": map[string]any{"target": "test", "project": "."}}},
 	} {
-		apply, err := job.ParseMerge(map[string]any{key: value})
+		put, err := job.DecodePut(map[string]any{key: value})
+		if err != nil {
+			continue
+		}
+		apply, err := job.PutMerge(put)
 		if err != nil {
 			continue
 		}
@@ -96,7 +100,7 @@ func TestMagusToolCallMatchesOnlyMagusTools(t *testing.T) {
 		assert.Empty(t, magusToolCall(name), "%q is not a call to magus", name)
 	}
 
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__other__client","tool_input":{"script":"import \"magus\"; magus\\run([\"ci\"]);"}}`)
+	req, ok := decodeTestEnvelope(t, `{"tool_name":"mcp__other__client","tool_input":{"script":"import \"magus\"; magus\\run([\"ci\"]);"}}`)
 	require.True(t, ok)
 	assert.NotContains(t, req.Value, "magus run ci", "another server's client tool is not graded as magus's")
 }
@@ -126,7 +130,7 @@ func TestBuildCallCoversTools(t *testing.T) {
 // ci is not a run of it, and what the parse cannot settle reads as the refusing answer.
 func TestBuildCall(t *testing.T) {
 	const imp = `import "magus"; `
-	unread := "magus run ci\nclient op=unread"
+	unread := "magus run ci %unread%\nclient op=unread"
 	for name, tc := range map[string]struct {
 		input map[string]any
 		want  string
@@ -137,13 +141,15 @@ func TestBuildCall(t *testing.T) {
 		"an uppercase gate":            {clientScript(imp + `magus\run(["CI"]);`), "magus run CI"},
 		"a shard plan":                 {clientScript(imp + `magus\cmd("affected", ["ci", "--plan"]);`), "client"},
 		"a plan flag in comment":       {clientScript(imp + "// --plan\nmagus\\run([\"ci\"]);"), "magus run ci"},
-		"a computed argv":              {clientScript(imp + `final a = ["c" + "i"]; magus\run(a);`), "magus run ci"},
-		"a computed target":            {clientScript(imp + `magus\run(["c" + "i"]);`), "magus run ci"},
+		"a computed argv":              {clientScript(imp + `final a = ["c" + "i"]; magus\run(a);`), "magus run ci %unread%"},
+		"a computed target":            {clientScript(imp + `magus\run(["c" + "i"]);`), "magus run ci %unread%"},
 		"a stored member":              {clientScript(imp + `final r = magus\run; r(["ci"]);`), unread},
 		"an aliased import":            {clientScript(`import "magus" as m; m\run(["ci"]);`), "magus run ci"},
 		"a flat import":                {clientScript(`import "magus" as _; run(["ci"]);`), "magus run ci"},
 		"another tool's ci":            {clientScript(imp + `import "proc"; proc\run(["echo", "ci"]);`), "client"},
-		"an unrelated run":             {clientScript(imp + `magus\run(["test", "."]);`), "client"},
+		"another target's run":         {clientScript(imp + `magus\run(["agent-bench-run", "."]);`), "magus run agent-bench-run ."},
+		"another target's affected":    {clientScript(imp + `magus\cmd("affected", ["agent-bench-run"]);`), "magus affected agent-bench-run"},
+		"a report on another target":   {clientScript(imp + `magus\run(["agent-bench-run", "--dry-run"]);`), "client"},
 		"no script":                    {map[string]any{"op": "list"}, "client"},
 		"a script with no calls":       {clientScript("fun main(args: [str]) > int { return 1; }"), "client"},
 		"a script that does not parse": {clientScript("fun ("), unread},
@@ -162,7 +168,7 @@ func TestBuildCall(t *testing.T) {
 		"a computed id":     {clientScript(imp + `final id = "a/b"; magus\job.put(id);`), "client op=put id=%unread%"},
 		"a computed opts":   {clientScript(imp + `final o = {"parent": "a"}; magus\job.put("a/b", opts: o);`), "client op=put id=a/b opts=%unread%"},
 		"a computed value":  {clientScript(imp + `final p = "a"; magus\job.put("a/b", opts: {"parent": p});`), "client op=put id=a/b parent=%unread%"},
-		"a register":        {clientScript(imp + `magus\job.register("a/b", reported_base: "abc");`), "client op=register id=a/b"},
+		"a register":        {clientScript(imp + `magus\job.register("a/b");`), "client op=register id=a/b"},
 		"a clear":           {clientScript(imp + `magus\job.clear();`), "client op=clear"},
 		"a wait":            {clientScript(imp + `magus\job.wait("a/b");`), "magus job wait a/b"},
 		"an exit":           {clientScript(imp + `magus\job.exit("a/b", result: {"summary": "done"});`), "magus job exit a/b"},
@@ -220,7 +226,7 @@ func TestClientJobWritesReachTheRebindRule(t *testing.T) {
 		`import "magus"; magus\job.put("harness/other", opts: {"write_paths": ["**"]});`:  "is outside lease",
 		`import "magus"; magus\job.put("` + me + `", opts: {"write_paths": ["**"]});`:     "rewrite the job it holds",
 		`import "magus"; magus\job.clear();`:                                              "drop every job",
-		`import "magus"; magus\job.register("harness/other", reported_base: "abc");`:      "write another job",
+		`import "magus"; magus\job.register("harness/other");`:                            "write another job",
 		`import "magus"; magus\cmd("job", ["exec", "harness/other"]);`:                    "take the lease on another job",
 		`import "magus"; final j = magus\job; j.clear();`:                                 "cannot read",
 		`import "magus" as m; m\job.put("harness/other", opts: {"write_paths": ["**"]});`: "is outside lease",

@@ -2,8 +2,10 @@ package knowledge
 
 import (
 	"cmp"
+	"iter"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/types"
 )
@@ -49,8 +51,8 @@ type CoverageFacts struct {
 // distinct files), and reads the coverage attrs the @coverage overlay merged onto the
 // file and symbol nodes. A file with no symbol node (no SCIP index ingested, or a
 // non-code file) yields the zero value. Callers must have merged the @symbols and
-// @coverage shards (KnowledgeGraphWithSymbols / MergeWorkspaceSymbols) first; on a
-// symbol-free graph every file yields the zero value.
+// @coverage shards first (a KnowledgeGraph request with Symbols: types.AllSymbols, or
+// MergeWorkspaceSymbols); on a symbol-free graph every file yields the zero value.
 func (g *Graph) FileFacts(relPath string) FileFacts {
 	g.ensureAdj()
 	var ff FileFacts
@@ -58,26 +60,9 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 	if fn, ok := g.node(fid); ok {
 		ff.Coverage = readCoverage(fn)
 	}
-	for _, e := range g.out[fid] {
-		if e.Relation != types.RelationDefines {
-			continue
-		}
-		sn, ok := g.node(e.Target)
-		if !ok || sn.Kind != types.KindSymbol {
-			continue
-		}
+	for sn := range g.definedSymbols(relPath) {
 		sf := SymbolFacts{ID: sn.ID, Label: sn.Label, Coverage: readCoverage(sn)}
-		for _, in := range g.in[sn.ID] {
-			if in.Relation != types.RelationReferences {
-				continue
-			}
-			// Only a SCIP-ingested reference edge carries the count provenance; a
-			// non-SCIP references edge (e.g. charm->target) is skipped rather than
-			// counted as a phantom count-0 caller, mirroring Graph.Refs.
-			count, _, ok := parseRefProvenance(in.Provenance)
-			if !ok {
-				continue
-			}
+		for _, count := range g.symbolReferences(sn.ID) {
 			sf.RefCount += count
 			sf.FileCount++
 		}
@@ -90,6 +75,66 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 		return cmp.Compare(a.ID, b.ID)
 	})
 	return ff
+}
+
+// Referrers is each file referencing a symbol the workspace-relative relPath defines,
+// with its occurrence count, relPath itself included when it uses its own symbols. A
+// non-empty declaration narrows it to the symbols that declaration names: one whose label
+// is the declaration's last word, split on spaces and dots, so `Graph.FileFacts` and
+// `export fun ci` name `FileFacts` and `ci`. It reads the SCIP `references` edges
+// FileFacts counts, and a graph with no symbol shards merged answers nil.
+func (g *Graph) Referrers(relPath, declaration string) map[string]int {
+	g.ensureAdj()
+	word := declaration
+	if i := strings.LastIndexAny(declaration, " ."); i >= 0 {
+		word = declaration[i+1:]
+	}
+	var out map[string]int
+	for sn := range g.definedSymbols(relPath) {
+		if declaration != "" && sn.Label != word {
+			continue
+		}
+		for file, count := range g.symbolReferences(sn.ID) {
+			if out == nil {
+				out = map[string]int{}
+			}
+			out[file] += count
+		}
+	}
+	return out
+}
+
+// definedSymbols yields each symbol node the workspace-relative relPath defines. The
+// caller runs ensureAdj first.
+func (g *Graph) definedSymbols(relPath string) iter.Seq[types.KnowledgeNode] {
+	return func(yield func(types.KnowledgeNode) bool) {
+		for _, e := range g.out[fileID(relPath)] {
+			if e.Relation != types.RelationDefines {
+				continue
+			}
+			if sn, ok := g.node(e.Target); ok && sn.Kind == types.KindSymbol && !yield(sn) {
+				return
+			}
+		}
+	}
+}
+
+// symbolReferences yields each file referencing the symbol id, with its occurrence count.
+// Only a SCIP-ingested references edge carries the count; any other references edge (a
+// charm->target one) is skipped rather than counted as a phantom count-0 caller, as in
+// Graph.Refs. The caller runs ensureAdj first.
+func (g *Graph) symbolReferences(id string) iter.Seq2[string, int] {
+	return func(yield func(string, int) bool) {
+		for _, in := range g.in[id] {
+			if in.Relation != types.RelationReferences {
+				continue
+			}
+			count, _, ok := parseRefProvenance(in.Provenance)
+			if ok && !yield(strings.TrimPrefix(in.Source, types.KindFile+":"), count) {
+				return
+			}
+		}
+	}
 }
 
 // readCoverage reads the covered/total ratio the @coverage overlay folded onto a node,

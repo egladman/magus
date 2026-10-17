@@ -5,6 +5,8 @@
 // leaving a module out of the run. This refuses each of those. A file-wide nolint is
 // out of the analyzer's reach, so this rule reads every test file, and lint-rules
 // replays from cache less often for it; that is the price of the check.
+//
+// Tier 1, mechanical: the fix deletes the exemption.
 namespace testpairing;
 
 import "assert";
@@ -25,10 +27,11 @@ final NAMED = std\pattern(`//nolint:([\w,.-]+)`);
 final FIX = "Pair the test file instead: move its tests into the _test.go of the file they exercise, or move the code it owns into a same-stem .go file.";
 
 export fun reads() > [str] {
-    return [".golangci.yml", "magusfile.buzz", "**/*_test.go",
+    return [".golangci.yml", "magusfile.buzz", "hack/magusfile/run-golangci.buzz", "**/*_test.go",
             "libs/conventions/**/*_test.go",
             "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
-            "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go"];
+            "libs/gopherbuzz/**/*_test.go", "libs/proofread/**/*_test.go",
+            "libs/testlayout/**/*_test.go", "libs/xdg/**/*_test.go", "libs/cmdline/**/*_test.go"];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -36,7 +39,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     foreach (f in files) {
         if (f.value == ".golangci.yml") {
             configFindings(f, found: found);
-        } else if (f.value == "magusfile.buzz") {
+        } else if (f.value == "magusfile.buzz" or f.value == "hack/magusfile/run-golangci.buzz") {
             runFindings(f, found: found);
         } else if (f.value.indexOf("/testdata/") == null) {
             directiveFindings(f, found: found);

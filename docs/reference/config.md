@@ -66,12 +66,16 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## jobs
 
-| Config key             | Environment variable         | Flag                     | Type     |
-| ---------------------- | ---------------------------- | ------------------------ | -------- |
-| `jobs.default_timeout` | `MAGUS_JOBS_DEFAULT_TIMEOUT` | `--jobs-default-timeout` | duration |
-| `jobs.max_depth`       | `MAGUS_JOBS_MAX_DEPTH`       | `--jobs-max-depth`       | int      |
-| `jobs.max_live`        | `MAGUS_JOBS_MAX_LIVE`        | `--jobs-max-live`        | int      |
-| `jobs.stale_after`     | `MAGUS_JOBS_STALE_AFTER`     | `--jobs-stale-after`     | duration |
+| Config key                | Environment variable            | Flag                        | Type     |
+| ------------------------- | ------------------------------- | --------------------------- | -------- |
+| `jobs.default_timeout`    | `MAGUS_JOBS_DEFAULT_TIMEOUT`    | `--jobs-default-timeout`    | duration |
+| `jobs.max_claim_files`    | `MAGUS_JOBS_MAX_CLAIM_FILES`    | `--jobs-max-claim-files`    | int      |
+| `jobs.max_claim_projects` | `MAGUS_JOBS_MAX_CLAIM_PROJECTS` | `--jobs-max-claim-projects` | int      |
+| `jobs.max_depth`          | `MAGUS_JOBS_MAX_DEPTH`          | `--jobs-max-depth`          | int      |
+| `jobs.max_live`           | `MAGUS_JOBS_MAX_LIVE`           | `--jobs-max-live`           | int      |
+| `jobs.max_validations`    | `MAGUS_JOBS_MAX_VALIDATIONS`    | `--jobs-max-validations`    | int      |
+| `jobs.retain`             | `MAGUS_JOBS_RETAIN`             | `--jobs-retain`             | duration |
+| `jobs.stale_after`        | `MAGUS_JOBS_STALE_AFTER`        | `--jobs-stale-after`        | duration |
 
 ## knowledge
 

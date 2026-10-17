@@ -37,28 +37,28 @@ func (_m *MockObserver) EXPECT() *MockObserver_Expecter {
 	return &MockObserver_Expecter{mock: &_m.Mock}
 }
 
-// OnBuild provides a mock function for the type MockObserver
-func (_mock *MockObserver) OnBuild(buildStats BuildStats) {
-	_mock.Called(buildStats)
+// Observe provides a mock function for the type MockObserver
+func (_mock *MockObserver) Observe(graphEvent GraphEvent) {
+	_mock.Called(graphEvent)
 	return
 }
 
-// MockObserver_OnBuild_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnBuild'
-type MockObserver_OnBuild_Call struct {
+// MockObserver_Observe_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Observe'
+type MockObserver_Observe_Call struct {
 	*mock.Call
 }
 
-// OnBuild is a helper method to define mock.On call
-//   - buildStats BuildStats
-func (_e *MockObserver_Expecter) OnBuild(buildStats interface{}) *MockObserver_OnBuild_Call {
-	return &MockObserver_OnBuild_Call{Call: _e.mock.On("OnBuild", buildStats)}
+// Observe is a helper method to define mock.On call
+//   - graphEvent GraphEvent
+func (_e *MockObserver_Expecter) Observe(graphEvent interface{}) *MockObserver_Observe_Call {
+	return &MockObserver_Observe_Call{Call: _e.mock.On("Observe", graphEvent)}
 }
 
-func (_c *MockObserver_OnBuild_Call) Run(run func(buildStats BuildStats)) *MockObserver_OnBuild_Call {
+func (_c *MockObserver_Observe_Call) Run(run func(graphEvent GraphEvent)) *MockObserver_Observe_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 BuildStats
+		var arg0 GraphEvent
 		if args[0] != nil {
-			arg0 = args[0].(BuildStats)
+			arg0 = args[0].(GraphEvent)
 		}
 		run(
 			arg0,
@@ -67,92 +67,12 @@ func (_c *MockObserver_OnBuild_Call) Run(run func(buildStats BuildStats)) *MockO
 	return _c
 }
 
-func (_c *MockObserver_OnBuild_Call) Return() *MockObserver_OnBuild_Call {
+func (_c *MockObserver_Observe_Call) Return() *MockObserver_Observe_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockObserver_OnBuild_Call) RunAndReturn(run func(buildStats BuildStats)) *MockObserver_OnBuild_Call {
-	_c.Run(run)
-	return _c
-}
-
-// OnError provides a mock function for the type MockObserver
-func (_mock *MockObserver) OnError(err error) {
-	_mock.Called(err)
-	return
-}
-
-// MockObserver_OnError_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnError'
-type MockObserver_OnError_Call struct {
-	*mock.Call
-}
-
-// OnError is a helper method to define mock.On call
-//   - err error
-func (_e *MockObserver_Expecter) OnError(err interface{}) *MockObserver_OnError_Call {
-	return &MockObserver_OnError_Call{Call: _e.mock.On("OnError", err)}
-}
-
-func (_c *MockObserver_OnError_Call) Run(run func(err error)) *MockObserver_OnError_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 error
-		if args[0] != nil {
-			arg0 = args[0].(error)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *MockObserver_OnError_Call) Return() *MockObserver_OnError_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockObserver_OnError_Call) RunAndReturn(run func(err error)) *MockObserver_OnError_Call {
-	_c.Run(run)
-	return _c
-}
-
-// OnQuery provides a mock function for the type MockObserver
-func (_mock *MockObserver) OnQuery(queryEvent QueryEvent) {
-	_mock.Called(queryEvent)
-	return
-}
-
-// MockObserver_OnQuery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OnQuery'
-type MockObserver_OnQuery_Call struct {
-	*mock.Call
-}
-
-// OnQuery is a helper method to define mock.On call
-//   - queryEvent QueryEvent
-func (_e *MockObserver_Expecter) OnQuery(queryEvent interface{}) *MockObserver_OnQuery_Call {
-	return &MockObserver_OnQuery_Call{Call: _e.mock.On("OnQuery", queryEvent)}
-}
-
-func (_c *MockObserver_OnQuery_Call) Run(run func(queryEvent QueryEvent)) *MockObserver_OnQuery_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 QueryEvent
-		if args[0] != nil {
-			arg0 = args[0].(QueryEvent)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *MockObserver_OnQuery_Call) Return() *MockObserver_OnQuery_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockObserver_OnQuery_Call) RunAndReturn(run func(queryEvent QueryEvent)) *MockObserver_OnQuery_Call {
+func (_c *MockObserver_Observe_Call) RunAndReturn(run func(graphEvent GraphEvent)) *MockObserver_Observe_Call {
 	_c.Run(run)
 	return _c
 }

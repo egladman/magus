@@ -95,14 +95,3 @@ arm_check_no_mcp() {
     *) arm_die "$RUNNER_MCP_CONFIG names MCP servers; the arm must hand the session an empty set" ;;
     esac
 }
-
-# arm_doctor runs doctor against the worktree and prints its JSON. HOME points
-# at the run's own empty home so that home-scoped hook configs on the machine
-# running the benchmark cannot decide an arm's verdict; doctor reads $HOME for
-# its guard-wiring and checkpoint-wiring candidates.
-#
-# Exit status is ignored: checks unrelated to the arm (an unreachable VCS base
-# ref in a throwaway fixture, say) fail without saying anything about the arm.
-arm_doctor() {
-    HOME="$1/.benchmark/home" "$BENCH_MAGUS_BIN" --root "$1" doctor -o json 2>/dev/null
-}

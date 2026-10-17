@@ -74,7 +74,7 @@ type removal struct {
 	verb, target string
 	failed       []string
 	lead         string
-	next         hint.Next
+	next         types.NextStep
 }
 
 // worktreeRemoveDenial names the first failed condition in the verdict and lists every one
@@ -91,6 +91,7 @@ func worktreeRemoveDenial(r removal) ShellVerdict {
 			"A removal passes when the worktree is a linked worktree of this repository other than your own, clean, " +
 			"taken by no live job, every change its unpublished commits made reads the same in your checkout's HEAD, " +
 			"and it is unlocked or locked over a worker your session spawned for a job that finished, which git removes only with -f -f. " +
+			"A checkout a job's fork made and locked is magus's to remove: `" + hint.JobWait.String() + " <job>` once its job ended, `" + hint.JobExit.String() + " <job>` before. " +
 			"An unlock is judged the same, but for the lock. --force changes nothing here but that lock.",
 		Rule: denyRule{Name: denyRuleWorktreeRemove},
 	}
@@ -168,6 +169,10 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	var finished []types.Job
 	exited := ""
 	for _, row := range rows {
+		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
+			r.failed = append(r.failed, fmt.Sprintf("job %s's fork made it, and only that job's holder or the session that forked it removes it (`%s`)",
+				row.ID, hint.DescribeJob.With(row.ID)))
+		}
 		if !samePath(row.CheckoutRoot, co.Root) {
 			continue
 		}
@@ -182,8 +187,23 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		}
 	}
 	ownedLock := false
-	if co.Locked && !s.unlock {
-		switch owner := lockOwner(deps, rows, finished, co); {
+	var forked *types.Job
+	switch {
+	case !co.Locked || s.unlock:
+	case co.LockReason == vcs.CheckoutLockReason:
+		// git removes a locked worktree only with -f -f, which would also discard changes, so
+		// a fork's checkout goes through magus, which removes it only once it holds no work.
+		i := slices.IndexFunc(rows, func(row types.Job) bool {
+			return row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && mayWorkIn(deps, rows, row)
+		})
+		if i < 0 {
+			r.failed = append(r.failed, lockHeld(co))
+			break
+		}
+		forked = &rows[i]
+		r.failed = append(r.failed, "it is the checkout job "+forked.ID+"'s fork made and locked, which git removes only with -f -f; magus unlocks and removes it once the job ends")
+	default:
+		switch owner := lockOwner(deps, rows, finished); {
 		case owner == "":
 			r.failed = append(r.failed, lockHeld(co))
 		case s.force < 2:
@@ -200,12 +220,55 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		r.lead = "job " + exited + " exited and is not graded yet; wait for its grade before " + r.verb + " " + r.target + "."
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(exited),
 			"a job's worktree is removable once its grade is filed")
+	case forked != nil && len(r.failed) == 1 && forked.State.Terminal():
+		r.lead = "job " + forked.ID + " ended, and magus removes the checkout its fork made, keeping it if it holds work."
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(forked.ID),
+			"wait unlocks and removes the checkout of every ended job once it holds no work")
+	case forked != nil && len(r.failed) == 1:
+		r.lead = "job " + forked.ID + " owns " + r.target + "; ending it removes the checkout its fork made, keeping it if it holds work."
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(forked.ID),
+			"exit ends the job, then unlocks and removes its checkout once it holds no work")
 	case ownedLock && len(r.failed) == 1:
 		r.lead = r.target + " is locked over your finished worker; git removes a locked worktree only with -f -f."
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), []string{"git", "worktree", "remove", "-f", "-f", r.target},
 			"every condition but the lock holds, and the lock is your own finished worker's")
 	}
 	return r
+}
+
+// ownsCheckout reports whether root is a standing checkout a fork made for a job the
+// caller may work in (see [mayWorkIn]). A store that cannot be read owns nothing.
+func ownsCheckout(ctx context.Context, deps Dependencies, at location, root string) bool {
+	return slices.ContainsFunc(ownedCheckouts(ctx, deps, at), func(owned string) bool { return samePath(owned, root) })
+}
+
+// ownedCheckouts are the roots, cleaned, of the standing checkouts forks made for jobs the
+// caller may work in (see [mayWorkIn]). A store that cannot be read owns nothing.
+func ownedCheckouts(ctx context.Context, deps Dependencies, at location) []string {
+	rows, err := jobRowsAt(ctx, at)
+	if err != nil {
+		return nil
+	}
+	var roots []string
+	for _, row := range rows {
+		if row.Worktree.Standing() && mayWorkIn(deps, rows, row) {
+			roots = append(roots, filepath.Clean(row.Worktree.Root))
+		}
+	}
+	return roots
+}
+
+// mayWorkIn reports whether the caller is row's holder or its root: the session holding row
+// or a job row descends from, a caller holding no job that no session spawned, or an agent
+// spawned for row whose binding the call does not carry yet.
+func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
+	if deps.lease == "" {
+		return deps.caller.Agent == "" || spawnedAsJob(deps.facts, rows, deps.caller.Agent, row.ID)
+	}
+	if deps.lease == row.ID {
+		return true
+	}
+	return slices.ContainsFunc(types.JobAncestors(rows, row.ID), func(a types.Job) bool { return a.ID == deps.lease })
 }
 
 // lockHeld is the condition a lock fails when nothing proves who holds it is done.
@@ -217,11 +280,11 @@ func lockHeld(co types.RegisteredCheckout) string {
 	return reason + ", so whoever locked it still holds it (`git worktree list --porcelain`)"
 }
 
-// lockOwner names the finished job whose worker locked co, when the caller is the
+// lockOwner names the finished job whose worker locked a checkout, when the caller is the
 // session that spawned it: a root caller, and a spawn record in its own session facts
-// naming the job. "" when nothing proves that. A lock `magus checkout` took is never one.
-func lockOwner(deps Dependencies, rows, finished []types.Job, co types.RegisteredCheckout) string {
-	if co.LockReason == vcs.CheckoutLockReason || !deps.caller.Identified() || deps.caller.Agent != "" {
+// naming the job. "" when nothing proves that.
+func lockOwner(deps Dependencies, rows, finished []types.Job) string {
+	if !deps.caller.Identified() || deps.caller.Agent != "" {
 		return ""
 	}
 	if deps.lease != "" {

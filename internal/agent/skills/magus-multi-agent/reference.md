@@ -10,14 +10,33 @@ matches one (`api`, `internal/**`) is refused with {{mgslink "MGS3018"}}{{if .Fu
 claims every file under it and so overlaps every job editing anything there{{end}}.
 
 Two jobs share one file by claiming declarations in it: `<file>#<declaration>`, such
-as `internal/agent/catalog.go#SkillVersion`.
+as `internal/agent/catalog.go#SkillVersion`. This is the default whenever two jobs touch
+different declarations of a file; `--depends-on` is for two jobs on the SAME one.
 
 - A claim names one file, never a glob.
 - The file needs a diff driver (`{{cmd "doctor"}}` lists the managed ones); otherwise
   fork refuses with {{mgslink "MGS3031"}}.
+- The word must name exactly one declaration of the file. `ctx` or `String` names every
+  line that holds it, so fork refuses it with {{mgslink "MGS3031"}} and prints words that
+  name one each. A word that names none is accepted, because the declaration may not be
+  written yet; check its spelling.
+- A fork refused with {{mgslink "MGS3032"}} (another checkout holds the file) prints the
+  claim pair it computed: the declarations the holder has touched so far, and the symbols
+  the new job's goals name, with whether the two are disjoint. Re-fork both rows with the
+  pair, or follow the other advice it prints. Neither row is written for you.
+- A project's magusfile or magus.yaml is never held whole: fork refuses it with
+  {{mgslink "MGS3036"}} and lists its claims. Inside the `magus\project({...})` call, and
+  in magus.yaml, a claim is a key path: `magusfile.buzz#project.targets.test` holds only
+  the `test` entry of `targets`, `magus.yaml#jobs.stale_after` one job setting.
+  A job holding the file through a glob (`**/*.buzz`) narrows to the keys and declarations
+  its first write changes and releases the rest. A fork refused over a held one opens one
+  release request for the holder (`{{cmd "session attention"}}`).
 - Two jobs that must edit the SAME declaration still have one owner. Give it to one
   job, or order them with `--depends-on`{{if .Full}}. Claiming the whole file, or a glob over its directory, is
   what serializes every other job that needed one function in it{{end}}.
+- Deleting is a valid route. When removing a code path, flag, fallback or test reaches
+  the goal, the job that owns that declaration deletes it and declares `absent`
+  beside it; no job adds a parallel path beside one it replaces.
 
 The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"test ."`,
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
@@ -33,6 +52,24 @@ job with `--parent` and paths inside its own.
 The same checkpoint is what a later incremental re-review diffs from (see the
 {{skill "change-summary"}} skill); review time and pickup time read the same object.
 {{end}}
+
+## Check the record before the fork
+
+`{{cmd "job fork"}} --stdin --dry-run` runs the fork's validation and writes nothing. It lists
+every problem at once, each with its code and the edit that clears it, and exits 1 while any
+remains. Fix every listed problem, then fork the same record.
+
+A glob write path past `jobs.max_claim_files` (default 50 files) or `jobs.max_claim_projects`
+(default 1 project) is refused as {{mgslink "MGS3043"}}. Name the files the job edits. A sweep
+that really needs the whole glob waives it in the record:
+
+```json
+"waivers": [{"code": "MGS3043", "subject": "**/*.go", "reason": "renames the type everywhere"}]
+```
+
+Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can be waived. The
+subject is the write path, the output path, or `target project` for MGS3045. A waiver on any other
+code is refused. Magus checks that the reason is not blank; a reviewer reads it.
 
 ## After the spawn
 
@@ -94,12 +131,25 @@ Moving a live job's boundary is yours. Change its record and run `{{cmd "job app
   goals, and the job keeps its state{{if .Full}}. A re-fork would hand a taken job out again as
   declared{{end}}.
 - `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes mid-flight is a goal you add this way, so
-  `{{cmd "job wait"}}` grades it from a recorded run.
+- A check you find the job owes, mid-flight or after its exit, is a goal you add this way.
+  The write bumps the job's `generation`, so its check must run again before
+  `{{cmd "job wait"}}` passes: the wait refuses evidence filed earlier and prints the check to
+  rerun.
 - A revoked path is recorded as a release with its digest. The worker's next write
   there is refused, naming the revocation.
 - Ending a whole job stays `{{cmd "job exit"}} <job>`. A worker never widens: its refusal
   names `{{cmd "describe job"}}` and tells it to ask you.
+
+A job that ended is retried by forking its id again, `{{cmd "job fork"}} <id>`. That starts
+its next attempt and folds the one that ended into the row's `prior`: its unmet goals,
+violations, the guard's denials, unresolved risks and failing run refs, which
+`{{cmd "describe job"}}` prints for the next holder. A new id loses that history. magus never
+retries on its own; it marks an attempt not retryable when repeating it unchanged cannot
+help, and names what changes first: widen with `{{cmd "job apply"}}`, edit the config, or
+decide it yourself. Then fork it, or do the job locally. A spec change bumps the row's
+`generation`, and `{{cmd "job wait"}}` never passes evidence filed at an earlier one: rerun the
+check it names. `max_attempts` on the record caps the forks; past it a fork is refused
+until its record raises the cap.
 
 Advance the row on every state change. `{{cmd "ls jobs"}}` then shows which live jobs
 claim intersecting `write_paths` and how long since each row was touched. A reported
@@ -138,7 +188,10 @@ The guard grades each write of a worker that exported `magus.lease` against thes
 and denies one outside them, naming the owner. A writer magus cannot attribute is only
 ADVISED, and every uncertainty fails open: a seatbelt, not a sandbox.
 
-So a denied worker COORDINATES and never works around. Ask the orchestrator to
+So a denied worker COORDINATES and never works around. A worker refused a build, a
+regeneration or a target outside its check names it in its result: the checkout's
+integrator, the subagent spawned `<parent>/integrate <job>` in that checkout, runs those, never
+the worker and never the root. Ask the orchestrator to
 re-partition, or have the owning job release the path, then retry{{if .Full}}. Editing
 anyway from an un-enrolled shell, or dropping the lease id to buy advisory
 treatment, turns a denial you could have acted on into a collision nobody sees
@@ -162,8 +215,9 @@ EOF
 ```
 
 A scout whose output is prose has no check, so it cannot pass. The root ends it with
-`{{cmd "job exit"}} <job>`, recorded no_return. That is the expected end for such a
-scout, not a failure.
+`{{cmd "job exit"}} <job>`, recorded no_return with the end reason "returned ungraded"
+or "ended ungraded", never "abandoned". That is the expected end for such a scout, not a
+failure.
 
 Every row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state
@@ -209,7 +263,7 @@ A goal names WHAT it examines and what must be true of it:
 | -------- | ----------------------------------------------- | ---------------------------------------------- |
 | `check`  | `passed`                                        | a recorded run, captured after the declaration |
 | `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`, `signature` | the knowledge graph, below file granularity |
 
 One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}`.
 Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the
@@ -255,15 +309,18 @@ edit job and spends budget for nothing.
 Track the job tree, agent state, messages, and completion in the provider's agent or
 task view. Use it to keep the store aware of descendants.
 
-Watch processes and shared workspace resources with magus:
+A person at a terminal watches processes and shared workspace resources with magus:
 
 ```sh
 magus status --watch=15s
 ```
 
 It shows magus process state, lock holders, and shared-service state and adoption. It
-does not show an agent thinking without running a magus process. Never replace it with
-sleep loops, repeated `ps`, or a waiting agent.
+does not show an agent thinking without running a magus process. It is for that person:
+an agent never starts it, or a sleep or tick loop, as a background task, and never
+replaces it with repeated `ps` or a waiting agent. An agent waits for its own run's
+completion notice; the root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>`
+only when it needs to know.
 
 To wait for a process you did not start to end, use your host's own wait or monitor
 tool{{if .Full}}: a shell loop holds your tool slot for the whole wait{{end}}.
@@ -307,6 +364,7 @@ A blocked worker RAISES; it never stalls quietly.
   with `{{cmd "session dispose"}} <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
   request magus could answer on its own would not have needed a person{{end}}.
 - A worker that raised one waits for the disposition; it never chooses for itself.
+  It does not exit its row or report back first, because a reply that lands after the row ended reaches nobody.
 
 `{{cmd "session"}}` is how the root audits what a job RAN, as opposed to what it reported.
 `{{cmd "session"}} --since 2h -o json` answers what the fleet has been doing.

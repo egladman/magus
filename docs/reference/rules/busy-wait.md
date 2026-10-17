@@ -1,28 +1,28 @@
 ---
-title: "busy-wait: a loop that only sleeps between polls, holding a tool slot for its whole wait"
-description: "An advisory by default: it explains, and blocks nothing, on a loop that only sleeps between polls, holding a tool slot for its whole wait."
-tags: [guard, rules, busy-wait, advise]
+title: "busy-wait: a while or until loop that sleeps, or a for loop that sleeps until it breaks out"
+description: "A deny rule by default: it refuses a while or until loop that sleeps, or a for loop that sleeps until it breaks out, and names what to run instead."
+tags: [guard, rules, busy-wait, deny]
 ---
 
 # busy-wait
 
-An advisory by default: it explains, and blocks nothing, on a loop that only sleeps between polls, holding a tool slot for its whole wait.
+A deny rule by default: it refuses a while or until loop that sleeps, or a for loop that sleeps until it breaks out, and names what to run instead.
 
 ## What it catches
 
-A loop that only sleeps between polls, holding a tool slot for its whole wait.
+A while or until loop that sleeps, or a for loop that sleeps until it breaks out.
 
 ## Why
 
-A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, and its deny says only what holds for it: the loop occupies a tool slot for the whole wait. The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor is for.A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules.
+A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting: wait for the task's completion notice, or `magus job wait <job>` for a job; `magus status --watch` is for a person watching. A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, `magus status --watch` for the project lock. The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"busy-wait": "deny"})
+magus\guard.builtins({"busy-wait": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,8 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [busy-wait]: ...
+deny [busy-wait]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [busy-wait]: ...` instead.
 
 `magus describe rule busy-wait` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

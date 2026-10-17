@@ -149,7 +149,7 @@ func TestRefProvenanceRoundTrip(t *testing.T) {
 
 func TestGraphRefs(t *testing.T) {
 	syms := []types.KnowledgeSymbol{{
-		Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11",
+		Key: "example.com/foo Bar#", Label: "Bar", Source: "pkg/foo/foo.go:11", Signature: "type Bar struct",
 		Defs: []string{"pkg/foo/foo.go"},
 		Refs: []types.KnowledgeSymbolRef{
 			{Path: "pkg/b/b.go", Count: 1, Lines: []int{3}},
@@ -175,6 +175,7 @@ func TestGraphRefs(t *testing.T) {
 			{File: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
 			{File: "pkg/b/b.go", Count: 1, Lines: []int{3}},
 		},
+		Signature: new("type Bar struct"),
 	}, out)
 }
 
@@ -230,6 +231,62 @@ func TestAssembleSymbolsSizesDefiningFiles(t *testing.T) {
 	use, ok := nodeByID(out, "file:pkg/foo/use.go")
 	require.True(t, ok)
 	assert.Equal(t, map[string]string{"language": "go"}, use.Attrs)
+}
+
+// A body's shape and token count ride its node; a symbol with no shape carries neither.
+func TestAssembleSymbolsCarriesBodyShape(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "example.com/foo F().", Label: "F", Source: "pkg/foo/foo.go:3", DefEndLine: 9, BodyShape: "a1b2", BodyTokens: 42, Defs: []string{"pkg/foo/foo.go"}},
+		{Key: "example.com/foo C.", Label: "C", Source: "pkg/foo/foo.go:11", Defs: []string{"pkg/foo/foo.go"}},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)}).Output()
+
+	f, ok := nodeByID(out, "symbol:example.com/foo F().")
+	require.True(t, ok)
+	assert.Equal(t, "a1b2", f.Attrs[AttrBodyShape])
+	assert.Equal(t, "42", f.Attrs[attrBodyTokens])
+	c, ok := nodeByID(out, "symbol:example.com/foo C.")
+	require.True(t, ok)
+	assert.NotContains(t, c.Attrs, AttrBodyShape)
+	assert.NotContains(t, c.Attrs, attrBodyTokens)
+}
+
+// A package's clause rides its namespace node, and an import's alias the file's reference
+// edge to it; an unaliased import carries no attr.
+func TestAssembleSymbolsCarriesImportAliases(t *testing.T) {
+	ns := "example.com/q/"
+	syms := []types.KnowledgeSymbol{{
+		Key: ns, Namespace: ns, Label: "q", Source: "q/q.go:1", PackageName: "queuetypes", Defs: []string{"q/q.go"},
+		Refs: []types.KnowledgeSymbolRef{{Path: "a/a.go", Count: 1, Alias: "qtypes"}, {Path: "a/b.go", Count: 1}},
+	}}
+	g := mergeAll([]Shard{assembleSymbols("q", syms, nil)})
+	g.ensureAdj()
+
+	assert.Equal(t, "queuetypes", g.nodes[symbolID(ns)].Attrs[attrPackageName])
+	aliases := map[string]string{}
+	for _, e := range g.in[symbolID(ns)] {
+		if e.Relation == types.RelationReferences {
+			aliases[e.Source] = e.Attrs[attrImportAlias]
+		}
+	}
+	assert.Equal(t, map[string]string{"file:a/a.go": "qtypes", "file:a/b.go": ""}, aliases)
+}
+
+// What a body branches on rides its node as a comma list; a body branching on nothing
+// carries no attr.
+func TestAssembleSymbolsCarriesBranchIdents(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{Key: "example.com/foo F().", Label: "F", Source: "pkg/foo/foo.go:3", DefEndLine: 9, BranchIdents: []string{"mode", "strict"}, Defs: []string{"pkg/foo/foo.go"}},
+		{Key: "example.com/foo G().", Label: "G", Source: "pkg/foo/foo.go:11", DefEndLine: 12, Defs: []string{"pkg/foo/foo.go"}},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)}).Output()
+
+	f, ok := nodeByID(out, "symbol:example.com/foo F().")
+	require.True(t, ok)
+	assert.Equal(t, "mode,strict", f.Attrs[attrBranchIdents])
+	g, ok := nodeByID(out, "symbol:example.com/foo G().")
+	require.True(t, ok)
+	assert.NotContains(t, g.Attrs, attrBranchIdents)
 }
 
 func TestGraphDefinitions(t *testing.T) {
@@ -523,29 +580,5 @@ func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
 		merged.canonical = false
 		assert.Equalf(t, fingerprintShardContent(merged), fingerprintShardContent(p),
 			"%s is already canonical, so skipping the merge fingerprints it alike", p.Name)
-	}
-}
-
-func TestIsTestPath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		path string
-		want bool
-	}{
-		{"pkg/x_test.go", true},
-		{"pkg/x_test.go:12", true},
-		{"web/a.test.ts", true},
-		{"web/a.spec.tsx", true},
-		{"py/test_thing.py", true},
-		{"py/thing_test.py", true},
-		{"pkg/x.go", false},
-		{"web/testing.ts", false},
-		{"py/tester.py", false},
-		{"contest.go", false},
-		{"", false},
-	}
-	for _, tc := range tests {
-		assert.Equal(t, tc.want, IsTestPath(tc.path), tc.path)
 	}
 }

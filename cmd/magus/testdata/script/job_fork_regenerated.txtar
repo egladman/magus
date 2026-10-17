@@ -1,9 +1,10 @@
-# A writing job's fork names the declared outputs a target regenerates from sources inside
-# its write paths when those outputs sit outside them: a flag registry feeds a manpage in
-# another project and a lock file beside it. An output the paths hold (the rules page) is
-# not named, nor is one git ignores (coverage), nor anything for a read-only job. describe
-# job carries the same block for the holder, json gets a field, and apply prints it when
-# the paths change.
+# A writing job's fork is refused (MGS3044) for each declared output a target regenerates
+# from sources inside its write paths when the output sits outside them: a flag registry
+# feeds a manpage in another project and a lock file beside it. An output the paths hold
+# (the rules page) is not named, nor is one git ignores (coverage), nor anything for a
+# read-only job. A waiver in the record accepts an output the root regenerates. describe
+# job carries the same block for the holder, and json gets a field. An apply that widens
+# the paths judges only the outputs the added paths bring in.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -14,7 +15,17 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'registry and its generated pages'
 
-exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
+! exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
+! stdout .
+stderr '^\[error\] 2 problems:$'
+stderr '^  1\. \[MGS3044\] write_paths: docs:content-generate regenerates docs/manpage/\*\.md from cli/registry\.go'
+stderr '^  2\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
+stderr '^     fix: add "docs/manpage/\*\.md" to write_paths, or waive it in waivers: \{"code":"MGS3044","subject":"docs/manpage/\*\.md","reason":"the root regenerates it"\}$'
+exec magus ls jobs -o name
+! stdout .
+
+stdin $WORK/fork.json
+exec magus job fork --stdin
 cmp stdout $WORK/fork.out
 
 exec magus describe job flags/shell
@@ -35,15 +46,19 @@ exec magus job fork flags/survey --read-only --criteria 'read the registry'
 stdin $WORK/widen.json
 exec magus job apply -f -
 stdout '^  write_paths \+docs/manpage/\*\.md$'
-stdout '^  cli/testdata/api\.lock \(\.:man-generate\)$'
 ! stdout 'docs:content-generate'
 
+-- fork.json --
+{"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md"],
+ "check": {"target": "test", "project": "."},
+ "waivers": [
+  {"code": "MGS3044", "subject": "docs/manpage/*.md", "reason": "the root regenerates it"},
+  {"code": "MGS3044", "subject": "cli/testdata/api.lock", "reason": "the root regenerates it"}]}
 -- fork.out --
 forked flags/shell, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/shell` and takes it with `magus job exec flags/shell`
-regenerated outside the write paths, from sources inside them
-  docs/manpage/*.md (docs:content-generate)
-  cli/testdata/api.lock (.:man-generate)
-  the root regenerates these after integration: never hand-edit them; if this job must regenerate them itself, ask the root to widen the write paths
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- widen.json --
 {"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."}}

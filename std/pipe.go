@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,9 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module pipe -lang buzz -out ../internal/interp/bindings/gen/pipe.go
-
-func init() { Register(Pipe) }
+//go:generate go run ../cmd/magus-utils bindings -module pipe -lang buzz -out ../internal/interp/bindings/gen/pipe.go -pkg bindgen
 
 // Pipe is the "pipe" host module: a `magus buzz` script as a stage of a shell pipe of
 // magus processes, between a stage that writes records and one that reads them.
@@ -124,23 +121,6 @@ var Pipe = Module{
 	},
 }
 
-// PipeIO is the record stream a `magus buzz` stage reads and writes. In is nil when no
-// magus stage writing records feeds the script; Out receives what it emits, and Prose
-// what it shows a person, which is stderr while a magus reads Out.
-type PipeIO struct {
-	In       *report.Reader
-	Upstream int
-	Out      io.Writer
-	Prose    io.Writer
-}
-
-type pipeIOKey struct{}
-
-// WithPipe carries the stage's record stream on ctx for the pipe module.
-func WithPipe(ctx context.Context, p PipeIO) context.Context {
-	return context.WithValue(ctx, pipeIOKey{}, p)
-}
-
 // errNoRecordUpstream is what reading from a script no record stage feeds raises: a
 // script written to filter a run's records has nothing to filter, and reading nothing
 // would pass for "no failures".
@@ -148,7 +128,7 @@ var errNoRecordUpstream = errors.New("no magus stage writing records feeds this 
 	"pipe a run into it, like `magus run test . | magus buzz <script>`")
 
 func pipeIn(ctx context.Context, member string) (*report.Reader, error) {
-	p, _ := ctx.Value(pipeIOKey{}).(PipeIO)
+	p := report.StageFrom(ctx)
 	if p.In == nil {
 		return nil, fmt.Errorf("pipe.%s: %w", member, errNoRecordUpstream)
 	}
@@ -207,7 +187,7 @@ func PipeAll(ctx context.Context) ([]types.PipeRecord, error) {
 
 // PipeEmit implements pipe.emit.
 func PipeEmit(ctx context.Context, record map[string]any) error {
-	p, _ := ctx.Value(pipeIOKey{}).(PipeIO)
+	p := report.StageFrom(ctx)
 	if p.Out == nil {
 		return errors.New("pipe.emit: this script is not a pipe stage, run it with `magus buzz <script>`")
 	}
@@ -358,7 +338,7 @@ func PipeDiff(ctx context.Context, artifact map[string]any) error {
 	if err != nil {
 		return err
 	}
-	p, _ := ctx.Value(pipeIOKey{}).(PipeIO)
+	p := report.StageFrom(ctx)
 	prose := p.Prose
 	if prose == nil {
 		prose = os.Stdout
@@ -462,7 +442,7 @@ type pipeFields struct {
 func parsePipeRecord(line report.Line) (types.PipeRecord, error) {
 	var f pipeFields
 	if err := line.Decode(&f); err != nil {
-		return types.PipeRecord{}, fmt.Errorf("pipe: %s record: %w", line.Type, err)
+		return types.PipeRecord{}, fmt.Errorf("%s record: %w", line.Type, err)
 	}
 	return types.PipeRecord{
 		Schema: line.Schema, Type: line.Type,

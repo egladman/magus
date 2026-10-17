@@ -432,3 +432,41 @@ func assertFile(t *testing.T, path, content string, mode os.FileMode) {
 	require.NoError(t, err)
 	assert.Equal(t, mode, info.Mode().Perm())
 }
+
+func TestConfinedToGeneratedSection(t *testing.T) {
+	t.Parallel()
+
+	user := "*.png binary\n"
+	old := user + "\n" + generatedMarkers.section("a.go merge=magus\n")
+
+	tests := []struct {
+		name      string
+		committed string
+		current   string
+		want      bool
+		wantErr   string
+	}{
+		{name: "identical", committed: old, current: old, want: false},
+		{name: "section body changed", committed: old, current: user + "\n" + generatedMarkers.section("b.go merge=magus\n"), want: true},
+		{name: "section first written", committed: user, current: old, want: true},
+		{name: "section dropped", committed: old, current: user, want: true},
+		{name: "hand edit beside section", committed: old, current: "*.png binary\n*.jpg binary\n\n" + generatedMarkers.section("a.go merge=magus\n"), want: false},
+		{name: "hand edit and section change", committed: old, current: "*.jpg binary\n\n" + generatedMarkers.section("b.go merge=magus\n"), want: false},
+		{name: "blank lines moved", committed: old, current: user + generatedMarkers.section("a.go merge=magus\n") + "\n\n", want: true},
+		{name: "crlf working copy", committed: old, current: strings.ReplaceAll(user+"\n"+generatedMarkers.section("b.go merge=magus\n"), "\n", "\r\n"), want: true},
+		{name: "torn committed section", committed: tornBanner + "\n", current: old, wantErr: "committed: line 1"},
+		{name: "torn working section", committed: old, current: tornBanner + "\n", wantErr: "working copy: line 1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ConfinedToGeneratedSection(tt.committed, tt.current)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

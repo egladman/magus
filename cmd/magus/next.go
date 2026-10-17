@@ -13,10 +13,11 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
-// The rendering half of hint.Next: the structured results carry the field, and text
+// The rendering half of types.NextStep: the structured results carry the field, and text
 // mode prints the same commands under a `next:` label so a person sees the step an
 // agent's harness would.
 
@@ -28,12 +29,12 @@ import (
 // embedded result, so the wire shape is the result plus one key.
 type queryWithNext struct {
 	types.KnowledgeQueryOutput `yaml:",inline"`
-	Next                       []hint.Next `json:"next,omitempty" yaml:"next,omitempty"`
+	Next                       []types.NextStep `json:"next,omitempty" yaml:"next,omitempty"`
 }
 
 type explainWithNext struct {
 	types.KnowledgeExplainOutput `yaml:",inline"`
-	Next                         []hint.Next `json:"next,omitempty" yaml:"next,omitempty"`
+	Next                         []types.NextStep `json:"next,omitempty" yaml:"next,omitempty"`
 	// AgentSessions is what the loaded transcripts recorded about this node's file, the
 	// same fact the text view prints. Absent when nothing touched it, or when the node is
 	// not about a file.
@@ -47,7 +48,7 @@ type explainWithNext struct {
 
 type filesWithNext struct {
 	types.FileReport `yaml:",inline"`
-	Next             []hint.Next `json:"next,omitempty" yaml:"next,omitempty"`
+	Next             []types.NextStep `json:"next,omitempty" yaml:"next,omitempty"`
 }
 
 // nextGate is what one result needs to serve its breadcrumbs: the marker store that
@@ -66,22 +67,26 @@ type nextGate struct {
 
 // newNextGate resolves the gate for a command running against root.
 func newNextGate(root string) nextGate {
-	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), magus.WithLoadedConfig(globalCfg))
+	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nextGate{role: hint.RoleUnbound}
 	}
-	role, writePaths := actingRole(dir, resolveRootOrEmpty(root))
+	role, writePaths := actingRole(resolveRootOrEmpty(root))
 	return nextGate{gate: hint.NewGate(dir, ""), role: role, writePaths: writePaths}
 }
 
 // actingRole grades the acting lease against this checkout's job store. A store that
 // cannot be read serves the worker's narrower set.
-func actingRole(cacheDir, root string) (hint.Role, []string) {
-	id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv())
+func actingRole(root string) (hint.Role, []string) {
+	loc, err := jobPlace(root)
+	if err != nil {
+		return hint.RoleWorker, nil
+	}
+	id, _ := job.ActingLease(loc, trail.LeaseFromEnv())
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}
-	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		return hint.RoleWorker, nil
 	}
@@ -93,8 +98,8 @@ func actingRole(cacheDir, root string) (hint.Role, []string) {
 // Every output that carries breadcrumbs calls it, structured output included: the
 // journal's readers ask what a reader was given, and an entry that reached a harness
 // as a field was given over exactly as one printed on a terminal was.
-func (n nextGate) served(next []hint.Next) []hint.Next {
-	served := hint.ServableTo(n.role, n.writePaths, next)
+func (n nextGate) served(next []types.NextStep) []types.NextStep {
+	served := hint.FilterServable(n.role, n.writePaths, next)
 	hint.AppendServedNext(n.gate.CacheDir(), served)
 	return served
 }
@@ -115,13 +120,13 @@ func emitConcurrencyNudge(ctx context.Context, sink *magus.Sink, m *magus.Magus,
 	if line == "" {
 		return
 	}
-	next := []hint.Next{hint.NextForSlotWait(string(types.ProfileAggressive), args)}
+	next := []types.NextStep{hint.NextForSlotWait(string(types.ProfileAggressive), args)}
 	gate := hint.NewGate(m.CacheDir(), terminalWindow())
 	if gate.MarkFired(hint.MarkerKind(next[0].ID)) {
 		return
 	}
 	hint.AppendServedNext(gate.CacheDir(), next)
-	rerun := strings.TrimSuffix(hint.Render(next, func(hint.Next) string { return "" }), "\n")
+	rerun := strings.TrimSuffix(hint.Render(next, func(types.NextStep) string { return "" }), "\n")
 	sink.EmitNotice(ctx, slog.LevelInfo, "", line+"\n"+rerun)
 }
 
@@ -132,8 +137,8 @@ func emitConcurrencyNudge(ctx context.Context, sink *magus.Sink, m *magus.Magus,
 // before still needs the ids filled in. The Why is advice, so it goes through the
 // gate; -s drops it without spending the firing, and the next full run still explains
 // itself.
-func printNext(w io.Writer, n nextGate, next []hint.Next) {
-	fmt.Fprint(w, hint.Render(next, func(entry hint.Next) string {
+func printNext(w io.Writer, n nextGate, next []types.NextStep) {
+	fmt.Fprint(w, hint.Render(next, func(entry types.NextStep) string {
 		if global.silent {
 			return ""
 		}

@@ -9,6 +9,8 @@
 // The calling side is held too: queue-apply releases the key to main's runs alone, and
 // every write the queue makes is the app's, since a run or a merge the job's own token
 // makes starts no workflow.
+//
+// Tier 1, mechanical: the fix is the workflow line the finding names.
 namespace queuetoken;
 
 import "assert";

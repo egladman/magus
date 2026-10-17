@@ -85,12 +85,15 @@ tax() { echo $(( $1 / 10 )); }
  "check": {"target": "test", "project": "."}}
 -- fork.out --
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- shell.out --
 advise
 -- ls-overlap.out --
-JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
-cents     ana     running  -      2      alone  magus run test .
-currency  ben     running  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
+cents     ana     running  standard  2      alone  magus run test .
+currency  ben     running  standard  2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -103,13 +106,15 @@ in flight: never fetched; `magus queue ls --provider <provider> --base <branch>`
 updated cents, still running:
   write_paths -pricing/format.sh
 -- ls-handed.out --
-JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
-cents     ana     running  -      1      alone  magus run test .
-currency  ben     running  -      2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
+cents     ana     running  standard  1      alone  magus run test .
+currency  ben     running  standard  2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- describe.out --
 job: currency
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+skills: short
 
 criteria
 prices carry a currency code
@@ -118,6 +123,9 @@ write paths
   pricing/format.sh
   checkout/tax.sh
 
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
+
 projects
   .
 
@@ -125,8 +133,14 @@ deny paths the workspace declares
   pricing/total.sh: owned by live lease cents: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
 
+grouping history
+  none recorded for these projects
+
 the only check you run
 magus run test .
 currency: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
+net lines: +0 -0 (+0)
+exports no goal declares: none
+left defined with no use: none

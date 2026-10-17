@@ -10,9 +10,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module path -lang buzz -out ../internal/interp/bindings/gen/path.go
-
-func init() { Register(Path) }
+//go:generate go run ../cmd/magus-utils bindings -module path -lang buzz -out ../internal/interp/bindings/gen/path.go -pkg bindgen
 
 // Path is the "path" host module: pure path-string math (no filesystem access).
 // fs.* already covers dirname/basename/join/glob; these are the remaining

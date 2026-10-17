@@ -1,0 +1,50 @@
+# A magusfile that will not load does not stop the job verbs that only touch the store:
+# the fork or apply that declares the fix still writes its row. What needs the workspace
+# (the model tier, the notes over the write paths) is skipped, and each skip is named on
+# stderr with the load error, never left to read as a clean result.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+cp $WORK/code.go a.go
+cp $WORK/code.go b.go
+cp $WORK/broken.buzz magusfile.buzz
+! exec magus ls
+stderr 'no member "noSuchCall"'
+
+exec magus job fork wave/fix --write-paths a.go --check 'test .'
+stdout '^forked wave/fix, declared, with 1 write path\(s\)'
+! stdout 'model tier'
+stderr 'unchecked: the workspace did not load, so no model tier was assigned and no tier limit was checked'
+stderr 'unchecked: the workspace did not load, so the outputs regenerated outside the write paths, the ci targets no goal runs and a check too long for the foreground were not listed'
+stderr 'no member "noSuchCall"'
+
+stdin $WORK/applied.json
+exec magus job apply -f -
+stdout '^created wave/applied, declared, with 1 write path\(s\)$'
+! stdout 'model tier'
+stderr 'unchecked: the workspace did not load, so no model tier was assigned'
+stderr 'unchecked: the workspace did not load, so the outputs regenerated outside the write paths'
+
+# A dry run assigns no tier anyway, so only the notes are skipped.
+stdin $WORK/applied.json
+exec magus job apply -f - --dry-run
+! stderr 'no model tier was assigned'
+
+exec magus ls jobs -o name
+stdout '^wave/fix$'
+stdout '^wave/applied$'
+exec magus describe job wave/fix
+stdout '^job: wave/fix$'
+exec magus job exit wave/fix wave/applied
+exec magus ls jobs -o name
+! stdout 'wave/'
+
+-- broken.buzz --
+import "magus";
+
+magus\noSuchCall();
+-- code.go --
+package pkg
+-- applied.json --
+{"schema_version": 12, "id": "wave/applied", "write_paths": ["b.go"],
+ "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go"]}]}

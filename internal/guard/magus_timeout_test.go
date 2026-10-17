@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/hint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // Every wrapper shape refuses toward the same magus argv bounded by its own --timeout,
@@ -45,7 +46,7 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
 		// Argv and Why are the remedy's tokenized form and its prose, which this test does not pin.
-		assert.Equal(t, hint.Next{ID: "deny-magus-timeout", Run: next, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], command)
+		assert.Equal(t, types.NextStep{ID: "deny-magus-timeout", Run: next, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], command)
 		for _, flag := range []string{"--timeout <dur>", "--target-timeout <dur>", "--stall-timeout <dur>"} {
 			assert.Contains(t, v.Why, flag, command)
 		}

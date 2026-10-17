@@ -17,11 +17,14 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// writeHistory saves h to a temp file and returns its path.
+// writeHistory writes h to a temp file and returns its path.
 func writeHistory(t *testing.T, h forecast.History) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), path, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
 	return path
 }
 
@@ -109,9 +112,12 @@ func TestServiceInsightCacheHit(t *testing.T) {
 	)
 
 	// Insight folds the volatility lens onto the cached scan; with no history path
-	// configured that lens is an empty report carrying just the (zero) threshold.
+	// configured that lens is an empty report carrying just the (zero) threshold. The
+	// model-tier lens is empty too: a service with no workspace has no outcomes to read, and
+	// still says what the lens means.
 	want := view
 	want.Volatility = &types.VolatilityReport{}
+	want.ModelTiers = &types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
 	for i := 0; i < 3; i++ {
 		got, err := svc.Insight(context.Background())
 		require.NoError(t, err)

@@ -12,11 +12,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cli"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -77,13 +78,13 @@ type ShellVerdict struct {
 	Kind    hint.MarkerKind
 	Brief   string
 	Rule    denyRule
-	Next    []hint.Next
+	Next    []types.NextStep
 	Lead    string
 	demoted bool
 }
 
 // withRemedy attaches next to a deny, or leaves v alone when the rule computed none.
-func (v ShellVerdict) withRemedy(lead string, next ...hint.Next) ShellVerdict {
+func (v ShellVerdict) withRemedy(lead string, next ...types.NextStep) ShellVerdict {
 	if len(next) == 0 || lead == "" {
 		return v
 	}
@@ -233,10 +234,10 @@ type runStage struct {
 // never reads its value as a project.
 var runStageFlags = sync.OnceValue(func() map[string]*flag.FlagSet {
 	run := flag.NewFlagSet("run", flag.ContinueOnError)
-	gen.BindRun(run)
-	run.String(gen.FlagRunSkip, "", "")
+	flaggen.BindRun(run)
+	run.String(flaggen.FlagRunSkip, "", "")
 	affected := flag.NewFlagSet("affected", flag.ContinueOnError)
-	gen.BindAffected(affected)
+	flaggen.BindAffected(affected)
 	return map[string]*flag.FlagSet{"run": run, "affected": affected}
 })
 
@@ -392,7 +393,7 @@ func (ch *runChain) breakWith(why string) {
 // pipeStdioFlags change what a stage reads from stdin or writes to stdout, or stop it
 // taking the project locks a pipe orders stages by.
 var pipeStdioFlags = []string{
-	gen.FlagRunStdin, gen.FlagRunStep, gen.FlagRunDetach, gen.FlagRunGraph,
+	flaggen.FlagRunStdin, flaggen.FlagRunStep, flaggen.FlagRunDetach, flaggen.FlagRunGraph,
 	"plan", "impact", "explain", "bisect", "dry-run", "h", "help",
 }
 
@@ -633,7 +634,7 @@ func renamesSymbol(args []string) bool {
 // Resolving none while live leases hold write paths in the checkout at root is a deny: a
 // worker bound only by its session would otherwise be graded by nobody. dryRun judges as
 // [Request.DryRun] does, writing nothing.
-func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) Verdict {
+func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -1045,7 +1046,10 @@ var assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'
 //
 // Empty when the line does not RUN magus, so a rule built on this cannot fire on
 // one that merely names a directory.
-func magusCdTargets(command string, d Dialect) []string {
+//
+// Each target is placed where the shell lands, from callDir and the cds before it, with `~`
+// and $HOME the home's; one that cannot be placed is left out.
+func magusCdTargets(command string, d Dialect, callDir, home string) []string {
 	if !mentionsMagusCommand(command, d) {
 		return nil
 	}
@@ -1058,12 +1062,25 @@ func magusCdTargets(command string, d Dialect) []string {
 		vars[m[1]] = m[3]
 	}
 	var out []string
+	cwd := callDir
 	syntax.Walk(f, func(n syntax.Node) bool {
 		call, ok := n.(*syntax.CallExpr)
 		if !ok || len(call.Args) < 2 || literalWord(call.Args[0].Parts) != "cd" {
 			return true
 		}
-		out = append(out, expandGuardVars(rawWord(command, call.Args[1]), vars))
+		word := placeableWord(command, call.Args[1])
+		if strings.HasPrefix(word, unresolved) {
+			if expanded := expandGuardVars(rawWord(command, call.Args[1]), vars); !strings.ContainsAny(expanded, "$`") {
+				word = expanded
+			}
+		}
+		dir, ok := placePath(word, cwd, home)
+		if !ok {
+			cwd = ""
+			return true
+		}
+		cwd = dir
+		out = append(out, dir)
 		return true
 	})
 	return out
@@ -1118,7 +1135,7 @@ func magusInThrowawayCopy(command string, d Dialect) bool {
 	if parsed && !slices.ContainsFunc(cmds, isMagusWork) {
 		return false
 	}
-	return slices.ContainsFunc(magusCdTargets(command, d), throwawayDirRe.MatchString)
+	return slices.ContainsFunc(magusCdTargets(command, d, "", userHome()), throwawayDirRe.MatchString)
 }
 
 // expandGuardVars substitutes $NAME and ${NAME} from assignments made earlier on
@@ -1558,7 +1575,7 @@ func magusHelpRequest(args []string) bool {
 			return true
 		}
 	}
-	level, depth := cli.All, 0
+	level, depth := commands.Root.Children, 0
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if depth == 0 && strings.HasPrefix(a, "-") {
@@ -1575,7 +1592,7 @@ func magusHelpRequest(args []string) bool {
 		if a == "help" {
 			return depth <= 1 || len(level) > 0
 		}
-		j := slices.IndexFunc(level, func(cmd cli.Command) bool { return cmd.Name == a })
+		j := slices.IndexFunc(level, func(cmd cmdline.Command) bool { return cmd.Name == a })
 		if j < 0 {
 			return false
 		}
@@ -1934,14 +1951,18 @@ var (
 	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
 		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
-	denyBusyWait    = "this loop polls for work you started, and you are told when it finishes; start it and do something else."
+	denyBusyWait = "this loop polls for work the host announces when it ends; wait for the task's completion notice, or `" + hint.JobWait.With("<job>") +
+		"` for a job. `" + hint.Status.With("--watch") + "` is for a person watching, not a loop."
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
-		"Waiting on something outside this machine is what your host's monitor is for."
+		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
 	// Says only what the guard can prove about a probe of someone else's process: nothing
-	// here announces that process's end to the caller, so the other text would be false.
-	denyBusyWaitForeign    = "this loop holds your tool slot for the whole wait on a process you did not start; wait with your host's monitor."
-	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on."
+	// here announces that process's end to the caller, so it is sent to the record magus
+	// keeps of that work instead. Sending it to "your host's monitor" built piles of
+	// watchers, each running this loop.
+	denyBusyWaitForeign    = "this loop waits on work you did not start; wait on its record: `" + hint.JobWait.With("<job>") + "` for a job, `" + hint.Status.With("--watch=15s") + "` for the project lock."
+	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on. " +
+		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
 	denyProcessPoll    = "`pgrep`, `pidof` and `ps` poll for what the project lock already records; read it: `" + hint.Status.With("--watch=15s") + "`."
 	denyProcessPollWhy = "Status reads the project lock continuously (holder PID, command, age), where the process table invents an unbounded poll."
@@ -2076,11 +2097,6 @@ func magusWithFlags(args []string, flags ...string) []string {
 	return append(argv, flags...)
 }
 
-// magusSilent reports -s or --silent among a magus argv's own flags.
-func magusSilent(args []string) bool {
-	return magusFlag(args, "silent") || magusFlag(args, "s")
-}
-
 // magusOutputFormat is the value of -o/--output, "" when none was given.
 func magusOutputFormat(args []string) string {
 	for i, a := range args {
@@ -2104,7 +2120,7 @@ func magusOutputFormat(args []string) string {
 // pipeRemedy is the piped magus command answering on its own: -s for a run trimmed to its
 // tail, else the projection pipeRewrite names, read out of its first quoted span so the
 // prose and the served command cannot drift apart.
-func pipeRemedy(p pipedMagus) (string, []hint.Next) {
+func pipeRemedy(p pipedMagus) (string, []types.NextStep) {
 	if p.bin == "" || magusOutputFormat(p.args) != "" {
 		return "", nil
 	}
@@ -2114,7 +2130,7 @@ func pipeRemedy(p pipedMagus) (string, []hint.Next) {
 	words := magusSubcommandWords(p.args)
 	switch {
 	case len(words) > 0 && isRunVerb(words[0]) && slices.Contains([]string{"head", "tail", "less", "more"}, p.filter):
-		if magusSilent(p.args) {
+		if magusFlag(p.args, "s", "silent") {
 			return "", nil
 		}
 		flags, why = []string{"-s"}, "-s stays quiet until something fails, then prints the diagnostics and the log path."
@@ -2130,7 +2146,7 @@ func pipeRemedy(p pipedMagus) (string, []hint.Next) {
 	if len(flags) == 0 {
 		return "", nil
 	}
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe), magusWithFlags(p.args, flags...), why)}
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleOutputPipe), magusWithFlags(p.args, flags...), why)}
 }
 
 // quotedFlags reads the flags out of prose's first backtick span, nil unless every word
@@ -2153,7 +2169,7 @@ func quotedFlags(prose string) []string {
 
 // redirectRemedy drops the redirect for the lever that does what it was for: --silent
 // for a discard, --tee for stdout kept in a file.
-func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
+func redirectRemedy(r redirectedMagus) (string, []types.NextStep) {
 	if r.bin == "" {
 		return "", nil
 	}
@@ -2164,7 +2180,7 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	case r.file == "/dev/null":
 		lead = "`" + r.verb + " " + r.dest + "` discards the diagnostics a failure prints."
 		why = "--silent says nothing until something fails, then prints what the redirect would have discarded."
-		if !magusSilent(r.args) {
+		if !magusFlag(r.args, "s", "silent") {
 			flags = []string{"--silent"}
 		}
 	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
@@ -2185,24 +2201,24 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	default:
 		return "", nil
 	}
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputRedirect), magusWithFlags(r.args, flags...), why)}
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleOutputRedirect), magusWithFlags(r.args, flags...), why)}
 }
 
 // rawToolRemedy is the spell op run bare, when the typed command is the op's own. A
 // rewriting form is left to the prose: its charm belongs on the workspace's target.
-func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (string, []hint.Next) {
+func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (string, []types.NextStep) {
 	if !match.exact || match.rewrites || helpRequest(deps, c) {
 		return "", nil
 	}
 	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`; the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
-	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleRawTool),
+	return lead, []types.NextStep{hint.NextForDenyRemedy(string(denyRuleRawTool),
 		hint.Run.Argv(match.spell+"::"+match.operation),
 		"the op runs the same command in the project you are in.")}
 }
 
 // stageAllRemedy stages the same paths through the workspace. `git add .` is left to the
 // prose: it stages the working directory's subtree, which no vcs add spelling equals.
-func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
+func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
 		return "", nil
@@ -2224,13 +2240,13 @@ func stageAllRemedy(command string, d Dialect) (string, []hint.Next) {
 			}
 		}
 		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
-			[]hint.Next{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
+			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
 				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
 	}
 	return "", nil
 }
 
-// foreignWaitFires reports a sleep-only while or until loop whose condition probes a
+// foreignWaitFires reports a sleeping while or until loop whose condition probes a
 // process by pid or through magus's pool and job rows, which a caller's own backgrounded
 // command never needs: the host announces that one's end.
 func foreignWaitFires(command string, d Dialect) bool {
@@ -2241,7 +2257,7 @@ func foreignWaitFires(command string, d Dialect) bool {
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
 		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !bodyOnlySleeps(loop.Do, d) {
+		if found || !ok || !runsIn(loop.Do, d, "sleep") {
 			return !found
 		}
 		for _, cond := range loop.Cond {
@@ -2645,6 +2661,12 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			return v
 		}
 	}
+	// The same poll with the loop left to the caller's next call.
+	if parsed && sleepPollFires(work) {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); ok {
+			return v
+		}
+	}
 	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
 	// waiting in the background. The backtick is judged first because a stray one is how a
 	// filter loses its file operand in the first place.
@@ -2700,6 +2722,12 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 				return v
 			}
 			advisory = v
+		}
+		// The push gate reads the verdict's rule, so a commit or add earlier on the line must
+		// not speak in its place: `git commit -m x && git push` reached the push ungated
+		// because the commit's advisory was the one the line returned.
+		if advisory.Rule.Name != advisoryPushGate && slices.ContainsFunc(cmds, isPush) {
+			advisory = ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}
 		}
 	} else if !parsed {
 		if v, matched := gitGuardFallback(command, grade); matched {

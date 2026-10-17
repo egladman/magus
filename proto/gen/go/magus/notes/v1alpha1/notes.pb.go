@@ -164,25 +164,25 @@ func (AnchorKind) EnumDescriptor() ([]byte, []int) {
 
 // AnchorStatus is what checking one anchor against the workspace found.
 //
+// It is `magus notes verify`'s grade, mapped rather than re-derived, so the two cannot
+// disagree.
+//
 // DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored
-// code still exists and quietly stopped meaning what the note says. BODY_CHANGED is that same
-// check graded one step finer - the content moved, the DECLARATION did not - and it is a far
-// weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone
-// is 39-105x less likely to come with a prose update than one that changes it, which is why
-// an undifferentiated content hash reports drift that mostly is not there. Surface it, never
-// gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it
-// means no fingerprint was recorded (the note predates fingerprinting, or was never re-read)
-// or none could be computed here, and reporting drift from missing data is the false positive
-// that trains a reader to ignore every flag.
+// code still exists and quietly stopped meaning what the note says. A symbol drifts when its
+// signature changes; a body edit or a move leaves it RESOLVES, since those almost never
+// invalidate prose about what the symbol is. A file drifts when its content changes.
+// UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means the
+// graph would not load, a symbol note recorded no signature, or none could be read here, and
+// reporting drift from missing data is the false positive that trains a reader to ignore
+// every flag.
 type AnchorStatus int32
 
 const (
-	AnchorStatus_ANCHOR_STATUS_UNSPECIFIED  AnchorStatus = 0
-	AnchorStatus_ANCHOR_STATUS_RESOLVES     AnchorStatus = 1
-	AnchorStatus_ANCHOR_STATUS_DANGLING     AnchorStatus = 2
-	AnchorStatus_ANCHOR_STATUS_DRIFTED      AnchorStatus = 3
-	AnchorStatus_ANCHOR_STATUS_UNVERIFIED   AnchorStatus = 4
-	AnchorStatus_ANCHOR_STATUS_BODY_CHANGED AnchorStatus = 5
+	AnchorStatus_ANCHOR_STATUS_UNSPECIFIED AnchorStatus = 0
+	AnchorStatus_ANCHOR_STATUS_RESOLVES    AnchorStatus = 1
+	AnchorStatus_ANCHOR_STATUS_DANGLING    AnchorStatus = 2
+	AnchorStatus_ANCHOR_STATUS_DRIFTED     AnchorStatus = 3
+	AnchorStatus_ANCHOR_STATUS_UNVERIFIED  AnchorStatus = 4
 )
 
 // Enum value maps for AnchorStatus.
@@ -193,15 +193,13 @@ var (
 		2: "ANCHOR_STATUS_DANGLING",
 		3: "ANCHOR_STATUS_DRIFTED",
 		4: "ANCHOR_STATUS_UNVERIFIED",
-		5: "ANCHOR_STATUS_BODY_CHANGED",
 	}
 	AnchorStatus_value = map[string]int32{
-		"ANCHOR_STATUS_UNSPECIFIED":  0,
-		"ANCHOR_STATUS_RESOLVES":     1,
-		"ANCHOR_STATUS_DANGLING":     2,
-		"ANCHOR_STATUS_DRIFTED":      3,
-		"ANCHOR_STATUS_UNVERIFIED":   4,
-		"ANCHOR_STATUS_BODY_CHANGED": 5,
+		"ANCHOR_STATUS_UNSPECIFIED": 0,
+		"ANCHOR_STATUS_RESOLVES":    1,
+		"ANCHOR_STATUS_DANGLING":    2,
+		"ANCHOR_STATUS_DRIFTED":     3,
+		"ANCHOR_STATUS_UNVERIFIED":  4,
 	}
 )
 
@@ -307,9 +305,8 @@ type Anchor struct {
 	// node_id is the graph node this anchor names, so a client can link into the Graph
 	// Explorer. Empty when the anchor does not resolve.
 	NodeId string `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	// detail explains a DANGLING, DRIFTED or BODY_CHANGED status in one sentence, and what to
-	// do about it.
-	// Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is
+	// detail explains a DANGLING, DRIFTED or UNVERIFIED status in one sentence, and what to do
+	// about it. Empty for RESOLVES. UNTRUSTED only in the sense that it is prose; it is
 	// magus-authored, unlike body below.
 	Detail        string `protobuf:"bytes,5,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -920,14 +917,13 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x10ANCHOR_KIND_FILE\x10\x02\x12\x17\n" +
 	"\x13ANCHOR_KIND_PROJECT\x10\x03\x12\x16\n" +
 	"\x12ANCHOR_KIND_TARGET\x10\x04\x12\x14\n" +
-	"\x10ANCHOR_KIND_NOTE\x10\x05*\xbe\x01\n" +
+	"\x10ANCHOR_KIND_NOTE\x10\x05*\xc0\x01\n" +
 	"\fAnchorStatus\x12\x1d\n" +
 	"\x19ANCHOR_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ANCHOR_STATUS_RESOLVES\x10\x01\x12\x1a\n" +
 	"\x16ANCHOR_STATUS_DANGLING\x10\x02\x12\x19\n" +
 	"\x15ANCHOR_STATUS_DRIFTED\x10\x03\x12\x1c\n" +
-	"\x18ANCHOR_STATUS_UNVERIFIED\x10\x04\x12\x1e\n" +
-	"\x1aANCHOR_STATUS_BODY_CHANGED\x10\x05*\x86\x01\n" +
+	"\x18ANCHOR_STATUS_UNVERIFIED\x10\x04\"\x04\b\x05\x10\x05*\x1aANCHOR_STATUS_BODY_CHANGED*\x86\x01\n" +
 	"\tStaleness\x12\x19\n" +
 	"\x15STALENESS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14STALENESS_UNMEASURED\x10\x01\x12\x15\n" +

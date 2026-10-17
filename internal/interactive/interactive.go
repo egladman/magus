@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,7 +70,7 @@ func ScoreProjects(all []*types.Project, filters []string) []ScoredProject {
 // bounded by how many projects a person works in, and an age-based sweep would delete
 // the long-tail entry that remembering is for.
 func stateDir() (string, error) {
-	dir, err := config.UserStateDir()
+	dir, err := xdg.StateDir()
 	if err != nil {
 		return "", err
 	}

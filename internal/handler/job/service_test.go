@@ -153,7 +153,7 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 // vocabulary, so a reader never asks which door to knock on for which kind.
 func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	dir := t.TempDir()
-	store := jobstore.NewStore(jobstore.Location{CacheDir: dir, Root: dir})
+	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
 		row.Model = "opus"
@@ -209,6 +209,13 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 				Expect: types.ExpectChanged,
 				Paths:  []string{"internal/job/store.go"},
 			},
+			{
+				ID:        "store-shape",
+				Kind:      types.GoalKindSymbol,
+				Expect:    types.ExpectSignature,
+				Symbols:   []string{"Update"},
+				Signature: "func (Store).Update(ctx context.Context, id string) error",
+			},
 		}
 		row.Result = &types.JobResult{
 			ChangedPaths:    []string{"internal/job/store.go"},
@@ -250,7 +257,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
 	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
 
-	require.Len(t, got.Goals, 2)
+	require.Len(t, got.Goals, 3)
 	require.Equal(t, "lint", got.Goals[0].Id)
 	require.Equal(t, "check", got.Goals[0].Kind)
 	require.Equal(t, "passed", got.Goals[0].Expect)
@@ -258,6 +265,10 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Equal(t, "store-touched", got.Goals[1].Id)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Goals[1].Paths)
 	require.Empty(t, got.Goals[1].Check, "a paths gate carries no check to render")
+	require.Equal(t, "signature", got.Goals[2].Expect)
+	require.Equal(t, []string{"Update"}, got.Goals[2].Symbols)
+	require.Equal(t, "func (Store).Update(ctx context.Context, id string) error", got.Goals[2].Signature)
+	require.Empty(t, got.Goals[1].Signature, "only a signature goal carries one")
 
 	require.NotNil(t, got.Result)
 	require.Equal(t, []string{"internal/job/store.go"}, got.Result.ChangedPaths)
@@ -340,6 +351,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		Attempt: &types.JobAttempt{
 			Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
 			AttemptID: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+			Lease: "api/store", ExtraArgs: []string{"-run", "TestStore"},
 		},
 		Releases:     []types.JobRelease{{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}},
 		GateAttempts: []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "out2"}}},
@@ -360,9 +372,23 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	}
 	row.Version = 11
 	row.Requires = []string{"claims"}
+	row.Breaks = []string{"--old-flag", "api.Open"}
+	row.ModelTier = &types.JobModelTier{
+		Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
+	}
+	row.ReworkRounds, row.Widenings = 2, 1
 
 	got := delegatedJob(row)
 
+	require.True(t, proto.Equal(&jobv1.JobModelTier{
+		Name: "economy", Rank: 0, Skills: "full", Source: "matrix",
+		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
+	}, got.ModelTier), "model_tier: %v", got.ModelTier)
+	require.Equal(t, int32(2), got.ReworkRounds)
+	require.Equal(t, int32(1), got.Widenings)
+
+	require.Equal(t, []string{"--old-flag", "api.Open"}, got.Breaks)
 	require.Equal(t, "its checkout no longer exists", got.EndReason)
 	require.Equal(t, "disjoint", got.WriteProof)
 	require.Equal(t, "94d434ac0", got.ReportedBase)
@@ -381,6 +407,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.True(t, proto.Equal(&jobv1.JobAttempt{
 		Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
 		AttemptId: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+		Lease: "api/store", ExtraArgs: []string{"-run", "TestStore"},
 	}, got.Attempt))
 	require.True(t, proto.Equal(&jobv1.JobRelease{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}, got.Releases[0]))
 	require.True(t, proto.Equal(&jobv1.JobIntegration{
@@ -407,6 +434,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Nil(t, bare.Attempt)
 	require.Nil(t, bare.Integration)
 	require.Nil(t, bare.WaiterEvidence)
+	require.Nil(t, bare.ModelTier, "a workspace that declared no tiers assigned none")
 }
 
 // TestListJobs_ServesTheStoresReport pins that the listing's flags are the ones the store's

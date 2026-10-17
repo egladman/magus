@@ -1,0 +1,700 @@
+package calibrate
+
+import (
+	"embed"
+	"errors"
+	"fmt"
+	"hash/fnv"
+	"io/fs"
+	"maps"
+	"path"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+
+	"golang.org/x/tools/txtar"
+
+	"github.com/egladman/magus/libs/proofread"
+)
+
+// label is what a labeled case says a rule does with its text. Hit and pass
+// are the verdicts the rule must reach. False positive and false negative are
+// known misses, kept so precision and recall count them: the rule fires on a
+// false positive and stays silent on a false negative, and a replay that sees
+// otherwise reports the case, since the rule changed.
+type label string
+
+const (
+	labelHit           label = "hit"
+	labelPass          label = "pass"
+	labelFalsePositive label = "fp"
+	labelFalseNegative label = "fn"
+)
+
+// labelAuthor marks a case file section of an author's own texts. It holds no
+// case: its texts build the [proofread.Voice] every case in its file is
+// judged with.
+const labelAuthor label = "author"
+
+// fires reports whether a case with this label expects its rule to report.
+func (l label) fires() bool { return l == labelHit || l == labelFalsePositive }
+
+// labeledCase is one labeled text and the rule judging it.
+type labeledCase struct {
+	// File and Line place the case's text in its case file, Line 1-based.
+	File string
+	Line int
+	Rule proofread.Rule
+	Kind proofread.Kind
+	// Label is the verdict the case records.
+	Label label
+	Text  string
+	// Symbol names the declaration a doc-comment case documents; its Doc is
+	// Text.
+	Symbol proofread.Symbol
+	// ThreadLength is the count of replies the author already posted, for a
+	// review-reply case.
+	ThreadLength int
+	// Event is the verdict a review-summary case is posted with, "" for none.
+	Event proofread.Event
+	// Voice is what the case file's author sections measure, or nil when it
+	// has none.
+	Voice *proofread.Voice
+}
+
+//go:embed cases/*.txtar
+var labeledCases embed.FS
+
+// LabeledCases returns the case files proofread carries, one per rule.
+func LabeledCases() fs.FS {
+	sub, err := fs.Sub(labeledCases, "cases")
+	if err != nil {
+		panic(err)
+	}
+
+	return sub
+}
+
+// catalog indexes [proofread.Catalog] by rule.
+var catalog = sync.OnceValue(func() map[proofread.Rule]proofread.RuleDoc {
+	out := map[proofread.Rule]proofread.RuleDoc{}
+	for _, doc := range proofread.Catalog() {
+		out[doc.Name] = doc
+	}
+
+	return out
+})
+
+// caseLead is the title and opening paragraph a one-line change-description
+// case is judged under, so the line reads as a bullet of a description with
+// its goal stated.
+const caseLead = "fix(cache): keep the key stable\n" +
+	"A cached replay missed whenever two workers raced on the key, so the cache key now " +
+	"sorts its inputs before hashing.\n\n"
+
+// LoadCases reads every .txtar file at the root of fsys. A file is named for
+// the rule its cases judge, <rule>.txtar, and its comment is free text. Each
+// section header reads
+//
+//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
+//
+// where label is hit, pass, fp or fn and kind is one the rule judges. Each
+// non-blank line of a section is one case; whole makes the section one case,
+// for a text whose lines belong together. A one-line change-description case
+// is judged as a bullet under a fixed title and opening paragraph; a whole one
+// as written. name and owner describe a doc-comment case's symbol,
+// thread sets a review case's thread length, and event a review-summary case's
+// verdict: APPROVE, REQUEST_CHANGES or COMMENT.
+//
+// A section labeled author holds no case. Its texts, one per non-blank line or
+// the whole section, are one author's own writing of its kind: every author
+// section of a file builds one [proofread.Voice] (see [proofread.BuildVoice]),
+// and every case in the file is judged with it. A file with no author section
+// judges with no voice.
+//
+// A file named for no rule, a header it cannot read, or a kind the rule does
+// not judge is an error naming the file and line.
+func LoadCases(fsys fs.FS) ([]labeledCase, error) {
+	names, err := fs.Glob(fsys, "*.txtar")
+	if err != nil {
+		return nil, err
+	}
+
+	var out []labeledCase
+
+	for _, name := range names {
+		data, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return nil, err
+		}
+
+		cases, err := parseCases(name, data)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, cases...)
+	}
+
+	return out, nil
+}
+
+func parseCases(name string, data []byte) ([]labeledCase, error) {
+	rule := proofread.Rule(strings.TrimSuffix(path.Base(name), ".txtar"))
+
+	doc, ok := catalog()[rule]
+	if !ok {
+		return nil, fmt.Errorf("%s: no rule is named %q", name, rule)
+	}
+
+	archive := txtar.Parse(data)
+	line := 1 + strings.Count(string(archive.Comment), "\n")
+
+	var out []labeledCase
+
+	authored := map[proofread.Kind][]string{}
+
+	for _, f := range archive.Files {
+		header := line
+		line++
+
+		proto, whole, err := parseHeader(f.Name, doc)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", name, header, err)
+		}
+
+		proto.File, proto.Rule = name, rule
+		body := string(f.Data)
+
+		switch {
+		case proto.Label == labelAuthor && whole:
+			authored[proto.Kind] = append(authored[proto.Kind], body)
+		case proto.Label == labelAuthor:
+			for text := range strings.SplitSeq(body, "\n") {
+				if strings.TrimSpace(text) != "" {
+					authored[proto.Kind] = append(authored[proto.Kind], text)
+				}
+			}
+		case whole:
+			proto.Line, proto.Text = line, strings.TrimSuffix(body, "\n")
+			out = append(out, proto)
+		default:
+			for i, text := range strings.Split(strings.TrimSuffix(body, "\n"), "\n") {
+				if strings.TrimSpace(text) == "" {
+					continue
+				}
+
+				one := proto
+				one.Line, one.Text = line+i, text
+
+				if one.Kind == proofread.KindChangeDescription {
+					one.Text = caseLead + text
+				}
+
+				out = append(out, one)
+			}
+		}
+
+		line += strings.Count(body, "\n")
+	}
+
+	if len(authored) == 0 {
+		return out, nil
+	}
+
+	voice, err := proofread.BuildVoice(authored)
+	if err != nil {
+		return nil, fmt.Errorf("%s: the author sections: %w", name, err)
+	}
+
+	for i := range out {
+		out[i].Voice = voice
+	}
+
+	return out, nil
+}
+
+func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error) {
+	fields := strings.Fields(header)
+	if len(fields) == 0 {
+		return labeledCase{}, false, errors.New("a section needs a <label>/<kind> header")
+	}
+
+	verdict, kind, ok := strings.Cut(fields[0], "/")
+	if !ok {
+		return labeledCase{}, false, fmt.Errorf("section %q needs a <label>/<kind> header", header)
+	}
+
+	parsed, _ := proofread.ParseKind(kind)
+	out := labeledCase{Label: label(verdict), Kind: parsed}
+
+	switch out.Label {
+	case labelHit, labelPass, labelFalsePositive, labelFalseNegative, labelAuthor:
+	default:
+		return labeledCase{}, false, fmt.Errorf("label %q is none of hit, pass, fp, fn or author", verdict)
+	}
+
+	if !slices.Contains(doc.Kinds, out.Kind) {
+		return labeledCase{}, false, fmt.Errorf("rule %s does not judge kind %q", doc.Name, kind)
+	}
+
+	whole := false
+
+	for _, attr := range fields[1:] {
+		key, value, _ := strings.Cut(attr, "=")
+
+		switch key {
+		case "whole":
+			whole = true
+		case "name":
+			out.Symbol.Name = value
+		case "owner":
+			out.Symbol.Owner = value
+		case "thread":
+			n, err := strconv.Atoi(value)
+			if err != nil || n < 0 {
+				return labeledCase{}, false, fmt.Errorf("thread=%q is not a count", value)
+			}
+
+			out.ThreadLength = n
+		case "event":
+			out.Event = proofread.Event(value)
+			events := []proofread.Event{proofread.EventApprove, proofread.EventRequestChanges, proofread.EventComment}
+			if !slices.Contains(events, out.Event) {
+				return labeledCase{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
+			}
+		case "was":
+			// The label a case carried in a labeling round before a fix moved it, as
+			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
+			if parts := strings.Split(value, ":"); len(parts) != 3 || slices.Contains(parts, "") {
+				return labeledCase{}, false, fmt.Errorf("was=%q is not <label>:<round>:<id>", value)
+			}
+		default:
+			return labeledCase{}, false, fmt.Errorf("unknown attribute %q", attr)
+		}
+	}
+
+	return out, whole, nil
+}
+
+// Fires reports whether the case's rule reports its text, judged with every
+// rule at its default decision and the case's rule turned on where it is house
+// style, under the case's voice when it has one. The other rules run because a
+// rule leaves a span to another that reports it.
+func (c labeledCase) Fires() bool {
+	opts := []proofread.Option{
+		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
+	}
+
+	if doc, ok := catalog()[c.Rule]; ok && doc.Decisions[c.Kind] == proofread.DecisionOff {
+		opts = append(opts, proofread.WithDecisions(map[proofread.Rule]proofread.Decision{c.Rule: proofread.DecisionDeny}))
+	}
+
+	var found []proofread.Finding
+
+	if c.Kind == proofread.KindDocComment {
+		s := c.Symbol
+		s.Doc = c.Text
+		found = proofread.Judge(s, opts...)
+	} else {
+		found = proofread.JudgeText(c.Text, c.Kind, opts...)
+	}
+
+	return slices.ContainsFunc(found, func(f proofread.Finding) bool { return f.Rule == c.Rule })
+}
+
+// Agrees reports whether the rule still does what the case's label records.
+func (c labeledCase) Agrees() bool { return c.Fires() == c.Label.fires() }
+
+// HeldOut reports whether c is in the fifth of the cases kept out of tuning: a
+// rule's exceptions are never written against it, so its precision is the one
+// a gate can trust. The split is a hash of the text, so adding or editing one
+// case never moves another into or out of it.
+func (c labeledCase) HeldOut() bool {
+	h := fnv.New64a()
+	h.Write([]byte(c.Text))
+
+	return h.Sum64()%5 == 0
+}
+
+// Score is one rule's tally over its labeled cases. Precision is null when no
+// case is labeled as firing, and Recall when no case is labeled as text the
+// rule should report.
+type Score struct {
+	Rule      proofread.Rule `json:"rule"`
+	Cases     int            `json:"cases"`
+	TP        int            `json:"tp"`
+	FP        int            `json:"fp"`
+	FN        int            `json:"fn"`
+	TN        int            `json:"tn"`
+	Precision *float64       `json:"precision"`
+	// Lower is the Wilson 95% lower bound on Precision over the TP + FP
+	// firings, null with Precision.
+	Lower  *float64 `json:"lower"`
+	Recall *float64 `json:"recall"`
+	// HeldOut counts the cases [Case.HeldOut] keeps out of tuning, and
+	// HeldOutPrecision is the precision over those alone, null when none of
+	// them fires. The other counts include them.
+	HeldOut          int      `json:"held_out"`
+	HeldOutPrecision *float64 `json:"held_out_precision"`
+	// Disagree counts the cases whose rule no longer does what their label
+	// records; their verdicts are tallied as observed.
+	Disagree int `json:"disagree"`
+}
+
+// Scores runs every case and tallies the verdicts it observes per rule, in
+// [proofread.Rules] order. A case labeled hit or fn should be reported; one
+// the rule reports is a true positive, one it does not a false negative.
+func Scores(cases []labeledCase) []Score {
+	byRule := map[proofread.Rule]*Score{}
+	heldTP, heldFP := map[proofread.Rule]int{}, map[proofread.Rule]int{}
+
+	for _, c := range cases {
+		s, ok := byRule[c.Rule]
+		if !ok {
+			s = &Score{Rule: c.Rule}
+			byRule[c.Rule] = s
+		}
+
+		fired := c.Fires()
+		shouldFire := c.Label == labelHit || c.Label == labelFalseNegative
+		held := c.HeldOut()
+
+		s.Cases++
+
+		if held {
+			s.HeldOut++
+		}
+
+		switch {
+		case fired && shouldFire:
+			s.TP++
+
+			if held {
+				heldTP[c.Rule]++
+			}
+		case fired:
+			s.FP++
+
+			if held {
+				heldFP[c.Rule]++
+			}
+		case shouldFire:
+			s.FN++
+		default:
+			s.TN++
+		}
+
+		if fired != c.Label.fires() {
+			s.Disagree++
+		}
+	}
+
+	var out []Score
+
+	for _, r := range proofread.Rules() {
+		s, ok := byRule[r]
+		if !ok {
+			continue
+		}
+
+		s.Precision = ratio(s.TP, s.TP+s.FP)
+		s.Recall = ratio(s.TP, s.TP+s.FN)
+		s.HeldOutPrecision = ratio(heldTP[r], heldTP[r]+heldFP[r])
+
+		if s.Precision != nil {
+			lb := wilsonLower(*s.Precision, s.TP+s.FP)
+			s.Lower = &lb
+		}
+
+		out = append(out, *s)
+	}
+
+	return out
+}
+
+// z95 is the standard normal quantile of a two-sided 95% interval.
+const z95 = 1.959963984540054
+
+// wilsonLower is the lower end of the Wilson score interval at 95% on a
+// proportion p observed over n trials, n > 0.
+func wilsonLower(p float64, n int) float64 { return wilson(p, n, z95) }
+
+// The precision gates of the proofread method: a rule ships advise once at
+// least gateFirings of its firings are labeled and the Wilson 95% lower bound
+// on their precision reaches adviseLower, and deny once that bound reaches
+// denyLower (0 wrong of 35, 1 of 53, 2 of 69).
+const (
+	gateFirings = 30
+	adviseLower = 0.70
+	denyLower   = 0.90
+)
+
+// denyUnmeasured names the conditions of the deny gate that labeled cases
+// cannot show: firings from a second source outside this repository, and a
+// not-useful rate under 10% once the rule is in use.
+var denyUnmeasured = []string{"firings from two sources", "a not-useful rate under 10% in use"}
+
+// Gate is one rule's shipped default held against what its labeled cases
+// support.
+type Gate struct {
+	Rule      proofread.Rule      `json:"rule"`
+	Dimension proofread.Dimension `json:"dimension"`
+	// Shipped is the strictest default the rule takes on any kind it judges.
+	Shipped proofread.Decision `json:"shipped"`
+	// Supports is the strictest decision the precision gates allow.
+	Supports proofread.Decision `json:"supports"`
+	// Firings counts the cases the rule reports, and Wrong those labeled fp.
+	Firings          int      `json:"firings"`
+	Wrong            int      `json:"wrong"`
+	Precision        *float64 `json:"precision"`
+	Lower            *float64 `json:"lower"`
+	HeldOutPrecision *float64 `json:"held_out_precision"`
+	// Pass is false when Shipped is stricter than Supports.
+	Pass bool `json:"pass"`
+	// Needs is how many more labeled firings Shipped's gate takes at the
+	// rule's current precision, or at a precision of 1 when it has no firing:
+	// 0 when it passes, null when no count reaches the gate at that precision.
+	Needs *int `json:"needs"`
+	// Unmeasured lists the conditions of Shipped's gate this replay does not
+	// see: for deny, firings from two sources and a not-useful rate under 10%
+	// in use.
+	Unmeasured []string `json:"unmeasured"`
+}
+
+// Gates holds each scored rule's shipped default against its score, in the
+// order of scores. Precision and its lower bound come from TP and FP alone.
+func Gates(scores []Score) []Gate {
+	out := make([]Gate, 0, len(scores))
+
+	for _, s := range scores {
+		doc := catalog()[s.Rule]
+		g := Gate{
+			Rule: s.Rule, Dimension: doc.Dimension, Shipped: proofread.DecisionOff,
+			Firings: s.TP + s.FP, Wrong: s.FP, Precision: ratio(s.TP, s.TP+s.FP),
+			HeldOutPrecision: s.HeldOutPrecision, Unmeasured: []string{},
+		}
+
+		for _, k := range doc.Kinds {
+			if d := doc.Decisions[k]; decisionRank(d) > decisionRank(g.Shipped) {
+				g.Shipped = d
+			}
+		}
+
+		precision := 1.0
+
+		if g.Precision != nil {
+			precision = *g.Precision
+			lb := wilsonLower(precision, g.Firings)
+			g.Lower = &lb
+		}
+
+		g.Supports = supported(g.Firings, g.Lower)
+		g.Pass = decisionRank(g.Shipped) <= decisionRank(g.Supports)
+
+		if g.Shipped == proofread.DecisionDeny {
+			g.Unmeasured = slices.Clone(denyUnmeasured)
+		}
+
+		if g.Pass {
+			g.Needs = new(int)
+		} else if n, ok := firingsNeeded(precision, gateLower(g.Shipped)); ok {
+			more := max(n-g.Firings, 0)
+			g.Needs = &more
+		}
+
+		out = append(out, g)
+	}
+
+	return out
+}
+
+func decisionRank(d proofread.Decision) int {
+	switch d {
+	case proofread.DecisionDeny:
+		return 2
+	case proofread.DecisionAdvise:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func supported(firings int, lower *float64) proofread.Decision {
+	switch {
+	case lower == nil || firings < gateFirings:
+		return proofread.DecisionOff
+	case *lower >= denyLower:
+		return proofread.DecisionDeny
+	case *lower >= adviseLower:
+		return proofread.DecisionAdvise
+	default:
+		return proofread.DecisionOff
+	}
+}
+
+func gateLower(d proofread.Decision) float64 {
+	if d == proofread.DecisionDeny {
+		return denyLower
+	}
+
+	return adviseLower
+}
+
+// firingsNeeded is the fewest labeled firings, at least gateFirings, whose
+// Wilson lower bound at precision reaches bar. It is false when precision
+// does not exceed bar, since the bound only approaches the precision.
+func firingsNeeded(precision, bar float64) (int, bool) {
+	if precision <= bar {
+		return 0, false
+	}
+
+	reaches := func(n int) bool { return wilsonLower(precision, n) >= bar }
+
+	hi := gateFirings
+	for !reaches(hi) {
+		hi *= 2
+	}
+
+	lo := gateFirings
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if reaches(mid) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+
+	return lo, true
+}
+
+func ratio(n, d int) *float64 {
+	if d == 0 {
+		return nil
+	}
+
+	r := float64(n) / float64(d)
+
+	return &r
+}
+
+// rate is how often one rule reports over the texts of a group.
+type rate struct {
+	Rule     proofread.Rule     `json:"rule"`
+	Decision proofread.Decision `json:"decision"`
+	Findings int                `json:"findings"`
+	// PerThousand is findings per 1000 texts.
+	PerThousand float64 `json:"per_thousand"`
+	// Texts counts the texts with at least one finding, and Share is that
+	// count over the group's texts.
+	Texts int     `json:"texts"`
+	Share float64 `json:"share"`
+	// DeniedTexts counts the texts with at least one finding the rule denies,
+	// which differs from Texts where the rule marks some of its findings
+	// advise itself.
+	DeniedTexts int `json:"denied_texts"`
+}
+
+// GroupRates is every rule's rate over one group of texts.
+type GroupRates struct {
+	Group string `json:"group"`
+	Texts int    `json:"texts"`
+	Rules []rate `json:"rules"`
+}
+
+// tally counts findings per rule and group over texts of one kind, judged
+// with the rules' default decisions. It is safe for concurrent use.
+type tally struct {
+	kind  proofread.Kind
+	rules []rate
+
+	mu     sync.Mutex
+	groups map[string]*groupTally
+}
+
+type groupTally struct {
+	texts    int
+	findings map[proofread.Rule]int
+	hit      map[proofread.Rule]int
+	denied   map[proofread.Rule]int
+}
+
+// NewTally returns a tally over the rules on by default for kind. Voice drift
+// is left out, since a tally judges with no voice.
+func NewTally(kind proofread.Kind) *tally {
+	t := &tally{kind: kind, groups: map[string]*groupTally{}}
+
+	for _, doc := range proofread.Catalog() {
+		if d, ok := doc.Decisions[kind]; ok && d != proofread.DecisionOff && doc.Name != proofread.RuleVoiceDrift {
+			t.rules = append(t.rules, rate{Rule: doc.Name, Decision: d})
+		}
+	}
+
+	return t
+}
+
+// Add judges text and counts its findings under group.
+func (t *tally) Add(group, text string) {
+	var found []proofread.Finding
+	if t.kind == proofread.KindDocComment {
+		found = proofread.Judge(proofread.Symbol{Doc: text})
+	} else {
+		found = proofread.JudgeText(text, t.kind)
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	g, ok := t.groups[group]
+	if !ok {
+		g = &groupTally{
+			findings: map[proofread.Rule]int{}, hit: map[proofread.Rule]int{}, denied: map[proofread.Rule]int{},
+		}
+		t.groups[group] = g
+	}
+
+	g.texts++
+
+	seen, denied := map[proofread.Rule]bool{}, map[proofread.Rule]bool{}
+
+	for _, f := range found {
+		g.findings[f.Rule]++
+
+		if !seen[f.Rule] {
+			seen[f.Rule] = true
+			g.hit[f.Rule]++
+		}
+
+		if f.Decision == proofread.DecisionDeny && !denied[f.Rule] {
+			denied[f.Rule] = true
+			g.denied[f.Rule]++
+		}
+	}
+}
+
+// Rates returns each group's rates, groups sorted by name and rules in
+// [proofread.Rules] order, every rule that runs on the kind listed.
+func (t *tally) Rates() []GroupRates {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var out []GroupRates
+
+	for _, name := range slices.Sorted(maps.Keys(t.groups)) {
+		g := t.groups[name]
+		gr := GroupRates{Group: name, Texts: g.texts, Rules: []rate{}}
+
+		for _, r := range t.rules {
+			r.Findings, r.Texts, r.DeniedTexts = g.findings[r.Rule], g.hit[r.Rule], g.denied[r.Rule]
+			r.PerThousand = 1000 * float64(r.Findings) / float64(g.texts)
+			r.Share = float64(r.Texts) / float64(g.texts)
+			gr.Rules = append(gr.Rules, r)
+		}
+
+		out = append(out, gr)
+	}
+
+	return out
+}

@@ -31,6 +31,8 @@ A verdict names its rule in brackets, which is how you got here:
 deny [hook-wiring-write]: ...
 ```
 
+A workspace that sets this rule to `advise` sees `advise [hook-wiring-write]: ...` instead.
+
 `magus describe rule hook-wiring-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

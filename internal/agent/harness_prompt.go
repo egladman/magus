@@ -177,47 +177,6 @@ func sameJSON(a, b any) bool {
 	return errA == nil && errB == nil && bytes.Equal(ea, eb)
 }
 
-// verifyHarnessAgents reports whether every subagent file a descriptor renders holds the bytes
-// the spell rendered. A descriptor with none leaves the status empty.
-func verifyHarnessAgents(root string, d HarnessDescriptor, result *HarnessVerification) {
-	for _, a := range d.Agents {
-		file, err := planWholeFile(root, a.Path, a.Content)
-		switch {
-		case err != nil:
-			result.AgentStatus, result.AgentReason = HarnessUncovered, err.Error()
-			return
-		case len(file.Changes) > 0:
-			result.AgentStatus = HarnessUncovered
-			result.AgentReason = a.Path + " is missing or differs from what the spell renders; merge what `magus describe harness " + d.ID + "` prints"
-			return
-		}
-	}
-	if len(d.Agents) > 0 {
-		result.AgentStatus = HarnessVerified
-	}
-}
-
-// verifyHarnessPrompts reports whether every prompt a descriptor keeps is in place. A
-// descriptor with none leaves the status empty.
-func verifyHarnessPrompts(root string, d HarnessDescriptor, result *HarnessVerification) {
-	if len(d.Prompts) == 0 {
-		return
-	}
-	for _, p := range d.Prompts {
-		file, err := planHarnessPrompt(root, p)
-		switch {
-		case err != nil:
-			result.PromptStatus, result.PromptReason = HarnessUncovered, err.Error()
-			return
-		case len(file.Changes) > 0:
-			result.PromptStatus = HarnessUncovered
-			result.PromptReason = "missing " + promptLocation(p) + ", so the host never asks the person before the call; merge what `magus describe harness " + d.ID + "` prints"
-			return
-		}
-	}
-	result.PromptStatus = HarnessVerified
-}
-
 // HarnessSetting is one plain value a harness keeps in a host's JSON config, read by the host
 // as configuration rather than run as a hook: a plugin to enable, a marketplace to know. Key
 // and Value set it inside a document the person also edits.
@@ -256,25 +215,4 @@ func planHarnessSetting(root string, s HarnessSetting) (types.HarnessFile, error
 		return fmt.Errorf("%s holds %v, not %v, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
 			settingLocation(s), got, s.Value)
 	})
-}
-
-// verifyHarnessSettings reports whether every setting a descriptor keeps is in place. A
-// descriptor with none leaves the status empty.
-func verifyHarnessSettings(root string, d HarnessDescriptor, result *HarnessVerification) {
-	if len(d.Settings) == 0 {
-		return
-	}
-	for _, s := range d.Settings {
-		file, err := planHarnessSetting(root, s)
-		switch {
-		case err != nil:
-			result.SettingStatus, result.SettingReason = HarnessUncovered, err.Error()
-			return
-		case len(file.Changes) > 0:
-			result.SettingStatus = HarnessUncovered
-			result.SettingReason = "missing " + settingLocation(s) + "; merge what `magus describe harness " + d.ID + "` prints"
-			return
-		}
-	}
-	result.SettingStatus = HarnessVerified
 }

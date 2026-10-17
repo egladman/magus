@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -34,7 +35,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	}
 	w.WriteTree(files)
 
-	ws, err := Inspect(context.Background(), w.Root())
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 	graph, err := ws.TargetGraph(context.Background())
 	require.NoError(t, err, "TargetGraph")
@@ -61,7 +62,7 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 		t.Helper()
 		w := testkit.NewWorkspace(t)
 		w.Magusfile(magusfile)
-		ws, err := Inspect(context.Background(), w.Root())
+		ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 		require.NoError(t, err, "Inspect")
 		has, scanErr := anyProjectDeclaresCI(ws.All())
 		require.NoError(t, scanErr, "anyProjectDeclaresCI scan error")
@@ -88,7 +89,7 @@ func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	ws, err := Inspect(context.Background(), root, opts...)
+	ws, err := Inspect(context.Background(), root, append(opts, WithSpawnRule(TierCeiling))...)
 	require.NoError(t, err, "Inspect")
 	return ws
 }
@@ -271,7 +272,7 @@ func TestListCharms_InverseIndex(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: []string{"write"}}))
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: []string{"write"}}))
 
 	charms, err := ws.ListCharms(context.Background())
 	require.NoError(t, err, "ListCharms")
@@ -313,14 +314,11 @@ func TestListCharms_InverseIndex(t *testing.T) {
 	}
 }
 
-// TestListTargets_CustomTargets exercises this package's own test build,
-// which deliberately does not link the Buzz interpreter (see doc.go and
-// register_test.go) — so validateTargetPolicies (A4) cannot see this project's
-// magusfile at all and its "policy names an unknown target" enforcement does not
-// apply here (see the interp.Available guard in load()). The end-to-end version
-// of that check, exercised through a real magusfile via the linked interpreter,
-// lives in cmd/magus (which blank-imports interp/bindings): see
-// TestInspect_TargetPolicyNamingUnknownTarget in cmd/magus/project_options_test.go.
+// TestListTargets_CustomTargets: a target a Go program names with WithTarget is one it
+// declares, so validateTargetPolicies accepts it with no op behind it and ListTargets
+// lists it as custom. A magusfile's policy table naming an unknown target is still a
+// load error: see TestInspect_TargetPolicyNamingUnknownTarget in
+// cmd/magus/project_options_test.go.
 func TestListTargets_CustomTargets(t *testing.T) {
 	t.Parallel()
 	const customTarget = "zzz-custom-target"
@@ -392,7 +390,7 @@ func TestListProjects_Manifests(t *testing.T) {
 	reg.RegisterProject(".")
 	reg.RegisterProject("has", WithSpell(hasSpell))
 	reg.RegisterProject("none", WithSpell(noneSpell))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.ListProjects(context.Background())
@@ -437,7 +435,7 @@ func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 	reg.RegisterProject(".")
 	reg.RegisterProject("apps/member", WithSpell(nodeSpell))
 	reg.RegisterProject("solo", WithSpell(nodeSpell))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.ListProjects(context.Background())
@@ -493,7 +491,7 @@ func TestListProjects_LockfilesAbsent(t *testing.T) {
 	reg.RegisterProject(".")
 	reg.RegisterProject("py", WithSpell(noLocks))
 	reg.RegisterProject("rs", WithSpell(missingLocks))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.ListProjects(context.Background())
@@ -614,7 +612,7 @@ func TestEvaluateProjects_WorkspaceRootedSources(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithSpell(spellName))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.EvaluateProjects(context.Background())
@@ -666,7 +664,7 @@ func TestClassifyFiles_Classification(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(rootSpell))
 	reg.RegisterProject("web", WithSpell(webSpell))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.ClassifyFiles(context.Background(), []string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz", ".gitattributes"})
@@ -731,7 +729,7 @@ func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 	// ws.Root(), not root: on macOS t.TempDir() hands back a /var path that Inspect
 	// resolves to /private/var, and an absolute spelling has to be built from the root
@@ -818,7 +816,7 @@ func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 	root := w.Root()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	out, err := ws.ClassifyFiles(context.Background(), []string{".gitattributes"})
@@ -828,6 +826,47 @@ func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 		Path: ".gitattributes", Project: ".", Role: "source", SourceOf: []string{"."},
 		Claims: out[0].Claims, DependsOn: out[0].DependsOn, Focus: out[0].Focus, Hint: out[0].Hint, Exists: out[0].Exists,
 	}, out[0])
+}
+
+// TestClassifyFiles_DeclaredGitattributesByChange pins the other half of the precedence:
+// a project that declares .gitattributes still sees a hand edit as a source change, but a
+// change confined to the section magus writes is magus's own, so it reads as maintained.
+func TestClassifyFiles_DeclaredGitattributesByChange(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	spellName := register.Spell(t, "zzz-df-attrs-change", spells.WithSources(".gitattributes"))
+
+	const user = "*.png binary\n"
+	section := func(body string) string {
+		return "# BEGIN magus-generated - do not edit this section manually\n" + body + "# END magus-generated\n"
+	}
+	committed := user + "\n" + section("a.go merge=magus\n")
+
+	tests := []struct {
+		name    string
+		working string
+		want    string
+	}{
+		{name: "unchanged", working: committed, want: "source"},
+		{name: "section rewritten", working: user + "\n" + section("a.go merge=magus\nb.go merge=magus\n"), want: "maintained"},
+		{name: "hand edit outside the section", working: user + "*.jpg binary\n\n" + section("a.go merge=magus\n"), want: "source"},
+		{name: "hand edit and section rewritten", working: "*.jpg binary\n\n" + section("b.go merge=magus\n"), want: "source"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := testkit.NewRepo(t, map[string]string{".gitattributes": committed, "magusfile.buzz": ""})
+			repo.Write(".gitattributes", tt.working)
+
+			reg := NewWorkspaceRegistry()
+			reg.RegisterProject(".", WithSpell(spellName))
+			ws, err := Inspect(context.Background(), repo.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+			require.NoError(t, err, "Inspect")
+
+			out, err := ws.ClassifyFiles(context.Background(), []string{".gitattributes"})
+			require.NoError(t, err, "ClassifyFiles")
+			require.Len(t, out, 1)
+			assert.Equal(t, tt.want, out[0].Role)
+		})
+	}
 }
 
 // TestInspectorMethods_HonorCancelledContext pins that a context cancelled BEFORE
@@ -1048,7 +1087,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1075,7 +1114,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	})
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1105,7 +1144,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `,
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 
 	require.ErrorContains(t, err, `target "generate": ctx.writesFiles: exclusion "!gen/runtime.go" has no glob to narrow`)
 }
@@ -1122,7 +1161,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	})
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1150,7 +1189,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `,
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 
 	require.ErrorContains(t, err, `exclusion "!gen/x" has no glob to narrow`)
 }
@@ -1177,7 +1216,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `,
 	})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1212,7 +1251,7 @@ export fun scan(ctx: magus\Context, args: [str]) > void {
 `,
 	})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1242,7 +1281,7 @@ fun probe() > str { return "x"; }
 `,
 	})
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "a computed observation value must not load")
 	assert.Contains(t, err.Error(), "observes", "the error names the declaration that failed")
 }
@@ -1264,7 +1303,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1312,7 +1351,7 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 	}
 	w.WriteTree(files)
 
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 	m, ok := ws.(*Magus)
 	require.True(t, ok, "Inspect returns *Magus")
@@ -1357,7 +1396,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 	}
 	w.WriteTree(files)
 
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 	paths := []string{"skills/note.md", "dist/index.html", "skills/magusfile.buzz", "site/gen/a.html", "site/gen/b.html", "site/README.md"}
 	entries, err := ws.ClassifyFiles(context.Background(), paths)

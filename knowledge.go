@@ -27,16 +27,19 @@ import (
 	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/internal/oci"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -44,23 +47,110 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-// BuildGlobalKnowledgeGraph unions the current workspace with each registered one
+// workspacegraph cannot import this package, so the builders are registered from here.
+func init() { //nolint:gochecknoinits // workspacegraph cannot import this package, so the builders register from here
+	workspacegraph.Register(workspacegraph.Builders{
+		BuildGlobal:          buildGlobalKnowledgeGraph,
+		Build:                buildKnowledgeGraph,
+		MergeSymbols:         mergeWorkspaceSymbols,
+		MergeSymbolsForRef:   mergeWorkspaceSymbolsForRef,
+		Query:                queryKnowledgeGraph,
+		SymbolGaps:           workspaceSymbolGaps,
+		SymbolIndexTimes:     workspaceSymbolIndexTimes,
+		SymbolOccurrences:    workspaceSymbolOccurrences,
+		RecordedHumanOnly:    readRecordedHumanOnly,
+		RecordedStaleIndexes: readRecordedStaleIndexes,
+		UsePublishedShards:   usePublishedShards,
+		ReaderContext: func(ctx context.Context, _ types.Inspector, root string) ([]string, error) {
+			paths := map[string]bool{}
+			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+			if err != nil {
+				return nil, err
+			}
+			// The default source means nothing claimed root: there is no checkout to diff.
+			if res.VCS != nil && res.Source != types.VCSSourceDisabled && res.Source != types.VCSSourceDefault {
+				changed, err := res.VCS.ChangedFiles(ctx, root, res.Base)
+				if err != nil {
+					return nil, err
+				}
+				for _, p := range changed {
+					paths[p] = true
+				}
+			}
+			// A dry run: a read verb must not write the sweep's verdicts into the job store.
+			loc := job.Location{Root: root, DryRun: true}
+			if lease, _ := job.RunLease(ctx, loc); lease != "" {
+				if loc.StateBase, err = xdg.StateDir(); err != nil {
+					return nil, err
+				}
+				rows, err := job.NewStore(loc).List()
+				if err != nil {
+					return nil, err
+				}
+				for _, row := range rows {
+					if row.ID != lease || !row.State.Live() {
+						continue
+					}
+					for _, wp := range row.WritePaths {
+						// A claim names a declaration in a file; a glob, its directory.
+						wp, _, _ = strings.Cut(wp, "#")
+						if i := strings.IndexAny(wp, "*?[{"); i >= 0 {
+							wp = filepath.ToSlash(filepath.Dir(wp[:i+1]))
+						}
+						if wp != "" && wp != "." {
+							paths[wp] = true
+						}
+					}
+				}
+			}
+			return slices.Sorted(maps.Keys(paths)), nil
+		},
+	})
+}
+
+// readRecordedHumanOnly is recordedHumanOnly for a ws that may be no lazy workspace, which
+// has no record to answer from.
+func readRecordedHumanOnly(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
+	lw, ok := ws.(*LazyWorkspace)
+	if !ok {
+		return types.HumanOnlyIndex{}, false
+	}
+	return recordedHumanOnly(ctx, lw, cfg)
+}
+
+// readRecordedStaleIndexes is recordedStaleIndexes for a ws that may be no lazy workspace.
+func readRecordedStaleIndexes(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
+	lw, ok := ws.(*LazyWorkspace)
+	if !ok {
+		return nil, false
+	}
+	return recordedStaleIndexes(ctx, lw, cfg)
+}
+
+// buildGlobalKnowledgeGraph unions the current workspace with each registered one
 // (cfg.Knowledge.Workspaces), namespacing node IDs by workspace so repos can't
 // collide. A workspace that fails to open is skipped with a warning, not fatal:
 // the query degrades to what it can reach.
-func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	if log == nil {
 		log = slog.Default()
 	}
 	root := ws.Root()
 	merged := knowledge.NewGraph()
 
-	cur, err := BuildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
+	cur, err := buildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
 	if err != nil {
 		return nil, err
 	}
 	knowledge.UnionInto(merged, knowledge.Qualified(cur, workspaceName(root)))
 
+	// A registered workspace is opened with what the current one was given: its
+	// environment, its stderr and its command line.
+	var opts []Option
+	getenv := envGetter(nil)
+	if m := magusBehind(ctx, ws); m != nil {
+		opts, getenv = m.processOptions(), m.env
+	}
 	seen := map[string]bool{cleanRoot(root): true}
 	for _, wr := range cfg.Knowledge.Workspaces {
 		abs := cleanRoot(wr)
@@ -68,7 +158,7 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 			continue // skip blanks and the current workspace re-listed
 		}
 		seen[abs] = true
-		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
+		g, err := buildRegisteredWorkspace(ctx, abs, getenv, opts, refresh, log)
 		if err != nil {
 			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), attr.Error(err))
 			continue
@@ -83,16 +173,20 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 
 // buildRegisteredWorkspace opens a registered workspace read-only, loads its own
 // config (its cache dir, immutability, etc.), and builds its graph cache-first.
-func buildRegisteredWorkspace(ctx context.Context, root string, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+func buildRegisteredWorkspace(ctx context.Context, root string, getenv func(string) string, opts []Option, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	wcfg, err := config.LoadWithRoot("", root)
 	if err != nil {
 		return nil, err
 	}
-	wsRepo, err := Inspect(ctx, root)
+	// Its own cache.dir wins; MAGUS_CACHE_DIR places a workspace that declares none.
+	if wcfg.Cache.Dir == "" {
+		wcfg.Cache.Dir = getenv("MAGUS_CACHE_DIR")
+	}
+	wsRepo, err := Inspect(ctx, root, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return BuildKnowledgeGraph(ctx, wsRepo, root, wcfg, refresh, log)
+	return buildKnowledgeGraph(ctx, wsRepo, root, wcfg, refresh, log)
 }
 
 // workspaceName is the qualifier for a workspace root: its basename. Collisions
@@ -110,24 +204,9 @@ func cleanRoot(root string) string {
 	return filepath.Clean(root)
 }
 
-// resolveCacheDir resolves the workspace cache directory: config Cache.Dir, then
-// MAGUS_CACHE_DIR, then <root>/.magus (relative values join to root). Open and the
-// knowledge-graph loader share this single implementation.
-func resolveCacheDir(root string, cfg config.Config) string {
-	if cfg.Cache.Dir != "" {
-		if filepath.IsAbs(cfg.Cache.Dir) {
-			return filepath.Clean(cfg.Cache.Dir)
-		}
-		return filepath.Join(root, cfg.Cache.Dir)
-	}
-	if override := os.Getenv("MAGUS_CACHE_DIR"); override != "" {
-		if filepath.IsAbs(override) {
-			return filepath.Clean(override)
-		}
-		return filepath.Join(root, override)
-	}
-	return filepath.Join(root, ".magus")
-}
+// resolveCacheDir is config.CacheDir, the one resolution the root, the pipe records
+// and the internal packages share.
+func resolveCacheDir(root string, cfg config.Config) string { return config.CacheDir(root, cfg) }
 
 // cacheImmutable reports whether the cache is read-only, matching cache.Open's own
 // cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.
@@ -159,6 +238,22 @@ func CatalogFingerprint() string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
+// answerCatalogs identifies what a target that asks the binary for its answer reads from
+// the binary: the catalogs CatalogFingerprint covers plus the guard rule catalog that
+// magus\describe.rule() serves. A step keys on it in place of the build, so a rebuild
+// that changed none of them replays, and one that changed any of them misses.
+//
+// It does not cover rendering code, how describe.graphMarkdown lays a page out: a target
+// whose output depends on that keys the renderer's source, or declares skip_cache.
+var answerCatalogs = sync.OnceValue(func() string {
+	h := sha256.New()
+	fmt.Fprintf(h, "catalogs\x00%s\x00rules\x00", CatalogFingerprint())
+	for _, r := range guard.Rules() {
+		fmt.Fprintf(h, "%s\x00%s\x00%t\x00%s\x00%s\x00", r.Name, r.Decision, r.Fixed, r.Catches, r.Why)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+})
+
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.
 func allModuleEntries() []types.ModuleEntry {
@@ -170,7 +265,7 @@ func allModuleEntries() []types.ModuleEntry {
 	return out
 }
 
-// BuildKnowledgeGraph assembles, persists, and returns the workspace knowledge
+// buildKnowledgeGraph assembles, persists, and returns the workspace knowledge
 // graph. It is the single graph-loading path shared by the `magus graph`
 // subcommands, the query/explain/path verbs, and the MCP tools: it gathers the describe
 // outputs the graph is composed from, resolves the cache dir, and runs the
@@ -182,7 +277,7 @@ func allModuleEntries() []types.ModuleEntry {
 // graph's classes up to date and leaves the lazily loaded symbol classes to the readers
 // that merge them (MergeWorkspaceSymbols), so a domain read never parses a SCIP index;
 // refresh rebuilds every class.
-func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+func buildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	want := knowledge.DefaultClasses
 	if refresh {
 		want = knowledge.AllClasses
@@ -234,7 +329,8 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			model = knowledgeSources{
 				cfg: cfg, root: root, cacheDir: cacheDir,
-				spells: spells, graph: graph, projects: projects, tree: tree, log: log.With(attr.Component("knowledge")),
+				spells: spells, graph: graph, projects: projects, humanOnly: humanOnlyIndexBehind(ctx, ws),
+				tree: tree, log: log.With(attr.Component("knowledge")),
 			}
 		})
 		return model, modelErr
@@ -261,6 +357,13 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			return symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws)), nil
 		},
+		HumanOnlyFunc: func(ctx context.Context) (types.HumanOnlyIndex, error) {
+			src, err := resolveModel(ctx)
+			if err != nil {
+				return types.HumanOnlyIndex{}, err
+			}
+			return src.humanOnly, nil
+		},
 		ReadsFunc: func(ctx context.Context) (readlog.Reads, error) {
 			if _, err := resolveModel(ctx); err != nil {
 				return readlog.Reads{}, err
@@ -277,6 +380,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		}
 		in := gatherKnowledgeInputs(ctx, src, refresh, stale)
 		in.Indexes = symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws))
+		in.HumanOnly = src.humanOnly
 		if reads, ok := evaluationReads(ctx, ws); ok {
 			in.Reads = &reads
 		}
@@ -292,6 +396,8 @@ func magusBehind(ctx context.Context, ws types.Inspector) *Magus {
 	switch w := ws.(type) {
 	case *Magus:
 		return w
+	case internals:
+		return w.Magus
 	case *LazyWorkspace:
 		if m, err := w.Magus(ctx); err == nil {
 			return m
@@ -307,7 +413,7 @@ func evaluationReads(ctx context.Context, ws types.Inspector) (readlog.Reads, bo
 	if m == nil {
 		return readlog.Reads{}, false
 	}
-	return m.EvaluationReads(), true
+	return m.loadReads.Reads(), true
 }
 
 // indexFreshness is the freshness verdict of every symbol index the evaluation behind ws
@@ -364,21 +470,18 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 // the domain fast stamp still matches. false means the caller must open the workspace to
 // resolve them; it never guesses.
 func recordedSymbolIndexDeclarations(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]knowledge.SymbolIndexDeclaration, bool) {
-	cacheDir := resolveCacheDir(lw.root, cfg)
-	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
-	reads, known := store.EvaluationReads()
-	fast := knowledgeFastStamps(ctx, cfg, lw.root, cacheDir, lw.tree(), []knowledge.ShardClass{knowledge.ClassDomain}, reads, known)
-	return store.SymbolIndexDeclarations(fast[knowledge.ClassDomain])
+	store, fastDomain := recordedDomainStamp(ctx, lw, cfg)
+	return store.SymbolIndexDeclarations(fastDomain)
 }
 
-// RecordedStaleIndexes answers, for a lazy workspace that has not been opened, which
+// recordedStaleIndexes answers, for a lazy workspace that has not been opened, which
 // declared symbol indexes the last evaluation judged stale, from the verdicts the store
 // recorded: valid while the domain fast stamp matches (the sources are as they were) and
 // every judged index file is the one it judged (same size and mtime). false means the
 // caller must open the workspace and judge afresh, as every read did before; it never
 // guesses, so an index rebuilt since the record, or one the record never judged, sends
 // the read to the workspace rather than to a stale verdict.
-func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
+func recordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
 	decls, ok := recordedSymbolIndexDeclarations(ctx, lw, cfg)
 	if !ok {
 		return nil, false
@@ -417,8 +520,11 @@ type knowledgeSources struct {
 	spells   []types.Spell
 	graph    types.TargetGraphOutput
 	projects types.ProjectsOutput
-	tree     *knowledge.TreeWalk // nil when there is no root to walk
-	log      *slog.Logger
+	// humanOnly is what the evaluation declares human_only. The graph and projects above
+	// carry no target policy, so the domain stamp folds it on its own.
+	humanOnly types.HumanOnlyIndex
+	tree      *knowledge.TreeWalk // nil when there is no root to walk
+	log       *slog.Logger
 }
 
 func (s knowledgeSources) symbolInputs() symbolIngestInputs {
@@ -443,7 +549,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		// churn and unmeasured prose. Reading it back off @vcs is no substitute either: that
 		// shard is filtered to paths with a file node, so it is a view of the scan and not a
 		// record of it.
-		in.VCS = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
+		in.VCS, in.CoChanges = loadKnowledgeVCSCached(ctx, src.cfg, src.root, src.cacheDir, refresh, src.log)
 	}
 	if needs(knowledge.ClassDomain) {
 		cfg := src.cfg
@@ -532,9 +638,11 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown {
+	humanOnly, humanOnlyErr := json.Marshal(src.humanOnly)
+	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
+		h.String(string(humanOnly))
 		h.String(tree)
 		h.String(vcsHead)
 		for _, p := range ignoreSources {
@@ -694,6 +802,8 @@ func foldEvaluationReads(h *knowledge.InputHash, reads readlog.Reads, known bool
 	for _, p := range reads.Files {
 		h.Path(p)
 	}
+	// The process environment, never the workspace's (WithEnv): a magusfile reads it
+	// through internal/proc/environ, so it is what the evaluation saw.
 	for _, name := range reads.Env {
 		if v, ok := os.LookupEnv(name); ok {
 			h.String("env:" + name + "=" + v)
@@ -1055,24 +1165,24 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShards(ws), log)
 }
 
-// MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
+// mergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
 // a symbol-seeded query (the default graph excludes them for scale), first bringing the
 // symbol and coverage classes up to date with their inputs; @session is merged as stored
 // (see knowledge.SymbolClasses). No store or no symbol shards merges nothing.
-func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+func mergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
 	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.SymbolClasses, log); err != nil {
 		return err
 	}
 	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
 }
 
-// QueryKnowledgeGraph answers input the way BuildKnowledgeGraph, then MergeWorkspaceSymbols,
+// queryKnowledgeGraph answers input the way buildKnowledgeGraph, then mergeWorkspaceSymbols,
 // then Graph.Query would, byte for byte, without decoding every symbol shard: matches are
 // ranked from the store's symbol names index, and only the shards the answer's neighborhood
 // touches are read (see knowledge.Store.QuerySymbols). It returns the answer and the graph
 // the matches were ranked over, which holds every node a near-miss suggestion searches.
-func QueryKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error) {
-	g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
+func queryKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error) {
+	g, err := buildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, nil, err
 	}
@@ -1082,11 +1192,11 @@ func QueryKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 	return symbolStore(ws, root, cfg, log).QuerySymbols(ctx, g, input, budget)
 }
 
-// MergeWorkspaceSymbolsForRef merges symbols into g for `magus refs`, targeting only
+// mergeWorkspaceSymbolsForRef merges symbols into g for `magus refs`, targeting only
 // the shards that mention ref (via the xref routing index) when ref is an exact symbol
 // ID (the scale-safe reverse lookup), or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
-func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
+func mergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
 	if _, err := ensureKnowledgeGraph(ctx, ws, root, cfg, false, knowledge.SymbolClasses, log); err != nil {
 		return err
 	}
@@ -1323,7 +1433,7 @@ func foldBinary(h *knowledge.InputHash) bool {
 	return true
 }
 
-// SymbolGaps reports every project that declares a SCIP index magus could not read, so a
+// workspaceSymbolGaps reports every project that declares a SCIP index magus could not read, so a
 // lookup can say whether it searched everywhere it should have. ok is false when the probe
 // itself could not run: a nil slice would otherwise be indistinguishable from "no gaps"
 // and would turn an internal failure into a confident claim of absence, which is the one
@@ -1341,7 +1451,7 @@ func foldBinary(h *knowledge.InputHash) bool {
 // Freshness is out of scope here, but no longer unreachable: an index that is merely STALE
 // is a different fact from one that could not be read, and SymbolIndexStatus answers it
 // from the cache. A gap says the evidence is missing; staleness says it is behind.
-func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) (gaps []types.KnowledgeSymbolGap, ok bool) {
+func workspaceSymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) (gaps []types.KnowledgeSymbolGap, ok bool) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -1383,13 +1493,13 @@ func SymbolIndexedAt(cacheDir, projectAbsDir string) (time.Time, bool) {
 	return info.ModTime(), true
 }
 
-// SymbolIndexTimes reports, by workspace-relative project path, when the cached SCIP
+// workspaceSymbolIndexTimes reports, by workspace-relative project path, when the cached SCIP
 // indexes each project declares were written, leaving out a project with none built. A
 // project with several reports the oldest: a caller asks whether a file predates the index
 // that covers it, and the oldest is the one answer that holds for every index. ok is false
 // when the declarations cannot be resolved. A knowledge.symbols override that points at an
 // index in the tree is not consulted.
-func SymbolIndexTimes(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (times map[string]time.Time, ok bool) {
+func workspaceSymbolIndexTimes(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (times map[string]time.Time, ok bool) {
 	spells, err := ListSpells(ctx)
 	if err != nil {
 		return nil, false
@@ -1423,7 +1533,7 @@ func symbolIndexTimes(decls []resolvedSymbolIndex) map[string]time.Time {
 	return out
 }
 
-// SymbolOccurrences returns every exact source range where the symbol keyed by key
+// workspaceSymbolOccurrences returns every exact source range where the symbol keyed by key
 // appears, with each range verified against the file on disk. It reads the SAME declared
 // indexes the graph is built from, so it can never disagree with `magus refs` about which
 // projects were searched, but it goes back to the index rather than to the graph, because
@@ -1440,17 +1550,17 @@ func symbolIndexTimes(decls []resolvedSymbolIndex) map[string]time.Time {
 // names[0] is the identifier a rename targets. An empty set verifies nothing (see
 // symbols.Verify), which is the conservative outcome for an index that names the symbol
 // nowhere.
-func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (read SymbolOccurrenceRead, ok bool) {
-	reads, ok := SymbolsOccurrences(ctx, ws, root, cfg, log, []string{key})
+func workspaceSymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (read SymbolOccurrenceRead, ok bool) {
+	reads, ok := workspaceSymbolsOccurrences(ctx, ws, root, cfg, log, []string{key})
 	return reads[key], ok
 }
 
-// SymbolsOccurrences is SymbolOccurrences for several keys in one pass over the declared
+// workspaceSymbolsOccurrences is workspaceSymbolOccurrences for several keys in one pass over the declared
 // indexes, for a caller that asks about every changed symbol of a diff: listing the spells and
 // projects, resolving the declarations and decoding a stale index each happen once, not once
 // per key. Every key has an entry in the result, empty when nothing names it. ok is false when
 // the probe itself could not run.
-func SymbolsOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, keys []string) (reads map[string]SymbolOccurrenceRead, ok bool) {
+func workspaceSymbolsOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, keys []string) (reads map[string]SymbolOccurrenceRead, ok bool) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -1606,23 +1716,10 @@ func mergeOccurrenceFiles(in []types.SymbolOccurrenceFile) []types.SymbolOccurre
 	return out
 }
 
-// SymbolOccurrenceRead is what SymbolOccurrences could read: the verified sites, the
-// spellings they were checked against, and every declared index that exists but yielded
-// nothing usable.
-//
-// Unreadable is the field that keeps the result honest. The occurrence list claims to be
-// complete, so an index magus could not decode has to travel WITH the sites rather than be
-// dropped on the way: a caller folds it into the coverage gaps, which turns the verdict
-// from "searched everywhere" into "unknown, not absent" and names the project to rebuild.
-// The sites that WERE read are still returned: a partial answer plus an accurate account
-// of what is missing beats discarding both.
-type SymbolOccurrenceRead struct {
-	Files []types.SymbolOccurrenceFile
-	// Names are the spellings an occurrence may hold; Names[0] is the identifier a rename
-	// targets. See symbols.ParseOccurrences.
-	Names      []string
-	Unreadable []types.KnowledgeSymbolGap
-}
+// SymbolOccurrenceRead is what [Magus.SymbolOccurrences] could read: the verified sites,
+// the spellings they were checked against, and every declared index that exists but
+// yielded nothing usable, which a caller folds into its coverage gaps.
+type SymbolOccurrenceRead = workspacegraph.SymbolOccurrenceRead
 
 // symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
 // loadKnowledgeSymbols does, so the two cannot disagree about which indexes exist.
@@ -1634,7 +1731,7 @@ func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSym
 // from ctx would hand it, which is where the indexer would have to be found.
 func indexerInstalled(ctx context.Context) func(bin string) bool {
 	return func(bin string) bool {
-		_, err := procrun.LookPath(ctx, bin)
+		_, err := spawn.LookPath(ctx, bin)
 		return err == nil
 	}
 }
@@ -1669,22 +1766,24 @@ func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func
 }
 
 // SymbolGaps reports the projects whose declared symbol index this workspace could not
-// read, and whether the probe ran at all. Method form of the package-level SymbolGaps,
-// for callers that already hold a Magus (the MCP handlers).
+// read, and whether the probe ran at all. It stats and reads index files and opens
+// nothing.
 func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
-	return SymbolGaps(ctx, m, m.Root(), m.cfg, slog.Default())
+	return workspaceSymbolGaps(ctx, m, m.Root(), m.cfg, slog.Default())
 }
 
 // SymbolOccurrences returns every verified source range where the symbol keyed by key
-// appears. Method form of the package-level SymbolOccurrences, for callers that already
-// hold a Magus: the pairing SymbolGaps keeps, since the two answers are read together.
+// appears, read from the same declared indexes the graph is built from, and false when
+// the probe could not run. It pairs with SymbolGaps, since the two answers are read
+// together.
 func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurrenceRead, bool) {
-	return SymbolOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), key)
+	return workspaceSymbolOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), key)
 }
 
-// SymbolsOccurrences is the method form of the package-level SymbolsOccurrences.
+// SymbolsOccurrences is SymbolOccurrences for several keys in one pass over the declared
+// indexes. Every key has an entry in the result, empty when nothing names it.
 func (m *Magus) SymbolsOccurrences(ctx context.Context, keys []string) (map[string]SymbolOccurrenceRead, bool) {
-	return SymbolsOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), keys)
+	return workspaceSymbolsOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), keys)
 }
 
 // resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the
@@ -1838,34 +1937,36 @@ func spellIndexer(name string) *spells.SymbolIndexer {
 // budget, so the effective in-subdir window is smaller than the bound.
 const vcsDefaultMaxCommits = 1000
 
-// loadKnowledgeVCS gathers per-file history for the @vcs shard when opt-in
-// (knowledge.vcs.enabled), routed through the VCS abstraction so it is not git-specific:
-// any resolved backend that implements ChurnReporter works, and one that does not is
-// skipped. Best-effort: a disabled/absent VCS or a scan error yields no metadata (the
-// shard is absent), never an error. Callers want loadKnowledgeVCSCached; this is the
-// uncached walk it wraps.
-func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) []types.KnowledgeVCS {
+// loadKnowledgeVCS gathers per-file history and file co-change pairs for the @vcs shard
+// when opt-in (knowledge.vcs.enabled), routed through the VCS abstraction so it is not
+// git-specific: any resolved backend that implements ChurnReporter works, and one that
+// does not is skipped. Best-effort: a disabled/absent VCS or a scan error yields no
+// metadata (the shard is absent), never an error. Callers want loadKnowledgeVCSCached;
+// this is the uncached walk it wraps.
+func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) ([]types.KnowledgeVCS, []types.KnowledgeCoChange) {
 	if !cfg.Knowledge.VCS.Enabled {
-		return nil
+		return nil, nil
 	}
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
 		log.DebugContext(ctx, "vcs enabled but no version control resolved, skipping")
-		return nil
+		return nil, nil
 	}
 	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
 		log.WarnContext(ctx, "vcs history scan failed, skipping", attr.Error(err))
-		return nil
+		return nil, nil
 	}
-	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
+	prefix := vcsPathPrefix(root, res.VCS.Claims())
+	return aggregateFileHistory(changes, prefix), aggregateFileCoupling(changes, prefix)
 }
 
 // vcsHistoryFile holds one cached scan. The fingerprint travels inside the file rather than
 // in its name, so a stale scan is overwritten instead of accumulating a file per dead HEAD.
 type vcsHistoryFile struct {
-	Fingerprint string               `json:"fingerprint"`
-	Entries     []types.KnowledgeVCS `json:"entries"`
+	Fingerprint string                    `json:"fingerprint"`
+	Entries     []types.KnowledgeVCS      `json:"entries"`
+	Couplings   []types.KnowledgeCoChange `json:"couplings"`
 }
 
 // vcsHistoryFormat versions the cached SHAPE. Bump it whenever a KnowledgeVCS json tag is
@@ -1873,18 +1974,19 @@ type vcsHistoryFile struct {
 // would match on an unchanged HEAD and decode the renamed fields as zero values.
 //
 //	v2: LastUnix (epoch int64) became LastModified (time.Time).
-const vcsHistoryFormat = 2
+//	v3: the file holds co-change couplings beside the entries.
+const vcsHistoryFormat = 3
 
-// loadKnowledgeVCSCached returns the per-file history, walking it only when the cached scan
-// does not match the current input.
+// loadKnowledgeVCSCached returns the per-file history and co-change pairs, walking only when
+// the cached scan does not match the current input.
 //
 // A hit and a miss must be indistinguishable downstream (every consumer gets the same full
-// slice either way), which is the property that makes caching this safe at all.
+// slices either way), which is the property that makes caching this safe at all.
 //
 // refresh forces the walk and still rewrites the cache, so distrusting it costs one walk
 // rather than every walk. Best-effort throughout: an unreadable file or a failed write just
 // means walking, and nothing here can fail a build.
-func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheDir string, refresh bool, log *slog.Logger) []types.KnowledgeVCS {
+func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheDir string, refresh bool, log *slog.Logger) ([]types.KnowledgeVCS, []types.KnowledgeCoChange) {
 	fp := vcsInputFingerprint(ctx, cfg, root)
 	path := filepath.Join(knowledge.StoreDir(cacheDir), "inputs", "vcs.json")
 	if fp != "" && !refresh {
@@ -1892,24 +1994,24 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 			var f vcsHistoryFile
 			if err := json.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
 				log.DebugContext(ctx, "reusing cached vcs history", slog.Int("files", len(f.Entries)))
-				return f.Entries
+				return f.Entries, f.Couplings
 			}
 		}
 	}
-	entries := loadKnowledgeVCS(ctx, cfg, root, log)
+	entries, couplings := loadKnowledgeVCS(ctx, cfg, root, log)
 	// An empty scan is not worth a file, and writing one would cache "no history" against a
 	// real HEAD, so a transient git failure would persist as an answer.
 	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
-		return entries
+		return entries, couplings
 	}
-	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries})
+	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
 	if err == nil {
 		err = file.WriteFileAtomic(path, b, 0o644)
 	}
 	if err != nil {
 		log.DebugContext(ctx, "caching vcs history failed", attr.Error(err))
 	}
-	return entries
+	return entries, couplings
 }
 
 // vcsInputFingerprint identifies the history the scan reads: where it starts, how far back
@@ -2025,6 +2127,69 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	return entries
 }
 
+// A commit touching more than coChangeMaxFiles files is mechanical (a rename sweep, a
+// regeneration, a format pass) and says nothing about which files belong together (Robbes
+// et al.). A pair needs coChangeMinSupport shared commits, because one co-occurrence is
+// coincidence, and coChangeMinConfidence of the rarer file's commits, so a hot file does
+// not couple to everything it ever shared a commit with.
+const (
+	coChangeMaxFiles      = 30
+	coChangeMinSupport    = 2
+	coChangeMinConfidence = 0.3
+)
+
+// aggregateFileCoupling reduces per-commit changes to the file pairs that change together.
+// Paths are made workspace-relative as aggregateFileHistory does. Confidence is Support
+// over the smaller of the two files' commit counts, counted over the commits kept after
+// the bulk filter. The result is independent of commit order, with A < B, sorted by A then
+// B.
+func aggregateFileCoupling(changes []types.CommitChange, prefix string) []types.KnowledgeCoChange {
+	commits := map[string]int{}
+	type pair struct{ a, b string }
+	support := map[pair]int{}
+	for _, c := range changes {
+		if len(c.Files) > coChangeMaxFiles {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, ch := range c.Files {
+			f := filepath.ToSlash(strings.TrimSpace(ch.Path))
+			if prefix != "" {
+				rel, ok := strings.CutPrefix(f, prefix)
+				if !ok {
+					continue
+				}
+				f = rel
+			}
+			if f != "" {
+				seen[f] = true
+			}
+		}
+		files := slices.Sorted(maps.Keys(seen))
+		for i, a := range files {
+			commits[a]++
+			for _, b := range files[i+1:] {
+				support[pair{a, b}]++
+			}
+		}
+	}
+	var out []types.KnowledgeCoChange
+	for p, n := range support {
+		confidence := float64(n) / float64(min(commits[p.a], commits[p.b]))
+		if n < coChangeMinSupport || confidence < coChangeMinConfidence {
+			continue
+		}
+		out = append(out, types.KnowledgeCoChange{A: p.a, B: p.b, Support: n, Confidence: confidence})
+	}
+	slices.SortFunc(out, func(x, y types.KnowledgeCoChange) int {
+		if c := cmp.Compare(x.A, y.A); c != 0 {
+			return c
+		}
+		return cmp.Compare(x.B, y.B)
+	})
+	return out
+}
+
 // ShortRevision abbreviates a full VCS revision id for display, leaving a
 // short id untouched. Matches this codebase's convention of a 12-hex-digit
 // truncation elsewhere (PortableRef); the stored/compared value is always
@@ -2049,7 +2214,7 @@ type remoteShardAdapter struct{ ns *cache.RemoteNamespace }
 
 func (a remoteShardAdapter) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
 	rc, err := a.ns.Get(ctx, key)
-	if errors.Is(err, cache.ErrRemoteMiss) {
+	if errors.Is(err, types.ErrCacheMiss) {
 		return nil, knowledge.ErrShardMiss
 	}
 	return rc, err
@@ -2059,86 +2224,17 @@ func (a remoteShardAdapter) PutShard(ctx context.Context, key string, r io.Reade
 	return a.ns.Put(ctx, key, r)
 }
 
-// publishedShards reads shards out of a published OCI artifact: the read-only half of the
-// shard backing, for a collaborator or a fresh worktree that has the repository but not
-// the build cache behind it.
-//
-// Shards are addressed by the content fingerprint the store keys them on, which is the
-// title of the layer carrying them. That is what makes the fetch incremental: the reader
-// asks for the shards it lacks, not for a merged graph it would have to take whole.
-type publishedShards struct {
-	client       *oci.Client
-	ref          oci.Reference
-	artifactType string
-	log          *slog.Logger
-
-	// The artifact is opened once per instance: a load asks for many shards and the token
-	// exchange plus manifest GET answers the same way every time. The first caller's ctx
-	// governs that open, so a cancelled first call leaves this handle permanently missing,
-	// which is the same outcome as an unreachable registry and is handled identically.
-	once sync.Once
-	art  *oci.Artifact
-}
-
-// PublishedShards returns a read-only knowledge.RemoteShards over the artifact at ref.
-// Nothing is fetched until a shard is asked for.
-//
-// Every read failure is a MISS: no artifact, no such tag, a private package, no network,
-// no layer with that key. The store's answer to a miss is to build the shard locally,
-// which is what would have happened anyway, so a registry nobody can reach must never
-// turn into a failed command. Real failures are logged at debug and dropped.
-func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log *slog.Logger) knowledge.RemoteShards {
-	if log == nil {
-		log = slog.Default()
-	}
-	return &publishedShards{client: c, ref: ref, artifactType: artifactType, log: log.With(attr.Component("knowledge"))}
-}
-
-func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
-	p.once.Do(func() {
-		art, err := p.client.Artifact(ctx, p.ref, p.artifactType)
-		if err != nil {
-			p.log.DebugContext(ctx, "published graph unreadable",
-				slog.String("ref", p.ref.String()), attr.Error(err))
-			return
-		}
-		p.art = art
-	})
-	if p.art == nil {
-		return nil, knowledge.ErrShardMiss
-	}
-	b, err := p.art.Layer(ctx, key)
-	if err != nil {
-		if !errors.Is(err, oci.ErrLayerMiss) {
-			p.log.DebugContext(ctx, "published shard fetch failed",
-				slog.String("ref", p.ref.String()), slog.String("key", key), attr.Error(err))
-		}
-		return nil, knowledge.ErrShardMiss
-	}
-	return io.NopCloser(bytes.NewReader(b)), nil
-}
-
-// PutShard refuses, and says so rather than reporting a write that did not happen.
-//
-// A registry has no per-blob append: publishing is upload every blob, then PUT one
-// manifest naming them all. So a shard cannot join an existing artifact on its own, and
-// an adapter that accumulated shards here would be holding a buffer nothing ever flushes
-// (the store calls this from the middle of a build, never at the end of one). The batched
-// publish is `magus graph push`, which reads the finished store off disk and uploads it as
-// a single artifact. The store treats this the way it treats any remote failure: the local
-// shard write already succeeded.
-func (p *publishedShards) PutShard(context.Context, string, io.Reader) error {
-	return errors.New("a published graph is republished whole by `magus graph push`, never one shard at a time")
-}
-
-// UsePublishedShards installs a read-only shard source on ws, consulted whenever the
-// knowledge store reaches for a shard it does not hold. Nothing is fetched here.
+// usePublishedShards installs a read-only shard source on ws, consulted whenever the
+// knowledge store reaches for a shard it does not hold. Nothing is fetched here. See
+// workspacegraph.PublishedShards.
 //
 // A ws that is not a *Magus is ignored: a caller holding some other Inspector has no
 // store for this to back.
-func UsePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
+func usePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
 	switch w := ws.(type) {
 	case *Magus:
+		w.publishedShards.Store(&r)
+	case internals:
 		w.publishedShards.Store(&r)
 	case *LazyWorkspace:
 		w.usePublishedShards(r)
@@ -2147,7 +2243,7 @@ func UsePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
 
 // shardChain reads from each backing in order and writes only to the FIRST. The build
 // cache is the writable one; a published artifact is republished whole, so a later link
-// has nothing to accept (see publishedShards.PutShard).
+// has nothing to accept (see workspacegraph.PublishedShards).
 //
 // Any read error moves to the next link and the last one's error is returned, so one
 // unreachable backing cannot mask a hit from another.
@@ -2177,6 +2273,9 @@ func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 	if lw, ok := ws.(*LazyWorkspace); ok {
 		return lazyRemoteShards{lw}
 	}
+	if v, ok := ws.(internals); ok {
+		ws = v.Magus
+	}
 	m, ok := ws.(*Magus)
 	if !ok {
 		return nil
@@ -2203,7 +2302,7 @@ func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 // warmKnowledgeGraph returns this handle's lazily-created warm-graph holder. The
 // rebuild closure is the cache-first build the CLI runs, over every class rather than the
 // default ones: callers read the store behind this graph directly (SymbolIndexDigest
-// after KnowledgeGraph), so the lazy classes must be current too. The holder adds an
+// after knowledgeGraph), so the lazy classes must be current too. The holder adds an
 // in-memory cache that is trusted only while WatchKnowledgeGraph has a watcher
 // invalidating it.
 func (m *Magus) warmKnowledgeGraph() *warmGraph {
@@ -2217,26 +2316,32 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	return m.warmGraph
 }
 
-// KnowledgeGraph returns the workspace knowledge graph. In the server, once
-// WatchKnowledgeGraph is running, this answers from a warm in-memory graph without
-// re-parsing magusfiles; otherwise (and on refresh) it rebuilds cache-first. It is
-// always fresh: the warm graph is served only while a watcher can invalidate it.
-func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-	return m.warmKnowledgeGraph().Get(ctx, refresh)
-}
-
-// KnowledgeGraphWithSymbols returns a graph that INCLUDES the lazily-loaded @symbols
-// shards, for a symbol-seeded MCP query (magus\query on symbols, magus\refs). It
-// builds cache-first into a FRESH graph (not the shared warm graph) and merges
-// symbols into it, so the warm graph the other MCP tools answer from is never
-// polluted with a workspace's (potentially huge) symbol set.
-func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
+// knowledgeGraph returns the workspace knowledge graph req asks for.
+//
+// Without symbols it answers from the warm in-memory graph: in the server, once
+// WatchKnowledgeGraph is running, without re-parsing magusfiles; otherwise (and on
+// refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
+// only while a watcher can invalidate it.
+//
+// With symbols (magus\query on symbols, magus\refs) it builds cache-first into a FRESH
+// graph and merges the @symbols shards into it, so the warm graph the other MCP tools
+// answer from is never polluted with a workspace's (potentially huge) symbol set. A scope
+// that targets one symbol merges only the shards that mention it.
+func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	if !req.Symbols.Loaded() {
+		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)
+	}
 	root := m.Root()
-	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
+	g, err := buildKnowledgeGraph(ctx, m, root, m.cfg, req.Refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if err := MergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default()); err != nil {
+	if ref := req.Symbols.Ref(); ref != "" {
+		err = mergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default())
+	} else {
+		err = mergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default())
+	}
+	if err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -2247,7 +2352,7 @@ func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph
 // indexes are rebuilt: `magus graph build` and the server's auto-indexer.
 func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 	at := knowledge.ReadGuardCheckout(ctx, m.Root())
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return err
 	}
@@ -2255,22 +2360,6 @@ func (m *Magus) WriteGuardIndex(ctx context.Context) error {
 		return s.Freshness == types.SymbolIndexStale || s.Freshness == types.SymbolIndexUnvouched
 	})
 	return knowledge.WriteGuardIndex(resolveCacheDir(m.Root(), m.cfg), m.Root(), g, fresh, at)
-}
-
-// KnowledgeGraphWithSymbolsForRef is KnowledgeGraphWithSymbols for magus\refs: it
-// merges only the symbol shards that mention ref (targeted reverse lookup) when ref
-// is an exact symbol ID, or all of them for a fuzzy name. Also fresh-not-warm, so the
-// shared warm graph stays symbol-free.
-func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string) (*knowledge.Graph, error) {
-	root := m.Root()
-	g, err := BuildKnowledgeGraph(ctx, m, root, m.cfg, false, slog.Default())
-	if err != nil {
-		return nil, err
-	}
-	if err := MergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default()); err != nil {
-		return nil, err
-	}
-	return g, nil
 }
 
 // WatchKnowledgeGraph starts a file watcher that keeps the warm knowledge graph

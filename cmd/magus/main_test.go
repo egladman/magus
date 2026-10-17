@@ -6,9 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"io"
 	"log"
 	"log/slog"
@@ -17,18 +14,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
@@ -178,6 +175,21 @@ func TestPeekSubConsumesTheShortGlobalValues(t *testing.T) {
 	}
 }
 
+// Only the verbs that seat their own steps drop the width a parent step seated this
+// process at; any other verb is that step's tool, and the seat counted its work.
+func TestSchedulesStepsNamesTheVerbsThatSeatTheirOwnSteps(t *testing.T) {
+	for _, args := range [][]string{{"run", "ci", "."}, {"-v", "affected", "ci"}, {"-C", "/ws", "run", "test"}} {
+		if !schedulesSteps(args) {
+			t.Errorf("schedulesSteps(%v) = false, want true", args)
+		}
+	}
+	for _, args := range [][]string{{"query", "run"}, {"describe", "job", "x"}, {}, {"--version"}} {
+		if schedulesSteps(args) {
+			t.Errorf("schedulesSteps(%v) = true, want false", args)
+		}
+	}
+}
+
 // TestPeekSubRecognizesVersion pins `magus --version`: peekSub used to treat
 // --version like any other dash-prefixed token (skip it, keep scanning for a
 // subcommand), so `magus --version` alone found no subcommand, fell through to
@@ -264,7 +276,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 
 // TestSnapshotGlobalsRestoresDryRun pins the fix for the server flag-bleed bug:
 // dispatchAdopted defers snapshotGlobals()() so one adopted client's flags (e.g.
-// --dry-run) cannot survive into the next dispatch on the same process. gen.BindFlags
+// --dry-run) cannot survive into the next dispatch on the same process. flaggen.BindFlags
 // binds each generated flag with the CURRENT struct field as its default, so an unset
 // flag on a later dispatch otherwise keeps whatever the previous one left in globalCfg.
 //
@@ -272,7 +284,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 // load a real workspace through loadMagus/inspectWorkspace, both memoized behind a
 // process-wide sync.Once that panics if invoked twice with a different root, not
 // something a unit test can safely drive. Instead this exercises the exact mechanism
-// dispatchAdopted's callees use to set the field (cmdParse -> gen.BindFlags) and proves
+// dispatchAdopted's callees use to set the field (cmdParse -> flaggen.BindFlags) and proves
 // snapshotGlobals's restore undoes it, which is the narrowest reachable seam for the fix.
 func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	savedCfg, savedGlobal := globalCfg, global
@@ -293,7 +305,7 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 	}
 
 	// Second adopted dispatch: a different client, no --dry-run. Before the fix,
-	// gen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
+	// flaggen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
 	// an unset flag here would silently inherit true from the first dispatch.
 	restore = snapshotGlobals()
 	if _, err := cmdParse("run", nil, nil); err != nil {
@@ -312,7 +324,7 @@ func TestExitCodeOf(t *testing.T) {
 	assert.Equal(t, 0, mapExitCode(nil))
 	assert.Equal(t, 1, mapExitCode(errors.New("go exited 1")))
 	assert.Equal(t, 1, mapExitCode(errors.Join(errors.New("go exited 1"), nil)))
-	assert.Equal(t, exitUsage, mapExitCode(usagef("no such target")))
+	assert.Equal(t, exit.Usage, mapExitCode(exit.Usagef("no such target")))
 
 	// A diagnostic that names no exit code is ordinary work that failed. 75 is carried
 	// by the error's own ExitCode(), never by its diagnostic code, so the two errors
@@ -428,7 +440,7 @@ func TestWantsUsage(t *testing.T) {
 // self-check against what the command actually accepts.
 func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
-	gen.BindDiff(fs)
+	flaggen.BindDiff(fs)
 	var buf bytes.Buffer
 	diffUsage(&buf)
 	out := buf.String()
@@ -805,6 +817,9 @@ func TestScripts(t *testing.T) {
 			// A run starts a broker otherwise, and a script must leave nothing running.
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The cache store lives under the user cache dir, which HOME=/no-home cannot hold.
+			// Beside $WORK rather than in it, where a script's VCS status would list it.
+			e.Setenv("XDG_CACHE_HOME", e.WorkDir+"-cache")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a
 			// copy, and a copy of the artifact readers download is exactly what
@@ -914,7 +929,7 @@ func BenchmarkMagusOpenCold(b *testing.B) {
 		root := openBenchWorkspace(b, 10)
 		b.StartTimer()
 
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -945,7 +960,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	root := openBenchJSWorkspace(b, 50)
 
 	// Warm the on-disk workspace cache with one full Open.
-	warm, err := magus.Open(ctx, root)
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -954,7 +969,7 @@ func BenchmarkMagusOpenWarmGraphCache(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -970,7 +985,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	ctx := context.Background()
 	root := openBenchWorkspace(b, 10)
 
-	warm, err := magus.Open(ctx, root)
+	warm, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -979,7 +994,7 @@ func BenchmarkMagusOpenWarmAOT(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m, err := magus.Open(ctx, root)
+		m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1217,18 +1232,18 @@ func TestSandboxFlag(t *testing.T) {
 // weaker --sandbox to shed its parent's mode, and may pass a stronger one.
 func TestRefuseInheritedSandboxWeakened(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
-	t.Setenv(run.SandboxEnvVar, "required")
+	t.Setenv(spawn.SandboxEnvVar, "required")
 	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), types.SandboxWeakened)
 	require.ErrorIs(t, refuseInheritedSandboxWeakened(types.SandboxModeBestEffort), types.SandboxWeakened)
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired))
 
-	t.Setenv(run.SandboxEnvVar, "best-effort")
+	t.Setenv(spawn.SandboxEnvVar, "best-effort")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeRequired), "a nested run may strengthen")
 
 	t.Setenv("MAGUS_LEVEL", "0")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "at the top level the person's flag is the authority")
 	t.Setenv("MAGUS_LEVEL", "1")
-	t.Setenv(run.SandboxEnvVar, "")
+	t.Setenv(spawn.SandboxEnvVar, "")
 	require.NoError(t, refuseInheritedSandboxWeakened(types.SandboxModeOff), "a parent that ran unsandboxed passes nothing down")
 }
 
@@ -1256,92 +1271,6 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assert.False(t, isDeclaredRun(context.Background(), argv))
 		})
-	}
-}
-
-// TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
-// dispatchSub routed with no matching entry in subcommands.go's subcommands: `magus mcp`
-// worked when typed, but help, did-you-mean, the man pages, and every completion
-// script (all derived from subcommands / knownSubcommands) never mentioned it.
-// dispatchSub's switch and knownSubcommands are two separate declarations that can
-// drift exactly the way the three copies subcommands.go's own doc comment already
-// describes; this closes that gap mechanically instead of relying on someone
-// remembering to update both.
-//
-// It reads dispatchSub's case labels out of main.go's source with go/parser rather
-// than exercising the switch at runtime: running it needs a loaded workspace for
-// most cases, which is more than a unit test should require to check that two name
-// lists agree.
-func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
-	// go test's cwd is this package dir, regardless of -trimpath.
-	dir, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	mainPath := filepath.Join(dir, "main.go")
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, mainPath, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", mainPath, err)
-	}
-
-	var dispatchFn *ast.FuncDecl
-	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "dispatchSub" {
-			dispatchFn = fn
-			break
-		}
-	}
-	if dispatchFn == nil {
-		t.Fatalf("%s: no dispatchSub function found - the parse target moved", mainPath)
-	}
-
-	var sw *ast.SwitchStmt
-	for _, stmt := range dispatchFn.Body.List {
-		if s, ok := stmt.(*ast.SwitchStmt); ok {
-			sw = s
-			break
-		}
-	}
-	if sw == nil {
-		t.Fatal("dispatchSub has no top-level switch - the parse is wrong, not the switch")
-	}
-
-	var cases []string
-	for _, stmt := range sw.Body.List {
-		cc, ok := stmt.(*ast.CaseClause)
-		if !ok || cc.List == nil { // nil List is the default clause
-			continue
-		}
-		for _, expr := range cc.List {
-			lit, ok := expr.(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				continue
-			}
-			s, err := strconv.Unquote(lit.Value)
-			if err != nil {
-				continue
-			}
-			cases = append(cases, s)
-		}
-	}
-	if len(cases) == 0 {
-		t.Fatal("found no case clauses in dispatchSub's switch - the parse is wrong, not the switch")
-	}
-
-	// help and version are routed in runCLI before dispatchSub is ever called (see
-	// runCLI's own switch on res.sub), so they belong in knownSubcommands and are
-	// deliberately absent from dispatchSub's case set, not a gap to flag.
-	got := append(cases, "help", "version")
-	slices.Sort(got)
-
-	want := slices.Clone(knownSubcommands)
-	slices.Sort(want)
-
-	if !slices.Equal(got, want) {
-		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
-			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
 	}
 }
 

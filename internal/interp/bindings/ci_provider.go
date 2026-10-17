@@ -16,7 +16,7 @@ import (
 // ops. It registers itself with the annotate package at init, so core can
 // select a spell provider without linking the VM: the same indirection
 // remote_cache.go uses for cache backends.
-func init() {
+func init() { //nolint:gochecknoinits // internal/ci/annotate cannot link the Buzz VM; the opener registers from the layer that can
 	annotate.RegisterOpener(openSpellAnnotator)
 }
 

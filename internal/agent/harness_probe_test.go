@@ -139,6 +139,29 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
 }
 
+// TestVerifyHarnessProbeJudgesTheEventUnleased pins the cause of a verify run from inside a
+// leased worker reading uncovered: the probe inherited the worker's lease, whose write
+// boundary denied the synthetic event the probe expects to advise.
+func TestVerifyHarnessProbeJudgesTheEventUnleased(t *testing.T) {
+	t.Setenv("BAGGAGE", "magus.lease=job-1,other=kept")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\ncase \"$BAGGAGE\" in\n*magus.lease*) printf 'leased' ;;\nother=kept) printf 'deny' ;;\n*) printf 'baggage lost' ;;\nesac\n")
+	writeProbeableHarness(t, root, "leased", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "leased")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
+}
+
+func TestWithoutLeaseClaim(t *testing.T) {
+	got := withoutLeaseClaim([]string{"PATH=/bin", "BAGGAGE=a=1, magus.lease=job-1,magus.spawner=me", "HOME=/h"})
+	assert.Equal(t, []string{"PATH=/bin", "BAGGAGE=a=1,magus.spawner=me", "HOME=/h"}, got)
+
+	got = withoutLeaseClaim([]string{"BAGGAGE=magus.lease=job-1", "HOME=/h"})
+	assert.Equal(t, []string{"HOME=/h"}, got, "a list holding only the lease leaves no empty variable")
+}
+
 // TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered covers a command that
 // runs, and answers, but not with a decision a working guard would ever render for
 // this event: the case a raw "it produced non-empty output" check would have
@@ -164,7 +187,7 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 	// root/magus is deliberately absent, and PATH holds sh alone.
 	writeProbeableHarness(t, root, "nomagus", "magus buzz -s magus-command.buzz")
 
-	// Resolved and copied BEFORE PATH is overridden below.
+	// Resolved and linked BEFORE PATH is overridden below.
 	shOnlyPATH := buildMinimalPATH(t, "sh")
 	t.Setenv("PATH", shOnlyPATH)
 
@@ -216,20 +239,21 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 }
 
 // buildMinimalPATH resolves each name against the CURRENT (real) PATH, so call it
-// before t.Setenv("PATH", ...) replaces it, copies each into a fresh directory,
+// before t.Setenv("PATH", ...) replaces it, links each into a fresh directory,
 // and returns that directory. A test then sets PATH to exactly this, giving a
 // deterministic PATH that carries some real tools (sh) but not others
 // (magus), rather than depending on what happens to be installed elsewhere on
 // the machine running the suite.
+//
+// Each tool is symlinked, never copied: macOS kills a copied system binary
+// (Launch Constraint Violation) and writes a crash report each run.
 func buildMinimalPATH(t *testing.T, names ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, name := range names {
 		real, err := exec.LookPath(name)
 		require.NoErrorf(t, err, "the test machine has no %q to stand in with", name)
-		data, err := os.ReadFile(real)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), data, 0o755))
+		require.NoError(t, os.Symlink(real, filepath.Join(dir, name)))
 	}
 	return dir
 }

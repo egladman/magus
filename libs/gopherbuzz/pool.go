@@ -545,7 +545,7 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 		idle := len(p.idle)
 		p.mu.Unlock()
 		if obs := poolObserverFrom(ctx); obs != nil {
-			obs.SessionAcquire(ctx, true, idle)
+			obs.SessionAcquire(ctx, SessionReused, idle)
 		}
 		return w, nil
 	}
@@ -553,7 +553,7 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 	// No idle session: a cold checkout. Report the miss before warming; newWorker
 	// then reports the warm cost (idle is 0; nothing was idle to leave behind).
 	if obs := poolObserverFrom(ctx); obs != nil {
-		obs.SessionAcquire(ctx, false, 0)
+		obs.SessionAcquire(ctx, SessionCold, 0)
 	}
 	return p.newWorker(ctx)
 }
@@ -570,13 +570,13 @@ func (p *Pool) releaseWorker(ctx context.Context, w *poolWorker) {
 	obs := poolObserverFrom(ctx)
 	if retained {
 		if obs != nil {
-			obs.SessionRelease(ctx, false, idle)
+			obs.SessionRelease(ctx, SessionRetained, idle)
 		}
 		return
 	}
 	_ = w.sess.Close()
 	if obs != nil {
-		obs.SessionRelease(ctx, true, idle)
+		obs.SessionRelease(ctx, SessionEvicted, idle)
 	}
 }
 

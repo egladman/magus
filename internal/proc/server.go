@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,7 +43,6 @@ const (
 	rootCtxKey contextKey = iota
 	cwdCtxKey
 	jobCtxKey
-	leaseCtxKey
 )
 
 // WithRoot returns ctx carrying the client-sent workspace root, readable via RootFromContext.
@@ -66,34 +66,6 @@ func RootFromContext(ctx context.Context) string {
 // CwdFromContext returns the child's working directory stored by the proc server, or "".
 func CwdFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(cwdCtxKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
-// WithLease returns ctx carrying the client's lease, readable via
-// LeaseFromContext. An id failing [types.ValidJobID] (including the empty
-// string a client that predates the field sends) stores nothing, so a reader sees "".
-//
-// The validation is here rather than at the call site because the value crosses a socket
-// any local process may dial: a lease id is exempt from the trail's redaction, so
-// storing an unvalidated one would let the wire carry a credential onto an event line.
-// Dropping it matches what trail.LeaseFromEnv does with a malformed environment value.
-func WithLease(ctx context.Context, lease string) context.Context {
-	if !types.ValidJobID(lease) {
-		return ctx
-	}
-	return context.WithValue(ctx, leaseCtxKey, lease)
-}
-
-// LeaseFromContext returns the lease the adopted client was launched under, or
-// "" when it claimed none or claimed one that failed validation.
-//
-// A caller that also reads the environment channel must prefer this: it is the lease
-// of the process that ASKED for the run, while the server's own environment describes
-// whoever happened to start the server.
-func LeaseFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(leaseCtxKey).(string); ok {
 		return v
 	}
 	return ""
@@ -618,7 +590,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCwd(ctx, req.Cwd)
-	ctx = WithLease(ctx, req.Lease)
+	ctx = types.WithJobLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
 	if req.Sandbox.Enabled() {
@@ -674,17 +646,14 @@ func (s *service) run(req runRequest, reply *runReply) error {
 			reply.ExitCode = exitErr.Code
 			return nil
 		}
-		reply.ExitCode = 1
 		// A failure that names its own status keeps it. Collapsing everything to 1 made
 		// the documented split (1 the work failed, 2 the invocation was wrong) depend on
 		// whether a server happened to be running.
-		if code, ok := ExitCode(err); ok {
-			reply.ExitCode = code
-		}
+		reply.ExitCode = exit.Code(err)
 		// Withheld when the handler already explained the failure: the client PRINTS this
 		// text, so sending a sentinel's placeholder would report "silent exit" as the
 		// reason a run failed.
-		if !AlreadyReported(err) {
+		if !exit.AlreadyReported(err) {
 			reply.Err = err.Error()
 		}
 		return nil

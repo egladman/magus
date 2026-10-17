@@ -1,0 +1,31 @@
+{
+  "fields": {
+    "breaks": "[]string",
+    "check": "*types.LeaseCheck",
+    "checkpoint": "string",
+    "criteria": "string",
+    "deny_paths": "[]string",
+    "depends_on": "[]string",
+    "enter": "string",
+    "focus": "[]string",
+    "forbidden_paths": "[]string",
+    "goals": "[]types.Goal",
+    "id": "string",
+    "max_attempts": "int",
+    "model": "string",
+    "owned_paths": "[]string",
+    "parent": "string",
+    "read_only": "bool",
+    "read_paths": "[]string",
+    "requires": "[]string",
+    "schema_version": "int",
+    "state": "types.JobState",
+    "tier": "string",
+    "timeout": "string",
+    "validation": "string",
+    "write_paths": "[]string"
+  },
+  "reserved": [
+    "completion_gates"
+  ]
+}

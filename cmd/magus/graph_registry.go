@@ -15,10 +15,12 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -190,7 +192,7 @@ func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, e
 	if err != nil {
 		return nil, err
 	}
-	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil, fmt.Errorf("graph push: %w", err)
 	}
@@ -243,7 +245,7 @@ func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
 	// requests happen later, inside the build, and a deadline started now would expire
 	// against whatever else that build has to do first.
 	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
-	magus.UsePublishedShards(ws, magus.PublishedShards(client, src, graphArtifactType, slog.Default()))
+	workspacegraph.UsePublishedShards(ws, workspacegraph.PublishedShards(client, src, graphArtifactType, slog.Default()))
 }
 
 func graphPull(ctx context.Context, root string, args []string) error {

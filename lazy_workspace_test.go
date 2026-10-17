@@ -49,7 +49,7 @@ func countingOpen(t *testing.T) (string, func(context.Context) (*Magus, error), 
 	opens := new(int)
 	return root, func(ctx context.Context) (*Magus, error) {
 		*opens++
-		ws, err := Inspect(ctx, root)
+		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +157,7 @@ func TestLazyWorkspaceUsePublishedShardsBeforeOpenBacksTheOpenedMagus(t *testing
 	lw := NewLazyWorkspace(root, open)
 	published := &lazyShards{}
 
-	UsePublishedShards(lw, published)
+	usePublishedShards(lw, published)
 	assert.Zero(t, *opens, "installing a backing must not open the workspace")
 
 	m, err := lw.Magus(context.Background())
@@ -173,7 +173,7 @@ func TestLazyWorkspaceUsePublishedShardsAfterOpenBacksTheOpenedMagus(t *testing.
 	require.Nil(t, remoteShards(m), "an Inspect-constructed handle has no backing until one is installed")
 	published := &lazyShards{}
 
-	UsePublishedShards(lw, published)
+	usePublishedShards(lw, published)
 
 	assert.Same(t, published, remoteShards(m))
 }
@@ -193,7 +193,7 @@ func TestLazyWorkspaceRemoteShardsOpenOnGetAndPutOnly(t *testing.T) {
 	root, open, opens := countingOpen(t)
 	lw := NewLazyWorkspace(root, open)
 	published := &lazyShards{}
-	UsePublishedShards(lw, published)
+	usePublishedShards(lw, published)
 	r := lazyRemoteShards{lw}
 	ctx := context.Background()
 

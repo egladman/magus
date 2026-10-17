@@ -31,6 +31,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [echo-on-success]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [echo-on-success]: ...` instead.
+
 `magus describe rule echo-on-success` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

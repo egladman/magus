@@ -13,13 +13,16 @@ final isolationDenial = "a worker that changes code would share this checkout; s
     + "A worker that changes code gets its own checkout, and detaches onto its branch "
     + "(`git switch --detach <branch>`) as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
     + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
-    + "scout, integrate) may share it.";
+    + "scout) may share it, and so does integrate, which lands the work in this checkout.";
 
 // The roles a spawn title names for work that changes the tree: the conventional commit types.
 final changeRoles = ["feat", "fix", "refactor", "perf", "docs", "test", "chore"];
 
 // The roles that read and report, forked as read-only jobs.
-final thinkingRoles = ["plan", "review", "research", "scout", "integrate"];
+final thinkingRoles = ["plan", "review", "research", "scout"];
+
+// The role that integrates the checkout it shares: it builds magus, regenerates and commits.
+final integrateRole = "integrate";
 
 // Spawn is what the rules read of one spawn, copied out of the request because a Buzz test
 // cannot build the host's SpawnRequest: constructing its Job fails on a nested default.
@@ -65,6 +68,9 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
         return magus\guard.deny(isolationDenial);
+    }
+    if (helpers\titleRole(spawn.title) == integrateRole) {
+        return row;
     }
     final building = builds\briefDenial(spawn.prompt);
     if (building != "") {
@@ -145,7 +151,7 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
     if (spawn.lease != "") {
         parent = spawn.lease;
     }
-    var model = "<model>";
+    var model = "<tier or model>";
     if (spawn.model != "") {
         model = spawn.model;
     }
@@ -172,8 +178,8 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
             + "your row already holds, and the job store refuses anything wider.";
     }
     return "Fork the row first: `{fork}` (or the client tool: `{tool}`), then spawn with the "
-        + "description `{parent}/{role} {id}`. A thinking role (plan, review, research, scout, "
-        + "integrate) forks `--read-only`; a change role declares its `--write-paths`.{scope}";
+        + "description `{parent}/{role} {id}`. A thinking role (plan, review, research, scout) "
+        + "forks `--read-only`; integrate and a change role declare `--write-paths`.{scope}";
 }
 
 fun request(title: str, isolated: bool) > Spawn {
@@ -206,7 +212,7 @@ test "a live row passes" {
 test "a spawn with no lineage title is denied, naming the fork" {
     final v = judged(Spawn{ kind = "spawn", title = "audit the store", isolated = true }, rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "no title grammar");
-    std\assert(v.reason.indexOf("magus job fork <job> --model <model> --write-paths <paths>") != null, message: "names the fork");
+    std\assert(v.reason.indexOf("magus job fork <job> --model <tier or model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
     std\assert(v.reason.indexOf("magus\\job.put(\"<job>\"") != null, message: "names the client tool write");
     std\assert(v.reason.indexOf("magus_job") == null, message: "names no retired MCP tool");
@@ -284,6 +290,12 @@ test "a brief that tells the worker to build magus is denied, naming the script"
     }
     final unreadable = judged(briefed("Run `magus run go-build .` first."), rows: null, unreadable: "x");
     std\assert(unreadable.decision == "deny", message: "an unreadable store does not excuse the brief");
+}
+
+test "an integrate spawn shares the checkout and its brief may build magus" {
+    final integrate = Spawn{ kind = "spawn", title = "orchestrator/integrate guard-command", isolated = false, prompt = "Run `magus run go-build .` once the units land." };
+    final v = judged(integrate, rows: store, unreadable: "");
+    std\assert(v.decision != "deny", message: v.reason);
 }
 
 test "a brief that forbids the build or builds something else passes" {

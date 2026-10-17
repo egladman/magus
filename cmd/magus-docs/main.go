@@ -22,25 +22,14 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-// repoBlob is the GitHub source base for inline type links. Pinned to the default
-// branch rather than a commit hash: the committed docs embed these links, so a raw
-// HEAD hash would rewrite on every commit and trip the `generate` drift gate
-// (regenerated docs would never match the tree). No release tags to pin to yet;
-// when there are, this can point at the tag.
-const repoBlob = "https://github.com/egladman/magus/blob/main"
+// callbackURL is the source link for the Callback type.
+var callbackURL = docs.SourceURL("std/module.go")
 
-// callbackURL is the source link for the Callback type; repoRoot is the module
-// root. Both are resolved in init() rather than main() so the docs the tests
-// generate via renderModule match the ones `go run` writes: `go test` runs from
-// the package directory and never calls main(), so anything resolved there would
-// silently differ under test and trip the drift gate.
-var callbackURL string
-var repoRoot string
-
-func init() {
-	repoRoot = findRepoRoot()
-	callbackURL = sourceURL("std/module.go", "type Callback ")
-}
+// repoRoot is the module root. It is a package var initializer rather than set in
+// main() so the docs the tests generate via renderModule match the ones `go run`
+// writes: `go test` runs from the package directory and never calls main(), so
+// anything resolved there would silently differ under test and trip the drift gate.
+var repoRoot = findRepoRoot()
 
 // findRepoRoot walks up from the working directory to the directory holding go.mod
 // (the module root), so source paths resolve whether the process runs from the
@@ -162,25 +151,6 @@ func modulePageGeneratedFrom(source string) bool {
 	return source == "reference/buzz/" || source == "std/**/*.go, internal/hostmodules/**/*.go"
 }
 
-// sourceURL builds a repoBlob link to the first line of path whose trimmed text
-// starts with prefix (the definition of a host type), so a type link points at
-// the definition the way godoc does. The line is resolved from the working tree
-// so it stays correct if the definition moves; on any read miss it links to the
-// file without a line anchor.
-func sourceURL(path, prefix string) string {
-	url := repoBlob + "/" + path
-	data, err := os.ReadFile(filepath.Join(repoRoot, path))
-	if err != nil {
-		return url
-	}
-	for i, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
-			return fmt.Sprintf("%s#L%d", url, i+1)
-		}
-	}
-	return url
-}
-
 // typeMarkdown renders a type for a table cell: a backticked code span, linked to
 // its source definition when it is a host-defined type. Primitive types (string,
 // int, []string, ...) stay unlinked, the way godoc only links named types.
@@ -192,20 +162,17 @@ func typeMarkdown(t std.TypeTag) string {
 	return "`" + name + "`"
 }
 
-// methodSourceLink renders a " · [source](...)" suffix linking a method to its
-// Impl's definition on GitHub (godoc-style), or "" when unresolvable. It rides
+// methodSourceLink renders a `" - [source](...)"` suffix linking a method to the file
+// holding its Impl on GitHub, or "" when unresolvable. It names the file and no
+// line, so moving the function never changes the page. It rides
 // the Signature line, not the heading: a link in the heading would fold into the
 // auto-generated slug and break the in-page #method anchors.
 func methodSourceLink(meth std.Method) string {
-	src, line := std.MethodSource(meth, repoRoot)
+	src := std.MethodSource(meth, repoRoot)
 	if src == "" {
 		return ""
 	}
-	url := repoBlob + "/" + src
-	if line > 0 {
-		url += fmt.Sprintf("#L%d", line)
-	}
-	return fmt.Sprintf(" - [source](%s)", url)
+	return fmt.Sprintf(" - [source](%s)", docs.SourceURL(src))
 }
 
 func writeModule(dir string, m std.Module) error {

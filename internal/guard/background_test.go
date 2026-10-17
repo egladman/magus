@@ -64,10 +64,9 @@ func TestDenyWorkerBackgroundRunRefusesOnlyABackgroundedCheck(t *testing.T) {
 
 	t.Run("silent for anyone but a bound worker", func(t *testing.T) {
 		assert.Empty(t, workerDenial(ctx, deps, "", "./magus run lint docs", background), "no lease")
-		owns := figuresLease()
-		owns.Check = &types.LeaseCheck{Target: "ci", Project: "."}
-		ownsCtx, _ := fleetFixture(t, owns)
-		assert.Empty(t, workerDenial(ownsCtx, deps, owns.ID, "./magus affected ci", background), "the gate's owner")
+		integrated := figuresLease()
+		integratorCtx, integrator := integratorFixture(t, integrated, "root/integrate "+integrated.ID)
+		assert.Empty(t, workerDenial(integratorCtx, integrator, integrated.ID, "./magus affected ci", background), "the checkout's integrator")
 		done := figuresLease()
 		done.State = types.StatePass
 		doneCtx, _ := fleetFixture(t, done)
@@ -99,12 +98,12 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 }
 
 func TestDecodeHookEnvelopeReadsHowTheHostRunsACommand(t *testing.T) {
-	req, ok := decodeHookEnvelope(`{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":true,"timeout":300000}}`)
+	req, ok := decodeTestEnvelope(t, `{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":true,"timeout":300000}}`)
 	require.True(t, ok)
 	assert.True(t, req.CallBackground)
 	assert.Equal(t, 5*time.Minute, req.CallTimeout)
 
-	req, ok = decodeHookEnvelope(`{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":"yes","timeout":"soon"}}`)
+	req, ok = decodeTestEnvelope(t, `{"hook_event_name":"PreToolUse","tool_input":{"command":"ls","run_in_background":"yes","timeout":"soon"}}`)
 	require.True(t, ok)
 	assert.False(t, req.CallBackground, "only an explicit true")
 	assert.Zero(t, req.CallTimeout, "a timeout that is not a number is none")

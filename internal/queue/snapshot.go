@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/xdg"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -34,7 +34,7 @@ type Snapshot struct {
 // snapshotDir is the repository's queue state: every worktree and clone of it reads the
 // one read any of them made.
 func snapshotDir(root string) (string, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("queue: resolve state dir: %w", err)
 	}

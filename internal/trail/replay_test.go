@@ -256,15 +256,44 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 
 	got := ForSession(base, "s1", 100)
 	require.Len(t, got.Spawns, 1)
+	require.Len(t, got.Calls, 2)
 	assert.Equal(t, SessionTrail{
 		Commands: 2,
 		Denied:   1,
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
 		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
+		Calls: []SessionCall{
+			{At: got.Calls[0].At, Decision: "pass", AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[1].At, Decision: "deny", AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+		},
 	}, got)
 
 	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
 	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+}
+
+func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
+	base := t.TempDir()
+	shadow := map[types.GuardProfile]types.GuardDecision{types.GuardProfileStandard: types.GuardAdvise}
+	advised := types.AgentFacts{
+		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 300_000, ContextModel: "claude-opus-5-5",
+		Billing: types.AgentBillingMetered, Shadow: shadow,
+	}
+	chars := 5000
+	passed := types.AgentFacts{Thread: types.AgentThreadMain, DelegableClass: types.DelegableSearch, ResultChars: &chars}
+	record(t, base, AgentCommand{
+		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "advise", Rule: "root-heavy-command", AgentFacts: advised,
+	})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: "pass", AgentFacts: passed})
+	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
+	AppendAgentSpawn(t.Context(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
+
+	got := ForSession(base, "s1", 100)
+	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
+	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: "advise", Rule: "root-heavy-command", AgentFacts: advised}, got.Calls[0])
+	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: "pass", AgentFacts: passed}, got.Calls[1])
+	require.Len(t, got.Spawns, 1)
+	assert.Equal(t, SessionSpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
 }
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {

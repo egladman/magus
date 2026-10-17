@@ -24,7 +24,7 @@ export fun serverHttp() > Figure !> any {
 
 | Call                                   | What it does                                                     |
 | -------------------------------------- | ---------------------------------------------------------------- |
-| `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` and `generated:` set the rest.     |
+| `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` sets the rest.                     |
 | `without(dirs, drop:)`                 | `dirs` less `drop`; raises when `drop` names one `dirs` lacks.   |
 | `external(name, ...)`                  | An `Actor`: a box that names no directory.                       |
 | `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\refs` result.            |
@@ -43,7 +43,7 @@ export fun serverHttp() > Figure !> any {
 
 ## A figure is data
 
-`Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`, `generated`,
+`Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`,
 `unscopedWhy` (empty for a figure that draws code), `graphEdges`, and the lists `boxes`,
 `scopes`, `exclusions`, `hiddenEdges`, `edgeMarks`, `flows`, `zones`, `alignments` and
 `legends`. Their records are `Box`, `Exclusion`, `HiddenEdges`, `EdgeMark`, `Flow` (two

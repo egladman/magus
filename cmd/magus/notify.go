@@ -11,10 +11,12 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -35,15 +37,15 @@ import (
 func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	nf := gen.BindSessionNotify(fset)
+	nf := flaggen.BindSessionNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus session notify: takes no positional arguments (read the event from stdin)")
+		return exit.Usagef("magus session notify: takes no positional arguments (read the event from stdin)")
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -61,7 +63,7 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 	}
 	normalizeEvent(&ev)
 
-	held, err := fileAttention(root, ev)
+	held, err := fileAttention(ctx, root, ev)
 	if err != nil {
 		noteAttentionOpenFailure(err)
 	}
@@ -72,13 +74,12 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 	}
 
 	switch opts.Format {
-	case FormatText:
+	case outputText:
 		title, message := renderNotification(ev)
 		fmt.Fprintf(out, "%s: %s\n", title, message)
 		return nil
-	case FormatName:
-		fmt.Fprintln(out, ev.Outcome)
-		return nil
+	case outputName:
+		return emitNames(os.Stdout, []string{string(ev.Outcome)})
 	}
 	return writeFormatted(out, opts, ev)
 }

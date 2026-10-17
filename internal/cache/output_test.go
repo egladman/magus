@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	json "github.com/egladman/magus/internal/json"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -137,6 +140,65 @@ func TestOutputStorePersistRevisionRoundTrip(t *testing.T) {
 		Key: "cafebabecafebabe", KeyVersion: KeyVersion,
 		Attempt: desc.Attempt, PersistedNs: desc.PersistedNs,
 	}, desc)
+}
+
+// A job row records the run behind an output ref through JobAttempt, so every field a
+// grader compares has to cross: the lease and args bind the run to the job and the check.
+func TestOutputDescriptorJobAttemptCarriesTheRunsIdentity(t *testing.T) {
+	t.Parallel()
+
+	d := OutputDescriptor{
+		Ref: "outdeadbeefcafe", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
+		TimestampMs: 1_700_000_000_000, DurationMs: 900, Attempt: "outdeadbeefcafe-0a1b2c3d",
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+		Lease: "wave/api", ExtraArgs: []string{"-run", "TestOne"},
+		Inv: "inv1", ErrMsg: "exit 1", Platform: "linux/amd64",
+	}
+	got := d.JobAttempt("outdead")
+	assert.Equal(t, types.JobAttempt{
+		Found: true, Ref: "outdead", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
+		TimestampMs: 1_700_000_000_000, DurationMs: 900, AttemptID: "outdeadbeefcafe-0a1b2c3d",
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+		Lease: "wave/api", ExtraArgs: []string{"-run", "TestOne"},
+	}, got)
+
+	got.ExtraArgs[0] = "-bench"
+	assert.Equal(t, "-run", d.ExtraArgs[0], "the attempt owns its args")
+	assert.Nil(t, OutputDescriptor{}.JobAttempt("outdead").ExtraArgs, "a run that recorded no args stays nil, which a grader does not compare")
+}
+
+// A run records the job lease it acted under, resolved as the sandbox resolves it: the
+// checkout's binding outranks the lease the environment claims.
+func TestRecordOutputStampsTheActingLease(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root, cdir, c := newMutableCache(t)
+	recordIn := func(ctx context.Context) OutputDescriptor {
+		t.Helper()
+		ref := c.recordOutput(ctx, Step{ProjectPath: "api", Target: "test", WorkspaceRoot: root}, "deadbeefcafef00d", []byte("ok\n"), Result{Duration: time.Second}, nil, false)
+		require.NotEmpty(t, ref)
+		_, d, err := c.outputs.ByRef(ref)
+		require.NoError(t, err)
+		return d
+	}
+	record := func() OutputDescriptor {
+		t.Helper()
+		return recordIn(t.Context())
+	}
+	adopted := types.WithJobLease(t.Context(), "wave/client")
+
+	t.Setenv(trail.EnvBaggage, "")
+	assert.Empty(t, record().Lease, "a run under no lease records none")
+	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "a run the daemon adopted records its client's lease")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=wave/api")
+	assert.Equal(t, "wave/api", record().Lease)
+	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "the client's lease outranks the daemon's environment")
+
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: cdir}).Bind(job.Caller{}, "wave/bound"))
+	assert.Equal(t, "wave/bound", record().Lease, "the checkout's binding outranks the claim")
+	assert.Equal(t, "wave/bound", recordIn(adopted).Lease, "the checkout's binding outranks the client's claim")
 }
 
 // TestOutputStoreV2DescriptorResolvesWithEmptyRevision pins backward compatibility for
@@ -328,7 +390,7 @@ func TestPortableRefDeterministicAcrossCaches(t *testing.T) {
 		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
 		require.NoError(t, err)
 		r, err := c.Run(context.Background(), makeStep(root), func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "built")
 			return nil
 		})
@@ -358,7 +420,7 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 	var refs []string
 	for i := 0; i < 3; i++ {
 		_, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintf(stdout, "attempt %d failed\n", i)
 			return boom
 		})
@@ -799,7 +861,7 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 
 	step := makeStep(root)
 	r, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprint(stdout, "no newline here") // no '\n' -> the trailing partial line goes through flush
 		return nil
 	})
@@ -842,7 +904,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	pass := makeStep(root)
 	rPass, err := c.Run(context.Background(), pass, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "build ok: 3 files")
 		return nil
 	})
@@ -861,7 +923,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	fail.Target = "test"
 	boom := errors.New("exit status 1")
 	_, err = c.Run(context.Background(), fail, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: assertion failed")
 		return boom
 	})
@@ -1054,7 +1116,7 @@ func TestFailingRunRefResolves(t *testing.T) {
 
 	boom := errors.New("exit status 1")
 	res, err := c.Run(context.Background(), step, func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: one assertion")
 		return boom
 	})

@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [revert-classify]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [revert-classify]: ...` instead.
+
 `magus describe rule revert-classify` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

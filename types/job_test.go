@@ -1,12 +1,13 @@
 package types
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -282,6 +283,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   append(make([]string, 0, 4), "types/"),
 		DenyPaths:    append(make([]string, 0, 4), "gen/"),
 		DependsOn:    append(make([]string, 0, 4), "b"),
+		Breaks:       append(make([]string, 0, 4), "--old-flag"),
 		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
 		GateAttempts: append(make([]JobGateAttempt, 0, 4), JobGateAttempt{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}),
 		Releases:     append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
@@ -292,6 +294,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	first.WritePaths = append(first.WritePaths, "first/")
 	first.DenyPaths = append(first.DenyPaths, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
+	first.Breaks = append(first.Breaks, "first")
 	first.Goals[0].DependsOn = append(first.Goals[0].DependsOn, "first")
 	first.GateAttempts = append(first.GateAttempts, JobGateAttempt{GateID: "first"})
 	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
@@ -300,6 +303,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.WritePaths = append(second.WritePaths, "second/")
 	second.DenyPaths = append(second.DenyPaths, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
+	second.Breaks = append(second.Breaks, "second")
 	second.Goals[0].DependsOn = append(second.Goals[0].DependsOn, "second")
 	second.GateAttempts = append(second.GateAttempts, JobGateAttempt{GateID: "second"})
 	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
@@ -311,6 +315,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/", "first/"},
 		DenyPaths:    []string{"gen/", "first/"},
 		DependsOn:    []string{"b", "first"},
+		Breaks:       []string{"--old-flag", "first"},
 		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}},
 		Releases:     []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}},
@@ -324,11 +329,141 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/"},
 		DenyPaths:    []string{"gen/"},
 		DependsOn:    []string{"b"},
+		Breaks:       []string{"--old-flag"},
 		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}},
 		Releases:     []JobRelease{{Path: "types/x.go"}},
 		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}},
 	}, orig)
+}
+
+// A run's args sit one level down, in the attempt and in each goal's attempt, so they
+// alias the store's array unless Clone copies them too. Asserted across two clones for the
+// reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesAttemptArgs(t *testing.T) {
+	t.Parallel()
+
+	args := func() []string { return append(make([]string, 0, 4), "-run", "TestOne") }
+	orig := Job{
+		ID:           "a",
+		Attempt:      &JobAttempt{Ref: "out1", ExtraArgs: args()},
+		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out2", ExtraArgs: args()}}},
+	}
+
+	first, second := orig.Clone(), orig.Clone()
+	first.Attempt.ExtraArgs = append(first.Attempt.ExtraArgs, "first")
+	first.GateAttempts[0].Attempt.ExtraArgs = append(first.GateAttempts[0].Attempt.ExtraArgs, "first")
+	second.Attempt.ExtraArgs = append(second.Attempt.ExtraArgs, "second")
+	second.GateAttempts[0].Attempt.ExtraArgs = append(second.GateAttempts[0].Attempt.ExtraArgs, "second")
+	first.Attempt.ExtraArgs[0] = "-bench"
+
+	assert.Equal(t, []string{"-bench", "TestOne", "first"}, first.Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne", "first"}, first.GateAttempts[0].Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne"}, orig.Attempt.ExtraArgs)
+	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
+}
+
+// The previous attempts and the rejection are the next holder's evidence, so a clone handed
+// out of the store must not alias the slices one level down. Asserted across two clones for
+// the reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
+	t.Parallel()
+
+	refs := func() []string { return append(make([]string, 0, 4), "out1") }
+	unmet := func() []GateStatus {
+		return append(make([]GateStatus, 0, 4), GateStatus{ID: "unit", Violations: refs()})
+	}
+	prior := func() PriorAttempt {
+		return PriorAttempt{
+			N:               1,
+			Unmet:           unmet(),
+			Violations:      refs(),
+			UnresolvedRisks: refs(),
+			FailingRefs:     refs(),
+			Denials:         append(make([]JobDenial, 0, 4), JobDenial{Rule: "lease-write"}),
+		}
+	}
+	orig := Job{
+		ID:        "a",
+		Prior:     append(make([]PriorAttempt, 0, 4), prior()),
+		Rejection: &JobRejection{Unmet: unmet(), Violations: refs()},
+	}
+
+	first, second := orig.Clone(), orig.Clone()
+	for i, c := range []Job{first, second} {
+		tag := fmt.Sprint(i)
+		p := &c.Prior[0]
+		p.Unmet[0].Violations = append(p.Unmet[0].Violations, tag)
+		p.Violations = append(p.Violations, tag)
+		p.UnresolvedRisks = append(p.UnresolvedRisks, tag)
+		p.FailingRefs = append(p.FailingRefs, tag)
+		p.Denials = append(p.Denials, JobDenial{Rule: tag})
+		c.Rejection.Unmet[0].Violations = append(c.Rejection.Unmet[0].Violations, tag)
+		c.Rejection.Violations = append(c.Rejection.Violations, tag)
+	}
+	first.Prior[0].FailingRefs[0] = "first"
+	first.Rejection.At = 9
+
+	assert.Equal(t, []string{"first", "0"}, first.Prior[0].FailingRefs)
+	wantPrior := second.Prior[0]
+	wantPrior.FailingRefs = []string{"out1", "1"}
+	wantPrior.Denials = []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}
+	assert.Equal(t, wantPrior, second.Prior[0])
+	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
+	assert.Equal(t, Job{ID: "a", Prior: []PriorAttempt{prior()}, Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
+}
+
+// A cap on attempts is declared like the rest of the spec, so applying a record that omits
+// it clears it, and a negative cap is refused at the door.
+func TestDeclarationCarriesMaxAttempts(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", MaxAttempts: 3}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxAttempts: -1}.Validate(), "max_attempts is -1")
+
+	var row Job
+	Declaration{ID: "worker", MaxAttempts: 3}.Apply(&row)
+	assert.Equal(t, 3, row.MaxAttempts)
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.MaxAttempts)
+}
+
+// The generation and the attempt record are the store's, so a declaration never writes
+// them: Apply leaves them where they were.
+func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
+	t.Parallel()
+
+	row := Job{
+		ID:         "worker",
+		Generation: 2,
+		Attempts:   2,
+		Prior:      []PriorAttempt{{N: 1, State: StateFail}},
+		Rejection:  &JobRejection{At: 1, ObservedGeneration: 2},
+	}
+	want := row
+	want.Criteria = "again"
+	Declaration{ID: "worker", Criteria: "again"}.Apply(&row)
+	assert.Equal(t, want, row)
+}
+
+func TestJobStaleAtReadsAZeroStampAsUnknown(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name              string
+		generation, stamp int
+		want              bool
+	}{
+		{"same generation", 2, 2, false},
+		{"an earlier spec", 2, 1, true},
+		{"an unstamped record", 2, 0, false},
+		{"a row with no generation", 0, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, Job{Generation: tc.generation}.StaleAt(tc.stamp))
+		})
+	}
 }
 
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
@@ -355,6 +490,61 @@ func TestDeclarationRejectsCyclicGoals(t *testing.T) {
 	}).Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "dependencies contain a cycle")
+}
+
+// A path the guard can never match against a workspace-relative one used to be accepted
+// and bound nothing, silently.
+func TestDeclarationRefusesAPathOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		decl Declaration
+		want string
+	}{
+		{Declaration{ID: "j", WritePaths: []string{"~/.claude/plans/**"}}, `write_paths[0] "~/.claude/plans/**" begins with ~`},
+		{Declaration{ID: "j", WritePaths: []string{"api/**", "/abs/**"}}, `write_paths[1] "/abs/**" is absolute`},
+		{Declaration{ID: "j", DenyPaths: []string{"../wt/**"}}, `deny_paths[0] "../wt/**" climbs out of the workspace`},
+		{Declaration{ID: "j", ReadPaths: []string{"docs/../../x"}}, `read_paths[0] "docs/../../x" climbs out`},
+	} {
+		err := tt.decl.Validate()
+		require.Error(t, err, tt.want)
+		assert.Contains(t, err.Error(), tt.want)
+	}
+	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, ReadPaths: []string{"docs/../api/**"}}.Validate(),
+		"a path that cleans to one inside the workspace stands")
+}
+
+func TestDeclarationValidatesSignatureGoals(t *testing.T) {
+	t.Parallel()
+
+	shape := func(id string, symbols ...string) Goal {
+		return Goal{ID: id, Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: symbols}
+	}
+	for _, tc := range []struct {
+		name  string
+		goals []Goal
+		want  string
+	}{
+		{"one symbol, signature left for the fork to record", []Goal{shape("a", "Api")}, ""},
+		{"one symbol with its signature", []Goal{{ID: "a", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"}}, ""},
+		{"two symbols", []Goal{shape("a", "Api", "Old")}, "expects the signature of 2 symbols"},
+		{"no symbol", []Goal{shape("a", " ")}, "names nothing to examine"},
+		{"a signature on another expectation", []Goal{{ID: "a", Kind: GoalKindSymbol, Expect: ExpectPresent, Symbols: []string{"Api"}, Signature: "func Api()"}},
+			`expects "present" and carries a signature`},
+		{"two signatures for one symbol", []Goal{shape("a", "Api"), shape("b", "Api")}, `goals "a" and "b" both expect a signature of "Api"`},
+		{"signatures for two symbols", []Goal{shape("a", "Api"), shape("b", "Old")}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := Declaration{ID: "shaped", Goals: tc.goals}.Validate()
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+	assert.Contains(t, GoalExpects(), ExpectSignature)
 }
 
 // entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
@@ -391,6 +581,28 @@ func TestAnOlderReaderKeepsEntries(t *testing.T) {
 		State:   StatePass,
 		Entries: in.Entries,
 	}, back)
+}
+
+func TestDeclarationRefusesABlankBreaksEntry(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", Breaks: []string{"--old-flag", "api.Open"}}.Validate())
+	err := Declaration{ID: "worker", Breaks: []string{"--old-flag", "  "}}.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "breaks[1] is blank")
+}
+
+// The record is the whole spec, so applying one that omits breaks clears them: a job
+// keeps the right to break something only while its declaration says so.
+func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
+	t.Parallel()
+
+	var row Job
+	Declaration{ID: "worker", Breaks: []string{" --old-flag ", "", "api.Open"}}.Apply(&row)
+	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
+
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Empty(t, row.Breaks)
 }
 
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
@@ -614,6 +826,39 @@ func TestJobListFlagsAQueuedJobStaleOnlyOnceItsDependenciesEnd(t *testing.T) {
 	assert.Equal(t, []string{"queued", "lone"}, NewJobList(rows).Flag(now+2*hour, 2*time.Hour).Stale)
 }
 
+// JobAncestors walks nearest first, stops at a parent the rows do not carry and at a
+// cycle, and allocates only the chain it returns: every list asks it of every live row,
+// and a per-call index of the whole store made one list quadratic in allocations.
+func TestJobAncestors(t *testing.T) {
+	rows := []Job{
+		{ID: "root"},
+		{ID: "mid", Parent: "root"},
+		{ID: "leaf", Parent: "mid"},
+		{ID: "orphan", Parent: "missing"},
+		{ID: "a", Parent: "b"},
+		{ID: "b", Parent: "a"},
+		{ID: "into", Parent: "a"},
+	}
+	ids := func(id string) []string {
+		var out []string
+		for _, a := range JobAncestors(rows, id) {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"mid", "root"}, ids("leaf"))
+	assert.Empty(t, ids("root"))
+	assert.Empty(t, ids("orphan"), "a parent the rows do not carry ends the walk")
+	assert.Equal(t, []string{"b"}, ids("a"), "a cycle back to the start ends the walk")
+	assert.Equal(t, []string{"a", "b"}, ids("into"), "a cycle above the start ends the walk")
+
+	for i := range 1000 {
+		rows = append(rows, Job{ID: fmt.Sprintf("filler-%d", i)})
+	}
+	allocs := testing.AllocsPerRun(10, func() { JobAncestors(rows, "leaf") })
+	assert.LessOrEqual(t, allocs, 4.0, "only the returned chain allocates, whatever the store's size")
+}
+
 // A footprint that is not known still says so on the wire: footprint_known is never
 // omitted, so a reader cannot take a missing footprint for an empty one.
 func TestFootprintsCrossJSON(t *testing.T) {
@@ -621,18 +866,182 @@ func TestFootprintsCrossJSON(t *testing.T) {
 
 	status, err := json.Marshal(JobStatus{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)"}`, string(status))
+	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)","lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
 
 	status, err = json.Marshal(JobStatus{Job: "a", FootprintKnown: true, Footprint: []RegionChange{
 		{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
 	}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
-		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}]}`, string(status))
+		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}],"lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
+
+	status, err = json.Marshal(JobStatus{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"lines_added":0,"lines_deleted":0,"symbol_delta_known":false,`+
+		`"observed_generation":2,"prior_generation":1}`, string(status))
 
 	overlap, err := json.Marshal(JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
 		Footprint: &JobOverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+
 		`"footprint":{"verdict":"shared","shared":["x/a.go#func X() {"]}}`, string(overlap))
+}
+
+func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
+	t.Parallel()
+	d := Declaration{
+		ID:          "bad id",
+		Parent:      "bad parent",
+		DependsOn:   []string{"ok", "bad dep"},
+		State:       "nope",
+		Timeout:     "soon",
+		MaxAttempts: -1,
+		Checkout:    "rel/dir",
+		WritePaths:  []string{"a.go", "../b.go"},
+		Breaks:      []string{" "},
+		Check:       &LeaseCheck{Target: "test", Project: "."},
+		Validation:  "magus run test .",
+		Waivers: []JobWaiver{
+			{Code: JobRecordInvalid, Subject: "x", Reason: "r"},
+			{Code: GateNotRun},
+		},
+		Goals: []Goal{
+			{ID: "a", Kind: GoalKindPaths},
+			{ID: "a", Kind: GoalKindPaths, Paths: []string{"x"}, DependsOn: []string{"missing"}},
+		},
+	}
+
+	ps := d.Problems()
+
+	fields := make([]string, len(ps))
+	for i, p := range ps {
+		fields[i] = string(p.Code) + " " + p.Field
+		assert.NotEmptyf(t, p.Message, "%s has a message", fields[i])
+		assert.NotEmptyf(t, p.Fix, "%s has a fix", fields[i])
+	}
+	assert.Equal(t, []string{
+		"MGS3037 id",
+		"MGS3037 parent",
+		"MGS3037 depends_on[1]",
+		"MGS3037 state",
+		"MGS3037 timeout",
+		"MGS3037 max_attempts",
+		"MGS3037 checkout",
+		"MGS3037 write_paths[1]",
+		"MGS3037 validation",
+		"MGS3037 breaks[0]",
+		"MGS3037 waivers[0].code",
+		"MGS3037 waivers[1].subject",
+		"MGS3037 waivers[1].reason",
+		"MGS3038 goals[0].paths",
+		"MGS3038 goals[1].id",
+		"MGS3038 goals[1].depends_on[0]",
+	}, fields)
+	err := d.Validate()
+	require.ErrorIs(t, err, JobRecordInvalid)
+	require.ErrorIs(t, err, JobGoalInvalid)
+}
+
+func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
+	t.Parallel()
+	d := Declaration{
+		ID:         "wave/a",
+		WritePaths: []string{"types/job.go"},
+		Check:      &LeaseCheck{Target: "go-test", Project: "."},
+		Waivers:    []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
+		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
+	}
+
+	assert.Empty(t, d.Problems())
+	require.NoError(t, d.Validate())
+}
+
+func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
+	t.Parallel()
+	d := Declaration{ID: "a", Goals: []Goal{
+		{ID: "x", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"y"}},
+		{ID: "y", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"x"}},
+		{ID: "z", Kind: GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"z"}},
+	}}
+
+	ps := d.Problems()
+
+	require.Len(t, ps, 2)
+	assert.Equal(t, "goals[0].depends_on", ps[1].Field)
+	assert.Contains(t, ps[1].Message, `cycle at "x"`)
+	assert.Equal(t, "goals[2].depends_on[0]", ps[0].Field)
+	assert.Contains(t, ps[0].Message, "cannot depend on itself")
+}
+
+func TestDeclarationApplyCopiesWaivers(t *testing.T) {
+	t.Parallel()
+	waivers := []JobWaiver{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
+	var row Job
+
+	Declaration{ID: "a", Waivers: waivers}.Apply(&row)
+	waivers[0].Reason = "changed"
+
+	assert.Equal(t, "the root runs it", row.Waivers[0].Reason)
+}
+
+func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
+	t.Parallel()
+	g := Goal{ID: "g", Kind: GoalKindSymbol, Expect: ExpectSignature, Symbols: []string{"A", "B"}, Paths: []string{"x"}}
+
+	ps := g.problems("goals[3]")
+
+	require.Len(t, ps, 2)
+	assert.Equal(t, "goals[3].paths", ps[0].Field)
+	assert.Equal(t, "goals[3].symbols", ps[1].Field)
+	for _, p := range ps {
+		assert.Equal(t, JobGoalInvalid, p.Code)
+	}
+	require.ErrorIs(t, g.Validate(), JobGoalInvalid)
+}
+
+func TestPathWithin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		inner, outer string
+		want         bool
+	}{
+		{"internal/job/a.go", "internal/job/a.go", true},
+		{"internal/job/a.go", "internal/job", true},
+		{"internal/job/a.go", "internal/jo", false},
+		{"internal/job/a.go", "internal/job/*.go", true},
+		{"internal/job/a.go", "internal/**", true},
+		{"internal/job/a.txt", "internal/job/*.go", false},
+		{"internal/job/a.go#Run", "internal/job/a.go", true},
+		{"internal/job/a.go#Run", "internal/job/*.go", true},
+		{"internal/job/a.go#Run", "internal/job/a.go#Run", true},
+		{"internal/job/a.go#Run", "internal/job/a.go#Stop", false},
+		{"internal/job/a.go", "internal/job/a.go#Run", false},
+		{"internal/job/*.go", "internal/job/a.go#Run", false},
+		{"internal/job/*.go", "internal/job", true},
+		{"internal/job/*.go", "internal/job/a.go", false},
+		{"internal/job/*.go", "internal/**", true},
+		{"internal/job/*.go", "internal/**/*.go", true},
+		{"internal/*/x/*.go", "internal/**/*.go", true},
+		{"internal/job/a.go", "internal/**/*.go", true},
+		{"internal/*.go", "internal/**/*.go", true},
+		{"internal/job/**", "internal/**/*.go", false},
+		{"internal/job/*.txt", "internal/**/*.go", false},
+		{"internal/job/*_test.go", "internal/**/*.go", true},
+		{"internal/job/*.go", "internal/**/*_test.go", false},
+		{"internal/job/*", "internal/**/*.go", false},
+		{"internal/job/*.{go,txt}", "internal/**/*.go", false},
+		{"internal/job/*.[a-z]", "internal/**/*.go", false},
+		{"internal/job/*.go", "internal/**/*", true},
+		{".", "internal/**", false},
+		{".", "internal/**/*.go", false},
+		{".", "internal/job/*.go", false},
+		{"internal/**", "internal/job/**", false},
+		{"**/*.go", "internal/**", false},
+		{"**/*.go", "**", true},
+		{"internal/job/*.go", "internal/job/*.go", true},
+		{"", "internal/job", false},
+		{"internal/job/a.go", "", false},
+	} {
+		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
+	}
 }

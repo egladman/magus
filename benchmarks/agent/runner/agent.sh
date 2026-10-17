@@ -19,9 +19,16 @@ effort=$6
 # The environment is scrubbed to this whitelist plus every name the worktree's
 # .benchmark/env.sh exports, which is how an arm sets its levers (provision.sh
 # writes it per run: the pinned binary on PATH, the empty MCP config, rotation
-# off). Settings are limited to --setting-sources project, but HOME is kept, so
-# whatever the host reads from ~/.claude (memory, user-scoped skills) reaches
-# both arms equally; the arms differ only in what the worktree carries.
+# off).
+#
+# HOME is kept because the CLI finds its login through it; swapping HOME logs the
+# session out. The operator's ~/.claude is kept out by the CLI's own scoping
+# instead: --setting-sources project drops the user CLAUDE.md, user skills, user
+# agents and the hooks user settings declare, and CLAUDE_CODE_DISABLE_AUTO_MEMORY
+# drops the auto-memory prompt section. A run's init event shows the result: no
+# user skill or agent listed, memory_paths null.
+#
+# BENCH_CLAUDE_BIN picks the CLI build (default: claude on PATH).
 #
 # Credentials pass through by NAME only: an API key, or the long-lived token `claude
 # setup-token` mints for headless use. The operator exports one of them before launching
@@ -35,7 +42,7 @@ if [[ -f $wt/.benchmark/env.sh ]]; then
     done < <(grep -o '^[A-Z_][A-Z0-9_]*=' "$wt/.benchmark/env.sh" | tr -d '=')
 fi
 
-env_args=()
+env_args=(CLAUDE_CODE_DISABLE_AUTO_MEMORY=1)
 for name in "${env_keep[@]}"; do
     if [[ -n ${!name:-} ]]; then
         env_args+=("$name=${!name}")
@@ -47,9 +54,10 @@ done
 # total_cost_usd is priced from a table compiled into THIS binary, so which build
 # produced a transcript is what decides whether that figure can be compared to
 # list price at all. Unknown when the CLI cannot be asked, never guessed.
-printf '%s\n' "$(claude --version 2>/dev/null || echo unknown)" >"$(dirname "$transcript")/agent-cli.txt"
+claude_bin=${BENCH_CLAUDE_BIN:-claude}
+printf '%s\n' "$("$claude_bin" --version 2>/dev/null || echo unknown)" >"$(dirname "$transcript")/agent-cli.txt"
 
-cmd=(claude -p
+cmd=("$claude_bin" -p
     --output-format stream-json --verbose
     --permission-mode acceptEdits
     --model "$model"
@@ -59,10 +67,19 @@ cmd=(claude -p
 # Turn caps are a task-level budget the CLI has not exposed since 2.x; the wall
 # clock and the dollar cap are what actually bound a run. Recorded either way so
 # a transcript says which caps were live.
-if claude --help 2>/dev/null | grep -q -- '--max-turns'; then
+if "$claude_bin" --help 2>/dev/null | grep -q -- '--max-turns'; then
     cmd+=(--max-turns "$max_turns")
 else
     printf 'agent.sh: claude has no --max-turns; turn cap %s is recorded, not enforced\n' "$max_turns" >&2
+fi
+
+# Headless, acceptEdits approves file edits only: the CLI denies every command
+# that is not read-only, and every command the guard rewrites to close stdin
+# (`exec </dev/null; ...`). BENCH_ALLOWED_TOOLS (Bash, say) pre-approves tools so
+# a session can run them; the guard's own denies still apply.
+if [[ -n ${BENCH_ALLOWED_TOOLS:-} ]]; then
+    cmd+=(--allowed-tools "$BENCH_ALLOWED_TOOLS")
+    printf 'agent.sh: pre-approved tools: %s\n' "$BENCH_ALLOWED_TOOLS" >&2
 fi
 
 if [[ -n ${RUNNER_BUDGET_USD:-} && ${RUNNER_BUDGET_USD} != 0 ]]; then

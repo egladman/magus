@@ -3,6 +3,8 @@
 // edit to it (golangci-lint re-run under a new rule set, replaying the verdict computed
 // under the old one) while still seeding the root project through directory containment
 // and rerunning everything for nothing (MGS1028, and doctor's undeclared-seeding advice).
+//
+// Tier 1, mechanical: the fix is a sources entry.
 namespace rootconfigs;
 
 import "assert";

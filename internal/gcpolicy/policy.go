@@ -21,7 +21,7 @@ var (
 	raised bool
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // measured: GC must be raised before the heap reaches 4 MB, which is before main; see the optimization block
 	if os.Getenv("GOGC") != "" {
 		return
 	}

@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1468,7 +1468,9 @@ const wantDiffDriverLines = "*.go diff=golang\n" +
 	"*.md diff=markdown\n" +
 	"*.ts diff=typescript\n" +
 	"*.tsx diff=typescript\n" +
-	"*.buzz diff=buzz\n"
+	"*.buzz diff=buzz\n" +
+	"*.yaml diff=yaml\n" +
+	"*.yml diff=yaml\n"
 
 // A generated .go file matches both its output glob and `*.go`. git resolves each attribute
 // by the last line that sets it, and the two lines set different ones, so the file keeps the
@@ -1587,6 +1589,7 @@ export type Pair<T> = {
 
 Run it.
 `,
+		"e.yaml": "jobs:\n  stale_after: 2h\n",
 	}
 	repo := testkit.NewRepo(t, files).Root()
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{}))
@@ -1612,6 +1615,7 @@ Run it.
 		{"b.tsx", "  return <div>hi</div>;", "export default function App() {"},
 		{"c.go", "\treturn 1", "func Alpha() int {"},
 		{"d.md", "Run it.", "## Usage"},
+		{"e.yaml", "  stale_after: 2h", "jobs"},
 	} {
 		t.Run(tc.file+" "+strings.TrimSpace(tc.line), func(t *testing.T) {
 			original := files[tc.file]
@@ -1667,6 +1671,8 @@ func TestCheckMergeDriverReportsMissingDiffDrivers(t *testing.T) {
 		".gitattributes: *.ts diff=typescript",
 		".gitattributes: *.tsx diff=typescript",
 		".gitattributes: *.buzz diff=buzz",
+		".gitattributes: *.yaml diff=yaml",
+		".gitattributes: *.yml diff=yaml",
 		"git config diff.typescript.xfuncname",
 		"git config diff.buzz.xfuncname",
 	}, missing)
@@ -2233,7 +2239,7 @@ func TestGitCheckoutState(t *testing.T) {
 	assert.Equal(t, types.CheckoutState{RemoteBranches: []string{"origin/main"}}, got)
 }
 
-func refsOf(t *testing.T, dir string) string {
+func listRefs(t *testing.T, dir string) string {
 	t.Helper()
 	return gitTestOutput(t, dir, "for-each-ref", "--format=%(refname) %(objectname)")
 }
@@ -2303,7 +2309,7 @@ func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
 	origin, _ := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
 	elsewhere := testkit.NewRepo(t, map[string]string{"x.txt": "x\n"}).Root()
-	before := refsOf(t, elsewhere)
+	before := listRefs(t, elsewhere)
 
 	t.Run("hostile environment", func(t *testing.T) {
 		t.Setenv("GIT_DIR", filepath.Join(elsewhere, ".git"))
@@ -2321,7 +2327,7 @@ func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
 	assert.Equal(t, gitTestOutput(t, clone, "rev-parse", "origin/main"), gitTestOutput(t, clone, "rev-parse", "MERGE_HEAD"),
 		"the merge did not start in the clone")
 	assert.NoFileExists(t, filepath.Join(elsewhere, ".git", "MERGE_HEAD"))
-	assert.Equal(t, before, refsOf(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
+	assert.Equal(t, before, listRefs(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
 	assert.NotEmpty(t, gitTestOutput(t, clone, "for-each-ref", "refs/remotes/origin/main"), "the fetch landed somewhere other than the clone")
 }
 
@@ -2664,7 +2670,7 @@ func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
 	// Only the read is expected, so any EnsureMergeDriver call, which may write, fails the test.
-	probe := mocks.NewMockVCSDriver(t)
+	probe := typestest.NewMockVCSDriver(t)
 	probe.EXPECT().MergeDriverCommand(mock.Anything, "").Return("", context.Canceled).Once()
 	assert.True(t, installsMergeDriver(probe))
 	assert.True(t, installsMergeDriver(gitVCS{}), "git registers a merge driver")
@@ -2726,13 +2732,13 @@ func (f remoteFixture) advance(t *testing.T, branch, name string) string {
 // the user's view of the remote under a command that only asked for a commit.
 func TestFetchRefLeavesTagsAndTrackingRefsAlone(t *testing.T) {
 	f := newRemoteFixture(t)
-	before := refsOf(t, f.clone)
+	before := listRefs(t, f.clone)
 	tip := f.advance(t, "main", "next.txt")
 
 	got, err := gitVCS{}.FetchRef(t.Context(), f.clone, "origin", "refs/heads/main")
 	require.NoError(t, err)
 	assert.Equal(t, tip, got)
-	assert.Equal(t, before, refsOf(t, f.clone), "fetching a branch moved, added or left a ref")
+	assert.Equal(t, before, listRefs(t, f.clone), "fetching a branch moved, added or left a ref")
 	gitRun(t, f.clone, "cat-file", "-e", tip+"^{commit}")
 }
 
@@ -2770,7 +2776,7 @@ func TestFetchRefConcurrentCallsDoNotShareARef(t *testing.T) {
 	for r := range results {
 		assert.Equal(t, tips[r.remote], r.id, "a fetch from %s answered with another fetch's tip", r.remote)
 	}
-	assert.NotContains(t, refsOf(t, f.clone), "refs/magus/", "a fetch left its scratch ref behind")
+	assert.NotContains(t, listRefs(t, f.clone), "refs/magus/", "a fetch left its scratch ref behind")
 }
 
 func TestFetchRefAndFetchCommit(t *testing.T) {
@@ -2792,7 +2798,7 @@ func TestFetchRefAndFetchCommit(t *testing.T) {
 // B10: a value shaped like a refspec, an option or a URL never reaches fetch or push.
 func TestRemoteArgumentsRefuseRefspecsOptionsAndURLs(t *testing.T) {
 	f := newRemoteFixture(t)
-	before := refsOf(t, f.clone)
+	before := listRefs(t, f.clone)
 	id := gitTestOutput(t, f.clone, "rev-parse", "HEAD")
 	g := gitVCS{}
 	ctx := t.Context()
@@ -2811,7 +2817,7 @@ func TestRemoteArgumentsRefuseRefspecsOptionsAndURLs(t *testing.T) {
 	require.Error(t, err)
 	_, err = g.MergeTrees(ctx, f.clone, types.TreeMerge{Ours: "HEAD", Theirs: "-x"})
 	require.Error(t, err)
-	assert.Equal(t, before, refsOf(t, f.clone))
+	assert.Equal(t, before, listRefs(t, f.clone))
 }
 
 // A name git would read as a path must not become one: with a repository at ./evil and no
@@ -3039,7 +3045,7 @@ func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	ctx := t.Context()
 	tree, err := g.TreeID(ctx, dir, revs["clean"])
 	require.NoError(t, err)
-	before := refsOf(t, dir)
+	before := listRefs(t, dir)
 	c := types.TreeCommit{
 		CommitMeta: types.CommitMeta{
 			Message: "update", Author: types.Person{Name: "author", Email: "a@x"}, Committer: queueIdentity,
@@ -3052,7 +3058,7 @@ func TestCommitTreeIsDeterministicAndCreatesNoRef(t *testing.T) {
 	second, err := g.CommitTree(ctx, dir, c)
 	require.NoError(t, err)
 	assert.Equal(t, first, second, "the same inputs yield the same commit id")
-	assert.Equal(t, before, refsOf(t, dir))
+	assert.Equal(t, before, listRefs(t, dir))
 	assert.Equal(t, revs["ours"]+" "+revs["clean"], gitTestOutput(t, dir, "log", "-1", "--format=%P", first))
 	assert.Equal(t, "author queue", gitTestOutput(t, dir, "log", "-1", "--format=%an %cn", first))
 
@@ -3172,18 +3178,86 @@ func TestCheckoutLifecycle(t *testing.T) {
 	assert.Empty(t, listed)
 }
 
-// RemoveCheckout touches only what CreateCheckout made: a worktree the user added by hand
-// is neither listed nor removable through it.
-func TestRemoveCheckoutRefusesACheckoutItDidNotCreate(t *testing.T) {
+// Checkouts lists only what CreateCheckout made, so a worktree added by hand never reaches
+// cleanup that walks the list.
+func TestCheckoutsSkipsAWorktreeItDidNotCreate(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
-	mine := filepath.Join(t.TempDir(), "mine")
-	gitRun(t, dir, "worktree", "add", "-q", "--detach", mine, "HEAD")
+	gitRun(t, dir, "worktree", "add", "-q", "--detach", filepath.Join(t.TempDir(), "mine"), "HEAD")
 
 	listed, err := gitVCS{}.Checkouts(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Empty(t, listed)
-	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, mine), "not a checkout CreateCheckout made")
-	assert.DirExists(t, mine)
+}
+
+// RemoveCheckout removes a worktree CreateCheckout did not make only when nothing in it is
+// lost: no changed or untracked file, and every commit it reaches named by a ref.
+func TestRemoveCheckoutOfAWorktreeItDidNotCreate(t *testing.T) {
+	tests := []struct {
+		name string
+		// prepare edits the worktree at co, added detached at the repository's HEAD, and
+		// returns the error RemoveCheckout gives, or "" when it removes co.
+		prepare func(t *testing.T, co string) string
+	}{
+		{name: "clean at a reachable HEAD", prepare: func(*testing.T, string) string { return "" }},
+		{name: "on a branch with its own commit", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "switch", "-q", "-c", "topic")
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "topic")
+			return ""
+		}},
+		{name: "a changed file", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.WriteFile(filepath.Join(co, "a.txt"), []byte("b\n"), 0o644))
+			return "1 changed or untracked file(s), which removing it would lose: a.txt"
+		}},
+		{name: "an untracked file", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.WriteFile(filepath.Join(co, "new.txt"), []byte("n\n"), 0o644))
+			return "1 changed or untracked file(s), which removing it would lose: new.txt"
+		}},
+		{name: "a commit no ref reaches", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "lost")
+			return "1 commit(s) no branch, tag or remote reaches, newest " + gitTestOutput(t, co, "rev-parse", "HEAD")
+		}},
+		{name: "a commit only a tag reaches", prepare: func(t *testing.T, co string) string {
+			gitRun(t, co, "commit", "-q", "--allow-empty", "-m", "tagged")
+			gitRun(t, co, "tag", "kept")
+			return ""
+		}},
+		{name: "its directory gone", prepare: func(t *testing.T, co string) string {
+			require.NoError(t, os.RemoveAll(co))
+			return ""
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+			co := filepath.Join(t.TempDir(), "co")
+			gitRun(t, dir, "worktree", "add", "-q", "--detach", co, "HEAD")
+			want := tt.prepare(t, co)
+
+			err := gitVCS{}.RemoveCheckout(t.Context(), dir, co)
+			if want != "" {
+				require.ErrorContains(t, err, want)
+				assert.DirExists(t, co)
+				return
+			}
+			require.NoError(t, err)
+			assert.NoDirExists(t, co)
+			registered, err := gitVCS{}.RegisteredCheckouts(t.Context(), dir)
+			require.NoError(t, err)
+			assert.Len(t, registered, 1, "only the main checkout stays registered")
+		})
+	}
+}
+
+// RemoveCheckout never removes the main checkout or a directory git does not register as
+// a worktree of root.
+func TestRemoveCheckoutRefusesWhatIsNotALinkedWorktree(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, dir), "is the main checkout of")
+	assert.FileExists(t, filepath.Join(dir, "a.txt"))
+
+	stray := t.TempDir()
+	require.ErrorContains(t, gitVCS{}.RemoveCheckout(t.Context(), dir, stray), "is not a checkout of")
+	assert.DirExists(t, stray)
 }
 
 // RegisteredCheckouts lists every worktree git registers, the main one first, with its
@@ -3633,15 +3707,15 @@ func TestBundleCarriesCommitsWithoutRefs(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "stage.bundle")
 
 	require.NoError(t, g.Bundle(ctx, f.clone, file, types.BundleRange{Base: base, Head: carried}))
-	assert.NotContains(t, refsOf(t, f.clone), "refs/magus/")
+	assert.NotContains(t, listRefs(t, f.clone), "refs/magus/")
 
 	other := t.TempDir()
 	gitRun(t, other, "clone", "-q", "file://"+f.remote, ".")
 	gitConfigureFixture(t, other)
-	before := refsOf(t, other)
+	before := listRefs(t, other)
 	require.NoError(t, g.Unbundle(ctx, other, file))
 	gitRun(t, other, "cat-file", "-e", carried+"^{commit}")
-	assert.Equal(t, before, refsOf(t, other), "unbundling created a ref")
+	assert.Equal(t, before, listRefs(t, other), "unbundling created a ref")
 
 	whole := filepath.Join(t.TempDir(), "whole.bundle")
 	require.NoError(t, g.Bundle(ctx, f.clone, whole, types.BundleRange{Head: carried}), "an empty Base bundles the whole history")
@@ -3664,7 +3738,7 @@ func TestFetchSweepsOnlyStaleScratchRefs(t *testing.T) {
 
 	_, err := gitVCS{}.FetchRef(t.Context(), f.clone, "origin", "refs/heads/main")
 	require.NoError(t, err)
-	refs := refsOf(t, f.clone)
+	refs := listRefs(t, f.clone)
 	assert.NotContains(t, refs, stale)
 	assert.Contains(t, refs, fresh)
 }
@@ -3955,4 +4029,59 @@ func TestGitIgnoreSources(t *testing.T) {
 	exclude, err = filepath.EvalSymlinks(filepath.Dir(fromLinked[0]))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude, "a linked worktree shares its main checkout's exclude file")
+}
+
+// RegionsConfig moves with every funcname pattern the repository sets, and only with them.
+func TestRegionsConfigFollowsDiffDriverPatterns(t *testing.T) {
+	t.Parallel()
+
+	r := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": "package a\n"})
+	ctx := t.Context()
+	read := func() string {
+		got, err := gitVCS{}.RegionsConfig(ctx, r.Root())
+		require.NoError(t, err)
+		return got
+	}
+
+	defaults := read()
+	assert.NotEmpty(t, defaults, "magus's own patterns are always there")
+	r.Git("config", "user.name", "Someone Else")
+	assert.Equal(t, defaults, read(), "other configuration")
+
+	r.Git("config", "diff.golang.xfuncname", "^func .*$")
+	xfuncname := read()
+	assert.NotEqual(t, defaults, xfuncname)
+	assert.Contains(t, xfuncname, "diff.golang.xfuncname=^func .*$")
+
+	r.Git("config", "diff.custom.funcname", "^sub ")
+	assert.NotEqual(t, xfuncname, read())
+}
+
+// RegionsConfig moves with the attribute files outside the tree that pick a file's diff
+// driver: the repository's info/attributes and core.attributesFile.
+func TestRegionsConfigFollowsAttributeFilesOutsideTheTree(t *testing.T) {
+	t.Parallel()
+
+	r := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"})
+	ctx := t.Context()
+	read := func() string {
+		got, err := gitVCS{}.RegionsConfig(ctx, r.Root())
+		require.NoError(t, err)
+		return got
+	}
+
+	global := filepath.Join(t.TempDir(), "attributes")
+	r.Git("config", "core.attributesFile", global)
+	before := read()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(r.Root(), ".git", "info"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(r.Root(), ".git", "info", "attributes"), []byte("*.go diff=golang\n"), 0o644))
+	local := read()
+	assert.NotEqual(t, before, local, "info/attributes")
+
+	require.NoError(t, os.WriteFile(global, []byte("*.go diff=golang\n"), 0o644))
+	written := read()
+	assert.NotEqual(t, local, written, "core.attributesFile")
+	require.NoError(t, os.WriteFile(global, []byte("*.go -diff\n"), 0o644))
+	assert.NotEqual(t, written, read(), "an edit to core.attributesFile")
 }

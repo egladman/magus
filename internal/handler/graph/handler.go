@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/httpx"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )

@@ -7,7 +7,7 @@ import (
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -17,7 +17,7 @@ import (
 // secret provider needs the Buzz VM to run the spell's handler op. It registers itself
 // with the secret package at init, so core can resolve through a spell provider without
 // linking the VM: the same indirection ci_provider.go and remote_cache.go use.
-func init() {
+func init() { //nolint:gochecknoinits // internal/secret cannot link the Buzz VM; the opener registers from the layer that can
 	secret.RegisterProviderOpener(openSpellSecretProvider)
 }
 
@@ -78,7 +78,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	// cover, because the value is unknown until the command that reveals it has printed.
 	// Discarding both streams is the only correct answer; a provider that needs to
 	// report something must do it by failing.
-	ctx = run.WithOutputWriters(ctx, io.Discard, io.Discard)
+	ctx = spawn.WithOutputWriters(ctx, io.Discard, io.Discard)
 
 	resp, err := p.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "resolve_secret",

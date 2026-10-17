@@ -10,7 +10,7 @@ import (
 // UnmarshalText is the one door from a name to each guard enum, so it is where a
 // misspelling stops, and an empty name stays unset.
 func TestGuardEnumsUnmarshalText(t *testing.T) {
-	for _, name := range []string{"", "root", "worker"} {
+	for _, name := range []string{"", "root", "worker", "integrator"} {
 		var r AgentRole
 		require.NoError(t, r.UnmarshalText([]byte(name)), name)
 		assert.Equal(t, AgentRole(name), r)
@@ -22,7 +22,7 @@ func TestGuardEnumsUnmarshalText(t *testing.T) {
 	}
 
 	r := AgentRoleWorker
-	require.EqualError(t, r.UnmarshalText([]byte("lead")), `unknown agent role "lead" (want one of [root worker])`)
+	require.EqualError(t, r.UnmarshalText([]byte("lead")), `unknown agent role "lead" (want one of [root worker integrator])`)
 	assert.Equal(t, AgentRoleWorker, r)
 
 	d := GuardDeny

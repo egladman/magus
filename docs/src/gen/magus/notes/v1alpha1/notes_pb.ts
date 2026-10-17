@@ -37,7 +37,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/notes/v1alpha1/notes.proto.
  */
 export const file_magus_notes_v1alpha1_notes: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9ub3Rlcy92MWFscGhhMS9ub3Rlcy5wcm90bxIUbWFndXMubm90ZXMudjFhbHBoYTEinQEKBkFuY2hvchIuCgRraW5kGAEgASgOMiAubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yS2luZBIOCgZ0YXJnZXQYAiABKAkSMgoGc3RhdHVzGAMgASgOMiIubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yU3RhdHVzEg8KB25vZGVfaWQYBCABKAkSDgoGZGV0YWlsGAUgASgJItACCgROb3RlEgwKBG5hbWUYASABKAkSKgoFc2NvcGUYAiABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRINCgV0aXRsZRgDIAEoCRIMCgR0YWdzGAQgAygJEi0KB2FuY2hvcnMYBSADKAsyHC5tYWd1cy5ub3Rlcy52MWFscGhhMS5BbmNob3ISDAoEYm9keRgGIAEoCRIMCgRwYXRoGAcgASgJEjIKCXN0YWxlbmVzcxgIIAEoDjIfLm1hZ3VzLm5vdGVzLnYxYWxwaGExLlN0YWxlbmVzcxITCgtvdXRydW5fZGF5cxgJIAEoBRIvCgttb2RpZnlfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoGc291cmNlGAsgASgLMhwubWFndXMubm90ZXMudjFhbHBoYTEuU291cmNlImAKBlNvdXJjZRIMCgRraW5kGAEgASgJEgsKA3JlZhgCIAEoCRINCgVhc19vZhgDIAEoCRIsCghjYXB0dXJlZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAifQoLU3RvcmVTdGF0dXMSKgoFc2NvcGUYASABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRIQCghkZWNsYXJlZBgCIAEoCBIMCgRwYXRoGAMgASgJEhIKCm5vdGVfY291bnQYBCABKAUSDgoGaXNzdWVzGAUgAygJIkUKEExpc3ROb3Rlc1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiigEKEUxpc3ROb3Rlc1Jlc3BvbnNlEikKBW5vdGVzGAEgAygLMhoubWFndXMubm90ZXMudjFhbHBoYTEuTm90ZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSMQoGc3RvcmVzGAMgAygLMiEubWFndXMubm90ZXMudjFhbHBoYTEuU3RvcmVTdGF0dXMiPAoOR2V0Tm90ZVJlcXVlc3QSKgoEbmFtZRgBIAEoCUIcukgZchcyFV4oc2hhcmVkfHByaXZhdGUpLy4rJCpDCgVTY29wZRIVChFTQ09QRV9VTlNQRUNJRklFRBAAEhAKDFNDT1BFX1NIQVJFRBABEhEKDVNDT1BFX1BSSVZBVEUQAiqeAQoKQW5jaG9yS2luZBIbChdBTkNIT1JfS0lORF9VTlNQRUNJRklFRBAAEhYKEkFOQ0hPUl9LSU5EX1NZTUJPTBABEhQKEEFOQ0hPUl9LSU5EX0ZJTEUQAhIXChNBTkNIT1JfS0lORF9QUk9KRUNUEAMSFgoSQU5DSE9SX0tJTkRfVEFSR0VUEAQSFAoQQU5DSE9SX0tJTkRfTk9URRAFKr4BCgxBbmNob3JTdGF0dXMSHQoZQU5DSE9SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkFOQ0hPUl9TVEFUVVNfUkVTT0xWRVMQARIaChZBTkNIT1JfU1RBVFVTX0RBTkdMSU5HEAISGQoVQU5DSE9SX1NUQVRVU19EUklGVEVEEAMSHAoYQU5DSE9SX1NUQVRVU19VTlZFUklGSUVEEAQSHgoaQU5DSE9SX1NUQVRVU19CT0RZX0NIQU5HRUQQBSqGAQoJU3RhbGVuZXNzEhkKFVNUQUxFTkVTU19VTlNQRUNJRklFRBAAEhgKFFNUQUxFTkVTU19VTk1FQVNVUkVEEAESFQoRU1RBTEVORVNTX0NVUlJFTlQQAhIUChBTVEFMRU5FU1NfT1VUUlVOEAMSFwoTU1RBTEVORVNTX1BFVFJJRklFRBAEMrkBCgxOb3Rlc1NlcnZpY2USXAoJTGlzdE5vdGVzEiYubWFndXMubm90ZXMudjFhbHBoYTEuTGlzdE5vdGVzUmVxdWVzdBonLm1hZ3VzLm5vdGVzLnYxYWxwaGExLkxpc3ROb3Rlc1Jlc3BvbnNlEksKB0dldE5vdGUSJC5tYWd1cy5ub3Rlcy52MWFscGhhMS5HZXROb3RlUmVxdWVzdBoaLm1hZ3VzLm5vdGVzLnYxYWxwaGExLk5vdGVC4wEKGGNvbS5tYWd1cy5ub3Rlcy52MWFscGhhMUIKTm90ZXNQcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9ub3Rlcy92MWFscGhhMTtub3Rlc3YxYWxwaGExogIDTU5YqgIUTWFndXMuTm90ZXMuVjFhbHBoYTHKAhRNYWd1c1xOb3Rlc1xWMWFscGhhMeICIE1hZ3VzXE5vdGVzXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6Ok5vdGVzOjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+  fileDesc("CiBtYWd1cy9ub3Rlcy92MWFscGhhMS9ub3Rlcy5wcm90bxIUbWFndXMubm90ZXMudjFhbHBoYTEinQEKBkFuY2hvchIuCgRraW5kGAEgASgOMiAubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yS2luZBIOCgZ0YXJnZXQYAiABKAkSMgoGc3RhdHVzGAMgASgOMiIubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yU3RhdHVzEg8KB25vZGVfaWQYBCABKAkSDgoGZGV0YWlsGAUgASgJItACCgROb3RlEgwKBG5hbWUYASABKAkSKgoFc2NvcGUYAiABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRINCgV0aXRsZRgDIAEoCRIMCgR0YWdzGAQgAygJEi0KB2FuY2hvcnMYBSADKAsyHC5tYWd1cy5ub3Rlcy52MWFscGhhMS5BbmNob3ISDAoEYm9keRgGIAEoCRIMCgRwYXRoGAcgASgJEjIKCXN0YWxlbmVzcxgIIAEoDjIfLm1hZ3VzLm5vdGVzLnYxYWxwaGExLlN0YWxlbmVzcxITCgtvdXRydW5fZGF5cxgJIAEoBRIvCgttb2RpZnlfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoGc291cmNlGAsgASgLMhwubWFndXMubm90ZXMudjFhbHBoYTEuU291cmNlImAKBlNvdXJjZRIMCgRraW5kGAEgASgJEgsKA3JlZhgCIAEoCRINCgVhc19vZhgDIAEoCRIsCghjYXB0dXJlZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAifQoLU3RvcmVTdGF0dXMSKgoFc2NvcGUYASABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRIQCghkZWNsYXJlZBgCIAEoCBIMCgRwYXRoGAMgASgJEhIKCm5vdGVfY291bnQYBCABKAUSDgoGaXNzdWVzGAUgAygJIkUKEExpc3ROb3Rlc1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiigEKEUxpc3ROb3Rlc1Jlc3BvbnNlEikKBW5vdGVzGAEgAygLMhoubWFndXMubm90ZXMudjFhbHBoYTEuTm90ZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSMQoGc3RvcmVzGAMgAygLMiEubWFndXMubm90ZXMudjFhbHBoYTEuU3RvcmVTdGF0dXMiPAoOR2V0Tm90ZVJlcXVlc3QSKgoEbmFtZRgBIAEoCUIcukgZchcyFV4oc2hhcmVkfHByaXZhdGUpLy4rJCpDCgVTY29wZRIVChFTQ09QRV9VTlNQRUNJRklFRBAAEhAKDFNDT1BFX1NIQVJFRBABEhEKDVNDT1BFX1BSSVZBVEUQAiqeAQoKQW5jaG9yS2luZBIbChdBTkNIT1JfS0lORF9VTlNQRUNJRklFRBAAEhYKEkFOQ0hPUl9LSU5EX1NZTUJPTBABEhQKEEFOQ0hPUl9LSU5EX0ZJTEUQAhIXChNBTkNIT1JfS0lORF9QUk9KRUNUEAMSFgoSQU5DSE9SX0tJTkRfVEFSR0VUEAQSFAoQQU5DSE9SX0tJTkRfTk9URRAFKsABCgxBbmNob3JTdGF0dXMSHQoZQU5DSE9SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkFOQ0hPUl9TVEFUVVNfUkVTT0xWRVMQARIaChZBTkNIT1JfU1RBVFVTX0RBTkdMSU5HEAISGQoVQU5DSE9SX1NUQVRVU19EUklGVEVEEAMSHAoYQU5DSE9SX1NUQVRVU19VTlZFUklGSUVEEAQiBAgFEAUqGkFOQ0hPUl9TVEFUVVNfQk9EWV9DSEFOR0VEKoYBCglTdGFsZW5lc3MSGQoVU1RBTEVORVNTX1VOU1BFQ0lGSUVEEAASGAoUU1RBTEVORVNTX1VOTUVBU1VSRUQQARIVChFTVEFMRU5FU1NfQ1VSUkVOVBACEhQKEFNUQUxFTkVTU19PVVRSVU4QAxIXChNTVEFMRU5FU1NfUEVUUklGSUVEEAQyuQEKDE5vdGVzU2VydmljZRJcCglMaXN0Tm90ZXMSJi5tYWd1cy5ub3Rlcy52MWFscGhhMS5MaXN0Tm90ZXNSZXF1ZXN0GicubWFndXMubm90ZXMudjFhbHBoYTEuTGlzdE5vdGVzUmVzcG9uc2USSwoHR2V0Tm90ZRIkLm1hZ3VzLm5vdGVzLnYxYWxwaGExLkdldE5vdGVSZXF1ZXN0GhoubWFndXMubm90ZXMudjFhbHBoYTEuTm90ZULjAQoYY29tLm1hZ3VzLm5vdGVzLnYxYWxwaGExQgpOb3Rlc1Byb3RvUAFaSWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL25vdGVzL3YxYWxwaGExO25vdGVzdjFhbHBoYTGiAgNNTliqAhRNYWd1cy5Ob3Rlcy5WMWFscGhhMcoCFE1hZ3VzXE5vdGVzXFYxYWxwaGEx4gIgTWFndXNcTm90ZXNcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhZNYWd1czo6Tm90ZXM6OlYxYWxwaGExYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_timestamp]);
 
 /**
  * Anchor is one typed attachment from a note to a graph entity, with the result of checking
@@ -72,9 +72,8 @@ export type Anchor = Message<"magus.notes.v1alpha1.Anchor"> & {
   nodeId: string;
 
   /**
-   * detail explains a DANGLING, DRIFTED or BODY_CHANGED status in one sentence, and what to
-   * do about it.
-   * Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is
+   * detail explains a DANGLING, DRIFTED or UNVERIFIED status in one sentence, and what to do
+   * about it. Empty for RESOLVES. UNTRUSTED only in the sense that it is prose; it is
    * magus-authored, unlike body below.
    *
    * @generated from field: string detail = 5;
@@ -450,16 +449,17 @@ export const AnchorKindSchema: GenEnum<AnchorKind> = /*@__PURE__*/
 /**
  * AnchorStatus is what checking one anchor against the workspace found.
  *
+ * It is `magus notes verify`'s grade, mapped rather than re-derived, so the two cannot
+ * disagree.
+ *
  * DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored
- * code still exists and quietly stopped meaning what the note says. BODY_CHANGED is that same
- * check graded one step finer - the content moved, the DECLARATION did not - and it is a far
- * weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone
- * is 39-105x less likely to come with a prose update than one that changes it, which is why
- * an undifferentiated content hash reports drift that mostly is not there. Surface it, never
- * gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it
- * means no fingerprint was recorded (the note predates fingerprinting, or was never re-read)
- * or none could be computed here, and reporting drift from missing data is the false positive
- * that trains a reader to ignore every flag.
+ * code still exists and quietly stopped meaning what the note says. A symbol drifts when its
+ * signature changes; a body edit or a move leaves it RESOLVES, since those almost never
+ * invalidate prose about what the symbol is. A file drifts when its content changes.
+ * UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means the
+ * graph would not load, a symbol note recorded no signature, or none could be read here, and
+ * reporting drift from missing data is the false positive that trains a reader to ignore
+ * every flag.
  *
  * @generated from enum magus.notes.v1alpha1.AnchorStatus
  */
@@ -488,11 +488,6 @@ export enum AnchorStatus {
    * @generated from enum value: ANCHOR_STATUS_UNVERIFIED = 4;
    */
   UNVERIFIED = 4,
-
-  /**
-   * @generated from enum value: ANCHOR_STATUS_BODY_CHANGED = 5;
-   */
-  BODY_CHANGED = 5,
 }
 
 /**

@@ -5,6 +5,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,6 +69,19 @@ func countBlobs(t *testing.T, cdir string) int {
 		return nil
 	})
 	return n
+}
+
+// ageBlobs backdates every blob under cdir past blobGrace, as if no process had written
+// or claimed one since.
+func ageBlobs(t *testing.T, cdir string) {
+	t.Helper()
+	old := time.Now().Add(-2 * blobGrace)
+	require.NoError(t, filepath.WalkDir(filepath.Join(cdir, "cas"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		return os.Chtimes(p, old, old)
+	}))
 }
 
 // assertReferencedBlobsExist checks the central invariant: every blob
@@ -223,6 +237,7 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 	runForProject(t, c, root, "b", "content-b")
 
 	assert.Equal(t, 2, countBlobs(t, cdir), "setup: want 2 distinct blobs")
+	ageBlobs(t, cdir)
 
 	// Cap to a tiny non-zero value: evictLRU will evict every manifest
 	// since the cache is much larger than 1 byte.
@@ -230,4 +245,76 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 
 	assert.Empty(t, listManifests(t, cdir), "want 0 surviving manifests")
 	assert.Equal(t, 0, countBlobs(t, cdir), "want all blobs gc'd")
+}
+
+// TestGCSparesBlobsAnotherProcessHolds: every checkout of a repository shares one store,
+// so a GC in one process must leave the blobs another process holds: one it wrote for a
+// manifest it has not stored yet, and one it is replaying from an entry the GC evicts.
+func TestGCSparesBlobsAnotherProcessHolds(t *testing.T) {
+	store := t.TempDir()
+	c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store))
+	require.NoError(t, err)
+
+	root := t.TempDir()
+	out := filepath.Join(root, "p", "out.txt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(out), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "p", "main.go"), []byte("package p"), 0o644))
+	step := Step{
+		ProjectPath:   "p",
+		Sources:       types.MustParseGlobs("p/*.go"),
+		Outputs:       types.MustParseGlobs("p/out.txt"),
+		WorkspaceRoot: root,
+	}
+	r, err := c.Run(t.Context(), step, func(context.Context) error {
+		return os.WriteFile(out, []byte("replayed"), 0o644)
+	})
+	require.NoError(t, err)
+	ageBlobs(t, store)
+	held, err := c.local.lookup(t.Context(), &step, r.Hash)
+	require.NoError(t, err)
+
+	snapshot := func(content string) OutputRecord {
+		abs := filepath.Join(t.TempDir(), content)
+		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
+		rec, err := c.snapshotOne(abs, "p/"+content)
+		require.NoError(t, err)
+		return rec
+	}
+	pending := snapshot("pending")
+	stale := snapshot("stale")
+	old := time.Now().Add(-2 * blobGrace)
+	require.NoError(t, os.Chtimes(c.blobPath(stale.Blob), old, old))
+
+	collectInAnotherProcess(t, store)
+
+	_, err = c.readManifest("p", r.Hash)
+	require.Error(t, err, "setup: the other process evicts the held entry")
+	assert.NoFileExists(t, c.blobPath(stale.Blob), "an unreferenced blob nobody holds is collected")
+	assert.FileExists(t, c.blobPath(pending.Blob), "a blob written for a manifest not yet stored survives")
+	require.NoError(t, os.Remove(out))
+	_, err = c.replay(t.Context(), held.manifest, root)
+	require.NoError(t, err, "the replay of an entry looked up before the eviction completes")
+	got, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Equal(t, "replayed", string(got))
+}
+
+// collectInAnotherProcess runs TestHelperCollectStore in a child process: another
+// checkout's magus evicting every entry in the shared store and collecting its blobs.
+func collectInAnotherProcess(t *testing.T, store string) {
+	t.Helper()
+	cmd := osexec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestHelperCollectStore$")
+	cmd.Env = append(os.Environ(), "CACHETEST_STORE="+store)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+}
+
+func TestHelperCollectStore(t *testing.T) {
+	store := os.Getenv("CACHETEST_STORE")
+	if store == "" {
+		t.Skip("subprocess helper; not run directly")
+	}
+	c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store))
+	require.NoError(t, err)
+	c.evictOldest(t.Context(), 1)
 }

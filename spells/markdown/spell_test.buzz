@@ -1,0 +1,28 @@
+import "std";
+import "magus/spell";
+import "./spell" as markdown;
+
+fun dprintCommand() > Command {
+    return markdown\mgs_listTargets()["dprint"]!(Target{});
+}
+
+fun patched(args: [str], charm: Charm) > [str] {
+    final result = args.cloneMutable();
+    foreach (patch in charm.ops) {
+        std\assert(patch.op == PatchOpKind.replace, message: "rw replaces by index: {patch.op.value}");
+        result[std\parseInt(patch.path.sub(1, len: patch.path.len() - 1))!] = patch.value;
+    }
+    return result;
+}
+
+test "dprint ignores descendant configs under the default" {
+    std\assert(dprintCommand().args.join(" ") == "check --config-discovery=ignore-descendants",
+        message: "default argv");
+}
+
+test "dprint ignores descendant configs under rw" {
+    final cmd = dprintCommand();
+    final rw = cmd.charms["rw"]!;
+    std\assert(patched(cmd.args, charm: rw).join(" ") == "fmt --config-discovery=ignore-descendants",
+        message: "rw argv");
+}

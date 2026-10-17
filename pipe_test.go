@@ -19,15 +19,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
-	"github.com/egladman/magus/internal/json"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,10 +37,7 @@ import (
 // through takeRunLocks, touch READY, wait for the budget until AWAIT_FILE exists, write
 // WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
-// the status it records and exits with. FORK_UNTIL, when set, first starts a copy of
-// this stage with its executable, argv and stdout, which is what a fork of it looks like
-// until it execs, holding stdout until the file FORK_UNTIL names exists; the stage waits
-// for it before exiting.
+// the status it records and exits with.
 func TestHelperPipeStage(t *testing.T) {
 	if os.Getenv("PIPETEST_HELPER") != "1" {
 		t.Skip("subprocess helper; not run directly")
@@ -50,29 +47,10 @@ func TestHelperPipeStage(t *testing.T) {
 		n, _ := strconv.Atoi(env(k))
 		return time.Duration(n) * time.Millisecond
 	}
-	// Checked before FORK_UNTIL, which the copy inherits.
-	if release := env("FORK_HOLDS_UNTIL"); release != "" {
-		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
-			if _, err := os.Stat(release); err == nil {
-				break
-			}
-		}
-		os.Exit(0)
-	}
-	awaitFork := func() {}
-	if release := env("FORK_UNTIL"); release != "" {
-		fork := exec.Command(os.Args[0])
-		fork.Args = slices.Clone(os.Args)
-		fork.Env = append(os.Environ(), "PIPETEST_FORK_HOLDS_UNTIL="+release)
-		fork.Stdout = os.Stdout
-		if err := fork.Start(); err != nil {
-			t.Fatalf("start the fork: %v", err)
-		}
-		awaitFork = func() { _ = fork.Wait() }
-	}
-	l := newProjectLocker(env("CACHE_DIR"), testWorkspaceRoot, withStdio(&ProcessStdio{Stdin: os.Stdin, Stdout: os.Stdout}))
+	l := newProjectLocker(env("CACHE_DIR"), testWorkspaceRoot, withStdio(&pipe.Stdio{Stdin: os.Stdin, Stdout: os.Stdout}))
+	cfg := config.Config{Cache: config.Cache{Dir: env("CACHE_DIR")}}
 	if env("GATE") != "" {
-		GatePipe(testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: env("CACHE_DIR")}})
+		pipe.Gate(testWorkspaceRoot, cfg)
 	}
 	time.Sleep(ms("PRE_MS"))
 	release := func() {}
@@ -111,10 +89,9 @@ func TestHelperPipeStage(t *testing.T) {
 	time.Sleep(ms("HOLD_MS"))
 	release()
 	_, _ = os.Stdout.WriteString(env("WRITE_AFTER"))
-	awaitFork()
 	if e := env("EXIT"); e != "" {
 		code, _ := strconv.Atoi(e)
-		writeExitRecord(l.pipeDir(), exitRecord{PID: os.Getpid(), Command: "helper", Status: code, Ended: time.Now()})
+		pipe.RecordExit(testWorkspaceRoot, cfg, code, "")
 		os.Exit(code)
 	}
 	// os.Exit rather than returning: the test framework would print PASS onto the pipe.
@@ -144,7 +121,7 @@ func pattern(n int) []byte {
 func pipeStage(t *testing.T, cacheDir string, env map[string]string, args ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestHelperPipeStage$"}, args...)...)
-	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, procrun.AncestorsEnvVar+"=")
+	cmd.Env = append(os.Environ(), "PIPETEST_HELPER=1", "PIPETEST_CACHE_DIR="+cacheDir, spawn.AncestorsEnvVar+"=")
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, "PIPETEST_"+k+"="+v)
 	}
@@ -185,12 +162,12 @@ func shellPipe(t *testing.T) (r, w *os.File) {
 // downstream is this test process as the reading stage: its "stdin" is r.
 func downstream(cacheDir string, r *os.File, opts ...lockerOption) *projectLocker {
 	return newProjectLocker(cacheDir, testWorkspaceRoot,
-		append([]lockerOption{withStdio(&ProcessStdio{Stdin: r}), writingTo(io.Discard)}, opts...)...)
+		append([]lockerOption{withStdio(&pipe.Stdio{Stdin: r}), withOutput(io.Discard)}, opts...)...)
 }
 
-// upstreamOf starts a helper stage whose stdout is w, and closes this process's copy of
+// startUpstream starts a helper stage whose stdout is w, and closes this process's copy of
 // w so the stage is the pipe's only writer.
-func upstreamOf(t *testing.T, cmd *exec.Cmd, w *os.File) {
+func startUpstream(t *testing.T, cmd *exec.Cmd, w *os.File) {
 	t.Helper()
 	cmd.Stdout = w
 	startStage(t, cmd)
@@ -204,7 +181,7 @@ func TestAcquireDefersToAPredecessorThatHolds(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "500", "WRITE_AFTER": "plan"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	start := time.Now()
@@ -220,7 +197,7 @@ func TestAcquireDefersToAPredecessorThatHolds(t *testing.T) {
 		t.Fatalf("took p after %s, before the upstream released it", waited)
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "plan" {
 		t.Fatalf("stdin after the wait = %q, want %q", got, "plan")
 	}
@@ -232,14 +209,16 @@ func TestRecordReaderWaitsWithoutSpooling(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	ready := readyFile(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "400", "WRITE_AFTER": "records"})
-	upstreamOf(t, up, w)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "400", "WRITE_AFTER": "records"}, "records")
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
-	proved := &pipeline{ready: make(chan struct{}), records: report.NewReader(strings.NewReader(""), nil)}
-	close(proved.ready)
-	stdio := &ProcessStdio{Stdin: r, pipeline: proved}
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(stdio), writingTo(io.Discard))
+	stdio := &pipe.Stdio{Stdin: r, WritesRecords: func(argv []string) bool { return slices.Contains(argv, "records") }}
+	stdio.ProveUpstream(context.Background())
+	if !stdio.ReadsRecords() {
+		t.Fatalf("the record stage writing stdin was not proven")
+	}
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(stdio), withOutput(io.Discard))
 	start := time.Now()
 	release, sp, err := l.takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
@@ -258,117 +237,6 @@ func TestRecordReaderWaitsWithoutSpooling(t *testing.T) {
 	}
 }
 
-// ReadRecords takes the records off stdin and leaves every other byte where a target
-// reads it, in order, with the end of the stream intact.
-func TestReadRecordsRelaysWhatIsNotARecord(t *testing.T) {
-	r, w := shellPipe(t)
-	go func() {
-		_, _ = w.WriteString(`{"schema":5,"type":"run.scope","label":"a","projects":["a"]}` + "\npayload-1\n\n" +
-			`{"schema":5,"type":"run.target.result","project":"a","target":"emit","status":"ok","cache_hit":false}` + "\npayload-2")
-		_ = w.Close()
-	}()
-	in, err := ReadRecords(r)
-	if err != nil {
-		t.Fatalf("ReadRecords: %v", err)
-	}
-	lines, err := in.All(context.Background())
-	if err != nil {
-		t.Fatalf("All: %v", err)
-	}
-	var got []string
-	for _, l := range lines {
-		got = append(got, l.Type)
-	}
-	if want := []string{report.TypeRunScope, report.TypeTargetResult}; !slices.Equal(got, want) {
-		t.Fatalf("records = %q, want %q", got, want)
-	}
-	rest, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read the relayed stdin: %v", err)
-	}
-	if string(rest) != "payload-1\n\npayload-2" {
-		t.Fatalf("relayed stdin = %q, want the upstream's other bytes", rest)
-	}
-}
-
-// TestReadByMagus proves the reading end of stdout: a process running this executable
-// reads it, anything else does not, and a stream that is no pipe proves nothing.
-func TestReadByMagus(t *testing.T) {
-	ctx := context.Background()
-
-	r, w := shellPipe(t)
-	reader := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"})
-	reader.Stdin = r
-	startStage(t, reader)
-	_ = r.Close()
-	if !ReadByMagus(ctx, w) {
-		t.Errorf("a stage running this executable reads the pipe, but ReadByMagus = false")
-	}
-
-	r2, w2 := shellPipe(t)
-	other := exec.Command("sleep", "3")
-	other.Stdin = r2
-	startStage(t, other)
-	_ = r2.Close()
-	if ReadByMagus(ctx, w2) {
-		t.Errorf("sleep reads the pipe, but ReadByMagus = true")
-	}
-
-	file, err := os.Create(filepath.Join(t.TempDir(), "out"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	if ReadByMagus(ctx, file) || ReadByMagus(ctx, nil) {
-		t.Errorf("ReadByMagus proved a reader of a file")
-	}
-}
-
-// TestPipeReaderProofLetsABlockedForkGo: a shell stage that never execs, like a `while
-// read` loop, sits blocked on the pipe, and the writer stops waiting for it at once
-// rather than at pipeExecWait.
-func TestPipeReaderProofLetsABlockedForkGo(t *testing.T) {
-	r, w := shellPipe(t)
-	reader := exec.Command("bash", "-c", "while read -r l; do :; done | cat")
-	reader.Stdin = r
-	startStage(t, reader)
-	_ = r.Close()
-	start := time.Now()
-	if ReadByMagus(context.Background(), w) {
-		t.Errorf("a while-read loop reads the pipe, but ReadByMagus = true")
-	}
-	if took := time.Since(start); took >= pipeExecWait/2 {
-		t.Errorf("ReadByMagus took %v to let a blocked fork go, want well under %v", took, pipeExecWait)
-	}
-}
-
-// TestRecordUpstream proves the writing end of stdin: a stage of this executable whose
-// argv writes records, and never one whose argv does not or a stage of another tool.
-func TestRecordUpstream(t *testing.T) {
-	ctx := context.Background()
-	writes := func(argv []string) bool { return slices.Contains(argv, "records") }
-
-	r, w := shellPipe(t)
-	up := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}, "records")
-	upstreamOf(t, up, w)
-	pid, ok := RecordUpstream(ctx, r, writes)
-	if !ok || pid != up.Process.Pid {
-		t.Errorf("RecordUpstream = %d, %v; want the record stage %d", pid, ok, up.Process.Pid)
-	}
-
-	r2, w2 := shellPipe(t)
-	upstreamOf(t, pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}), w2)
-	if _, ok := RecordUpstream(ctx, r2, writes); ok {
-		t.Errorf("proved a stage whose argv writes no records")
-	}
-
-	r3, w3 := shellPipe(t)
-	upstreamOf(t, exec.Command("sleep", "3"), w3)
-	if _, ok := RecordUpstream(ctx, r3, func([]string) bool { return true }); ok {
-		t.Errorf("proved sleep as a record stage")
-	}
-}
-
 // TestAcquireDefersBeforeThePredecessorLocks is the order a plain fail-fast lost
 // silently: the downstream got to the lock first, blocked reading stdin while holding
 // it, and the upstream was refused.
@@ -377,7 +245,7 @@ func TestAcquireDefersBeforeThePredecessorLocks(t *testing.T) {
 	r, w := shellPipe(t)
 	result := filepath.Join(t.TempDir(), "result")
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "PROJECTS": "p", "RESULT": result, "HOLD_MS": "300", "WRITE_AFTER": "plan"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 
 	release, sp, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
@@ -388,7 +256,7 @@ func TestAcquireDefersBeforeThePredecessorLocks(t *testing.T) {
 		t.Fatalf("took p without waiting for the upstream that had not locked yet")
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if err := up.Wait(); err != nil {
 		t.Fatalf("upstream: %v (it must never be refused by the stage reading it)", err)
 	}
@@ -405,7 +273,7 @@ func TestDeferralDrainsSoTheUpstreamNeverBlocks(t *testing.T) {
 	r, w := shellPipe(t)
 	const n = 4 << 20
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "WRITE_BYTES": strconv.Itoa(n)})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -416,7 +284,7 @@ func TestDeferralDrainsSoTheUpstreamNeverBlocks(t *testing.T) {
 	defer release()
 	got, _ := io.ReadAll(r)
 	if sp != nil {
-		sp.wait()
+		sp.Wait()
 	}
 	if len(got) != n || sha256.Sum256(got) != sha256.Sum256(pattern(n)) {
 		t.Fatalf("relayed %d bytes, want the upstream's %d byte-for-byte", len(got), n)
@@ -428,7 +296,7 @@ func TestDeferralEndsWhenThePredecessorIsKilled(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "WRITE_HOLDING": "partial", "HOLD_MS": "60000"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 	time.AfterFunc(300*time.Millisecond, func() { _ = up.Process.Kill() })
 
@@ -437,7 +305,7 @@ func TestDeferralEndsWhenThePredecessorIsKilled(t *testing.T) {
 		t.Fatalf("takeRunLocks after the upstream was killed: %v", err)
 	}
 	got, _ := io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "partial" {
 		t.Fatalf("stdin = %q, want what the upstream wrote before it died", got)
 	}
@@ -452,7 +320,7 @@ func TestDeferralHonorsContextCancel(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "60000"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -475,7 +343,7 @@ func TestDeferralHoldsNothingWhileWaiting(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "800"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	done := make(chan error, 1)
@@ -484,7 +352,7 @@ func TestDeferralHoldsNothingWhileWaiting(t *testing.T) {
 		if err == nil {
 			rel()
 			_, _ = io.ReadAll(r)
-			sp.wait()
+			sp.Wait()
 		}
 		done <- err
 	}()
@@ -505,7 +373,7 @@ func TestNoDeferralWithoutStdio(t *testing.T) {
 	cacheDir := t.TempDir()
 	_, w := shellPipe(t)
 	ready := readyFile(t)
-	upstreamOf(t, pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "5000"}), w)
+	startUpstream(t, pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "5000"}), w)
 	waitForFile(t, ready, 5*time.Second)
 
 	start := time.Now()
@@ -544,17 +412,17 @@ func TestDeferralDecisionLine(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "300"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	var out bytes.Buffer
-	release, sp, err := downstream(cacheDir, r, writingTo(&out)).takeRunLocks(context.Background(), []string{"p"})
+	release, sp, err := downstream(cacheDir, r, withOutput(&out)).takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
 		t.Fatalf("takeRunLocks: %v", err)
 	}
 	release()
 	_, _ = io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	want := fmt.Sprintf("magus: waiting for pid %d (", up.Process.Pid)
 	if strings.Count(out.String(), want) != 1 || !strings.Contains(out.String(), "TestHelperPipeStage") {
 		t.Fatalf("decision output = %q, want exactly one line naming pid %d and its command", out.String(), up.Process.Pid)
@@ -566,18 +434,18 @@ func TestDeferralDecisionRecordUnderJSONL(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "300"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	var prose, records bytes.Buffer
 	rw := report.NewWriter(&records, report.WithBlockOnFull())
-	release, sp, err := downstream(cacheDir, r, writingTo(&prose), withReportWriter(rw)).takeRunLocks(context.Background(), []string{"p"})
+	release, sp, err := downstream(cacheDir, r, withOutput(&prose), withReportWriter(rw)).takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
 		t.Fatalf("takeRunLocks: %v", err)
 	}
 	release()
 	_, _ = io.ReadAll(r)
-	sp.wait()
+	sp.Wait()
 	if err := rw.Close(); err != nil {
 		t.Fatalf("close records: %v", err)
 	}
@@ -590,32 +458,12 @@ func TestDeferralDecisionRecordUnderJSONL(t *testing.T) {
 	}
 }
 
-func TestRelayPreservesBytesAndEOF(t *testing.T) {
-	r, w := shellPipe(t)
-	sp, err := startSpool(r, t.TempDir())
-	if err != nil {
-		t.Fatalf("startSpool: %v", err)
-	}
-	_, _ = w.WriteString("ab")
-	time.Sleep(50 * time.Millisecond)
-	if err := sp.handOff(r); err != nil {
-		t.Fatalf("handOff: %v", err)
-	}
-	_, _ = w.WriteString("cd")
-	_ = w.Close()
-	got, err := io.ReadAll(r)
-	if err != nil || string(got) != "abcd" {
-		t.Fatalf("relayed %q (%v), want abcd then EOF", got, err)
-	}
-	sp.wait()
-}
-
 func TestPipeWaitRecordIsWrittenAndSwept(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "600"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	done := make(chan struct{})
@@ -625,7 +473,7 @@ func TestPipeWaitRecordIsWrittenAndSwept(t *testing.T) {
 		if err == nil {
 			rel()
 			_, _ = io.ReadAll(r)
-			sp.wait()
+			sp.Wait()
 		}
 	}()
 	time.Sleep(250 * time.Millisecond)
@@ -661,7 +509,7 @@ func TestDisjointUpstreamDoesNotDelay(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "READY": ready, "WRITE_HOLDING": "record-1\n", "HOLD_MS": "5000"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	start := time.Now()
@@ -683,7 +531,7 @@ func TestUnsettledUpstreamDelaysUntilSettled(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "500", "PROJECTS": "a", "WRITE_HOLDING": "x", "HOLD_MS": "5000"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 
 	start := time.Now()
 	release, sp, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"b"})
@@ -705,10 +553,10 @@ func TestReadOnlyUpstreamNeverDelays(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "5000", "WRITE_HOLDING": "status"}, "readonly")
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	time.Sleep(100 * time.Millisecond)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{
 		Stdin:      r,
 		TakesLocks: func(argv []string) bool { return !slices.Contains(argv, "readonly") },
 	}))
@@ -734,10 +582,10 @@ func TestPipeGateHoldsTheRunUntilItExits(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "500", "EXIT": "0"}, "readonly")
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
 	start := time.Now()
 	release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
 	if err != nil {
@@ -756,10 +604,10 @@ func TestPipeGateThatFailsStartsNothing(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "200", "EXIT": "78"}, "readonly")
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
 	_, _, err := l.takeRunLocks(t.Context(), []string{"p"})
 	wantPipeUpstreamFailed(t, err, 78, up.Process.Pid)
 }
@@ -772,10 +620,10 @@ func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
 	ready := readyFile(t)
 	freed := filepath.Join(t.TempDir(), "freed")
 	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_FILE": freed, "EXIT": "0"}, "readonly")
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{Stdin: r, TakesLocks: readOnly}))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
 	done := make(chan error, 1)
 	go func() {
 		release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
@@ -810,14 +658,14 @@ func TestTransitiveUpstreamIsWeighed(t *testing.T) {
 	r2, w2 := shellPipe(t)
 	ready := readyFile(t)
 	a := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "600"})
-	upstreamOf(t, a, w1)
+	startUpstream(t, a, w1)
 	b := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "5000"}, "readonly")
 	b.Stdin = r1
-	upstreamOf(t, b, w2)
+	startUpstream(t, b, w2)
 	_ = r1.Close()
 	waitForFile(t, ready, 5*time.Second)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, writingTo(io.Discard), withStdio(&ProcessStdio{
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{
 		Stdin:      r2,
 		TakesLocks: func(argv []string) bool { return !slices.Contains(argv, "readonly") },
 	}))
@@ -866,7 +714,7 @@ func TestPredecessorExcludesAncestryRefs(t *testing.T) {
 	r, w := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "5000"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	waitForFile(t, ready, 5*time.Second)
 
 	ctx := types.WithInvocationAncestors(context.Background(), []string{strconv.Itoa(up.Process.Pid) + ":inv-outer"})
@@ -885,7 +733,7 @@ func TestPipeCycleIsRefused(t *testing.T) {
 	defer w2.Close()
 	h := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "5000"})
 	h.Stdin = r2
-	upstreamOf(t, h, w1)
+	startUpstream(t, h, w1)
 	_ = r2.Close()
 	time.Sleep(100 * time.Millisecond)
 
@@ -919,12 +767,12 @@ func TestUpstreamThroughANonMagusStage(t *testing.T) {
 	r2, w2 := shellPipe(t)
 	ready := readyFile(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "500", "WRITE_AFTER": "plan"})
-	upstreamOf(t, up, w1)
+	startUpstream(t, up, w1)
 	through(t, r1, w2)
 	waitForFile(t, ready, 5*time.Second)
 
 	var out bytes.Buffer
-	release, sp, err := downstream(cacheDir, r2, writingTo(&out)).takeRunLocks(context.Background(), []string{"p"})
+	release, sp, err := downstream(cacheDir, r2, withOutput(&out)).takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
 		t.Fatalf("takeRunLocks: %v (the magus behind cat holds p)", err)
 	}
@@ -933,7 +781,7 @@ func TestUpstreamThroughANonMagusStage(t *testing.T) {
 		t.Fatalf("did not wait on the magus stage behind cat")
 	}
 	got, _ := io.ReadAll(r2)
-	sp.wait()
+	sp.Wait()
 	if string(got) != "plan" {
 		t.Fatalf("stdin = %q, want plan relayed through cat", got)
 	}
@@ -974,7 +822,7 @@ func TestPipeCycleThroughANonMagusStage(t *testing.T) {
 	defer w3.Close()
 	h := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "5000"})
 	h.Stdin = r3
-	upstreamOf(t, h, w2)
+	startUpstream(t, h, w2)
 	_ = r3.Close()
 	through(t, r2, w1)
 	time.Sleep(100 * time.Millisecond)
@@ -1005,7 +853,7 @@ func TestALoopThroughToolsAloneIsNotACycle(t *testing.T) {
 
 func TestStdioOnAFileKeepsTheFailFast(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+	lockDir := workspace.LocksDir(cacheDir, testWorkspaceRoot)
 	cmd := helperHold(t, cacheDir, "p", 5_000)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
@@ -1029,7 +877,7 @@ func TestStdioOnAFileKeepsTheFailFast(t *testing.T) {
 func TestHoldsRecordLifecycle(t *testing.T) {
 	cacheDir := t.TempDir()
 	_, w := shellPipe(t)
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(&ProcessStdio{Stdout: w}))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(&pipe.Stdio{Stdout: w}))
 	release, _, err := l.takeRunLocks(context.Background(), []string{"b", "", "a"})
 	if err != nil {
 		t.Fatalf("takeRunLocks: %v", err)
@@ -1069,8 +917,8 @@ func TestHoldsRecordLifecycle(t *testing.T) {
 }
 
 // provedStdio is this test process as a reading stage that proved its upstream at start.
-func provedStdio(r *os.File) *ProcessStdio {
-	s := &ProcessStdio{Stdin: r}
+func provedStdio(r *os.File) *pipe.Stdio {
+	s := &pipe.Stdio{Stdin: r}
 	s.ProveUpstream(context.Background())
 	return s
 }
@@ -1092,7 +940,7 @@ func TestPipeRedUpstreamRefusesBeforeTheLocks(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "200", "EXIT": "5"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 
 	_, _, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"p"})
 	wantPipeUpstreamFailed(t, err, 5, up.Process.Pid)
@@ -1105,7 +953,7 @@ func TestPipeGreenUpstreamIsNoRefusal(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "200", "EXIT": "0"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 
 	release, _, err := downstream(cacheDir, r).takeRunLocks(context.Background(), []string{"p"})
 	if err != nil {
@@ -1121,12 +969,13 @@ func TestPipeEarlyProofOutlivesAFastFailingUpstream(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "7"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
-	s.pipeline.all()
+	// Records returns once the proof taken at start is done.
+	s.Records()
 	_ = up.Wait()
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), withOutput(io.Discard))
 	_, _, err := l.takeRunLocks(context.Background(), []string{"p"})
 	wantPipeUpstreamFailed(t, err, 7, up.Process.Pid)
 }
@@ -1137,10 +986,10 @@ func TestPipeSettleReportsARedUpstreamOnDisjointProjects(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "400", "EXIT": "4"})
-	upstreamOf(t, up, w)
+	startUpstream(t, up, w)
 	s := provedStdio(r)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), withOutput(io.Discard))
 	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
 	if err != nil {
 		t.Fatalf("takeRunLocks on a disjoint project: %v", err)
@@ -1148,252 +997,5 @@ func TestPipeSettleReportsARedUpstreamOnDisjointProjects(t *testing.T) {
 	release()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	var notices bytes.Buffer
-	wantPipeUpstreamFailed(t, s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}), 4, up.Process.Pid)
-}
-
-// TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes: this stage never read its stdin,
-// and the upstream is blocked on a full pipe. Settling must not wait on it forever.
-func TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "WRITE_BYTES": strconv.Itoa(4 << 20), "EXIT": "0"})
-	upstreamOf(t, up, w)
-	s := provedStdio(r)
-
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
-	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
-	if err != nil {
-		t.Fatalf("takeRunLocks: %v", err)
-	}
-	release()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	var notices bytes.Buffer
-	if err := s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}); err != nil || notices.Len() != 0 {
-		t.Fatalf("settle = %v, notices %q; want a green pipeline", err, notices.String())
-	}
-}
-
-// TestPipeForkPendingExecIsNoStage is `magus affected generate | magus run consume`,
-// where generate's target runs a command. Until it execs, generate's fork runs magus with
-// generate's argv and holds generate's stdout, but it is no stage and leaves no exit
-// status: counting one reported an upstream of unknown status on a green pipeline.
-func TestPipeForkPendingExecIsNoStage(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	ready, forkRelease := readyFile(t), filepath.Join(t.TempDir(), "fork-release")
-	// Registered first, so it runs after the stage is killed, if the test stops early.
-	t.Cleanup(func() { _ = os.WriteFile(forkRelease, nil, 0o644) })
-	up := pipeStage(t, cacheDir, map[string]string{"FORK_UNTIL": forkRelease, "READY": ready, "EXIT": "0"})
-	upstreamOf(t, up, w)
-	waitForFile(t, ready, 5*time.Second)
-
-	s := provedStdio(r)
-	if got := s.pipeline.all(); len(got) != 1 || got[0].pid != up.Process.Pid {
-		t.Fatalf("proven stages = %+v, want only pid %d", got, up.Process.Pid)
-	}
-	if err := os.WriteFile(forkRelease, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	var notices bytes.Buffer
-	if err := s.pipeline.settle(ctx, r, newProjectLocker(cacheDir, testWorkspaceRoot).pipeDir(), pipeNotices{out: &notices}); err != nil || notices.Len() != 0 {
-		t.Fatalf("settle = %v, notices %q; want a green pipeline", err, notices.String())
-	}
-}
-
-// TestPipeNoticesStatusUnknown: the notice is a line of prose, or under -o jsonl a
-// run.notice record whose attrs name the stage, never free text on a parsed stream.
-func TestPipeNoticesStatusUnknown(t *testing.T) {
-	u := upstreamStage{pid: 4242, argv: []string{"magus", "affected", "generate"}}
-	var prose bytes.Buffer
-	pipeNotices{out: &prose}.statusUnknown(u)
-	if want := "magus: pid 4242 (magus affected generate), upstream of this run in a pipe, ended without leaving its exit status, so whether it failed is unknown.\n"; prose.String() != want {
-		t.Errorf("prose = %q, want %q", prose.String(), want)
-	}
-
-	var records, beside bytes.Buffer
-	pipeNotices{out: &beside, records: report.NewLineEncoder(&records)}.statusUnknown(u)
-	if beside.Len() != 0 {
-		t.Errorf("a record notice also wrote prose: %q", beside.String())
-	}
-	type notice struct {
-		Type  string         `json:"type"`
-		Level string         `json:"level"`
-		Attrs map[string]any `json:"attrs"`
-	}
-	var rec notice
-	if err := json.Unmarshal(records.Bytes(), &rec); err != nil {
-		t.Fatalf("record %q: %v", records.String(), err)
-	}
-	want := notice{
-		Type:  report.TypeNotice,
-		Level: "warn",
-		Attrs: map[string]any{"upstream_pid": float64(4242), "upstream_command": "magus affected generate"},
-	}
-	require.Equal(t, want, rec)
-}
-
-// TestPipeSettleCountsAVanishedUpstreamAsUnknown: a stage killed before it could record its
-// status is reported, not waited on, and not counted as a failure.
-func TestPipeSettleCountsAVanishedUpstreamAsUnknown(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "60000", "EXIT": "0"})
-	upstreamOf(t, up, w)
-	s := provedStdio(r)
-
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
-	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
-	if err != nil {
-		t.Fatalf("takeRunLocks: %v", err)
-	}
-	release()
-	time.AfterFunc(200*time.Millisecond, func() { _ = up.Process.Kill() })
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	var notices bytes.Buffer
-	if err := s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}); err != nil {
-		t.Fatalf("settle = %v, want nil for an upstream whose status is unknown", err)
-	}
-	if want := fmt.Sprintf("pid %d (", up.Process.Pid); !strings.Contains(notices.String(), want) || !strings.Contains(notices.String(), "unknown") {
-		t.Fatalf("notices = %q, want the vanished upstream named as unknown", notices.String())
-	}
-}
-
-func TestPipeSettleHonorsContextCancel(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "a", "HOLD_MS": "60000", "EXIT": "0"})
-	upstreamOf(t, up, w)
-	s := provedStdio(r)
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withStdio(s), writingTo(io.Discard))
-	release, _, err := l.takeRunLocks(context.Background(), []string{"b"})
-	if err != nil {
-		t.Fatalf("takeRunLocks: %v", err)
-	}
-	release()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	err = s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: io.Discard})
-	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 5*time.Second {
-		t.Fatalf("settle = %v after %s, want the context's error", err, time.Since(start))
-	}
-}
-
-func TestPipeSettleWithoutProofIsNil(t *testing.T) {
-	r, _ := shellPipe(t)
-	if err := (&ProcessStdio{Stdin: r}).SettlePipeline(context.Background(), testWorkspaceRoot, config.Config{}); err != nil {
-		t.Fatalf("SettlePipeline without ProveUpstream = %v", err)
-	}
-	s := provedStdio(r)
-	if err := s.pipeline.settle(context.Background(), r, t.TempDir(), pipeNotices{out: io.Discard}); err != nil {
-		t.Fatalf("settle with no magus upstream = %v", err)
-	}
-}
-
-// TestPipeAwaitUpstreamRefusesARedUpstream is `magus affected generate | magus affected
-// ci --plan`: the plan stage takes no lock, so only the wait keeps it from printing a
-// plan behind a failed generate.
-func TestPipeAwaitUpstreamRefusesARedUpstream(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "4"})
-	upstreamOf(t, up, w)
-	s := provedStdio(r)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	err := s.AwaitUpstream(ctx, testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: cacheDir}})
-	wantPipeUpstreamFailed(t, err, 4, up.Process.Pid)
-	if !strings.Contains(err.Error(), "printed nothing") {
-		t.Fatalf("err = %q, want it to say this stage printed nothing", err)
-	}
-}
-
-func TestPipeAwaitUpstreamGreenLeavesNothingToSettle(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"PRE_MS": "300", "EXIT": "0"})
-	upstreamOf(t, up, w)
-	s := provedStdio(r)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	if err := s.AwaitUpstream(ctx, testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: cacheDir}}); err != nil {
-		t.Fatalf("AwaitUpstream after a green upstream = %v", err)
-	}
-	if left := s.pipeline.all(); len(left) != 0 {
-		t.Fatalf("pipeline still holds %d stage(s) after a green wait", len(left))
-	}
-}
-
-func TestPipeExitRecordLifecycle(t *testing.T) {
-	dir := t.TempDir()
-	proved := time.Now()
-	u := upstreamStage{pid: 424242, proved: proved}
-
-	writeExitRecord(dir, exitRecord{PID: u.pid, Status: 2, Ended: proved.Add(-time.Hour)})
-	if _, ok := readExitRecord(dir, u); ok {
-		t.Fatalf("read a record left before the stage was proved alive: an earlier process with its pid")
-	}
-	writeExitRecord(dir, exitRecord{PID: u.pid, Status: 2, Ended: proved})
-	if rec, ok := readExitRecord(dir, u); !ok || rec.exitCode() != 2 {
-		t.Fatalf("readExitRecord = %+v, %v; want status 2", rec, ok)
-	}
-	if got := (exitRecord{Status: 130, Signal: "interrupt"}); got.exitCode() != 1 || got.ending() != "was stopped by a signal (interrupt)" {
-		t.Fatalf("a signalled stage exits %d, %q; want 1, stopped by a signal", got.exitCode(), got.ending())
-	}
-
-	// The writes above stamp a scan. Age it so this write is due to scan again:
-	// a due scan removes a dead record past exitRecordKeep.
-	past := time.Now().Add(-exitSweepEvery - time.Second)
-	if err := os.Chtimes(filepath.Join(dir, sweepName), past, past); err != nil {
-		t.Fatalf("age sweep stamp: %v", err)
-	}
-	stale := filepath.Join(dir, "999999"+exitSuffix)
-	writeRecord(t, stale, exitRecord{PID: 999999, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
-	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("a dead writer's day-old record was not swept: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, strconv.Itoa(u.pid)+exitSuffix)); err != nil {
-		t.Fatalf("a fresh record was swept: %v", err)
-	}
-
-	// A stamp from that scan is fresh, so the next write must not scan. A day-old
-	// record planted after the stamp stays until a scan is due again.
-	held := filepath.Join(dir, "888888"+exitSuffix)
-	writeRecord(t, held, exitRecord{PID: 888888, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
-	writeExitRecord(dir, exitRecord{PID: 2, Ended: time.Now()})
-	if _, err := os.Stat(held); err != nil {
-		t.Fatalf("a fresh sweep stamp rescanned and removed a stale record: %v", err)
-	}
-}
-
-// A directory that cannot record the scan must not be walked. Recording
-// happens before the walk, so a failed record is not "never scanned": the
-// next exit would otherwise pay the full directory scan again.
-func TestExitSweepSkipsWhenTheRecordCannotBeWritten(t *testing.T) {
-	dir := t.TempDir()
-	past := time.Now().Add(-exitSweepEvery - time.Second)
-	sweep := filepath.Join(dir, sweepName)
-	if err := os.WriteFile(sweep, nil, 0o644); err != nil {
-		t.Fatalf("write sweep stamp: %v", err)
-	}
-	if err := os.Chtimes(sweep, past, past); err != nil {
-		t.Fatalf("age sweep stamp: %v", err)
-	}
-	stale := filepath.Join(dir, "999999"+exitSuffix)
-	writeRecord(t, stale, exitRecord{PID: 999999, Status: 1, Ended: time.Now().Add(-exitRecordKeep - time.Hour)})
-	stampSweep = func(string, time.Time, time.Time) error { return os.ErrPermission }
-	t.Cleanup(func() { stampSweep = os.Chtimes })
-	writeExitRecord(dir, exitRecord{PID: 1, Ended: time.Now()})
-	if _, err := os.Stat(stale); err != nil {
-		t.Fatalf("an unrecordable sweep was walked and removed a record: %v", err)
-	}
+	wantPipeUpstreamFailed(t, s.SettlePipeline(ctx, testWorkspaceRoot, config.Config{Cache: config.Cache{Dir: cacheDir}}), 4, up.Process.Pid)
 }

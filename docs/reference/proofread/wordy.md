@@ -1,13 +1,13 @@
 ---
 title: "wordy"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent (\"in order to\")."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent (\"in order to\")."
 tags: [proofread, rules, wordy, deny]
 aliases: [reference/prose/wordy]
 ---
 
 # wordy
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent ("in order to").
+A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent ("in order to").
 
 ## What it catches
 
@@ -31,7 +31,7 @@ The code is `PRF4002`. The decision depends on the kind of text judged:
 | `reference`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
-| `agent-instructions` | deny    |
+| `agent-brief`        | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
@@ -68,4 +68,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

@@ -52,6 +52,18 @@ func (h hotWorkspace) Duplication(context.Context) (types.DuplicationOutput, err
 	return types.DuplicationOutput{}, nil
 }
 
+func (h hotWorkspace) Conformance(context.Context) (types.ConformanceOutput, error) {
+	return types.ConformanceOutput{}, nil
+}
+
+func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
+	return types.ModelTierOutput{}, nil
+}
+
+func (h hotWorkspace) GroupingLens(context.Context) (types.GroupingOutput, error) {
+	return types.GroupingOutput{}, nil
+}
+
 func hot(paths ...string) []types.FileHotspot {
 	out := make([]types.FileHotspot, 0, len(paths))
 	for _, p := range paths {

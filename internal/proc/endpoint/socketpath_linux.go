@@ -42,16 +42,14 @@ func unixName(path string) (string, func(), error) {
 	return name, func() { _ = unix.Close(fd) }, nil
 }
 
-func init() { boundAt = diagBoundAt }
-
 // From linux/unix_diag.h, which x/sys/unix does not carry.
 const (
 	udiagShowVFS = 0x2
 	unixDiagVFS  = 1
 )
 
-// diagBoundAt compares the file sock_diag says ln is bound to with the file at path.
-func diagBoundAt(ln *net.UnixListener, path string) (bool, error) {
+// boundAt compares the file sock_diag says ln is bound to with the file at path.
+func boundAt(ln *net.UnixListener, path string) (bool, error) {
 	var want unix.Stat_t
 	if err := unix.Stat(path, &want); err != nil {
 		if errors.Is(err, unix.ENOENT) {

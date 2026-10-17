@@ -8,8 +8,10 @@
 // concurrent spell executions and can be shared across server workspaces.
 //
 // Boundary: the library links the engine-agnostic interp package and the Buzz VM,
-// but deliberately not the host bindings (interp/bindings) or the Buzz engine
-// backend — cmd/magus blank-imports those. So a script-driven backend (e.g. the
-// spell-backed remote backend) reaches the library only through registered
-// hooks such as [cache.RegisterRemoteBackendOpener], never a direct import.
+// but deliberately not the host bindings or the Buzz engine backend. A program
+// that evaluates magusfiles imports _ "github.com/egladman/magus/buzzengine";
+// without it, [Open] and [Inspect] on a workspace with a magusfile return a
+// [types.EngineNotLinkedError]. A script-driven backend (e.g. the spell-backed
+// remote backend) reaches the library only through registered hooks such as
+// [cache.RegisterRemoteBackendOpener], never a direct import.
 package magus

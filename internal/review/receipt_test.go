@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -109,6 +111,63 @@ func TestRecordStoreIsOwnerOnly(t *testing.T) {
 	fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(receiptFile)))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
+
+// A receipt is a line a person can grep, appended when a path is acked again, and the last
+// line for a path is its receipt.
+func TestReceiptsAreAppendedAsJSONLines(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Date(2026, 10, 14, 9, 30, 0, 0, time.UTC)
+	cp := types.VCSCheckpoint{Revision: "abc123", Branch: "feat", Dirty: true, PatchDigest: "p", UntrackedDigest: "u", VCS: "git", Preserved: "stash"}
+	require.NoError(t, Record(dir, []Receipt{
+		{Path: "a b/c.go", Digest: "d1", At: at, Source: cp, Reason: "line one\nline two"},
+		{Path: "other.go", Digest: "d2", At: at},
+	}))
+	require.NoError(t, Record(dir, []Receipt{{Path: "other.go", Digest: "d3", At: at}}))
+
+	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(receiptFile)))
+	require.NoError(t, err)
+	lines := bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n"))
+	require.Len(t, lines, 3, "the re-ack is a third line; the first two are untouched")
+	assert.Contains(t, string(lines[0]), `"path":"a b/c.go"`)
+	assert.Contains(t, string(lines[2]), `"digest":"d3"`)
+
+	s, err := Load(dir)
+	require.NoError(t, err)
+	require.Len(t, s, 2)
+	assert.Equal(t, Receipt{Path: "a b/c.go", Digest: "d1", At: at, Source: cp, Reason: "line one\nline two"}, s["a b/c.go"])
+	assert.Equal(t, "d3", s["other.go"].Digest)
+}
+
+// Re-acking one path over and over cannot grow the file without bound: once it is
+// file.CompactDue, it is rewritten to the last line for each path.
+func TestReceiptsCompactPastTheirBound(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 100 {
+		require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: fmt.Sprint(i), At: time.Now()}}))
+	}
+
+	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(receiptFile)))
+	require.NoError(t, err)
+	assert.False(t, file.CompactDue(bytes.Count(b, []byte("\n")), 1))
+	s, err := Load(dir)
+	require.NoError(t, err)
+	assert.True(t, s.Covers("a.go", "99"))
+}
+
+// The JSON document an older magus kept is named, not read and not skipped: skipping it
+// would report every file it covered as unread.
+func TestOldReceiptsJSONIsNamedNotRead(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, filepath.FromSlash(oldReceiptFile))
+	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o755))
+	require.NoError(t, os.WriteFile(old, []byte(`[{"path":"a.go","digest":"d"}]`), 0o600))
+
+	_, err := Load(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), old)
+	assert.Contains(t, err.Error(), "mv "+old+" "+old+".old")
+	require.Error(t, Record(dir, []Receipt{{Path: "b.go", Digest: "d", At: time.Now()}}))
 }
 
 func TestRecordReplacesTheSamePath(t *testing.T) {

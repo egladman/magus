@@ -10,9 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module uuid -lang buzz -out ../internal/interp/bindings/gen/uuid.go
-
-func init() { Register(UUID) }
+//go:generate go run ../cmd/magus-utils bindings -module uuid -lang buzz -out ../internal/interp/bindings/gen/uuid.go -pkg bindgen
 
 // UUID is the "uuid" host module: unique identifiers and random tokens for run
 // ids, cache-busting suffixes, and artifact names. Native Buzz can only produce a

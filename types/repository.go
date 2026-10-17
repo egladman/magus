@@ -37,12 +37,6 @@ type WorkspaceReader interface {
 // TargetExpander resolves a Target into concrete per-project targets.
 type TargetExpander interface {
 	ExpandPath(t Target) ([]Target, error)
-	// ExpandCwd resolves t against the project containing the current working
-	// directory. found reports whether cwd is inside any project; when false,
-	// targets is empty and the caller typically falls back to ExpandPath or
-	// reports "not inside a project". found is a deliberate signal distinct from
-	// len(targets) — callers (e.g. magus tail) key their error message on it.
-	ExpandCwd(t Target) (targets []Target, found bool, err error)
 	ExpandAffected(ctx context.Context, target, baseRef string) (targets []Target, source string, fellBack bool, err error)
 }
 

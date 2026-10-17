@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -16,20 +17,22 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/egladman/magus/buzzengine" // Open and Inspect fail without the engine linked
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -42,17 +45,6 @@ func TestMain(m *testing.M) {
 	// A sandboxed run's children start as this binary re-run as their launcher.
 	MaybeLaunchSandbox()
 	testkit.Main(m, "LOCKTEST_*", "PIPETEST_*")
-}
-
-// TestContainsAll covers the StreamAllSentinel detection used by the
-// affected --stdin streaming flow.
-func TestContainsAll(t *testing.T) {
-	t.Parallel()
-	assert.False(t, slices.Contains([]string(nil), StreamAllSentinel), "empty slice")
-	assert.True(t, slices.Contains([]string{StreamAllSentinel}, StreamAllSentinel), "only sentinel")
-	assert.True(t, slices.Contains([]string{"a", StreamAllSentinel, "b"}, StreamAllSentinel), "sentinel mid")
-	assert.False(t, slices.Contains([]string{"a", "b"}, StreamAllSentinel), "no sentinel")
-	assert.False(t, slices.Contains([]string{"--all-things"}, StreamAllSentinel), "sentinel-like prefix")
 }
 
 // TestMakeHandlerConventionalTargets asserts that targetHandler returns a
@@ -77,8 +69,7 @@ func TestTargetHandlerConventionalTargets(t *testing.T) {
 }
 
 // TestSpellTargetSources asserts that TargetSources returns the correct globs for a
-// known target and nil for unknown targets, covering the generic enrichment loop in
-// executeOnProjects.
+// known target and nil for unknown targets.
 func TestSpellTargetSources(t *testing.T) {
 	t.Parallel()
 	vs := map[string][]string{
@@ -98,28 +89,6 @@ func TestSpellTargetSources_nilMap(t *testing.T) {
 	t.Parallel()
 	s := spells.NewSpell("bare")
 	assert.Nil(t, s.TargetSources()["lint"], "TargetSources on nil-map spell")
-}
-
-// TestMergePaths verifies dedup + lex ordering, the contract callers
-// rely on for deterministic stream-driven affected output.
-func TestMergePaths(t *testing.T) {
-	t.Parallel()
-
-	// merge normalizes a nil result to an empty slice so the comparison is
-	// against a non-nil expected value (assert.Equal distinguishes nil/empty).
-	merge := func(a, b []string) []string {
-		got := mergePaths(a, b)
-		if got == nil {
-			got = []string{}
-		}
-		return got
-	}
-
-	assert.Equal(t, []string{}, merge(nil, nil), "both empty")
-	assert.Equal(t, []string{"a", "x"}, merge(nil, []string{"x", "a"}), "a empty")
-	assert.Equal(t, []string{"a", "x"}, merge([]string{"x", "a"}, nil), "b empty")
-	assert.Equal(t, []string{"a", "b", "c"}, merge([]string{"a", "b"}, []string{"b", "c"}), "dedup across")
-	assert.Equal(t, []string{"a"}, merge([]string{"a", "a"}, []string{"a"}), "all dupes")
 }
 
 // TestForEachSpell_BudgetHonored verifies that when the context carries a
@@ -224,7 +193,7 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 func TestCacheOps_InspectReturnErrNoCache(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	_, _, err = m.PruneCache(context.Background(), time.Now(), true)
 	assert.ErrorIs(t, err, types.ErrNoCache, "PruneCache on Inspect")
@@ -260,34 +229,40 @@ func TestClose_Idempotent(t *testing.T) {
 	require.NoError(t, m.Close(), "second Close")
 }
 
-func TestSetGraphObserver_Invoked(t *testing.T) {
+// TestWithObserverRidesTheRun: a run's observer sees the graph builds made under the run's
+// context, and nothing made outside it, so two runs on one workspace never share one.
+func TestWithObserverRidesTheRun(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	var builds int
-	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnBuild(mock.Anything).Run(func(types.BuildStats) { builds++ }).Return().Maybe()
-	obs.EXPECT().OnQuery(mock.Anything).Return().Maybe()
-	obs.EXPECT().OnError(mock.Anything).Return().Maybe()
-	m.SetGraphObserver(obs)
-	_, err = m.Graph()
+	obs := typestest.NewMockObserver(t)
+	obs.EXPECT().Observe(mock.Anything).Run(func(e types.GraphEvent) {
+		if e.Op == types.GraphOpBuild {
+			builds++
+		}
+	}).Return().Maybe()
+	ctx := applyRunOpts([]RunOption{WithObserver(obs)}).observed(context.Background())
+	_, err = m.AffectedFromPaths(ctx, []string{"magusfile.buzz"})
 	require.NoError(t, err)
-	assert.NotZero(t, builds, "SetGraphObserver: OnBuild never called after Graph()")
+	assert.NotZero(t, builds, "WithObserver: no build observed under the run's context")
 
-	// Clear the observer; subsequent Graph() must not increment.
 	before := builds
-	m.SetGraphObserver(nil)
+	_, err = m.AffectedFromPaths(context.Background(), []string{"magusfile.buzz"})
+	require.NoError(t, err)
+	assert.Equal(t, before, builds, "a build outside the run's context reached its observer")
+
 	_, err = m.Graph()
 	require.NoError(t, err)
-	assert.Equal(t, before, builds, "SetGraphObserver(nil): OnBuild called after clearing observer")
+	assert.Equal(t, before, builds, "the workspace holds no observer of its own")
 }
 
 func TestStepFor_RootProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -314,7 +289,7 @@ func TestStepFor_RootProject(t *testing.T) {
 func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{Path: ".", Sources: types.MustParseGlobs("**/*.go")}
 	assert.Empty(t, m.baseStep(p).IgnoreDirs, "no resolved spells: Step.IgnoreDirs must be empty")
@@ -327,7 +302,7 @@ func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    ".",
@@ -344,7 +319,7 @@ func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 func TestStepFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")
-	m, err := inspect(context.Background(), root)
+	m, err := inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := &types.Project{
 		Path:    "api",
@@ -402,7 +377,7 @@ func ExampleInspect() {
 	w, cleanup := newExampleWorkspace(map[string]string{"myapp/magusfile.buzz": ""})
 	defer cleanup()
 
-	ws, err := Inspect(context.Background(), w.Root())
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect error:", err)
 		return
@@ -483,7 +458,7 @@ func ExampleOpen() {
 	ws, cleanup := exampleWorkspace()
 	defer cleanup()
 
-	m, err := Open(context.Background(), ws.Root())
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -504,7 +479,7 @@ func ExampleMagus_ExpandAffected() {
 	ws, cleanup := exampleWorkspace()
 	defer cleanup()
 
-	m, err := Open(context.Background(), ws.Root())
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -539,7 +514,7 @@ func ExampleWorkspaceRegistry_withSpell() {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithSpell(name))
 
-	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg))
+	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -572,7 +547,7 @@ func newWorkspace(t *testing.T) types.WorkspaceRepository {
 		"extensions/drape/magusfile.buzz":   "", // "extensions/drape"
 		"extensions/lattice/magusfile.buzz": "", // "extensions/lattice"
 	})
-	ws, err := Inspect(context.Background(), w.Root())
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
@@ -754,7 +729,7 @@ func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	disabled := false
 	cfg.VCS.Enabled = &disabled
 
-	ws, err := Inspect(context.Background(), root, WithLoadedConfig(cfg))
+	ws, err := Inspect(context.Background(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Inspect")
 
 	got := ws.VCSOptions()
@@ -771,16 +746,16 @@ func b64Pub(t *testing.T) (pub string, seed string) {
 // TestRemoteCacheRequiresTrustSet is the paranoid root: a wired remote backend
 // with no declared trust set must be a hard error, not a silent unverified cache.
 func TestRemoteCacheRequiresTrustSet(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, false, "")
+	_, err := remoteCacheSigningOpts(nil, false, "", "")
 	assert.Error(t, err, "empty trust set was accepted; a remote cache must require trusted_keys")
-	_, err = remoteCacheSigningOpts([]string{}, false, "")
+	_, err = remoteCacheSigningOpts([]string{}, false, "", "")
 	assert.Error(t, err, "empty trust-set slice was accepted")
 }
 
 // TestRemoteCacheInsecureSkipsTrustSet: the explicit opt-out accepts a wired
 // backend with no trust set and no signing key, yielding the insecure option.
 func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
-	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it")
+	opts, err := remoteCacheSigningOpts(nil, true, "single-repo CI cache; nothing outside this repo can write it", "")
 	require.NoError(t, err, "insecure mode rejected empty trust set")
 	assert.Len(t, opts, 1, "insecure: want 1 opt (WithInsecureRemote)")
 }
@@ -790,46 +765,35 @@ func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
 // satisfies it, because an existing config it breaks has to be repairable from the
 // message alone.
 func TestRemoteCacheInsecureNeedsAReason(t *testing.T) {
-	_, err := remoteCacheSigningOpts(nil, true, "")
+	_, err := remoteCacheSigningOpts(nil, true, "", "")
 	require.Error(t, err, "a bare cache.remote.insecure switched off signature verification with nothing recorded")
 	assert.Contains(t, err.Error(), "cache.remote.insecure_reason", "the refusal must name the exact key that satisfies it")
 
-	_, err = remoteCacheSigningOpts(nil, true, "   ")
+	_, err = remoteCacheSigningOpts(nil, true, "   ", "")
 	assert.Error(t, err, "whitespace is not prose")
 }
 
 // TestRemoteCacheTrustSetDecodes: a valid trust set yields verification options;
-// adding a signing-key env var yields a signing option too.
+// adding a signing key yields a signing option too.
 func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
-	// The verify-only half below asserts the ABSENCE of a signing key, so it must
-	// not inherit one. ci.yaml exports MAGUS_CACHE_SIGNING_KEY with the real secret
-	// on a push to main, which turns "want 1 opt" into 2. t.Setenv has no unset
-	// form, so restore by hand.
-	if prev, ok := os.LookupEnv(signingKeyEnv); ok {
-		require.NoError(t, os.Unsetenv(signingKeyEnv))
-		t.Cleanup(func() { _ = os.Setenv(signingKeyEnv, prev) })
-	}
-
-	opts, err := remoteCacheSigningOpts([]string{pub}, false, "")
+	opts, err := remoteCacheSigningOpts([]string{pub}, false, "", "")
 	require.NoError(t, err, "valid trust set rejected")
 	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")
 
-	t.Setenv(signingKeyEnv, seed)
-	opts, err = remoteCacheSigningOpts([]string{pub}, false, "")
+	opts, err = remoteCacheSigningOpts([]string{pub}, false, "", seed)
 	require.NoError(t, err, "valid trust set + signing key rejected")
 	assert.Len(t, opts, 2, "signing: want 2 opts (trusted keys + signing key)")
 }
 
 // TestRemoteCacheRejectsMalformedKeys: bad base64 in either the trust set or the
-// signing-key env var is a clear configuration error, not a silent fallback.
+// signing key is a clear configuration error, not a silent fallback.
 func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
-	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "")
+	_, err := remoteCacheSigningOpts([]string{"not!base64!"}, false, "", "")
 	assert.Error(t, err, "malformed trusted key was accepted")
 	pub, _ := b64Pub(t)
-	t.Setenv(signingKeyEnv, "not!base64!")
-	_, err = remoteCacheSigningOpts([]string{pub}, false, "")
+	_, err = remoteCacheSigningOpts([]string{pub}, false, "", "not!base64!")
 	assert.Error(t, err, "malformed signing key was accepted")
 }
 
@@ -845,27 +809,27 @@ func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
 	required := true
 	cfg.Cache.Remote.Write.Enabled = &required
 
-	m, err := Open(t.Context(), root, WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	if m != nil {
 		_ = m.Close()
 	}
 	assert.ErrorContains(t, err, "remote writes are required but no remote backend is wired")
 }
 
-// TestOpenRemoteBackendThatDidNotStart: this test binary links no backend opener, so
-// every wired backend fails to start. A required write surfaces that failure as the
-// error; an optional one names it in the header the run prints.
+// TestOpenRemoteBackendThatDidNotStart: no magusfile here imports the github spell, so the
+// wired backend fails to start. A required write surfaces that failure as the error; an
+// optional one names it in the header the run prints.
 func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 	opt := remoteBackendOption(t.Context(), "github", nil)
 	require.NotNil(t, opt)
 
 	_, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt, cache.WithRemoteWrite(true))
-	assert.ErrorContains(t, err, "run local-only: remote github unavailable: cache: no remote backend registered in this binary")
+	assert.ErrorContains(t, err, `run local-only: remote github unavailable: spell "github" is not registered`)
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)
-	tier, mode := (&Magus{cache: c}).CacheDescription()
-	assert.True(t, strings.HasPrefix(tier, "local (remote github unavailable: cache: no remote backend registered in this binary"), tier)
+	tier, mode, _ := (&Magus{cache: c}).CacheDescription()
+	assert.True(t, strings.HasPrefix(tier, `local (remote github unavailable: spell "github" is not registered`), tier)
 	assert.Equal(t, "read+write", mode)
 }
 
@@ -888,23 +852,23 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 		return w.Root()
 	}
 
-	mBuild, err := Open(ctx, mkWS(), WithProvider(tel))
+	mBuild, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	defer func() { _ = mBuild.Close() }()
 
-	mBridge, err := Open(ctx, mkWS(), WithProvider(tel))
+	mBridge, err := Open(ctx, mkWS(), workspace.WithTelemetryProvider(tel), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	defer func() { _ = mBridge.Close() }()
 
 	// Both workspaces adopted the SAME provider instance rather than building their own.
-	assert.True(t, tel == mBuild.Telemetry(), "build workspace did not adopt the injected provider")
-	assert.True(t, tel == mBridge.Telemetry(), "bridge workspace did not adopt the injected provider")
+	assert.True(t, tel == mBuild.tel, "build workspace did not adopt the injected provider")
+	assert.True(t, tel == mBridge.tel, "bridge workspace did not adopt the injected provider")
 
 	// Record a target run through the "build" workspace's provider (as a per-workspace
 	// registry build would)...
-	mBuild.Telemetry().RecordTargetRun(ctx, 0.5,
+	mBuild.tel.RecordTargetRun(ctx, 0.5,
 		observability.Attr{Key: "magus.target", Value: "build"},
-		observability.Attr{Key: "outcome", Value: "success"},
+		observability.Attr{Key: "outcome", Value: string(observability.OutcomeOK)},
 	)
 
 	// ...and read it back through the "bridge" workspace's collector (as the dashboard does).
@@ -914,20 +878,20 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
 
-	var targetRuns int64
+	var targetRuns uint64
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
-			if m.Name != "magus.target.runs" {
+			if m.Name != "magus.target.duration" {
 				continue
 			}
-			sum, isSum := m.Data.(metricdata.Sum[int64])
-			require.True(t, isSum, "magus.target.runs should be an int64 sum")
-			for _, dp := range sum.DataPoints {
-				targetRuns += dp.Value
+			hist, isHist := m.Data.(metricdata.Histogram[float64])
+			require.True(t, isHist, "magus.target.duration should be a float64 histogram")
+			for _, dp := range hist.DataPoints {
+				targetRuns += dp.Count
 			}
 		}
 	}
-	assert.Equal(t, int64(1), targetRuns,
+	assert.Equal(t, uint64(1), targetRuns,
 		"a target run recorded via one Magus must be visible through the other's shared-provider collector")
 }
 
@@ -958,7 +922,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	m, err := Open(context.Background(), w.Root())
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1066,51 +1030,15 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 		"the magusfile target must run alone; the shadowed spell op must not also run")
 }
 
-// recordingProvider is a minimal observability.Provider fake: every method except
-// Shutdown is a no-op, and Shutdown records whether it ran (and can be told to error).
+// recordingProvider is a telemetry provider that records whether Shutdown ran (and can be
+// told to error); every other method is observability.Nop's.
 type recordingProvider struct {
+	observability.Nop
 	shutdownCalled bool
 	shutdownErr    error
 }
 
-func (p *recordingProvider) Enabled() bool                                                       { return true }
-func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Attr)               {}
-func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
-func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
-func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
-func (p *recordingProvider) RecordCacheSaved(context.Context, float64)                           {}
-func (p *recordingProvider) RecordGraphQuery(context.Context, float64, ...observability.Attr)    {}
-func (p *recordingProvider) RecordRemoteOp(context.Context, observability.RemoteOp)              {}
-func (p *recordingProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
-	return ctx, func(error) {}
-}
-func (p *recordingProvider) RecordTargetRun(context.Context, float64, ...observability.Attr) {}
-func (p *recordingProvider) RecordPoolAcquire(context.Context, float64, int64)               {}
-func (p *recordingProvider) RecordPoolRelease(context.Context, int64)                        {}
-func (p *recordingProvider) RecordPoolWaiting(context.Context, int64)                        {}
-func (p *recordingProvider) RecordMCPCall(context.Context, observability.MCPCall)            {}
-func (p *recordingProvider) RecordSandboxApply(context.Context, float64, string, string)     {}
-func (p *recordingProvider) RecordSandboxRules(context.Context, observability.SandboxRules)  {}
-func (p *recordingProvider) RecordSandboxCheck(context.Context, string, string, string)      {}
-func (p *recordingProvider) RecordSandboxEnvDropped(context.Context, string, int64)          {}
-func (p *recordingProvider) RecordBuzzExec(context.Context, float64, string, string)         {}
-func (p *recordingProvider) RecordBuzzCompile(context.Context, float64, string, string)      {}
-func (p *recordingProvider) RecordBuzzHostCall(context.Context, observability.BuzzHostCall)  {}
-func (p *recordingProvider) RecordBuzzSessionReuse(context.Context, string)                  {}
-func (p *recordingProvider) RecordBuzzSessionIdle(context.Context, int64)                    {}
-func (p *recordingProvider) RecordBuzzSessionEviction(context.Context, string)               {}
-func (p *recordingProvider) RecordBuzzSessionWarm(context.Context, float64, string)          {}
-func (p *recordingProvider) RecordBuzzImport(context.Context, float64, string, string)       {}
-func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, string, string) {}
-func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
-func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
-func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
-func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)                 {}
-func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
-func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
-func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
-func (p *recordingProvider) RecordReviewMergedWhileReading(context.Context, float64)         {}
-func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
+func (p *recordingProvider) Enabled() bool { return true }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true
 	return p.shutdownErr
@@ -1159,98 +1087,6 @@ func TestClose_LeavesInjectedProviderRunning(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, p.shutdownCalled, "Close must not shut down a shared/injected provider")
-}
-
-// mkTree creates dirs and marker files in w. A trailing "/" makes a directory,
-// otherwise an empty marker file.
-func mkTree(t *testing.T, w *testkit.Workspace, paths ...string) {
-	t.Helper()
-	for _, p := range paths {
-		if p[len(p)-1] == '/' {
-			if err := os.MkdirAll(w.Path(p), 0o755); err != nil {
-				t.Fatalf("mkdir %s: %v", p, err)
-			}
-			continue
-		}
-		w.Write(p, "")
-	}
-}
-
-func mustFindRoot(t *testing.T, dir string) string {
-	t.Helper()
-	got, err := FindRoot(dir)
-	if err != nil {
-		t.Fatalf("FindRoot(%s): %v", dir, err)
-	}
-	return got
-}
-
-// TestFindRoot pins the one-workspace rule: a magusfile marks a PROJECT, and only
-// magus.yaml declares where a workspace begins.
-func TestFindRoot(t *testing.T) {
-	t.Run("a nested project does not become its own workspace", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
-		if got := mustFindRoot(t, filepath.Join(root, "console")); got != root {
-			t.Errorf("root = %q, want %q; halting at console's magusfile is the original bug", got, root)
-		}
-	})
-
-	// The regression the first attempt shipped: go.mod was treated as a workspace
-	// marker on the theory it only sits at a repo's top, which is false in any
-	// multi-module repo. A submodule then locked its own cache dir and stopped
-	// excluding the root run despite touching the same files.
-	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
-		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
-			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
-		}
-	})
-
-	// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows
-	// them. The nearest declaration governs, the same way .git behaves.
-	t.Run("nearest magus.yaml wins so a nested worktree keeps its own", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		outer := w.Root()
-		mkTree(t, w, "magus.yaml", "magusfile.buzz",
-			".claude/worktrees/feature/magus.yaml",
-			".claude/worktrees/feature/magusfile.buzz",
-			".claude/worktrees/feature/console/magusfile.buzz")
-
-		wt := filepath.Join(outer, ".claude", "worktrees", "feature")
-		if got := mustFindRoot(t, wt); got != wt {
-			t.Errorf("root = %q, want the worktree %q, not its parent repo", got, wt)
-		}
-		if got := mustFindRoot(t, filepath.Join(wt, "console")); got != wt {
-			t.Errorf("root from inside the worktree = %q, want %q", got, wt)
-		}
-		if got := mustFindRoot(t, outer); got != outer {
-			t.Errorf("root from the parent = %q, want %q", got, outer)
-		}
-	})
-
-	t.Run("a standalone project with no magus.yaml resolves to its outermost marker", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
-		if got, want := mustFindRoot(t, filepath.Join(root, "solo", "nested")), filepath.Join(root, "solo"); got != want {
-			t.Errorf("root = %q, want %q", got, want)
-		}
-	})
-
-	// Contiguity bounds the fallback: without it, one stray magusfile in a home
-	// directory would adopt every project beneath it.
-	t.Run("a gap stops the fallback from reaching a stray ancestor", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		root := w.Root()
-		mkTree(t, w, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
-		if got, want := mustFindRoot(t, filepath.Join(root, "gap", "proj")), filepath.Join(root, "gap", "proj"); got != want {
-			t.Errorf("root = %q, want %q; the marker-less gap must stop the walk", got, want)
-		}
-	})
 }
 
 // floorWorkspace writes a minimal workspace whose magus.yaml declares constraint.
@@ -1308,7 +1144,7 @@ func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
 func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"), WithSpawnRule(TierCeiling))
 
 	require.Error(t, err, "a binary below the declared floor must not open the workspace")
 	assert.ErrorIs(t, err, types.WorkspaceNeedsNewerMagus)
@@ -1319,7 +1155,7 @@ func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
 func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 0.3.0")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"), WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err)
 }
@@ -1328,7 +1164,7 @@ func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 	root := floorWorkspace(t, "")
 
-	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"))
+	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"), WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err)
 }
@@ -1337,7 +1173,7 @@ func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 func TestRequiredVersion_NoVersionSuppliedOpens(t *testing.T) {
 	root := floorWorkspace(t, ">= 99.0.0")
 
-	_, err := Inspect(context.Background(), root)
+	_, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 
 	require.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
 }
@@ -1367,7 +1203,7 @@ func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
 	repo.Write("tracked.txt", "one\nCHANGED\n")
 	repo.Write("fresh.txt", "hello\nworld\n")
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1387,7 +1223,7 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 
 	repo.Write("blob.bin", string([]byte{0x00, 0x01, 0x02, 0x00}))
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1409,7 +1245,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 	repo.Write("nonewline.txt", "two")
 	repo.Write("brand-new.txt", "fresh\n")
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1431,7 +1267,7 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 	repo := testkit.NewRepo(t, map[string]string{"a.txt": "x\n"})
 
-	m, err := Open(context.Background(), repo.Root())
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1529,10 +1365,54 @@ func TestApplyEnvSandboxModeIsAFloor(t *testing.T) {
 func TestLoadConfigValidatesTheEnvironment(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("magus.yaml", "concurrency_profile: balanced\n")
-	t.Setenv("MAGUS_CONCURRENCY_PROFILE", "turbo")
 
-	_, err := loadConfig(w.Root())
+	_, err := loadConfig(w.Root(), WithEnv([]string{"MAGUS_CONCURRENCY_PROFILE=turbo"}))
 	require.ErrorContains(t, err, `MAGUS_CONCURRENCY_PROFILE: unknown concurrency profile "turbo"`)
+}
+
+// TestLoadConfigReadsOnlyTheEnvironmentItIsGiven: a library workspace given no
+// environment is configured by its magus.yaml alone, whatever the process environment
+// says, and one given an environment reads that and not the process's.
+func TestLoadConfigReadsOnlyTheEnvironmentItIsGiven(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "concurrency: 3\n")
+	t.Setenv("MAGUS_CONCURRENCY", "5")
+
+	cfg, err := loadConfig(w.Root())
+	require.NoError(t, err)
+	assert.Equal(t, 3, cfg.Concurrency, "no WithEnv: the process environment is not read")
+
+	cfg, err = loadConfig(w.Root(), WithEnv([]string{"MAGUS_CONCURRENCY=7"}))
+	require.NoError(t, err)
+	assert.Equal(t, 7, cfg.Concurrency, "WithEnv: the given environment overrides magus.yaml")
+}
+
+// TestWorkspaceProcessOptionsDefaultToNothing: without WithStderr notices are
+// discarded and without WithCommandLine no command line is recorded; with them, the
+// workspace keeps what it was given.
+func TestWorkspaceProcessOptionsDefaultToNothing(t *testing.T) {
+	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	bare := ws.(*Magus)
+	assert.Equal(t, io.Discard, bare.noticeWriter())
+	assert.Empty(t, bare.commandLine)
+	assert.Empty(t, bare.env("PATH"), "no WithEnv: no environment variable reads as set")
+
+	var notices bytes.Buffer
+	ws, err = Inspect(t.Context(), root, WithStderr(&notices), WithCommandLine([]string{"magus", "run", "x"}), WithEnv([]string{"A=1", "A=2"}), WithSpawnRule(TierCeiling))
+
+	require.NoError(t, err)
+	given := ws.(*Magus)
+	assert.Same(t, &notices, given.noticeWriter())
+	assert.Equal(t, []string{"magus", "run", "x"}, given.commandLine)
+	assert.Equal(t, "2", given.env("A"), "a key set twice reads its last value, as os.Getenv does")
+}
+
+// TestFindRootRefusesAnEmptyDir: the library has no working directory to fall back to.
+func TestFindRootRefusesAnEmptyDir(t *testing.T) {
+	_, err := FindRoot("")
+	require.ErrorContains(t, err, "needs a directory")
 }
 
 // yaml reaches the same door as env and flags, so a misspelled profile stops the load.
@@ -1562,7 +1442,7 @@ func TestTargetLabel(t *testing.T) {
 func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("https://example.com/o/r.git", nil).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1576,7 +1456,7 @@ func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("", errors.New("unborn branch")).Once()
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("", errors.New("no remote")).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1588,7 +1468,7 @@ func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 func TestLastPassedBaseReadsRefWithoutMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("feat/x", nil).Once()
 	d.EXPECT().ParentRef().Return("HEAD~1").Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -1607,7 +1487,7 @@ func TestLastPassedBaseRefErrorKeepsItsText(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	cause := errors.New("unborn branch")
-	d := mocks.NewMockVCSDriver(t)
+	d := typestest.NewMockVCSDriver(t)
 	d.EXPECT().Ref(mock.Anything, root).Return("", cause).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
 	m.cfg.CI.RecordRuns = true
@@ -1649,7 +1529,7 @@ func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
 +	d()
 +}
 `
-	head := graphOf(
+	head := newGraph(
 		rangedSymbol(goSymbol("api", ""), "api", "api.go:1", 0, "Package"),
 		rangedSymbol(goSymbol("api", "Open()."), "Open", "api.go:3", 5, "Function"),
 		rangedSymbol(goSymbol("api", "Close()."), "Close", "api.go:7", 9, "Function"),
@@ -1684,7 +1564,7 @@ const twoHunkPatch = `diff --git a/api.go b/api.go
 // that hunk changed.
 func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
 	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
-	head := graphOf(
+	head := newGraph(
 		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
 		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
 	)

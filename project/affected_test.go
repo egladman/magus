@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // newAffectedWorkspace lays down a workspace with three projects in
@@ -332,14 +332,14 @@ func TestVCSRootPrefix(t *testing.T) {
 	})
 }
 
-// buildOnceObserver expects exactly one OnBuild; a second call, from a request that
-// should not reach it, fails the test.
-func buildOnceObserver(t *testing.T) *mocks.MockObserver {
+// buildOnceObserver expects exactly one build; a second, from a request that should not
+// reach it, fails the test.
+func buildOnceObserver(t *testing.T) *typestest.MockObserver {
 	t.Helper()
-	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnBuild(mock.Anything).Return().Once()
-	obs.EXPECT().OnQuery(mock.Anything).Return().Maybe()
-	obs.EXPECT().OnError(mock.Anything).Return().Maybe()
+	isBuild := func(e types.GraphEvent) bool { return e.Op == types.GraphOpBuild }
+	obs := typestest.NewMockObserver(t)
+	obs.EXPECT().Observe(mock.MatchedBy(isBuild)).Return().Once()
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return !isBuild(e) })).Return().Maybe()
 	return obs
 }
 
@@ -357,14 +357,14 @@ func TestAffectedRequestScopedObserver(t *testing.T) {
 	require.NoError(t, err, "call A")
 	_, err = AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"})
 	require.NoError(t, err, "call B")
-	obsA.AssertNumberOfCalls(t, "OnBuild", 1)
-	obsB.AssertNumberOfCalls(t, "OnBuild", 1)
+	obsA.AssertExpectations(t)
+	obsB.AssertExpectations(t)
 
 	_, err = AffectedFromPaths(context.Background(), ws, []string{"api/x.go"})
 	require.NoError(t, err, "call C")
 	// An observerless call must not leak events into either observer.
-	obsA.AssertNumberOfCalls(t, "OnBuild", 1)
-	obsB.AssertNumberOfCalls(t, "OnBuild", 1)
+	obsA.AssertExpectations(t)
+	obsB.AssertExpectations(t)
 }
 
 // buildWorkspace constructs a minimal Workspace from a list of projects.

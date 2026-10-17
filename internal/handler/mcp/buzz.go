@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -108,7 +108,7 @@ func runWorker[R any](ctx context.Context, w worker, req any) (R, error) {
 		ctx, cancel = context.WithTimeout(ctx, w.timeout)
 		defer cancel()
 	}
-	res, err := run.Exec(ctx, exe, []string{"buzz"}, run.ExecOptions{
+	res, err := spawn.Exec(ctx, exe, []string{"buzz"}, spawn.ExecOptions{
 		Dir:     w.root,
 		Env:     w.env,
 		Stdin:   string(wire),

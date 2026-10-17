@@ -70,9 +70,9 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check 
 	var details []string
 	for _, p := range projects {
 		label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
-		for target, peakMB := range measuredPeaksMB(&h, p.Path) {
+		for target, peaks := range measuredPeaksMB(&h, p.Path) {
 			declaredMB, declaredBy := types.ChainMemoryMB(p, target, lookup)
-			if d := gradeDeclaration(label, target, declaredBy, declaredMB, peakMB); d != "" {
+			if d := gradeDeclaration(label, target, declaredBy, declaredMB, peaks); d != "" {
 				details = append(details, d)
 			}
 		}
@@ -100,23 +100,27 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check 
 // and the measurement agree closely enough to leave alone. declaredBy names the
 // target the figure came from, which is not this one when it was inherited from a
 // composed target. The reader needs the line to edit, not the line they ran.
-func gradeDeclaration(project, target, declaredBy string, declaredMB, peakMB int) string {
+//
+// An undeclared target claims 1.25 times its highest passing peak once three runs
+// measured it, so it wants a declaration only when its passing peaks spread wider than
+// that headroom: then the next run can outgrow a claim sized from the last ones.
+func gradeDeclaration(project, target, declaredBy string, declaredMB int, peaks peakRange) string {
 	declares := "declares"
 	if declaredBy != "" && declaredBy != target {
 		declares = "runs " + declaredBy + ", which declares"
 	}
 	switch {
 	case declaredMB <= 0:
-		if peakMB < undeclaredFloorMB {
+		if peaks.highMB < undeclaredFloorMB || !peaks.unstable() {
 			return ""
 		}
 		return fmt.Sprintf(
-			"%s %s declares no memory_mb anywhere in what it runs and reached at least %dMB; an undeclared target claims no memory, so every other magus on the machine is blind to it",
-			project, target, peakMB)
-	case float64(peakMB) > float64(declaredMB)*underDeclaredRatio && peakMB-declaredMB >= materialGapMB:
+			"%s %s declares no memory_mb anywhere in what it runs and its passing runs reached from %dMB to %dMB; a claim measured from them carries a quarter's headroom, which that spread outgrows",
+			project, target, peaks.passLowMB, peaks.passHighMB)
+	case float64(peaks.highMB) > float64(declaredMB)*underDeclaredRatio && peaks.highMB-declaredMB >= materialGapMB:
 		return fmt.Sprintf(
 			"%s %s %s %dMB and reached at least %dMB; admission seats it against a figure it exceeds",
-			project, target, declares, declaredMB, peakMB)
+			project, target, declares, declaredMB, peaks.highMB)
 	}
 	// No over-declared finding, deliberately. The symmetric case ("declares far
 	// more than it has ever used, lower it") is the one a measured PEAK could
@@ -134,31 +138,64 @@ func gradeDeclaration(project, target, declaredBy string, declaredMB, peakMB int
 	return ""
 }
 
-// measuredPeaksMB returns the highest peak recorded for each of a project's targets,
-// keyed by the bare target name.
+// peakRange is what a target's recorded peaks say about its memory, in MiB.
+type peakRange struct {
+	// highMB is the highest peak of any run, a failed one included.
+	highMB int
+	// passLowMB and passHighMB bound the peaks of the passing runs, which are what a
+	// measured claim is sized from; passRuns counts them.
+	passLowMB, passHighMB, passRuns int
+}
+
+// unstable reports whether the passing peaks spread wider than the headroom a claim
+// measured from them carries.
+func (r peakRange) unstable() bool {
+	return r.passRuns >= 2 && float64(r.passHighMB) > float64(r.passLowMB)*underDeclaredRatio
+}
+
+// measuredPeaksMB returns the recorded peaks of each of a project's targets, keyed by
+// the bare target name.
 //
 // The history keys a target as "<spell>/<target>", because the unit that runs is a
 // spell's implementation of a target, while a magusfile declares memory against the
-// bare name. One target served by two spells therefore has two histories, and the
-// figure that has to fit on a machine is the larger of them.
-func measuredPeaksMB(h *forecast.History, project string) map[string]int {
+// bare name. One target served by two spells therefore has two histories: the figure
+// that has to fit on a machine is the larger of them, and the spread that matters is
+// that of the spell whose passing peak sizes the claim.
+func measuredPeaksMB(h *forecast.History, project string) map[string]peakRange {
 	targets, ok := h.Projects[project]
 	if !ok {
 		return nil
 	}
-	out := map[string]int{}
-	for key := range targets {
-		peak, ok := h.PredictPeakRSS(project, key)
-		if !ok {
+	out := map[string]peakRange{}
+	for key, st := range targets {
+		var r peakRange
+		for _, o := range st.RecentOutcomes {
+			if o.MaxRSSBytes <= 0 {
+				continue
+			}
+			mb := int(o.MaxRSSBytes >> 20)
+			r.highMB = max(r.highMB, mb)
+			if o.Result == forecast.OutcomeFail {
+				continue
+			}
+			if r.passRuns == 0 || mb < r.passLowMB {
+				r.passLowMB = mb
+			}
+			r.passHighMB, r.passRuns = max(r.passHighMB, mb), r.passRuns+1
+		}
+		if r.highMB == 0 {
 			continue
 		}
 		name := key
 		if i := strings.LastIndex(key, "/"); i >= 0 {
 			name = key[i+1:]
 		}
-		if mb := int(peak >> 20); mb > out[name] {
-			out[name] = mb
+		prev := out[name]
+		if r.passHighMB < prev.passHighMB {
+			r.passLowMB, r.passHighMB, r.passRuns = prev.passLowMB, prev.passHighMB, prev.passRuns
 		}
+		r.highMB = max(r.highMB, prev.highMB)
+		out[name] = r
 	}
 	return out
 }

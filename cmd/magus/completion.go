@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 //go:embed completions/magus.bash
@@ -29,7 +31,7 @@ func completion(args []string) error {
 	}
 	if fs.NArg() < 1 {
 		completionUsage()
-		return usagef("magus completion: shell name required (bash, zsh, fish, or powershell)")
+		return exit.Usagef("magus completion: shell name required (bash, zsh, fish, or powershell)")
 	}
 	switch fs.Arg(0) {
 	case "bash":
@@ -46,7 +48,7 @@ func completion(args []string) error {
 		return err
 	default:
 		completionUsage()
-		return usagef("magus completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
+		return exit.Usagef("magus completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
 	}
 }
 

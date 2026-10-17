@@ -6,7 +6,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/langservice"
 )
@@ -114,7 +114,7 @@ func workspaceTargetNames(ctx context.Context, cwd string) func() []string {
 // generated binders in cmd/magus/gen and the shell completions come from, so
 // this can't drift from what the subcommand actually accepts.
 func cliFlagCandidates(verb string) []string {
-	for _, c := range cli.All {
+	for _, c := range commands.Root.Children {
 		if c.Name != verb {
 			continue
 		}

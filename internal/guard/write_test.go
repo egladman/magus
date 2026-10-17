@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,13 +173,17 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 
 	t.Run("no state recorded", func(t *testing.T) {
 		// The store stores a row naming no state as declared, so the legacy row an older
-		// magus left is planted as the file it wrote.
+		// magus left is planted as the lines it wrote.
 		ctx, root := fleetFixture(t)
 		leases := fixture.FleetLeases()
 		leases[0].State, leases[1].State = "", ""
-		body, err := json.Marshal(map[string]any{"jobs": leases})
-		require.NoError(t, err)
-		path, err := job.NewStore(job.Location{CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
+		var body []byte
+		for _, row := range leases {
+			line, err := json.Marshal(row)
+			require.NoError(t, err)
+			body = append(append(body, line...), '\n')
+		}
+		path, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: ctx.Value(locationKey{}).(location).cacheDir, Root: root}).Path()
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, body, 0o644))
@@ -455,7 +460,7 @@ func TestAdviseInstructionWrite(t *testing.T) {
 // workspace that did not opt in by DECLARING a store.
 func TestDenyNotesWrite(t *testing.T) {
 	root := t.TempDir()
-	// A workspace magus.FindRoot can resolve, so the rule reaches its real decision
+	// A workspace workspace.FindRoot can resolve, so the rule reaches its real decision
 	// rather than bailing out on a missing workspace and passing for the wrong reason.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
 	cwd, err := os.Getwd()
@@ -590,10 +595,10 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 	t.Helper()
 	loc := hookLocation(ctx, Dependencies{})
-	return job.NewStore(job.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
+	return job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
-func unattributedOf(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
+func unattributedWrites(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
 	t.Helper()
 	rows, err := store.List()
 	require.NoError(t, err)
@@ -620,7 +625,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 	require.Equal(t, "advise", got.Decision)
 
 	store := fleetLedger(t, ctx)
-	recorded := unattributedOf(t, store, "lease-a")
+	recorded := unattributedWrites(t, store, "lease-a")
 	require.Len(t, recorded, 1, "the owner is told what moved under it")
 	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
 	assert.NotEmpty(t, recorded[0].Digest)
@@ -638,7 +643,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 
 		gradeLeasedWrite(ctx, Dependencies{}, "lease-a", mine)
 
-		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "lease-a"))
+		assert.Empty(t, unattributedWrites(t, fleetLedger(t, ctx), "lease-a"))
 	})
 
 	t.Run("unclaimed ground records nothing", func(t *testing.T) {
@@ -649,8 +654,8 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 		gradeLeasedWrite(ctx, Dependencies{}, "", loose)
 
 		store := fleetLedger(t, ctx)
-		assert.Empty(t, unattributedOf(t, store, "lease-a"))
-		assert.Empty(t, unattributedOf(t, store, "lease-b"))
+		assert.Empty(t, unattributedWrites(t, store, "lease-a"))
+		assert.Empty(t, unattributedWrites(t, store, "lease-b"))
 	})
 }
 
@@ -802,14 +807,14 @@ func TestAdviseAgentSourceWrite(t *testing.T) {
 		"internal/hint/mcp_tool.go",
 		"internal/hint/cli_command.go",
 	} {
-		got := adviseAgentSourceWrite(rel)
+		got := adviseAgentSourceWrite(".", rel)
 		assert.Contains(t, got.Say, "magus-skill-authoring", rel)
 		assert.Contains(t, got.Why, "SkillVersion", rel)
 	}
 
-	assert.Empty(t, adviseAgentSourceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
-	assert.Empty(t, adviseAgentSourceWrite("internal/agent/catalog.go"))
-	assert.Empty(t, adviseAgentSourceWrite("cmd/magus/agent.go"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/handler/mcp/diff.go"), "one handler is not the registry")
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/agent/catalog.go"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "cmd/magus/agent.go"))
 }
 
 // TestAdviseDescriptorWrite: the generator INPUT, not the generated output. The first is
@@ -819,15 +824,15 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 	magusTreeFixture(t)
 
 	for _, rel := range []string{"proto/magus/v1/run.proto", "std/fs.go"} {
-		got := adviseDescriptorWrite(rel).Say
+		got := adviseDescriptorWrite(".", rel).Say
 		assert.Contains(t, got, "SAME commit", rel)
 		assert.Contains(t, got, "magus run generate .", rel)
 	}
 
-	assert.Empty(t, adviseDescriptorWrite("std/fs_test.go"), "a test beside a descriptor feeds no generator")
-	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its API")
-	assert.Empty(t, adviseDescriptorWrite("proto/README.md"))
-	assert.Empty(t, adviseDescriptorWrite("internal/cache/cache.go"))
+	assert.Empty(t, adviseDescriptorWrite(".", "std/fs_test.go"), "a test beside a descriptor feeds no generator")
+	assert.Empty(t, adviseDescriptorWrite(".", "std/http/client.go"), "a subdirectory is a module's implementation, not its API")
+	assert.Empty(t, adviseDescriptorWrite(".", "proto/README.md"))
+	assert.Empty(t, adviseDescriptorWrite(".", "internal/cache/cache.go"))
 }
 
 // Both rules name paths and a target belonging to magus's OWN checkout, which a shipped
@@ -835,9 +840,9 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 // worth pinning: in anybody else's workspace neither rule can fire at all.
 func TestMagusOwnSourceTreeGatesTheRepoScopedRules(t *testing.T) {
 	inWorkspace(t) // an ordinary workspace: no magusfile, no cmd/magus
-	assert.Empty(t, adviseAgentSourceWrite("internal/agent/skills/magus-run/SKILL.md"))
-	assert.Empty(t, adviseDescriptorWrite("std/fs.go"))
-	assert.Empty(t, adviseDescriptorWrite("proto/magus/v1/run.proto"))
+	assert.Empty(t, adviseAgentSourceWrite(".", "internal/agent/skills/magus-run/SKILL.md"))
+	assert.Empty(t, adviseDescriptorWrite(".", "std/fs.go"))
+	assert.Empty(t, adviseDescriptorWrite(".", "proto/magus/v1/run.proto"))
 }
 
 // The host sends an ABSOLUTE path, and this repository is routinely checked out under
@@ -852,9 +857,9 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
 
-	assert.Contains(t, adviseAgentSourceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")).Say, "magus-skill-authoring")
-	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")).Say, "SAME commit")
-	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
+	assert.Contains(t, adviseAgentSourceWrite(".", filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")).Say, "magus-skill-authoring")
+	assert.Contains(t, adviseDescriptorWrite(".", filepath.Join(ws, "std", "fs.go")).Say, "SAME commit")
+	assert.Empty(t, adviseDescriptorWrite(".", filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }
 
 // wideningForms are the spellings of a command that widens a job's write paths. A
@@ -971,18 +976,30 @@ func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 	}
 }
 
-func TestGradeLeasedWriteDeniesAnOverdueLease(t *testing.T) {
+// A taken lease past its deadline is ended by the read that grades its write, which then
+// has no boundary left to deny on; one nobody took stays live, and its writes are denied.
+func TestGradeLeasedWriteUnderAnOverdueLease(t *testing.T) {
 	leases := fixture.FleetLeases()
 	leases[1].Deadline = time.Now().Add(-time.Minute).Unix()
 	ctx, root := fleetFixture(t, leases...)
 
+	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go")).Decision)
+	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "lease-b" })
+	require.GreaterOrEqual(t, i, 0)
+	assert.Equal(t, types.StateNoReturn, rows[i].State)
+	assert.Contains(t, rows[i].EndReason, "deadline passed")
+
+	leases[1].Registered = 0
+	ctx, root = fleetFixture(t, leases...)
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go"))
 	require.Equal(t, "deny", got.Decision, "an overdue lease writing inside its own write paths is denied")
 	assert.Contains(t, got.Reason, "lease-b")
 	assert.Contains(t, got.Reason, "deadline")
 	assert.Contains(t, got.Reason, time.Unix(leases[1].Deadline, 0).UTC().Format(time.RFC3339))
 
-	leases[1].Deadline = time.Now().Add(time.Hour).Unix()
+	leases[1].Deadline, leases[1].Registered = time.Now().Add(time.Hour).Unix(), 1
 	ctx, root = fleetFixture(t, leases...)
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go")).Decision,
 		"a deadline still ahead bounds nothing yet")
@@ -1013,7 +1030,7 @@ func TestGradeLeasedWriteNamesHowToReleaseAnOwner(t *testing.T) {
 // second lease is a second fact, and a second session has heard nothing.
 func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	write := func(session, rel string) Verdict {
+	write := func(session, rel string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
 	}
 
@@ -1146,11 +1163,11 @@ func TestEnterRefuses(t *testing.T) {
 // storeAt is the job store the fixture's context pins.
 func storeAt(ctx context.Context) *job.Store {
 	at := hookLocation(ctx, Dependencies{})
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	return job.NewStore(at.jobs())
 }
 
-// vcsOffSwitchWorkspace puts the test in a workspace magus.FindRoot resolves, the way
-// TestDenyNotesWrite does: a marker file magus.FindRoot's own walk recognizes, so the rule
+// vcsOffSwitchWorkspace puts the test in a workspace workspace.FindRoot resolves, the way
+// TestDenyNotesWrite does: a marker file workspace.FindRoot's own walk recognizes, so the rule
 // reaches its real decision instead of bailing out on "no workspace" and passing for the
 // wrong reason.
 func vcsOffSwitchWorkspace(t *testing.T) string {
@@ -1296,4 +1313,75 @@ func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
 
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(scratch, "main.go")).Decision,
 		"a go.mod alone makes no magus checkout")
+}
+
+// A worker its spawn bound is taken in the session's checkout while its fork made it one of
+// its own, nested or not. Its editor writes into that checkout are graded against its write
+// paths like the rest of its work, and a write into a third checkout is still refused.
+func TestGradeLeasedWriteInTheCheckoutTheLeasesForkMade(t *testing.T) {
+	ctx, session := fleetFixture(t)
+	nested := filepath.Join(session, ".claude", "worktrees", "w")
+	for name, own := range map[string]string{"apart": t.TempDir(), "nested": nested} {
+		t.Run(name, func(t *testing.T) {
+			third := t.TempDir()
+			for _, dir := range []string{session, own, third} {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+			}
+			row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
+				Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+				CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
+			// Only a fork writes the worktree record, so the rows are pinned rather than stored.
+			ctx := job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+
+			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "std", "module.go")).Decision,
+				"a write the lease's paths cover, in the checkout its fork made")
+			outside := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "cmd", "main.go"))
+			assert.Equal(t, "deny", outside.Decision, "the fork's checkout is graded against the lease's paths, not waved through")
+			other := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(third, "std", "module.go"))
+			assert.Equal(t, "deny", other.Decision)
+			assert.Contains(t, other.Reason, "another checkout")
+		})
+	}
+}
+
+// The host's own Write and Edit calls, from a session rooted in another checkout, reach the
+// same grading through Judge: each is graded against the lease's paths in the checkout its
+// fork made, and neither is waved through as a write outside every checkout.
+func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
+	ctx, session := fleetFixture(t)
+	own := t.TempDir()
+	for _, dir := range []string{session, own} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	}
+	module := filepath.Join(own, "std", "module.go")
+	require.NoError(t, os.WriteFile(module, []byte("package std\n\nfunc A() {}\n"), 0o644))
+	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+		CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+	judge := func(tool string, input map[string]any) types.GuardJudgment {
+		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "w", Input: hookJSON(t, map[string]any{
+			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": session,
+			"tool_input": input,
+		})})
+	}
+
+	for tool, payload := range map[string]map[string]any{
+		"Write": {"content": "package std\n\nfunc B() {}\n"},
+		"Edit":  {"old_string": "func A() {}", "new_string": "func A() { _ = 1 }"},
+	} {
+		t.Run(tool, func(t *testing.T) {
+			at := func(path string) map[string]any {
+				input := map[string]any{"file_path": path}
+				maps.Copy(input, payload)
+				return input
+			}
+			inside := judge(tool, at(module))
+			assert.NotEqual(t, decisionDeny, inside.Decision, inside.Reason)
+			outside := judge(tool, at(filepath.Join(own, "cmd", "main.go")))
+			assert.Equal(t, decisionDeny, outside.Decision, "a path outside the lease's paths, in the checkout its fork made")
+		})
+	}
 }

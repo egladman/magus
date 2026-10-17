@@ -1,7 +1,9 @@
 package job
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -59,6 +61,22 @@ type Terms struct {
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
 	Affinity []TermsAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
+	// Grouping is the grouping lens over the groups that wrote in the lease's projects: what
+	// splitting or chaining work there cost before. Facts for the orchestrator, like
+	// Affinity; nil when it was not read.
+	Grouping *types.GroupingOutput `json:"grouping,omitempty" yaml:"grouping,omitempty"`
+	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
+	// unknown and renders nothing.
+	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
+	// DeletionCandidates are the unreferenced symbols in the write paths, from
+	// [UnreferencedInPaths]: findings to finish or delete, never goals.
+	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	// ReferencedOutside are the files outside the write paths that use what they define,
+	// from [ReferencedOutside]: findings, never a boundary.
+	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
+	// ReferencedOutsideGap says why ReferencedOutside is unknown, such as [NoSymbolIndex];
+	// empty when a symbol index answered.
+	ReferencedOutsideGap string `json:"referenced_outside_gap,omitempty" yaml:"referenced_outside_gap,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -99,28 +117,38 @@ type TermsAffinity struct {
 // derive from the row alone, because it needs a knowledge graph and a loadable workspace.
 // The zero value is a brief rendered from the row and nothing else.
 type TermsFacts struct {
-	Evidence           []TermsEvidence
-	GraphCold          bool
-	WorkspaceCold      bool
-	Projects           []string
-	DerivedDenyPaths   []TermsBoundary
-	RegeneratedOutside []RegeneratedOutput
-	UnrunGates         []UnrunGate
-	Affinity           []TermsAffinity
+	Evidence             []TermsEvidence
+	GraphCold            bool
+	WorkspaceCold        bool
+	Projects             []string
+	DerivedDenyPaths     []TermsBoundary
+	RegeneratedOutside   []RegeneratedOutput
+	UnrunGates           []UnrunGate
+	Affinity             []TermsAffinity
+	Grouping             *types.GroupingOutput
+	Stage                types.ReleaseStage
+	DeletionCandidates   []types.UnreferencedEntry
+	ReferencedOutside    []ReferencedFile
+	ReferencedOutsideGap string
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
 func NewTerms(row types.Job, facts TermsFacts) Terms {
 	return Terms{
-		Lease:              row,
-		Evidence:           facts.Evidence,
-		GraphCold:          facts.GraphCold,
-		WorkspaceCold:      facts.WorkspaceCold,
-		Projects:           facts.Projects,
-		DerivedDenyPaths:   facts.DerivedDenyPaths,
-		RegeneratedOutside: facts.RegeneratedOutside,
-		UnrunGates:         facts.UnrunGates,
-		Affinity:           facts.Affinity,
+		Lease:                row,
+		Evidence:             facts.Evidence,
+		GraphCold:            facts.GraphCold,
+		WorkspaceCold:        facts.WorkspaceCold,
+		Projects:             facts.Projects,
+		DerivedDenyPaths:     facts.DerivedDenyPaths,
+		RegeneratedOutside:   facts.RegeneratedOutside,
+		UnrunGates:           facts.UnrunGates,
+		Affinity:             facts.Affinity,
+		Grouping:             facts.Grouping,
+		Stage:                facts.Stage,
+		DeletionCandidates:   facts.DeletionCandidates,
+		ReferencedOutside:    facts.ReferencedOutside,
+		ReferencedOutsideGap: facts.ReferencedOutsideGap,
 	}
 }
 
@@ -133,10 +161,21 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 func (b Terms) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
+	if t := b.Lease.ModelTier; t != nil {
+		fmt.Fprintf(&s, "model tier: %s\nskills: %s\n", t, t.Skills)
+	}
 
+	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "criteria", b.Lease.Criteria)
+	writeAttempts(&s, b.Lease)
+	writeList(&s, "may break", b.Lease.Breaks)
+	if b.Stage.Known() {
+		writeList(&s, "release stage", []string{stageLine(b.Stage)})
+	}
+	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
 	writeList(&s, "write paths", b.Lease.WritePaths)
 	writeList(&s, "deny paths", b.Lease.DenyPaths)
+	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside, b.ReferencedOutsideGap))
 	writeList(&s, "projects", b.Projects)
 
 	switch {
@@ -160,6 +199,9 @@ func (b Terms) String() string {
 		}
 		writeList(&s, "affinity warnings", lines)
 	}
+	if b.Grouping != nil {
+		writeList(&s, "grouping history", groupingLines(*b.Grouping))
+	}
 
 	switch {
 	case b.GraphCold:
@@ -175,6 +217,128 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+// interfaceLines is one entry per symbol goal: what the job must leave behind, as the
+// signature the fork froze. It leads the terms because the contract a holder implements
+// is the part the rest of the brief only bounds.
+func interfaceLines(goals []types.Goal) []string {
+	var lines []string
+	for _, g := range goals {
+		if g.Kind != types.GoalKindSymbol {
+			continue
+		}
+		line := strings.Join(g.Symbols, ", ") + " (" + string(g.Expect) + ")"
+		if g.Signature != "" {
+			line += ": " + g.Signature
+		}
+		lines = append(lines, line)
+		if d := strings.TrimSpace(g.Description); d != "" {
+			lines = append(lines, "  "+d)
+		}
+	}
+	return lines
+}
+
+// maxUnmetShown caps the unmet goals the newest previous attempt lists.
+const maxUnmetShown = 5
+
+// writeAttempts writes which attempt the holder is on and what the attempts before it left:
+// the newest in full, so the next holder starts from what failed and never from a
+// transcript, and each older one in a line, newest first. A first attempt with no cap writes
+// nothing.
+func writeAttempts(s *strings.Builder, row types.Job) {
+	if row.Attempts > 1 || row.MaxAttempts > 0 {
+		line := fmt.Sprintf("attempt %d", max(row.Attempts, 1))
+		if row.MaxAttempts > 0 {
+			line += fmt.Sprintf(" of %d", row.MaxAttempts)
+		}
+		fmt.Fprintf(s, "\n%s\n", line)
+	}
+	if len(row.Prior) == 0 {
+		return
+	}
+	newest := row.Prior[len(row.Prior)-1]
+	lines := append([]string{priorSummary(newest)}, priorDetail(newest)...)
+	for _, p := range slices.Backward(row.Prior[:len(row.Prior)-1]) {
+		lines = append(lines, priorSummary(p)+", "+retryLine(p.Retry))
+	}
+	writeList(s, "previous attempts", lines)
+}
+
+// priorSummary is one ended attempt in a line: how it ended, at which tier, and how much
+// more work and room it was given on the way.
+func priorSummary(p types.PriorAttempt) string {
+	line := fmt.Sprintf("attempt %d: %s", p.N, p.State)
+	if p.EndReason != "" {
+		line += " (" + p.EndReason + ")"
+	}
+	if p.ModelTier != "" {
+		line += ", tier " + p.ModelTier
+	}
+	return line + fmt.Sprintf(", %d rework round(s), %d widening(s)", p.ReworkRounds, p.Widenings)
+}
+
+// priorDetail is what the newest ended attempt left for the next holder, indented under its
+// summary, ending with its retry verdict.
+func priorDetail(p types.PriorAttempt) []string {
+	var lines []string
+	if len(p.Unmet) > 0 {
+		ids := make([]string, 0, maxUnmetShown)
+		for _, g := range p.Unmet[:min(len(p.Unmet), maxUnmetShown)] {
+			ids = append(ids, g.ID)
+		}
+		line := "  unmet: " + strings.Join(ids, ", ")
+		if more := len(p.Unmet) - len(ids); more > 0 {
+			line += fmt.Sprintf(" and %d more", more)
+		}
+		lines = append(lines, line)
+	}
+	for _, v := range p.Violations {
+		lines = append(lines, "  violation: "+firstLine(v))
+	}
+	for _, r := range p.UnresolvedRisks {
+		lines = append(lines, "  unresolved risk: "+firstLine(r))
+	}
+	for _, d := range p.Denials {
+		line := "  denied: " + d.Rule
+		if reason := firstLine(d.Reason); reason != "" {
+			line += ": " + reason
+		}
+		lines = append(lines, line)
+	}
+	if !p.DenialsKnown {
+		lines = append(lines, "  (denials unknown: the trail was rotated)")
+	}
+	for _, ref := range p.FailingRefs {
+		lines = append(lines, "  failed run: reopen with `"+hint.QueryOutput.With(ref)+"`")
+	}
+	return append(lines, "  "+retryLine(p.Retry))
+}
+
+// retryLine is an attempt's retry verdict as describe prints it.
+func retryLine(v types.RetryVerdict) string {
+	if v.Retryable {
+		return "retryable"
+	}
+	line := "not retryable until " + string(cmp.Or(v.Change, types.RetryAfterPerson))
+	if v.Reason != "" {
+		line += ": " + firstLine(v.Reason)
+	}
+	return line
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
+}
+
+func stageLine(s types.ReleaseStage) string {
+	line := "newest release " + s.Tag
+	if s.Major == 0 {
+		line += ": below 1.0 a major floor ships as a minor release"
+	}
+	return line
 }
 
 // writeBlock emits a heading and a verbatim body. Verbatim is deliberate for the criteria:

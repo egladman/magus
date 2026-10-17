@@ -109,7 +109,9 @@ step, and so do hunks that use each other, because neither can go first. Generat
 sits in a folded group of its own (`--generated` shows it), and a hunk magus cannot place
 goes in a final group named `unranked` that says why: no symbol index covers the file, the
 hunk defines and uses no changed symbol, or the working tree no longer matches the range
-you are reading.
+you are reading. Under each step, a `signature:` line gives every changed symbol's declaration
+as the indexer rendered it, with `was` and the old declaration after it when `--baseline`
+shows the signature changed.
 
 The last line is a completeness line, such as `14 hunks, 14 placed`. It names any hunk
 placed twice or not placed, and any changed file with no hunk to show (a binary file, a
@@ -298,9 +300,9 @@ one you sent. For any other host the line is empty. A review that has already me
 the mark.
 
 If the review merges while the mark is set, the `check-review` job reports `review.merged`,
-even when nobody commented, and clears the mark. Two opt-in telemetry metrics count what it
-cost: `magus.review.merged_while_reading` and `magus.review.merged_while_reading.duration`.
-They carry no attribute and reach a backend only when telemetry export is on; see
+even when nobody commented, and clears the mark. The opt-in telemetry metric
+`magus.review.merged_while_reading.duration` counts what it cost. It carries no attribute
+and reaches a backend only when telemetry export is on; see
 [Telemetry](telemetry.md#agents-and-review).
 
 ## After it merges
@@ -444,6 +446,9 @@ first. A longer topic is refused with a message that you type the reply. The out
 something to think with while you write.
 
 ## What magus does not do
+
+Review is where the [human in the loop](../doctrine.md#human-in-the-loop) is least
+negotiable: an agent may read and draft, and a person sends, replies and approves.
 
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may
   draft a comment into the shared session. You send it. magus stamps authorship from the

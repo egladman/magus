@@ -24,7 +24,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	ref, _ := trail.WriteBlob(context.Background(), primaryCache, "grd", []byte("the full verdict"))
 	require.NotEmpty(t, ref)
 
-	opened, err := Inspect(context.Background(), worktree)
+	opened, err := Inspect(context.Background(), worktree, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := opened.(*Magus)
 	got, err := m.PayloadByRef(context.Background(), ref)
@@ -37,7 +37,7 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	assert.Contains(t, err.Error(), m.CacheDir())
 	assert.Contains(t, err.Error(), primaryCache)
 
-	opened, err = Inspect(context.Background(), primary)
+	opened, err = Inspect(context.Background(), primary, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	_, err = opened.(*Magus).PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)

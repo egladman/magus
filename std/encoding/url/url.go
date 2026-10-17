@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module url -lang buzz -out ../../../internal/interp/bindings/gen/url.go
+//go:generate go run ../../../cmd/magus-utils bindings -module url -lang buzz -out ../../../internal/interp/bindings/gen/url.go -pkg bindgen
 
 // Module is the "encoding/url" host module: percent-encoding, plus parsing a URL
 // into its components and building one back out.

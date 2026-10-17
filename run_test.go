@@ -1,32 +1,40 @@
 package magus
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
-	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -47,7 +55,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithTarget("security",
 		Advisory("a vulnerability report is not a build failure")))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -56,7 +64,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.True(t, p.TargetPolicies["security"].Advisory, "the fixture declares an advisory target")
 
 	var out bytes.Buffer
-	sink, err := NewSink(FormatText, io.Discard, &out)
+	sink, err := NewSink(output.Text, io.Discard, &out)
 	require.NoError(t, err, "NewSink")
 
 	obs := stageObserver{out: sink, label: "fixture", policies: targetPolicies(p)}
@@ -136,7 +144,7 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -168,16 +176,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 
 	// A real broker, and a second client holding the whole host: the refusal crosses the
 	// wire exactly as it does between two worktrees.
-	sockDir, err := os.MkdirTemp("", "brk")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	addr := "unix://" + filepath.Join(sockDir, broker.SocketName)
-	ln, err := broker.Listen(t.Context(), addr)
-	require.NoError(t, err)
-	serveCtx, stopServe := context.WithCancel(context.Background())
-	served := make(chan error, 1)
-	go func() { served <- broker.Serve(serveCtx, ln, broker.WithCapacity(10_000, 4)) }()
-	t.Cleanup(func() { stopServe(); <-served })
+	addr := serveBroker(t)
 
 	const holderPID = 4242
 	other, err := broker.Dial(t.Context(), addr)
@@ -194,13 +193,13 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	root := w.Root()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
-		WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithBroker(broker.NewClient(addr)), WithBrokerPolicy(types.BrokerBestEffort), WithSpawnRule(TierCeiling))
+
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
 	var stream, notices bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	sink, err := NewSink(output.JSONL, &stream, &notices)
 	require.NoError(t, err)
 	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSink(sink))
 	require.NoError(t, sink.Close(), "flush the stream before reading it")
@@ -234,6 +233,104 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	assert.Contains(t, diag.Message, holder)
 }
 
+// serveBroker serves a broker with room for 4 slots until the test ends, and returns its
+// address.
+func serveBroker(t *testing.T) string {
+	t.Helper()
+	sockDir, err := os.MkdirTemp("", "brk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	addr := "unix://" + filepath.Join(sockDir, broker.SocketName)
+	ln, err := broker.Listen(t.Context(), addr)
+	require.NoError(t, err)
+	serveCtx, stopServe := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- broker.Serve(serveCtx, ln, broker.WithCapacity(10_000, 4)) }()
+	t.Cleanup(func() { stopServe(); <-served })
+	return addr
+}
+
+// killedRunArg, followed by a broker's address, makes the test binary the run
+// TestRun_AKilledRunTakesItsStepGroups kills (see runAStepUntilKilled). An argument
+// rather than a variable, because TestMain clears the environment it does not keep.
+const killedRunArg = "killed-run-broker"
+
+// A run killed mid-step runs no release, and the process group its step started is
+// orphaned with it: the broker ends the group when the run's connection closes. Groups
+// that outlived their runs forked for days and stalled the host on 2026-10-15.
+func TestRun_AKilledRunTakesItsStepGroups(t *testing.T) {
+	if args := flag.Args(); len(args) == 2 && args[0] == killedRunArg {
+		os.Exit(runAStepUntilKilled(t, args[1]))
+	}
+	require.Empty(t, flag.Args(), "a run started with arguments it does not take must not start another")
+	if runtime.GOOS == "windows" {
+		t.Skip("windows starts a step's group unwatched")
+	}
+	addr := serveBroker(t)
+
+	run := exec.Command(os.Args[0], "-test.run=^TestRun_AKilledRunTakesItsStepGroups$", killedRunArg, addr)
+	run.Env = append(os.Environ(), "MAGUS_LEVEL=")
+	var stderr bytes.Buffer
+	run.Stderr = &stderr
+	out, err := run.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, run.Start())
+	t.Cleanup(func() { _ = run.Process.Kill(); _ = run.Wait() })
+
+	stdout := bufio.NewReader(out)
+	line, _ := stdout.ReadString('\n')
+	pgid, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil {
+		rest, _ := io.ReadAll(stdout)
+		t.Fatalf("the run printed no group:\n%s%s\nstderr:\n%s", line, rest, &stderr)
+	}
+	t.Cleanup(func() { _ = broker.SignalGroup(pgid, true) })
+	require.True(t, groupAlive(pgid), "the step's group runs while its run does")
+
+	require.NoError(t, run.Process.Kill())
+	_ = run.Wait()
+	assert.Eventually(t, func() bool { return !groupAlive(pgid) }, 15*time.Second, 50*time.Millisecond,
+		"the step's group ends with the run that started it")
+}
+
+// runAStepUntilKilled runs one step that starts a group whose leader waits on a
+// background sleep, and prints the group's id once the step's claim holds it. The test
+// kills it first; otherwise the sleep ends within 30 seconds and the run with it.
+func runAStepUntilKilled(t *testing.T, addr string) int {
+	spellName := register.Spell(t, "zzz-killed-run-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			// Watching inside the step's own watch, so the print comes after the claim's hold.
+			ctx = spawn.WithGroupWatch(ctx, func(pgid int, _ string) func() {
+				fmt.Println(pgid)
+				return func() {}
+			})
+			_, err := spawn.Exec(ctx, "sh", []string{"-c", "sleep 30 & wait"}, spawn.ExecOptions{Quiet: true})
+			return nil, err
+		}),
+	)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), WithBroker(broker.NewClient(addr)),
+		WithBrokerPolicy(types.BrokerRequired), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	if err := m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+// groupAlive reports whether any process is left in group pgid.
+func groupAlive(pgid int) bool {
+	return exec.Command("sh", "-c", `kill -0 -- "-$1" 2>/dev/null`, "sh", strconv.Itoa(pgid)).Run() == nil
+}
+
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run
 // --no-cache (WithNoCache) forces a cached target to re-execute, and, unlike
 // --race, the rebuild refreshes the entry, so a subsequent ordinary run hits
@@ -254,7 +351,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -292,7 +389,7 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -327,7 +424,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -371,7 +468,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -402,15 +499,15 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
-	// This package's tests do not link the Buzz interpreter, so a magus.project()
-	// policy table in the fixture would never evaluate (see interp.Available in Open).
-	// The chain and the writesFiles footprint are static, and come from the magusfile.
+	// The policy is set here rather than in the fixture's magus.project() table, so the
+	// test reads one fact from the magusfile at a time: the chain and the writesFiles
+	// footprint are static, and come from it.
 	p.TargetPolicies = map[string]types.Target{"index-generate": {SkipCache: true}}
 
 	magusMD := types.Glob{Pattern: "MAGUS.md"}
@@ -440,7 +537,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -592,14 +689,14 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
-	// This package's tests do not link the Buzz interpreter, so a magusfile stating
-	// the policy and the chain would never evaluate (see interp.Available in Open).
+	// The policy and the chain are set on the loaded project, not stated in a magusfile,
+	// so the test pins the gate rule over exactly this table.
 	p.TargetPolicies = map[string]types.Target{"gate": {SkipCache: true}}
 	p.TargetChains = map[string][]types.ChainStep{"composer": {{Target: "gate"}}}
 	// The artifact is what makes it a gate rather than a side effect to leave alone.
@@ -646,7 +743,7 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -685,7 +782,7 @@ func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -727,7 +824,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -748,28 +845,29 @@ export fun lint(ctx: magus\Context, args: [str]) > void {}
 // renders the rules pages from magus\describe.rule(), the running binary's catalog, so a
 // binary rebuilt with new rules left the entry keyed on unchanged sources replaying the
 // old pages. A target reaching magus\describe or a nested magus, directly, through a
-// helper, or through an imported module's function, keys on the build; nothing else does.
+// helper, or through an imported module's function, keys on the binary's catalogs;
+// nothing else does, and no key carries the build itself.
 func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	const mf = `import "magus";
 import "./lib/index" as index;
 import "fs";
-export fun rules_generate(ctx: magus\Context, args: [str]) > void {
+export fun rules_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("rules.md");
     final rules = magus\describe.rule();
     fs\writeFile("rules.md", "{rules.len()}");
 }
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render(".");
 }
-export fun nested(ctx: magus\Context, args: [str]) > void {
+export fun nested(ctx: magus\Context, args: [str]) > void !> any {
     helper();
 }
-fun helper() > void {
+fun helper() > void !> any {
     magus\run(["build"]);
 }
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     index\plain();
     fs\writeFile("out.txt", "built");
 }
@@ -777,31 +875,35 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	const lib = `namespace index;
 import "magus";
 import "fs";
-export fun render(project: str) > void {
+export fun render(project: str) > void !> any {
     fs\writeFile("MAGUS.md", magus\describe.graphMarkdown([project]));
 }
 export fun plain() > void {}
 `
 	w.Magusfile(mf)
 	w.Write("lib/index.buzz", lib)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	build := proc.BinaryBuild()
-	require.NotEmpty(t, build)
+	catalogs := answerCatalogs()
+	require.NotEmpty(t, catalogs)
 	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
-		assert.Equal(t, build, m.buildStep(p, target).BinaryBuild, target)
+		assert.Equal(t, catalogs, m.buildStep(p, target).Catalogs, target)
 		_, lines, err := m.ComputeTargetKey(context.Background(), ".", target, nil)
 		require.NoError(t, err, target)
-		assert.Contains(t, lines, "binary:"+build, "describe target --cache must mint the key a run does: %s", target)
+		assert.Contains(t, lines, "catalogs:"+catalogs, "describe target --cache must mint the key a run does: %s", target)
+		// A rebuild moves the build and nothing else here, so the build must not key it.
+		for _, line := range lines {
+			assert.NotContains(t, line, buildinfo.Build(), "a rebuilt binary with unchanged catalogs replays: %s", target)
+		}
 	}
-	assert.Empty(t, m.buildStep(p, "build").BinaryBuild, "a target that never asks the binary keeps its key across rebuilds")
+	assert.Empty(t, m.buildStep(p, "build").Catalogs, "a target that never asks the binary keeps its key when the catalogs change")
 	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "build", nil)
 	require.NoError(t, err)
-	assert.NotContains(t, lines, "binary:"+build)
+	assert.NotContains(t, lines, "catalogs:"+catalogs)
 }
 
 // TestDriftGateVerifiesItsOutputsOnlyWithoutWrite: a target that declares outputs and
@@ -824,7 +926,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 `
 	w.Magusfile(mf)
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -855,7 +957,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
 }
 `)
-	m, err := Open(context.Background(), w.Root())
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -864,6 +966,48 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	step := m.buildStep(p, "generate")
 	applyRunKeying(&step, p, nil, nil, nil)
 	assert.True(t, step.VerifyOutputs)
+}
+
+// TestWriteGrantKeysOnlyAStepThatReadsIt pins the charm half of keying only what changes
+// behavior: a default rw run of a check-only target shares the entry a ci run (rw
+// stripped) mints, while a target that branches on rw, edits in place, or composes one
+// that does keeps the two apart.
+func TestWriteGrantKeysOnlyAStepThatReadsIt(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	const mf = `import "magus";
+export fun check(ctx: magus\Context, args: [str]) > void {}
+export fun gen(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+    if (ctx.hasCharm("rw")) { return; }
+}
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("*.txt");
+}
+export fun outer(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gen);
+}
+export fun built(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("dist/**");
+}
+`
+	w.Magusfile(mf)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	key := func(target string, charms ...string) string {
+		k, _, err := m.ComputeTargetKey(context.Background(), ".", target, charms)
+		require.NoError(t, err, target)
+		return k
+	}
+	for _, target := range []string{"check", "built"} {
+		assert.Equal(t, key(target), key(target, types.CharmReadWrite), "%s never reads rw", target)
+		assert.Equal(t, key(target), key(target, types.CharmUpdate), "%s never reads update", target)
+		assert.NotEqual(t, key(target), key(target, types.CharmCD), "%s: only the write grants are judged", target)
+	}
+	for _, target := range []string{"gen", "tidy", "outer"} {
+		assert.NotEqual(t, key(target), key(target, types.CharmReadWrite), "%s reads rw", target)
+	}
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
@@ -880,7 +1024,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 `
 	w.Magusfile(mf)
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.Error(t, err, "Open must reject a computed magus.inputs argument")
 	assert.Contains(t, err.Error(), "literal arguments", "error should explain the literal requirement")
 	assert.Contains(t, err.Error(), "build", "error should name the offending target")
@@ -896,14 +1040,15 @@ func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	const mf = `import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void {
+import "magus/spell/go";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final env = mut {"GOOS": "linux"};
     go["go-build"](ctx.withEnv(env), {});
 }
 `
 	w.Magusfile(mf)
 
-	_, err := Open(context.Background(), root)
+	_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "a computed ctx.withEnv must not be a load error")
 }
 
@@ -1152,7 +1297,7 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1173,7 +1318,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 	writeCommit(t, repo, ".gitignore", ".magus/\n")
 	head := repo.Head()
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1207,7 +1352,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1230,7 +1375,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
 	root := mkGlobalWS(t, "build")
 
-	m, err := Open(t.Context(), root)
+	m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	targets, source, fellBack, err := m.ExpandAffected(t.Context(), "build", "")
@@ -1326,10 +1471,10 @@ func TestRedactError(t *testing.T) {
 func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell("ci-capable"))
+	reg.RegisterProject(".", WithSpell(register.Spell(t, "ci-capable", spells.WithTargets("ci"))))
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -1352,7 +1497,7 @@ type recordedOutputOverlap struct {
 func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutputOverlap {
 	t.Helper()
 	var buf bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	sink, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkOutputOverlap(t.Context(), steps, sink)
 	require.NoError(t, sink.Close())
@@ -1437,7 +1582,7 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
-	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	sink, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkMissingDependencies(t.Context(), []*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", sink)
 	require.NoError(t, sink.Close())
@@ -1717,7 +1862,6 @@ func TestProbeToolsDoesNotGateOnADeclaredConstant(t *testing.T) {
 // the version gate. Pinned because it is not obvious from either name, and because a gate
 // that can be disabled by a cache knob should at least be disabled on purpose.
 func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
-	t.Setenv("MAGUS_CACHE_TOOL_VERSION", "off")
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(string) (string, error) { return "v26.5.0", nil }, &calls)
 	p := &types.Project{
@@ -1727,7 +1871,7 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 	}
 
 	full := map[string]string{}
-	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{getenv: envGetter([]string{"MAGUS_CACHE_TOOL_VERSION=off"})}).probeTools(t.Context(), []*types.Project{p}, full)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 	assert.Equal(t, 0, calls)
@@ -1737,7 +1881,6 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 // mode=workspace probes once at the root instead of per project dir. The gate still keys
 // by project path, so a per-project window is enforced against the root's reading.
 func TestProbeToolsWorkspaceModeProbesTheRootDir(t *testing.T) {
-	t.Setenv("MAGUS_CACHE_TOOL_VERSION", "workspace")
 	var seen []string
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(dir string) (string, error) {
@@ -1750,7 +1893,7 @@ func TestProbeToolsWorkspaceModeProbesTheRootDir(t *testing.T) {
 		ResolvedSpells: []*spells.Spell{sp},
 	}
 
-	m := &Magus{ws: &types.Workspace{Root: "/tmp/root"}}
+	m := &Magus{ws: &types.Workspace{Root: "/tmp/root"}, getenv: envGetter([]string{"MAGUS_CACHE_TOOL_VERSION=workspace"})}
 	full := map[string]string{}
 	_, err := m.probeTools(t.Context(), []*types.Project{p}, full)
 	require.NoError(t, err)
@@ -1792,7 +1935,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	w.Magusfile(rootMF)
 	w.Write("leaf/magusfile.buzz", leafMF)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1842,7 +1985,7 @@ func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
 	// so the Wilson score plays no part and the only thing under test is the gate.
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1909,7 +2052,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	)
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1922,6 +2065,96 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
 	assert.Contains(t, got, "status=retried_volatile")
 	assert.Contains(t, got, "reason=bootstrap")
+}
+
+// A run beside a history store an older magus left behind says so as an error, naming the
+// file and how to move it aside, and says what the run does without its history. Silent,
+// every claim fell back to its declaration and no outcome was recorded.
+func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
+	spellName := register.Spell(t, "zzz-unreadable-history-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+	)
+
+	var logged syncBuffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	stateDir := t.TempDir()
+	old := filepath.Join(stateDir, "v1.json")
+	require.NoError(t, os.WriteFile(old, []byte("{}"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(stateDir, "history.jsonl")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}))
+
+	got := logged.String()
+	assert.Equal(t, 1, strings.Count(got, "run history is unreadable"), "said once, however many readers wait on it")
+	assert.Contains(t, got, "sizes claims from declarations and records no history")
+	assert.Contains(t, got, "mv "+old+" "+old+".old")
+}
+
+// TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into
+// retry_on_volatile leaves when its failure is typed non-retryable.
+func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	spellName := register.Spell(t, "zzz-not-retried-spell",
+		spells.WithTargets("refused"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("refused", RetryOnVolatile("a fixture that races its own teardown")),
+	)
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	var stream, notices bytes.Buffer
+	sink, err := NewSink(output.JSONL, &stream, &notices)
+	require.NoError(t, err)
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "refused"}}, WithSink(sink))
+	require.NoError(t, sink.Close(), "flush the stream before reading it")
+	require.Error(t, err)
+	assert.Equal(t, int32(1), calls.Load(), "a non-retryable failure runs once")
+
+	var got []report.VolatilityCall
+	for line := range bytes.Lines(stream.Bytes()) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal(line, &head))
+		if head.Type == report.TypeVolatility {
+			var v report.VolatilityCall
+			require.NoError(t, json.Unmarshal(line, &v))
+			got = append(got, v)
+		}
+	}
+	require.Len(t, got, 1, "stream:\n%s", stream.String())
+	wantCall := got[0]
+	wantCall.Project, wantCall.Target, wantCall.Status = ".", spellName+"/refused", "not_retried"
+	wantCall.Attempts, wantCall.RetryReason = 1, "non_retryable"
+	assert.Equal(t, wantCall, got[0])
 }
 
 // TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run
@@ -1950,13 +2183,16 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 		}}, 3)}},
 	}}
 	historyPath := filepath.Join(root, "history.json")
-	require.NoError(t, seeded.Save(context.Background(), historyPath))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), historyPath, func(h *forecast.History) error {
+		*h = seeded
+		return nil
+	}))
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))
 	cfg := config.Defaults()
 	cfg.HistoryPath = historyPath
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1970,6 +2206,46 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 	require.Len(t, outcomes, 4)
 	assert.Equal(t, shape.Charms, outcomes[3].Charms)
 	assert.Equal(t, shape.ArgsHash, outcomes[3].ArgsHash)
+}
+
+// TestRun_OutcomeRecordsTheTargetsCPUTime pins that the CPU time every exec under a
+// target reports lands on that target's outcome, and that a target which executed
+// nothing, as a cache replay executes nothing, records none.
+func TestRun_OutcomeRecordsTheTargetsCPUTime(t *testing.T) {
+	spellName := register.Spell(t, "zzz-cpu-time-spell",
+		spells.WithTargets("spent", "replayed"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "spent" {
+				types.RecordCPUMs(ctx, 1_200)
+				types.RecordCPUMs(ctx, 300)
+			}
+			return nil, nil
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	historyPath := filepath.Join(root, "history.json")
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName), WithTarget("spent"), WithTarget("replayed"))
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "spent"}, {Path: ".", Name: "replayed"}}))
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	spent := got.Projects["."][spellName+"/spent"].RecentOutcomes
+	require.Len(t, spent, 1)
+	assert.Equal(t, int64(1_500), spent[0].CPUMs, "the sum of every exec's CPU time")
+	replayed := got.Projects["."][spellName+"/replayed"].RecentOutcomes
+	require.Len(t, replayed, 1)
+	assert.Zero(t, replayed[0].CPUMs)
 }
 
 // TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
@@ -2143,7 +2419,7 @@ func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -2212,7 +2488,7 @@ func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("**/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	require.NotNil(t, m.Get("leaf"), "the nested project must resolve")
@@ -2250,7 +2526,7 @@ func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("leaf/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2290,7 +2566,7 @@ func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeR
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	reg.RegisterProject("leaf")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	p := m.Get(".")
@@ -2351,12 +2627,12 @@ func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "leaf/magusfile.buzz", "gen/own.txt", "leaf/gen/child.txt"} {
-		w.Write(rel, rel)
+		w.Write(rel, "// "+rel)
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithOutputs("**/gen/*.txt"))
 	reg.RegisterProject("leaf")
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -2368,4 +2644,23 @@ func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
 		got = append(got, path)
 	}
 	assert.Equal(t, []string{filepath.Join(m.Root(), "gen", "own.txt")}, got)
+}
+
+// TestInvokeSpellHandsItsCostToTheStep pins that what a target's processes cost reaches
+// the cache step's collector, which the session record reads, though the collector the
+// outcome reads sits between them.
+func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
+	s := spells.NewSpell("zzz-cost-hand-over", spells.WithTargets("spent"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			types.RecordPeakRSS(ctx, 4096)
+			types.RecordCPUMs(ctx, 700)
+			return nil, nil
+		}))
+	rt := volatility.NewRuntime(nil, "", volatility.Config{}, nil, false)
+	step := types.WithExecCost(volatility.WithRuntime(t.Context(), rt))
+
+	require.NoError(t, invokeSpell(step, &types.Project{Path: ".", Dir: t.TempDir()}, "spent", s))
+
+	assert.Equal(t, int64(4096), types.PeakRSS(step))
+	assert.Equal(t, int64(700), types.CPUMs(step))
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -63,9 +64,9 @@ func TestServerStopNoServerExitsNonzero(t *testing.T) {
 	err := serverStop(context.Background(), []string{"--socket", addr})
 	require.Error(t, err, "stop against a dead socket must report failure")
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
+	assert.NotZero(t, silent.ExitCode(), "stopping nothing must exit non-zero")
 }
 
 // TestServerStopStalePools drives --pools against a live per-process pool whose
@@ -341,7 +342,7 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	root := w.Root()
-	m, err := magus.Open(context.Background(), root, opts...)
+	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(magus.TierCeiling))...)
 	require.NoError(t, err, "fixture workspace must open")
 
 	name := register.Spell(t, "fake-job-review",
@@ -439,7 +440,7 @@ func newMergeWhileReadingRecorder(t *testing.T) *mergeWhileReadingRecorder {
 // remarks, no drafts, no seen threads. The mark is the only trace that a review was opened here.
 func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
 	started := time.Now().Add(-90 * time.Second)
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
 	require.NoError(t, err)
@@ -451,7 +452,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	assert.Equal(t, "acme/acme: 0", merged[0].Preview)
 	require.Len(t, rec.secs, 1, "one merge under a reader is one observation")
 	assert.InDelta(t, 90.0, rec.secs[0], 5.0, "the duration is the time from the mark to the merge")
-	assert.False(t, changeset.NewStore(m.CacheDir()).LoadReading().Active(), "reported once: the mark is cleared")
+	assert.False(t, storedReading(t, changeset.NewStore(m.CacheDir())).Active(), "reported once: the mark is cleared")
 
 	// The next tick finds nothing to report, and counts nothing.
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -463,7 +464,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 // pull request, and counting the old mark would put a reader under a merge they never started on.
 func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
@@ -471,7 +472,7 @@ func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()), "nothing was said and the mark is not this review's")
 	assert.Empty(t, rec.secs)
-	assert.True(t, changeset.NewStore(m.CacheDir()).LoadReading().Active(), "another review's mark is not this job's to clear")
+	assert.True(t, storedReading(t, changeset.NewStore(m.CacheDir())).Active(), "another review's mark is not this job's to clear")
 }
 
 // The job reads the mark, then waits on the forge. A mark the reader set on another review in the
@@ -484,7 +485,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 		_, err := store.SetReading(context.Background(), types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 		require.NoError(t, err)
 		return []any{}, nil
-	}, magus.WithProvider(rec))
+	}, workspace.WithTelemetryProvider(rec))
 	store = changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-time.Minute))
 	require.NoError(t, err)
@@ -492,7 +493,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
 
 	assert.Len(t, mergedReviewEvents(t, m.CacheDir()), 1, "the merge under the old mark is reported")
-	assert.Equal(t, "7", store.LoadReading().Review, "the mark set in between is not deleted")
+	assert.Equal(t, "7", storedReading(t, store).Review, "the mark set in between is not deleted")
 	assert.Empty(t, rec.secs, "the mark was not this job's to clear, so it is not counted")
 }
 
@@ -500,7 +501,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 // asking the forge, and it is cleared.
 func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-changeset.ReadingTTL-time.Minute))
 	require.NoError(t, err)
@@ -509,22 +510,30 @@ func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()), "an expired mark is not a reader")
 	assert.Empty(t, rec.secs)
-	assert.False(t, store.LoadReading().Active(), "the expired mark is cleared")
+	assert.False(t, storedReading(t, store).Active(), "the expired mark is cleared")
 }
 
 // A review closed without merging will never merge, so the mark that was waiting on it goes.
 func TestCheckReviewClearsTheMarkOfAReviewClosedUnmerged(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspaceIn(t, "closed", func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	ctx, _, m := checkReviewWorkspaceIn(t, "closed", func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
 
-	assert.False(t, store.LoadReading().Active(), "nothing is left to wait for")
+	assert.False(t, storedReading(t, store).Active(), "nothing is left to wait for")
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()))
 	assert.Empty(t, rec.secs)
+}
+
+// storedReading is the store's mark, failing the test when it cannot be read.
+func storedReading(t *testing.T, store *changeset.Store) changeset.ReadingMark {
+	t.Helper()
+	m, err := store.LoadReading()
+	require.NoError(t, err)
+	return m
 }
 
 // shutdownRecorder counts Shutdown calls on an otherwise real provider.
@@ -546,7 +555,7 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 	require.NoError(t, err)
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
-	m, err := magus.Open(context.Background(), w.Root())
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -565,7 +574,7 @@ func TestCheckReviewCountsNoReadingWhenNobodyWasReading(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
 		return []any{map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}}, nil
-	}, magus.WithProvider(rec))
+	}, workspace.WithTelemetryProvider(rec))
 	reader := changeset.NewStore(m.CacheDir())
 	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
 	reader.MarkCommentsSeen(root, []string{"t1"})

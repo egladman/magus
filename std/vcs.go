@@ -8,14 +8,12 @@ import (
 	"os"
 	"sync"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../internal/interp/bindings/gen/vcs.go
-
-func init() { Register(Vcs) }
+//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../internal/interp/bindings/gen/vcs.go -pkg bindgen
 
 // Vcs is the "vcs" host module: version-control queries for the current working tree.
 var Vcs = Module{
@@ -548,7 +546,7 @@ func vcsExe(ctx context.Context) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	path, err := run.LookPath(ctx, v.Name())
+	path, err := spawn.LookPath(ctx, v.Name())
 	if err != nil {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%s is the resolved VCS but is not on PATH", v.Name())
 	}

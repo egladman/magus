@@ -1,12 +1,16 @@
 package magus
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
@@ -27,7 +31,7 @@ func symbolNode(id, label, source, signature, digest string) types.KnowledgeNode
 	}
 }
 
-func graphOf(nodes ...types.KnowledgeNode) *knowledge.Graph {
+func newGraph(nodes ...types.KnowledgeNode) *knowledge.Graph {
 	g := knowledge.NewGraph()
 	g.Merge(nodes, nil)
 	return g
@@ -118,7 +122,7 @@ func TestDiffWithSkipOrderDoesNotComputeTheOrder(t *testing.T) {
 	for name, body := range orderTree {
 		files[name] = body
 	}
-	m, err := Open(t.Context(), writeWorkspace(t, files))
+	m, err := Open(t.Context(), writeWorkspace(t, files), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	paths := []string{"iface.go", "impl.go"}
@@ -151,7 +155,7 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 			symbolNode(goSymbol("api", "hidden()."), "hidden", private, "func hidden() error", "d4"),
 		},
 	}
-	head := graphOf(
+	head := newGraph(
 		symbolNode(goSymbol("api", "Open()."), "Open", kept, "func Open(root string, quiet bool) error", "d1x"),
 		symbolNode(goSymbol("api", "Steady()."), "Steady", "api.go:40", "func Steady() error", "d3"),
 		symbolNode(goSymbol("api", "hidden()."), "hidden", private, "func hidden() error", "d4x"),
@@ -189,7 +193,7 @@ func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 			symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open() error", "d1"),
 		},
 	}
-	head := graphOf(symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open(quiet bool) error", "d2"))
+	head := newGraph(symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open(quiet bool) error", "d2"))
 	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
 
 	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, head,
@@ -212,7 +216,7 @@ func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 			symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
 		},
 	}
-	head := graphOf(
+	head := newGraph(
 		symbolNode(typeID, "Config", "api.go:10", "type Config struct { Root string; Quiet bool }", "d1x"),
 		symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
 		symbolNode(typeID+"Quiet.", "Quiet", "api.go:12", "struct field Quiet bool", "d3"),
@@ -234,7 +238,7 @@ func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
 	base := types.KnowledgeGraphOutput{SchemaVersion: types.KnowledgeSchemaVersion}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, graphOf(),
+	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, newGraph(),
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API, "no symbols on the base side means unknown, never an empty delta")
@@ -248,7 +252,7 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 		symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "", ""),
 	}}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{}, graphOf(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
+	attachAPIDelta(&out, map[string]*types.DiffFile{}, newGraph(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API)
 	require.Len(t, out.Notes, 1)
@@ -308,7 +312,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{patch: trailPatch})
+	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), patch: trailPatch})
 
 	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
@@ -348,7 +352,7 @@ func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
 -func EntryPointFrom(ctx context.Context) *T { return nil }
 `
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: moved})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: moved})
 
 	assert.Empty(t, out.Files[0].Symbols)
 }
@@ -358,10 +362,10 @@ func TestAttachConformanceFollowsTheBaselineClassification(t *testing.T) {
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
+	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
 	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
 
-	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
+	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
 	require.Len(t, out.Files[0].Symbols, 1)
 	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
 	assert.NotEmpty(t, out.Files[0].Symbols[0].Checks)
@@ -371,9 +375,179 @@ func TestAttachConformanceSkipsGeneratedFiles(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: trailPatch})
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: trailPatch})
 
 	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
+}
+
+// shippedConformance is the knowledge.conformance a workspace gets with none in its magus.yaml.
+func shippedConformance() types.ConformanceOptions {
+	return config.Defaults().Knowledge.Conformance.Options()
+}
+
+func TestAttachConformanceAppliesTheBarAndCapItIsGiven(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6, "Trail": 3})
+	for name, gates := range map[string]func(*types.ConformanceGates){
+		"a zero cap":        func(g *types.ConformanceGates) { g.MaxFindings = 0 },
+		"a bar none clears": func(g *types.ConformanceGates) { g.Bar = 1.01 },
+	} {
+		out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+		in := conformanceInput{conformance: shippedConformance(), patch: trailPatch}
+		gates(&in.conformance.Gates)
+
+		attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, in)
+
+		assert.Empty(t, out.Files[0].Symbols, name)
+	}
+}
+
+// The threshold check runs only when a review hands it the policy and a ratchet path, so this
+// is what keeps it reachable from `magus diff`.
+func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
+	ns := "gomod example.com/m `example.com/m/internal/trail`/"
+	long := types.KnowledgeSymbol{
+		Key: ns + "EntryPointFrom().", Label: "EntryPointFrom", Language: "go", SymbolKind: "Function", Namespace: ns,
+		Signature: "func EntryPointFrom(ctx context.Context) *T", Source: "internal/trail/trail.go:6",
+		DefEndLine: 25, Defs: []string{"internal/trail/trail.go"},
+	}
+	head := knowledge.NewGraph()
+	for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
+		Graph:   types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}},
+		Symbols: map[string][]types.KnowledgeSymbol{".": {long}},
+	}) {
+		head.Merge(sh.Nodes, sh.Edges)
+	}
+	conformance := shippedConformance()
+	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 8},
+	}
+	conformance.RatchetPath, conformance.Ratchet = "conformance.jsonl", types.ConformanceRatchet{Schema: 1}
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head,
+		conformanceInput{conformance: conformance, patch: trailPatch})
+
+	require.Len(t, out.Files[0].Symbols, 1)
+	var names []string
+	for _, c := range out.Files[0].Symbols[0].Checks {
+		names = append(names, c.Name)
+	}
+	assert.Contains(t, names, "conformance-threshold")
+}
+
+func TestAttachConformanceReportsAKnownSymbolWhoseBodyGrew(t *testing.T) {
+	const file = "internal/trail/trail.go"
+	ns := "gomod example.com/m `example.com/m/internal/trail`/"
+	build := func(longEnd int) *knowledge.Graph {
+		sym := func(key, label, line string, end int) types.KnowledgeSymbol {
+			return types.KnowledgeSymbol{
+				Key: ns + key, Label: label, Language: "go", SymbolKind: "Function", Namespace: ns,
+				Source: file + ":" + line, DefEndLine: end, Defs: []string{file},
+			}
+		}
+		g := knowledge.NewGraph()
+		for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
+			Graph:   types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}},
+			Symbols: map[string][]types.KnowledgeSymbol{".": {sym("Long().", "Long", "6", longEnd), sym("Short().", "Short", "100", 102)}},
+		}) {
+			g.Merge(sh.Nodes, sh.Edges)
+		}
+		return g
+	}
+	head, base := build(65), build(61)
+	ids := map[string]string{}
+	for id, def := range definedSymbols(head.Nodes()) {
+		ids[def.node.Label] = id
+	}
+	conformance := shippedConformance()
+	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 52},
+	}
+	conformance.RatchetPath = "conformance.jsonl"
+	conformance.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
+		Metric: types.ConformanceFuncLines, Items: []string{file + "#Long"}, Reason: "split pending",
+	}}}
+	out := types.Diff{Files: []types.DiffFile{{Path: file, Project: "."}}}
+
+	attachConformance(map[string]*types.DiffFile{file: &out.Files[0]}, head, conformanceInput{
+		conformance: conformance, base: base,
+		changes: map[string]string{ids["Long"]: types.DiffChangeBody, ids["Short"]: types.DiffChangeAdded},
+	})
+
+	var got []string
+	for _, s := range out.Files[0].Symbols {
+		for _, c := range s.Checks {
+			got = append(got, c.Message)
+		}
+	}
+	assert.Equal(t, []string{"`Long` measures 60 for func-lines source, up from 56 at the base, past the configured anchor of 52"}, got)
+}
+
+const ratchetHead = `{"kind":"schema","schema":1}
+{"kind":"measured","rev":"r","date":"d"}
+{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
+`
+
+func ratchetConformance() types.ConformanceOptions {
+	o := shippedConformance()
+	o.RatchetPath = "conformance.jsonl"
+	return o
+}
+
+func readRatchet(text string) func(string) (string, bool) {
+	return func(path string) (string, bool) { return text, path == "conformance.jsonl" && text != "" }
+}
+
+func TestDiffConformanceReadsTheRatchetAndItsBase(t *testing.T) {
+	loosened := `diff --git a/conformance.jsonl b/conformance.jsonl
+--- a/conformance.jsonl
++++ b/conformance.jsonl
+@@ -1,3 +1,3 @@
+ {"kind":"schema","schema":1}
+ {"kind":"measured","rev":"r","date":"d"}
+-{"kind":"threshold","metric":"func-lines","population":"source","value":70,"n":40,"percentile":99,"why":"w"}
++{"kind":"threshold","metric":"func-lines","population":"source","value":80,"n":40,"percentile":99,"why":"w"}
+`
+	generated := map[string]bool{"gen/x.go": true}
+	o, base, note, err := diffConformance(ratchetConformance(), diffConfig{minCohort: 7}, loosened, generated, readRatchet(ratchetHead))
+
+	require.NoError(t, err)
+	assert.Empty(t, note)
+	assert.Equal(t, 80, o.Ratchet.Thresholds[0].Value)
+	require.NotNil(t, base)
+	assert.Equal(t, 70, base.Thresholds[0].Value, "the base is the record before the patch")
+	wantGates := shippedConformance().Gates
+	wantGates.MinCohort = 7
+	want := ratchetConformance()
+	want.Gates = wantGates
+	want.Generated = generated
+	want.Ratchet = o.Ratchet
+	assert.Equal(t, want, o, "a review's override wins and an unset one keeps the configured gate")
+
+	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, trailPatch, nil, readRatchet(ratchetHead))
+	require.NoError(t, err)
+	require.NotNil(t, base)
+	assert.Equal(t, 80, base.Thresholds[0].Value, "a patch that leaves the record alone has it as its base")
+
+	added := "diff --git a/conformance.jsonl b/conformance.jsonl\nnew file mode 100644\n--- /dev/null\n+++ b/conformance.jsonl\n@@ -0,0 +1,3 @@\n+" +
+		strings.ReplaceAll(strings.TrimSuffix(ratchetHead, "\n"), "\n", "\n+") + "\n"
+	_, base, _, err = diffConformance(ratchetConformance(), diffConfig{}, added, nil, readRatchet(ratchetHead))
+	require.NoError(t, err)
+	assert.Nil(t, base, "a record the change adds has no base")
+}
+
+func TestDiffConformanceRefusesAMissingOrInvalidRecord(t *testing.T) {
+	_, _, _, err := diffConformance(ratchetConformance(), diffConfig{}, "", nil, readRatchet(""))
+	require.ErrorContains(t, err, "conformance.jsonl")
+
+	_, _, _, err = diffConformance(ratchetConformance(), diffConfig{}, "", nil, readRatchet(`{"kind":"schema","schema":2}`))
+	require.ErrorContains(t, err, "schema 2")
+
+	o, base, note, err := diffConformance(shippedConformance(), diffConfig{}, "", nil, readRatchet(""))
+	require.NoError(t, err, "no ratchet path configured reads nothing")
+	assert.Nil(t, base)
+	assert.Empty(t, note)
+	assert.Equal(t, shippedConformance().Gates, o.Gates)
 }
 
 func TestPairRenames(t *testing.T) {
@@ -430,4 +604,29 @@ func TestGoDescriptorsExported(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// tagsDriver answers Tags and nothing else; any other call panics on the nil embedded
+// interface, which pins that the stage reads tags only.
+type tagsDriver struct {
+	types.VCSDriver
+	tags []types.VCSTag
+	err  error
+}
+
+func (d tagsDriver) Tags(context.Context, string, string) ([]types.VCSTag, error) {
+	return d.tags, d.err
+}
+
+func TestReleaseStageFromReadsTheNewestRootTag(t *testing.T) {
+	v, _ := types.ParseVersion("v0.4.0")
+	driver := tagsDriver{tags: []types.VCSTag{{Name: "v0.4.0", Version: v}}}
+
+	assert.Equal(t, types.ReleaseStage{Tag: "v0.4.0", Major: 0}, releaseStageFrom(t.Context(), driver, "."))
+}
+
+func TestReleaseStageFromIsUnknownWithoutTags(t *testing.T) {
+	assert.False(t, releaseStageFrom(t.Context(), tagsDriver{}, ".").Known(), "no tag visible is unknown")
+	assert.False(t, releaseStageFrom(t.Context(), tagsDriver{err: errors.New("no tags")}, ".").Known(),
+		"a driver that cannot list tags is unknown, never pre-1.0 by guess")
 }

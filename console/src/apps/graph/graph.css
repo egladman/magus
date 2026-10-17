@@ -12,6 +12,7 @@
 :root {
   --gk-project: var(--console-node-project); --gk-module: var(--console-node-module);
   --gk-file: var(--console-node-file); --gk-dir: var(--console-node-dir);
+  --gk-figure: var(--console-node-figure);
   --gk-target: var(--console-node-target); --gk-spell: var(--console-node-spell);
   --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
   --gk-marker: var(--console-node-marker);
@@ -250,6 +251,7 @@
 .console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
 .console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
 .console-graph-kinddot[data-kind="dir"] { background: var(--gk-dir); }
+.console-graph-kinddot[data-kind="figure"] { background: var(--gk-figure); }
 .console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
 .console-graph-kinddot[data-kind="spell"] { background: var(--gk-spell); }
 .console-graph-kinddot[data-kind="op"] { background: var(--gk-op); }
@@ -278,6 +280,7 @@
   .console-graph-kinddot[data-kind="project"],
   .console-graph-kinddot[data-kind="module"],
   .console-graph-kinddot[data-kind="dir"],
+  .console-graph-kinddot[data-kind="figure"],
   .console-graph-kinddot[data-kind="file"] { border-radius: var(--console-radius-micro); }
 
   /* Declarations: triangle */

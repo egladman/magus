@@ -18,7 +18,7 @@ func TestPathResolveUsesItsOwnBase(t *testing.T) {
 	assert.Empty(t, resolved.Base, "an absolute result carries no base")
 	assert.Equal(t, resolved, resolved.Resolve(), "resolving twice changes nothing")
 
-	rel, err := resolved.RelativeTo("/repo")
+	rel, err := resolved.Relativize("/repo")
 	require.NoError(t, err)
 	// A relative result names what it is relative to.
 	assert.Equal(t, Path{Value: "src/main.go", Base: "/repo"}, rel)
@@ -55,10 +55,10 @@ func TestPathRebaseReinterprets(t *testing.T) {
 	assert.Equal(t, "/one", p.Base, "Rebase returns a copy and leaves the receiver alone")
 }
 
-func TestPathRelativeToCrossesBases(t *testing.T) {
+func TestPathRelativizeCrossesBases(t *testing.T) {
 	// Expressed from /repo even though it was measured from /repo/docs.
 	p := Path{Value: "conventions.md", Base: "/repo/docs"}
-	rel, err := p.RelativeTo("/repo")
+	rel, err := p.Relativize("/repo")
 	require.NoError(t, err)
 	assert.Equal(t, Path{Value: "docs/conventions.md", Base: "/repo"}, rel)
 }

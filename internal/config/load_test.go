@@ -525,6 +525,35 @@ func TestJobsStaleAfterHonorsAWrittenZero(t *testing.T) {
 	}
 }
 
+// jobs.max_validations defaults to one run per job tree, and a written zero lifts the cap.
+func TestJobsMaxValidations(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml string
+		want int
+	}{
+		"absent is one":             {want: 1},
+		"a written zero is no cap":  {yaml: "jobs:\n  max_validations: 0\n", want: 0},
+		"a written number is taken": {yaml: "jobs:\n  max_validations: 3\n", want: 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			}
+			cfg, err := LoadWorkspaceOnly(root)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.Jobs.MaxValidations)
+		})
+	}
+
+	cfg := Defaults()
+	cfg.Jobs.MaxValidations = -1
+	assert.ErrorContains(t, Validate(cfg), "max_validations", "a negative cap is a misconfiguration, never a default")
+}
+
 func TestJobsStaleAfterRefusesANegativeWindow(t *testing.T) {
 	t.Parallel()
 

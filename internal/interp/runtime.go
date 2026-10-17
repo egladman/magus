@@ -20,20 +20,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -49,14 +49,14 @@ type sourceReaderCtxKey struct{}
 
 // TargetContextGlobal is the session-global name under which the bindings layer
 // stashes the shared magus.Context value (see bindings.registerAllBuzz). A target
-// function receives it as its first argument; execBuzzSrc fetches it with GetGlobal and
+// function receives it as its first argument; execBuzzSource fetches it with GetGlobal and
 // prepends it at dispatch. The double underscore keeps it out of the way of any
 // magusfile identifier.
 const TargetContextGlobal = "__magus_target_context"
 
 // CtxFormTargetKeys returns the normalized keys of the exported functions in src whose
 // FIRST parameter is annotated `magus\Context` (types.ContextParamAnnotation): the target
-// contract. execBuzzSrc uses it to enforce that contract at load (an exported function
+// contract. execBuzzSource uses it to enforce that contract at load (an exported function
 // missing the context is rejected with MGS1008) and to prepend the context at dispatch.
 // It does NOT build the graph: the dependency graph is read statically by
 // describe.Extract, which sees ctx-form declarations directly. Best-effort: a parse
@@ -566,7 +566,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 	if stamp == "" {
 		return nil
 	}
-	base, err := config.UserCacheDir()
+	base, err := xdg.CacheDir()
 	if err != nil {
 		return nil
 	}
@@ -631,7 +631,7 @@ func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
 // bytecodeSecret reads the key chunks are sealed with, creating it on first use.
 // It lives in the state dir, apart from the cache it protects.
 func bytecodeSecret() ([]byte, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +700,7 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 // later process reuses.
 //
 // A var so a test can stand in for an executable with no build ID.
-var compilerStamp = proc.BinaryDigest
+var compilerStamp = buildinfo.Digest
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no
@@ -940,7 +940,7 @@ func importBoundNames(src string) map[string]string {
 	return names
 }
 
-// magusfileFacts is what execBuzzSrc reads from a magusfile's syntax before running it.
+// magusfileFacts is what execBuzzSource reads from a magusfile's syntax before running it.
 // Every field is a function of the source bytes and this build's parser alone.
 type magusfileFacts struct {
 	Imports       map[string]string `json:"imports,omitempty"`
@@ -1011,7 +1011,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	}
 	slog.With(attr.Component("interp")).DebugContext(ctx, "run magusfile target", "target", target, "dir", workDir)
 
-	load, err := execBuzzSrc(ctx, src, false)
+	load, err := execBuzzSource(ctx, src, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1088,7 +1088,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 
 // parseBuzz executes src in parse mode to collect target names.
 func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
-	load, err := execBuzzSrc(ctx, src, true)
+	load, err := execBuzzSource(ctx, src, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1125,7 +1125,7 @@ func ctxlessTargetErr(name string) error {
 		name, types.ContextParamAnnotation, name, types.ContextParamAnnotation)
 }
 
-// execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
+// execBuzzSource creates a Buzz Session, registers bindings, and executes source files.
 // loadedBuzz is a magusfile load: a freshly-executed session plus its exposed
 // target map. The two are produced together and always returned together,
 // so the old (*Session, map[string]vm.Callable, error) signature carried
@@ -1136,7 +1136,7 @@ type loadedBuzz struct {
 	Targets map[string]vm.Callable
 }
 
-func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz, error) {
+func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz, error) {
 	// Carry the magusfile source on the context for the whole load, so the module
 	// resolver registered below (which captures this ctx) can resolve top-level
 	// `import "project/<path>"` cross-project handles during execution. Run mode
@@ -1364,11 +1364,11 @@ func withDeclaredStep(ctx context.Context, dir, key string) context.Context {
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz
-// session for src. Safe to call from multiple goroutines because execBuzzSrc reads
+// session for src. Safe to call from multiple goroutines because execBuzzSource reads
 // sources by absolute path and does not acquire chdirMu.
 func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 	return func(ctx context.Context) (*buzz.WorkerSession, error) {
-		load, err := execBuzzSrc(ctx, src, false)
+		load, err := execBuzzSource(ctx, src, false)
 		if err != nil {
 			return nil, err
 		}

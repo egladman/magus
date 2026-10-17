@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // How a catalogued deny is worded.
@@ -88,7 +89,7 @@ func verdictParts(reason, why string) denial {
 // carries all of it with each command's why, and the inline text its first command alone,
 // on every firing, since the command is what a reader acts on. It is returned as served,
 // and nil for a rule with no page.
-func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note string, remedy []hint.Next, preview bool) (shown, ref string, served []hint.Next) {
+func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note string, remedy []types.NextStep, preview bool) (shown, ref string, served []types.NextStep) {
 	// The tier, not the compiled default: a recoverable rule a workspace sets to deny
 	// refuses with its page and remedy like any other deny.
 	doc, catalogued := Rule(rule)
@@ -111,10 +112,10 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	if d.Why != "" {
 		stored += "\n" + d.Why
 	}
-	stored += strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n") + see
+	stored += strings.TrimSuffix(hint.Render(remedy, func(n types.NextStep) string { return n.Why }), "\n") + see
 	command := ""
 	if len(remedy) > 0 {
-		command = strings.TrimSuffix(hint.Render(remedy[:1], func(hint.Next) string { return "" }), "\n")
+		command = strings.TrimSuffix(hint.Render(remedy[:1], func(types.NextStep) string { return "" }), "\n")
 	}
 	if preview {
 		return d.Say + note + command, "", remedy
@@ -207,6 +208,6 @@ func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys
 	}
 	next := hint.NextForDenial(ref)
 	next.ID, next.Why = adviceVerdictID, "the ref holds this advisory's rationale, which the inline text leaves out."
-	hint.AppendServedNext(markers.CacheDir(), []hint.Next{next})
+	hint.AppendServedNext(markers.CacheDir(), []types.NextStep{next})
 	return text + "\nfull advice: " + next.Run, ref
 }

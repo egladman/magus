@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -22,10 +25,10 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	gitRun(t, root, "init", "-q")
 	commitInsightFiles(t, root, "Ada", "2026-01-01T00:00:00Z", map[string]string{
-		"magusfile.buzz":      "# root\n",
-		"api/magusfile.buzz":  "# api\n",
+		"magusfile.buzz":      "// root\n",
+		"api/magusfile.buzz":  "// api\n",
 		"api/service.go":      "package api\n",
-		"docs/magusfile.buzz": "# docs\n",
+		"docs/magusfile.buzz": "// docs\n",
 		"docs/guide.md":       "# guide\n",
 	})
 	commitInsightFiles(t, root, "Ada", "2026-01-02T00:00:00Z", map[string]string{"api/service.go": "package api\n// second\n"})
@@ -36,7 +39,7 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	reg.RegisterProject(".")
 	reg.RegisterProject("api", WithDependsOn(".."))
 	reg.RegisterProject("docs", WithDependsOn("api"))
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
@@ -86,9 +89,9 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 		Definition: types.HotspotDefinition,
 		Commits:    10,
 		Nodes: []types.Node{
-			{Path: ".", Name: rootName, Children: []string{}, Dir: canonicalRoot, BlastRadius: 3, Churn: 1, Authors: 1, LastCommit: insightTimePtr(1)},
-			{Path: "api", Name: "api", Children: []string{"."}, Dir: filepath.Join(canonicalRoot, "api"), BlastRadius: 2, Churn: 3, Authors: 2, LastCommit: insightTimePtr(3)},
-			{Path: "docs", Name: "docs", Children: []string{"api"}, Dir: filepath.Join(canonicalRoot, "docs"), BlastRadius: 1, Churn: 2, Authors: 2, LastCommit: insightTimePtr(4)},
+			{Path: ".", Name: rootName, Children: []string{}, Dir: canonicalRoot, BlastRadius: 3, Churn: 1, Authors: 1, LastCommit: new(insightTime(1))},
+			{Path: "api", Name: "api", Children: []string{"."}, Dir: filepath.Join(canonicalRoot, "api"), BlastRadius: 2, Churn: 3, Authors: 2, LastCommit: new(insightTime(3))},
+			{Path: "docs", Name: "docs", Children: []string{"api"}, Dir: filepath.Join(canonicalRoot, "docs"), BlastRadius: 1, Churn: 2, Authors: 2, LastCommit: new(insightTime(4))},
 		},
 	}, hotspots)
 }
@@ -137,11 +140,6 @@ func insightTime(day int) time.Time {
 	return time.Date(2026, time.January, day, 0, 0, 0, 0, time.UTC)
 }
 
-func insightTimePtr(day int) *time.Time {
-	t := insightTime(day)
-	return &t
-}
-
 // TestDuplicationHistoryCountsFilesChangingTogether pins the co-change evidence: copies in
 // separate files that always change together are drifting when one is edited alone, and
 // copies that share one file carry no evidence at all.
@@ -158,6 +156,59 @@ func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
 	assert.Nil(t, duplicationHistory(sameFile, scan))
 }
 
+// TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError pins both ends of the
+// lens: a workspace with no symbol index answers unknown with the lens's definition, never an
+// empty pass, and a ratchet record the configuration names but the tree lacks is an error
+// that names it, never a lens that quietly falls back to the anchors.
+func TestConformanceLensWithoutAnIndexIsUnknownAndMisconfigurationIsAnError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// root\n"), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+
+	open := func(cfg config.Config) *Magus {
+		ws, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+		require.NoError(t, err)
+		return ws.(*Magus)
+	}
+
+	out, err := open(config.Defaults()).Conformance(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, types.ConformanceDefinition, out.Definition)
+	wantAnswer := out.Answer
+	wantAnswer.Verdict, wantAnswer.Reason = types.VerdictUnknown, types.ReasonSymbolIndexMissing
+	assert.Equal(t, wantAnswer, out.Answer, "no index means unknown, never a pass")
+
+	cfg := config.Defaults()
+	cfg.Knowledge.Conformance.Ratchet = "hack/policy/conformance.jsonl"
+	_, err = open(cfg).Conformance(t.Context())
+	assert.ErrorContains(t, err, "hack/policy/conformance.jsonl")
+}
+
+// TestModelTierLensReportsWhatTheJobHistoryHolds pins the lens against the history file the
+// job store writes: no file is an empty lens that still carries its definition, and a
+// recorded outcome is one row.
+func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+	m.cfg.HistoryPath = filepath.Join(t.TempDir(), "history.json")
+
+	empty, err := m.ModelTierLens(t.Context())
+	require.NoError(t, err, "a workspace that never ran a job has nothing to report, not a failure")
+	assert.Equal(t, types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}, empty)
+
+	require.NoError(t, forecast.UpdateHistory(t.Context(), m.cfg.HistoryPath, func(h *forecast.History) error {
+		h.RecordJob(types.JobOutcome{Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, ChecksRun: 2})
+		return nil
+	}))
+	got, err := m.ModelTierLens(t.Context())
+	require.NoError(t, err)
+	require.Len(t, got.Rows, 1)
+	wantRow := got.Rows[0]
+	wantRow.ModelTier, wantRow.Rank, wantRow.ChecksPerJob = "economy", -1, 2
+	assert.Equal(t, wantRow, got.Rows[0], "a workspace with no declaration ranks nothing")
+}
+
 // TestProjectDisplayName resolves the label the insight lenses attach to a scanned
 // path. A path the workspace does not know still gets a label rather than an empty
 // cell: a commit can touch a directory no project claims.
@@ -166,7 +217,7 @@ func TestProjectDisplayName(t *testing.T) {
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 	})
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
@@ -190,7 +241,7 @@ func TestDeclaredDeps(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("web", WithDependsOn("lib"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 

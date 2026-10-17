@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -21,23 +22,23 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root)
+	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
-	workspace := m.(*Magus)
+	inspected := m.(*Magus)
 
-	tier, mode := workspace.CacheDescription()
-	assert.Empty(t, tier+mode, "an Inspect workspace has no cache to describe")
-	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
+	tier, mode, dir := inspected.CacheDescription()
+	assert.Empty(t, tier+mode+dir, "an Inspect workspace has no cache to describe")
+	_, _, err = inspected.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
-	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
-	assert.ErrorIs(t, workspace.ExportCache(context.Background(), &strings.Builder{}), types.ErrNoCache)
-	assert.ErrorIs(t, workspace.ImportCache(context.Background(), strings.NewReader("")), types.ErrNoCache)
-	_, err = workspace.TailLog(".", "")
+	assert.ErrorIs(t, inspected.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
+	assert.ErrorIs(t, inspected.ExportCache(context.Background(), &strings.Builder{}), types.ErrNoCache)
+	assert.ErrorIs(t, inspected.ImportCache(context.Background(), strings.NewReader("")), types.ErrNoCache)
+	_, err = inspected.TailLog(".", "")
 	assert.ErrorIs(t, err, types.ErrNoCache)
 
-	stats := workspace.CacheStats()
-	collector, enabled := workspace.MetricsCollector()
-	metrics, err := workspace.MetricsSnapshot(context.Background())
+	stats := inspected.CacheStats()
+	collector, enabled := inspected.MetricsCollector()
+	metrics, err := inspected.MetricsSnapshot(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, collector)
 	assert.False(t, enabled)
@@ -50,8 +51,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	}{
 		Stats:     CacheStats{},
 		Metrics:   nil,
-		CacheDir:  workspace.CacheDir(),
-		Workspace: workspace.Root(),
+		CacheDir:  inspected.CacheDir(),
+		Workspace: inspected.Root(),
 	}, struct {
 		Stats     CacheStats
 		DiskBytes int64
@@ -60,10 +61,10 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 		Workspace string
 	}{
 		Stats:     stats,
-		DiskBytes: workspace.CacheDiskBytes(),
+		DiskBytes: inspected.CacheDiskBytes(),
 		Metrics:   metrics,
-		CacheDir:  workspace.CacheDir(),
-		Workspace: workspace.Root(),
+		CacheDir:  inspected.CacheDir(),
+		Workspace: inspected.Root(),
 	})
 }
 
@@ -74,7 +75,7 @@ func TestResolveCacheDir_DoesNotNeedWorkspaceLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, ".magus"), got)
 
-	got, err = ResolveCacheDir(root, WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
+	got, err = ResolveCacheDir(root, workspace.WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "cache"), got)
 }
@@ -83,6 +84,46 @@ func TestCacheDirIsUnderTheWorkspaceRoot(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
 	assert.Equal(t, filepath.Join(m.Root(), ".magus"), m.CacheDir(),
 		"the journal run logs and the per-ref output store hang off this one root")
+}
+
+// TestWorktreesOfOneRepositoryShareTheCache pins one cache per repository: a key names no
+// checkout, so a target another worktree already ran at the same content replays here,
+// while each checkout keeps its own journals and output records. A real input change
+// still misses.
+func TestWorktreesOfOneRepositoryShareTheCache(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	const mf = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("in.txt");
+}
+`
+	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})
+	wt := repo.AddWorktree("sibling")
+
+	storeA, err := config.StoreDir(repo.Root(), config.Config{})
+	require.NoError(t, err)
+	storeB, err := config.StoreDir(wt.Root(), config.Config{})
+	require.NoError(t, err)
+	assert.Equal(t, storeA, storeB, "every worktree of one repository resolves one store")
+
+	run := func(root string) CacheStats {
+		t.Helper()
+		m, err := Open(t.Context(), root, WithSpawnRule(TierCeiling))
+		require.NoError(t, err, "Open %s", root)
+		t.Cleanup(func() { _ = m.Close() })
+		assert.NotEqual(t, storeA, m.CacheDir(), "journals and output records stay in the checkout")
+		_, _, dir := m.CacheDescription()
+		assert.Equal(t, storeA, dir, "the run header names the shared store")
+		require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}))
+		return m.CacheStats()
+	}
+	assert.Positive(t, run(repo.Root()).Miss, "the first checkout runs it")
+	sibling := run(wt.Root())
+	assert.Zero(t, sibling.Miss, "the sibling runs nothing the first stored")
+	assert.Positive(t, sibling.Hit, "the sibling replays the entry the first stored")
+
+	wt.Write("in.txt", "two")
+	assert.Positive(t, run(wt.Root()).Miss, "a changed input still misses")
 }
 
 // TestCacheStatsAndDiskBytesOnAnOpenWorkspace: a freshly opened cache has served
@@ -181,14 +222,14 @@ func TestTailLogWithNoEntries(t *testing.T) {
 
 func TestListAndGetArtifactWithoutACache(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	m := ws.(*Magus)
 
-	_, err = m.ListArtifacts(context.Background(), "api", "api/gen/x.go")
+	_, err = m.internals().ListArtifacts(context.Background(), "api", "api/gen/x.go")
 	assert.ErrorIs(t, err, types.ErrNoCache)
 
-	assert.ErrorIs(t, m.GetArtifact(context.Background(), cache.ArtifactVersion{}, filepath.Join(root, "dst")),
+	assert.ErrorIs(t, m.internals().GetArtifact(context.Background(), cache.ArtifactVersion{}, filepath.Join(root, "dst")),
 		types.ErrNoCache)
 
 	_, err = m.PublishOutput(context.Background(), "outdeadbe")
@@ -216,7 +257,7 @@ func TestMetricsAreOffUnlessAskedFor(t *testing.T) {
 func TestMetricsCollectionYieldsAReadableSnapshot(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
 
-	m, err := Open(context.Background(), root, WithMetricsCollection())
+	m, err := Open(context.Background(), root, WithMetricsCollection(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -251,6 +292,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
+		Lease: "wave/api",
 	})
 
 	assert.Equal(t, OutputDescriptor{
@@ -259,6 +301,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
+		Lease: "wave/api",
 	}, got)
 
 	assert.Equal(t, OutputDescriptor{}, newOutputDescriptor(cache.OutputDescriptor{}))

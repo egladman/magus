@@ -39,6 +39,9 @@ const (
 	ReasonPredictedVolatile RetryReason = "predicted_volatile"
 	ReasonSkip              RetryReason = "skip"
 	ReasonDisabled          RetryReason = "disabled"
+	// ReasonNonRetryable is a failure [types.ClassifyRetry] calls non-retryable: running it
+	// again unchanged cannot clear it, whatever its history says.
+	ReasonNonRetryable RetryReason = "non_retryable"
 )
 
 // Decision is the output of Decide.
@@ -74,21 +77,23 @@ func score(s forecast.Stats, cfg Config) float64 {
 	if total < cfg.MinSamples {
 		return 0
 	}
-	if total == 0 {
-		// With MinSamples==0 the guard above lets an empty history through; avoid a 0/0 NaN.
+	return WilsonLower(s.VolatileCount, total)
+}
+
+// WilsonLower is the lower bound of the Wilson score interval (z=1.96, 95% CI) for hits
+// out of total trials: 0 for no trials, and never negative.
+func WilsonLower(hits, total int) float64 {
+	// At no hits the terms cancel exactly in theory but leave a rounding residue in floats.
+	if total <= 0 || hits <= 0 {
 		return 0
 	}
-	p := float64(s.VolatileCount) / float64(total)
+	p := float64(hits) / float64(total)
 	n := float64(total)
 	const z = 1.96
 	z2 := z * z
 	numerator := p + z2/(2*n) - z*math.Sqrt((p*(1-p)+z2/(4*n))/n)
 	denominator := 1 + z2/n
-	lb := numerator / denominator
-	if lb < 0 {
-		return 0
-	}
-	return lb
+	return max(numerator/denominator, 0)
 }
 
 func isSuspectedRegression(s forecast.Stats, cfg Config) bool {
@@ -210,9 +215,15 @@ func (rt *Runtime) IsAffected(projectPath string) bool {
 // from the Runtime because the Runtime holds one answer for the whole run and the
 // policy is per target. Storing it here collapsed the two: opting `test` in made
 // every sibling under a composed `ci` retryable as well.
-func (rt *Runtime) Decide(projectPath, target string, affected, eligible bool) Decision {
+//
+// cause is the failure being decided on. One that [types.ClassifyRetry] calls
+// non-retryable is never re-run, however the history reads.
+func (rt *Runtime) Decide(projectPath, target string, affected, eligible bool, cause error) Decision {
 	if !rt.cfg.Enabled || !rt.retry || !eligible {
 		return Decision{Retry: false, Reason: ReasonDisabled}
+	}
+	if !types.ClassifyRetry(cause).Retryable {
+		return Decision{Retry: false, Reason: ReasonNonRetryable}
 	}
 	rt.mu.Lock()
 	s := rt.stats(projectPath, target)

@@ -1,0 +1,14 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+A review reply that reads as impatient.
+-- hit/review-reply --
+As I said, the map is shared.
+I already explained why the lock is needed.
+For the last time, please run the tests.
+This is obviously wrong.
+Again, the cache key needs sorting.
+Like I mentioned above, this races.
+-- pass/review-reply --
+I already fixed it.
+Ran it again, and it passes now.
+As discussed, the map is shared.
+The obvious fix is a lock.

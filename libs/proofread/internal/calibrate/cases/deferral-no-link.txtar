@@ -1,0 +1,16 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+A review reply that defers the change and links no issue.
+-- hit/review-reply --
+I'll fix this later.
+Let's handle that in a follow-up PR.
+Good point, I added a TODO for it.
+Out of scope here, will do in a separate PR.
+I'll fix the UTF-8 handling later.
+We can move to SHA-256 later.
+I'll parse ISO-8601 dates later.
+-- pass/review-reply --
+I'll fix this later, tracked in #412.
+Filed https://github.com/o/r/issues/9 as a follow-up.
+Added a TODO pointing at MAG-123.
+Later in the file the map is read again.
+Fixed in the latest push.

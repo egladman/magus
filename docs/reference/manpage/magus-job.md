@@ -1,6 +1,6 @@
 ---
 title: magus job
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the server's own jobs."
 tags: [cli, magus job, job, jobs, lease, agents, delegation]
 ---
@@ -84,22 +84,25 @@ them and magus describe job prints one job's terms.
 ### job fork options
 
 **--check** *\<target\> \<project\> [-- args]*
-: The one check this job runs, as \`\<target\> \<project\> [-- args]\` (the \`magus run\` is implied)
+: The one check this job runs, as \<target\> \<project\> [-- args] (the \`magus run\` is implied)
+
+**--checkout** *string*
+: Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work
 
 **--checkpoint** *magus vcs checkpoint -o name*
-: The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
+: The working state this job is handed, as magus vcs checkpoint -o name prints it
 
 **--criteria** *string*
 : What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
 
 **--deny-paths** *string*
-: A path inside the write paths this job may not write; repeatable or comma-separated
+: A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
 **--model** *string*
-: The model the work was matched to
+: The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
 
 **--parent** *string*
 : The job this one is forked from
@@ -120,17 +123,20 @@ them and magus describe job prints one job's terms.
 : Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 
 **--write-paths** *\<file\>#\<declaration\>*
-: A path this job may write, or \`\<file\>#\<declaration\>\` to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
+: A path this job may write, or \<file\>#\<declaration\> to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
 
 ### job apply options
 
 **-f** *-*
-: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
+: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
 
 ### job exec options
 
-**--base** *magus vcs checkpoint -o name*
-: The base this checkout landed on, as \`magus vcs checkpoint -o name\` prints it (default: read from this checkout)
+**--slots** *int* (default: 1)
+: With --timeout: the machine budget slots the command takes while it runs
+
+**--timeout** *duration*
+: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
 
 ### job exit options
 
@@ -143,7 +149,7 @@ them and magus describe job prints one job's terms.
 ### job wait options
 
 **--evidence** *\<goal\>*
-: Grade check goal \`\<goal\>\` against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
+: Grade check goal \<goal\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 
 **--integration**
 : Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
@@ -213,6 +219,12 @@ magus job fork --stdin < job.json
 magus job exec session-load/core
 ```
 
+*Bound a long command*
+
+```sh
+magus job exec --timeout 20m -- rg -l TODO ~/src
+```
+
 *Return it with its result*
 
 ```sh
@@ -263,5 +275,5 @@ magus job prune --dry-run
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-queue**(1)](magus-queue.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

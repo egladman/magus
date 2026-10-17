@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
@@ -359,6 +360,66 @@ func TestCheckGuardWiring(t *testing.T) {
 	})
 }
 
+// writeModHarness wires a skills-only harness that enables a Claude Code plugin, the shape
+// of the magus mod, and merges its settings into the workspace when enable is set. The
+// plugin store sits under a temp CLAUDE_CONFIG_DIR holding installed.
+func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed string) {
+	t.Helper()
+	var descriptor agent.HarnessDescriptor
+	require.NoError(t, json.Unmarshal([]byte(`{
+  "schema_version": 2,
+  "id": "mod-host",
+  "display": {"name": "Mod Host"},
+  "skills": {"paths": [], "form": "both"},
+  "settings": [
+    {"path": ".claude/settings.json", "key": ["extraKnownMarketplaces", "magus"], "value": {"source": {"source": "github", "repo": "egladman/magus"}}},
+    {"path": ".claude/settings.json", "key": ["enabledPlugins", "magus@magus"], "value": true}
+  ]
+}`), &descriptor))
+	fixture.WireHarness(t, descriptor)
+	if enable {
+		w.Write(".claude/settings.json", `{"enabledPlugins": {"magus@magus": true}}`)
+	}
+	store := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", store)
+	require.NoError(t, os.MkdirAll(filepath.Join(store, "plugins"), 0o755))
+	if installed != "" {
+		require.NoError(t, os.WriteFile(filepath.Join(store, "plugins", "installed_plugins.json"), []byte(installed), 0o644))
+	}
+}
+
+func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T) {
+	t.Run("enabled and missing -> fail naming the install line", func(t *testing.T) {
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
+		writeModHarness(t, w, true, "")
+
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		require.Equal(t, types.CheckFail, c.Status)
+		assert.Contains(t, strings.Join(c.Details, "\n"), "/plugin install magus --marketplace egladman/magus")
+	})
+
+	t.Run("enabled and installed -> no plugin problem", func(t *testing.T) {
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
+		writeModHarness(t, w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
+
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		assert.NotEqual(t, types.CheckFail, c.Status)
+		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
+	})
+
+	t.Run("not enabled -> silent", func(t *testing.T) {
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
+		writeModHarness(t, w, false, "")
+
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
+		assert.NotEqual(t, types.CheckFail, c.Status)
+		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
+	})
+}
+
 // TestLanguageCoverageRespectsNoLanguage covers both halves of the opt-out: a declared reason
 // exempts a spell-less project, and a project that never declared one is still reported. The
 // exempt count is in the OK message on purpose, so an exemption stays visible rather than
@@ -677,7 +738,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
-			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort)))
+			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort)))
 		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = catalog
 

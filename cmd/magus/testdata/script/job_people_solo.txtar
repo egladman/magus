@@ -55,12 +55,12 @@ exec magus job wait refactor/pricing
 cp stdout $WORK/raw
 exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait.out
-exec magus ls jobs
+exec magus ls jobs --all
 cmp stdout $WORK/ls-done.out
 
 # Who holds what and since when: the checkout each job was taken in, the clock it was
 # taken and last moved on, and the run its result named.
-exec magus ls jobs -o json
+exec magus ls jobs --all -o json
 stdout '"checkout_root": ".*shop-pricing"'
 stdout '"registered": [1-9][0-9]+'
 stdout '"updated": [1-9][0-9]+'
@@ -97,10 +97,13 @@ total() { echo $(( $1 + $2 )); }
  "unresolved_risks": []}
 -- fork.out --
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- ls-declared.out --
-JOB               HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
-refactor/pricing  -       declared  -      1      alone     magus run test .
-refactor/tax      -       declared  -      1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
+refactor/pricing  -       declared  standard  1      alone     magus run test .
+refactor/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
@@ -108,12 +111,17 @@ recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb
 took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+skills: short
 
 criteria
 totals are computed in cents
 
 write paths
   pricing/total.sh
+
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 
 projects
   .
@@ -122,15 +130,21 @@ deny paths the workspace declares
   checkout/tax.sh: owned by live lease refactor/tax: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
 
+grouping history
+  none recorded for these projects
+
 the only check you run
 magus run test .
 refactor/pricing: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
+net lines: +0 -0 (+0)
+exports no goal declares: none
+left defined with no use: none
 -- exit.out --
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
 -- abandon.out --
-abandoned refactor/tax, recorded no_return
+ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
 -- wait.out --
 verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .
@@ -138,8 +152,8 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 -- ls-done.out --
-JOB               HOLDER        STATE      MODEL  PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       -      1      alone     magus run test .
-refactor/tax      shop-tax      no_return  -      1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

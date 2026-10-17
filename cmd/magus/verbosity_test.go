@@ -209,7 +209,7 @@ func TestApplyDisplayQuietLeavesJSONLNoticesWhole(t *testing.T) {
 	require.IsType(t, dirHandler{}, slog.Default().Handler())
 	assert.Equal(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "text display")
 
-	global.output = string(FormatJSONL)
+	global.output = string(outputJSONL)
 	applyDisplay()
 	assert.NotEqual(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "-o jsonl notices")
 }

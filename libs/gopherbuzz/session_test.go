@@ -1842,6 +1842,30 @@ fun probe() > int { return 1; }`), "a body-less extern declaration parses")
 	assert.False(t, bound, "an extern declaration must not bind a value: the host owns the implementation")
 }
 
+// TestParity_ExternObjectMethodEmitsNoClosure pins the object form of the same
+// rule: an extern method pushes no closure, so the method count the def builder
+// pops must leave it out, and a static method declared after it still routes to
+// the type rather than to instances.
+func TestParity_ExternObjectMethodEmitsNoClosure(t *testing.T) {
+	v := evalParity(t, `
+object Handle {
+    n: int,
+
+    extern fun close() > void;
+
+    fun twice() > int {
+        return this.n * 2;
+    }
+
+    static fun make() > Handle {
+        return Handle{ n = 21 };
+    }
+}
+
+fun probe() > int { return Handle.make().twice(); }`)
+	assert.Equal(t, int64(42), v.AsInt())
+}
+
 // TestParity_ExternReturnTypeIsChecked is the reason the declaration exists. The
 // signature has to reach call sites, or it is decoration: a host call's result
 // must type as its declared return, not as Unknown.

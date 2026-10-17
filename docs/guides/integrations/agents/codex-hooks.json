@@ -2,62 +2,55 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking command"
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "statusMessage": "magus guard: checking the call"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "statusMessage": "magus: recording the subagent"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the subagent"
           }
         ]
       },
       {
-        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking file"
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "statusMessage": "magus: joining the subagent to its spawn"
           }
         ]
-      },
+      }
+    ],
+    "SubagentStop": [
       {
-        "matcher": "mcp__.*",
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking MCP tool call"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name codex",
-            "statusMessage": "magus: recording read"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking read"
-          }
-        ]
-      },
-      {
-        "matcher": "spawn_agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking subagent spawn"
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "statusMessage": "magus: recording the subagent's context"
           }
         ]
       }
@@ -68,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -95,15 +88,6 @@
             "statusMessage": "magus: recording where the work stands"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
-            "statusMessage": "magus: proofreading the reply"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -111,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: noting the request"
           }
         ]

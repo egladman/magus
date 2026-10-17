@@ -8,14 +8,14 @@ import (
 
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/spells/gen/mocks"
+	"github.com/egladman/magus/spells/gen/spellstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
-	d := mocks.NewMockDriver(t)
+	d := spellstest.NewMockDriver(t)
 	// The reference is passed through verbatim; magus never parses it.
 	d.EXPECT().
 		Invoke(mock.Anything, spells.InvokeRequest{Target: "resolve_secret", Params: map[string]any{"ref": "Private/DockerHub/token"}}).
@@ -29,7 +29,7 @@ func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
 func TestSpellSecretProviderAcceptsAStringInData(t *testing.T) {
 	// A spell whose op returns a value rather than printing it lands in Data. Documented
 	// alongside the Text form in the adapter's contract.
-	d := mocks.NewMockDriver(t)
+	d := spellstest.NewMockDriver(t)
 	d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{Data: "value-in-data"}, nil).Once()
 	v, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ func TestSpellSecretProviderRejectsAnEmptyOrWrongTypedResult(t *testing.T) {
 		"empty text":      {Text: ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			d := mocks.NewMockDriver(t)
+			d := spellstest.NewMockDriver(t)
 			d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(resp, nil).Once()
 			_, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
 			require.Error(t, err)
@@ -55,7 +55,7 @@ func TestSpellSecretProviderRejectsAnEmptyOrWrongTypedResult(t *testing.T) {
 
 func TestSpellSecretProviderPropagatesTheSpellError(t *testing.T) {
 	want := errors.New("vault is sealed")
-	d := mocks.NewMockDriver(t)
+	d := spellstest.NewMockDriver(t)
 	d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{}, want).Once()
 	_, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
 	require.ErrorIs(t, err, want)

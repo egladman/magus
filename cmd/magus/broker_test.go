@@ -16,7 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,9 +79,9 @@ func TestBrokerStatusExitsNonZeroWithNoneRunning(t *testing.T) {
 	globalCfg.Broker = types.BrokerRequired
 
 	err := brokerStatus(t.Context(), nil)
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, 1, silent.exitCode)
+	assert.Equal(t, 1, silent.ExitCode())
 }
 
 func TestBrokerStatusPrintsItsRows(t *testing.T) {
@@ -143,8 +144,7 @@ func TestServerRowsNameEveryListener(t *testing.T) {
 func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 	privateSockDir(t)
 	err := brokerCmd(t.Context(), []string{"--idle-exit", "-1s"})
-	var usage errUsage
-	require.ErrorAs(t, err, &usage)
+	require.Equal(t, exit.Usage, exit.Code(err))
 	assert.False(t, broker.Live(t.Context(), broker.DefaultAddr()), "nothing was bound")
 }
 
@@ -152,7 +152,7 @@ func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 // in the CLI registry, on the package constant a broker a run starts uses.
 func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 	fs := flag.NewFlagSet("broker", flag.ContinueOnError)
-	f := gen.BindBroker(fs)
+	f := flaggen.BindBroker(fs)
 	assert.Equal(t, broker.DefaultIdleExit, f.IdleExit)
 }
 

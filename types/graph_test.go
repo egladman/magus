@@ -59,7 +59,7 @@ func TestWithGraphObserver_ComposesOntoConfig(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	obs := NewMockObserver(t)
-	obs.EXPECT().OnError(mock.Anything).Once()
+	obs.EXPECT().Observe(mock.Anything).Once()
 	WithGraphObserver(obs)(cfg)
-	cfg.Obs.OnError(nil)
+	cfg.Obs.Observe(GraphEvent{Op: GraphOpBuild})
 }

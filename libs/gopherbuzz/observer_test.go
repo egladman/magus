@@ -107,15 +107,15 @@ func (o *countingObserver) count() int {
 
 type recordingPoolObserver struct {
 	mu       sync.Mutex
-	acquires []bool // reused flag per acquire
+	acquires []SessionAcquireKind
 	warms    int
-	releases []bool // evicted flag per release
+	releases []SessionReleaseKind
 	lastIdle int
 }
 
-func (o *recordingPoolObserver) SessionAcquire(_ context.Context, reused bool, idle int) {
+func (o *recordingPoolObserver) SessionAcquire(_ context.Context, kind SessionAcquireKind, idle int) {
 	o.mu.Lock()
-	o.acquires = append(o.acquires, reused)
+	o.acquires = append(o.acquires, kind)
 	o.lastIdle = idle
 	o.mu.Unlock()
 }
@@ -126,9 +126,9 @@ func (o *recordingPoolObserver) SessionWarm(_ context.Context, _ time.Duration, 
 	o.mu.Unlock()
 }
 
-func (o *recordingPoolObserver) SessionRelease(_ context.Context, evicted bool, idle int) {
+func (o *recordingPoolObserver) SessionRelease(_ context.Context, kind SessionReleaseKind, idle int) {
 	o.mu.Lock()
-	o.releases = append(o.releases, evicted)
+	o.releases = append(o.releases, kind)
 	o.lastIdle = idle
 	o.mu.Unlock()
 }
@@ -150,9 +150,9 @@ func TestPoolObserverColdThenReuse(t *testing.T) {
 
 	obs.mu.Lock()
 	defer obs.mu.Unlock()
-	require.Equal(t, []bool{false, true}, obs.acquires, "first checkout cold, second reused")
+	require.Equal(t, []SessionAcquireKind{SessionCold, SessionReused}, obs.acquires, "first checkout cold, second reused")
 	assert.Equal(t, 1, obs.warms, "exactly one session warmed")
-	require.Equal(t, []bool{false, false}, obs.releases, "both releases retain (pool not full)")
+	require.Equal(t, []SessionReleaseKind{SessionRetained, SessionRetained}, obs.releases, "both releases retain (pool not full)")
 	assert.Equal(t, 1, obs.lastIdle, "one session idle after the last release")
 }
 

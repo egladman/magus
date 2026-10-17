@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/spells"
@@ -421,4 +422,123 @@ func TestCommentOnlyDeclaredDirectives(t *testing.T) {
 
 	ts := commentSyntax(t, ".ts")
 	assert.False(t, CommentOnlyDeclared("// @ts-ignore\nf();\n", "f();\n", ts), "removing a ts directive is a code edit")
+}
+
+func claimedRegion(declaration string, kind types.MergeKind) types.MergeRegion {
+	return types.MergeRegion{Locations: []types.Location{{Path: "a.go", Declaration: declaration}}, Kind: kind}
+}
+
+const claimsBase = "package a\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc A() int { return 1 }\nfunc B() int { return 2 }\n"
+
+// TestMergeByClaims pins what two jobs' disjoint claims settle that a line merge does
+// not. Every case is one types.MergeThreeWay refuses, so a pass here is the claims at work.
+func TestMergeByClaims(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		ours, theirs  string
+		claimsOurs    []string
+		claimsTheirs  []string
+		want, wantErr string
+		regions       []types.MergeRegion
+	}{
+		{
+			name:         "adjacent edits in two claimed declarations",
+			ours:         strings.Replace(claimsBase, "return 1", "return 10", 1),
+			theirs:       strings.Replace(claimsBase, "return 2", "return 20", 1),
+			claimsOurs:   []string{"A"},
+			claimsTheirs: []string{"B"},
+			want:         strings.Replace(strings.Replace(claimsBase, "return 1", "return 10", 1), "return 2", "return 20", 1),
+			regions: []types.MergeRegion{
+				claimedRegion("func A() int { return 1 }", types.MergeByClaim),
+				claimedRegion("func B() int { return 2 }", types.MergeByClaim),
+			},
+		},
+		{
+			name:         "an edit outside its side's claims",
+			ours:         strings.Replace(claimsBase, "return 1", "return 10", 1),
+			theirs:       strings.Replace(claimsBase, "return 2", "return 20", 1),
+			claimsOurs:   []string{"A"},
+			claimsTheirs: []string{"C"},
+			wantErr:      "a.go#func B() int { return 2 }: theirs changed it, and none of that side's claims names it",
+		},
+		{
+			name:         "both sides on one line",
+			ours:         strings.Replace(claimsBase, "return 2", "return 21", 1),
+			theirs:       strings.Replace(claimsBase, "return 2", "return 22", 1),
+			claimsOurs:   []string{"A"},
+			claimsTheirs: []string{"B"},
+			wantErr:      "a.go#func B() int { return 2 }: both sides changed the same lines",
+		},
+		{
+			name:    "one import line both replaced, as a set",
+			ours:    strings.Replace(claimsBase, `"fmt"`, `"errors"`, 1),
+			theirs:  strings.Replace(claimsBase, `"fmt"`, `"io"`, 1),
+			want:    strings.Replace(claimsBase, "\t\"fmt\"\n", "\t\"errors\"\n\t\"io\"\n", 1),
+			regions: []types.MergeRegion{claimedRegion(types.Preamble, types.MergeImportSet)},
+		},
+		{
+			name:   "adjacent import edits, unclaimed",
+			ours:   strings.Replace(claimsBase, `"fmt"`, `"errors"`, 1),
+			theirs: strings.Replace(claimsBase, "\t\"os\"\n", "\t\"io\"\n\t\"os\"\n", 1),
+			want:   strings.Replace(claimsBase, "\t\"fmt\"\n", "\t\"errors\"\n\t\"io\"\n", 1),
+		},
+		{
+			name:         "an import block's own line is not an import",
+			ours:         strings.Replace(claimsBase, "import (", "import ( // std", 1),
+			theirs:       strings.Replace(claimsBase, `"fmt"`, `"io"`, 1),
+			claimsOurs:   []string{"A"},
+			claimsTheirs: []string{"B"},
+			wantErr:      "a.go#(preamble): ours changed it, and none of that side's claims names it",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, settled := types.MergeThreeWay("a.go", []byte(claimsBase), []byte(tc.ours), []byte(tc.theirs))
+			require.False(t, settled, "a case a line merge settles proves nothing about claims")
+
+			got, err := MergeByClaims("a.go", []byte(claimsBase),
+				ClaimSide{[]byte(tc.ours), tc.claimsOurs}, ClaimSide{[]byte(tc.theirs), tc.claimsTheirs})
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(got.Content))
+			if tc.regions == nil {
+				assert.Empty(t, got.Regions, "an edit no other edit touches is not a contested region")
+				return
+			}
+			assert.Equal(t, tc.regions, got.Regions)
+		})
+	}
+}
+
+// TestMergeByClaimsBothAdded: two insertions at one base line merge as
+// types.MergeBothAdded does, ours then theirs, and only inside each side's claims.
+func TestMergeByClaimsBothAdded(t *testing.T) {
+	ours := strings.Replace(claimsBase, "func B", "func X() int { return 8 }\nfunc B", 1)
+	theirs := strings.Replace(claimsBase, "func B", "func Y() int { return 9 }\nfunc B", 1)
+	line, ok := types.MergeThreeWay("a.go", []byte(claimsBase), []byte(ours), []byte(theirs))
+	require.True(t, ok)
+
+	got, err := MergeByClaims("a.go", []byte(claimsBase), ClaimSide{[]byte(ours), []string{"X"}}, ClaimSide{[]byte(theirs), []string{"Y"}})
+	require.NoError(t, err)
+	assert.Equal(t, string(line.Content), string(got.Content))
+	assert.Equal(t, []types.MergeRegion{claimedRegion("func X() int { return 8 }", types.MergeBothAdded)}, got.Regions)
+
+	_, err = MergeByClaims("a.go", []byte(claimsBase), ClaimSide{[]byte(ours), []string{"X"}}, ClaimSide{[]byte(theirs), []string{"Z"}})
+	require.EqualError(t, err, "a.go#func Y() int { return 9 }: theirs changed it, and none of that side's claims names it")
+}
+
+func TestMergeByClaimsNeedsADiffDriver(t *testing.T) {
+	_, err := MergeByClaims("notes.txt", []byte("a\n"), ClaimSide{[]byte("b\n"), []string{"x"}}, ClaimSide{[]byte("c\n"), []string{"y"}})
+	require.EqualError(t, err, "notes.txt: no diff driver places its declarations")
+}
+
+func TestOverlappingClaims(t *testing.T) {
+	a, b, ok := OverlappingClaims([]string{"A", "executeStages"}, []string{"B", "Magus) executeStages"})
+	require.True(t, ok)
+	assert.Equal(t, []string{"executeStages", "Magus) executeStages"}, []string{a, b})
+
+	_, _, ok = OverlappingClaims([]string{"A"}, []string{"B", "execute"})
+	assert.False(t, ok, "claims naming different declarations are disjoint")
 }

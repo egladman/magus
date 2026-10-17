@@ -105,7 +105,8 @@ func TestCaptureReadsTheStoreWhenNoServerIsRunning(t *testing.T) {
 	written.Attach(root, "main", types.Diff{Base: "main"}, "asof")
 	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
 
-	sess := storedDiffReview(cache, "diff --git a/a.go b/a.go\n")
+	sess, err := storedDiffReview(cache, "diff --git a/a.go b/a.go\n")
+	require.NoError(t, err)
 	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")
 	assert.Equal(t, "mine", sess.Comments[0].Body)
 	// Digested from the patch exactly as attachDiffReview digests it, so a capture taken with
@@ -117,7 +118,8 @@ func TestCaptureReadsTheStoreWhenNoServerIsRunning(t *testing.T) {
 // An unreadable patch must not name every such capture the same note: the second one would
 // collide with the first and be refused, which is the transcript lost.
 func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
-	sess := storedDiffReview(t.TempDir(), "")
+	sess, err := storedDiffReview(t.TempDir(), "")
+	require.NoError(t, err)
 	assert.Empty(t, sess.AsOf)
 	assert.Equal(t, "review-thread", captureName(sess))
 }

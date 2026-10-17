@@ -24,7 +24,7 @@ func quietDisplay() bool {
 func forceQuietDisplay() {
 	wasQuiet := quietDisplay()
 	quietForced.Store(true)
-	if wasQuiet || global.output == string(FormatJSONL) {
+	if wasQuiet || global.output == string(outputJSONL) {
 		return
 	}
 	slog.SetDefault(slog.New(quiet.Wrap(slog.Default().Handler(), global.verbose >= 1)))

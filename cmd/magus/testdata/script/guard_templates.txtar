@@ -14,8 +14,8 @@
 #
 # Every template is Buzz, run the way a host config wires it: a plain
 # `magus buzz -s <file> [-- flags]` argv. The per-entry knobs ride that argv: the host
-# name, and the `magus shell` flags an entry declares about itself. Whether to forward
-# the whole event is worked out from the event.
+# name, and the `magus shell` flags an entry declares about itself. Every event goes to
+# `magus shell` whole, which judges the call by its tool and the shape of its input.
 #
 # Every case is labeled `# case: <input>/<decision>`; TestTransportCasesCoverTheContract
 # in internal/agent/guard_test.go fails when the guard contract grows a cell no case covers.
@@ -78,46 +78,30 @@ stdin pass-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
-# case: command/advise
-# A PreToolUse shell command comes back rewritten to run with stdin at end-of-file: the
-# whole tool_input returns (updatedInput replaces it), with the command prefixed
-# `exec </dev/null; ` and every other field kept. No permissionDecision rides with it, so
-# the host's own permission rules still judge the call. The first rewrite of a session
-# says so, once.
-stdin rewrite-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout '"updatedInput":'
-stdout '"command":"exec \\u003c/dev/null; ls -la"'
-stdout '"description":"list it"'
-stdout '"timeout":60000'
-stdout '"additionalContext":"magus runs your shell commands with stdin at end-of-file'
-! stdout 'permissionDecision'
-
 # case: command/pass
-# A command that already closes stdin is never prefixed twice, so a pass is nothing again.
-stdin rewrite-wrapped.json
+# No host gets a command back rewritten: a PreToolUse shell command that passes renders
+# nothing, so the call runs exactly as the host sent it and meets the person's own
+# permission rules as typed.
+stdin pretooluse-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
-# case: command/deny
-# A refused call is never rewritten.
-stdin rewrite-deny.json
+# case: command/advise
+stdin pretooluse-advise.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout '"permissionDecision":"deny"'
+stdout '"additionalContext":"'
 ! stdout 'updatedInput'
 
 # case: command/pass
-# Codex applies updatedInput only beside permissionDecision "allow", which would turn a
-# pass into an approval, so it is never handed one.
-stdin rewrite-command-codex.json
+stdin pretooluse-command-codex.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 ! stdout .
 
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
-# The Read tool never reaches a shell, so the glue restates it: a whole Read as a whole-file
-# print (`cat`), a ranged one as a ranged print (`sed -n`). The read rules then judge it as
-# the command it replaces. These run the Buzz glue alone, the form the wirings name; the
+# The Read tool never reaches a shell, so magus restates the whole event it receives: a
+# whole Read as a whole-file print (`cat`), a ranged one as a ranged print (`sed -n`). The
+# read rules then judge it as the command it replaces. These run the Buzz glue alone, the form the wirings name; the
 # fixture workspace sets read-navigation to deny past 120 lines and holds a Go file over
 # that, so the whole print is refused and the ranged one is not.
 cd read-ws
@@ -125,20 +109,20 @@ cd read-ws
 # case: command/deny
 # No offset and no limit: the whole file.
 stdin $WORK/read-whole.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 stdout '"permissionDecision":"deny"'
 stdout 'big.go'
 
 # case: command/deny
 # A limit past 300 lines counts as whole.
 stdin $WORK/read-huge-limit.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 stdout '"permissionDecision":"deny"'
 
 # case: command/pass
 # An offset and a limit inside the threshold is the bounded read the deny points to.
 stdin $WORK/read-range.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows tools
 ! stdout 'permissionDecision'
 cd $WORK
 
@@ -161,10 +145,9 @@ exec magus job fork harness/mcp-worker --read-only --criteria 'the transport tes
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
-# Both MCP cases forward the WHOLE event, which the glue works out from the event: an MCP
-# call carries no tool_input.command for HOST_EVENT_PATH to select. A derivation that
-# regressed to selecting `null` would judge text instead of a tool call, and the deny below
-# would vanish.
+# Both MCP cases forward the WHOLE event, as every call goes. A glue that regressed to
+# selecting a field would judge text instead of a tool call, and the deny below would
+# vanish.
 
 # case: mcp/pass
 # A judged MCP call that no rule refuses. `magus\describe` reads, and a bound worker
@@ -194,18 +177,17 @@ env XDG_STATE_HOME=
 # is filed beside the job store, so the state dir goes with it.
 rm $WORK/home/state
 
-# --- the edges of the whole-event derivation --------------------------------
+# --- the edges of the whole event -------------------------------------------
 #
-# The glue works out which payload to send from the event, so these are the shapes where
-# working it out could go wrong. Each says which branch it must take, and the last one is
-# the one that would be SILENT: a params object carrying a `command` key, where selecting
-# the field judges a string that was never a command line.
+# Every event goes whole, so these are the shapes where magus's decoder could misread one.
+# The last one is the one that would be SILENT: a params object carrying a `command` key,
+# where judging that field judges a string that was never a command line.
 
 # case: command/pass
-# An empty command is still a STRING, so it takes the field branch and magus judges an
-# empty command line. It must not be read as an absent field and turned into an envelope.
+# An empty command on the shell tool. The tool is one the guard knows, so a call with
+# nothing to run passes rather than being named as a tool no rule could read.
 stdin $WORK/empty-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
@@ -213,14 +195,14 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # envelope, where the decoder finds no command, no path and no prompt and says there is
 # nothing to judge.
 stdin $WORK/null-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
 # No command field at all, and no other shape magus reads either. The envelope goes whole
 # and the decoder answers that it holds nothing to judge.
 stdin $WORK/no-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --tool-rows $WORK/tools
 ! stdout .
 
 # case: command/pass
@@ -232,12 +214,27 @@ stdin $WORK/mcp-command-param.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
+# case: mcp/advise
+# Another server's tool carries nothing magus can read, so unjudged-tool names it rather
+# than letting it run unseen. Advised, by default, once a session; in a fixture workspace
+# for the cache dir that holds it to once.
+cd read-ws
+stdin $WORK/mcp-unjudged.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"additionalContext"'
+stdout 'mcp__browser__click'
+! stdout 'permissionDecision'
+stdin $WORK/mcp-unjudged.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+cd $WORK
+
 # --- the per-entry flag route: the argv after `--` ---------------------------
 #
 # A spawn carries a prompt and a subagent type rather than one string, so it takes the same
 # whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
 # an entry declares about itself. Only a wiring that also matches its host's skill tool may
-# pass --reports-skills, so the rule that requires a skill before a spawn fires
+# pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
 # exactly where loads are reported.
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
@@ -258,7 +255,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # case: command/deny
 # A SUPPORTED flag: the glue matches it against the set it publishes and passes it on.
 stdin $WORK/spawn-call.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 stdout '"permissionDecision":"deny"'
 stdout 'magus-multi-agent'
 
@@ -271,7 +268,7 @@ stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
 stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
-stderr 'Supported: --reports-skills'
+stderr 'Supported: --observes-skill-loads'
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -289,7 +286,7 @@ stdout '"permissionDecision":"deny"'
 # Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
 # one the single-flag case above already pins.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --reports-skills --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --observes-skill-loads --observes-skill-loads
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 
@@ -307,40 +304,40 @@ cd $WORK
 cd arch-ws
 
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 ! stderr .
 
 # case: command/deny
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 stdout '"permissionDecision":"deny"'
 stdout 'magus-architecture-review'
 
 # case: command/pass
 # Loading the skill clears it.
 stdin $WORK/arch-skill.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 
 # case: command/pass
 # A message that asks no structure question records nothing, so that session's next call runs.
 stdin $WORK/prompt-ordinary.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 ! stderr .
 stdin $WORK/arch-bash-s2.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 
 # case: path/deny
 # The path entry declares the capability too, and a write that creates a directory waits
 # on the same load whatever was asked.
 stdin $WORK/arch-new-dir.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 stdout 'creating the new directory'
@@ -353,12 +350,6 @@ stdout 'additionalContext'
 stdout 'NEW DIRECTORY'
 
 cd $WORK
-
-# case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
-# denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
-# three advisory families a rendered call could reach each need machine state a script
-# cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
-# binary. A case here would pass for a reason that is not this transport.
 
 # --- magus-path.buzz: the same hosts, their file-writing tool -----------
 
@@ -400,6 +391,14 @@ stdout 'nothing was judged'
 stdin pass-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
+
+# case: path/advise
+# The entry every shipped host wires to every tool judges a write too: magus-command.buzz
+# sends the whole event, and magus reads its file path as the write it is.
+stdin advise-path-whole.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"additionalContext":"'
+stdout 'every session'
 
 # case: path/deny
 # The notes store is the one rule that denies on file writes, and it fires only where a
@@ -529,12 +528,139 @@ env HOME=/no-home
 env XDG_STATE_HOME=
 rm $WORK/home/state
 
-# A preToolUse on a tool carrying neither field allows without asking magus
-# anything. Cursor's preToolUse fires for every tool, and the shell tool in
-# particular is beforeShellExecution's to judge, and twice would record two verdicts.
+# A Grep with nothing to restrict passes on its gating event.
 stdin cursor-pre-other.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
+
+# --- cursor-hook.buzz: the shell on preToolUse, one judgment per call ----------
+#
+# preToolUse is the shell's gate. A command that passes is answered with a plain allow:
+# the hook hands Cursor no updated_input, so the command runs exactly as Cursor sent it.
+env CURSOR_HOOK_STATE_DIR=$WORK/cursor-state
+
+# case: command/pass
+stdin cursor-pre-shell-pass.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"allow"'
+! stdout 'updated_input'
+
+# case: command/deny
+# A refused command is never rewritten: it does not run.
+stdin cursor-pre-shell-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"deny"'
+stdout 'whole-tree git stash'
+! stdout 'updated_input'
+
+# case: mcp/deny
+# beforeMCPExecution sends tool_input as a JSON string, not an object. Judged as the
+# string, the call reached no MCP rule.
+cd notes-ws
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus job fork harness/cursor-mcp-string --read-only --criteria 'the cursor MCP string-input case, held so the rebind rule has a job to read'
+stdin $WORK/cursor-exec-mcp-string.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdin $WORK/cursor-mcp-call-string.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout 'would drop every job'
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+rm $WORK/home/state
+
+# The rest of this section counts calls, so it runs against a stand-in magus that logs
+# each one and advises on every call. The gating event judges the call and files the
+# verdict; the event after it answers from the file. One call, one `magus shell`, one row.
+chmod 0755 $WORK/counting-magus
+env __MAGUS_BIN=$WORK/counting-magus
+env COUNTING_MAGUS_LOG=$WORK/calls.log
+
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"allow"'
+! stdout 'updated_input'
+grep 'shell .*observes-skill-loads' $WORK/calls.log
+
+# beforeShellExecution sees the same line, and lets it through unjudged.
+stdin cursor-before-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"allow"'
+
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=1 '^shell ' $WORK/calls.log
+
+# The verdict is spent: a second after-call event for the same id judges afresh.
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+grep -count=2 '^shell ' $WORK/calls.log
+
+# A failed call gets its advice on postToolUseFailure, again from the filed verdict.
+stdin cursor-pre-shell-failing.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdin cursor-post-shell-failing.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=3 '^shell ' $WORK/calls.log
+
+# Cursor reuses one tool_use_id for a Read and the Write after it, so the tool name is
+# part of the key: the Write's postToolUse does not answer from the Read's verdict.
+stdin cursor-pre-read-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdin cursor-pre-write-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdin cursor-post-write-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"additional_context":"COUNTED-ADVICE"'
+stdin cursor-post-read-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=5 '^shell ' $WORK/calls.log
+
+# A Read of a SKILL.md is how Cursor loads a skill, so it goes to magus as the Read it
+# is, which magus records as the load, rather than as the `cat` the other reads become.
+stdin cursor-pre-skill-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"allow"'
+grep '"tool_name":"Read"' $WORK/calls.log.stdin
+grep 'skills/magus-run/SKILL.md' $WORK/calls.log.stdin
+
+# case: mcp/advise
+# beforeMCPExecution files the verdict under the tool and the input, which it sends as a
+# JSON string; postToolUse names the same call MCP:<tool>, its input an object with the
+# keys in another order and no server, and carries the advice to the model.
+stdin cursor-mcp-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"permission":"allow"'
+grep '"tool_name":"mcp__magus__client"' $WORK/calls.log.stdin
+grep '"tool_input":\{"' $WORK/calls.log.stdin
+stdin cursor-post-mcp-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=7 '^shell ' $WORK/calls.log
+
+# preCompact marks the conversation, and the next after-call reply carries the brief
+# with the call's own advice. Only the next: the mark is spent.
+stdin cursor-pre-compact.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout '\{\}'
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdout 'COUNTED-ADVICE\\n\\nCOUNTED-BRIEF'
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --observes-skill-loads
+! stdout 'COUNTED-BRIEF'
+env __MAGUS_BIN=
+env COUNTING_MAGUS_LOG=
+env CURSOR_HOOK_STATE_DIR=
 
 # sessionEnd records where the work stopped and says nothing at all. A checkpoint
 # is not a verdict, so any reply here would be one the host has to interpret.
@@ -685,12 +811,12 @@ chmod 0755 $WORK/failing-proofread
 
 # The findings go back as Stop context, capped at five with the rest counted, and no
 # decision is printed. The binary comes from the environment, the decisions file is passed
-# through as -decisions, and the reply is judged as agent-reply.
+# through as --decisions, and the reply is judged as agent-reply.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --decisions $WORK/proofread-decisions.json
 stdout '"hookEventName":"Stop"'
-stdout 'closing-offer \(line 3\): argv agent-reply -format json -decisions'
+stdout 'closing-offer \(line 3\): argv agent-reply --stdin -o json --decisions'
 stdout 'and 2 more'
 ! stdout '"decision"'
 ! stderr .
@@ -772,7 +898,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_N
 # A message is as silent: the guard's unavailable notice would reach the model as context
 # on every turn, and nothing about the message itself was ever going to be enforced.
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 ! stderr .
 
@@ -1241,14 +1367,12 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
--- rewrite-command.json --
-{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "ls -la", "description": "list it", "timeout": 60000}}
--- rewrite-wrapped.json --
-{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "exec </dev/null; ls -la"}}
--- rewrite-deny.json --
-{"hook_event_name": "PreToolUse", "session_id": "rewrite", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
--- rewrite-command-codex.json --
-{"hook_event_name": "PreToolUse", "session_id": "rewrite-codex", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- pretooluse-command.json --
+{"hook_event_name": "PreToolUse", "session_id": "pretooluse", "tool_name": "Bash", "tool_input": {"command": "ls -la", "description": "list it", "timeout": 60000}}
+-- pretooluse-advise.json --
+{"hook_event_name": "PreToolUse", "session_id": "pretooluse", "tool_name": "Bash", "tool_input": {"command": "git push", "description": "push it", "timeout": 60000}}
+-- pretooluse-command-codex.json --
+{"hook_event_name": "PreToolUse", "session_id": "pretooluse-codex", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
 -- exec-mcp-worker.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --
@@ -1263,8 +1387,12 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": null}}
 -- no-command.json --
 {"session_id": "s1", "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "git stash the tree", "status": "pending"}]}}
+-- mcp-unjudged.json --
+{"session_id": "s-unjudged", "tool_name": "mcp__browser__click", "tool_input": {"ref": "e1"}}
 -- mcp-command-param.json --
 {"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")", "command": "git stash"}}
+-- advise-path-whole.json --
+{"session_id": "s-whole-write", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- notebook-path.json --
@@ -1311,6 +1439,16 @@ magus\project({
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
+-- tools/version --
+1
+-- tools/runs --
+Bash
+-- tools/inert --
+TodoWrite
+-- read-ws/tools/version --
+1
+-- read-ws/tools/reads --
+Read
 -- read-ws/big.go --
 package fixture
 
@@ -1508,3 +1646,48 @@ not json at all
 {"hook_event_name": "sessionEnd", "session_id": "c1", "reason": "completed", "transcript_path": "/tmp/t.jsonl"}
 -- cursor-subagent.json --
 {"hook_event_name": "subagentStart", "conversation_id": "child", "parent_conversation_id": "c1", "subagent_type": "explore", "task": "lease: L-1\nfind every caller"}
+-- cursor-pre-shell-pass.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-pass", "tool_input": {"command": "ls -la", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-pre-shell-deny.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-deny", "tool_input": {"command": "git stash", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-exec-mcp-string.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c3", "command": "magus job exec harness/cursor-mcp-string", "cwd": ".", "sandbox": false}
+-- cursor-mcp-call-string.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c3", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"import \\\"magus\\\"; magus\\\\job.clear();\"}", "command": "./magus mcp", "cwd": "."}
+-- counting-magus --
+#!/bin/sh
+# Stands in for magus: logs each call and its stdin, advises on every judgment, and
+# hands back a brief.
+echo "$*" >> "$COUNTING_MAGUS_LOG"
+cat > "$COUNTING_MAGUS_LOG.stdin"
+case "$1" in
+  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
+  session) echo COUNTED-BRIEF ;;
+esac
+exit 0
+-- cursor-pre-shell-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-before-shell-counted.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c2", "session_id": "c2", "command": "echo hi", "cwd": "", "sandbox": false}
+-- cursor-post-shell-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "tool_output": "{\"output\":\"hi\\n\",\"exitCode\":0}", "cwd": ""}
+-- cursor-pre-shell-failing.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "ls /not/here", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-post-shell-failing.json --
+{"hook_event_name": "postToolUseFailure", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "ls /not/here", "cwd": "", "timeout": 30000}, "error_message": "ls: /not/here: No such file or directory", "failure_type": "error", "is_interrupt": false, "cwd": ""}
+-- cursor-pre-read-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md"}}
+-- cursor-pre-write-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Write", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md", "contents": "x\n"}}
+-- cursor-post-write-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Write", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md", "contents": "x\n"}, "tool_output": "{\"success\":true}"}
+-- cursor-post-read-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md"}, "tool_output": "{\"content_length\":2}"}
+-- cursor-pre-skill-read.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-2\nfc_2", "tool_input": {"file_path": "/ws/.agents/skills/magus-run/SKILL.md"}}
+-- cursor-mcp-counted.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c2", "session_id": "c2", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"x\",\"args\":{\"b\":1,\"a\":2}}", "command": "./magus mcp"}
+-- cursor-post-mcp-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "MCP:client", "tool_use_id": "m-1", "tool_input": {"args": {"a": 2, "b": 1}, "script": "x"}, "tool_output": "{}"}
+-- cursor-pre-compact.json --
+{"hook_event_name": "preCompact", "conversation_id": "c2", "session_id": "c2", "trigger": "auto", "context_tokens": 180000, "context_window_size": 200000}

@@ -36,7 +36,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Truncate(maxDigestBytes+1), "sparse, so the cap is exercised without writing the bytes")
 	require.NoError(t, big.Close())
 
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	seed(t, s, types.Job{
 		ID:         "u1",
 		WritePaths: []string{"escape.go", "pipe", "big.bin"},
@@ -85,19 +85,19 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "real.go"), []byte("package real\n"), 0o644))
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"link.go"}})
 	stored, err := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
-	assert.Equal(t, "sha256:"+hashOf(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)
+	assert.Equal(t, "sha256:"+fileHash(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)
 }
 
 // TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce pins the difference between
 // removing a row and ENDING a job. Exit records what happened and the row is the account
 // of it; rm is for a row that should not exist, so the account is protected by default.
 func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	store := NewStore(loc)
 
 	for _, id := range []string{"keep", "drop"} {
@@ -132,7 +132,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 // TestDeleteRefusesABoundHolder pins that a worker cannot remove the record that work was
 // handed to it. Ending its own row stays allowed; that is the report it owes.
 func TestDeleteRefusesABoundHolder(t *testing.T) {
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	store := NewStore(loc)
 	_, err := store.Update(t.Context(), "held", func(row *types.Job) { row.WritePaths = []string{"internal/job"} })
 	require.NoError(t, err)

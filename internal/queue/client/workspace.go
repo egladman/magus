@@ -3,10 +3,11 @@ package client
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"sync"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/spells"
@@ -63,7 +64,8 @@ func OpenWorkspace(ctx context.Context, root, target string, opts ...WorkspaceOp
 	if o.regenerate == "" {
 		return nil, errors.New("workspace needs the target the queue's regeneration runs")
 	}
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
+		magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		return nil, err
 	}
@@ -213,17 +215,19 @@ func (w *Workspace) AutoResolvable(ctx context.Context, path string, base, merge
 // ClassifyEdit is magus's change classifier on one path's edit (Magus.ClassifyEdit), the
 // classes the ci gate sizes by.
 func (w *Workspace) ClassifyEdit(ctx context.Context, path string, old, cur []byte) (types.ClassifiedPath, error) {
-	c := w.m.ClassifyEdit(ctx, path, old, cur)
-	return types.ClassifiedPath{Path: path, Tier: carryTier(c.Class), Why: c.Why}, nil
+	class, why := w.m.ClassifyEdit(ctx, path, old, cur)
+	return types.ClassifiedPath{Path: path, Tier: carryTier(class), Why: why}, nil
 }
 
-func carryTier(c risk.Class) types.CarryTier {
-	switch c {
-	case risk.ClassGenerated:
+// carryTier maps the class word Magus.ClassifyEdit returns to the tier an approval is
+// carried by.
+func carryTier(class string) types.CarryTier {
+	switch class {
+	case risk.ClassGenerated.String():
 		return types.CarryGenerated
-	case risk.ClassProse:
+	case risk.ClassProse.String():
 		return types.CarryProse
-	case risk.ClassCommentOnly:
+	case risk.ClassCommentOnly.String():
 		return types.CarryCommentOnly
 	}
 	return types.CarryCode

@@ -2,9 +2,9 @@
   "claims": {
     "calls": 0,
     "flow": 5,
-    "imports": 3
+    "imports": 4
   },
   "figure": "knowledge-graph",
   "findings": [],
-  "stamp": "sha256:8edbd3a48dfbb0ee0f4b482991694386a43fdbd7b4a0abcf5369b2b48ab0fafa"
+  "stamp": "sha256:f35beeb3836641e7af29b1c5b63a9cb3a4a24c466e03e534f2d1fe978fce899a"
 }

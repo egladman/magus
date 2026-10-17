@@ -47,5 +47,7 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .except([magus\dir("internal/graph/dependency")],
             why: "the project dependency DAG targets run in, a different graph")
         .except([magus\dir("internal/graph/url")],
-            why: "composes the console explorer's URL; it reads no shard and asks no verb");
+            why: "composes the console explorer's URL; it reads no shard and asks no verb")
+        .except([magus\dir("internal/graph/workspacegraph")],
+            why: "the seam the root package installs its graph builders through; it holds none of the graph itself");
 }

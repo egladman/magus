@@ -18,7 +18,7 @@ Combine two values. shallow replaces one level of an object; deep recurses into 
 
 Return a new value with overlay applied one level deep. When both are objects, overlay's keys replace base's and nested objects are replaced whole, so a sibling key inside a nested object is dropped. Any other overlay replaces base entirely. Neither input is modified.
 
-**Signature:** `merge\shallow(base, overlay) -> any` - [source](https://github.com/egladman/magus/blob/main/std/merge.go#L72)
+**Signature:** `merge\shallow(base, overlay) -> any` - [source](https://github.com/egladman/magus/blob/main/std/merge.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
@@ -45,7 +45,7 @@ std\print(json\stringify(merge\shallow(base, overlay: overlay)) catch "");
 
 Return a new value with overlay applied through every nested object. Objects merge key by key; an array, a scalar, or null in overlay replaces the base value at that key, because a managed list is already the whole list. Neither input is modified.
 
-**Signature:** `merge\deep(base, overlay) -> any` - [source](https://github.com/egladman/magus/blob/main/std/merge.go#L77)
+**Signature:** `merge\deep(base, overlay) -> any` - [source](https://github.com/egladman/magus/blob/main/std/merge.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
@@ -73,7 +73,7 @@ std\print(json\stringify(merge\deep(base, overlay: overlay)) catch "");
 
 Deep-merge two JSON documents and return the indented text, with a trailing newline. Integers keep the digits that were in the text, which merge\deep cannot promise once a number has been a Buzz value. Objects merge key by key; arrays and other values are replaced by overlay. Object keys are emitted sorted, so the result does not keep base's key order.
 
-**Signature:** `merge\json(base, overlay) -> string` - [source](https://github.com/egladman/magus/blob/main/std/merge.go#L83)
+**Signature:** `merge\json(base, overlay) -> string` - [source](https://github.com/egladman/magus/blob/main/std/merge.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |

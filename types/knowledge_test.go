@@ -132,7 +132,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	kinds := []string{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir, KindFunction, KindImport,
-		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker,
+		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker, KindFigure,
 	}
 
 	// go test's cwd is this package dir, regardless of -trimpath.
@@ -294,6 +294,124 @@ func TestBodyDigest(t *testing.T) {
 	}
 }
 
+func TestBodyShape(t *testing.T) {
+	shape := func(src string) (string, int) {
+		t.Helper()
+		lines := SplitSourceLines([]byte(src))
+		digest, tokens, ok := BodyShape(lines, 1, len(lines), "go")
+		require.True(t, ok, src)
+		return digest, tokens
+	}
+
+	sum, sumTokens := shape("func Sum(xs []int) int {\n\t// running total\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\treturn t + 1\n}\n")
+	add, addTokens := shape("func Add(vals []int) int {\n\tacc := 10\n\tfor _, v := range vals {\n\t\tacc += v\n\t}\n\treturn acc + 0x2a // done\n}\n")
+	assert.Equal(t, sum, add, "names, literal values and comments differ; the shape does not")
+	assert.Equal(t, sumTokens, addTokens)
+
+	for name, src := range map[string]string{
+		"another operator":     "func Sub(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt -= x\n\t}\n\treturn t + 1\n}\n",
+		"another statement":    "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\tt++\n\treturn t + 1\n}\n",
+		"another literal kind": "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += x\n\t}\n\treturn t + \"1\"\n}\n",
+		"another binding":      "func Sum(xs []int) int {\n\tt := 0\n\tfor _, x := range xs {\n\t\tt += t\n\t}\n\treturn t + 1\n}\n",
+	} {
+		other, _ := shape(src)
+		assert.NotEqualf(t, sum, other, "%s is a different structure", name)
+	}
+
+	_, tokens := shape("func F() {}")
+	assert.Equal(t, 7, tokens, "func F ( ) { } and the semicolon the line end inserts")
+
+	lines := SplitSourceLines([]byte("package a\n\nfunc F() {}\n"))
+	for _, r := range [][2]int{{0, 1}, {3, 2}, {3, 8}} {
+		_, _, ok := BodyShape(lines, r[0], r[1], "go")
+		assert.Falsef(t, ok, "range %v does not fit the file", r)
+	}
+	for _, language := range []string{"python", "", "Go"} {
+		digest, tokens, ok := BodyShape(lines, 3, 3, language)
+		assert.Equalf(t, []any{"", 0, false}, []any{digest, tokens, ok}, "%q has no lexer here", language)
+	}
+}
+
+func TestBranchIdents(t *testing.T) {
+	for _, tc := range []struct {
+		name, src string
+		want      []string
+	}{
+		{
+			name: "a bare switch and a negated if",
+			src:  "func Run(mode string, strict bool) error {\n\tswitch mode {\n\tcase \"a\":\n\t}\n\tif !strict {\n\t\treturn nil\n\t}\n\treturn check(mode)\n}",
+			want: []string{"mode", "strict"},
+		},
+		{
+			name: "an else-if chain inside a loop",
+			src:  "func F(xs []int, quiet, loud bool) {\n\tfor range xs {\n\t\tif quiet {\n\t\t} else if loud {\n\t\t}\n\t}\n\tdone()\n}",
+			want: []string{"loud", "quiet"},
+		},
+		{
+			name: "a selector subject and an operator are not bare",
+			src:  "func (h *H) Handle(r Record) {\n\tswitch r.Level {\n\t}\n\tif err != nil {\n\t}\n\th.n++\n}",
+		},
+		{
+			name: "a switch with a statement after it",
+			src:  "func remedy(kind string) string {\n\tswitch kind {\n\tcase \"a\":\n\t\treturn \"x\"\n\t}\n\treturn \"\"\n}",
+			want: []string{"kind"},
+		},
+		{
+			name: "a body that is one switch",
+			src:  "func remedy(kind string) string {\n\tswitch kind {\n\tcase \"a\":\n\t\treturn \"x\"\n\tdefault:\n\t\treturn \"\"\n\t}\n}",
+		},
+		{
+			name: "a body that is one if chain",
+			src:  "func pick(a bool) int {\n\tif a {\n\t\treturn 1\n\t} else {\n\t\treturn 2\n\t}\n}",
+		},
+		{
+			name: "a signature holding braces",
+			src:  "func G(opts struct{ on bool }, on bool) {\n\tif on {\n\t}\n\tuse(opts)\n}",
+			want: []string{"on"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := SplitSourceLines([]byte(tc.src))
+			assert.Equal(t, tc.want, BranchIdents(lines, 1, len(lines), "go"))
+		})
+	}
+
+	lines := SplitSourceLines([]byte("func F(on bool) {\n\tif on {\n\t}\n\tg()\n}"))
+	assert.Nil(t, BranchIdents(lines, 1, 9, "go"), "the range does not fit")
+	assert.Nil(t, BranchIdents(lines, 1, len(lines), "python"), "no lexer")
+}
+
+func TestImportAlias(t *testing.T) {
+	lines := SplitSourceLines([]byte("package a\n\nimport (\n" +
+		"\tqtypes \"example.com/m/internal/queue/types\"\n" +
+		"\t\"example.com/m/types\"\n" +
+		"\t_ \"embed\"\n" +
+		"\t. \"example.com/m/dsl\"\n" +
+		"\tprocrun \"example.com/m/internal/proc/run\" // run shadows it\n" +
+		")\n" +
+		"import buzz `example.com/m/libs/gopherbuzz`\n" +
+		"import \"fmt\"\n" +
+		"var x = qtypes.New(\"p\")\n"))
+	for _, tc := range []struct {
+		line int
+		want string
+	}{
+		{line: 4, want: "qtypes"},
+		{line: 5},
+		{line: 6},
+		{line: 7},
+		{line: 8, want: "procrun"},
+		{line: 10, want: "buzz"},
+		{line: 11},
+		{line: 12},
+		{line: 0},
+		{line: 99},
+	} {
+		assert.Equal(t, tc.want, ImportAlias(lines, tc.line, "go"), "line %d", tc.line)
+	}
+	assert.Empty(t, ImportAlias(lines, 4, "typescript"), "only Go is read")
+}
+
 func TestMarkerFamilyIsClosed(t *testing.T) {
 	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness"}, MarkerFamily("").Values())
 	assert.True(t, MarkerCalls.Valid())
@@ -327,6 +445,17 @@ func TestKnowledgeRelationShapesForMarkersAndPackages(t *testing.T) {
 	assert.False(t, KnowledgeRelationAllows(RelationReferences, KindMarker, KindTarget))
 	assert.False(t, KnowledgeRelationAllows(RelationCalls, KindDir, KindSymbol))
 	assert.False(t, KnowledgeRelationAllows(RelationDocuments, KindDocSection, KindSpell))
+}
+
+func TestKnowledgeRelationCoChanges(t *testing.T) {
+	def, ok := KnowledgeRelation(RelationCoChanges)
+	require.True(t, ok, "co_changes is declared")
+	assert.True(t, def.Symmetric)
+	assert.Equal(t, "changes with", def.Label(true))
+	assert.Equal(t, "changes with", def.Label(false))
+	assert.True(t, KnowledgeRelationAllows(RelationCoChanges, KindFile, KindFile))
+	assert.False(t, KnowledgeRelationAllows(RelationCoChanges, KindFile, KindDir))
+	assert.False(t, KnowledgeRelationAllows(RelationCoChanges, KindAuthor, KindFile))
 }
 
 func TestKnowledgeRelationImplements(t *testing.T) {
@@ -402,4 +531,23 @@ func TestKnowledgeNeighborhoodJSONKeys(t *testing.T) {
 		"folds": [{"prefix": "internal/graph", "node": "dir:internal/graph", "folded": 3}],
 		"answer": {"verdict": "found"}
 	}`, KnowledgeNeighborhoodDefinition, KnowledgeSchemaVersion), string(b))
+}
+
+func TestGeneratedSource(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		src  string
+		want bool
+	}{
+		"the first line":           {"// Code generated by protoc-gen-go. DO NOT EDIT.\npackage x\n", true},
+		"after a build constraint": {"//go:build linux\r\n\r\n// Code generated by stringer; DO NOT EDIT.\r\npackage x\n", true},
+		"after the package clause": {"package x\n\n// Code generated by hand. DO NOT EDIT.\n", false},
+		"without the full stop":    {"// Code generated by x. DO NOT EDIT\npackage x\n", false},
+		"a mention in prose":       {"// This file is not Code generated by x. DO NOT EDIT.\npackage x\n", false},
+		"an empty file":            {"", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, GeneratedSource(SplitSourceLines([]byte(tc.src))))
+		})
+	}
 }

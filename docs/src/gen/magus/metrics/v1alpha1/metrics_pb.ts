@@ -94,14 +94,14 @@ export type Snapshot = Message<"magus.metrics.v1alpha1.Snapshot"> & {
   captureTime?: Timestamp;
 
   /**
-   * magus.target.duration + magus.target.runs
+   * magus.target.duration
    *
    * @generated from field: magus.metrics.v1alpha1.Latency target = 2;
    */
   target?: Latency;
 
   /**
-   * cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+   * cache is the local Cache.Run family (magus.cache.duration + magus.cache.reads).
    * Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
    * this family measures a Cache.Run, not a resolved op.
    *
@@ -117,7 +117,7 @@ export type Snapshot = Message<"magus.metrics.v1alpha1.Snapshot"> & {
   poolWait?: Latency;
 
   /**
-   * magus.graph.query.duration + magus.graph.queries
+   * magus.graph.query.duration
    *
    * @generated from field: magus.metrics.v1alpha1.Latency graph_query = 5;
    */
@@ -131,7 +131,7 @@ export type Snapshot = Message<"magus.metrics.v1alpha1.Snapshot"> & {
   remote?: Remote;
 
   /**
-   * per-target rollup of magus.target.{duration,runs}
+   * per-target rollup of magus.target.duration
    *
    * @generated from field: repeated magus.metrics.v1alpha1.TargetStat target_stats = 7;
    */
@@ -221,8 +221,8 @@ export const LatencySchema: GenMessage<Latency> = /*@__PURE__*/
   messageDesc(file_magus_metrics_v1alpha1_metrics, 4);
 
 /**
- * Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
- * volume.
+ * Remote is the remote-cache instrument family: outcome tallies from magus.cache.remote.ops
+ * plus transfer latency and volume.
  *
  * @generated from message magus.metrics.v1alpha1.Remote
  */
@@ -333,7 +333,7 @@ export type TargetStat = Message<"magus.metrics.v1alpha1.TargetStat"> & {
   cacheHitRate: number;
 
   /**
-   * runs with outcome=success
+   * runs with outcome=ok
    *
    * @generated from field: int64 success = 9;
    */

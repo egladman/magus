@@ -13,15 +13,20 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -41,7 +46,7 @@ import (
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
+		return exit.Usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
@@ -57,7 +62,7 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
+		return exit.Usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
 	}
 }
 
@@ -100,16 +105,16 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 		// git only ever calls this with all five placeholders, so a bare invocation is
 		// a human typing it. Exiting 0 said "merge resolved" for a run that did nothing,
 		// and disagreed with the 1-argument case, which already errored.
-		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
+		return exit.Usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return mergeDriverUsage()
 	}
 	if len(args) < 5 {
-		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+		return exit.Usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
 	}
 	if len(args) > 6 {
-		return usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
+		return exit.Usagef("magus vcs merge-driver: expected at most 6 arguments (ancestor result other markerSize path output), got %d", len(args))
 	}
 	f := settle.Files{Base: args[0], Ours: args[1], Theirs: args[2], Output: args[1], MarkerSize: args[3]}
 	if len(args) == 6 {
@@ -161,7 +166,7 @@ func mergeDriverRelPath(root, pathArg string) (string, error) {
 	if !filepath.IsAbs(pathArg) {
 		return filepath.ToSlash(pathArg), nil
 	}
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
 	}
@@ -187,6 +192,28 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "every path first and regenerating once is both faster and the only way to")
 	fmt.Fprintln(w, "settle a file one side deleted, which no VCS calls a merge driver for.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With --against, a source file two jobs both wrote also settles when each side")
+	fmt.Fprintln(w, "carries one job's work, every such job passed `magus job wait`, their claims on")
+	fmt.Fprintln(w, "it (<file>#<declaration>) are disjoint, and a project's merge_low_risk covers it.")
+	fmt.Fprintln(w, "Each edit must sit in its own job's claims; import lines merge as a set. A file")
+	fmt.Fprintln(w, "a job claims gets a line saying it settled or which condition failed. Needs a")
+	fmt.Fprintln(w, "VCS that reports a merge base: git does; Mercurial, Sapling and jj do not.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With nothing conflicted, it runs what the git settle hooks left: the")
+	fmt.Fprintln(w, "regenerations a merge left owed, and every settle deferred by setting the git")
+	fmt.Fprintln(w, "config key magus.settle to defer. A deferred settle starts no magus; the hook")
+	fmt.Fprintln(w, "records where the first deferred operation started, and this regenerates")
+	fmt.Fprintln(w, "everything changed since then in one run and stages it. To cherry-pick in")
+	fmt.Fprintln(w, "several batches and regenerate once:")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick A B C")
+	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick D E")
+	fmt.Fprintln(w, "  magus vcs resolve && git commit --amend --no-edit")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "`git config magus.settle defer` defers until `git config --unset magus.settle`.")
+	fmt.Fprintln(w, "A settle another magus's project lock keeps from running waits up to 2m, then")
+	fmt.Fprintln(w, "stages nothing, leaves the regeneration owed and prints this command.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
 	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
@@ -201,9 +228,9 @@ func vcsResolveUsage(w io.Writer) {
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
-	var rf *gen.VCSResolveFlags
+	var rf *flaggen.VCSResolveFlags
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
-		rf = gen.BindVCSResolve(fs)
+		rf = flaggen.BindVCSResolve(fs)
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -212,11 +239,11 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
 	if len(pos) > 0 && rf.Hook == "" {
-		return usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
+		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
 	}
 	if rf.Hook != "" {
 		if rf.Against != "" {
-			return usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
+			return exit.Usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
 		}
 		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
 	}
@@ -254,7 +281,14 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return errors.New("vcs resolve: version control is disabled for this workspace, resolve this merge by hand")
 	}
 
+	// The revision the merge starts from, which settling by job claims reads as ours.
+	var ours string
 	if rf.Against != "" {
+		meta, err := res.VCS.Metadata(ctx, m.Root())
+		if err != nil {
+			return fmt.Errorf("vcs resolve: %w", err)
+		}
+		ours = meta.ID
 		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
 		if err != nil {
 			return err
@@ -281,6 +315,11 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if !globalCfg.DryRun {
 		if conflicts, err = autoResolveConflicts(ctx, m, res.VCS, conflicts); err != nil {
 			return err
+		}
+		if len(conflicts) > 0 && rf.Against != "" {
+			if conflicts, err = settleByClaims(ctx, m, res.VCS, ours, rf.Against, conflicts); err != nil {
+				return err
+			}
 		}
 		if len(conflicts) == 0 {
 			return nil
@@ -328,6 +367,212 @@ func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriv
 		fmt.Println("vcs resolve: every conflict is resolved")
 	}
 	return left, nil
+}
+
+// settleByClaims settles the content conflicts that jobs on the two sides of a merge of
+// against into ours reached through disjoint declaration claims, and returns the conflicts
+// still standing. A path settles only when every condition holds:
+//   - a project's merge_low_risk covers it, and a diff driver places its declarations;
+//   - the VCS reports one merge base for the two sides;
+//   - each side carries the work of a job that writes the path, and every such job is
+//     recorded pass by `magus job wait`;
+//   - each of those jobs writes it by declaration claims alone, and the sides' claims are
+//     disjoint;
+//   - risk.MergeByClaims settles every region the two sides' edits meet in.
+//
+// A path some job claims by declaration gets one line saying it settled or which condition
+// failed. A path no job claims is passed over in silence, since claims say nothing about it.
+func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
+	root := m.Root()
+	store, err := openJobs(ctx, root, jobOpen{})
+	var rows []types.Job
+	if err == nil {
+		rows, err = store.List()
+	}
+	if err != nil {
+		fmt.Printf("vcs resolve: no conflict settles by job claims: the job store: %v\n", err)
+		return conflicts, nil
+	}
+	s := claimSettle{m: m, drv: drv, ours: ours, theirs: against}
+	var left []types.Conflict
+	for _, c := range conflicts {
+		writers, claimed := jobsWriting(rows, c.Path)
+		if c.Kind != types.ConflictKindContent || !claimed || m.FindOutputProducer(filepath.Join(root, filepath.FromSlash(c.Path))) != nil {
+			left = append(left, c)
+			continue
+		}
+		merged, how, err := s.settle(ctx, c.Path, writers)
+		var why unsettledError
+		if errors.As(err, &why) {
+			fmt.Printf("vcs resolve: %s not settled by job claims: %s\n", c.Path, why)
+			left = append(left, c)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("vcs resolve: %s: %w", c.Path, err)
+		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(c.Path)), merged, 0o644); err != nil {
+			return nil, fmt.Errorf("vcs resolve: %w", err)
+		}
+		if err := drv.MarkResolved(ctx, root, []string{c.Path}); err != nil {
+			return nil, fmt.Errorf("vcs resolve: %w", err)
+		}
+		fmt.Printf("vcs resolve: settled %s by job claims: %s\n", c.Path, how)
+	}
+	if len(left) == 0 {
+		fmt.Println("vcs resolve: every conflict is resolved")
+	}
+	return left, nil
+}
+
+// jobsWriting returns the rows with a write path on p, and whether any of them claims p by
+// declaration.
+func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
+	for _, row := range rows {
+		writes := false
+		for _, e := range row.WritePaths {
+			if types.PathsIntersect(e, p) {
+				writes = true
+				claimed = claimed || types.HasClaim(e)
+			}
+		}
+		if writes {
+			writers = append(writers, row)
+		}
+	}
+	return writers, claimed
+}
+
+// claimSettle decides paths for settleByClaims. ours and theirs are the two revisions the
+// merge joins; the merge base between them is looked up once.
+type claimSettle struct {
+	m            *magus.Magus
+	drv          types.VCSDriver
+	ours, theirs string
+
+	looked  bool
+	base    string
+	baseErr error
+}
+
+// unsettledError is the first condition that kept a path from settling by job claims,
+// as opposed to a failure to evaluate them.
+type unsettledError string
+
+func (e unsettledError) Error() string { return string(e) }
+
+func unsettledf(format string, args ...any) error {
+	return unsettledError(fmt.Sprintf(format, args...))
+}
+
+// mergeSide is one of the two revisions a merge joins; it indexes the per-side arrays of
+// settle.
+type mergeSide uint8
+
+const (
+	oursSide mergeSide = iota
+	theirsSide
+)
+
+// settle is the merge of p, or an unsettledError naming the first condition that failed.
+// how names the claims that settled it.
+func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job) (merged []byte, how string, err error) {
+	if _, _, ok := risk.MatchScopes(risk.MergeScopes(s.m.All()), p); !ok {
+		return nil, "", unsettledf("no project's merge_low_risk covers it")
+	}
+	if _, ok := types.MatchDiffDriver(p); !ok {
+		return nil, "", unsettledf("no diff driver places its declarations")
+	}
+	base, err := s.mergeBase(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	var jobs [2][]types.Job
+	for _, row := range writers {
+		if side, ok := s.resolveSide(ctx, row, base); ok {
+			jobs[side] = append(jobs[side], row)
+		}
+	}
+	names := [2]string{oursSide: "ours", theirsSide: s.theirs}
+	var claims, cited [2][]string
+	for side, rows := range jobs {
+		if len(rows) == 0 {
+			return nil, "", unsettledf("no job whose work %s carries writes it", names[side])
+		}
+		for _, row := range rows {
+			if row.State != types.StatePass {
+				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
+			}
+			for _, e := range row.WritePaths {
+				if !types.PathsIntersect(e, p) {
+					continue
+				}
+				_, decl := types.SplitClaim(e)
+				if decl == "" {
+					return nil, "", unsettledf("job %s writes it whole (%s), not by declaration", row.ID, e)
+				}
+				claims[side] = append(claims[side], decl)
+				cited[side] = append(cited[side], e+" (job "+row.ID+")")
+			}
+		}
+	}
+	if a, b, ok := risk.OverlappingClaims(claims[0], claims[1]); ok {
+		return nil, "", unsettledf("the claims overlap: %s#%s on %s, %s#%s on %s", p, a, names[oursSide], p, b, names[theirsSide])
+	}
+	var content [3][]byte
+	for i, rev := range []string{base, s.ours, s.theirs} {
+		text, err := s.drv.ReadFileAt(ctx, s.m.Root(), rev, p)
+		if err != nil {
+			return nil, "", unsettledf("it cannot be read at %s: %v", rev, err)
+		}
+		content[i] = []byte(text)
+	}
+	res, err := risk.MergeByClaims(p, content[0],
+		risk.ClaimSide{Content: content[1], Claims: claims[oursSide]},
+		risk.ClaimSide{Content: content[2], Claims: claims[theirsSide]})
+	if err != nil {
+		return nil, "", unsettledError(err.Error())
+	}
+	return res.Content, strings.Join(cited[0], ", ") + " against " + strings.Join(cited[1], ", ") + "; every job passed", nil
+}
+
+// mergeBase is the one merge base of the two sides, an unsettledError when there is not one.
+func (s *claimSettle) mergeBase(ctx context.Context) (string, error) {
+	if !s.looked {
+		s.looked = true
+		var ok bool
+		s.base, ok, s.baseErr = s.drv.MergeBase(ctx, s.m.Root(), s.ours, s.theirs)
+		switch {
+		case errors.Is(s.baseErr, types.ErrVCSUnsupported):
+			s.baseErr = unsettledf("%s reports no merge base, and each side's edits are measured from one", s.drv.Name())
+		case s.baseErr == nil && !ok:
+			s.baseErr = unsettledf("the sides share no one merge base")
+		}
+	}
+	return s.base, s.baseErr
+}
+
+// resolveSide is the side whose history carries row's work, or false for neither: the work is
+// already in the merge base, or no revision here names it. The work is the revision row's
+// checkout has checked out, else a revision named row.ID: the branch-per-job convention
+// hack/dev/merge-job-branches.buzz also reads.
+func (s *claimSettle) resolveSide(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
+	tip := row.ID
+	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
+		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {
+			tip = ref
+		}
+	}
+	root := s.m.Root()
+	if in, err := s.drv.IsAncestor(ctx, root, tip, base); err != nil || in {
+		return 0, false
+	}
+	for side, rev := range []string{s.ours, s.theirs} {
+		if in, err := s.drv.IsAncestor(ctx, root, tip, rev); err == nil && in {
+			return mergeSide(side), true
+		}
+	}
+	return 0, false
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that
@@ -536,12 +781,15 @@ func unresolvedError(plan settle.Plan) error {
 //
 // Failure is loud and never leaves stale output behind quietly: the exact command to
 // run is printed, a commit not yet made is stopped, and the regeneration stays owed in
-// the git dir, where `magus doctor` reports it.
+// the git dir, where `magus doctor` reports it. A run another magus keeps from starting
+// is waited on for settleLockWait, then lets the commit through with nothing staged: it
+// never ran, and stopping the last pick of a cherry-pick over someone else's lock leaves
+// the whole sequence stopped.
 func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string, args []string) error {
 	// A hook runs in the repository's top level, where the workspace root is too; the
 	// merge driver relies on the same. Read git's state before loading anything, since
 	// most commits are not merge-shaped and load nothing.
-	wsRoot, err := magus.FindRoot(root)
+	wsRoot, err := workspace.FindRoot(root)
 	if err != nil {
 		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
 	}
@@ -566,8 +814,11 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	if err != nil {
 		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
 	}
-	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
+	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
+	if settle.Busy(err) {
+		settleOwed(ctx, m, op, err)
+		return nil
+	}
 	if err != nil {
 		return settleFailed(ctx, hook, op, out, err)
 	}
@@ -576,7 +827,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	}
 	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
 	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	return nil
 }
@@ -592,39 +843,58 @@ func settleLoadFailure(err error) error {
 	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)
 }
 
-// settleOwedByHand is `magus vcs resolve` with nothing conflicted: it runs what the
-// merge driver left owed, which a settle hook that failed or was bypassed with
-// --no-verify leaves behind and `magus doctor` reports, stages the result and clears the
-// record. With nothing owed it says so.
+// settleLockWait bounds how long a settle waits for another magus to release a
+// project lock, polling every settleLockPoll.
+const (
+	settleLockWait = 2 * time.Minute
+	settleLockPoll = 2 * time.Second
+)
+
+// settleRun is the regeneration a settle runs: quiet, and waiting on a busy lock.
+func settleRun(root string, rc runConfig) settle.RunFunc {
+	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
+	return settle.Waiting(run, settleLockWait, settleLockPoll, func(ctx context.Context, line string) {
+		slog.WarnContext(ctx, line, attr.Notice(""), attr.Component("magus"))
+	})
+}
+
+// settleOwed says that a settle another magus kept from running left nothing staged and
+// its regeneration owed, and the command that finishes it. Hook already recorded the
+// record that command reads.
+func settleOwed(ctx context.Context, m *magus.Magus, op vcs.HookOperation, err error) {
+	finish := hint.VCSResolve.String()
+	if op.CommitPending || settle.FoldCommand(ctx, m) != "" {
+		finish += " && git commit --amend --no-edit"
+	}
+	slog.ErrorContext(ctx, fmt.Sprintf("this %s was not regenerated and nothing was staged; the regeneration stays owed, finish it with `%s`",
+		cmp.Or(op.Kind, "operation"), finish), attr.Notice(""), attr.Component("magus"), attr.Error(err))
+}
+
+// settleOwedByHand is `magus vcs resolve` with nothing conflicted. It settles, in one
+// run per target, what the settle hooks left: everything changed since the first
+// operation they deferred under magus.settle=defer, and what the merge driver left owed,
+// which a settle hook that failed, was kept from running or was bypassed with
+// --no-verify leaves behind and `magus doctor` reports. It stages the result and clears
+// both records. With nothing left it says so.
 func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver) error {
-	owed, err := vcs.OwedRegenerations(ctx, m.Root())
+	op, deferred, err := vcs.DeferredSettle(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	ran := settle.Invocations(nil, owed, buildDefinesTarget(ctx, m))
-	if len(ran) == 0 {
-		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
+	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
+	if err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	if deferred {
+		if err := vcs.ClearDeferredSettle(ctx, m.Root()); err != nil {
+			return fmt.Errorf("vcs resolve: %w", err)
+		}
+	}
+	if len(out.Ran) == 0 {
+		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths, no settle deferred and no regeneration owed")
 		return nil
 	}
-	plan := settle.Plan{Rebuild: map[string][]string{}}
-	for _, inv := range ran {
-		plan.Rebuild[strings.TrimSuffix(inv[0], ":rw")] = inv[1:]
-	}
-	if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
-		return fmt.Errorf("vcs resolve: regenerate: %w", err)
-	}
-	settled, err := plan.Paths(ctx, m, driver)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	staged, _, err := stagePaths(ctx, m.Root(), driver, settled)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
-		return fmt.Errorf("vcs resolve: %w", err)
-	}
-	fmt.Printf("settled what the merge driver left owed; staged %d path(s): %s\n", len(staged), driver.ReviewCommand())
+	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())
 	return nil
 }
 
@@ -660,7 +930,7 @@ func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out se
 		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
 			attr.Notice(""), attr.Component("magus"))
 	}
-	return errSilent{exitCode: 1}
+	return exit.Reported(exit.Failure)
 }
 
 // resolveVCS returns the active VCS resolution for the workspace.
@@ -709,16 +979,16 @@ func vcsCheckpointUsage(w io.Writer) {
 
 // vcsCheckpointCmd reads the working state's identity and prints it.
 func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
-	var flags *gen.VCSCheckpointFlags
+	var flags *flaggen.VCSCheckpointFlags
 	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
-		flags = gen.BindVCSCheckpoint(fs)
+		flags = flaggen.BindVCSCheckpoint(fs)
 	})
 	if err != nil {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
+		return exit.Usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -764,7 +1034,7 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cp)
 	case outputName:
-		return emitNames([]string{cp.Token()})
+		return emitNames(os.Stdout, []string{cp.Token()})
 	}
 	fmt.Println(checkpointLine(cp))
 	return nil
@@ -830,9 +1100,9 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// --dry-run is the GLOBAL config flag, not a local one: it already means
 	// "show me what would happen" on every other command, and redefining it here
 	// panics the FlagSet anyway.
-	var af *gen.VCSAddFlags
+	var af *flaggen.VCSAddFlags
 	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		af = gen.BindVCSAdd(fs)
+		af = flaggen.BindVCSAdd(fs)
 		fs.Usage = func() { vcsAddUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -841,7 +1111,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// Before the workspace loads: a refusal about the flags must not need a resolvable
 	// tree, and must not land after anything is staged.
 	if err := ward.RequireReason(untrackedOverride, af.Untracked, af.Reason); err != nil {
-		return usagef("%s", err)
+		return exit.Usagef("%s", err)
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -900,6 +1170,17 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// undeclared path at once, which is the one that needs a flag because nobody named
 	// them one by one.
 	explicit := len(pos) > 0
+	if !explicit {
+		held, err := heldForOtherLeases(ctx, root, slices.Concat(sources, outputs, undeclared))
+		if err != nil {
+			return err
+		}
+		isHeld := func(p string) bool { _, ok := held[p]; return ok }
+		sources = slices.DeleteFunc(sources, isHeld)
+		outputs = slices.DeleteFunc(outputs, isHeld)
+		undeclared = slices.DeleteFunc(undeclared, isHeld)
+		reportHeld(ctx, held)
+	}
 	maintained, unclaimed := splitMaintained(undeclared)
 	if explicit {
 		// They were asked for by name, so they are not "skipped" and must not be
@@ -1115,6 +1396,58 @@ func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths 
 	return stageable, dropped, nil
 }
 
+// heldForOtherLeases is the subset of paths a whole-tree `vcs add` leaves unstaged, each
+// with the live lease it belongs to: the ones another lease's write paths cover in this
+// checkout. Two holders sharing a checkout share its dirty tree, and staging the other's
+// uncommitted sources would land them under this caller's commit.
+func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[string]string, error) {
+	loc, err := jobPlace(root)
+	if err != nil {
+		return nil, fmt.Errorf("vcs add: place the job store to read which leases share this checkout: %w", err)
+	}
+	rows, err := job.NewStore(loc).List()
+	if err != nil {
+		return nil, fmt.Errorf("vcs add: read the job store to keep other leases' work out of this stage: %w", err)
+	}
+	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
+	return otherLeasesPaths(rows, root, lease, paths), nil
+}
+
+// otherLeasesPaths maps each of paths that a live row in the checkout at root, other than
+// lease's own, declares among its write paths to that row's id. Two rows covering one path
+// both name it, unless lease is one of them.
+func otherLeasesPaths(rows []types.Job, root, lease string, paths []string) map[string]string {
+	here := slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool {
+		return r.CheckoutRoot == "" || !sameDir(r.CheckoutRoot, root)
+	})
+	held := map[string]string{}
+	for _, p := range paths {
+		owner, ok := job.AttributeWrite(here, p)
+		switch {
+		case ok && owner.Job != lease:
+			held[p] = owner.Job
+		case !ok && len(owner.Ambiguous) > 0 && !slices.Contains(owner.Ambiguous, lease):
+			held[p] = strings.Join(owner.Ambiguous, " and ")
+		}
+	}
+	return held
+}
+
+// reportHeld says, on stderr in every output format, which paths a whole-tree stage left
+// for the leases that write them.
+func reportHeld(ctx context.Context, held map[string]string) {
+	byLease := map[string][]string{}
+	for p, lease := range held {
+		byLease[lease] = append(byLease[lease], p)
+	}
+	for _, lease := range slices.Sorted(maps.Keys(byLease)) {
+		paths := byLease[lease]
+		slices.Sort(paths)
+		slog.WarnContext(ctx, fmt.Sprintf("held back %d path(s) live lease %s writes in this checkout: %s; name a path to stage it anyway",
+			len(paths), lease, strings.Join(paths, ", ")), attr.Notice(""), attr.Component("magus"))
+	}
+}
+
 // emitStaging renders the verdict: the structured formats get the value itself, and the
 // terminal gets the prose. One decision, several audiences, which is the whole reason
 // the verdict is a value. `-o json` used to be accepted here and answer in text.
@@ -1129,7 +1462,7 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, 
 	case outputName:
 		// The paths that were staged, which is what the plan is a plan OF. Dropped paths
 		// are deliberately absent: this is the list a caller feeds forward.
-		return emitNames(v.Staged)
+		return emitNames(os.Stdout, v.Staged)
 	}
 	reportStaging(v, dropped, untracked, dryRun, review)
 	return nil

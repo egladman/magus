@@ -70,7 +70,7 @@ func TestCacheKeyGenerateRefusesTee(t *testing.T) {
 
 // seedOf pulls the base64 seed back out of the rendered banner: it is the one line
 // that decodes to 32 bytes.
-func seedOf(t *testing.T, out string) string {
+func findSeed(t *testing.T, out string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		if raw, err := base64.StdEncoding.DecodeString(line); err == nil && len(raw) == 32 {
@@ -94,7 +94,7 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	assert.Contains(t, out, "keyid  ")
 	// The seed sits BARE on its own line, not after "VAR=", which is awkward to
 	// select and invites pasting it into an export, straight into shell history.
-	assert.Contains(t, out, "\n\n"+seedOf(t, out)+"\n\n", "the seed must be alone on its line")
+	assert.Contains(t, out, "\n\n"+findSeed(t, out)+"\n\n", "the seed must be alone on its line")
 	assert.NotContains(t, out, signingKeyEnv+"=", "the seed must not be rendered as an assignment")
 	// Column zero, or the snippet does not paste into magus.yaml.
 	assert.Contains(t, out, "\ncache:\n  remote:\n    trusted_keys:\n")

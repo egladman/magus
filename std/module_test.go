@@ -2,6 +2,10 @@ package std
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
@@ -9,7 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestMain(m *testing.M) {
+	// magusfile-api-generate rewrites the std API lock through this variable.
+	testkit.Main(m, "UPDATE_STD_API_LOCK")
+}
 
 // The covImpl* functions below are Method Impls and Field Resolvers of every shape
 // validateMethod and validateField accept or reject. They are package-level rather
@@ -34,8 +41,8 @@ func covResolverCtx(_ context.Context) (string, error) { return "", nil }
 
 func covResolverBare() (string, error) { return "", nil }
 
-// TestValidateModuleAcceptsWellFormedDeclarations covers the shapes Register lets
-// through: a plain method, a variadic one, an Extern with no Impl, a namespace of
+// TestValidateModuleAcceptsWellFormedDeclarations covers the shapes the registry
+// lets through: a plain method, a variadic one, an Extern with no Impl, a namespace of
 // Externs, and both Field Resolver arities.
 func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 	tests := []struct {
@@ -84,8 +91,8 @@ func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 
 // TestValidateModuleRejectsMismatchedDeclarations walks every rejection
 // validateModule can produce. Each case asserts the message names WHICH member is
-// wrong as well as what is wrong with it: the error surfaces from a package init(),
-// where the member name is the only thing locating the mistake.
+// wrong as well as what is wrong with it: the error surfaces as a panic while the
+// registry builds, where the member name is the only thing locating the mistake.
 func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 	method := func(m Method) Module { return Module{Name: "covbad", Methods: []Method{m}} }
 	field := func(f Field) Module { return Module{Name: "covbad", Fields: []Field{f}} }
@@ -249,25 +256,21 @@ func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 	})
 }
 
-// TestRegisterPanicsRatherThanStoringABadModule covers both of Register's refusals.
-// Neither case reaches the registry, so this leaves the global module set untouched
-// - which matters, since nothing unregisters.
-func TestRegisterPanicsRatherThanStoringABadModule(t *testing.T) {
+// TestIndexModulesPanicsRatherThanIndexingABadModule covers both of the registry's
+// refusals. It indexes a throwaway list, so the real registry is untouched.
+func TestIndexModulesPanicsRatherThanIndexingABadModule(t *testing.T) {
 	assert.PanicsWithValue(t, `host: duplicate module registration: "uuid"`, func() {
-		Register(Module{Name: "uuid"})
+		indexModules([]Module{{Name: "uuid"}, {Name: "uuid"}})
 	}, "a second module under a live name must not silently replace it")
 
 	assert.Panics(t, func() {
-		Register(Module{Name: "zzz-cov-never-registered", Methods: []Method{{Name: "f"}}})
+		indexModules([]Module{{Name: "zzz-cov-never-registered", Methods: []Method{{Name: "f"}}}})
 	}, "a method with no Impl and no Extern must not reach the registry")
-
-	_, ok := Get("zzz-cov-never-registered")
-	assert.False(t, ok, "the rejected module must not be stored")
 }
 
 func TestGetAndAllReadTheRegistry(t *testing.T) {
 	got, ok := Get("uuid")
-	require.True(t, ok, "uuid registers from its own init")
+	require.True(t, ok, "uuid is in the portable list")
 	assert.Equal(t, "uuid", got.Name)
 
 	_, ok = Get("zzz-cov-no-such-module")
@@ -355,4 +358,75 @@ func fieldNames(m Module) string {
 		return "<field>"
 	}
 	return m.Fields[0].Name
+}
+
+// stdAPILockPath is the committed snapshot of every member a magusfile can call on a
+// std host module, one dotted name per line, sorted.
+var stdAPILockPath = filepath.Join("gen", "std-api.lock")
+
+// stdAPINames lists the Buzz-facing member names of every std module: methods as
+// <module>.<method>, namespace members as <module>.<namespace>.<member> and fields
+// as <module>.<field>. The magus module is left out because magus-api.lock owns it.
+func stdAPINames(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, m := range All() {
+		if m.Name == "magus" {
+			continue
+		}
+		for _, f := range m.Fields {
+			out = append(out, m.Name+"."+CamelCase(f.Name))
+		}
+		for _, meth := range m.Methods {
+			out = append(out, m.Name+"."+BuzzMethodName(meth))
+		}
+		for _, ns := range m.Namespaces {
+			for _, meth := range ns.Methods {
+				out = append(out, m.Name+"."+ns.Name+"."+BuzzMethodName(meth))
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestStdAPILocked pins the std method names the way TestMagusAPILocked pins magus.*.
+// A Method.Name is the identifier every magusfile calls, and Buzz reads a missing
+// member as null, so a rename or removal loads fine and fails later with "null is not
+// callable". Added members fail too, which is settled by regenerating the lock.
+func TestStdAPILocked(t *testing.T) {
+	got := stdAPINames(t)
+
+	if os.Getenv("UPDATE_STD_API_LOCK") != "" {
+		require.NoError(t, os.MkdirAll(filepath.Dir(stdAPILockPath), 0o755))
+		require.NoError(t, os.WriteFile(stdAPILockPath, []byte(strings.Join(got, "\n")+"\n"), 0o644))
+		t.Logf("wrote %s (%d members)", stdAPILockPath, len(got))
+		return
+	}
+
+	data, err := os.ReadFile(stdAPILockPath)
+	require.NoError(t, err, "the std API lock must be committed; regenerate with `magus run magusfile-api-generate .`")
+	want := strings.Fields(string(data))
+
+	gotSet := map[string]bool{}
+	for _, n := range got {
+		gotSet[n] = true
+	}
+	wantSet := map[string]bool{}
+	for _, n := range want {
+		wantSet[n] = true
+	}
+	for _, n := range want {
+		assert.Truef(t, gotSet[n],
+			"%s was REMOVED or renamed in the std API.\n"+
+				"A magusfile still calling it loads fine and fails at run time with "+
+				"\"null is not callable\". Move every in-repo caller, list the change under "+
+				"Breaking in the changelog, then regenerate the lock with "+
+				"`magus run magusfile-api-generate .`", n)
+	}
+	for _, n := range got {
+		assert.Truef(t, wantSet[n],
+			"%s was ADDED to the std API; regenerate the lock with "+
+				"`magus run magusfile-api-generate .`", n)
+	}
 }

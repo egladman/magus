@@ -15,15 +15,16 @@ import (
 	"strings"
 	"time"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -54,9 +55,9 @@ func notesCmd(ctx context.Context, root string, args []string) error {
 		// Named rather than left to the generic unknown-subcommand error, because the
 		// reason it is absent is the whole point of the store and is worth stating at the
 		// moment someone reaches for it.
-		return usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
+		return exit.Usagef("magus notes: there is no `put`; a note is written by a person, not a program (run `%s`)", hint.NotesEdit.With("<name>"))
 	default:
-		return usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
+		return exit.Usagef("magus notes: unknown subcommand %q (want ls, get, edit, verify, or capture)", args[0])
 	}
 }
 
@@ -326,7 +327,7 @@ func notesList(root string, args []string) error {
 		for i, n := range found {
 			names[i] = n.Name
 		}
-		if err := emitNames(names); err != nil {
+		if err := emitNames(os.Stdout, names); err != nil {
 			return err
 		}
 		return notesIssuesError(issues, false)
@@ -383,7 +384,7 @@ func notesGet(root string, args []string) error {
 		return err
 	}
 	if opts.Format == outputName {
-		return emitNames([]string{n.Name})
+		return emitNames(os.Stdout, []string{n.Name})
 	}
 	if opts.Format != outputText {
 		return emitFormatted(opts, scopedNote{
@@ -600,7 +601,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	// the reader would act on next: the note each issue is about (its file, for an issue
 	// about the store rather than a note). A clean store prints nothing.
 	if opts.Format == outputName {
-		if err := emitNames(notesIssueSubjects(report.Issues)); err != nil {
+		if err := emitNames(os.Stdout, notesIssueSubjects(report.Issues)); err != nil {
 			return err
 		}
 		return notesIssuesError(report.Issues, strict)
@@ -834,14 +835,17 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		return usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
+		return exit.Usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
 	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
-	sess, fromServer := captureSession(ctx, m)
+	sess, fromServer, err := captureSession(ctx, m)
+	if err != nil {
+		return fmt.Errorf("magus notes capture: %w", err)
+	}
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
 	comments, partial := reviewComments(ctx, m)
@@ -1038,12 +1042,13 @@ func captureName(sess *types.DiffReview) string {
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
 // absence of a server is a smaller transcript rather than no transcript. The caller says which
 // one it got; see notesCapture's output.
-func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool) {
+func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool, error) {
 	if sess := serverDiffReview(ctx); sess != nil {
-		return sess, true
+		return sess, true, nil
 	}
 	patch, _ := m.WorkingDiff(ctx, nil)
-	return storedDiffReview(m.CacheDir(), patch), false
+	sess, err := storedDiffReview(m.CacheDir(), patch)
+	return sess, false, err
 }
 
 // storedDiffReview rebuilds what a capture needs from the files the store persists.
@@ -1052,12 +1057,16 @@ func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, boo
 // so the note this capture names is the one either path would have named for this tree. No
 // patch leaves it EMPTY rather than digesting the empty string, which would name every such
 // capture the same note and make the second one collide with the first.
-func storedDiffReview(cacheDir, patch string) *types.DiffReview {
-	sess := &types.DiffReview{Comments: changeset.NewStore(cacheDir).LoadDrafts()}
+func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
+	drafts, err := changeset.NewStore(cacheDir).LoadDrafts()
+	if err != nil {
+		return nil, err
+	}
+	sess := &types.DiffReview{Comments: drafts}
 	if patch != "" {
 		sess.AsOf = changeset.PatchDigest(patch)
 	}
-	return sess
+	return sess, nil
 }
 
 // serverDiffReview reads the running server's review session, or nil when there is no server,
@@ -1166,10 +1175,16 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 	comments, err := bindings.ReviewComments(ctx, at)
 	// The watermark is PERSISTED, so the new-comment mark survives without the server that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	watermark := types.DiffReview{SeenComments: changeset.NewStore(cacheDir).LoadSeenComments()}
+	// An unreadable watermark marks nothing new rather than everything, and its error rides
+	// with the forge's.
+	seen, seenErr := changeset.NewStore(cacheDir).LoadSeenComments()
+	err = errors.Join(err, seenErr)
+	watermark := types.DiffReview{SeenComments: seen}
 	fresh := make(map[string]struct{})
 	for _, id := range watermark.UnseenComments(comments) {
-		fresh[id] = struct{}{}
+		if seenErr == nil {
+			fresh[id] = struct{}{}
+		}
 	}
 	for i := range comments {
 		if _, ok := fresh[comments[i].ID]; ok {

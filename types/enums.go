@@ -137,3 +137,61 @@ var sandboxModes = enum.Set[SandboxMode]{SandboxModeOff, SandboxModeBestEffort, 
 
 func (v SandboxMode) Values() []string { return sandboxModes.Strings() }
 func (v SandboxMode) Valid() bool      { return sandboxModes.Valid(v) }
+
+var skillVariants = enum.Set[SkillVariant]{SkillVariantShort, SkillVariantFull}
+
+func (v SkillVariant) Values() []string { return skillVariants.Strings() }
+func (v SkillVariant) Valid() bool      { return skillVariants.Valid(v) }
+func (v SkillVariant) String() string   { return enum.String(v) }
+
+// Full and Short let a skill body branch with {{if .Full}}: text/template cannot name a
+// package constant, so the predicate hangs off the value being rendered. Short brackets
+// text only the shorter reader sees, so it suits wording, never a step.
+func (v SkillVariant) Full() bool  { return v == SkillVariantFull }
+func (v SkillVariant) Short() bool { return v == SkillVariantShort }
+
+var jobKinds = enum.Set[JobKind]{JobKindCheck, JobKindSymbol, JobKindPaths, JobKindScript, JobKindProse}
+
+func (v JobKind) Values() []string { return jobKinds.Strings() }
+func (v JobKind) Valid() bool      { return jobKinds.Valid(v) }
+func (v JobKind) String() string   { return enum.String(v) }
+
+var groupingShapes = enum.Set[GroupingShape]{GroupingChained, GroupingSplit, GroupingSolo}
+
+func (v GroupingShape) Values() []string { return groupingShapes.Strings() }
+func (v GroupingShape) Valid() bool      { return groupingShapes.Valid(v) }
+func (v GroupingShape) String() string   { return enum.String(v) }
+
+var groupingVerdicts = enum.Set[GroupingVerdict]{GroupingMeasured, GroupingUnknown}
+
+func (v GroupingVerdict) Values() []string { return groupingVerdicts.Strings() }
+func (v GroupingVerdict) Valid() bool      { return groupingVerdicts.Valid(v) }
+func (v GroupingVerdict) String() string   { return enum.String(v) }
+
+var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceDefault}
+
+func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
+func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
+func (v ModelTierSource) String() string   { return enum.String(v) }
+
+var conformanceMetrics = enum.Set[ConformanceMetric]{
+	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
+	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,
+	ConformanceCallerSpread, ConformanceModeKnobs, ConformanceAliasShare, ConformanceNameClash,
+}
+
+func (v ConformanceMetric) Values() []string { return conformanceMetrics.Strings() }
+func (v ConformanceMetric) Valid() bool      { return conformanceMetrics.Valid(v) }
+func (v ConformanceMetric) String() string   { return enum.String(v) }
+
+var conformancePopulations = enum.Set[ConformancePopulation]{ConformancePopSource, ConformancePopMain, ConformancePopTest}
+
+func (v ConformancePopulation) Values() []string { return conformancePopulations.Strings() }
+func (v ConformancePopulation) Valid() bool      { return conformancePopulations.Valid(v) }
+func (v ConformancePopulation) String() string   { return enum.String(v) }
+
+var conformanceSources = enum.Set[ConformanceSource]{ConformanceFromRatchet, ConformanceFromAnchor}
+
+func (v ConformanceSource) Values() []string { return conformanceSources.Strings() }
+func (v ConformanceSource) Valid() bool      { return conformanceSources.Valid(v) }
+func (v ConformanceSource) String() string   { return enum.String(v) }

@@ -13,15 +13,15 @@ stdout 'subcommands="[^"]*\bls\b[^"]*\bdescribe\b[^"]*\brun\b[^"]*\baffected\b[^
 
 exec magus completion zsh
 stdout '^#compdef magus mgs'
-stdout '''ls:list all discovered projects'''
-stdout 'describe:define a magus concept'
-stdout '''affected:run a target for VCS-diff affected projects'''
+stdout '''ls:List all discovered projects'''
+stdout 'describe:Define a magus concept'
+stdout '''affected:Run a target for VCS-diff affected projects'''
 
 exec magus completion fish
 stdout '^# fish completion for magus'
-stdout 'ls\s+.list all discovered projects.'
-stdout 'describe\s+.define a magus concept'
-stdout 'affected\s+.run a target for VCS-diff affected projects.'
+stdout 'ls\s+.List all discovered projects.'
+stdout 'describe\s+.Define a magus concept'
+stdout 'affected\s+.Run a target for VCS-diff affected projects.'
 
 exec magus completion powershell
 stdout '^# PowerShell completion for magus'

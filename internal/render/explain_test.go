@@ -72,6 +72,24 @@ func TestExplainTextPrintsPackageDocs(t *testing.T) {
 // TestExplainTextCountsAndFullIDs: a multi-edge group states its count before the
 // list and keeps full IDs, so an agent never miscounts and always has the next-call
 // token verbatim.
+// TestExplainPrintsADirsPublicAPI: a dir card lists each public symbol on one row with its
+// signature folded to one line, and prints the gap in place of an empty list.
+func TestExplainPrintsADirsPublicAPI(t *testing.T) {
+	dir := types.KnowledgeNode{ID: "dir:internal/a", Kind: types.KindDir}
+	got := ExplainText(types.KnowledgeExplainOutput{Node: dir, PublicAPI: []types.PublicSymbol{
+		{ID: "symbol:f", Label: "Open", Dir: "internal/a", Signature: "func Open(\n\tpath string,\n) error", UsedBy: 3},
+		{ID: "symbol:t", Label: "T", Dir: "internal/a", UsedBy: 1},
+	}})
+	assert.Equal(t, "dir:internal/a   dir\n\npublic API (2)\n"+
+		"  Open  func Open( path string, ) error  used by 3\n"+
+		"  T     used by 1\n", got)
+
+	gap := ExplainText(types.KnowledgeExplainOutput{Node: dir, PublicAPIGap: "the graph holds no go symbols for internal/a"})
+	assert.Contains(t, gap, "public API unknown: the graph holds no go symbols for internal/a\n")
+	assert.NotContains(t, ExplainText(types.KnowledgeExplainOutput{Node: dir}), "public API",
+		"a dir with symbols loaded and nothing used outside prints no block")
+}
+
 func TestExplainTextCountsAndFullIDs(t *testing.T) {
 	var in []types.KnowledgeEdgeRef
 	for _, id := range []string{"op:go:go-build", "op:go:go-test", "op:go:go-vet", "spell:go"} {

@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -61,31 +62,6 @@ func TestFields_boolPtrHasNoFlagName(t *testing.T) {
 				"KindBoolPtr field %q should have empty Flag.Long (env-only), got %q", f.GoPath, f.Flag.Long)
 		}
 	}
-}
-
-func TestFieldByEnv_found(t *testing.T) {
-	f, ok := FieldByEnv("MAGUS_CACHE_DIR")
-	require.True(t, ok, "FieldByEnv(MAGUS_CACHE_DIR) not found")
-	byPath, ok := FieldByGoPath("Cache.Dir")
-	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
-	assert.Equal(t, byPath, f, "the env and Go-path lookups reach one field")
-	assert.Equal(t, KindString, f.Kind)
-}
-
-func TestFieldByEnv_notFound(t *testing.T) {
-	_, ok := FieldByEnv("MAGUS_DOES_NOT_EXIST")
-	assert.False(t, ok, "FieldByEnv(unknown) should return false")
-}
-
-func TestFieldByGoPath_found(t *testing.T) {
-	f, ok := FieldByGoPath("Cache.Dir")
-	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
-	assert.Equal(t, "MAGUS_CACHE_DIR", f.EnvVar)
-}
-
-func TestFieldByGoPath_notFound(t *testing.T) {
-	_, ok := FieldByGoPath("Nonexistent.Field")
-	assert.False(t, ok, "FieldByGoPath(unknown) should return false")
 }
 
 // String must be single-line so %v / fmt.Println(field) doesn't smear across
@@ -178,36 +154,6 @@ func TestEnvPrefix(t *testing.T) {
 	assert.Equal(t, "MAGUS", EnvPrefix)
 }
 
-// BenchmarkFieldLookup measures O(1) map lookup via FieldByEnv.
-func BenchmarkFieldLookup(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		_, _ = FieldByEnv("MAGUS_CACHE_DIR")
-	}
-}
-
-// BenchmarkFieldLookup_miss measures miss path (key not in map).
-func BenchmarkFieldLookup_miss(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		_, _ = FieldByEnv("MAGUS_DOES_NOT_EXIST")
-	}
-}
-
-// BenchmarkFieldLookup_reflect is the control: linear scan via reflect, as a
-// baseline to demonstrate the advantage of the precomputed map.
-func BenchmarkFieldLookup_reflect(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		target := "MAGUS_CACHE_DIR"
-		for _, f := range Fields {
-			if f.EnvVar == target {
-				break
-			}
-		}
-	}
-}
-
 // BenchmarkApplyEnv_AllUnset measures the hot path where no MAGUS_* vars are
 // set — essentially N empty-string checks.
 func BenchmarkApplyEnv_AllUnset(b *testing.B) {
@@ -285,18 +231,14 @@ func BenchmarkParseBool_fallback(b *testing.B) {
 
 // BenchmarkField_String measures the String formatter.
 func BenchmarkField_String(b *testing.B) {
-	f, _ := FieldByEnv("MAGUS_CACHE_DIR")
+	i := slices.IndexFunc(Fields, func(f Field) bool { return f.EnvVar == "MAGUS_CACHE_DIR" })
+	if i < 0 {
+		b.Fatal("no MAGUS_CACHE_DIR field")
+	}
+	f := Fields[i]
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = f.String()
-	}
-}
-
-// BenchmarkFieldByGoPath measures the GoPath index lookup.
-func BenchmarkFieldByGoPath(b *testing.B) {
-	b.ReportAllocs()
-	for b.Loop() {
-		_, _ = FieldByGoPath("Cache.Dir")
 	}
 }
 

@@ -1,7 +1,7 @@
 // Package annotate emits CI job-log structure: the fold markers and the
 // warning/error notices a CI provider recognizes.
 //
-// The shape mirrors [cache.RemoteBackend]: magus core names no provider.
+// The shape mirrors [types.CacheBackend]: magus core names no provider.
 // It holds an [Annotator], asks whether it is Active, and calls generic
 // verbs. Provider syntax lives behind an implementation, so supporting a
 // new one is a new implementation and no change to any call site.

@@ -69,14 +69,14 @@ export fun rowID(section: str, key: str) > str {
     return "fb" + crypto\sha256Hex("{section}|{key}").sub(0, len: 12);
 }
 
-fun observationAgent(o: FeedbackObservation) > str {
+fun observationAgent(o: TrailObservation) > str {
     return if (o.agent == "") "main" else o.agent;
 }
 
 // nextRun reports whether the agent behind obs[i] ran one of the nexts it was served:
 // a later call of the same agent, before the same rule refused it again, that is a served
 // command verbatim or that the guard let through as that rule's served next.
-export fun nextRun(obs: [FeedbackObservation], i: int) > bool {
+export fun nextRun(obs: [TrailObservation], i: int) > bool {
     final o = obs[i];
     var j = i + 1;
     while (j < obs.len()) {
@@ -134,7 +134,7 @@ fun ranked(groups: {str: Group}) > [Group] {
 
 // settledLast moves the groups a person already marked fine behind the rest, keeping each
 // part's order, so the first pages carry what still needs a verdict.
-fun settledLast(groups: [Group], section: str, latest: {str: FeedbackMark}) > [Group] {
+fun settledLast(groups: [Group], section: str, latest: {str: TrailMark}) > [Group] {
     final open = mut [<Group>];
     final settled = mut [<Group>];
     foreach (g in groups) {
@@ -150,8 +150,8 @@ fun settledLast(groups: [Group], section: str, latest: {str: FeedbackMark}) > [G
 
 // rows folds a session's observations into the report's labelled rows, in label order.
 // marks are this repository's verdicts; a row shows the latest one made on its id.
-export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
-    final latest = mut {<str: FeedbackMark>};
+export fun rows(t: Trail, marks: [TrailMark]) > [Row] {
+    final latest = mut {<str: TrailMark>};
     foreach (m in marks) {
         latest[m.id] = m;
     }
@@ -220,7 +220,7 @@ export fun report(session: str, since: str, through: str) > Report !> any {
     return fold(t, marks: magus\trail.marks());
 }
 
-export fun fold(t: FeedbackTrail, marks: [FeedbackMark]) > Report {
+export fun fold(t: Trail, marks: [TrailMark]) > Report {
     var unparsed = 0;
     foreach (o in t.observations) {
         if (o.tool == "shell.command" and o.command != "" and o.shape == "") {
@@ -370,27 +370,27 @@ export fun main(args: [str]) > void !> any {
     }
 }
 
-// trailFromJSON reads a fixture: a FeedbackTrail spelled as JSON, the shape -o json of
+// trailFromJSON reads a fixture: a Trail spelled as JSON, the shape -o json of
 // magus\trail.read would print.
-export fun trailFromJSON(text: str) > FeedbackTrail !> any {
+export fun trailFromJSON(text: str) > Trail !> any {
     final raw = json\parse(text);
-    final obs = mut [<FeedbackObservation>];
+    final obs = mut [<TrailObservation>];
     foreach (o in raw["observations"] ?? []) {
         final nexts = mut [<str>];
         foreach (x in o["nexts"] ?? []) {
             nexts.append(x);
         }
         final command = o["command"] ?? "";
-        obs.append(FeedbackObservation{
+        obs.append(TrailObservation{
             at = std\toInt(o["at"] ?? 0), agent = o["agent"] ?? "", lease = o["lease"] ?? "", tool = o["tool"] ?? "shell.command",
             command = command, path = o["path"] ?? "", decision = o["decision"] ?? "", rule = o["rule"] ?? "",
             nexts = nexts, preauthorizedBy = o["preauthorizedBy"] ?? "",
             shape = magus\trail.shape(command), shapes = magus\trail.shapes(command),
         });
     }
-    final spawns = mut [<FeedbackSpawn>];
+    final spawns = mut [<TrailSpawn>];
     foreach (s in raw["spawns"] ?? []) {
-        spawns.append(FeedbackSpawn{
+        spawns.append(TrailSpawn{
             at = std\toInt(s["at"] ?? 0), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "", model = s["model"] ?? "",
         });
     }
@@ -398,7 +398,7 @@ export fun trailFromJSON(text: str) > FeedbackTrail !> any {
     foreach (c in raw["checkouts"] ?? []) {
         checkouts.append(c);
     }
-    return FeedbackTrail{
+    return Trail{
         session = raw["session"] ?? "", host = raw["host"] ?? "", start = std\toInt(raw["start"] ?? 0), end = std\toInt(raw["end"] ?? 0),
         checkouts = checkouts, observations = obs, spawns = spawns,
     };
@@ -408,7 +408,7 @@ final FIXTURE = "hack/testdata/feedback-trail.json";
 
 fun fixtureReport() > Report !> any {
     return fold(trailFromJSON(fs\readFile(FIXTURE)), marks: [
-        FeedbackMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = "unguarded", key = "grep -rn <arg>",
+        TrailMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = "unguarded", key = "grep -rn <arg>",
             verdict = "should-deny", note = "use magus refs", session = "s-old", at = 1 },
     ]);
 }

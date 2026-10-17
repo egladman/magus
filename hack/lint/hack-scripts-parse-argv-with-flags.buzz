@@ -3,6 +3,8 @@
 // value, an empty one and `--` its own way, and each script that grew one answered them
 // differently. A git hook reads the path git hands it as $1 and lives outside the script
 // directories, so it is not judged.
+//
+// Tier 1, mechanical: the fix is a flags\parse call.
 namespace scriptflags;
 
 import "assert";

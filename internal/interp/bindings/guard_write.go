@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/hint"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -34,6 +35,6 @@ func registerWriteRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectO
 // buzzWriteRule adapts the registered Buzz function to the guard's rule type.
 func buzzWriteRule(sess *buzz.Session, rule vm.Value) workspace.WriteRule {
 	return func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error) {
-		return callFunctionRule(ctx, sess, rule, "write", bindinggen.ObjectWriteRequest(req), facts)
+		return callFunctionRule(ctx, sess, rule, "write", bindgen.ObjectWriteRequest(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
 	}
 }

@@ -13,12 +13,14 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -49,7 +51,7 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, harness, starter, or adoption)", args[0])
+		return exit.Usagef("magus agent: unknown subcommand %q (want install, harness, starter, or adoption)", args[0])
 	}
 }
 
@@ -113,7 +115,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	// and with stderr redirected that looked exactly like a successful install: the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
-	af := gen.BindAgent(fset)
+	af := flaggen.BindAgent(fset)
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
@@ -293,11 +295,11 @@ func declaresRoutingIndex(ctx context.Context, dir string) bool {
 	if err != nil {
 		return false
 	}
-	root, err := magus.FindRoot(abs)
+	root, err := workspace.FindRoot(abs)
 	if err != nil || root != abs {
 		return false
 	}
-	ws, err := magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	ws, err := magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	if err != nil {
 		return false
 	}
@@ -374,7 +376,7 @@ func reportContextCost(ctx context.Context, dir string, written []string) {
 	// What the always-loaded set would cost if the long form were the one carried. Kept
 	// even though it is no longer a flag to choose between, because it is the number that
 	// justifies the split: without it the reader cannot see what the shorter form buys.
-	if alt, err := agentSkills.VariantSize(agent.VariantFull); err == nil && alt > installed {
+	if alt, err := agentSkills.VariantSize(types.SkillVariantFull); err == nil && alt > installed {
 		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {

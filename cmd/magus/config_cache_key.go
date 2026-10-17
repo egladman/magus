@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
@@ -44,7 +45,7 @@ func configCacheKey(ctx context.Context, _ string, args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config cache key: unknown subcommand %q", sub)
+		return exit.Usagef("magus config cache key: unknown subcommand %q", sub)
 	}
 }
 
@@ -95,7 +96,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 	// thing the whole key-handling design forbids. Refused rather than ignored: a
 	// silently-dropped --tee would leave you believing you had a copy.
 	if global.tee != "" {
-		return usagef("magus config cache key generate: --tee writes to a file and a signing key must not come to rest on disk; drop it, or pipe -o template='{{.seed}}' straight into your secret store")
+		return exit.Usagef("magus config cache key generate: --tee writes to a file and a signing key must not come to rest on disk; drop it, or pipe -o template='{{.seed}}' straight into your secret store")
 	}
 
 	km, err := cache.GenerateSigningKey()
@@ -113,7 +114,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
 	if opts.Format == outputName {
 		slog.WarnContext(ctx, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.", attr.Notice(""))
-		return emitNames([]string{km.KeyID})
+		return emitNames(os.Stdout, []string{km.KeyID})
 	}
 	if opts.Format != outputText {
 		// Warnings to stderr so a pipe gets only the requested field. Printed BEFORE

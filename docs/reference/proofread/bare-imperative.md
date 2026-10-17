@@ -1,13 +1,13 @@
 ---
 title: "bare-imperative"
-description: "A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere (\"Fix this.\")."
-tags: [proofread, rules, bare-imperative, advise]
+description: "A rule that is off by default: it reports a short command in a review reply that gives no reason anywhere (\"Fix this.\") once a decisions table turns it on."
+tags: [proofread, rules, bare-imperative, off]
 aliases: [reference/prose/bare-imperative]
 ---
 
 # bare-imperative
 
-A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere ("Fix this.").
+A rule that is off by default: it reports a short command in a review reply that gives no reason anywhere ("Fix this.") once a decisions table turns it on.
 
 ## What it catches
 
@@ -26,9 +26,11 @@ Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request
 
 The code is `PRF8012`. The decision depends on the kind of text judged:
 
-| Kind           | Default |
-| -------------- | ------- |
-| `review-reply` | off     |
+| Kind             | Default |
+| ---------------- | ------- |
+| `review-summary` | off     |
+| `review-inline`  | off     |
+| `review-reply`   | off     |
 
 ## Changing it
 
@@ -51,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "bare-imperative", "code": "PRF8012", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/bare-imperative/"}
+{"rule": "bare-imperative", "code": "PRF8012", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/bare-imperative/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -60,4 +62,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

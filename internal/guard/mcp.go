@@ -112,15 +112,15 @@ func buildCall(name string, input map[string]any, cwd string) string {
 }
 
 // clientCall renders what a client script does that a rule judges, one line per
-// call: a gate run as `magus run ci`, a nested `magus job ...` as that command, and
-// each magus\job write as `client op=<member> id=<id> <key>=<value>...`. A script
-// with none of these renders as the tool's bare name.
+// call: a target run as `magus run <target> <projects>`, a nested `magus job ...` as
+// that command, and each magus\job write as `client op=<member> id=<id>
+// <key>=<value>...`. A script with none of these renders as the tool's bare name.
 //
 // The script is parsed, not matched: a comment naming --plan, a `"CI"` or a
 // variable holding the argv read as what they are. What the parse cannot settle
-// reads as the refusing answer: a computed argv as the gate, a computed id or value
+// reads as the refusing answer: a computed argv as unreadRun, a computed id or value
 // as unreadValue, and a script that does not parse, or a path that cannot be read,
-// as both the gate and an unread job call. A relative path resolves against cwd,
+// as both unreadRun and an unread job call. A relative path resolves against cwd,
 // the process's own when empty.
 func clientCall(input map[string]any, cwd string) string {
 	name := hint.ToolClient.String()
@@ -150,7 +150,19 @@ func clientCall(input map[string]any, cwd string) string {
 }
 
 func unreadClientCall() string {
-	return "magus run ci\n" + hint.ToolClient.String() + " op=" + jobOpUnread
+	return unreadRun + "\n" + hint.ToolClient.String() + " op=" + jobOpUnread
+}
+
+// unreadRun renders a run the guard cannot read: the gate, which the lease rules refuse,
+// on a project no workspace declares, which human-only refuses wherever a target is
+// declared human_only.
+const unreadRun = "magus run ci " + unreadValue
+
+// runsTarget reports an argv that runs a target rather than reporting on one, which the
+// rules holding a run to its target read.
+func runsTarget(argv []string) bool {
+	_, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: argv})
+	return ok
 }
 
 // clientScriptLines walks a client script for the magus calls a rule judges. ok is
@@ -289,14 +301,14 @@ func (r *clientReader) call(member []string, c *ast.CallExpr) {
 	}
 }
 
-// magusLine renders a nested magus invocation a rule reads: the gate, and anything
-// under `magus job`, which the rebind rule judges. An argv the script computes may be
-// the gate, so it renders as one.
+// magusLine renders a nested magus invocation a rule reads: a target run, which the gate
+// and human-only rules judge, and anything under `magus job`, which the rebind rule
+// judges. An argv the script computes may be any run, so it renders as unreadRun.
 func (r *clientReader) magusLine(argv []string, literal bool) {
 	switch {
 	case !literal:
-		r.lines = append(r.lines, "magus run ci")
-	case isGateCommand(argv), len(argv) > 0 && argv[0] == hint.JobFork.Head():
+		r.lines = append(r.lines, unreadRun)
+	case isGateCommand(argv), len(argv) > 0 && argv[0] == hint.JobFork.Head(), runsTarget(argv):
 		quoted := make([]string, len(argv))
 		for i, a := range argv {
 			quoted[i] = quoteValue(a)

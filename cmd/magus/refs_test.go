@@ -13,6 +13,8 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -36,9 +38,9 @@ func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
 	var stderr bytes.Buffer
 	_, err := refsSymbol(&stderr, g, "Classify")
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent)
-	assert.Equal(t, exitUsage, silent.exitCode)
+	assert.Equal(t, exit.Usage, silent.ExitCode())
 	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
   `+hint.Refs.With("'"+hintID+"'")+`
   `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
@@ -195,12 +197,41 @@ func TestEmitDefinitionsText(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "symbol: symbol:a F().  (F)\n"+
 		"a.go:3-5  verified\nfunc F() {\n\treturn\n}\n"+
 		"\nb.go:9  verified  (the index recorded no end line; the declaration line alone)\nvar F = 1\n"+
 		"c.go  (the index recorded no line in this file)\n", got)
+}
+
+func TestWriteRefsText(t *testing.T) {
+	out := types.KnowledgeRefsOutput{
+		Symbol: "symbol:a F().", Label: "F",
+		Defs:      []types.KnowledgeRefSite{{File: "a.go"}},
+		Refs:      []types.KnowledgeRefSite{{File: "b.go", Count: 2, Lines: []int{4, 9}}, {File: "c.go", Count: 1}},
+		FileCount: 2, RefCount: 3,
+		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}
+	var b bytes.Buffer
+	require.NoError(t, writeRefsText(&b, out))
+	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\n"+
+		"referenced in 2 file(s), 3 occurrence(s):\n"+
+		"  b.go  (2)"+linesSuffix([]int{4, 9})+"\n  c.go  (1)\n", b.String())
+
+	// A resolved symbol nothing references is a verified answer, unless the verdict is not.
+	out.Refs, out.FileCount, out.RefCount = nil, 0, 0
+	b.Reset()
+	require.NoError(t, writeRefsText(&b, out))
+	assert.Equal(t, "symbol: symbol:a F().  (F)\ndefined in:\n  a.go\nno references found\n", b.String())
+
+	out.Answer.Verdict = types.VerdictUnknown
+	b.Reset()
+	err := writeRefsText(&b, out)
+	assert.True(t, exit.AlreadyReported(err))
+	assert.Contains(t, b.String(), "verdict: unknown, not absent")
 }
 
 // A changed range still prints, marked, but the exit status says the lines are not the
@@ -215,12 +246,16 @@ func TestEmitDefinitionsChangedExitsOne(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Contains(t, got, "a.go:3-5  changed  (edited since indexing; refresh with `")
 
-	got = captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: outputName}, out) })
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	got = captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputName}, out)
+	})
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Equal(t, "b.go:1-2\n", got)
 }
 
@@ -232,13 +267,17 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	out := types.KnowledgeDefinitionsOutput{Symbol: "symbol:a F().", Definitions: []types.KnowledgeDefinitionSite{site}, Answer: answer}
 
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
 	require.NoError(t, err)
 	assert.Contains(t, got, staleIndexNotice(answer))
 
 	out.Definitions[0].Status = types.DefinitionUnverified
-	captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	captureStdout(t, func() {
+		err = emitDefinitions(context.Background(), os.Stdout, output.Options{Format: outputText}, out)
+	})
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 }
 
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
@@ -271,7 +310,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 	out := captureStdout(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 1}, err)
+	assert.Equal(t, exit.Reported(exit.Failure), err)
 	assert.Empty(t, out)
 }
 
@@ -287,7 +326,7 @@ func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, missing)
 }
 
@@ -337,7 +376,7 @@ func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.Contains(t, errOut, "outside the workspace")
 }
 
@@ -362,7 +401,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -390,7 +429,7 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	errOut := captureStderr(t, func() {
 		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, 0, nil)
 	})
-	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotEmpty(t, errOut)
 }
 
@@ -407,7 +446,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 
 	var stderr bytes.Buffer
 	var err error
-	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: outputJSON}, miss) })
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputJSON}, miss) })
 	require.NoError(t, err)
 	var record types.KnowledgeRefsOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
@@ -427,7 +466,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
 
 	stderr.Reset()
-	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: FormatText}, miss) })
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, output.Options{Format: outputText}, miss) })
 	require.NoError(t, err)
 	assert.Empty(t, stdout, "text output keeps stdout for answers")
 	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)

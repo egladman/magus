@@ -1,0 +1,19 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+A review requesting changes whose body names nothing blocking.
+-- hit/review-summary event=REQUEST_CHANGES --
+Needs work.
+Not ready yet, please revise.
+I'd like to see some changes before this goes in.
+-- pass/review-summary event=REQUEST_CHANGES --
+The retry loop in client.go never backs off.
+See the inline comments: two races in the cache.
+Tests are failing on Linux.
+`Cache.put` races with `Cache.get`.
+-- pass/review-summary event=REQUEST_CHANGES whole --
+Two things hold this:
+- the lock around the map
+- the retry with no backoff
+-- pass/review-summary event=COMMENT --
+Needs work.
+-- pass/review-summary --
+Needs work.

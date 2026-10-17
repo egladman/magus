@@ -1,0 +1,175 @@
+# `magus vcs resolve --against` settles a source file git leaves conflicted when two jobs
+# wrote it through disjoint declaration claims: each side carries one job's work, both
+# jobs passed `magus job wait`, and a project's merge_low_risk covers the file. Jobs a and
+# b edit adjacent lines of a.go, so git conflicts and no line merge settles it. Each
+# refusal names the condition that failed and leaves the conflict as git left it:
+#   - no project declares merge_low_risk;
+#   - job c's claims overlap job a's;
+#   - job d returned but nobody waited on it.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd ws
+exec git init -q -b main
+exec magus ls
+exec git add -A
+exec git commit -q -m base
+
+exec magus job fork a --criteria 'A returns 10' --write-paths 'a.go#A' --check 'test .'
+exec magus job fork b --criteria 'B returns 20' --write-paths 'a.go#B' --check 'test .'
+exec magus job fork c --criteria 'B returns 21' --write-paths 'a.go#A,a.go#B' --check 'test .'
+exec magus job fork d --criteria 'B returns 22' --write-paths 'a.go#B' --check 'test .'
+exec git worktree add -q -b a ../a
+exec git worktree add -q -b b ../b
+exec git worktree add -q -b c ../c
+exec git worktree add -q -b d ../d
+
+cd ../a
+exec magus job exec a
+cp $WORK/a.A.go a.go
+exec git commit -q -am 'A returns 10'
+exec sh $WORK/result.sh
+stdin $WORK/result.json
+exec magus job exit a --stdin
+
+cd ../b
+exec magus job exec b
+cp $WORK/a.B.go a.go
+exec git commit -q -am 'B returns 20'
+exec sh $WORK/result.sh
+stdin $WORK/result.json
+exec magus job exit b --stdin
+
+cd ../c
+exec magus job exec c
+cp $WORK/a.C.go a.go
+exec git commit -q -am 'B returns 21'
+exec sh $WORK/result.sh
+stdin $WORK/result.json
+exec magus job exit c --stdin
+
+cd ../d
+exec magus job exec d
+cp $WORK/a.D.go a.go
+exec git commit -q -am 'B returns 22'
+exec sh $WORK/result.sh
+stdin $WORK/result.json
+exec magus job exit d --stdin
+
+cd ../ws
+exec magus job wait a
+stdout 'recorded pass'
+exec magus job wait b
+stdout 'recorded pass'
+exec magus job wait c
+stdout 'recorded pass'
+
+exec git checkout -q -b integration
+exec git merge -q --ff-only a
+
+# No opt-in: no project declares merge_low_risk.
+! exec magus vcs resolve --against b
+stdout '^vcs resolve: a.go not settled by job claims: no project''s merge_low_risk covers it$'
+exec git merge --abort
+
+cp $WORK/magusfile.optin.buzz magusfile.buzz
+exec magus ls
+exec git add -A
+exec git commit -q -m 'merge_low_risk covers the Go sources'
+
+# Overlap: c claims A as well as B, and a, on ours, claims A.
+! exec magus vcs resolve --against c
+stdout '^vcs resolve: a.go not settled by job claims: the claims overlap: a.go#A on ours, a.go#A on c$'
+exec git status --porcelain --untracked-files=no
+stdout '^UU a.go$'
+exec git merge --abort
+
+# Not passed: d exited, and nobody waited on it.
+! exec magus vcs resolve --against d
+stdout '^vcs resolve: a.go not settled by job claims: job d is exited, not recorded pass by `magus job wait`$'
+exec git merge --abort
+
+# Settled: a's claim A and b's claim B are disjoint and both jobs passed.
+exec magus vcs resolve --against b
+stdout '^vcs resolve: settled a.go by job claims: a.go#A \(job a\) against a.go#B \(job b\); every job passed$'
+cmp a.go $WORK/a.want.go
+exec git status --porcelain --untracked-files=no
+stdout '^M  a.go$'
+exec git commit -q --no-edit
+
+# Each job's check runs on the settled file.
+exec magus run test .
+
+-- ws/.gitignore --
+.magus/
+-- ws/.gitattributes --
+# BEGIN magus-generated - do not edit this section manually
+*.go diff=golang
+*.py diff=python
+*.rs diff=rust
+*.md diff=markdown
+*.ts diff=typescript
+*.tsx diff=typescript
+*.buzz diff=buzz
+*.yaml diff=yaml
+*.yml diff=yaml
+# END magus-generated
+-- ws/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({});
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("a.go", "test.sh");
+    proc\exec("sh", ["test.sh"]);
+}
+-- ws/test.sh --
+grep -q '^func A' a.go && grep -q '^func B' a.go
+-- ws/a.go --
+package a
+
+func A() int { return 1 }
+func B() int { return 2 }
+-- magusfile.optin.buzz --
+import "magus";
+import "proc";
+
+magus\project({"merge_low_risk": ["*.go"]});
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("a.go", "test.sh");
+    proc\exec("sh", ["test.sh"]);
+}
+-- a.A.go --
+package a
+
+func A() int { return 10 }
+func B() int { return 2 }
+-- a.B.go --
+package a
+
+func A() int { return 1 }
+func B() int { return 20 }
+-- a.C.go --
+package a
+
+func A() int { return 1 }
+func B() int { return 21 }
+-- a.D.go --
+package a
+
+func A() int { return 1 }
+func B() int { return 22 }
+-- a.want.go --
+package a
+
+func A() int { return 10 }
+func B() int { return 20 }
+-- result.sh --
+magus run test . >/dev/null 2>&1
+ref=$(magus run test . -o jsonl | sed -n 's/.*"ref":"\(out[0-9a-f]*\)".*/\1/p' | head -n 1)
+printf '{"schema_version": 2, "changed_paths": ["a.go"], "validation": {"command": "magus run test .", "output_ref": "%s"}, "unresolved_risks": []}\n' "$ref" > "$WORK/result.json"

@@ -37,28 +37,38 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
 // digestLen keeps 16 hex characters, 64 bits: collision-free for a per-workspace store and
-// short enough to read in a JSON file by eye.
+// short enough to read by eye.
 const digestLen = 16
 
-// receiptFile is where the store lives, under the cache dir rather than in the tree.
+// receiptFile is where the store lives, under the cache dir rather than in the tree: JSON
+// Lines, a receipt per line, the last line for a path being that path's receipt.
 //
 // Not committed and not shared: a receipt describes one working tree, and one that traveled
 // would let a stranger's acknowledgement stand in for the reader's own, the laundering this
 // package exists to refuse.
-const receiptFile = "review/receipts.json"
+const receiptFile = "review/receipts.jsonl"
+
+// oldReceiptFile is the single JSON document an older magus kept the receipts in. It is
+// neither read nor skipped: a skipped one would report every file it covered as unread.
+const oldReceiptFile = "review/receipts.json"
+
+func receiptLog(cacheDir string) file.JSONL[Receipt] {
+	return file.JSONL[Receipt]{
+		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
+		Perm: 0o600,
+		Key:  func(r Receipt) string { return r.Path },
+		Old:  filepath.Join(cacheDir, filepath.FromSlash(oldReceiptFile)),
+	}
+}
 
 // Receipt marks a file as read at one specific content. It names no reader; see the package
 // doc for why.
@@ -104,7 +114,7 @@ type Store map[string]Receipt
 // Load reads the store. A missing file is an empty store, not an error: nobody having
 // acknowledged anything yet is the starting state.
 func Load(cacheDir string) (Store, error) {
-	list, err := receiptDoc(cacheDir).Load()
+	list, err := receiptLog(cacheDir).Load()
 	if err != nil {
 		return nil, err
 	}
@@ -113,21 +123,6 @@ func Load(cacheDir string) (Store, error) {
 		out[r.Path] = r
 	}
 	return out, nil
-}
-
-// receiptDoc is the store's file. It has two writers by design: the server records from a
-// console keypress while the CLI records from `--ack` or a closing viewer, in another
-// process. A torn write would matter, because Load refuses a corrupt store, and so would a
-// lost update, since a dropped receipt reads as a file nobody read.
-func receiptDoc(cacheDir string) file.Doc[[]Receipt] {
-	return file.Doc[[]Receipt]{
-		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
-		Perm: 0o600,
-		Encode: func(list []Receipt) ([]byte, error) {
-			b, err := json.MarshalIndent(list, "", "  ")
-			return append(b, '\n'), err
-		},
-	}
 }
 
 // Covers reports whether the store holds a receipt for this path AT this content.
@@ -144,12 +139,19 @@ func (s Store) Covers(path, digest string) bool {
 // Merges rather than replaces: acknowledging three files today must not withdraw what was
 // acknowledged yesterday, and a reviewer working through a large change in several sittings
 // is the normal case rather than the exception.
+//
+// A receipt is appended, never rewritten in place, so recording one path leaves every other
+// untouched. The store has two writers by design: the server records from a console keypress
+// while the CLI records from `--ack` or a closing viewer, in another process. The lock
+// serializes the read of an earlier reason with its replacement and the compaction; a dropped
+// receipt would read as a file nobody read.
 func Record(cacheDir string, add []Receipt) error {
-	return receiptDoc(cacheDir).Update(context.Background(), func(list *[]Receipt) error {
-		cur := make(Store, len(*list))
-		for _, r := range *list {
+	return receiptLog(cacheDir).Update(context.Background(), func(stored []Receipt) []Receipt {
+		cur := make(Store, len(stored))
+		for _, r := range stored {
 			cur[r.Path] = r
 		}
+		lines := make([]Receipt, 0, len(add))
 		for _, r := range add {
 			// A re-ack with no reason keeps the one already on the record. Overwriting it
 			// would let the note explaining why forty files were covered in one keystroke
@@ -159,11 +161,9 @@ func Record(cacheDir string, add []Receipt) error {
 				r.Reason = cur[r.Path].Reason
 			}
 			cur[r.Path] = r
+			lines = append(lines, r)
 		}
-		// Sorted so the file is stable across writes; an unordered map would rewrite the
-		// whole thing on every ack and make the store's own history unreadable.
-		*list = slices.SortedFunc(maps.Values(cur), func(a, b Receipt) int { return strings.Compare(a.Path, b.Path) })
-		return nil
+		return lines
 	})
 }
 

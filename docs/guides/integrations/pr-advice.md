@@ -171,26 +171,69 @@ it merges; a removal, or a move the workflow does not follow, fails after the me
 
 The symbol half of `conformance` reads `magus diff`'s `checks` on each symbol the change
 adds, renames or re-signs. Every check derives its norm from the workspace's own symbol
-index, needs `conformance-min-cohort` declarations agreeing at `conformance-min-share` or
-more (the same two inputs as the target half, default 5 and 0.8), never counts the change's
-own new names toward a norm, and states a fact with its counts rather than a rule:
+index, needs `knowledge.conformance.gates.min_cohort` declarations agreeing at
+`knowledge.conformance.gates.min_share` or more (the same two inputs as the target half, 5 and
+0.8 until `magus.yaml` says otherwise), never counts the change's own new names toward a
+norm, and states a fact with its counts rather than a rule. The action's
+`conformance-min-cohort` and `conformance-min-share` inputs override those two gates for one
+run. The checks:
 
-| check             | it reports                                                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `naming-affix`    | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry |
-| `name-collision`  | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                               |
-| `rename-leftover` | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                             |
-| `param-order`     | a function taking two parameters in the reverse of the order most functions in its scope that take both do                  |
+| check                   | it reports                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `naming-affix`          | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry                                                                                                                       |
+| `name-collision`        | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                                                                                                                                                     |
+| `rename-leftover`       | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                                                                                                                                                   |
+| `param-order`           | a function taking two parameters in the reverse of the order most functions in its scope that take both do                                                                                                                                        |
+| `conformance-threshold` | a symbol past the value `knowledge.conformance` enforces, or past the base's because the change raised it or listed the symbol as known                                                                                                           |
+| `call-sequence`         | a function calling the same workspace functions in the same order as another, over a run longer than the `call-sequence` value for its population: share the sequence in one function, or record a known entry with its reason                    |
+| `sibling-sprawl`        | a method or function joining siblings whose names differ in one complementary word (`RecordCacheHit`, `RecordCacheMiss`); it weighs shared parameters, three types carrying the family, and a type past its `type-methods` value                  |
+| `shared-loop`           | a function shared past `shared-body`, `caller-spread` or `shared-reach` that one caller's branch or option bends, or a re-signed one that gains such a knob: give each caller a copy with one line saying why, or record a mode-knobs known entry |
+| `import-alias`          | an aliased import of a package past `alias-share` or `name-clash`, or a new package taking an existing one's name: rename the package, or record a known entry with its reason                                                                    |
 
 The checks read what every language's index holds (names, kinds, scopes, references) and,
 where a language reports it, the declaration's shape: `param-order` needs a language whose
-index renders parameter names (Go and TypeScript today).
+index renders parameter names (Go and TypeScript today). `conformance-threshold` needs
+`knowledge.conformance.ratchet` to name a committed record; without one it reports nothing. It
+judges against the committed value, else the configured anchor, never a percentile measured
+today.
+
+`call-sequence` and `sibling-sprawl` are on by default and stay advice. `call-sequence` reads
+the index's calls and the lines they sit on, so it needs a language whose index records calls.
+It drops a wrapper (a one-statement body three or more functions call) from every sequence,
+and leaves out two shapes that share callees by design: a builder calling mostly one type's
+methods, and two Go command verbs taking a `[]string` argument list. Its value is
+`knowledge.conformance.checks.call-sequence`, 7 for `source` and `main` until the ratchet commits
+a tighter one. `sibling-sprawl` needs a family of three, or two that three types carry, with
+two members the change did not add; a lone family clears the bar only with one of its three
+weights. Folding the family into one member that takes the word as a value is the usual
+remedy.
+
+`shared-loop` is the mirror of a clone, also advice: a function whose callers do not share its
+knobs. A knob is a parameter the body switches on or tests bare, or, on a function three or
+more packages call, an options field or `With` function only one of them uses; a decision
+table, a body that is one switch, has none. It fires on a function with a knob whose body is
+past `shared-body` and whose callers are past `caller-spread` import hops apart (the function's
+own package removed) or more than `shared-reach` packages, and on a re-signed function two
+packages or files call that branches on a parameter. The index holds no base signature, so a
+re-signed function's every knob is named, whether or not the change added it. Keep a shared
+function only when its callers share failure semantics and policy knobs, so a bug in one is a
+bug in the other.
+
+`import-alias` reads an import that must be renamed as advice that a package's name is
+wrong, and stays advice. `alias-share` is the percent of a package's importers that alias it,
+leaving out an alias equal to its name and an importer inside a package of that name;
+`name-clash` is the percent of a package's importers that also import another package of its
+name, blamed on the package with fewer importers. Both judge only packages with
+`min_subject` importers (5 by default), never a generated or excluded one, and read Go's
+package clauses, so another language contributes nothing. The finding names the package's
+spellings (one: name the package after it; several: pick one) or the clash and its share,
+and every importer.
 
 A directory the change creates gets three more checks, read from `magus diff`'s `layout` on
 the first changed file in it. A directory is new when every file the index places under it
 is one the change adds, so an existing directory is never reported. Its norm is the
 directories of the same language under the same parent that the change did not create,
-behind the same two gates:
+behind the same two gates, `knowledge.conformance.gates`:
 
 | check           | it reports                                                              |
 | --------------- | ----------------------------------------------------------------------- |

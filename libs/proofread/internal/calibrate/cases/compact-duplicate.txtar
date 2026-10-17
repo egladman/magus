@@ -1,0 +1,17 @@
+A compact line restating an earlier one, from lines the 2026-10-13 rewrite to the floor left in.
+-- hit/agent-compact whole --
+Magusfile/target/spell CONTRACTS (caching, `ctx.needs`, wards, op kinds, charms, command vs service): magus-buzz-lang.
+Fan out three lenses, merge results.
+Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what makes op service): magus-buzz-lang.
+-- hit/agent-compact whole --
+`ListProjects`: declared project facts (project-relative globs); cheap
+`Inspect`: evaluated graph; costly.
+`ListProjects`: declared, project-relative globs.
+-- pass/agent-compact whole --
+Run gate before push to main.
+Run gate after push to main.
+Read captured log; fix root cause.
+Never skip a failing test.
+-- pass/agent-compact whole --
+`magus run ci <project>` for project you work in.
+`magus affected ci`: final gate once change done.

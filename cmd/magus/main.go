@@ -16,15 +16,16 @@
 //	magus doctor                        validate the workspace
 //
 // magus help prints the full list of top-level subcommands, in the order and with the
-// descriptions subcommands in subcommands.go declares as the single source of
-// truth, kept short here rather than a second enumeration that can drift
+// descriptions internal/commands declares as the single source of truth,
+// kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
-//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go
+//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -fields-pkg schemagen -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
+//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go -pkg flaggen
+//go:generate go run ../magus-utils completions -out completions
 package main
 
 import (
@@ -45,10 +46,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp/mcpclient"
@@ -56,10 +59,11 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +72,23 @@ func main() {
 	// launcher, which must confine itself and exec the child before anything else runs.
 	magus.MaybeLaunchSandbox()
 	relaxStartupGC(startupGCWindow)
+	// Here and not in runCLI: testscript drives runCLI in process, where the width is the
+	// test binary's own.
+	if schedulesSteps(os.Args[1:]) {
+		spawn.RestoreGoWidth()
+	}
 	os.Exit(runCLI())
+}
+
+// schedulesSteps reports whether args name a verb that seats its own steps, and so takes
+// claims of its own rather than running inside the parent step's seat. `ci` is a target
+// these verbs reach, not a verb.
+func schedulesSteps(args []string) bool {
+	switch sub, _ := peekSub(expandVerbosityArgs(args)); sub {
+	case "run", "affected":
+		return true
+	}
+	return false
 }
 
 // runCLI is the CLI entry point as a function returning an exit code, so both main
@@ -77,7 +97,7 @@ func main() {
 func runCLI() int {
 	// Before the worker branches: a client worker runs magus\job.put, which opens its own
 	// Store inside std and grades the check through this.
-	std.RegisterJobGrader(newCheckGrader())
+	job.SetCheckGrader(newCheckGrader())
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
@@ -138,9 +158,12 @@ func runCLI() int {
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
-	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
+	rootCtx = types.WithJobLease(rootCtx, trail.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
+	// An agent host's hook judged this invocation before it ran, and a person typing it
+	// answers for it: the Run family must not judge it a second time in process.
+	rootCtx = guard.WithHostJudged(rootCtx)
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
@@ -148,10 +171,10 @@ func runCLI() int {
 	// Adopt the ancestry a parent magus passed down, before anything can take a project
 	// lock. Stamped here rather than in BeginInvocation because every subcommand that
 	// locks needs it, including the ones with no invocation record of their own (clean).
-	rootCtx = types.WithInvocationAncestors(rootCtx, run.AncestorsFromEnv())
+	rootCtx = types.WithInvocationAncestors(rootCtx, spawn.AncestorsFromEnv())
 	// env\set lands here rather than in the process environment. An adopted run gets its
 	// own from the proc server, so under `magus server` one run's PATH is not another's.
-	rootCtx = run.WithEnvOverlay(rootCtx)
+	rootCtx = spawn.WithEnvOverlay(rootCtx)
 	rootCtx = proveStdio(rootCtx, args)
 
 	res, exitCode := startup(rootCtx, args)
@@ -318,7 +341,7 @@ func hasDetachFlag(args []string) bool {
 		if !strings.HasPrefix(a, "-") {
 			continue
 		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == gen.FlagRunDetach {
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == flaggen.FlagRunDetach {
 			return true
 		}
 	}
@@ -448,14 +471,26 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	case "status":
 		return dispatchProfile{needsConfig: true, needsForward: true}
 	case "job":
-		// `job run` submits one of the server's OWN jobs and is called from a VCS hook,
-		// where it promises to be a silent no-op when no server answers. Loading the
-		// workspace to make that promise is work nobody asked for, and it breaks the
-		// promise out loud: a checkout carrying one unparsable local spell logs the load
-		// error on every hook. It resolves the server socket itself, exactly as
-		// `magus job run` did before this verb replaced it. Every other job verb reads the
-		// workspace and takes the default.
-		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
+		// Never forwarded, never preloaded. The job store answers most of what a job verb
+		// asks, the server adopts none of them, and the verbs that need the workspace (a
+		// fork's notes, a wait's gates) open it themselves through loadMagus, so a fork
+		// or an exit that reads only the store no longer waits on a magusfile evaluation.
+		//
+		// `job run` is the sharpest case: it submits one of the server's OWN jobs from a
+		// VCS hook, where it promises to be a silent no-op when no server answers, and a
+		// checkout carrying one unparsable local spell would log the load error on every
+		// hook.
+		return dispatchProfile{needsConfig: true}
+	case "ls":
+		// `ls jobs` reads the job store alone; the other nouns list the workspace.
+		if i := slices.IndexFunc(subArgs, func(a string) bool { return slices.Contains(lsNouns, a) }); i >= 0 && strings.HasPrefix(subArgs[i], "job") {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
+	case "describe":
+		// As `job`: `describe job` opens the workspace and the knowledge graph itself, only
+		// for the sections that read them.
+		if len(subArgs) > 0 && describeAlias[subArgs[0]] == "job" {
 			return dispatchProfile{needsConfig: true}
 		}
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
@@ -563,7 +598,7 @@ func finalizeConfig() error {
 	//
 	// After Validate, which refuses "jsonl" from magus.yaml, env and --log-format:
 	// only -o jsonl opens the report stream the withheld results go to.
-	if global.output == string(FormatJSONL) {
+	if global.output == string(outputJSONL) {
 		globalCfg.Log.Format = "jsonl"
 	}
 	return nil
@@ -586,7 +621,7 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 	fs := flag.NewFlagSet("globals-after-subcommand", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.SetOutput(io.Discard)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	takesValue := map[string]bool{}
 	fs.VisitAll(func(f *flag.Flag) { takesValue[f.Name] = !flagIsBool(f) })
 
@@ -617,14 +652,14 @@ func bindGlobalsAfterSubcommand(subArgs []string) {
 
 // globalValueFlags is the set of "-name"/"--name" tokens for every value-taking
 // global flag, derived once from the real bindings (the config-generated
-// gen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
+// flaggen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
 // never drift from them. Two bootstrap flags are added explicitly: root and config
 // precede config loading, so they are not part of the generated set. Deriving it
 // closes the latent gap where a value global flag missing from the old hand-kept
 // list made `magus --cache-dir x run` misread x as the subcommand.
 var globalValueFlags = sync.OnceValue(func() map[string]bool {
 	fs := flag.NewFlagSet("global", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	// Both short forms belong here beside their long names: peekSub reads this set to
 	// know a token consumes the next one, and a missing -C made `magus -C /ws run`
@@ -703,7 +738,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
 			// The display flags are what failed to parse, so no display was installed.
 			fmt.Fprintln(os.Stderr, err)
-			return startupResult{cleanup: cleanup}, exitUsage
+			return startupResult{cleanup: cleanup}, exit.Usage
 		}
 		return startupResult{
 			rootCtx: rootCtx,
@@ -715,7 +750,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 
 	stopEarlyRoot := trace.phase("startup.find_root_early")
-	earlyRoot, _ := magus.FindRoot(extractRootFlag(args))
+	earlyRoot, _ := workspace.FindRoot(extractRootFlag(args))
 	stopEarlyRoot()
 
 	stopCfgLoad := trace.phase("startup.config_load")
@@ -895,7 +930,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg = globalCfg
 	stopFlags()
 
-	// exitUsage, not 0. No subcommand is the same category as an unknown one (the
+	// exit.Usage, not 0. No subcommand is the same category as an unknown one (the
 	// invocation was wrong and nothing was attempted), and that path already exits 2
 	// (see dispatchSub's default). Returning 0 made bare `magus` a command that
 	// reports success having done nothing, so `magus $CMD` with an empty CMD is a
@@ -903,14 +938,14 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	//
 	// An EXPLICIT `magus help` / `-h` / `--help` still exits 0: there the usage text
 	// is what was asked for, so printing it IS the work succeeding. That distinction
-	// is the whole of exitUsage's contract in helpers.go (0 did what was asked, 2 was
+	// is the whole of exit.Usage's contract in helpers.go (0 did what was asked, 2 was
 	// asked wrong), and it is why this cannot simply key on "did we print usage".
 	if len(rest) == 0 {
 		if helpRequested {
 			return startupResult{cleanup: cleanup}, 0
 		}
 		usage()
-		return startupResult{cleanup: cleanup}, exitUsage
+		return startupResult{cleanup: cleanup}, exit.Usage
 	}
 
 	rootCtx = withTrace(rootCtx, trace)
@@ -1024,101 +1059,17 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}, -1
 }
 
-func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, subArgs []string) error {
-	switch sub {
-	case "ls":
-		return ls(ctx, root, subArgs)
-	case "describe":
-		return describeCmd(ctx, root, subArgs)
-	case "run":
-		return runTarget(ctx, root, rc, subArgs)
-	case "x":
-		return x(ctx, root, rc, subArgs)
-	case "where":
-		return whereCmd(ctx, root, subArgs)
-	case "affected":
-		return affected(ctx, root, rc, subArgs)
-	case "query":
-		return queryCmd(ctx, root, subArgs)
-	case "explain":
-		return explainCmd(ctx, root, subArgs)
-	case "path":
-		return pathCmd(ctx, root, subArgs)
-	case "refs":
-		return refsCmd(ctx, root, subArgs)
-	case "graph":
-		return graphCmd(ctx, root, subArgs)
-	case "spell":
-		return spellCmd(ctx, root, subArgs)
-	case "watch":
-		return watchCmd(ctx, root, rc, subArgs)
-	case "events":
-		return eventsCmd(ctx, root, subArgs)
-	case "status":
-		return status(ctx, subArgs)
-	case "clean":
-		return cleanCmd(ctx, root, subArgs)
-	case "vcs":
-		return vcsCmd(ctx, root, rc, subArgs)
-	case "queue":
-		return queueCmd(ctx, root, subArgs)
-	case "doctor":
-		return doctorCmd(ctx, root, rc, subArgs)
-	case "config":
-		return configCmd(ctx, root, globalCfg, subArgs)
-	case "session":
-		return sessionCmd(ctx, root, subArgs)
-	case "shell":
-		return shellCmd(ctx, subArgs)
-	case "job":
-		return jobCmd(ctx, root, subArgs)
-	case "notes":
-		return notesCmd(ctx, root, subArgs)
-	case "diff":
-		return diffCmd(ctx, root, subArgs)
-	case "server":
-		return serverCmd(ctx, root, subArgs)
-	case "broker":
-		return brokerCmd(ctx, subArgs)
-	case "mcp":
-		return mcpCmd(ctx, root, subArgs)
-	case "completion":
-		return completion(subArgs)
-	case "man":
-		return manCmd(subArgs)
-	case "init":
-		return initCmd(ctx, root, subArgs)
-	case "agent":
-		return agentCmd(ctx, root, subArgs)
-	case "self":
-		return selfCmd(ctx, root, subArgs)
-	case "buzz":
-		return buzzCmd(ctx, root, subArgs)
-	default:
-		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice(""), attr.Component("magus"))
-		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {
-			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", suggestion))
-		}
-		unknownSubcommandUsage()
-		return errSilent{exitCode: 2}
-	}
-}
-
-func unknownSubcommandUsage() {
-	fmt.Fprintln(os.Stderr, "")
-	usage()
-}
-
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
-	for _, sc := range subcommands {
-		if sc.Group != group {
-			group = sc.Group
+	for _, c := range commands.Root.Children {
+		if c.Group != group {
+			group = c.Group
 			fmt.Fprintf(os.Stderr, "\n%s:\n", group)
 		}
-		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
+		fmt.Fprintf(os.Stderr, "  %-14s %s\n", c.Name, c.Short)
 	}
+	fmt.Fprintf(os.Stderr, "  %-14s %s\n", commands.Help.Name, commands.Help.Short)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
@@ -1140,7 +1091,7 @@ func usage() {
 
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
 // back. runTarget/affected write flags straight into these package globals via cmdParse
-// (gen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
+// (flaggen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
 // whatever a previous dispatch left there); dispatchAdopted defers the returned restore
 // so one adopted client's flags cannot bleed into the next one dispatched on this process.
 func snapshotGlobals() (restore func()) {
@@ -1311,14 +1262,14 @@ func sandboxFlag(args []string) (mode types.SandboxMode, set bool) {
 
 // refuseInheritedSandboxWeakened refuses a nested magus that would run under a weaker
 // sandbox mode than the run that started it. The parent hands every child its mode
-// (run.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
+// (spawn.SandboxEnvVar, the setting's own variable), and only a flag can lower it, so this
 // is the flag's check.
 func refuseInheritedSandboxWeakened(mode types.SandboxMode) error {
-	if run.CurrentLevel() == 0 {
+	if spawn.CurrentLevel() == 0 {
 		return nil
 	}
 	// An unknown value never reaches here: loading the config already refused it.
-	inherited := types.SandboxMode(os.Getenv(run.SandboxEnvVar))
+	inherited := types.SandboxMode(os.Getenv(spawn.SandboxEnvVar))
 	if !inherited.Valid() || !mode.WeakerThan(inherited) {
 		return nil
 	}
@@ -1403,7 +1354,7 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	fs.StringVar(&discardConfig, "config", "", "")
 	fs.StringVar(&discardConfig, "c", "", "")
 	if err := fs.Parse(pre); err != nil {
-		return usagef("magus: %v", err)
+		return exit.Usagef("magus: %v", err)
 	}
 	return nil
 }
@@ -1521,48 +1472,16 @@ func rationaleArgs(err error) []any {
 	return nil
 }
 
-// mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
+// mapExitCode maps a dispatch error to an exit code and logs it unless it was already reported.
 func mapExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	if errors.Is(err, flag.ErrHelp) {
-		return 0
-	}
-	var silent errSilent
-	if errors.As(err, &silent) {
-		return silent.exitCode
-	}
-	// A misuse of the command line exits 2, not 1: the work was never attempted.
-	var usage errUsage
-	if errors.As(err, &usage) {
-		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
-		return exitUsage
-	}
-	// os.exit(code) from a magusfile: honor the requested code without an extra
-	// generic error line; the magusfile already logged whatever it wanted to.
-	//
-	// A diagnostic-carrying ExitError stays quiet HERE and logs at the site that
-	// raised it, which is the rule the stall watchdog already follows (watchdog.go)
-	// and the reason it gives: a reader should learn why the run stopped at the moment
-	// it stops, not only in the final error. Logging again here printed MGS3012 twice
-	// and promoted MGS3014, a deliberate non-failure, from Warn to Error.
+	code := exit.Code(err)
+	// os.exit(code) from a magusfile logs nothing more: the magusfile already logged
+	// whatever it wanted to, and a diagnostic-carrying ExitError logs at the site that
+	// raised it, as the stall watchdog does (watchdog.go). Logging again here printed
+	// MGS3012 twice and promoted MGS3014, a deliberate non-failure, from Warn to Error.
 	var exitErr types.ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.Code
+	if code != exit.OK && !exit.AlreadyReported(err) && !errors.As(err, &exitErr) {
+		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
 	}
-	slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // same final error line as the usage branch above
-	// A failure that names its own status keeps it, the same question internal/proc's
-	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
-	// busy machine and not a broken build: a contended no-wait workspace lock, and a
-	// step the machine's build budget could not seat (MGS3009).
-	//
-	// Checked after the branches above and not before them: a run where real targets
-	// ALSO failed reaches errSilent first and stays 1, which is the more actionable
-	// verdict: a broken build does not become a scheduling problem because a peer
-	// happened to be busy too.
-	if code, ok := proc.ExitCode(err); ok {
-		return code
-	}
-	return 1
+	return code
 }

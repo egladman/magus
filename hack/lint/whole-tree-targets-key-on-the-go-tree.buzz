@@ -11,6 +11,8 @@
 //
 // It reads magus\describe.graph(), the same static extraction buildStep depends on, so a
 // footprint moved into a helper or reworded still gets graded.
+//
+// Tier 1, mechanical: the fix restates the Go tree in the target's reads.
 namespace wholetree;
 
 import "assert";

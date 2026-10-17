@@ -20,11 +20,14 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -76,9 +79,9 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		// Named here rather than falling through to the generic unknown-subcommand
 		// message because the caller is usually installed host wiring, not a person,
 		// and "unknown subcommand" does not tell whoever reads that log what to re-run.
-		return usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
+		return exit.Usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
+		return exit.Usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 
@@ -126,13 +129,13 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
+		return exit.Usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
 	}
 	if brief {
 		return sessionBriefCmd(ctx, root)
 	}
 	if limit < 0 {
-		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
+		return exit.Usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
 	}
 	cutoff, err := parseSince(since)
 	if err != nil {
@@ -172,7 +175,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		for _, s := range summaries {
 			names = append(names, s.Invocation)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	out := map[string]any{
 		"invocations": summaries,
@@ -434,7 +437,7 @@ func parseSince(raw string) (time.Time, error) {
 	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
 		return ts, nil
 	}
-	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
+	return time.Time{}, exit.Usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
 // invocationsInCheckout keeps the invocations that ran in the checkout at root. The store
@@ -589,7 +592,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session load: takes no arguments (got %q); the stream arrives on stdin, or name a file with --file", rest[0])
+		return exit.Usagef("magus session load: takes no arguments (got %q); the stream arrives on stdin, or name a file with --file", rest[0])
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {
@@ -614,7 +617,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
@@ -792,7 +795,7 @@ func newRejudge(ctx context.Context, root string) rejudgeFunc {
 			Spells:       project.DefaultSpellRegistry().All,
 			ShellRules:   shellRules,
 			ShellDialect: shellDialect,
-			Builtins:     magus.GuardBuiltins(ctx, nil, root),
+			Builtins:     guard.BuiltinSettings(ctx, nil, root),
 		}
 	})
 	return func(text string) (program, verdict, rule string) {
@@ -899,6 +902,9 @@ type sessionShowOutput struct {
 	// when the trail here holds nothing for it, which is the case for a session that ran
 	// in another worktree.
 	Trail *trail.SessionTrail `json:"trail,omitempty"`
+	// Cost is what the session's context and spawns cost. The sections the trail could not
+	// measure are named in its not_measured map rather than left out or zeroed.
+	Cost *sessionCost `json:"cost,omitempty"`
 }
 
 // sessionTrailEvents bounds the trail walk behind the join: recent work is what a reader
@@ -913,7 +919,8 @@ func sessionShow(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Report one loaded session: what it ran grouped by program, what today's")
 			fmt.Fprintln(os.Stderr, "guard rules say about each command, which skills it loaded, and which")
-			fmt.Fprintln(os.Stderr, "files it read and wrote.")
+			fmt.Fprintln(os.Stderr, "files it read and wrote, and what its context and spawns cost. A cost")
+			fmt.Fprintln(os.Stderr, "section the guard trail could not measure says so.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The id is a host session id, listed by `magus session ls`. Sessions")
 			fmt.Fprintln(os.Stderr, "arrive here through `magus session load`.")
@@ -926,7 +933,7 @@ func sessionShow(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
+		return exit.Usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {
@@ -948,6 +955,7 @@ func sessionShow(root string, args []string) error {
 
 	out := summarizeSession(rest[0], events)
 	out.Trail = sessionTrailHere(root, rest[0])
+	out.Cost = summarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -959,10 +967,22 @@ func sessionShow(root string, args []string) error {
 	return nil
 }
 
+// sessionModelTable is the model rows in effect for the workspace at root: those its
+// harnesses publish, then agents.models over them. A workspace that will not load has no
+// harness rows, and the cost section then reports no facts for a model rather than failing
+// the report. The workspace is opened apart from the process's shared handle, which a
+// session read never needs.
+func sessionModelTable(root string) model.Table {
+	rows := harnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+	})
+	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
+}
+
 // sessionTrailHere folds this checkout's trail for the session, or nil when it holds
 // nothing: no cache dir, no trail, or a session that ran elsewhere all read the same.
 func sessionTrailHere(root, session string) *trail.SessionTrail {
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil
 	}
@@ -1119,6 +1139,9 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 			fmt.Fprintf(w, "  model %s", model)
 			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
 		}
+	}
+	if s.Cost != nil {
+		renderCost(w, s.Cost)
 	}
 }
 

@@ -1,7 +1,7 @@
 package main
 
-//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
-//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go
+//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go -pkg bindgen
+//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go -pkg bindgen
 
 import (
 	"reflect"
@@ -158,6 +158,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffOrderCount", Type: reflect.TypeFor[types.DiffOrderCount](), RuntimeObject: true},
 	{Name: "DiffOrder", Type: reflect.TypeFor[types.DiffOrder](), RuntimeObject: true},
 	{Name: "DiffReviewed", Type: reflect.TypeFor[types.DiffReviewed](), RuntimeObject: true},
+	{Name: "ReleaseStage", Type: reflect.TypeFor[types.ReleaseStage](), RuntimeObject: true},
 	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
@@ -184,6 +185,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
 	// Graph reads, leaf-first. magus\query, explain, path, refs, and stats return these.
 	// KnowledgeGodNode.in is a Buzz keyword; the mirror emits it as a free identifier.
+	{Name: "KnowledgeTermScore", Type: reflect.TypeFor[types.KnowledgeTermScore](), RuntimeObject: true},
+	{Name: "KnowledgeListRank", Type: reflect.TypeFor[types.KnowledgeListRank](), RuntimeObject: true},
+	{Name: "KnowledgeMatchWhy", Type: reflect.TypeFor[types.KnowledgeMatchWhy](), RuntimeObject: true},
 	{Name: "Match", Type: reflect.TypeFor[types.KnowledgeMatch](), RuntimeObject: true},
 	{Name: "KnowledgeNode", Type: reflect.TypeFor[types.KnowledgeNode](), RuntimeObject: true},
 	{Name: "KnowledgeEdge", Type: reflect.TypeFor[types.KnowledgeEdge](), RuntimeObject: true},
@@ -193,7 +197,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
 	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
+	{Name: "KnowledgeRanking", Type: reflect.TypeFor[types.KnowledgeRanking](), RuntimeObject: true},
 	{Name: "QueryResult", Type: reflect.TypeFor[types.KnowledgeQueryOutput](), RuntimeObject: true},
+	{Name: "PublicSymbol", Type: reflect.TypeFor[types.PublicSymbol](), RuntimeObject: true},
 	{Name: "ExplainResult", Type: reflect.TypeFor[types.KnowledgeExplainOutput](), RuntimeObject: true},
 	{Name: "PathResult", Type: reflect.TypeFor[types.KnowledgePathOutput](), RuntimeObject: true},
 	{Name: "RefsResult", Type: reflect.TypeFor[types.KnowledgeRefsOutput](), RuntimeObject: true},
@@ -223,6 +229,22 @@ var boundaryTypes = []boundaryType{
 	{Name: "DuplicationGroup", Type: reflect.TypeFor[types.DuplicationGroup](), RuntimeObject: true},
 	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
 	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
+	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
+	// Conformance carries [ConformanceRow], [ConformanceKnown] and [ConformanceCarry]. InsightReport.conformance
+	// is a Conformance.
+	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
+	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
+	{Name: "ConformanceKnown", Type: reflect.TypeFor[types.ConformanceKnown](), RuntimeObject: true},
+	{Name: "ConformanceCarry", Type: reflect.TypeFor[types.ConformanceCarry](), RuntimeObject: true},
+	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
+	{Name: "Conformance", Type: reflect.TypeFor[types.ConformanceOutput](), RuntimeObject: true},
+	// The model-tier lens: InsightReport.modelTiers is a ModelTierOutput, a list of records.
+	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
+	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
+	{Name: "ModelTierOutput", Type: reflect.TypeFor[types.ModelTierOutput](), RuntimeObject: true},
+	// The grouping lens: InsightReport.grouping is a Grouping, a list of records.
+	{Name: "GroupingRecord", Type: reflect.TypeFor[types.GroupingRecord](), RuntimeObject: true},
+	{Name: "Grouping", Type: reflect.TypeFor[types.GroupingOutput](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
@@ -251,6 +273,21 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobGateAttempt", Type: reflect.TypeFor[types.JobGateAttempt](), RuntimeObject: true},
 	{Name: "JobIntegration", Type: reflect.TypeFor[types.JobIntegration](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
+	{Name: "JobWorktree", Type: reflect.TypeFor[types.JobWorktree](), RuntimeObject: true},
+	// Model tiers. A magusfile's bounds function and a harness spell build the first two,
+	// so they carry no encoder; a matrix function is handed the request, whose history is
+	// a list of records. There is deliberately no ModelTier object: that name is the
+	// workspace's own Buzz enum.
+	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
+	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
+	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
+	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
+	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
+	{Name: "JobDenial", Type: reflect.TypeFor[types.JobDenial](), RuntimeObject: true},
+	{Name: "RetryVerdict", Type: reflect.TypeFor[types.RetryVerdict](), RuntimeObject: true},
+	{Name: "PriorAttempt", Type: reflect.TypeFor[types.PriorAttempt](), RuntimeObject: true},
+	{Name: "JobRejection", Type: reflect.TypeFor[types.JobRejection](), RuntimeObject: true},
+	{Name: "JobWaiver", Type: reflect.TypeFor[types.JobWaiver](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
@@ -275,6 +312,8 @@ var boundaryTypes = []boundaryType{
 	// request's lease is one, and the verdict both return. The guard hands a rule the
 	// request and the rule hands back the verdict, so all need encoders: allow/advise/deny
 	// build the verdict on the Go side.
+	// Before the three requests, which each carry the caller's.
+	{Name: "ContextWindow", Type: reflect.TypeFor[types.ContextWindow](), RuntimeObject: true},
 	{Name: "SpawnTarget", Type: reflect.TypeFor[types.SpawnTarget](), RuntimeObject: true},
 	{Name: "SpawnRequest", Type: reflect.TypeFor[types.SpawnRequest](), RuntimeObject: true},
 	{Name: "VCSInvocation", Type: reflect.TypeFor[types.VCSInvocation](), RuntimeObject: true},
@@ -287,11 +326,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
-	// magus\trail's records, leaf first: FeedbackTrail holds lists of the two before it.
-	{Name: "FeedbackObservation", Type: reflect.TypeFor[types.FeedbackObservation](), RuntimeObject: true},
-	{Name: "FeedbackSpawn", Type: reflect.TypeFor[types.FeedbackSpawn](), RuntimeObject: true},
-	{Name: "FeedbackTrail", Type: reflect.TypeFor[types.FeedbackTrail](), RuntimeObject: true},
-	{Name: "FeedbackMark", Type: reflect.TypeFor[types.FeedbackMark](), RuntimeObject: true},
+	// magus\trail's records, leaf first: Trail holds lists of the two before it.
+	{Name: "TrailObservation", Type: reflect.TypeFor[types.TrailObservation](), RuntimeObject: true},
+	{Name: "TrailSpawn", Type: reflect.TypeFor[types.TrailSpawn](), RuntimeObject: true},
+	{Name: "Trail", Type: reflect.TypeFor[types.Trail](), RuntimeObject: true},
+	{Name: "TrailMark", Type: reflect.TypeFor[types.TrailMark](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
@@ -445,6 +484,32 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SandboxAccess",
 		Type:  reflect.TypeFor[spells.SandboxAccess](),
 		Cases: []enumCase{{"none", ""}, {"ro", "ro"}, {"rx", "rx"}, {"rw", "rw"}, {"rwx", "rwx"}},
+	},
+	{
+		Name:  "SkillVariant",
+		Type:  reflect.TypeFor[types.SkillVariant](),
+		Cases: []enumCase{{"short", "short"}, {"full", "full"}},
+	},
+	{
+		Name: "JobKind",
+		Type: reflect.TypeFor[types.JobKind](),
+		Cases: []enumCase{{"check", "check"}, {"symbol", "symbol"}, {"paths", "paths"},
+			{"script", "script"}, {"prose", "prose"}},
+	},
+	{
+		Name:  "ModelTierSource",
+		Type:  reflect.TypeFor[types.ModelTierSource](),
+		Cases: []enumCase{{"row", "row"}, {"matrix", "matrix"}, {"default", "default"}},
+	},
+	{
+		Name:  "GroupingShape",
+		Type:  reflect.TypeFor[types.GroupingShape](),
+		Cases: []enumCase{{"none", ""}, {"chained", "chained"}, {"split", "split"}, {"solo", "solo"}},
+	},
+	{
+		Name:  "GroupingVerdict",
+		Type:  reflect.TypeFor[types.GroupingVerdict](),
+		Cases: []enumCase{{"none", ""}, {"measured", "measured"}, {"unknown", "unknown"}},
 	},
 }
 

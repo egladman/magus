@@ -124,13 +124,13 @@ performance metric, and a performance metric gets gamed rather than met.
 Record that you have read the changed files at their current content; \-\-impact reports what carries no such record
 .TP
 \fB\-\-baseline\fR \fIgraph export --symbols -o json\fR
-The base's `graph export \-\-symbols \-o json`: adds what each changed symbol did to the API and the smallest semver bump that proves
+The base's graph export \-\-symbols \-o json: adds what each changed symbol did to the API and the smallest semver bump that proves
 .TP
 \fB\-\-conformance\-min\-cohort\fR \fIint\fR
-How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)
+How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort
 .TP
 \fB\-\-conformance\-min\-share\fR \fIstring\fR
-The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)
+The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share
 .TP
 \fB\-\-generated\fR
 Include declared target outputs, which are folded away by default
@@ -142,7 +142,7 @@ Append the blast radius of landing this: reach, ownership, an estimate from reco
 Print the report instead of opening the interactive viewer
 .TP
 \fB\-\-patch\fR \fI-\fR
-Review a patch somebody handed you instead of the working tree; `\-` reads stdin
+Review a patch somebody handed you instead of the working tree; \- reads stdin
 .TP
 \fB\-\-reason\fR \fIstring\fR
 An optional note kept with an \-\-ack, for the next reader of the report
@@ -230,36 +230,36 @@ magus diff -o json
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
 \fBmagus\-describe\fR(1),
-\fBmagus\-run\fR(1),
-\fBmagus\-x\fR(1),
 \fBmagus\-where\fR(1),
+\fBmagus\-run\fR(1),
 \fBmagus\-affected\fR(1),
-\fBmagus\-graph\fR(1),
-\fBmagus\-query\fR(1),
-\fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
-\fBmagus\-refs\fR(1),
-\fBmagus\-watch\fR(1),
-\fBmagus\-events\fR(1),
-\fBmagus\-status\fR(1),
+\fBmagus\-x\fR(1),
 \fBmagus\-clean\fR(1),
 \fBmagus\-shell\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-graph\fR(1),
 \fBmagus\-vcs\fR(1),
-\fBmagus\-queue\fR(1),
-\fBmagus\-doctor\fR(1),
-\fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
+\fBmagus\-queue\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-broker\fR(1),
 \fBmagus\-mcp\fR(1),
+\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
-\fBmagus\-init\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

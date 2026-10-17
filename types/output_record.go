@@ -78,6 +78,7 @@ type OutputDescriptor struct {
 	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
 	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, sl, jj
 	Platform  string   `json:"platform,omitempty"`   // GOOS/GOARCH the run executed on
+	Lease     string   `json:"lease,omitempty"`      // job lease the run acted under; "" for none
 }
 
 // ClassDigest summarizes one component class of a cache key: every key input shares a

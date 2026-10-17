@@ -430,9 +430,9 @@ func (l Lens) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-// render lays g out with magus/figure. The authored budgets always apply: an oversized
-// figure is a FindingsError telling the reader to narrow the lens, never a generated()
-// escape. Every call compiles figure anew; the server reaches it through renderCache.
+// render lays g out with magus/figure. The figure budgets always apply: an oversized
+// figure is a FindingsError telling the reader to narrow the lens. Every call compiles
+// figure anew; the server reaches it through renderCache.
 func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
@@ -494,7 +494,7 @@ func buildFigure(g graph, desc, anchorHref string) figure.Figure {
 	names := actorNames(g.nodes)
 	actors := make(map[string]*figure.Actor, len(g.nodes))
 	for _, n := range g.nodes {
-		a := &figure.Actor{Name: names[n.ID], Link: linkTo(anchorHref, n.Anchor), Look: &plain}
+		a := &figure.Actor{Name: names[n.ID], Link: anchorLink(anchorHref, n.Anchor), Look: &plain}
 		actors[n.ID] = a
 		f.Boxes = append(f.Boxes, figure.Box{Actor: a})
 	}
@@ -524,8 +524,8 @@ func actorNames(nodes []Node) map[string]string {
 	return out
 }
 
-// linkTo fills anchorHref for an actor, which figure paints as a plain link.
-func linkTo(anchorHref, anchor string) string {
+// anchorLink fills anchorHref for an actor, which figure paints as a plain link.
+func anchorLink(anchorHref, anchor string) string {
 	if anchorHref == "" {
 		return ""
 	}

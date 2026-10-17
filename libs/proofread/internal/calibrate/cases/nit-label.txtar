@@ -1,0 +1,15 @@
+Cases written with the rule (2026-10-13), not drawn from a labeling round.
+An inline review comment whose nit or blocking label contradicts its text.
+-- hit/review-inline --
+nit: this must be guarded by the lock before merge.
+Nit: this is a blocker, the build fails without it.
+[nitpick] The import order is required by the linter.
+blocking: feel free to skip this if you prefer.
+suggestion (non-blocking): this must not ship.
+issue (blocking): optional, but the name could be clearer.
+-- pass/review-inline --
+nit: the name could be shorter.
+blocking: this races with the writer in cache.go.
+This must be guarded by the lock.
+nit (non-blocking): trailing space.
+Nitpicking here, but the name is long.

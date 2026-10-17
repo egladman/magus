@@ -49,6 +49,70 @@ func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// CreateCheckout implements types.CheckoutProvisioner with `jj workspace add`, whose
+// working-copy commit starts empty on rev. The source's .jj records the workspace's
+// directory beside the name it was registered under, which `jj workspace list` omits.
+func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return err
+	}
+	if err := checkNewCheckout(root, dir); err != nil {
+		return err
+	}
+	name := "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	if err := hgRun(ctx, "jj", root, []string{"workspace", "add", "--name", name, "--revision", rev, "--", dir}); err != nil {
+		return err
+	}
+	return recordMadeCheckout(ctx, filepath.Join(root, ".jj"), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir), Name: name})
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner: it forgets the workspace, which
+// leaves its commits in the store, then deletes the directory.
+func (v jjVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
+	}
+	meta := filepath.Join(root, ".jj")
+	rec, ok, err := madeCheckoutAt(meta, dir)
+	switch {
+	case err != nil:
+		return err
+	case !ok:
+		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
+	}
+	if err := hgRun(ctx, "jj", root, []string{"workspace", "forget", "--", rec.Name}); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(rec.Dir); err != nil {
+		return err
+	}
+	return forgetMadeCheckout(ctx, meta, rec)
+}
+
+// Checkouts implements types.CheckoutProvisioner from the source's record.
+func (v jjVCS) Checkouts(_ context.Context, root string) ([]string, error) {
+	return madeCheckoutDirs(filepath.Join(root, ".jj"))
+}
+
+// StrandedRevisions implements types.CheckoutProvisioner from bookmarks: a commit no
+// bookmark, local or remote, and no base reaches. The working-copy commit counts only once
+// it holds a change or a description, since jj abandons an empty one on forget.
+func (v jjVCS) StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error) {
+	if err := checkRequiredRevsetRef(bases...); err != nil {
+		return nil, err
+	}
+	reach := "bookmarks() | remote_bookmarks() | root()"
+	for _, b := range bases {
+		reach += " | " + b
+	}
+	revset := "::@ ~ ::(" + reach + `) ~ (@ & empty() & description(exact:""))`
+	out, err := vcsOutput(ctx, dir, "jj", "log", "--no-graph", "-r", revset, "-T", `commit_id ++ "\n"`)
+	if err != nil {
+		return nil, fmt.Errorf("jj log -r %q: %w", revset, err)
+	}
+	return splitLines([]byte(out)), nil
+}
+
 func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err

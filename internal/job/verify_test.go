@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,14 +88,16 @@ func goalAttempts() []types.JobGateAttempt {
 func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 	t.Parallel()
 
+	got := verifyClaim(acceptRow(), passingResult(), passingRun, nil)
+	assert.True(t, got.Clean(), "a verified job carries no risk")
+	got.UnresolvedRisks = nil
 	assert.Equal(t, Status{
 		Job:      "harness/ledger-accept",
 		Verified: true,
-		Risks:    []string{},
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
 		Gates: []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
-	}, verifyClaim(acceptRow(), passingResult(), passingRun, nil))
+	}, got)
 }
 
 func TestVerifyGoalsRequireEvidenceForEveryDeclaredGate(t *testing.T) {
@@ -255,6 +257,31 @@ func TestVerifyNamesEveryViolation(t *testing.T) {
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
 }
 
+// .gitattributes is regenerated beside a change to any output glob and no job declares it,
+// so a result naming it outside the write paths verifies, with a note saying it was passed
+// over; any other path outside them is still a violation.
+func TestVerifyNotesAMagusMaintainedPathOutsideTheWritePaths(t *testing.T) {
+	t.Parallel()
+
+	rep := passingResult()
+	rep.ChangedPaths = append(rep.ChangedPaths, ".gitattributes")
+	v := verifyClaim(acceptRow(), rep, passingRun, nil)
+	assert.True(t, v.Verified, "%q", v.Violations)
+	require.Len(t, v.Notes, 1)
+	assert.Contains(t, v.Notes[0], `".gitattributes"`)
+	assert.Contains(t, v.Notes[0], "magus maintains itself")
+
+	var out strings.Builder
+	RenderGates(&out, v)
+	assert.Contains(t, out.String(), "note: "+v.Notes[0]+"\n")
+
+	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
+	v = verifyClaim(acceptRow(), rep, passingRun, nil)
+	assert.False(t, v.Verified)
+	assert.Equal(t, []string{`changed path "internal/sessions/store.go" is outside the job's write paths` +
+		` (internal/ledger, cmd/magus/ledger.go, docs/reference/*.md)`}, v.Violations)
+}
+
 // The result the coding-agent persona filed on 2026-09-11 and had ACCEPTED: nothing
 // changed, a ref from an unrelated codegen run, a self-asserted pass, and two fields
 // nobody asked for. Every one of them is now a named rejection, which is the whole of
@@ -297,6 +324,59 @@ func TestVerifyReadsTheStoredRunsOutcome(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "failed")
 }
 
+// A passing run of the same check by another lease, in a checkout the two share, proves
+// nothing about this job's work.
+func TestVerifyRefusesAnotherLeasesRun(t *testing.T) {
+	t.Parallel()
+
+	theirs := passingRun
+	theirs.Lease = "harness/other"
+	v := verifyClaim(acceptRow(), passingResult(), theirs, nil)
+	assert.False(t, v.Verified)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], `"harness/other"`)
+	assert.Contains(t, v.Violations[0], `"harness/ledger-accept"`)
+}
+
+// The holder's own run is its evidence, and so is a run under no lease at all: the
+// orchestrator runs checks unleased, which is the run `job wait --integration` grades.
+func TestVerifyAcceptsTheHoldersRunAndAnUnleasedOne(t *testing.T) {
+	t.Parallel()
+
+	for name, lease := range map[string]string{"the holder's": "harness/ledger-accept", "an unleased": ""} {
+		att := passingRun
+		att.Lease = lease
+		v := verifyClaim(acceptRow(), passingResult(), att, nil)
+		assert.True(t, v.Verified, "%s run: %v", name, v.Violations)
+	}
+}
+
+// The args a run forwarded after `--` are part of what it ran: a run narrowed to another
+// test does not stand in for the check. A record with no args is not compared.
+func TestVerifyComparesTheRunsRecordedArgs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		ok   bool
+	}{
+		{name: "the check's own args", args: []string{"-run", "Ledger"}, ok: true},
+		{name: "a record with none", args: nil, ok: true},
+		{name: "a run narrowed elsewhere", args: []string{"-run", "Other"}, ok: false},
+		{name: "a run with more args", args: []string{"-run", "Ledger", "-short"}, ok: false},
+	} {
+		att := passingRun
+		att.ExtraArgs = tc.args
+		v := verifyClaim(acceptRow(), passingResult(), att, nil)
+		assert.Equal(t, tc.ok, v.Verified, "%s: %v", tc.name, v.Violations)
+		if !tc.ok {
+			require.Len(t, v.Violations, 1, tc.name)
+			assert.Contains(t, v.Violations[0], "-- "+strings.Join(tc.args, " "), "the message shows the args the run forwarded")
+		}
+	}
+}
+
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
 // ref from any run at all passes for evidence.
 func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
@@ -310,8 +390,8 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no check and no goal")
 }
 
-// The binary's spelling and the args after `--` are ways of running one target, so
-// neither may decide whether the evidence binds.
+// The binary's spelling is a way of running one target, so it may not decide whether the
+// evidence binds; nor may a check's args when the run recorded none.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
@@ -323,12 +403,12 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	} {
 		c, err := types.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
-		assert.True(t, bindsTo(c, att, nil), line)
+		assert.True(t, ranCheck(c, att, nil), line)
 	}
 
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(c, att, nil), "another project is another run")
+	assert.False(t, ranCheck(c, att, nil), "another project is another run")
 }
 
 // A script check binds to the run `magus buzz --record` stored for that script, and to no
@@ -337,10 +417,10 @@ func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	t.Parallel()
 
 	c := types.LeaseCheck{Script: "probes/key.buzz"}
-	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
-	assert.True(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
-	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
-	assert.False(t, bindsTo(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
@@ -355,13 +435,13 @@ func TestCheckBindsOnCharm(t *testing.T) {
 
 	charmless, err := types.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
-	assert.False(t, bindsTo(charmless, written, nil), "a written run is not evidence of a gated one")
-	assert.True(t, bindsTo(charmless, gated, nil))
+	assert.False(t, ranCheck(charmless, written, nil), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(charmless, gated, nil))
 
 	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
-	assert.True(t, bindsTo(rw, written, nil))
-	assert.False(t, bindsTo(rw, gated, nil), "a gated run is not evidence of a written one")
+	assert.True(t, ranCheck(rw, written, nil))
+	assert.False(t, ranCheck(rw, gated, nil), "a gated run is not evidence of a written one")
 }
 
 // A check is resolved the way `magus run` resolves it, so in a workspace whose
@@ -396,7 +476,7 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 			c, err := types.ParseLeaseRunLine(tc.check)
 			require.NoError(t, err)
 			tc.att.Found = true
-			assert.Equal(t, tc.want, bindsTo(c, tc.att, defaults))
+			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults))
 		})
 	}
 }
@@ -412,12 +492,12 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
 
 	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
-	assert.True(t, bindsTo(optOut, gated, defaults), "the --no-default-charms run")
-	assert.False(t, bindsTo(optOut, written, defaults), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(optOut, gated, defaults), "the --no-default-charms run")
+	assert.False(t, ranCheck(optOut, written, defaults), "a written run is not evidence of a gated one")
 
 	plain := types.LeaseCheck{Target: "generate", Project: "."}
-	assert.True(t, bindsTo(plain, written, defaults), "a plain check still binds the default-charm run")
-	assert.False(t, bindsTo(plain, gated, defaults))
+	assert.True(t, ranCheck(plain, written, defaults), "a plain check still binds the default-charm run")
+	assert.False(t, ranCheck(plain, gated, defaults))
 
 	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
 	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
@@ -459,6 +539,25 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	assert.False(t, status.Verified)
 	require.Len(t, status.Violations, 1)
 	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
+}
+
+// A run the job wrote after grades other files, so its pass is not this job's; the run is
+// named by attempt id, which no later run of the same step takes over.
+func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "fix/job-store"}
+	gate := types.Goal{ID: "check", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
+	run := types.JobAttempt{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
+
+	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
+	assert.True(t, status.Verified, status.Violations)
+
+	status = verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"att1": "a.go changed after it started"}})
+	assert.False(t, status.Verified)
+	require.Len(t, status.Violations, 1)
+	assert.Contains(t, status.Violations[0], "predates the job's last write")
+	assert.Contains(t, status.Violations[0], "a.go changed after it started")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.
@@ -685,9 +784,22 @@ func TestUnclaimedFootprint(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		writePaths []string
+		releases   []types.JobRelease
 		regions    []types.RegionChange
 		want       []string
 	}{
+		{
+			name:       "a pattern covers a file whole beside a claim on it",
+			writePaths: []string{"**/*.go", "run.go#executeStages"},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+		},
+		{
+			name:       "a pattern no longer covers a file its row released",
+			writePaths: []string{"**/*.go", "run.go#executeStages"},
+			releases:   []types.JobRelease{{Path: "run.go", Digest: "sha256:ab"}},
+			regions:    []types.RegionChange{placed("run.go", "func RunCI() {"), placed("order.go", "func Order() {")},
+			want:       []string{"run.go#func RunCI() {"},
+		},
 		{
 			name:       "inside the claimed declaration",
 			writePaths: []string{"run.go#executeStages"},
@@ -728,7 +840,7 @@ func TestUnclaimedFootprint(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, unclaimedFootprint(tc.writePaths, tc.regions))
+			assert.Equal(t, tc.want, unclaimedFootprint(types.Job{WritePaths: tc.writePaths, Releases: tc.releases}, tc.regions))
 		})
 	}
 }
@@ -736,7 +848,7 @@ func TestUnclaimedFootprint(t *testing.T) {
 // integrationRow seeds a job checked by `test .` with one more check goal, in state.
 func integrationRow(t *testing.T, state types.JobState) *Store {
 	t.Helper()
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
 		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Check: forkCheck(), Goals: []types.Goal{
 			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
@@ -771,7 +883,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 
 	s := integrationRow(t, types.StatePass)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
-	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
 	assert.True(t, grade.Verified, "%+v", grade.Gates)
 	assert.Equal(t, []string{"check", "lint"}, []string{grade.Gates[0].ID, grade.Gates[1].ID})
@@ -792,7 +904,7 @@ func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 
 	s := integrationRow(t, types.StateExited)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}}, "out2")
-	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
 	assert.False(t, grade.Verified)
 	assert.True(t, grade.Gates[0].Verified)
@@ -810,9 +922,67 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 	s := integrationRow(t, types.StatePass)
 	rep := integrationEvidence()
 	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "nope", OutputRef: "out3"})
-	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged")
+	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
 	require.ErrorContains(t, err, `goal "nope"`)
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
+}
+
+// The integrator's validators run the checks in its tree under their own leases, so a
+// run under another lease grades integration; plain wait still refuses it.
+func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	byRef := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
+	resolve := func(ctx context.Context, ref string) (types.JobAttempt, error) {
+		att, err := byRef(ctx, ref)
+		att.Lease = "root/validate"
+		return att, err
+	}
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
+	require.NoError(t, err)
+	assert.True(t, grade.Verified, "%+v", grade.Gates)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	att, err := resolve(t.Context(), "out1")
+	require.NoError(t, err)
+	plain := verifyGate(rows[0], rows[0].EffectiveGoals()[0], "out1", att, Observed{})
+	assert.False(t, plain.Verified)
+	assert.Contains(t, strings.Join(plain.Violations, "\n"), `"root/validate"`)
+}
+
+// Symbol goals a merge can break are graded against the integrator's graph, and `changed`,
+// which is the holder's diff, is not graded there at all.
+func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
+		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.Goal{
+			{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"Api"}},
+			{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
+			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}},
+		}}.Apply(u)
+		u.State = types.StatePass
+	})
+	require.NoError(t, err)
+
+	merged := goalGraph{{id: "symbol:go a/Api().", label: "Api", file: "a.go", signature: "func Api(n int)"}}
+	grade, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", GraphSymbols(merged))
+	require.NoError(t, err)
+	assert.False(t, grade.Verified)
+	require.Len(t, grade.Gates, 2, "the changed goal belongs to the holder's checkout")
+	wantShape := grade.Gates[0]
+	wantShape.ID = "shape"
+	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}
+	assert.Equal(t, wantShape, grade.Gates[0])
+	assert.Equal(t, types.GateStatus{ID: "gone", Verified: true}, grade.Gates[1])
+
+	blind, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", nil)
+	require.NoError(t, err)
+	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
+	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
 }

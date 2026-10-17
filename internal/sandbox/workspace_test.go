@@ -17,7 +17,7 @@ import (
 // fromConfig is FromConfig for a test that expects it to succeed.
 func fromConfig(t *testing.T, root, cacheDir string, cfg config.SandboxConfig) *Policy {
 	t.Helper()
-	p, err := FromConfig(root, cacheDir, cfg, nil)
+	p, err := FromConfig(root, cacheDir, "", cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
 	return p
@@ -35,6 +35,20 @@ func TestFromConfigFlowsAllowIntoPolicy(t *testing.T) {
 	require.NoError(t, withAllow.CheckWrite(t.Context(), filepath.Join(extra, "out")))
 	assert.Error(t, withAllow.CheckExec(t.Context(), filepath.Join(extra, "tool")), "rw grants no exec")
 	assert.Error(t, fromConfig(t, root, cacheDir, config.SandboxConfig{}).CheckWrite(t.Context(), filepath.Join(extra, "out")))
+}
+
+// The store every checkout of the repository shares lies outside the workspace, so a
+// nested magus that stores an entry there needs its own grant.
+func TestFromConfigGrantsTheSharedStore(t *testing.T) {
+	t.Parallel()
+	root, cacheDir := t.TempDir(), t.TempDir()
+	store := filesystem.ResolveRulePath(t.TempDir())
+
+	p, err := FromConfig(root, cacheDir, store, config.SandboxConfig{}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(store, "cas", "ab", "ab12")))
+	assert.Error(t, fromConfig(t, root, cacheDir, config.SandboxConfig{}).CheckWrite(t.Context(), filepath.Join(store, "cas", "ab", "ab12")))
 }
 
 // magus.yaml takes the declaration a spell makes: an entry's variable, when set, is the
@@ -58,7 +72,7 @@ func TestFromConfigResolvesTheSpellShape(t *testing.T) {
 
 	cache := filesystem.ResolveRulePath(t.TempDir())
 	t.Setenv("MAGUS_TEST_TOOL_CACHE", cache)
-	p, err := FromConfig(root, "", config.SandboxConfig{}, map[string]spells.Sandbox{"tool": {
+	p, err := FromConfig(root, "", "", config.SandboxConfig{}, map[string]spells.Sandbox{"tool": {
 		Allow: []spells.SandboxAllow{{Env: "MAGUS_TEST_TOOL_CACHE", Base: "userCache", Path: "tool", Mode: spells.SandboxAccessRW}},
 		Env:   spells.SandboxEnv{Passthrough: []string{"MAGUS_TEST_TOOL_CACHE"}},
 	}})
@@ -95,7 +109,7 @@ func TestFromConfigRefusesABadAllowOrPassthrough(t *testing.T) {
 		"escaping path": {Allow: []spells.SandboxAllow{{Base: "home", Path: "../x", Mode: "rw"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := FromConfig(root, "", cfg, nil)
+			_, err := FromConfig(root, "", "", cfg, nil)
 			assert.ErrorIs(t, err, types.AllowlistUnresolved)
 		})
 	}
@@ -197,7 +211,7 @@ func TestFromConfigNeverPutsTheTempDirInsideTheWorkspace(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(root, ".magus", "tmp"))
 	require.NoError(t, os.MkdirAll(os.Getenv("TMPDIR"), 0o700))
 
-	_, err := FromConfig(root, filepath.Join(root, ".magus"), config.SandboxConfig{}, nil)
+	_, err := FromConfig(root, filepath.Join(root, ".magus"), "", config.SandboxConfig{}, nil)
 	assert.ErrorContains(t, err, "inside the workspace")
 }
 

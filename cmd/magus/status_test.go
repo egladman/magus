@@ -17,10 +17,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -122,6 +125,32 @@ func TestPrintStatusCompact(t *testing.T) {
 		"no broker · server up · pool 1/4 running · ?:?(0.1s)\n")
 }
 
+func TestPrintWorkByOwnerGroupsWhatRunsAndSaysWhatWasStopped(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	printWorkByOwner(&out, broker.WorkReport{
+		Running: []broker.Work{
+			{Kind: broker.WorkRun, Lease: "plan/a", PID: 10, Command: "magus run go-test .", Dir: "/w/a", Since: now.Add(-12 * time.Minute), Slots: 4},
+			{Kind: broker.WorkExec, PID: 11, Command: "rg -l TODO", Dir: "/w", Since: now.Add(-3 * time.Minute), Slots: 1, Deadline: now.Add(7 * time.Minute)},
+			{Kind: broker.WorkExec, Lease: "plan/a", PID: 12, Command: "sleep 600", Dir: "/w/a", Since: now.Add(-time.Hour), Deadline: now.Add(-time.Second)},
+		},
+		Ended: []broker.Ended{{Work: broker.Work{Kind: broker.WorkExec, Lease: "plan/b", Command: "rg x"}, Reason: "passed its deadline (2026-10-13T11:58:00Z)", At: now.Add(-2 * time.Minute)}},
+	}, now)
+	text := out.String()
+
+	assert.Contains(t, text, "work by owner")
+	assert.Less(t, strings.Index(text, "  plan/a\n"), strings.Index(text, "  unleased\n"), "owners in the order their oldest work started")
+	assert.Equal(t, 1, strings.Count(text, "  plan/a\n"), "one heading per owner")
+	assert.Regexp(t, `run\s+pid 10\s+up 12m0s\s+slots 4\s+no deadline\s+magus run go-test \.\s+/w/a`, text)
+	assert.Regexp(t, `exec\s+pid 11\s+up 3m0s\s+slots 1\s+deadline in 7m0s\s+rg -l TODO`, text)
+	assert.Contains(t, text, "past its deadline")
+	assert.Regexp(t, `plan/b\s+exec\s+2m0s ago\s+rg x\s+passed its deadline`, text)
+
+	out.Reset()
+	printWorkByOwner(&out, broker.WorkReport{}, now)
+	assert.Empty(t, out.String(), "nothing runs, nothing to say")
+}
+
 func TestClampStatusWatch(t *testing.T) {
 	assert.Equal(t, time.Duration(0), clampStatusWatch(0))
 	assert.Equal(t, statusWatchMin, clampStatusWatch(time.Second))
@@ -164,7 +193,7 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 }
 
 // TestStartupNoSubcommandExitsUsage locks the shape of startup(): with no
-// subcommand it prints usage and returns exitUsage WITHOUT dispatching. This is the
+// subcommand it prints usage and returns exit.Usage WITHOUT dispatching. This is the
 // cheapest assertion that exercises the full pre-dispatch path without a workspace
 // fixture, so it doubles as a guard against the refactor accidentally calling
 // os.Exit directly.
@@ -188,7 +217,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	if res.cleanup != nil {
 		t.Cleanup(res.cleanup)
 	}
-	require.Equal(t, exitUsage, code, "startup(nil) exit code")
+	require.Equal(t, exit.Usage, code, "startup(nil) exit code")
 	assert.Empty(t, res.sub, "startup(nil) sub should be empty (no dispatch)")
 
 	// An explicit global help flag lands in the SAME no-subcommand branch and must
@@ -202,7 +231,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 			if res.cleanup != nil {
 				t.Cleanup(res.cleanup)
 			}
-			assert.Equal(t, 0, code, "an explicit %s exits 0, not exitUsage", flagName)
+			assert.Equal(t, 0, code, "an explicit %s exits 0, not exit.Usage", flagName)
 		})
 	}
 }
@@ -398,23 +427,21 @@ func TestProbeMCPReadiness(t *testing.T) {
 	})
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 // mcpServing returns an MCP config enabled and pointing at a live endpoint whose /readyz
 // returns code (200 serving, 503 not-ready). mcpUnreachable and mcpDisabled are the other
 // two states. They build an explicit config to pass in, so no test mutates package state.
 func mcpServing(t *testing.T, code int) config.MCP {
-	return config.MCP{Address: readyzServer(t, code), Enabled: boolPtr(true)}
+	return config.MCP{Address: readyzServer(t, code), Enabled: new(true)}
 }
 
 // mcpUnreachable returns an enabled MCP config whose address nothing listens on.
 func mcpUnreachable() config.MCP {
-	return config.MCP{Address: "127.0.0.1:1", Enabled: boolPtr(true)}
+	return config.MCP{Address: "127.0.0.1:1", Enabled: new(true)}
 }
 
 // mcpDisabled returns an MCP config with the server turned off.
 func mcpDisabled() config.MCP {
-	return config.MCP{Enabled: boolPtr(false)}
+	return config.MCP{Enabled: new(false)}
 }
 
 func TestMCPAddress(t *testing.T) {
@@ -624,9 +651,9 @@ func TestRunProbesMCPOnly(t *testing.T) {
 	t.Run("unreachable-exits-1", func(t *testing.T) {
 		err := runProbes(ctx, "", mcpUnreachable(), []probeKind{probeMCP}, "")
 		require.Error(t, err)
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		assert.Equal(t, 1, silent.exitCode)
+		assert.Equal(t, 1, silent.ExitCode())
 	})
 }
 
@@ -1261,12 +1288,12 @@ func TestCompactServiceToken(t *testing.T) {
 
 func TestGridEnabledNeedsATerminalAndColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	assert.True(t, gridEnabled(OutputOptions{Format: outputText}, true))
-	assert.False(t, gridEnabled(OutputOptions{Format: outputText}, false))
-	assert.False(t, gridEnabled(OutputOptions{Format: outputJSON}, true))
+	assert.True(t, gridEnabled(output.Options{Format: outputText}, true))
+	assert.False(t, gridEnabled(output.Options{Format: outputText}, false))
+	assert.False(t, gridEnabled(output.Options{Format: outputJSON}, true))
 
 	t.Setenv("NO_COLOR", "1")
-	assert.False(t, gridEnabled(OutputOptions{Format: outputText}, true))
+	assert.False(t, gridEnabled(output.Options{Format: outputText}, true))
 }
 
 // TestWriteStatusStructuredFormats covers the dispatch: a machine-readable format bypasses
@@ -1282,21 +1309,21 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 
 	t.Run("json", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			require.NoError(t, writeStatus(io.Discard, r, OutputOptions{Format: outputJSON}, 0, false))
+			require.NoError(t, writeStatus(io.Discard, r, output.Options{Format: outputJSON}, 0, false))
 		})
 		assert.Contains(t, out, `"dir": "/tmp/c"`)
 	})
 
 	t.Run("yaml", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			require.NoError(t, writeStatus(io.Discard, r, OutputOptions{Format: outputYAML}, 0, false))
+			require.NoError(t, writeStatus(io.Discard, r, output.Options{Format: outputYAML}, 0, false))
 		})
 		assert.Contains(t, out, "dir: /tmp/c")
 	})
 
 	t.Run("compact wins over the text frame", func(t *testing.T) {
 		var buf bytes.Buffer
-		require.NoError(t, writeStatus(&buf, r, OutputOptions{Format: outputText}, 0, true))
+		require.NoError(t, writeStatus(&buf, r, output.Options{Format: outputText}, 0, true))
 		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 }

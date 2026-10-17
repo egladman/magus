@@ -13,17 +13,18 @@ import (
 func runConfig(args []string) error {
 	fs := flag.NewFlagSet("config", flag.ExitOnError)
 	configPath := fs.String("config", "../../internal/config/config.go", "Path to config.go")
-	outPath := fs.String("out", "", "Flag-binding output file path (skip when empty)")
 	fieldsOut := fs.String("fields-out", "", "Generated Fields-table output path (skip when empty)")
+	fieldsPkg := fs.String("fields-pkg", "", "Package clause of the Fields table")
 	bindOut := fs.String("bind-out", "", "Generated BindFlags output path (skip when empty)")
+	bindPkg := fs.String("bind-pkg", "", "Package clause of BindFlags")
 	applyEnvOut := fs.String("apply-env-out", "", "Generated ApplyEnv output path (skip when empty)")
+	applyEnvPkg := fs.String("apply-env-pkg", "", "Package clause of ApplyEnv")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	return generate.Write(*configPath, generate.Paths{
-		Flags:    *outPath,
-		Fields:   *fieldsOut,
-		Bind:     *bindOut,
-		ApplyEnv: *applyEnvOut,
+		Fields:   generate.Output{Path: *fieldsOut, Package: *fieldsPkg},
+		Bind:     generate.Output{Path: *bindOut, Package: *bindPkg},
+		ApplyEnv: generate.Output{Path: *applyEnvOut, Package: *applyEnvPkg},
 	})
 }

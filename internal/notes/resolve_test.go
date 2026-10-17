@@ -2,9 +2,12 @@ package notes
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,13 +15,13 @@ import (
 )
 
 // givenAnchorsResolver resolves exactly the anchors it was given and nothing else, and reports
-// whatever digest it was told to.
+// whatever digest and signature it was told to.
 type givenAnchorsResolver struct {
 	live    map[string]bool
 	digests map[string]string
-	// decls is left nil by most cases on purpose: an anchor with no current declaration
-	// digest is UNGRADED, which is the path every note stamped before grading takes.
-	decls map[string]string
+	// sigs answers Signature. A symbol missing from it errors, the way a symbol whose
+	// indexer rendered no signature does.
+	sigs map[string]string
 }
 
 func (f givenAnchorsResolver) Resolves(_ context.Context, a Anchor) bool {
@@ -27,8 +30,12 @@ func (f givenAnchorsResolver) Resolves(_ context.Context, a Anchor) bool {
 func (f givenAnchorsResolver) Digest(_ context.Context, a Anchor) (string, error) {
 	return f.digests[string(a.Kind)+":"+a.Target], nil
 }
-func (f givenAnchorsResolver) DeclDigest(_ context.Context, a Anchor) (string, error) {
-	return f.decls[string(a.Kind)+":"+a.Target], nil
+func (f givenAnchorsResolver) Signature(_ context.Context, a Anchor) (string, error) {
+	sig, ok := f.sigs[string(a.Kind)+":"+a.Target]
+	if !ok {
+		return "", errors.New("the test indexer rendered no signature")
+	}
+	return sig, nil
 }
 
 func TestAnchorIssues(t *testing.T) {
@@ -108,18 +115,19 @@ func TestDegradeHintNamesTheFallback(t *testing.T) {
 	assert.Contains(t, degradeHint(Anchor{Kind: AnchorProject}), "no longer exists")
 }
 
-// TestAnchorIssuesReportsDrift covers the case an existence check cannot see: the code
-// is still there and quietly stopped saying what the note claims.
-func TestAnchorIssuesReportsDrift(t *testing.T) {
+// TestFileAnchorStillDriftsOnContent covers the case an existence check cannot see: the file
+// is still there and quietly stopped saying what the note claims. Signature grading is for
+// symbols; a file has no signature, so its whole content stays the fingerprint.
+func TestFileAnchorStillDriftsOnContent(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:    "pairing",
 		Title:   "Two caches",
-		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "aaaaaaaaaaaaaaaa"}},
+		Anchors: []Anchor{{Kind: AnchorFile, Target: "internal/cache/cache.go", Digest: "aaaaaaaaaaaaaaaa"}},
 	}))
 	res := givenAnchorsResolver{
-		live:    map[string]bool{"symbol:m cache/Put().": true},
-		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
+		live:    map[string]bool{"file:internal/cache/cache.go": true},
+		digests: map[string]string{"file:internal/cache/cache.go": "bbbbbbbbbbbbbbbb"},
 	}
 
 	issues, err := AnchorIssues(context.Background(), dir, res)
@@ -128,6 +136,11 @@ func TestAnchorIssuesReportsDrift(t *testing.T) {
 	assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
 	assert.Contains(t, issues[0].Message, "still exists but its content changed")
 	assert.Contains(t, issues[0].Hint, "Nothing re-records it for you")
+
+	res.digests["file:internal/cache/cache.go"] = "aaaaaaaaaaaaaaaa"
+	issues, err = AnchorIssues(context.Background(), dir, res)
+	require.NoError(t, err)
+	assert.Empty(t, issues, "content equal to the recorded digest is clean")
 }
 
 // TestAnchorIssuesSilentWhenADigestIsUnavailable pins the direction the tuning must
@@ -138,9 +151,9 @@ func TestAnchorIssuesSilentWhenADigestIsUnavailable(t *testing.T) {
 	require.NoError(t, Save(dir, Note{
 		Name:    "pairing",
 		Title:   "Two caches",
-		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "aaaaaaaaaaaaaaaa"}},
+		Anchors: []Anchor{{Kind: AnchorFile, Target: "cache.go", Digest: "aaaaaaaaaaaaaaaa"}},
 	}))
-	live := map[string]bool{"symbol:m cache/Put().": true}
+	live := map[string]bool{"file:cache.go": true}
 
 	issues, err := AnchorIssues(context.Background(), dir, givenAnchorsResolver{live: live}) // no digests at all
 	require.NoError(t, err)
@@ -152,17 +165,19 @@ func TestAnchorIssuesSilentWhenADigestIsUnavailable(t *testing.T) {
 	require.NoError(t, Save(fresh, Note{
 		Name:    "unstamped",
 		Title:   "Never re-anchored",
-		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put()."}},
+		Anchors: []Anchor{{Kind: AnchorFile, Target: "cache.go"}},
 	}))
 	issues, err = AnchorIssues(context.Background(), fresh, givenAnchorsResolver{
 		live:    live,
-		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
+		digests: map[string]string{"file:cache.go": "bbbbbbbbbbbbbbbb"},
 	})
 	require.NoError(t, err)
 	assert.Empty(t, issues, "a note with no recorded fingerprint is not retroactively drifted")
 }
 
-func TestRecordDigestsIsDeliberateAndReportsWhatItDid(t *testing.T) {
+// TestRecordDigestsRecordsASymbolsSignature: a symbol anchor is re-attested by its signature,
+// and a body digest left from before signature grading goes, since nothing reads it.
+func TestRecordDigestsRecordsASymbolsSignature(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:    "pairing",
@@ -170,8 +185,8 @@ func TestRecordDigestsIsDeliberateAndReportsWhatItDid(t *testing.T) {
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "aaaaaaaaaaaaaaaa"}},
 	}))
 	res := givenAnchorsResolver{
-		live:    map[string]bool{"symbol:m cache/Put().": true},
-		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
+		live: map[string]bool{"symbol:m cache/Put().": true},
+		sigs: map[string]string{"symbol:m cache/Put().": "func Put(k string) error"},
 	}
 
 	changed, err := RecordDigests(context.Background(), dir, "pairing", "cafe1234", res)
@@ -180,12 +195,34 @@ func TestRecordDigestsIsDeliberateAndReportsWhatItDid(t *testing.T) {
 
 	got, err := Get(dir, "pairing")
 	require.NoError(t, err)
-	assert.Equal(t, "bbbbbbbbbbbbbbbb", got.Anchors[0].Digest)
+	assert.Equal(t, Anchor{Kind: AnchorSymbol, Target: "m cache/Put().", Signature: "func Put(k string) error", Commit: "cafe1234"},
+		got.Anchors[0])
 
 	// Idempotent: nothing to re-attest, nothing written.
 	changed, err = RecordDigests(context.Background(), dir, "pairing", "cafe1234", res)
 	require.NoError(t, err)
 	assert.Equal(t, 0, changed)
+}
+
+// TestRecordDigestsKeepsASignatureItCannotRead: writing "" would erase the signature a person
+// attested, and the note would read unverifiable for a reason nobody chose.
+func TestRecordDigestsKeepsASignatureItCannotRead(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "notes")
+	require.NoError(t, Save(dir, Note{
+		Name:    "pairing",
+		Title:   "Two caches",
+		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Signature: "func Put()"}},
+	}))
+
+	changed, err := RecordDigests(context.Background(), dir, "pairing", "cafe1234", givenAnchorsResolver{
+		live: map[string]bool{"symbol:m cache/Put().": true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, changed)
+
+	got, err := Get(dir, "pairing")
+	require.NoError(t, err)
+	assert.Equal(t, "func Put()", got.Anchors[0].Signature)
 }
 
 // Re-attestation on a note whose declared id no longer matches its filename. Saving to
@@ -198,8 +235,8 @@ func TestRecordDigestsUpdatesTheNoteInPlaceAfterARename(t *testing.T) {
 	require.NoError(t, os.WriteFile(file,
 		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m cache/Put().\n---\n\nProse.\n"), 0o644))
 	res := givenAnchorsResolver{
-		live:    map[string]bool{"symbol:m cache/Put().": true},
-		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
+		live: map[string]bool{"symbol:m cache/Put().": true},
+		sigs: map[string]string{"symbol:m cache/Put().": "func Put()"},
 	}
 
 	changed, err := RecordDigests(context.Background(), dir, "pairing", "cafe1234", res)
@@ -211,7 +248,7 @@ func TestRecordDigestsUpdatesTheNoteInPlaceAfterARename(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	assert.Equal(t, file, found[0].Path)
-	assert.Equal(t, "bbbbbbbbbbbbbbbb", found[0].Anchors[0].Digest)
+	assert.Equal(t, "func Put()", found[0].Anchors[0].Signature)
 }
 
 // A verify warning names the file to go and repair, so it has to be the file that exists.
@@ -238,14 +275,14 @@ func TestRecordDigestsSkipsADanglingAnchor(t *testing.T) {
 	}))
 
 	changed, err := RecordDigests(context.Background(), dir, "ghost", "cafe1234", givenAnchorsResolver{
-		digests: map[string]string{"symbol:m gone/Removed#": "cccccccccccccccc"},
+		sigs: map[string]string{"symbol:m gone/Removed#": "type Removed struct{}"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, changed)
 
 	got, err := Get(dir, "ghost")
 	require.NoError(t, err)
-	assert.Empty(t, got.Anchors[0].Digest)
+	assert.Empty(t, got.Anchors[0].Signature)
 }
 
 // TestRecordDigestsStampsTheRevision: the digest says the anchored code changed, and the
@@ -283,92 +320,81 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 	assert.Contains(t, issues[0].Hint, "git diff cafe1234..HEAD -- a.go")
 }
 
-// Grading is the answer to a measured base rate: only about one code change in thirty-eight
-// to a documented subject actually invalidates the prose, and a whole-body hash fires on all
-// thirty-eight. A body edited under an unchanged declaration is the common, mostly-harmless
-// case, and reporting it as drift is how a store trains its reader to ignore the findings.
-func TestBodyChangeUnderAnUnchangedDeclarationIsNotDrift(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "notes")
-	require.NoError(t, Save(dir, Note{
-		Name:  "pairing",
-		Title: "Two caches",
-		Anchors: []Anchor{{
-			Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
-			Digest: "oldbody", DeclDigest: "decl",
-		}},
-		Body: "prose",
-	}))
-	res := givenAnchorsResolver{
-		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
-		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
-		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "decl"},
+// A Go struct's signature carries its fields, so a long one is where a cap anywhere between
+// the indexer and the grade would hide a change. The field that changes sits past 4 KiB.
+func longStructSignature(last string) string {
+	var b strings.Builder
+	b.WriteString("type Wide struct {")
+	for i := range 300 {
+		fmt.Fprintf(&b, " Field%03d string;", i)
 	}
-
-	issues, err := AnchorIssues(t.Context(), dir, res)
-	require.NoError(t, err)
-	require.Len(t, issues, 1)
-	assert.Equal(t, CodeAnchorBodyChanged, issues[0].Code)
-	assert.Contains(t, issues[0].Message, "unchanged declaration")
+	b.WriteString(" " + last + " }")
+	return b.String()
 }
 
-func TestDeclarationChangeIsStillDrift(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "notes")
-	require.NoError(t, Save(dir, Note{
-		Name:  "pairing",
-		Title: "Two caches",
-		Anchors: []Anchor{{
-			Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
-			Digest: "oldbody", DeclDigest: "olddecl",
-		}},
-		Body: "prose",
-	}))
-	res := givenAnchorsResolver{
-		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
-		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
-		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "newdecl"},
-	}
-
-	issues, err := AnchorIssues(t.Context(), dir, res)
-	require.NoError(t, err)
-	require.Len(t, issues, 1)
-	assert.Equal(t, CodeDriftedAnchor, issues[0].Code, "what the subject IS changed")
-}
-
-// A note stamped before grading existed has no recorded declaration, and an anchor kind with
-// no declaration never gets one. Neither may be silently downgraded to the softer finding:
-// ungraded means the evidence to grade it is absent, not that the change was harmless.
-func TestAnUngradedAnchorReportsDrift(t *testing.T) {
-	for _, tt := range []struct {
-		name       string
-		declDigest string
-		current    map[string]string
-	}{
-		{"note predates grading", "", map[string]string{"symbol:m internal/cache/Store#Put().": "decl"}},
-		{"kind has no declaration", "decl", nil},
+func TestSymbolAnchorDriftsOnASignatureChange(t *testing.T) {
+	require.Greater(t, len(longStructSignature("Last int")), 4096)
+	for _, tt := range []struct{ name, recorded, current string }{
+		{"a parameter", "func Put(k string) error", "func Put(k string, ttl time.Duration) error"},
+		{"a struct field past the cap", longStructSignature("Last int"), longStructSignature("Last int64")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "notes")
 			require.NoError(t, Save(dir, Note{
-				Name:  "pairing",
-				Title: "Two caches",
-				Anchors: []Anchor{{
-					Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
-					Digest: "oldbody", DeclDigest: tt.declDigest,
-				}},
-				Body: "prose",
+				Name:    "pairing",
+				Title:   "Two caches",
+				Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Signature: tt.recorded, Commit: "cafe1234"}},
 			}))
 			res := givenAnchorsResolver{
-				live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
-				digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
-				decls:   tt.current,
+				live: map[string]bool{"symbol:m cache/Put().": true},
+				sigs: map[string]string{"symbol:m cache/Put().": tt.current},
 			}
 
 			issues, err := AnchorIssues(t.Context(), dir, res)
 			require.NoError(t, err)
 			require.Len(t, issues, 1)
 			assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
+			assert.Contains(t, issues[0].Message, "its signature changed")
+			assert.Contains(t, issues[0].Hint, "last reviewed at cafe1234")
 		})
 	}
+}
+
+// TestSymbolAnchorWithoutASignatureIsUnverifiable: neither a note recorded before signature
+// grading nor a symbol its indexer renders no signature for may read clean, and neither is
+// drift: nothing compared anything.
+func TestSymbolAnchorWithoutASignatureIsUnverifiable(t *testing.T) {
+	for _, tt := range []struct {
+		name, recorded string
+		current        map[string]string
+		message        string
+	}{
+		{"none recorded", "", map[string]string{"symbol:m cache/Put().": "func Put()"}, "no recorded signature"},
+		{"none rendered", "func Put()", nil, "the test indexer rendered no signature"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "notes")
+			require.NoError(t, Save(dir, Note{
+				Name:    "pairing",
+				Title:   "Two caches",
+				Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "oldbody", Signature: tt.recorded}},
+			}))
+			res := givenAnchorsResolver{
+				live: map[string]bool{"symbol:m cache/Put().": true},
+				sigs: tt.current,
+			}
+
+			issues, err := AnchorIssues(t.Context(), dir, res)
+			require.NoError(t, err)
+			require.Len(t, issues, 1)
+			assert.Equal(t, CodeUnverifiableAnchor, issues[0].Code)
+			assert.Contains(t, issues[0].Message, tt.message)
+		})
+	}
+
+	hint := gradeSignature(t.Context(), givenAnchorsResolver{}, "pairing", Anchor{Kind: AnchorSymbol, Target: "m cache/Put()."}).hint
+	assert.Contains(t, hint, "recorded before notes graded symbols by signature")
+	assert.Contains(t, hint, "`magus notes edit pairing` records it")
 }
 
 // gradedStore writes one note per grading outcome, so a note NAME identifies the expected
@@ -383,12 +409,15 @@ func gradedStore(t *testing.T) (string, givenAnchorsResolver) {
 		{Name: "drifted", Title: "Moved on", Anchors: []Anchor{
 			{Kind: AnchorFile, Target: "internal/cache/cache.go", Digest: "oldbody"},
 		}},
-		{Name: "body", Title: "Same signature", Anchors: []Anchor{
-			{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "oldbody", DeclDigest: "decl"},
+		{Name: "resigned", Title: "New signature", Anchors: []Anchor{
+			{Kind: AnchorSymbol, Target: "m cache/Put().", Signature: "func Put()"},
+		}},
+		{Name: "unrecorded", Title: "Before signatures", Anchors: []Anchor{
+			{Kind: AnchorSymbol, Target: "m cache/Get().", Digest: "oldbody"},
 		}},
 		{Name: "clean", Title: "Still true", Anchors: []Anchor{
 			{Kind: AnchorFile, Target: "clean.go"},
-			{Kind: AnchorSymbol, Target: "m clean/Ok()."},
+			{Kind: AnchorSymbol, Target: "m clean/Ok().", Signature: "func Ok() bool"},
 		}},
 	} {
 		require.NoError(t, Save(dir, n))
@@ -398,14 +427,16 @@ func gradedStore(t *testing.T) (string, givenAnchorsResolver) {
 		live: map[string]bool{
 			"file:internal/cache/cache.go": true,
 			"symbol:m cache/Put().":        true,
+			"symbol:m cache/Get().":        true,
 			"file:clean.go":                true,
 			"symbol:m clean/Ok().":         true,
 		},
-		digests: map[string]string{
-			"file:internal/cache/cache.go": "newbody",
-			"symbol:m cache/Put().":        "newbody",
+		digests: map[string]string{"file:internal/cache/cache.go": "newbody"},
+		sigs: map[string]string{
+			"symbol:m cache/Put().": "func Put(k string)",
+			"symbol:m cache/Get().": "func Get() string",
+			"symbol:m clean/Ok().":  "func Ok() bool",
 		},
-		decls: map[string]string{"symbol:m cache/Put().": "decl"},
 	}
 }
 
@@ -416,16 +447,17 @@ func TestResolveAnchorsSeesEveryAnchor(t *testing.T) {
 
 	all, err := ResolveAnchors(t.Context(), dir, res)
 	require.NoError(t, err)
-	require.Len(t, all, 5, "every anchor of every note, healthy ones included")
+	require.Len(t, all, 6, "every anchor of every note, healthy ones included")
 
 	byNote := map[string][]ResolvedAnchor{}
 	for _, r := range all {
 		byNote[r.Note] = append(byNote[r.Note], r)
 	}
 	for note, want := range map[string]IssueCode{
-		"gone":    CodeDanglingAnchor,
-		"drifted": CodeDriftedAnchor,
-		"body":    CodeAnchorBodyChanged,
+		"gone":       CodeDanglingAnchor,
+		"drifted":    CodeDriftedAnchor,
+		"resigned":   CodeDriftedAnchor,
+		"unrecorded": CodeUnverifiableAnchor,
 	} {
 		require.Len(t, byNote[note], 1)
 		assert.Equal(t, want, byNote[note][0].Status, note)
@@ -505,7 +537,7 @@ func TestResolveAnchorsUngradedWithoutAResolver(t *testing.T) {
 
 	all, err := ResolveAnchors(t.Context(), dir, nil)
 	require.NoError(t, err)
-	require.Len(t, all, 5, "an ungraded pass sees exactly the anchors a graded one does")
+	require.Len(t, all, 6, "an ungraded pass sees exactly the anchors a graded one does")
 
 	for _, r := range all {
 		assert.Equal(t, StatusUngraded, r.Status, "note %s anchor %d", r.Note, r.Pos)
@@ -527,41 +559,5 @@ func TestUngradedResolutionDiffersOnlyInStatus(t *testing.T) {
 	for i, want := range graded {
 		want.Status = StatusUngraded
 		assert.Equal(t, want, ungraded[i])
-	}
-}
-
-// errDeclResolver computes a body digest but fails on the declaration: a symbol the indexer
-// found but reported no enclosing range for.
-type errDeclResolver struct{ givenAnchorsResolver }
-
-func (errDeclResolver) DeclDigest(context.Context, Anchor) (string, error) {
-	return "", assert.AnError
-}
-
-// TestDeclarationHeldFailsTowardsUngraded pins the DIRECTION the grading fails in, which is
-// the whole reason it is one exported function rather than a rule each caller re-implements.
-// Every way of being unsure (nothing recorded, nothing computable, an error) answers false,
-// so the finding degrades to ungraded drift rather than to the softer verdict. Overstating a
-// change costs a re-read; understating one is a note that quietly stopped being true.
-func TestDeclarationHeldFailsTowardsUngraded(t *testing.T) {
-	const target = "m internal/cache/Store#Put()."
-	key := "symbol:" + target
-
-	for _, tt := range []struct {
-		name     string
-		recorded string
-		res      Resolver
-		want     bool
-	}{
-		{"nothing recorded", "", givenAnchorsResolver{decls: map[string]string{key: "decl"}}, false},
-		{"nothing computable", "decl", givenAnchorsResolver{}, false},
-		{"declaration errored", "decl", errDeclResolver{}, false},
-		{"declaration moved", "decl", givenAnchorsResolver{decls: map[string]string{key: "other"}}, false},
-		{"declaration held", "decl", givenAnchorsResolver{decls: map[string]string{key: "decl"}}, true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			a := Anchor{Kind: AnchorSymbol, Target: target, Digest: "oldbody", DeclDigest: tt.recorded}
-			assert.Equal(t, tt.want, DeclarationHeld(t.Context(), tt.res, a))
-		})
 	}
 }

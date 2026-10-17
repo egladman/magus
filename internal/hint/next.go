@@ -10,49 +10,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// A breadcrumb belongs on the RESULT, not in the prose under it. Measured over 21
-// days of this repo's agent sessions: the one breadcrumb magus already printed (the
-// `magus query output <ref>` line after a failing run) was followed 21% of the time,
-// the same rate as an unhinted next step, while re-running the same failing target
-// won 84%. Text at the bottom of output does not convert.
-//
-// So a next is a FIELD: a harness can present it as an affordance, and because every
-// entry carries a stable id, uptake per breadcrumb is a query rather than a guess.
-// One that nobody takes gets deleted from the number instead of reworded.
-//
-// It stays a suggestion. magus informs and never decides, so a reader (or an agent)
-// may ignore every one of them, and nothing here enforces an order.
-
-// Next is one breadcrumb on a result: a complete command to run, a stable id to
-// count it by, and one sentence saying what it answers.
-//
-// Run always has the real ids or refs filled in, never a placeholder, because a
-// command that still needs editing is prose. Why is one sentence: a caller that
-// repeats a result within a session shows Run every time and Why once.
-//
-// Argv is the same command as an argument vector, unquoted: Run is for a person to
-// paste and Argv for a caller to exec, so the two differ wherever an argument needs
-// shell quotes.
-//
-// Reads marks a workspace script that declares it changes nothing (see MatchScripts).
-// ServableTo honors it for a single `buzz` invocation only, so it cannot clear any
-// other command for a reviewer.
-type Next struct {
-	ID    string   `json:"id"              yaml:"id"`
-	Run   string   `json:"run"             yaml:"run"`
-	Argv  []string `json:"argv,omitempty"  yaml:"argv,omitempty"`
-	Why   string   `json:"why,omitempty"   yaml:"why,omitempty"`
-	Reads bool     `json:"reads,omitempty" yaml:"reads,omitempty"`
-}
-
 // breadcrumb builds one entry from raw, unquoted args: Run gets them shell-quoted,
 // Argv gets them as they are.
-func breadcrumb(id string, c Command, why string, args ...string) Next {
+func breadcrumb(id string, c Command, why string, args ...string) types.NextStep {
 	quoted := make([]string, len(args))
 	for i, a := range args {
 		quoted[i] = matcherArg(a)
 	}
-	return Next{ID: id, Run: c.With(quoted...), Argv: c.Argv(args...), Why: why}
+	return types.NextStep{ID: id, Run: c.With(quoted...), Argv: c.Argv(args...), Why: why}
 }
 
 // nextCap bounds how many breadcrumbs one result may carry. A next that fires every
@@ -65,11 +30,11 @@ const nextCap = 3
 //
 // Nil when nothing matched. An absent verdict has its own text and no node to
 // point at.
-func NextForQuery(out types.KnowledgeQueryOutput) []Next {
+func NextForQuery(out types.KnowledgeQueryOutput) []types.NextStep {
 	if len(out.Matches) == 0 {
 		return nil
 	}
-	next := []Next{breadcrumb("query-explain", Explain,
+	next := []types.NextStep{breadcrumb("query-explain", Explain,
 		"explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
 		out.Matches[0].ID)}
 	// Ranked above path and refs: a reader holding a page wants the passage, and
@@ -95,8 +60,8 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 // NextForExplain breadcrumbs one node's context card: the path to its heaviest
 // neighbor, its references when it is a symbol, and the classification of the file
 // it was read from.
-func NextForExplain(out types.KnowledgeExplainOutput) []Next {
-	var next []Next
+func NextForExplain(out types.KnowledgeExplainOutput) []types.NextStep {
+	var next []types.NextStep
 	if other, ok := heaviestNeighbor(out); ok {
 		next = append(next, breadcrumb("explain-path", Path,
 			"path resolves the chain between two nodes, and this is the neighbor the card names most.",
@@ -121,8 +86,8 @@ func NextForExplain(out types.KnowledgeExplainOutput) []Next {
 // Derived across the whole call rather than per entry, because the classification
 // answers about a SET of paths and a breadcrumb per path would blow the cap on the
 // first `git status` piped into it.
-func NextForFiles(files []types.FileEntry) []Next {
-	var next []Next
+func NextForFiles(files []types.FileEntry) []types.NextStep {
+	var next []types.NextStep
 	for _, f := range files {
 		if len(f.SourceOf) > 0 {
 			next = append(next, breadcrumb("file-impact", Affected,
@@ -162,11 +127,11 @@ func regeneratingProject(f types.FileEntry) string {
 // that set, and why the first project is in it.
 //
 // Nil for an empty set, which is a complete answer with nothing to follow.
-func NextForAffected(target string, projects []string) []Next {
+func NextForAffected(target string, projects []string) []types.NextStep {
 	if target == "" || len(projects) == 0 {
 		return nil
 	}
-	return []Next{
+	return []types.NextStep{
 		breadcrumb("affected-plan", Affected,
 			"the plan is the same set sharded, which is what CI runs and what says how long it will take.",
 			target, "--plan"),
@@ -182,8 +147,8 @@ func NextForAffected(target string, projects []string) []Next {
 // The output entry restates the line a failing run already prints. That line is the
 // control this whole mechanism was measured against, so it stays exactly as it is
 // and gains a field beside it.
-func NextForFailure(project, target, ref string) []Next {
-	var next []Next
+func NextForFailure(project, target, ref string) []types.NextStep {
+	var next []types.NextStep
 	if ref != "" {
 		next = append(next, breadcrumb("run-output", QueryOutput,
 			"the ref holds the run's whole captured output, so nothing has to be reproduced to be read.",
@@ -199,7 +164,7 @@ func NextForFailure(project, target, ref string) []Next {
 
 // NextForDenial breadcrumbs a repeated guard deny: the full verdict the short form stands
 // in for. Its id is what `magus session hints` counts.
-func NextForDenial(ref string) Next {
+func NextForDenial(ref string) types.NextStep {
 	return breadcrumb("deny-verdict", QueryOutput,
 		"the ref holds this deny's full verdict, which a repeat within a session shortens to one line.",
 		ref)
@@ -215,12 +180,12 @@ const DenyRemedyPrefix = "deny-"
 //
 // Not a breadcrumb template: each argv is derived from a refused line, so the guard's
 // tests grade it by driving the rule rather than by sweeping this file's ids.
-func NextForDenyRemedy(rule string, argv []string, why string) Next {
+func NextForDenyRemedy(rule string, argv []string, why string) types.NextStep {
 	quoted := make([]string, len(argv))
 	for i, a := range argv {
 		quoted[i] = matcherArg(a)
 	}
-	return Next{ID: DenyRemedyPrefix + rule, Run: strings.Join(quoted, " "), Argv: slices.Clone(argv), Why: why}
+	return types.NextStep{ID: DenyRemedyPrefix + rule, Run: strings.Join(quoted, " "), Argv: slices.Clone(argv), Why: why}
 }
 
 // PipeSep separates the stages of a pipeline remedy's Argv. A served stage never
@@ -229,8 +194,8 @@ const PipeSep = "|"
 
 // NextForDenyRemedyPipeline is NextForDenyRemedy for a remedy that is a shell pipeline
 // of several complete argvs. Run joins the quoted stages with ` | `; Argv joins them with
-// PipeSep, which ServableTo splits to grade every stage on its own.
-func NextForDenyRemedyPipeline(rule string, stages [][]string, why string) Next {
+// PipeSep, which FilterServable splits to grade every stage on its own.
+func NextForDenyRemedyPipeline(rule string, stages [][]string, why string) types.NextStep {
 	runs := make([]string, len(stages))
 	var argv []string
 	for i, stage := range stages {
@@ -244,7 +209,7 @@ func NextForDenyRemedyPipeline(rule string, stages [][]string, why string) Next 
 		}
 		argv = append(argv, stage...)
 	}
-	return Next{ID: DenyRemedyPrefix + rule, Run: strings.Join(runs, " | "), Argv: argv, Why: why}
+	return types.NextStep{ID: DenyRemedyPrefix + rule, Run: strings.Join(runs, " | "), Argv: argv, Why: why}
 }
 
 // pipelineStages splits an Argv at PipeSep. A plain argv is one stage.
@@ -299,18 +264,18 @@ func LeaseRole(rows []types.Job, id string) (Role, []string) {
 	return RoleWorker, nil
 }
 
-// ServableTo drops the breadcrumbs role may not be served: every write for a
+// FilterServable drops the breadcrumbs role may not be served: every write for a
 // reviewer, and for a worker every write that does not land inside writePaths. Unbound
 // keeps the lot. A script declared read is not a write (see declaredRead).
 //
 // Dropped, never rewritten. A template narrowed to fit a role would be a command
 // nobody wrote, and the cap is applied afterwards so a filtered list still fills up
 // to nextCap from what survives.
-func ServableTo(role Role, writePaths []string, next []Next) []Next {
+func FilterServable(role Role, writePaths []string, next []types.NextStep) []types.NextStep {
 	if role == "" || role == RoleUnbound {
 		return capNext(next)
 	}
-	kept := make([]Next, 0, len(next))
+	kept := make([]types.NextStep, 0, len(next))
 	for _, n := range next {
 		if declaredRead(n) || !slices.ContainsFunc(pipelineStages(n.Argv), func(stage []string) bool {
 			return mutatesTree(stage) && (role != RoleWorker || !withinWritePaths(writePaths, stage))
@@ -324,7 +289,7 @@ func ServableTo(role Role, writePaths []string, next []Next) []Next {
 // declaredRead reports whether n is a script read: Reads set on one `buzz <path>`
 // invocation and nothing else. `buzz` itself stays off readCommands, since a script
 // with no declaration, or one declaring a write, is a write.
-func declaredRead(n Next) bool {
+func declaredRead(n types.NextStep) bool {
 	stages := pipelineStages(n.Argv)
 	return n.Reads && len(stages) == 1 && len(stages[0]) >= 3 && slices.Equal(stages[0][1:2], Buzz.tokens)
 }
@@ -456,7 +421,7 @@ func writePathsCover(writePaths []string, project string) bool {
 //
 // Absence has to be measurable, so a result with nothing to suggest carries no field
 // at all rather than an empty list.
-func capNext(next []Next) []Next {
+func capNext(next []types.NextStep) []types.NextStep {
 	if len(next) == 0 {
 		return nil
 	}
@@ -566,7 +531,7 @@ func sourcePath(source string) string {
 // Arguments after "--" belong to spells and are kept verbatim.
 //
 // profile is a string because cache imports this package.
-func NextForSlotWait(profile string, args []string) Next {
+func NextForSlotWait(profile string, args []string) types.NextStep {
 	const flagName = "concurrency-profile"
 	rerun := []string{"--" + flagName, profile}
 	for i := 0; i < len(args); i++ {
@@ -590,7 +555,7 @@ func NextForSlotWait(profile string, args []string) Next {
 	for i, a := range rerun {
 		quoted[i] = matcherArg(a)
 	}
-	return Next{
+	return types.NextStep{
 		ID:   "concurrency-profile",
 		Run:  BinaryName() + " " + strings.Join(quoted, " "),
 		Argv: append([]string{BinaryName()}, rerun...),
@@ -603,7 +568,7 @@ func NextForSlotWait(profile string, args []string) Next {
 //
 // One renderer for both doors: a reader who meets the breadcrumbs over MCP and on a
 // terminal meets one layout.
-func Render(next []Next, why func(Next) string) string {
+func Render(next []types.NextStep, why func(types.NextStep) string) string {
 	if len(next) == 0 {
 		return ""
 	}

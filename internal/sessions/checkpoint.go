@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 

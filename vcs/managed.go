@@ -274,6 +274,44 @@ func managedSectionPresent(path string, m managedMarkers) (bool, error) {
 	return len(spans) > 0, nil
 }
 
+// ConfinedToGeneratedSection reports whether committed and current differ, and wholly
+// inside the magus-generated section of a .gitattributes. Text outside the section must
+// match line for line, so a hand edit beside it is not magus's. A torn section in either
+// text is an error, as it is for the writer.
+//
+// Blank lines are ignored: the writer owns the spacing around its section, and moving it
+// changes nothing a person wrote.
+func ConfinedToGeneratedSection(committed, current string) (bool, error) {
+	committed = strings.ReplaceAll(committed, "\r\n", "\n")
+	current = strings.ReplaceAll(current, "\r\n", "\n")
+	if committed == current {
+		return false, nil
+	}
+	outside := func(text string) ([]string, error) {
+		spans, err := managedSpans(text, generatedMarkers)
+		if err != nil {
+			return nil, err
+		}
+		var kept strings.Builder
+		prev := 0
+		for _, s := range spans {
+			kept.WriteString(text[prev:s.start])
+			prev = s.end
+		}
+		kept.WriteString(text[prev:])
+		return slices.DeleteFunc(strings.Split(kept.String(), "\n"), func(line string) bool { return line == "" }), nil
+	}
+	was, err := outside(committed)
+	if err != nil {
+		return false, fmt.Errorf("committed: %w", err)
+	}
+	is, err := outside(current)
+	if err != nil {
+		return false, fmt.Errorf("working copy: %w", err)
+	}
+	return slices.Equal(was, is), nil
+}
+
 // managedLockName is the repository's managed-section lock file, in its metadata dir.
 const managedLockName = "magus-managed.lock"
 

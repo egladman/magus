@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path"
@@ -54,7 +55,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 // assembleDocsIn is assembleDocs over a walk already taken.
 func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) (Shard, docCitations) {
 	root := w.root
-	s := Shard{Name: docsShardName}
+	s := Shard{Name: docsShardName, Text: map[string]string{}}
 	var cites docCitations
 	files := w.docFiles(notesPath)
 	scanned := make(map[string]bool, len(files))
@@ -158,6 +159,13 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 
 		body := docs.StripFrontmatter(content)
 		headings, runs := parseDocBody([]byte(body))
+		for anchor, text := range sectionBodies([]byte(body), headings) {
+			id := dID
+			if anchor != "" {
+				id = docSectionID(rel, anchor)
+			}
+			s.Text[id] = text
+		}
 		bodyLine := strings.Count(content[:len(content)-len(body)], "\n")
 		seenRun := map[[2]string]bool{}
 		var unknownTargets []string
@@ -265,6 +273,9 @@ type docHeading struct {
 	level  int
 	text   string
 	anchor string
+	// start and end are byte offsets into the body: the start of the heading's first line
+	// and the start of the line after its last, where its section's text begins.
+	start, end int
 }
 
 // docHeadings returns the headings of a markdown body (frontmatter already stripped), each
@@ -273,6 +284,61 @@ type docHeading struct {
 func docHeadings(body []byte) []docHeading {
 	h, _ := parseDocBody(body)
 	return h
+}
+
+// headingSpan returns where h's lines start and where the text after them starts, or -1, -1
+// for a heading with no text, which leaves its section's text to the section before it.
+func headingSpan(h *ast.Heading, body []byte) (start, end int) {
+	lines := h.Lines()
+	if lines.Len() == 0 {
+		return -1, -1
+	}
+	first, last := lines.At(0).Start, lines.At(lines.Len()-1).Stop
+	start = bytes.LastIndexByte(body[:first], '\n') + 1
+	end = lineEnd(body, last)
+	if last > 0 && body[last-1] == '\n' {
+		end = last
+	}
+	// A setext heading's underline is part of the heading, not its section's text.
+	if next := lineEnd(body, end); end < len(body) && len(bytes.Trim(body[end:next], "=- \t\n")) == 0 &&
+		len(bytes.TrimSpace(body[end:next])) > 0 {
+		end = next
+	}
+	return start, end
+}
+
+// lineEnd is the offset just past the newline ending the line holding offset i, or the end of body.
+func lineEnd(body []byte, i int) int {
+	if j := bytes.IndexByte(body[i:], '\n'); j >= 0 {
+		return i + j + 1
+	}
+	return len(body)
+}
+
+// sectionBodies maps each heading's anchor to its section's text: everything from the line
+// after the heading to the next heading of any level, so a section holds none of the text
+// of the sections nested under it. The key "" holds the page's text before its first
+// heading. Text is trimmed, and a section with none has no entry.
+func sectionBodies(body []byte, headings []docHeading) map[string]string {
+	out := map[string]string{}
+	put := func(anchor string, from, to int) {
+		if from >= to {
+			return
+		}
+		if text := strings.TrimSpace(string(body[from:to])); text != "" {
+			out[anchor] = text
+		}
+	}
+	anchor, from := "", 0
+	for _, h := range headings {
+		if h.start < 0 {
+			continue
+		}
+		put(anchor, from, h.start)
+		anchor, from = h.anchor, h.end
+	}
+	put(anchor, from, len(body))
+	return out
 }
 
 // docRun is one `magus run` command in a fenced shell block, under the heading whose
@@ -312,7 +378,8 @@ func parseDocBody(body []byte) ([]docHeading, []docRun) {
 				return ast.WalkSkipChildren, nil
 			}
 			anchor = string(id)
-			heads = append(heads, docHeading{level: t.Level, text: headingText(t, body), anchor: anchor})
+			start, end := headingSpan(t, body)
+			heads = append(heads, docHeading{level: t.Level, text: headingText(t, body), anchor: anchor, start: start, end: end})
 			return ast.WalkSkipChildren, nil
 		case *ast.FencedCodeBlock:
 			if !shellFences[strings.ToLower(string(t.Language(body)))] {

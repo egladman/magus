@@ -2,10 +2,12 @@ package ffi
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +28,44 @@ func TestBuzzCallbackReturnsValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ret, 1)
 	assert.Equal(t, "payload", ret[0])
+}
+
+// os\retry classifies what its Buzz callback raised. A host error raised inside the callback
+// keeps its chain across the VM, so a non-retryable one ends the loop at the first call. A
+// string the script throws carries no type, so it is retryable and runs every attempt.
+func TestBuzzCallbackErrorsClassifyForRetry(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+
+	refused := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+	calls := 0
+	sess.SetGlobal("refuse", vm.DirectValue("refuse", func(context.Context, []vm.Value) (vm.Value, error) {
+		calls++
+		return vm.Null, Error(refused)
+	}))
+	sess.SetGlobal("tick", vm.DirectValue("tick", func(context.Context, []vm.Value) (vm.Value, error) {
+		calls++
+		return vm.Null, nil
+	}))
+	require.NoError(t, sess.Exec(ctx, `
+final viaHost = fun() > void !> any { refuse(); };
+final thrown = fun() > void !> any { tick(); throw "flaky"; };
+`))
+	callback := func(name string) std.Callback { return CallbackArg(sess, []vm.Value{sess.GetGlobal(name)}, 0) }
+	fast := map[string]any{"backoff_ms": 0}
+
+	_, err := std.OsRetry(ctx, 3, callback("viaHost"), fast)
+	var typed *types.NonRetryableError
+	require.ErrorAs(t, err, &typed)
+	assert.Equal(t, types.RetryAfterConfig, types.ClassifyRetry(err).Change)
+	assert.Equal(t, 1, calls)
+
+	calls = 0
+	_, err = std.OsRetry(ctx, 3, callback("thrown"), fast)
+	require.ErrorContains(t, err, "flaky")
+	assert.True(t, types.ClassifyRetry(err).Retryable)
+	assert.Equal(t, 3, calls)
 }
 
 func TestOptStrValCrossesNilAsNull(t *testing.T) {

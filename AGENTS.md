@@ -79,17 +79,39 @@ saying it, delete it here.
   (`types/enums.go`).
 - A type a magusfile or script reads lives in `types/`, not behind an alias.
 - Language changes in `libs/gopherbuzz/` match upstream Buzz.
-- Code kept only for older data, artifacts or callers carries
-  `compat(until: <condition>):`. The condition is something you can observe ("no
-  store still serves ed25519 envelopes"), never a date. Secondary sites say
-  `compat: see <primary site>`. An exported API gets `// Deprecated:` instead.
+- magus is pre-1.0, so breaking is fine: rename, remove or change a name, flag or
+  format without a migration path. Add no compat shim, dual reader, fallback for
+  older callers or `Deprecated:` alias without asking Eli first.
+- Deleting is an option. Before adding code to keep something working, check
+  whether removing the old path, flag, fallback, test or doc section reaches the
+  goal.
+- A shim Eli approved carries `compat(until: <condition>):`. The condition is
+  something you can observe ("no store still serves ed25519 envelopes"), never a
+  date. Secondary sites say `compat: see <primary site>`. An approved exported API
+  gets `// Deprecated:` instead.
+- Before proposing a design or reversing one, read what was decided: `magus query
+  "kind=docsection id=~decisions/ <terms>"` and the refusal rows in
+  [docs/doctrine.md](docs/doctrine.md#a-record-of-refusals). Reopen one only with
+  new evidence.
+- Merge duplicates only when they share semantics, knobs and bugs; otherwise keep
+  the copy with one line saying why
+  ([doctrine](docs/doctrine.md#a-copy-can-be-the-right-answer)).
 - `TODO`, `FIXME` and `BUG` comments stay; never add `godox` or a linter that
   reports them.
+- No silent defaults: a fallback says that it fell back, and an absent capability fails
+  loudly rather than answering empty (`docs/doctrine.md`).
+- Local state is JSON Lines: one append-only `.jsonl` file per store, one JSON
+  object per entry per line. The last line per key wins; compaction is by rename.
+  Encoding lives on the entry type (`MarshalJSON`, `UnmarshalJSON`), never in
+  a reader that splits lines. Never one rewritten JSON document, TSV or
+  `name<TAB>value`
+  ([doctrine](docs/doctrine.md#everything-is-a-file)).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.
-- A convention that matters gets an enforcement point (`internal/guard/dir.go` is
-  the example). A convention kept only in prose holds about half the time.
+- A convention that matters gets an enforcement point;
+  [CONTRIBUTING.md](CONTRIBUTING.md#where-a-rule-lives) says which. A
+  convention kept only in prose holds about half the time.
 
 ## Gotchas
 

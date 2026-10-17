@@ -352,7 +352,7 @@ func fnDoc(refs ...*scip.Occurrence) *scip.Document {
 	}
 }
 
-func callsOf(t *testing.T, syms []types.KnowledgeSymbol, key string) []types.KnowledgeSymbolCall {
+func symbolCalls(t *testing.T, syms []types.KnowledgeSymbol, key string) []types.KnowledgeSymbolCall {
 	t.Helper()
 	for _, s := range syms {
 		if s.Key == key {
@@ -374,8 +374,8 @@ func TestParseIndexAttributesCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	want := []types.KnowledgeSymbolCall{{Key: "gomod example.com/foo Callee().", Count: 2}}
-	assert.Equal(t, want, callsOf(t, syms, "gomod example.com/foo Caller()."))
-	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Callee()."), "the callee calls nothing")
+	assert.Equal(t, want, symbolCalls(t, syms, "gomod example.com/foo Caller()."))
+	assert.Empty(t, symbolCalls(t, syms, "gomod example.com/foo Callee()."), "the callee calls nothing")
 }
 
 // A reference outside every enclosing range (a package-level declaration, an import)
@@ -387,7 +387,7 @@ func TestParseIndexCallsIgnoresOccurrencesOutsideAnyBody(t *testing.T) {
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
 	require.NoError(t, err)
-	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."))
+	assert.Empty(t, symbolCalls(t, syms, "gomod example.com/foo Caller()."))
 }
 
 // An enclosing range spans the whole declaration, signature included, so most occurrences
@@ -398,7 +398,7 @@ func TestParseIndexCallsSkipsNonCallableCallee(t *testing.T) {
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
 	require.NoError(t, err)
-	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."), "a field reference is not a call")
+	assert.Empty(t, symbolCalls(t, syms, "gomod example.com/foo Caller()."), "a field reference is not a call")
 }
 
 // Recursion would mint a source==target edge, which the graph's edge key cannot express
@@ -409,7 +409,7 @@ func TestParseIndexCallsDropsSelfEdge(t *testing.T) {
 	)}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
 	require.NoError(t, err)
-	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."))
+	assert.Empty(t, symbolCalls(t, syms, "gomod example.com/foo Caller()."))
 }
 
 // A callee the workspace never defines has nothing to navigate to, so it gets no edge;
@@ -424,7 +424,7 @@ func TestParseIndexCallsSkipsCalleeDefinedElsewhere(t *testing.T) {
 
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
 	require.NoError(t, err)
-	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."))
+	assert.Empty(t, symbolCalls(t, syms, "gomod example.com/foo Caller()."))
 }
 
 // Nesting is what the innermost-wins walk exists for. Go cannot produce it (a FuncDecl
@@ -453,11 +453,11 @@ func TestParseIndexCallsAttributesToInnermostBody(t *testing.T) {
 	require.NoError(t, err)
 
 	want := []types.KnowledgeSymbolCall{{Key: "gomod example.com/foo Callee().", Count: 1}}
-	assert.Equal(t, want, callsOf(t, syms, "gomod example.com/foo Inner()."), "innermost body wins")
-	assert.Equal(t, want, callsOf(t, syms, "gomod example.com/foo Outer()."), "outer keeps only what inner does not enclose")
+	assert.Equal(t, want, symbolCalls(t, syms, "gomod example.com/foo Inner()."), "innermost body wins")
+	assert.Equal(t, want, symbolCalls(t, syms, "gomod example.com/foo Outer()."), "outer keeps only what inner does not enclose")
 }
 
-func implementsOf(t *testing.T, syms []types.KnowledgeSymbol, key string) []string {
+func symbolImplements(t *testing.T, syms []types.KnowledgeSymbol, key string) []string {
 	t.Helper()
 	for _, s := range syms {
 		if s.Key == key {
@@ -508,10 +508,10 @@ func TestParseIndexReadsImplementsRelationships(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"gomod example.com/foo Another#", "gomod example.com/foo Iface#"},
-		implementsOf(t, syms, "gomod example.com/foo Impl#"))
+		symbolImplements(t, syms, "gomod example.com/foo Impl#"))
 	assert.Equal(t, []string{"gomod example.com/foo Iface#Do()."},
-		implementsOf(t, syms, "gomod example.com/foo Impl#Do()."))
-	assert.Empty(t, implementsOf(t, syms, "gomod example.com/foo Iface#"), "an interface implements nothing")
+		symbolImplements(t, syms, "gomod example.com/foo Impl#Do()."))
+	assert.Empty(t, symbolImplements(t, syms, "gomod example.com/foo Iface#"), "an interface implements nothing")
 }
 
 // An indexer that emits no enclosing ranges gives no calls rather than a guess.

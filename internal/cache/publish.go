@@ -15,8 +15,9 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 )
 
 // An OUTPUT BUNDLE is how one run's captured output travels to another machine on
@@ -114,7 +115,7 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 		return "", writeErr
 	}
 	// Already present is the same bundle: a ref names one execution.
-	if putErr != nil && !errors.Is(putErr, ErrRemoteExists) {
+	if putErr != nil && !errors.Is(putErr, types.ErrCacheExists) {
 		return "", putErr
 	}
 	return desc.Ref, nil
@@ -226,7 +227,7 @@ func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBund
 		return nil, OutputBundle{}, fs.ErrNotExist
 	}
 	r, err := c.remote.backend.GetArtifact(ctx, bundleProject, ref)
-	if errors.Is(err, ErrRemoteMiss) {
+	if errors.Is(err, types.ErrCacheMiss) {
 		return nil, OutputBundle{}, fs.ErrNotExist
 	}
 	if err != nil {

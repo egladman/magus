@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -27,7 +26,7 @@ func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	var asked []string
@@ -38,8 +37,8 @@ func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	})
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"push"}, "/repo", nil), "no acting lease, nothing to ask")
-	require.NoError(t, vcsLeaseRefusal(proc.WithLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
-	assert.ErrorIs(t, vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
+	require.NoError(t, vcsLeaseRefusal(types.WithJobLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
+	assert.ErrorIs(t, vcsLeaseRefusal(types.WithJobLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
 	assert.Equal(t, []string{"worker git push /repo"}, asked)
 }
 
@@ -51,7 +50,7 @@ func TestVcsLeaseRefusalFailsClosedWithNoGate(t *testing.T) {
 	withVCSLeaseGate(t, nil)
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo", nil))
-	err := vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
+	err := vcsLeaseRefusal(types.WithJobLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "lease worker is acting and this binary registers no lease-vcs gate")
 	assert.Contains(t, err.Error(), "`git commit -m x`")

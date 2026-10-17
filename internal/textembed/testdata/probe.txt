@@ -1,0 +1,35 @@
+Tokenizer probe for internal/textembed. Its tokens are hashed into every encoded table,
+so editing this file invalidates every table until it is retrained.
+
+How does the Buzz engine load a spell before the graph build starts?
+Where is the BM25F index written, and which shard owns a symbol's doc comment?
+The daemon reads weights.json once; a stale ./magus deletes graph nodes.
+
+func (ix *Index) WriteTo(w io.Writer) (int64, error) { return ix.writeShards(w) }
+type HTTPServer struct{ TLSConfig *tls.Config; maxConns int32 }
+parseJSONBody HTTP2Server sha256Sum sha256sum XMLHttpRequest getURLForID IOError
+snake_case_name SCREAMING_SNAKE _leading trailing_ __dunder__ a_b_c x1_y2
+kebab-case-name pkg.Name.Method internal/textrank/fuseAll my_pkg-v2/readFile.go
+C:\Users\build\out.txt fs\readFile fs.readFile std\crypto\sha256 magus\dir("cmd/magus")
+
+namespace io;
+import "iocore";
+export enum FileMode { read, write, update }
+export object File {
+    static fun open(path: str, mode: FileMode) > ud { return iocore\File.open(path, mode); }
+}
+fun fib(n: int) > int { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+var list: [str] = ["a", "b"]; var map: {str: int} = {"one": 1};
+test "typeof protocol extern zdef" { assert(typeof 1 == <int>, message: "int"); }
+match (x) { 0 -> "zero", else -> "many" } out from pat rg obj static double any Function
+
+BZZ1001 BZZ2001 BZZ3002 MGS1021 MGS3009 PRF0001 RFC7231 v0.5.0-rc.3 1e-4 0x7fff 404 2026
+ctx.needs(":build") rt.target("go-test") magus run go-test . -- -run '^TestTable$'
+
+Ünïcödé naïve café résumé façade Straße STRASSE ǅungla ǈubljana İstanbul ıi
+Ελληνικά ΣΊΣΥΦΟΣ кириллица ПРИВЕТмир 日本語のテキスト 中文分词 한국어 עברית العربية
+emoji 🙂 tabs	and  double  spaces, punctuation!?;:…
+digits١٢٣ fullwidthＡＢＣ superscript² fractions½ roman Ⅻ
+
+A static embedding table maps each token to a direction; a text is the weighted sum of
+its tokens' directions, quantized to int8 so ranking never touches a float.

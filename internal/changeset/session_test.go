@@ -3,11 +3,13 @@ package changeset
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -90,13 +92,13 @@ func TestViewedStatePersistsAcrossStores(t *testing.T) {
 		"a reader who is interrupted must not lose what they had already read")
 }
 
-// A second magus in the same checkout writes these same three files. The saves swallow every
+// A second magus in the same checkout writes these same three paths. The saves only log an
 // error, so the property is pinned by occupying the fixed temp path a contended save would
 // have wanted: one that still needed it writes nothing and the progress is lost.
 func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
-	for _, name := range []string{"viewed.json", "drafts.json", "seen-threads.json"} {
+	for _, name := range []string{"viewed.jsonl", "drafts.jsonl", "seen-comments.jsonl"} {
 		require.NoError(t, os.Mkdir(filepath.Join(dir, "review", name+".tmp"), 0o755))
 	}
 
@@ -107,8 +109,9 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed,
 		"progress was lost because the save wanted one fixed temp path")
-	assert.ElementsMatch(t, []string{"t1"}, NewStore(dir).LoadSeenComments(),
-		"the watermark was lost because the save wanted one fixed temp path")
+	seen, err := NewStore(dir).LoadSeenComments()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"t1"}, seen, "the watermark was lost because the save wanted one fixed temp path")
 }
 
 // Two Stores over one state dir (the server and a check-review job) each attach before
@@ -123,15 +126,130 @@ func TestSessionSeenWatermarkNeverRegresses(t *testing.T) {
 	a.MarkCommentsSeen("/w", []string{"t1"})
 	b.MarkCommentsSeen("/w", []string{"t2"})
 
-	assert.Equal(t, []string{"t1", "t2"}, NewStore(dir).LoadSeenComments())
+	seen, err := NewStore(dir).LoadSeenComments()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t1", "t2"}, seen)
 }
 
-func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
+func TestUnreadableViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, mkdirAllWrite(filepath.Join(dir, "review", "viewed.json"), "{not json"))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review", "viewed.jsonl"), 0o755), "a directory where the file belongs")
 	s := NewStore(dir)
 	got := s.Attach("/w", "working", types.Diff{}, "")
-	assert.Empty(t, got.Viewed, "a corrupt progress file must not stop a review from opening")
+	assert.Empty(t, got.Viewed, "an unreadable progress file must not stop a review from opening")
+}
+
+// A change is a line appended, never a rewrite: un-reading a hunk ends its digest with a
+// line, and a reader takes the last line per digest.
+func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.MarkViewed("/w", "d1", true)
+	s.MarkViewed("/w", "d2", true)
+	s.MarkViewed("/w", "d1", false)
+	s.MarkCommentsSeen("/w", []string{"t1", "t2"})
+
+	viewed, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
+	require.NoError(t, err)
+	assert.Equal(t, `{"digest":"d1","viewed":true}`+"\n"+`{"digest":"d2","viewed":true}`+"\n"+`{"digest":"d1","viewed":false}`+"\n", string(viewed))
+	seen, err := os.ReadFile(filepath.Join(dir, "review", "seen-comments.jsonl"))
+	require.NoError(t, err)
+	assert.Equal(t, `{"id":"t1"}`+"\n"+`{"id":"t2"}`+"\n", string(seen))
+
+	restored := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+	want := &types.DiffReview{ID: "rev1", Base: "working", Cursor: types.DiffCursor{Hunk: -1}, Viewed: []string{"d2"}, SeenComments: []string{"t1", "t2"}, Comments: []types.DiffComment{}}
+	assert.Equal(t, want, restored)
+}
+
+// Compaction is the one rewrite: once the file is file.CompactDue, it is rewritten to its last
+// line per key, by rename, and an ended key leaves it.
+func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	s.Attach("/w", "working", types.Diff{}, "")
+	for range 40 {
+		s.MarkViewed("/w", "d1", true)
+		s.MarkViewed("/w", "d1", false)
+	}
+	s.MarkViewed("/w", "d2", true)
+
+	b, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
+	require.NoError(t, err)
+	assert.False(t, file.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
+	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed)
+}
+
+// An old JSON file is not read as a second format and not skipped without a word: the error
+// names the file and how to move it aside.
+func TestOldJSONStateIsNamedNotRead(t *testing.T) {
+	load := map[string]func(*Store) error{
+		"viewed.json":       func(s *Store) error { _, err := s.LoadViewed(); return err },
+		"drafts.json":       func(s *Store) error { _, err := s.LoadDrafts(); return err },
+		"seen-threads.json": func(s *Store) error { _, err := s.LoadSeenComments(); return err },
+		"reading.json":      func(s *Store) error { _, err := s.LoadReading(); return err },
+	}
+	for name, load := range load {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			old := filepath.Join(dir, "review", name)
+			require.NoError(t, mkdirAllWrite(old, `["x"]`))
+
+			require.ErrorContains(t, load(NewStore(dir)), "mv "+old+" "+old+".old")
+			got := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+			assert.Empty(t, got.Viewed)
+			assert.Empty(t, got.SeenComments)
+			assert.Empty(t, got.Comments)
+		})
+	}
+}
+
+// A draft is a line of its own JSON, free text included; an edit appends the draft again,
+// discarding appends a removal, and a draft nobody touched is not written twice.
+func TestDraftsAreAppendedAsJSONLines(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "first\nsecond\twith a tab"}, types.DiffAuthorUnattributed)
+	s.AddComment("/w", types.DiffComment{Path: "b.go", Body: "other"}, types.DiffAuthorUnattributed)
+
+	path := filepath.Join(dir, "review", "drafts.jsonl")
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, strings.Count(string(b), "\n"), "the second save did not rewrite the first draft")
+	assert.Contains(t, string(b), `"body":"first\nsecond\twith a tab"`)
+
+	restored := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+	require.Len(t, restored.Comments, 2)
+	assert.Equal(t, "first\nsecond\twith a tab", restored.Comments[0].Body)
+
+	s.DiscardDraft("/w", "c1")
+	b, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `{"id":"c1","removed":true}`)
+	left := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+	require.Len(t, left.Comments, 1)
+	assert.Equal(t, "c2", left.Comments[0].ID)
+}
+
+// Every field a draft carries survives the file, including the lines around the anchor's quote,
+// of which a blank one is the common case.
+func TestADraftRoundTripsThroughItsFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	want := types.DiffComment{
+		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: types.DiffAuthorUnattributed, AgentName: "claude",
+		Body: "why not `x`?\n\nand\ttabs", Resolved: true, Line: 41,
+		Origin: types.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
+			Credential: types.CredentialStdio},
+		Anchor: types.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
+			Before: []string{"", "x := 1"}, After: []string{"}", ""}},
+	}
+	s.saveDrafts([]types.DiffComment{want})
+
+	got, err := NewStore(dir).LoadDrafts()
+	require.NoError(t, err)
+	assert.Equal(t, []types.DiffComment{want}, got)
 }
 
 // The server stamps the author from the transport. A body that claims otherwise is ignored,
@@ -157,7 +275,7 @@ func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 	assert.Equal(t, types.DiffCursor{Path: "where/i/was.go", Hunk: 2}, got.Cursor,
 		"an agent suggesting must never move the reader's viewport")
 	require.Len(t, got.Suggestions, 1)
-	assert.False(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionPending, got.Suggestions[0].Status)
 }
 
 func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
@@ -166,10 +284,10 @@ func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
 	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", true)
+	got := s.AnswerSuggestion("/w", "s1", types.SuggestionAccepted)
 	assert.Equal(t, types.DiffCursor{Path: "b.go", Hunk: 3}, got.Cursor,
 		"the human accepting is the only path to the viewport")
-	assert.True(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionAccepted, got.Suggestions[0].Status)
 }
 
 // Declining is recorded, not discarded, so an agent can stop repeating itself.
@@ -179,10 +297,9 @@ func TestDecliningIsRecordedAndLeavesTheCursorAlone(t *testing.T) {
 	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
 	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", false)
+	got := s.AnswerSuggestion("/w", "s1", types.SuggestionDeclined)
 	assert.Equal(t, "a.go", got.Cursor.Path)
-	assert.True(t, got.Suggestions[0].Declined)
-	assert.False(t, got.Suggestions[0].Accepted)
+	assert.Equal(t, types.SuggestionDeclined, got.Suggestions[0].Status)
 }
 
 func TestResolveComment(t *testing.T) {
@@ -410,23 +527,6 @@ func TestMarkCommentsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	// new one.
 	store.MarkCommentsSeen(root, []string{"t2"})
 	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenComments([]types.ReviewComment{{ID: "t1"}, {ID: "t3"}}))
-}
-
-// A released binary wrote the watermark to seen-threads.json and reads only that name, so the
-// file must keep it for the two builds to share a state directory.
-func TestSeenWatermarkKeepsTheFileNameReleasedBinariesRead(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "review", "seen-threads.json"), []byte(`["t1"]`), 0o644))
-
-	s := NewStore(dir)
-	assert.Equal(t, []string{"t1"}, s.LoadSeenComments(), "a watermark an older build wrote is read")
-
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.MarkCommentsSeen("/w", []string{"t2"})
-	b, err := os.ReadFile(filepath.Join(dir, "review", "seen-threads.json"))
-	require.NoError(t, err)
-	assert.JSONEq(t, `["t1","t2"]`, string(b), "the newer build writes where the older one reads")
 }
 
 // A comment with no id cannot be tracked, and calling it new forever would mark the conversation

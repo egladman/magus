@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module toml -lang buzz -out ../../../internal/interp/bindings/gen/toml.go
+//go:generate go run ../../../cmd/magus-utils bindings -module toml -lang buzz -out ../../../internal/interp/bindings/gen/toml.go -pkg bindgen
 
 // Module is the "toml" host module: TOML parse and stringify via pelletier/go-toml/v2.
 // It mirrors the json and yaml modules so a magusfile can read a value out of a

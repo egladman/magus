@@ -302,6 +302,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		DenyPaths:  row.DenyPaths,
 		ReadPaths:  row.ReadPaths,
 		DependsOn:  row.DependsOn,
+		Breaks:     row.Breaks,
 		ReadOnly:   row.ReadOnly,
 		Checkpoint: row.Checkpoint,
 		Created:    row.Created,
@@ -322,6 +323,9 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
 		SchemaVersion:  int32(row.Version),
 		Requires:       row.Requires,
+		ModelTier:      wireModelTier(row.ModelTier),
+		ReworkRounds:   int32(row.ReworkRounds),
+		Widenings:      int32(row.Widenings),
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -360,6 +364,18 @@ func wireOrigin(o types.Origin) *jobv1.JobOrigin {
 	return w
 }
 
+// wireModelTier maps the tier the store assigned, nil for a row written where the workspace
+// declared none.
+func wireModelTier(t *types.JobModelTier) *jobv1.JobModelTier {
+	if t == nil {
+		return nil
+	}
+	return &jobv1.JobModelTier{
+		Name: t.Name, Rank: int32(t.Rank), Skills: string(t.Skills), Source: string(t.Source),
+		Reason: t.Reason, Site: t.Site, Model: t.Model,
+	}
+}
+
 func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
 	if a == nil {
 		return nil
@@ -368,6 +384,7 @@ func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
 		Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
 		Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
 		AttemptId: a.AttemptID, DurationMs: a.DurationMs, Revision: a.Revision, Dirty: a.Dirty,
+		Lease: a.Lease, ExtraArgs: a.ExtraArgs,
 	}
 }
 
@@ -432,6 +449,7 @@ func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
 			Paths:       g.Paths,
 			Symbols:     g.Symbols,
 			DependsOn:   g.DependsOn,
+			Signature:   g.Signature,
 		}
 		if g.Kind == types.GoalKindCheck && g.Check.Target != "" {
 			wire.Check = g.Check.String()

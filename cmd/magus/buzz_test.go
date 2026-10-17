@@ -89,7 +89,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
 	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
-	m, err := magus.Open(t.Context(), root)
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "fixture workspace must open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -205,7 +205,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
 	root, script := buzzLazyWorkspace(t, buzzVanillaScript)
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-		return magus.Open(ctx, root)
+		return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	})
 
 	var runErr error
@@ -221,7 +221,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	var m *magus.Magus
 	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
 		var err error
-		m, err = magus.Open(ctx, root)
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 		return m, err
 	})
 	t.Cleanup(func() {
@@ -302,7 +302,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root, _ := buzzLazyWorkspace(t, buzzVanillaScript)
 			opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
-				return magus.Open(ctx, root)
+				return magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 			})
 			script, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
 			require.NoError(t, err)
@@ -722,8 +722,6 @@ var glueVerdicts = []map[string]any{
 	{"decision": "pass"},
 	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
 	{"decision": "maybe", "reason": "a decision no template knows"},
-	{"decision": "pass", "updated_command": "exec </dev/null; git push"},
-	{"decision": "advise", "context": "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly.", "updated_command": "exec </dev/null; git push"},
 }
 
 // glueArrangement is one way a host reaches the shared glue: the host its wiring names,
@@ -745,6 +743,8 @@ type glueArrangement struct {
 	ownResponse bool
 	// wantsAsk marks an arrangement whose ask must render as the host's own prompt.
 	wantsAsk bool
+	// stub is the script standing in for magus; empty means glueTemplateEcho.
+	stub string
 }
 
 var glueArrangements = []glueArrangement{
@@ -755,6 +755,8 @@ var glueArrangements = []glueArrangement{
 	{label: "codex in a mode that never prompts", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
 	{label: "codex approval request for a push", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
 	{label: "codex approval request for anything else", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
+	{label: "codex with a human-only run's prompt rule", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run .","file_path":"README.md"}}`},
+	{label: "codex approval request for a human-only run", host: "codex", codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"magus run agent-bench-run ."}}`},
 	// The payload never overrides the name: an event carrying Codex's turn_id, under a
 	// wiring that names claude-code, gets Claude Code's ask.
 	{label: "claude-code named, Codex-shaped event", host: "claude-code", wantsAsk: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
@@ -766,6 +768,10 @@ var glueArrangements = []glueArrangement{
 // whether the call claimed --renders-ask in the file $RENDERS_ASK_RECORD names.
 const glueTemplateEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\n" +
 	"while [ $# -gt 0 ]; do\n  if [ \"$1\" = -o ]; then printf '%s' \"${2#template=}\"; exit 0; fi\n  shift\ndone\nexit 1\n"
+
+// glueVerdictEcho stands in for magus on a glue that asks for `-o json` and renders the
+// reply itself: it prints the verdict named by $GLUE_VERDICT and nothing else.
+const glueVerdictEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n"
 
 func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	t.Helper()
@@ -788,7 +794,7 @@ func glueDecode(t *testing.T, label, body string) any {
 }
 
 // runGlue runs one shipped glue file under `magus buzz`, as a host config wires it,
-// against event, with magus replaced by glueTemplateEcho. It returns what the glue
+// against event, with magus replaced by the arrangement's stub. It returns what the glue
 // printed and whether its call to magus claimed --renders-ask. Call it from a subtest:
 // it sets the environment and working directory for the rest of the test it runs in.
 func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
@@ -800,9 +806,14 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 	if a.rules {
 		rules := filepath.Join(dir, ".codex", "rules", "magus.rules")
 		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
-		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
+		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"+
+			"prefix_rule(pattern = [\"magus\", \"run\", \"agent-bench-run\"], decision = \"prompt\")\n"), 0o644))
 	}
-	bin := testkit.NewWorkspace(t).WriteExecutable("magus", glueTemplateEcho)
+	stub := a.stub
+	if stub == "" {
+		stub = glueTemplateEcho
+	}
+	bin := testkit.NewWorkspace(t).WriteExecutable("magus", stub)
 	record := filepath.Join(dir, "renders-ask")
 	t.Setenv("__MAGUS_BIN", bin)
 	t.Setenv("RENDERS_ASK_RECORD", record)
@@ -865,6 +876,11 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 		}
 
 		for _, a := range glueArrangements {
+			// A glue answers only the hosts it declares; which hosts wire it is the harness
+			// spells' to say, and their own tests hold it.
+			if !hosts[a.host] {
+				continue
+			}
 			t.Run(name+"/"+a.label, func(t *testing.T) {
 				body, rendersAsk := runGlue(t, name, a)
 				require.NotEmpty(t, body, "%s (%s) handed magus no template", name, a.label)
@@ -919,59 +935,65 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 	}
 }
 
-// TestGlueHandsBackTheRewrittenCommand pins the stdin rewrite per host. Claude Code's
-// updatedInput replaces the whole tool input, so every other field comes back with only
-// the command replaced; Codex applies updatedInput only beside an explicit allow, and a
-// restated Read is not the command the host runs, so neither is handed one.
-func TestGlueHandsBackTheRewrittenCommand(t *testing.T) {
+// TestGlueLeavesAHumanOnlyRunToCodexsPrompt pins that a plain run of a target the rules file
+// prompts for reaches the person through Codex's own prompt, as a push does: PreToolUse
+// carries the ask as context rather than refusing it, and the approval request leaves the
+// prompt standing. A run no rule matches is refused, naming the person's terminal.
+func TestGlueLeavesAHumanOnlyRunToCodexsPrompt(t *testing.T) {
+	render := func(t *testing.T, command, event, decision string) string {
+		t.Helper()
+		body, _ := runGlue(t, "magus-command.buzz", glueArrangement{host: "codex", codex: true, rules: true,
+			event: `{"hook_event_name":"` + event + `","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"` + command + `"}}`})
+		tmpl, err := template.New("glue").Funcs(templateFuncs()).Parse(body)
+		require.NoError(t, err)
+		var out strings.Builder
+		require.NoError(t, tmpl.Execute(&out, map[string]string{"decision": decision, "reason": "a person runs this"}))
+		return out.String()
+	}
+	t.Run("prompted run", func(t *testing.T) {
+		got := render(t, "magus run agent-bench-run .", "PreToolUse", "ask")
+		assert.NotContains(t, got, `"permissionDecision":"deny"`)
+		assert.Contains(t, got, "a person runs this")
+	})
+	t.Run("approval request for a prompted run", func(t *testing.T) {
+		assert.Equal(t, `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`, render(t, "magus run agent-bench-run .", "PermissionRequest", "ask"))
+		assert.Contains(t, render(t, "magus run agent-bench-run .", "PermissionRequest", "pass"), `"behavior":"allow"`)
+	})
+	t.Run("run no rule prompts for", func(t *testing.T) {
+		got := render(t, "magus run lint .", "PreToolUse", "ask")
+		assert.Contains(t, got, `"permissionDecision":"deny"`)
+		assert.Contains(t, got, "own terminal")
+		assert.NotContains(t, render(t, "magus run lint .", "PermissionRequest", "pass"), "allow",
+			"a pass is not consent to a prompt magus did not configure")
+	})
+}
+
+// TestGlueNeverRewritesTheCommand pins that no host is handed updatedInput: a pass renders
+// nothing and an advise renders its context alone, whatever the host or the tool. Claude
+// Code and Cursor already give a shell command a closed stdin, Codex never did, and a
+// rewrite would take a command out of reach of the person's own permission rules.
+func TestGlueNeverRewritesTheCommand(t *testing.T) {
 	funcs := templateFuncs()
 	const input = `{"command":"git push","description":"push it","timeout":60000,"run_in_background":true}`
-	const rewritten = `{"command":"exec </dev/null; git push","description":"push it","timeout":60000,"run_in_background":true}`
-	for _, tc := range []struct {
-		label, host, event string
-		want               map[string]string // decision -> reply; "" renders nothing
-	}{
-		{"claude-code", "claude-code",
-			`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":` + input + `}`,
-			map[string]string{
-				"pass":   `{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":` + rewritten + `}}`,
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once","updatedInput":` + rewritten + `}}`,
-			}},
-		{"codex", "codex",
-			`{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":` + input + `}`,
-			map[string]string{
-				"pass":   "",
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`,
-			}},
-		{"a restated read", "claude-code",
-			`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`,
-			map[string]string{
-				"pass":   "",
-				"advise": `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`,
-			}},
+	for _, tc := range []struct{ label, host, event string }{
+		{"claude-code", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":` + input + `}`},
+		{"codex", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":` + input + `}`},
+		{"a restated read", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`},
 	} {
 		t.Run(tc.label, func(t *testing.T) {
 			body, _ := runGlue(t, "magus-command.buzz", glueArrangement{label: tc.label, host: tc.host, event: tc.event, codex: tc.host == "codex"})
-			// magus renders with missingkey=error, and a verdict with no rewrite has no key.
 			tmpl, err := template.New(tc.label).Funcs(funcs).Option("missingkey=error").Parse(body)
 			require.NoError(t, err)
-			for decision, want := range tc.want {
-				verdict := map[string]any{"decision": decision, "updated_command": "exec </dev/null; git push"}
-				if decision == "advise" {
-					verdict["context"] = "said once"
-				}
-				var out strings.Builder
-				require.NoError(t, tmpl.Execute(&out, verdict), "%s on a %s", tc.label, decision)
-				if want == "" {
-					assert.Empty(t, out.String(), "%s on a %s", tc.label, decision)
-					continue
-				}
-				assert.JSONEq(t, want, out.String(), "%s on a %s", tc.label, decision)
-				require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, out.String())))
-			}
-			var plain strings.Builder
-			require.NoError(t, tmpl.Execute(&plain, map[string]any{"decision": "pass"}), "a pass with no rewrite has no updated_command key")
-			assert.Empty(t, plain.String())
+
+			var pass strings.Builder
+			require.NoError(t, tmpl.Execute(&pass, map[string]any{"decision": "pass"}))
+			assert.Empty(t, pass.String(), "a pass renders nothing")
+
+			var advise strings.Builder
+			require.NoError(t, tmpl.Execute(&advise, map[string]any{"decision": "advise", "context": "said once"}))
+			assert.JSONEq(t, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"said once"}}`, advise.String())
+			assert.NotContains(t, advise.String(), "updatedInput")
+			require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, advise.String())))
 		})
 	}
 }
@@ -1011,22 +1033,24 @@ func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 // rest, so a reply naming additional_context_v2 is accepted, ignored, and carries no
 // advisory at all.
 func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
-	funcs := templateFuncs()
 	for name, ev := range glueCursorEvents {
-		t.Run(name, func(t *testing.T) {
-			body, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{label: name, host: "cursor", event: ev.event})
-			require.NotEmpty(t, body, "cursor-hook.buzz handed magus no template on its %s event", name)
-			schema := glueLoadSchema(t, ev.schema)
-			named := glueSchemaPropertyNames(t, ev.schema)
-
-			tmpl, err := template.New(name).Funcs(funcs).Parse(body)
-			require.NoError(t, err, "the %s template carries the reply, so it must parse", name)
-			for _, verdict := range glueVerdicts {
-				var out strings.Builder
-				require.NoError(t, tmpl.Execute(&out, verdict), "the %s template on a %s", name, verdict["decision"])
-				reply, isObject := glueDecode(t, name, out.String()).(map[string]any)
-				require.True(t, isObject, "the %s template must render a JSON object", name)
-				if name == "gate" {
+		schema := glueLoadSchema(t, ev.schema)
+		named := glueSchemaPropertyNames(t, ev.schema)
+		for i, verdict := range glueVerdicts {
+			t.Run(fmt.Sprintf("%s/%d-%s", name, i, verdict["decision"]), func(t *testing.T) {
+				verdictJSON, err := json.Marshal(verdict)
+				require.NoError(t, err)
+				out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
+					label: name, host: "cursor", event: ev.event, stub: glueVerdictEcho,
+					env: map[string]string{
+						"GLUE_VERDICT":          string(verdictJSON),
+						"CURSOR_HOOK_STATE_DIR": t.TempDir(),
+					},
+				})
+				reply, isObject := glueDecode(t, name, out).(map[string]any)
+				require.True(t, isObject, "the %s reply must be a JSON object: %s", name, out)
+				switch name {
+				case "gate":
 					switch verdict["decision"] {
 					case "ask":
 						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
@@ -1035,17 +1059,23 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 					default:
 						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
 					}
+				case "advise":
+					if verdict["decision"] == "advise" {
+						assert.Equal(t, verdict["context"], reply["additional_context"], "the advice must reach the model")
+					} else {
+						assert.NotContains(t, reply, "additional_context", "only an advise carries context")
+					}
 				}
 				require.NoError(t, schema.Validate(reply),
-					"the %s template renders %s, which Cursor would not accept, per %s", name, out.String(), ev.schema)
+					"the %s reply is %s, which Cursor would not accept, per %s", name, out, ev.schema)
 				for field := range reply {
 					assert.Contains(t, named, field,
-						"the %s template names %q, which %s does not. Cursor ignores a field it has never\n"+
+						"the %s reply names %q, which %s does not. Cursor ignores a field it has never\n"+
 							"heard of rather than rejecting it, so a rename costs the verdict in silence.",
 						name, field, ev.schema)
 				}
-			}
-		})
+			})
+		}
 	}
 }
 

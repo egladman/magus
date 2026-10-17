@@ -7,7 +7,9 @@ tags: [release, versioning, tags, go-modules, workflow, release checks]
 # Releasing
 
 You release from your machine. `magus run release` cuts the tags. Nothing in CI
-does it for you, and nothing pushes on your behalf.
+does it for you, and nothing pushes on your behalf. A release is a
+[human in the loop](../doctrine.md#human-in-the-loop) decision end to end: the survey
+tells you the legal versions, and you choose one.
 
 | Step                | Where                             | What it does                                 |
 | ------------------- | --------------------------------- | -------------------------------------------- |

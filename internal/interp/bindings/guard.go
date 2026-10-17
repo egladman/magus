@@ -35,7 +35,8 @@ import (
 // allow/advise/deny to build its answer and once/count for state that lasts the calling
 // session. See registerSpawnRule, registerCommandRule and registerWriteRule.
 //
-// builtins() sets compiled rules by name; see registerBuiltins.
+// builtins() sets compiled rules by name; see registerBuiltins. profile() picks the level
+// those settings start from; see registerProfile.
 func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	guardMap := vm.NewMap()
 	registerVerdictMembers(obs, guardMap)
@@ -43,6 +44,7 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	registerCommandRule(ctx, sess, obs, guardMap)
 	registerWriteRule(ctx, sess, obs, guardMap)
 	registerBuiltins(ctx, obs, guardMap)
+	registerProfile(ctx, obs, guardMap)
 	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\guard.shell: expected a rule object`)
@@ -68,7 +70,9 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 //	});
 //
 // Each key names a compiled rule and each value sets its decision, off, advise or deny,
-// with lines for read-navigation alone. Every misdeclaration is MGS1045 and fails the load:
+// with lines, tokens, calls, chars or markers where the rule takes that parameter. A named rule
+// overrides what magus\guard.profile's level sets for it. Every misdeclaration is MGS1045
+// and fails the load:
 // a rule the workspace believes it set and did not reads as enforced when it is not.
 func registerBuiltins(ctx context.Context, obs buzz.DirectObserver, guardMap vm.Value) {
 	// Per session, as registerFunctionRule counts.
@@ -94,6 +98,43 @@ func registerBuiltins(ctx context.Context, obs buzz.DirectObserver, guardMap vm.
 		registered = true
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.SetBuiltins(declared)
+		}
+		return vm.Null, nil
+	}))
+}
+
+// registerProfile binds magus\guard.profile onto guardMap:
+//
+//	magus\guard.profile("strict");
+//
+// The level, off, light, standard or strict, is the set of compiled-rule settings the
+// workspace starts from before magus\guard.builtins overrides any; unset is light. Every
+// misdeclaration is MGS1045 and fails the load, as for builtins.
+func registerProfile(ctx context.Context, obs buzz.DirectObserver, guardMap vm.Value) {
+	// Per session, as registerFunctionRule counts.
+	registered := false
+	guardMap.MapSet("profile", directVal(obs, "magus.guard.profile", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		levels := strings.Join(types.GuardProfile("").Values(), ", ")
+		if len(args) != 1 || !args[0].IsStr() {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.profile: expected one level, %s`, levels)
+		}
+		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.profile: called from the magusfile of %s; declare the whole workspace's level in the root magusfile`, path)
+		}
+		if registered {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.profile: already declared in this magusfile; keep one call`)
+		}
+		p := types.GuardProfile(args[0].AsString())
+		if p == "" || !p.Valid() {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.profile: unknown level %q; give one of %s`, string(p), levels)
+		}
+		registered = true
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+			reg.SetProfile(p)
 		}
 		return vm.Null, nil
 	}))
@@ -135,14 +176,31 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 				return s, errors.New(`"decision" must be "off", "advise" or "deny"`)
 			}
 			s.Decision = builtin.Decision(field.AsString())
-		case "lines":
-			// Resolve reads 0 as unset, so a declared 0 must not reach it as one.
-			if !field.IsInt() || field.AsInt() < 1 {
-				return s, errors.New(`"lines" must be an int of 1 or more`)
+		case "markers":
+			// An empty list would reach Resolve as unset and take the rule's own markers,
+			// which is not what a workspace declaring none meant.
+			if !field.IsList() || len(field.ListItems()) == 0 {
+				return s, errors.New(`"markers" must be a list of one or more strings`)
 			}
-			s.Lines = int(field.AsInt())
+			for i, item := range field.ListItems() {
+				if !item.IsStr() {
+					return s, fmt.Errorf(`"markers"[%d] must be a string`, i)
+				}
+				s.Markers = append(s.Markers, item.AsString())
+			}
 		default:
-			return s, fmt.Errorf(`unknown field %q, a setting takes "decision" and "lines"`, k)
+			n := 0
+			if field.IsInt() {
+				n = int(field.AsInt())
+			}
+			if !s.SetParam(k, n) {
+				return s, fmt.Errorf(`unknown field %q, a setting takes "decision", "lines", "tokens", "calls", "chars" and "markers"`, k)
+			}
+			// Resolve reads 0 as unset, so a declared 0 must not reach it as one. Resolve
+			// owns each parameter's floor and which rules take it.
+			if n < 1 {
+				return s, fmt.Errorf(`%q must be an int of 1 or more`, k)
+			}
 		}
 	}
 	if s.Decision == "" {

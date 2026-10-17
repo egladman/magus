@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [output-pipe]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [output-pipe]: ...` instead.
+
 `magus describe rule output-pipe` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

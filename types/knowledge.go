@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"go/scanner"
+	"go/token"
 	"regexp"
 	"slices"
 	"strconv"
@@ -37,7 +39,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 17
+const KnowledgeSchemaVersion = 23
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -138,6 +140,11 @@ const (
 	// doc line, keyed "marker:<rel path>:<line>". It is a declaration, so its edges carry
 	// ConfidenceDeclared. A begin/end pair folds into one node with a line range.
 	KindMarker = "marker"
+
+	// KindFigure is a diagram a Buzz figure\of call builds, keyed "figure:<id>" by its
+	// literal id. It is read from source, never rendered, so the graph build stays
+	// independent of the figure engine.
+	KindFigure = "figure"
 )
 
 // RelationID is a stable directed predicate in the knowledge graph. It is string-backed
@@ -169,6 +176,14 @@ const (
 	// reported rather than silently drifting.
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
+
+// RelationDepicts links a figure to each directory or project it draws, from the literal
+// magus\dir calls in the function that builds it.
+const RelationDepicts RelationID = "depicts"
+
+// RelationCoChanges links two files changed in the same commits, from git history. It is
+// symmetric and stored once, with the lesser path as the source.
+const RelationCoChanges RelationID = "co_changes"
 
 // KnowledgeEndpointShape is one permitted subject/object-kind pair for a relation.
 // These are validation shapes in the closed-world sense: unlike OWL domain/range
@@ -240,7 +255,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
 		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
 		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
-		endpointShapes(KindFile, KindFunction, KindMarker), endpointShapes(KindDoc, KindDocSection, KindMarker),
+		endpointShapes(KindFile, KindFunction, KindMarker, KindFigure), endpointShapes(KindDoc, KindDocSection, KindMarker),
 		endpointShapes(KindDocSection, KindDocSection))},
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
@@ -284,11 +299,13 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
+	{ID: RelationDepicts, Description: "draws a directory or project in a diagram", ForwardLabel: "depicts", ReverseLabel: "depicted by", Shapes: endpointShapes(KindFigure, KindDir, KindProject)},
+	{ID: RelationCoChanges, Description: "changed in the same commits, from git history", ForwardLabel: "changes with", ReverseLabel: "changes with", Symmetric: true, Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
 		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
-		KindNote, KindPackage, KindLink, KindMarker)},
+		KindNote, KindPackage, KindLink, KindMarker, KindFigure)},
 }
 
 // KnowledgeRelationDefinitions returns a deep copy of the canonical relation
@@ -468,6 +485,18 @@ type KnowledgeVCS struct {
 	Commits int      `json:"commits"`
 }
 
+// KnowledgeCoChange is a pair of files changed in the same commits, an assembly input for
+// the `co_changes` edges. A < B. Support is the commits touching both; Confidence is
+// Support over the commit count of the less-changed file. It is not CoChange: that one
+// pairs projects, counts and carries no confidence, and the semantics differ, so the copy
+// stays.
+type KnowledgeCoChange struct {
+	A          string  `json:"a"`
+	B          string  `json:"b"`
+	Support    int     `json:"support"`
+	Confidence float64 `json:"confidence"`
+}
+
 // KnowledgeNote is one human-authored note from the declared notes store (an assembly
 // input, not a wire type). Path is workspace-relative and is what the @vcs shard joins on
 // to attribute the note to whoever wrote it: the reason notes live in the checkout at all.
@@ -526,11 +555,28 @@ type KnowledgeSymbol struct {
 	// was built over. Two sides with equal digests defined the symbol identically. Empty when
 	// the lines could not be read.
 	BodyDigest string
+	// BodyShape and BodyTokens are BodyShape's digest and token count over the same lines:
+	// equal shapes are copies that differ only in names and literal values. Empty and zero
+	// when the lines could not be read or the language has no lexer.
+	BodyShape  string
+	BodyTokens int
+	// BranchIdents are BranchIdents' identifiers over the same lines: what the body switches
+	// on or tests bare. Nil for a decision table, and when the lines could not be read or the
+	// language has no lexer.
+	BranchIdents []string
+	// PackageName is the package clause a namespace symbol's defining file declares, which
+	// is what an importer calls it unless it writes an alias. Empty for any other symbol and
+	// for a language with no package clause (only Go is read).
+	PackageName string
 	// SourceLines and SourceBytes size the file Source names, counted from the same read
 	// that computes BodyDigest. Zero when that read did not happen.
 	SourceLines int
 	SourceBytes int
-	Defs        []string
+	// SourceGenerated reports that the file Source names opens with the generated-code
+	// header [GeneratedSource] reads, from the same read. Its shape is its generator's, so
+	// no conformance check measures it.
+	SourceGenerated bool
+	Defs            []string
 	// Definitions holds each defining file's first definition with that file's own doc, in
 	// Defs order, when Defs names more than one file: a function written once per GOOS has
 	// one key and a doc per file. It lists the file Source names too, so a reader walks one
@@ -575,6 +621,26 @@ func CountLines(b []byte) int {
 // element i is line i+1.
 func SplitSourceLines(b []byte) [][]byte { return bytes.Split(b, []byte("\n")) }
 
+// generatedHeader is the line Go's convention marks generated source with
+// (https://go.dev/s/generatedcode); generators for other languages write it too.
+var generatedHeader = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+
+// GeneratedSource reports whether a file split by SplitSourceLines carries the
+// generated-code header: `// Code generated ... DO NOT EDIT.` on a line of its own before
+// the first line that is neither blank nor a `//` comment.
+func GeneratedSource(lines [][]byte) bool {
+	for _, line := range lines {
+		line = bytes.TrimSuffix(line, []byte("\r"))
+		if generatedHeader.Match(line) {
+			return true
+		}
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && !bytes.HasPrefix(trimmed, []byte("//")) {
+			return false
+		}
+	}
+	return false
+}
+
 // BodyDigest fingerprints lines start through end (1-based, inclusive) of a file split by
 // SplitSourceLines, the value KnowledgeSymbol.BodyDigest records. ok is false when the
 // range does not fit the file.
@@ -584,6 +650,152 @@ func BodyDigest(lines [][]byte, start, end int) (digest string, ok bool) {
 	}
 	sum := sha256.Sum256(bytes.Join(lines[start-1:end], []byte("\n")))
 	return hex.EncodeToString(sum[:8]), true
+}
+
+// BodyShape fingerprints the lexical shape of lines start through end, indexed as
+// BodyDigest indexes them: comments are dropped, each identifier that is not a keyword
+// becomes the index of its first occurrence, and each string or number literal becomes
+// its kind. Two bodies with equal digests differ at most in names and literal values.
+// tokens counts the tokens hashed. ok is false when the range does not fit the file or
+// language has no lexer here; only "go" has one.
+func BodyShape(lines [][]byte, start, end int, language string) (digest string, tokens int, ok bool) {
+	if start < 1 || end < start || end > len(lines) || language != "go" {
+		return "", 0, false
+	}
+	src := bytes.Join(lines[start-1:end], []byte("\n"))
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+
+	var shape []byte
+	first := map[string]int{}
+	for {
+		_, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		switch {
+		case tok == token.IDENT:
+			n, seen := first[lit]
+			if !seen {
+				n = len(first)
+				first[lit] = n
+			}
+			shape = append(shape, '$')
+			shape = strconv.AppendInt(shape, int64(n), 10)
+		case tok.IsLiteral(), tok.IsOperator(), tok.IsKeyword():
+			// A literal hashes as its kind, and a semicolon the scanner inserted at a line
+			// end as a typed one.
+			shape = append(shape, tok.String()...)
+		default:
+			shape = append(shape, lit...)
+		}
+		shape = append(shape, 0)
+		tokens++
+	}
+	sum := sha256.Sum256(shape)
+	return hex.EncodeToString(sum[:8]), tokens, true
+}
+
+// BranchIdents returns the identifiers lines start through end, indexed as BodyDigest
+// indexes them, use bare as a switch subject or an if or else-if condition, optionally
+// negated (`switch mode {`, `if !strict {`), sorted and distinct. A selector subject
+// (`switch r.Level`) and a condition with an operator never count. It returns nil for a
+// decision table, a body whose one top-level statement is that switch or if chain, since
+// branching is then the function's whole job; for a range that does not fit the file; and
+// for a language with no lexer here (only "go" has one).
+func BranchIdents(lines [][]byte, start, end int, language string) []string {
+	if start < 1 || end < start || end > len(lines) || language != "go" {
+		return nil
+	}
+	src := bytes.Join(lines[start-1:end], []byte("\n"))
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, 0)
+	type scanned struct {
+		tok token.Token
+		lit string
+	}
+	var toks []scanned
+	for {
+		_, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		toks = append(toks, scanned{tok, lit})
+	}
+
+	// The body opens at the first brace outside the signature's parentheses and brackets;
+	// a statement starts at depth 1 after that brace or a semicolon.
+	var idents []string
+	depth, nest, statements := 0, 0, 0
+	first := token.ILLEGAL
+	startsStatement := false
+	for i, t := range toks {
+		switch t.tok {
+		case token.LPAREN, token.LBRACK:
+			nest++
+		case token.RPAREN, token.RBRACK:
+			nest--
+		case token.LBRACE:
+			if depth > 0 || nest == 0 {
+				depth++
+				startsStatement = depth == 1
+				continue
+			}
+		case token.RBRACE:
+			if depth > 0 {
+				depth--
+			}
+		case token.SEMICOLON:
+			startsStatement = depth == 1
+			continue
+		}
+		if startsStatement && depth == 1 && t.tok != token.RBRACE {
+			statements++
+			if statements == 1 {
+				first = t.tok
+			}
+		}
+		startsStatement = false
+		if t.tok != token.IF && t.tok != token.SWITCH {
+			continue
+		}
+		j := i + 1
+		if j < len(toks) && toks[j].tok == token.NOT {
+			j++
+		}
+		if j+1 < len(toks) && toks[j].tok == token.IDENT && toks[j+1].tok == token.LBRACE {
+			idents = append(idents, toks[j].lit)
+		}
+	}
+	if statements == 1 && (first == token.IF || first == token.SWITCH) || len(idents) == 0 {
+		return nil
+	}
+	slices.Sort(idents)
+	return slices.Compact(idents)
+}
+
+// importSpec is one Go import spec on its own line, `a "p"` or `import a "p"`, with an
+// optional trailing comment; the first group is the name written before the path.
+var importSpec = regexp.MustCompile("^(?:import\\s+)?([\\p{L}_][\\p{L}\\p{N}_]*)\\s+(?:\"[^\"]*\"|`[^`]*`)\\s*(?://.*)?$")
+
+// ImportAlias returns the alias written on the 1-based import spec line of a file split by
+// SplitSourceLines, `a "p"` or `import a "p"`. It returns "" for a spec with no alias, a
+// blank or dot import, any line that is not an import spec, a line outside the file, and
+// any language but "go".
+func ImportAlias(lines [][]byte, line int, language string) string {
+	if language != "go" || line < 1 || line > len(lines) {
+		return ""
+	}
+	m := importSpec.FindSubmatch(bytes.TrimSpace(lines[line-1]))
+	// `import "p"` matches with the keyword as the name, and the keyword is never an alias.
+	if len(m) < 2 || string(m[1]) == "_" || string(m[1]) == "import" {
+		return ""
+	}
+	return string(m[1])
 }
 
 // KnowledgePackage is one third-party dependency read out of a project's manifest:
@@ -642,6 +854,12 @@ type SymbolIndexStatus struct {
 	Freshness SymbolIndexFreshness `json:"freshness"`
 	// Detail says why, for a freshness that needs it; empty otherwise.
 	Detail string `json:"detail,omitempty"`
+	// Changed lists, for a stale index, the workspace-relative sources modified since it
+	// was built, sorted, and ChangedCount how many there are. Changed may stop short of
+	// ChangedCount, so a long list stays bounded. A deleted source leaves nothing to stat,
+	// so it is never listed.
+	Changed      []string `json:"changed,omitempty"`
+	ChangedCount int      `json:"changed_count,omitzero"`
 }
 
 // KnowledgeSymbolRef is one referencing file: its path, how many times the symbol
@@ -651,6 +869,9 @@ type KnowledgeSymbolRef struct {
 	Path  string
 	Count int
 	Lines []int
+	// Alias is the name the file imports a namespace symbol under, as ImportAlias reads its
+	// import line, or empty when it writes none.
+	Alias string
 }
 
 // KnowledgeSymbolCall is one callee reached from inside a symbol's definition body: the
@@ -763,6 +984,10 @@ type KnowledgeStaleIndex struct {
 	Project  string `json:"project"            yaml:"project"`
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
 	Op       string `json:"op,omitempty"       yaml:"op,omitempty"`
+	// Changed and ChangedCount are SymbolIndexStatus's: the sources modified since the
+	// index was built, deletions never among them.
+	Changed      []string `json:"changed,omitempty"       yaml:"changed,omitempty"`
+	ChangedCount int      `json:"changed_count,omitzero"  yaml:"changed_count,omitempty"`
 }
 
 // Describe renders the index as "libs/api (go index)", or the bare project when the
@@ -954,7 +1179,12 @@ type KnowledgeMatch struct {
 	ID    string `json:"id"    yaml:"id"`
 	Kind  string `json:"kind"  yaml:"kind"`
 	Label string `json:"label" yaml:"label"`
-	Score int    `json:"score" yaml:"score"`
+	// Score is the fused ranking score scaled by 10000 and rounded. Only the order of
+	// matches means anything; the magnitude changes with the weight file.
+	Score int `json:"score" yaml:"score"`
+	// Why says how the match ranked: which query terms it held, in which fields, and its
+	// rank in each fused list.
+	Why *KnowledgeMatchWhy `json:"why,omitempty" yaml:"why,omitempty"`
 	// Staleness and OutrunDays travel with a prose match that ranked DOWN because the
 	// thing it describes moved on without it. They are the evidence for the weight, and
 	// they exist so the weight is never silent: a reader can see "ranked down: 400 days
@@ -962,6 +1192,45 @@ type KnowledgeMatch struct {
 	// not penalized, including prose with no history to measure.
 	Staleness  string `json:"staleness,omitempty"   yaml:"staleness,omitempty"`
 	OutrunDays int    `json:"outrun_days,omitempty" yaml:"outrun_days,omitempty"`
+}
+
+// KnowledgeMatchWhy explains one match's rank. Matched of Of is how many distinct query
+// words the match holds; a match holding fewer than Of is a partial match. A term holding
+// a path separator must appear whole, so its words are not counted. Terms are the
+// BM25F contributions by term and field, largest first. Lists is the match's 1-based rank
+// in each list the ranking fused. Seeds are the graph seeds that lifted it most. Prior is
+// the multiplicative kind and citation prior its lexical score was scaled by.
+type KnowledgeMatchWhy struct {
+	Matched int                  `json:"matched"         yaml:"matched"`
+	Of      int                  `json:"of"              yaml:"of"`
+	Terms   []KnowledgeTermScore `json:"terms,omitempty" yaml:"terms,omitempty"`
+	Lists   []KnowledgeListRank  `json:"lists,omitempty" yaml:"lists,omitempty"`
+	Seeds   []string             `json:"seeds,omitempty" yaml:"seeds,omitempty"`
+	Prior   float64              `json:"prior"           yaml:"prior"`
+}
+
+// KnowledgeTermScore is one query term's BM25F contribution from one field.
+type KnowledgeTermScore struct {
+	Term  string  `json:"term"  yaml:"term"`
+	Field string  `json:"field" yaml:"field"`
+	Score float64 `json:"score" yaml:"score"`
+}
+
+// KnowledgeListRank is a match's 1-based rank in one fused list.
+type KnowledgeListRank struct {
+	List string `json:"list" yaml:"list"`
+	Rank int    `json:"rank" yaml:"rank"`
+}
+
+// KnowledgeRanking names everything a ranked answer is a function of besides the graph
+// and the query: the weight file's digest, the reader context paths, the lists that could
+// not run and why, and a note when the ranking fell back to something less than the
+// stored lexical index.
+type KnowledgeRanking struct {
+	Weights string   `json:"weights"           yaml:"weights"`
+	Reader  []string `json:"reader,omitempty"  yaml:"reader,omitempty"`
+	Skipped []string `json:"skipped,omitempty" yaml:"skipped,omitempty"`
+	Note    string   `json:"note,omitempty"    yaml:"note,omitempty"`
 }
 
 // KnowledgeGraphDiffDefinition is the human-readable description of `magus graph diff`.
@@ -1013,6 +1282,10 @@ type KnowledgeRefsOutput struct {
 	RefCount      int                `json:"ref_count"      yaml:"ref_count"`
 	Defs          []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
 	Refs          []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
+	// Signature is the definition's signature as its indexer rendered it, the attribute
+	// `magus diff` classifies a signature change by. Nil is unknown: the symbol did not
+	// resolve, or its indexer renders no signature.
+	Signature *string `json:"signature,omitempty" yaml:"signature,omitempty"`
 	// Answer says whether an empty Refs list is a verified absence or a blind spot. A
 	// named field rather than an embedded struct: the template renderer skips anonymous
 	// fields, so `-o template` with no body would not list it, and yaml would nest what
@@ -1220,6 +1493,9 @@ type KnowledgeQueryOutput struct {
 	// queries never seed the symbol shards, so a bare term matching nothing says nothing
 	// about whether a code symbol by that name exists; this is where that is stated.
 	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
+	// Ranking is what the match order depends on beyond the graph and the query. Nil for
+	// an answer that was not ranked.
+	Ranking *KnowledgeRanking `json:"ranking,omitempty" yaml:"ranking,omitempty"`
 }
 
 // EdgeDirection says which end of an edge the focus node sits on. Distinct from
@@ -1265,6 +1541,12 @@ type KnowledgeExplainOutput struct {
 	// Resolution says how the name asked about became Node. A fuzzy card may describe
 	// something other than what was named, so a caller anchoring by path refuses one.
 	Resolution KnowledgeResolution `json:"resolution,omitempty" yaml:"resolution,omitempty"`
+	// PublicAPI is a dir node's symbols that a non-test file outside the dir references,
+	// most used first. Empty for other kinds.
+	PublicAPI []PublicSymbol `json:"public_api,omitempty" yaml:"public_api,omitempty"`
+	// PublicAPIGap says the graph holds no symbols of the dir's language for the dir, so an
+	// empty PublicAPI is not read as a dir that offers nothing.
+	PublicAPIGap string `json:"public_api_gap,omitempty" yaml:"public_api_gap,omitempty"`
 }
 
 // KnowledgeResolution is how a lookup turned the name it was given into one node.
@@ -1644,9 +1926,9 @@ type PrecedentKey struct {
 	// From and To are the layers a dep-direction precedent says imports run from and to.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
-	// MaxImports is the most packages under the layer a dep-fanout precedent says one package
-	// imports: the cohort's 95th percentile. Where to draw a ceiling is a decision the row
-	// does not make.
+	// MaxImports is the most packages under the layer a dep-fanout precedent lets one package
+	// import: the dep-fanout value knowledge.conformance enforces for the layer, the committed
+	// one else the anchor, and never the cohort's own percentile.
 	MaxImports int `json:"max_imports,omitempty"`
 	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to
 	// lower case.

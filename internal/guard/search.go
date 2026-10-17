@@ -403,7 +403,7 @@ func grepReaderVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict,
 			}
 		}
 		v := ShellVerdict{Deny: denyGrepReader(routes) + pipeNote(pipedInto(cmds[i+1:])), Rule: denyRule{Name: denyRuleGrepReader, Arg: strings.Join(idents, ",")}}
-		next := make([]hint.Next, 0, len(routes))
+		next := make([]types.NextStep, 0, len(routes))
 		for _, r := range routes {
 			if argv := servedArgv(r.run); len(argv) > 0 {
 				next = append(next, hint.NextForDenyRemedy(string(denyRuleGrepReader), argv, "prints the whole declaration, where a context count guesses at its length."))
@@ -650,8 +650,8 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
-func routeNexts(routes []searchRoute) []hint.Next {
-	next := make([]hint.Next, 0, len(routes))
+func routeNexts(routes []searchRoute) []types.NextStep {
+	next := make([]types.NextStep, 0, len(routes))
 	for _, r := range routes {
 		argv := servedArgv(r.run)
 		if len(argv) == 0 {
@@ -1301,7 +1301,7 @@ func classifiedLine(js searchJudgment) string {
 
 // textRemedy serves each text alternative as the literal search magus runs, when it is a
 // literal; a regular expression is named, not translated.
-func textRemedy(c hint.Invocation, js searchJudgment) (string, []hint.Next) {
+func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep) {
 	if len(js.texts) == 0 {
 		return "", nil
 	}
@@ -1311,7 +1311,7 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []hint.Next) {
 		paths = sc.paths
 	}
 	var names []string
-	var next []hint.Next
+	var next []types.NextStep
 	for _, t := range js.texts {
 		names = append(names, "`"+t.raw+"`")
 		lit := t.raw
@@ -1344,7 +1344,7 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	if len(argv) == 0 {
 		return v
 	}
-	next := []hint.Next{hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly.")}
+	next := []types.NextStep{hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly.")}
 	routes := routeNexts(js.routes)
 	if len(routes) == 0 {
 		return v
@@ -1356,13 +1356,14 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 }
 
 // noGraphVerdict advises a search for a name in a workspace with no symbol index to route
-// it to: the one case the rule fails open, since a deny there would route nowhere.
+// it to: the one case the rule fails open, since a deny there would route nowhere. It
+// carries no brief: a repeat saying the index is still missing changes nothing for a
+// reader already told how to build one.
 func noGraphVerdict(ident string) ShellVerdict {
 	return ShellVerdict{
 		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
 		Why:     precedentSearchAdviceWhy,
 		Kind:    advisoryPrecedent,
-		Brief:   "magus workspace: no symbol index exists yet and this search runs; `" + hint.GraphBuild.With("--silent") + "` builds one.",
 	}
 }
 

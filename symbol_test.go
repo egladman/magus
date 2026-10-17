@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -208,7 +209,7 @@ func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	cfg := config.Defaults()
 	cfg.HistoryPath = filepath.Join(root, "history.json")
-	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -473,7 +474,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 		opts = append(opts, WithSpell(name))
 	}
 	reg.RegisterProject(".", opts...)
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -622,7 +623,8 @@ func TestSymbolIndexKeysOnTheIndexerVersionNotTheToolchain(t *testing.T) {
 // scip-buzz observation cannot be probed, and the gap and the status name the install.
 func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no scip-buzz, wherever this runs
-	const goSpell = "zzz-missing-buzz-go-spell"
+	// Neither is the built-in go or buzz spell, which the linked engine registers.
+	const goSpell, buzzSpell = "zzz-missing-buzz-go-spell", "zzz-missing-buzz-spell"
 	goOp := spells.DefaultSymbolIndexOp
 	missing := errors.New(`exec: "scip-buzz": executable file not found in $PATH`)
 	buzzProbes := 0
@@ -637,7 +639,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	buzzSp := spells.NewSpell("buzz",
+	buzzSp := spells.NewSpell(buzzSpell,
 		spells.WithLanguage("buzz"), spells.WithSources("**/*.buzz"), spells.WithTargets("scip-buzz"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: spells.Command{Bin: "scip-buzz"}}),
 		spells.WithOps(map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-buzz"}}}),
@@ -662,8 +664,8 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	root := w.Root()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -688,7 +690,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 		Freshness: types.SymbolIndexNotBuilt, Detail: symbols.MissingIndexerHint("buzz", "scip-buzz"),
 	}, status["buzz"])
 
-	gaps, ok := SymbolGaps(ctx, m, root, m.cfg, nil)
+	gaps, ok := workspaceSymbolGaps(ctx, m, root, m.cfg, nil)
 	require.True(t, ok)
 	assert.Equal(t, []types.KnowledgeSymbolGap{{
 		Project: types.NewProjectRef(".", m.Get(".").Dir), Language: "buzz",
@@ -802,7 +804,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("svc", WithSpell(goSpell))
 	reg.RegisterProject("web", WithSpell(tsSpell))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1122,7 +1124,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)

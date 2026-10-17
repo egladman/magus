@@ -122,9 +122,12 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		writeLine("spell:", s.Spell)
 	}
 	// Active charms (sorted by the caller) change behavior, so they key the
-	// cache. Empty Charms adds nothing, so charm-less runs hash as before.
+	// cache. Empty Charms adds nothing, so charm-less runs hash as before. A charm the
+	// step cannot read (UnreadCharms) changes nothing it does, so it keys nothing.
 	for _, c := range s.Charms {
-		writeLine("charm:", c)
+		if !slices.Contains(s.UnreadCharms, c) {
+			writeLine("charm:", c)
+		}
 	}
 	// Same reasoning as charms, and the same empty-adds-nothing property: a run
 	// with no extra args hashes exactly as before, so this does not invalidate a
@@ -185,10 +188,10 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	if s.SpellDefVersion != "" {
 		writeLine("spellDefVersion:", s.SpellDefVersion)
 	}
-	// Written only for a step that asks the binary for its answer (Step.BinaryBuild), so
+	// Written only for a step that asks the binary for its answer (Step.Catalogs), so
 	// every other key is unchanged and KeyVersion need not move, as with obs.
-	if s.BinaryBuild != "" {
-		writeLine("binary:", s.BinaryBuild)
+	if s.Catalogs != "" {
+		writeLine("catalogs:", s.Catalogs)
 	}
 
 	tools := append([]string(nil), s.ToolVersions...)

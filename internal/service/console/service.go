@@ -12,13 +12,14 @@ import (
 	"sync"
 	"time"
 
-	magus "github.com/egladman/magus"
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,7 +79,7 @@ func WithStatusSnapshotFn(fn func(ctx context.Context) types.StatusSnapshot) Opt
 	return func(s *Service) { s.statusSnapshotFn = fn }
 }
 
-// WithKnowledgeGraphFn replaces Magus.KnowledgeGraph. Tests pass an in-memory graph.
+// WithKnowledgeGraphFn replaces the workspace knowledge graph. Tests pass an in-memory graph.
 func WithKnowledgeGraphFn(fn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)) Option {
 	return func(s *Service) { s.knowledgeGraphFn = fn }
 }
@@ -351,16 +352,20 @@ func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffO
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads
-// the @symbols shards; the production path routes to KnowledgeGraphWithSymbols only when
+// the @symbols shards; the production path requests the @symbols scope only when
 // they are actually needed so the default export stays lazy.
 func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowledge.Graph, error) {
 	if s.knowledgeGraphFn != nil {
 		return s.knowledgeGraphFn(ctx, withSymbols)
 	}
+	// The graph is one of the methods workspace.ViewAs adds to an opened *magus.Magus.
+	g := workspace.ViewAs[interface {
+		KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	}](s.magus)
 	if withSymbols {
-		return s.magus.KnowledgeGraphWithSymbols(ctx)
+		return g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	}
-	return s.magus.KnowledgeGraph(ctx, false)
+	return g.KnowledgeGraph(ctx, types.GraphRequest{})
 }
 
 // TargetGraph returns the describe-graph view (targets flavor). The error return

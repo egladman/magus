@@ -336,7 +336,7 @@ test "the labels directory, a sibling that only starts with sealed and unrelated
         "cat ~/.cache/proofread/calibration/sealed.json",
         "cat /var/cache/ada/proofread/calibration/labels/a",
         "git switch -c sealed-holdout proofread",
-        "cat libs/conventions/proofread/testdata/cases/claim.txtar",
+        "cat libs/proofread/internal/calibrate/cases/claim.txtar",
         "ls ~/.cache/other/sealed",
     ]) {
         std\assert(judged(line, argvs: [["cat", "x"]], roots: ada).decision == "allow", message: line);

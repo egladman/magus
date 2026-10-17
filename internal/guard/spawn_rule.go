@@ -13,20 +13,22 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/types"
 )
 
-// workspaceSpawnRule is the Verdict.Rule an unnamed magus\guard.spawn answer carries, in the
+// workspaceSpawnRule is the GuardJudgment.Rule an unnamed magus\guard.spawn answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceSpawnRule = workspaceShellPrefix + "spawn"
 
@@ -45,14 +47,25 @@ type spawnFields struct {
 }
 
 // spawnedAgentID reads the id a host assigned the child from a finished spawn call's
-// response, "" when the response names none. Both spellings are accepted because the
-// key is the host's and magus reads it by shape, never by host name.
+// response, "" when the response names none. The key is the host's and magus reads it by
+// shape, never by host name: `agentId`, `agent_id`, or `task_name`, the path a host that
+// addresses children by name hands back in place of an id.
+//
+// A response may be the object itself or a string holding its JSON; a string that is not
+// JSON names nothing.
 func spawnedAgentID(response any) string {
+	if s, ok := response.(string); ok {
+		var decoded any
+		if json.Unmarshal([]byte(s), &decoded) != nil {
+			return ""
+		}
+		response = decoded
+	}
 	m, ok := response.(map[string]any)
 	if !ok {
 		return ""
 	}
-	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"))
+	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"), envelopeString(m, "task_name"))
 }
 
 // judgeAgentEvent answers a spawn or a continuation of a subagent.
@@ -61,7 +74,7 @@ func spawnedAgentID(response any) string {
 // command would otherwise block the spawn describing it. The built-in rules read session
 // state; the workspace's magus\guard.spawn rule then reads the normalized request and may
 // only add to what they said.
-func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution) Verdict {
+func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution) types.GuardJudgment {
 	at := hookLocation(ctx, deps)
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	// A spawn call that has already run judges nothing, and judging it again would spend
@@ -72,13 +85,16 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
 	ctx = withOutputStore(ctx, at)
+	titled := spawnTitle(sync.OnceValues(func() (types.Job, bool) {
+		return spawnTitleJob(ctx, at, env.Spawn.Description)
+	}))
 
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	verdict := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	decided := ""
 	var failures []trail.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
@@ -88,10 +104,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	why := ""
 	verdictRef := ""
 	if env.IsSpawn {
-		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
+		verdict, verdictRef = spawnBuiltIns(ctx, deps, req, env, who, at)
 		if verdict.Decision == decisionDeny {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
-				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+				verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 		}
 		if verdict = deps.gradeAdvice(verdict); verdict.Decision != decisionPass {
@@ -101,11 +117,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description})); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled)})); refused {
+			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && verdict.Decision == decisionPass {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
+			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}
@@ -119,10 +135,18 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			decided = decidedByBuiltin
 		}
 	}
+	actingLease, _ := resolveActingLease(who, at, req.Lease)
+	if verdict.Decision != decisionDeny {
+		verdict = gradeMainSpawn(deps, verdict, env, who, at, actingLease, titled)
+		verdict = gradeSpawnCeiling(deps, verdict, env, who, at, actingLease)
+		if verdict.Decision != decisionPass && decided == "" {
+			decided = decidedByBuiltin
+		}
+	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != decisionDeny {
-		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease)
+		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease, titled)
 		bind := func(rule workspace.SpawnRule) ruleCall {
 			if rule == nil {
 				return nil
@@ -140,7 +164,6 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		failures = asked.failures
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
-		actingLease, _ := resolveActingLease(who, at, req.Lease)
 		call := judgedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
@@ -169,31 +192,82 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		ruleFailures: failures,
 	})
 	if verdict.Decision != decisionDeny {
+		if env.IsContinue {
+			recordRework(ctx, at, facts, env.Target)
+		}
 		markAgentSeen(facts, env)
+		bound := false
+		if env.IsSpawn {
+			_, bound = titled()
+		}
+		noteMainSpawn(at, who, actingLease, bound)
+		if env.IsSpawn {
+			recordPendingSpawn(facts, env, actingLease, time.Now())
+		}
 	}
 	return verdict
 }
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and
 // never the prompt.
-func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) (Verdict, string) {
+func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution, at location) (types.GuardJudgment, string) {
+	refused := func(rule denyRuleName, d denial) types.GuardJudgment {
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
+	}
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
-	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
+	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
+		return refused(denySpawnUnbriefed, denial{Say: reason}), ""
+	}
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
+	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
+		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
+	}
+	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok && row.Validated == 0 {
+		return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+	}
+	if spawnWaitsFires(env.Spawn.Description, env.Value) {
+		return refused(denyRuleSpawnWaiter, denySpawnWaiter()), ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
-	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
+	// A subagent handing waiting to a helper of its own, said once a session.
+	if who.Agent != "" && spawnNestedWordRe.MatchString(env.Spawn.Description+"\n"+env.Value[:min(len(env.Value), spawnWaiterHead)]) {
+		note := adviseSpawnNestedWaiter()
+		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
+			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
+		}
+	}
+	// The orchestrator waits for the build budget so its workers never do; a subagent
+	// spawning is a worker, which reports a full budget rather than waiting on it.
+	if who.Agent == "" {
+		if note := adviseBudgetFull(ctx, time.Now()); note.Say != "" {
+			shown, ref := shapeAdvice(ctx, gate, string(denyRuleSleepPoll), note.Say, map[string]string{note.Say: note.Why}, false)
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
+		}
+	}
+	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
+}
+
+// spawnIsolated reports whether the child runs outside this checkout: the spawn asked for
+// the host's isolation, or the row its title names owns a checkout of its own, where the
+// worker is taken.
+func spawnIsolated(env hookRequest, titled spawnTitle) bool {
+	if env.Spawn.Isolated {
+		return true
+	}
+	row, ok := titled()
+	return ok && row.Worktree.Standing()
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
 // read from the envelope or from what magus recorded; none is inferred from the host.
-func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at location, facts hint.Gate, explicitLease string) types.SpawnRequest {
+func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at location, facts hint.Gate, explicitLease string, titled spawnTitle) types.SpawnRequest {
 	req := types.SpawnRequest{
 		Kind:        types.SpawnKindSpawn,
 		Host:        who.Host,
@@ -204,18 +278,22 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		Name:        env.Spawn.Name,
 		Prompt:      env.Value,
 		Background:  env.Spawn.Background,
-		Isolated:    env.Spawn.Isolated,
+		Isolated:    spawnIsolated(env, titled),
 		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 	}
 	if env.IsContinue {
 		req.Kind = types.SpawnKindContinue
 		req.Target = continueTarget(ctx, at, facts, env.Target, time.Now())
+	} else if row, ok := titled(); ok {
+		req.ModelTier = row.ModelTier
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
 	lease, _ := resolveActingLease(who, at, explicitLease)
-	req.Role, req.Lease = actingRole(ctx, at, lease)
+	req.Role, req.Lease = actingRole(ctx, at, lease, req.Parent)
+	req.Thread, req.ThreadFrom, req.Window = callerCost(at, who, lease, facts)
+	req.Orchestration = callerOrchestration(at, who, req.Thread, req.ThreadFrom, lease)
 	return req
 }
 
@@ -294,6 +372,9 @@ type spawnedAgent struct {
 	// ContextTokens is the agent's last observed context size, nil until its host
 	// reports usage for it.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
+	// ContextWindow is the largest context the agent's host says it can hold, 0 until a
+	// host reports one alongside its usage.
+	ContextWindow int64 `json:"context_window,omitempty"`
 }
 
 // recordSpawnedAgent files what a finished spawn call handed its child under the child's
@@ -325,6 +406,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 		Name:          env.Spawn.Name,
 		Model:         env.DeclaredModel,
 		ContextTokens: prev.ContextTokens,
+		ContextWindow: prev.ContextWindow,
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
 		rows, err := leaseRows(ctx, at)
@@ -334,7 +416,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 			return
 		}
 		child := job.Caller{Host: who.Host, Session: who.Session, Agent: env.SpawnedAgent}
-		_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Bind(child, row.ID)
+		_ = job.NewStore(at.jobs()).Bind(child, row.ID)
 	}
 	writeSpawnedAgent(facts, env.SpawnedAgent, rec)
 }
@@ -375,6 +457,9 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 	return spawnTitleRow(live, title)
 }
 
+// spawnTitle is spawnTitleJob for one spawn, asked once however many rules read it.
+type spawnTitle func() (types.Job, bool)
+
 // spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
 // tried as spawnTitleJob tries them, whatever the row's state.
 func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
@@ -409,6 +494,17 @@ func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
 	return false
 }
 
+// spawnedAsJob reports whether the spawn record filed under agentID attributed that agent to
+// job, as spawnedJob does for any agent of the session.
+func spawnedAsJob(facts hint.Gate, rows []types.Job, agentID, job string) bool {
+	rec, ok := readSpawnedRecord(facts, spawnedAgentKind(agentID))
+	if !ok || rec.UntrustedJob != "" {
+		return false
+	}
+	row, ok := spawnTitleRow(rows, rec.Description)
+	return ok && row.ID == job
+}
+
 // caller is who this call comes from, as the job store keys a binding.
 func (who hookAttribution) caller() job.Caller {
 	return job.Caller{Host: who.Host, Session: who.Session, Agent: who.Agent}
@@ -421,7 +517,7 @@ func boundJob(who hookAttribution, at location) job.Binding {
 	if who.caller().Identified() && at.workspace == "" {
 		return job.Binding{}
 	}
-	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Binding(who.caller())
+	return job.NewStore(at.jobs()).Binding(who.caller())
 }
 
 // resolveActingLease is the lease a call acts under. See [resolveLease].
@@ -503,7 +599,7 @@ func execFlagTakesValue(name string) bool {
 	if takes, known := MagusFlagTakesValue(name); known {
 		return takes
 	}
-	for _, group := range cli.All {
+	for _, group := range commands.Root.Children {
 		if group.Name != hint.JobExec.Head() {
 			continue
 		}
@@ -511,8 +607,8 @@ func execFlagTakesValue(name string) bool {
 			if verb.Name != hint.JobExec.Leaf() {
 				continue
 			}
-			i := slices.IndexFunc(verb.Flags, func(f cli.Flag) bool { return f.Name == name })
-			return i >= 0 && verb.Flags[i].Kind != cli.FlagBool
+			i := slices.IndexFunc(verb.Flags, func(f cmdline.Flag) bool { return f.Name == name })
+			return i >= 0 && verb.Flags[i].Kind != cmdline.Bool
 		}
 	}
 	return false
@@ -545,7 +641,7 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	if who.caller().Identified() && at.workspace == "" {
 		return
 	}
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(at.jobs())
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
 	}
@@ -581,7 +677,7 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 				continue
 			}
 			if store == nil {
-				store = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+				store = job.NewStore(at.jobs())
 			}
 			store.Release(who.caller(), operands[0])
 		}
@@ -591,8 +687,13 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 // bindingUnlessEnded is b, or no binding when b names a job that ended in a verdict (pass,
 // fail or no_return), for the caller to release. A wait ends a job from its orchestrator's
 // session, so releaseOnEnd never sees the holder's call; the holder's own next call
-// releases it instead. An exited row still holds: a rejected wait sends the holder back to
-// the same paths.
+// releases it instead.
+//
+// An exited row still holds its holder, since a rejected wait sends it back to the same
+// paths, until the caller's BAGGAGE claims another job still declared or running. The
+// holder filed its result, so nothing of the exited job is left to grade, and keeping the
+// binding graded a resumed worker under the job it had finished. A binding to a job in
+// flight still outranks the claim: a worker cannot rewrite its own grading from a shell.
 func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Binding {
 	if b.Job == "" || b.Gone {
 		return b
@@ -601,11 +702,21 @@ func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Bin
 	if err != nil {
 		return b
 	}
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == b.Job })
-	if i < 0 || !rows[i].State.Terminal() {
-		return b
+	state := func(id string) types.JobState {
+		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+			return rows[i].State
+		}
+		return ""
 	}
-	return job.Binding{}
+	switch held := state(b.Job); {
+	case held.Terminal():
+		return job.Binding{}
+	case held == types.StateExited:
+		if claim := trail.LeaseFromEnv(); claim != b.Job && state(claim).Editing() {
+			return job.Binding{}
+		}
+	}
+	return b
 }
 
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
@@ -637,13 +748,10 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if refusals.AlreadyFired(refused) {
 			return false
 		}
-		base := deps.checkoutBase(ctx, at.workspace)
-		if base == "" {
-			return false
-		}
-		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base); err != nil {
+		if _, err := job.NewStore(at.jobs()).Exec(ctx, agentJob); err != nil {
 			// Only a holder conflict lasts until the row changes. A cancelled deadline, lock
-			// contention or I/O may pass on the next call, so it is never remembered.
+			// contention, I/O or a checkout with no revision yet may pass on the next call, so
+			// it is never remembered.
 			if errors.Is(err, job.ErrHeldElsewhere) {
 				refusals.MarkFired(refused)
 			}
@@ -710,12 +818,15 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 	if agentID == "" {
 		return
 	}
-	tokens, ok := lastContextTokens(transcript)
+	usage, ok := lastContextUsage(transcript)
 	if !ok {
 		return
 	}
 	rec, _ := readSpawnedAgent(facts, agentID)
-	rec.ContextTokens = &tokens
+	rec.ContextTokens = &usage.Tokens
+	if usage.Window > 0 {
+		rec.ContextWindow = usage.Window
+	}
 	writeSpawnedAgent(facts, agentID, rec)
 }
 
@@ -723,38 +834,75 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 // turn and only its last usage record is wanted.
 const agentUsageTail = 512 << 10
 
-// transcriptUsage is the one shape read from a transcript line: a message's token usage.
+// transcriptUsage is the shapes read from a transcript line: a message's token usage, model
+// and content, or the token_count event and function call items another host's rollout
+// records.
 type transcriptUsage struct {
 	Message struct {
+		Model string `json:"model"`
 		Usage *struct {
 			Input      int64 `json:"input_tokens"`
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
+		Content json.RawMessage `json:"content"`
 	} `json:"message"`
+	// IsSidechain marks a subagent's line written into its parent's transcript.
+	IsSidechain bool   `json:"isSidechain"`
+	Type        string `json:"type"`
+	Payload     struct {
+		Type string `json:"type"`
+		// Info is null on a token_count event that reports only rate limits.
+		Info *struct {
+			Last *struct {
+				Input int64 `json:"input_tokens"`
+			} `json:"last_token_usage"`
+			Window int64 `json:"model_context_window"`
+		} `json:"info"`
+		Name      string          `json:"name"`
+		Arguments string          `json:"arguments"`
+		CallID    string          `json:"call_id"`
+		Output    json.RawMessage `json:"output"`
+	} `json:"payload"`
 }
 
-// lastContextTokens reads the latest usage record in the tail of a JSONL transcript and
-// returns its input plus cache-read plus cache-write tokens: what the model was handed
-// on its last call, which is the context a resume would have to rebuild.
-func lastContextTokens(path string) (int64, bool) {
+// contextSize is what the model was handed on the line's call and the size of the window
+// it was handed it in (0 when the host does not report one), or false for a line that
+// reports no usage.
+func (u transcriptUsage) contextSize() (tokens, window int64, ok bool) {
+	if usage := u.Message.Usage; usage != nil {
+		return usage.Input + usage.CacheRead + usage.CacheWrite, 0, true
+	}
+	if info := u.Payload.Info; u.Type == "event_msg" && u.Payload.Type == "token_count" && info != nil && info.Last != nil {
+		// The count already includes the cached tokens, so nothing is added to it.
+		return info.Last.Input, info.Window, true
+	}
+	return 0, 0, false
+}
+
+// lastContextUsage reads the latest usage record in the tail of a JSONL transcript. Its
+// Tokens are input plus cache-read plus cache-write tokens: what the model was handed on
+// its last call, which is the context a resume would have to rebuild. Its Window is the
+// host's own figure for how large that context may grow, 0 when it names none. False when
+// the tail holds no usage record.
+func lastContextUsage(path string) (types.ContextWindow, bool) {
 	if !filepath.IsAbs(path) {
-		return 0, false
+		return types.ContextWindow{}, false
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, false
+		return types.ContextWindow{}, false
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return 0, false
+		return types.ContextWindow{}, false
 	}
 	start := max(info.Size()-agentUsageTail, 0)
 	buf := make([]byte, info.Size()-start)
 	n, err := f.ReadAt(buf, start)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, false
+		return types.ContextWindow{}, false
 	}
 	// A short read must not feed the unwritten tail of buf to json.Unmarshal.
 	lines := bytes.Split(buf[:n], []byte("\n"))
@@ -768,13 +916,14 @@ func lastContextTokens(path string) (int64, bool) {
 			continue
 		}
 		var rec transcriptUsage
-		if json.Unmarshal(line, &rec) != nil || rec.Message.Usage == nil {
+		if json.Unmarshal(line, &rec) != nil {
 			continue
 		}
-		u := rec.Message.Usage
-		return u.Input + u.CacheRead + u.CacheWrite, true
+		if tokens, window, ok := rec.contextSize(); ok {
+			return types.ContextWindow{Tokens: tokens, Window: window, Source: types.ContextFromTranscript}, true
+		}
 	}
-	return 0, false
+	return types.ContextWindow{}, false
 }
 
 func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {
@@ -818,7 +967,7 @@ func writeAgentMarker(facts hint.Gate, kind hint.MarkerKind, body []byte) {
 
 // decidedBy names which side produced a command verdict. A workspace shell rule is the
 // working tree's: it has no approved twin to be stricter than.
-func decidedBy(v Verdict) string {
+func decidedBy(v types.GuardJudgment) string {
 	switch {
 	case v.Decision == decisionPass || v.Decision == "":
 		return ""

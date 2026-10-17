@@ -85,6 +85,15 @@ func depCase(dir string, imports ...string) types.Case {
 	return types.Case{Node: precedentNamespace(dir, "go"), Source: dir, Imports: imports}
 }
 
+// fanoutConformance configures the dep-fanout ceiling as an anchor beside the shipped gates.
+func fanoutConformance(anchor int) types.ConformanceOptions {
+	o := testConformance()
+	o.Limits = map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource}: {Percentile: 95, Anchor: anchor},
+	}
+	return o
+}
+
 func fileCase(file string) types.Case { return types.Case{Node: "file:" + file, Source: file} }
 
 func precedentRow(t *testing.T, rows []types.Precedent, family types.PrecedentFamily, scope types.PrecedentScope) types.Precedent {
@@ -144,7 +153,7 @@ func TestPrecedentsPinThisTreesMeasuredShape(t *testing.T) {
 		f.edge("file:"+file, precedentNamespace("libs/gopherbuzz/std", "go"), types.RelationReferences)
 	}
 
-	rows := f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"cmd/magus/gen/f0.go": true}})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance(), Generated: map[string]bool{"cmd/magus/gen/f0.go": true}})
 
 	cmdInternal := types.PrecedentScope{Layers: []string{"cmd", "internal"}}
 	assert.Equal(t, types.Precedent{
@@ -188,7 +197,7 @@ func TestPrecedentsAreNotEstablishedBelowEitherGate(t *testing.T) {
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentErrSentinelName, Scope: goScope, Key: types.PrecedentKey{Prefix: "err"},
 		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope),
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}), types.PrecedentErrSentinelName, goScope),
 		"a cohort of four is under the minimum of five")
 
 	f.value("internal/a", "ErrX4", "error")
@@ -198,7 +207,7 @@ func TestPrecedentsAreNotEstablishedBelowEitherGate(t *testing.T) {
 		Family: types.PrecedentErrSentinelName, Scope: goScope, Key: types.PrecedentKey{Prefix: "err"},
 		Follow: 5, Cohort: 7, Share: 5.0 / 7, Cited: cited[:3],
 		Departures: []types.Case{{Node: bad, Source: "internal/a/f0.go:6"}, {Node: missing, Source: "internal/a/f0.go:7"}},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope),
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}), types.PrecedentErrSentinelName, goScope),
 		"5 of 7 is under 80%")
 }
 
@@ -221,7 +230,7 @@ func TestPrecedentsJudgeAValueWhoseLineACappedReferenceListMayHide(t *testing.T)
 		Provenance: refProvenance(types.KnowledgeSymbolRef{Count: 3, Lines: []int{40, 41}}),
 	})
 
-	row := precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope)
+	row := precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}), types.PrecedentErrSentinelName, goScope)
 	// lastErr is state; cachedErr's line may hold the third Errorf. Whether the row clears the
 	// gate and which followers it cites are other tests' business, so they are carried over.
 	want := types.Precedent{
@@ -251,7 +260,7 @@ func TestPrecedentsJudgeAnExternalTestPackageNoCycleForces(t *testing.T) {
 		Family: types.PrecedentTestPackageName, Scope: goScope,
 		Follow: 1, Cohort: 2, Share: 0.5, Cited: []types.Case{fileCase("internal/a/b_test.go")},
 		Departures: []types.Case{fileCase("internal/a/a_test.go")},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentTestPackageName, goScope))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}), types.PrecedentTestPackageName, goScope))
 }
 
 // TestPrecedentsMarshalByteStable: a test file defining namespaces of two languages is judged
@@ -264,7 +273,7 @@ func TestPrecedentsMarshalByteStable(t *testing.T) {
 	f.file("internal/a/a_test.go", precedentNamespace("internal/a", "go"), "a", "go")
 	f.file("internal/a/a_test.go", precedentNamespace("internal/a/a_test.go", "typescript"), "a_test", "typescript")
 
-	rows := f.g.Precedents(PrecedentOptions{})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 	assert.Equal(t, []types.Precedent{{
 		Family: types.PrecedentTestPackageName, Scope: goScope,
 		Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{fileCase("internal/a/a_test.go")},
@@ -272,7 +281,7 @@ func TestPrecedentsMarshalByteStable(t *testing.T) {
 	first, err := json.Marshal(rows)
 	require.NoError(t, err)
 	for range 20 {
-		again, err := json.Marshal(f.g.Precedents(PrecedentOptions{}))
+		again, err := json.Marshal(f.g.Precedents(PrecedentOptions{Conformance: testConformance()}))
 		require.NoError(t, err)
 		require.Equal(t, string(first), string(again))
 	}
@@ -296,7 +305,7 @@ func TestPrecedentsTakeALayerWhoseTopDirectoryHoldsOnlyNestedProjects(t *testing
 		Family: types.PrecedentDepDirection, Scope: layers, Key: types.PrecedentKey{From: "libs", To: "internal"},
 		Follow: 2, Cohort: 2, Share: 1,
 		Cited: []types.Case{depCase("libs/a", "internal/x"), depCase("libs/b", "internal/x")},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepDirection, layers))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}), types.PrecedentDepDirection, layers))
 }
 
 // A layer magus.project declares on a dir node wins over the first path segment, and a
@@ -314,7 +323,7 @@ func TestPrecedentsTakeTheDeclaredLayer(t *testing.T) {
 		f.imports("cmd/app", dir)
 		f.imports(dir, "internal/store")
 	}
-	rows := f.g.Precedents(PrecedentOptions{})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 
 	toHandler := types.PrecedentScope{Layers: []string{"cmd", "handler"}}
 	assert.Equal(t, types.Precedent{
@@ -348,7 +357,7 @@ func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
 			Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
-	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}}),
+	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}, Conformance: fanoutConformance(1)}),
 		"internal/a's generated file importing cmd/app is its generator's decision, not a departure")
 }
 
@@ -373,7 +382,7 @@ func TestPrecedentsSkipGeneratedAndTestCode(t *testing.T) {
 	f.pkg("mocks/a", 1)
 	f.imports("mocks/a", "internal/a")
 
-	rows := f.g.Precedents(PrecedentOptions{Generated: map[string]bool{
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance(), Generated: map[string]bool{
 		"internal/a/gen/f0.go": true, "internal/a/gen/x_test.go": true, "mocks/a/f0.go": true,
 	}})
 	assert.Equal(t, []types.Precedent{
@@ -400,16 +409,13 @@ func TestPrecedentsJudgeTestPackagesOnlyWhereALanguagePackagesByDirectory(t *tes
 			f.file(file, precedentNamespace(file, "typescript"), name, "typescript")
 		}
 	}
-	assert.Empty(t, f.g.Precedents(PrecedentOptions{}))
+	assert.Empty(t, f.g.Precedents(PrecedentOptions{Conformance: testConformance()}))
 }
 
-// TestPrecedentsFanoutIsADistributionOverImporters holds a cohort of 20, the smallest whose
-// nearest-rank p95 sits below its max, so the one heavy importer departs.
-func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
-	t.Parallel()
-
-	f := newPrecedentFixture()
-	var all []string
+// fanoutCohort is 19 packages importing one internal package each and cmd/big importing
+// twelve: a cohort of 20, whose nearest-rank p95 is 1.
+func fanoutCohort() (f *precedentFixture, all []string) {
+	f = newPrecedentFixture()
 	for i := range 12 {
 		dir := fmt.Sprintf("internal/p%d", i)
 		all = append(all, dir)
@@ -426,7 +432,13 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 	}
 	// A package that never imports the layer is not in its cohort.
 	f.pkg("cmd/none", 1)
+	return f, all
+}
 
+func TestPrecedentsFanoutDepartsPastTheConfiguredCeiling(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
@@ -435,7 +447,52 @@ func TestPrecedentsFanoutIsADistributionOverImporters(t *testing.T) {
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
+}
+
+// TestPrecedentsFanoutNeverFollowsTheLiveDistribution: the cohort's own p95 is 1, and a ceiling
+// of 12 holds anyway, so a package cannot loosen the bound by joining the heavy end.
+func TestPrecedentsFanoutNeverFollowsTheLiveDistribution(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
+		Follow: 20, Cohort: 20, Share: 1, Established: true,
+		Cited: []types.Case{
+			depCase("cmd/big", all...), depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"),
+		},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentDepFanout, internal))
+}
+
+func TestPrecedentsFanoutEnforcesTheCommittedValueOverTheAnchor(t *testing.T) {
+	t.Parallel()
+
+	f, all := fanoutCohort()
+	o := fanoutConformance(12)
+	o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{
+		ConformanceKey: types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal"},
+		Value:          2,
+	}}}
+	internal := types.PrecedentScope{Layers: []string{"internal"}}
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
+		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
+		Cited: []types.Case{
+			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
+		},
+		Departures: []types.Case{depCase("cmd/big", all...)},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: o}), types.PrecedentDepFanout, internal))
+}
+
+func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
+	t.Parallel()
+
+	f, _ := fanoutCohort()
+	for _, r := range f.g.Precedents(PrecedentOptions{Conformance: testConformance()}) {
+		assert.NotEqual(t, types.PrecedentDepFanout, r.Family, "no ceiling is configured, so none is claimed")
+	}
 }
 
 func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
@@ -455,11 +512,11 @@ func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
 		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
 	}
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal),
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal),
 		"four importers are under the minimum cohort of five")
 
 	f.pkg("cmd/c4", 1)
 	f.imports("cmd/c4", "internal/a")
 	want.Follow, want.Cohort, want.Established = 5, 5, true
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentDepFanout, internal))
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
 }

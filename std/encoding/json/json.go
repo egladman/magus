@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module json -lang buzz -out ../../../internal/interp/bindings/gen/json.go
+//go:generate go run ../../../cmd/magus-utils bindings -module json -lang buzz -out ../../../internal/interp/bindings/gen/json.go -pkg bindgen
 
 // Module is the "json" host module: JSON encode/decode for spells.
 var Module = std.Module{

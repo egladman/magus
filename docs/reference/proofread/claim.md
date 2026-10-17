@@ -1,13 +1,13 @@
 ---
 title: "claim"
-description: "A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet."
-tags: [proofread, rules, claim, advise]
+description: "A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on."
+tags: [proofread, rules, claim, off]
 aliases: [reference/prose/claim]
 ---
 
 # claim
 
-A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet.
+A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on.
 
 ## What it catches
 
@@ -29,6 +29,8 @@ The code is `PRF3001`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `change-description` | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
@@ -55,7 +57,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "claim", "code": "PRF3001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
+{"rule": "claim", "code": "PRF3001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -64,4 +66,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

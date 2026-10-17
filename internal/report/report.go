@@ -81,7 +81,7 @@ type TargetResult struct {
 	// The text a failing run prints is unchanged; this is the same suggestion as a
 	// field, because the printed line was measured converting at the rate of no hint
 	// at all.
-	Next []hint.Next `json:"next,omitempty"`
+	Next []types.NextStep `json:"next,omitempty"`
 }
 
 // TargetValue is what a target returned for one project, a str or a [str], once the run
@@ -117,13 +117,14 @@ type GraphError struct {
 	Message string `json:"error"`
 }
 
-// VolatilityCall records a volatility outcome; emitted when a retry was triggered or regression suspected.
+// VolatilityCall records a volatility outcome; emitted when a retry was triggered, a
+// regression suspected, or a non-retryable failure kept retry_on_volatile from retrying.
 type VolatilityCall struct {
 	Project         string  `json:"project"`
 	Target          string  `json:"target"`
-	Status          string  `json:"status"` // "retried_volatile" | "retry_failed" | "suspected_regression"
+	Status          string  `json:"status"` // "retried_volatile" | "retry_failed" | "suspected_regression" | "not_retried"
 	Attempts        int     `json:"attempts"`
-	RetryReason     string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_volatile"
+	RetryReason     string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_volatile" | "non_retryable"
 	VolatilityScore float64 `json:"volatility_score,omitempty"`
 }
 
@@ -206,10 +207,12 @@ type RunCharms struct {
 }
 
 // RunCache reports which cache tiers a run can reach and whether it may write to
-// them, the "cache: ..." header.
+// them, the "cache: ..." header. Dir is where the local tier's entries live: by
+// default one directory every checkout of the repository shares.
 type RunCache struct {
 	Tier string `json:"tier"`
 	Mode string `json:"mode"`
+	Dir  string `json:"dir,omitempty"`
 }
 
 // RunBase reports what an affected run's change set was compared against, the
@@ -407,7 +410,7 @@ func WriterFromContext(ctx context.Context) *Writer {
 // A parameter rather than a default, because a report written for a reader magus
 // cannot identify is not the same thing as one written for a bound worker, and the
 // serving side is where that has to be decided.
-type NextServer func(next []hint.Next) []hint.Next
+type NextServer func(next []types.NextStep) []types.NextStep
 
 // ServedIn serves a failing run's breadcrumbs the way every other door serves them:
 // filtered for the acting lease's role and journaled in this checkout's cache dir.
@@ -416,16 +419,17 @@ type NextServer func(next []hint.Next) []hint.Next
 // it unjournaled would give the most-served breadcrumb in the tree a denominator of
 // zero in `magus session hints`, and leave it the one suggestion the guard cannot
 // pre-authorize.
-func ServedIn(cacheDir, root string) NextServer {
-	return func(next []hint.Next) []hint.Next {
+func ServedIn(loc job.Location) NextServer {
+	cacheDir := loc.CacheDir
+	return func(next []types.NextStep) []types.NextStep {
 		role, writePaths := hint.RoleUnbound, []string(nil)
-		if id, _ := job.ActingLease(cacheDir, trail.LeaseFromEnv()); id != "" {
+		if id, _ := job.ActingLease(loc, trail.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker
-			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
+			if rows, err := job.NewStore(loc).List(); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)
 			}
 		}
-		served := hint.ServableTo(role, writePaths, next)
+		served := hint.FilterServable(role, writePaths, next)
 		hint.AppendServedNext(cacheDir, served)
 		return served
 	}
@@ -468,24 +472,25 @@ func GraphObserver(w *Writer) types.Observer {
 
 type graphObserver struct{ w *Writer }
 
-func (o *graphObserver) OnBuild(s types.BuildStats) {
-	_ = Record(o.w, GraphBuild{
-		Nodes:      s.Nodes,
-		DurationMs: s.Duration.Milliseconds(),
-	})
-}
-
-func (o *graphObserver) OnQuery(e types.QueryEvent) {
-	_ = Record(o.w, GraphQuery{
-		Op:          e.Op,
-		Nodes:       e.Nodes,
-		Seeds:       e.Seeds,
-		Strategy:    e.Strategy,
-		ResultCount: e.ResultCount,
-		DurationMs:  e.Duration.Milliseconds(),
-	})
-}
-
-func (o *graphObserver) OnError(err error) {
-	_ = Record(o.w, GraphError{Message: err.Error()})
+// Observe appends e as a GraphError when it failed, a GraphBuild for a build, and a
+// GraphQuery otherwise.
+func (o *graphObserver) Observe(e types.GraphEvent) {
+	switch {
+	case e.Err != nil:
+		_ = Record(o.w, GraphError{Op: e.Op, Message: e.Err.Error()})
+	case e.Op == types.GraphOpBuild:
+		_ = Record(o.w, GraphBuild{
+			Nodes:      e.Nodes,
+			DurationMs: e.Duration.Milliseconds(),
+		})
+	default:
+		_ = Record(o.w, GraphQuery{
+			Op:          e.Op,
+			Nodes:       e.Nodes,
+			Seeds:       e.Seeds,
+			Strategy:    e.Strategy,
+			ResultCount: e.ResultCount,
+			DurationMs:  e.Duration.Milliseconds(),
+		})
+	}
 }

@@ -11,7 +11,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	orphan := filepath.Join(root, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 
 	log.Reset()
 	out := captureStdout(t, func() {
@@ -50,7 +51,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	// A dry run names the same deletion and performs none of it.
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
 		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
 	})
@@ -66,20 +67,26 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}
+	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 
 	acting := func(ctx context.Context) string {
-		lease, err := harnessActingLease(ctx, root)
+		lease, _, err := checkoutLease(ctx, root)
 		require.NoError(t, err)
 		return lease
 	}
 	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
 
-	claimed := proc.WithLease(context.Background(), "fleet/claimed")
+	claimed := types.WithJobLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/env")
+	assert.Equal(t, "fleet/env", acting(context.Background()), "BAGGAGE, with no forwarded lease")
+	assert.Equal(t, "fleet/claimed", acting(claimed), "a forwarded lease over BAGGAGE")
+	t.Setenv(trail.EnvBaggage, "")
 
 	bindCheckout(t, cacheDir, "fleet/bound")
 	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
@@ -144,8 +151,10 @@ wired in .claude/settings.json hooks.PreToolUse:
 
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the printed merge command with
 // this test binary as `magus`, so the `magus buzz` it pipes into is built from this source
-// and never a stale binary found on disk. Afterwards nothing is left to merge, the person's
-// own entries and an integer past 2^53 survive, and a retired entry is gone.
+// and never a stale binary found on disk. The command is copied from the text output the
+// way a person copies it and must match want-merge.sh byte for byte, so an escaped > fails
+// here. Afterwards nothing is left to merge, the person's own entries and an integer past
+// 2^53 survive, a retired entry is gone, and a second run on the current plan changes nothing.
 func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "describe_harness_merge.txtar")
 	require.NoError(t, os.WriteFile(script, []byte(describeHarnessMergeTxtar), 0o644))
@@ -160,9 +169,11 @@ func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 	})
 }
 
-const describeHarnessMergeTxtar = `exec magus describe harness script-host -o 'template={{.merge}}'
-cp stdout merge.sh
-exec sh merge.sh
+const describeHarnessMergeTxtar = `exec sh -c 'magus describe harness script-host | sed -n "s/^  \(magus describe harness .*\)/\1/p" > printed.sh'
+cmp printed.sh want-merge.sh
+exec sh printed.sh
+cmp hooks.json want.json
+exec sh printed.sh
 cmp hooks.json want.json
 exec magus describe harness script-host
 stdout '^script-host harness: current$'
@@ -202,6 +213,8 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     "after": [{"command": "theirs"}]
   }
 }
+-- want-merge.sh --
+magus describe harness script-host -o json | magus buzz -e 'import "encoding/json"; import "fs"; import "io"; import "merge"; fun main(args: [str]) > void !> str { final plan = json\parse(io\stdin.readAll()); if (plan["files"] == null) { return; } foreach (path, file in plan["files"]) { final dir = fs\dirname(path); if (dir != "" and dir != ".") { fs\mkdirAll(dir); } if (file["content"] != null) { fs\writeFileAtomic(path, content: file["content"]); } else if (file["exists"]) { fs\writeFileAtomic(path, content: merge\json(fs\readFile(path), overlay: json\stringify(file["fragment"]))); } else { fs\writeFileAtomic(path, content: json\stringify(file["fragment"], indent: "  ") + "\n"); } } }'
 -- want.json --
 {
   "hooks": {
@@ -236,10 +249,11 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 `
 
 // TestShippedHarnessEntriesRetireWhenRewritten holds every entry a shipped harness spell
-// renders to being one a later merge recognizes as magus's. It merges each host's config
-// from nothing, rewrites every command the way a new spell version would, and merges again:
-// an entry the planner did not recognize stays beside its replacement, which is how Claude
-// Code's session PATH entry came to be wired twice while describe called the file current.
+// renders to being one a later merge recognizes as magus's. It merges each host's config,
+// rewrites every command the way a new spell version would, and merges again: an entry the
+// planner did not recognize stays beside its replacement, which is how Claude Code's session
+// PATH entry came to be wired twice while describe called the file current. Each config starts
+// with a hand-written reply check that no merge may add a second copy of, retire or rewrite.
 func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "shipped_harness_retire.txtar")
 	require.NoError(t, os.WriteFile(script, []byte(shippedHarnessRetireTxtar), 0o644))
@@ -272,14 +286,17 @@ grep 'magus-command.buzz' .claude/settings.json
 grep 'CLAUDE_ENV_FILE' .claude/settings.json
 grep 'magus-command.buzz' .codex/hooks.json
 grep 'cursor-hook.buzz' .cursor/hooks.json
-grep 'proofread-reply.buzz -- --agent-name claude-code' .claude/settings.json
-grep 'proofread-reply.buzz -- --agent-name codex' .codex/hooks.json
-grep 'proofread-reply.buzz -- --agent-name cursor' .cursor/hooks.json
-grep '"matcher": "spawn_agent"' .codex/hooks.json
+grep '"matcher": "spawn_agent\|collaborationspawn_agent\|Agent"' .codex/hooks.json
+grep '"PostToolUse"' .codex/hooks.json
+grep '"SubagentStart"' .codex/hooks.json
+grep '"SubagentStop"' .codex/hooks.json
+! grep '"matcher": "Read"' .codex/hooks.json
 grep '"UserPromptSubmit"' .codex/hooks.json
 grep '"beforeSubmitPrompt"' .cursor/hooks.json
-grep '"loop_limit": 1' .cursor/hooks.json
 grep 'sandbox_mode = "read-only"' .codex/agents/magus-scout.toml
+grep -count=1 'proofread-reply.buzz' .claude/settings.json
+grep -count=1 'proofread-reply.buzz' .codex/hooks.json
+grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
 exec sh rewrite.sh
 grep 'stale-rendering' .claude/settings.json
 exec sh merge.sh
@@ -289,7 +306,8 @@ exec sh merge.sh
 grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
-grep -count=1 'spawn_agent' .codex/hooks.json
+grep -count=1 'collaborationspawn_agent' .codex/hooks.json
+grep -count=2 'magus-rehydrate.buzz' .codex/hooks.json
 exec magus describe harness claude-code
 stdout '^claude-code harness: current$'
 exec magus describe harness codex
@@ -305,6 +323,12 @@ import "spells/harness/cursor";
 magus\harness.provider(claude);
 magus\harness.provider(codex);
 magus\harness.provider(cursor);
+-- .claude/settings.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code"}]}]}}
+-- .codex/hooks.json --
+{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"}]}]}}
+-- .cursor/hooks.json --
+{"version": 1, "hooks": {"stop": [{"command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name cursor", "loop_limit": 1}]}}
 -- merge.sh --
 set -e
 for id in claude-code codex cursor; do
@@ -314,7 +338,7 @@ done
 -- rewrite.sh --
 set -e
 for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
-  sed 's/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
+  sed '/proofread-reply/!s/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
   mv rewritten "$f"
 done
 `

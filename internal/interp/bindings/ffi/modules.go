@@ -5,7 +5,7 @@ import (
 	"maps"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // RegisterFunc installs a host module on a Buzz session and returns its module map.

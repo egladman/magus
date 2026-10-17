@@ -38,7 +38,9 @@ $ magus job apply -f - <<'EOF'
 {"schema_version": 11, "id": "upgrade/web", "criteria": "web runs left-pad 1.3", "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created upgrade/web, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Each job's check is that project's own test, so `api` passing says nothing about
@@ -79,10 +81,10 @@ done
 <!-- golden: job_people_upgrade.txtar ls-done.out -->
 
 ```console
-$ magus ls jobs
-JOB          HOLDER  STATE  MODEL  PATHS  PROOF     CHECK
-upgrade/api  ana     pass   -      1      alone     magus run test api
-upgrade/web  ben     pass   -      1      disjoint  magus run test web
+$ magus ls jobs --all
+JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
+upgrade/api  ana     pass   standard  1      alone     magus run test api
+upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -108,8 +110,9 @@ in his, claims the same page for the section he wants:
 
 ```console
 $ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
-[error] magus job fork: [MGS3032] job: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install
-  see: https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3032/
+[error] 1 problem:
+  1. [MGS3032] write_paths[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
+     fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply -f <record>`, dropping docs/fr/install.md
 ```
 
 Refused, with no row written: the page is held in another checkout, so it has one
@@ -126,6 +129,7 @@ EOF
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 The part after `#` names a heading the diff driver matches. Once Ben takes his job,
@@ -135,9 +139,9 @@ the board shows the shared page and why it is not a conflict:
 
 ```console
 $ magus ls jobs
-JOB           HOLDER  STATE    MODEL  PATHS  PROOF     CHECK
-fr/install    ana     running  -      1      alone     magus run lint .
-fr/upgrading  ben     running  -      1      disjoint  magus run lint .
+JOB           HOLDER  STATE    MODEL     PATHS  PROOF     CHECK
+fr/install    ana     running  standard  1      alone     magus run lint .
+fr/upgrading  ben     running  standard  1      disjoint  magus run lint .
 
 overlaps
   fr/install and fr/upgrading claim common ground
@@ -165,7 +169,9 @@ $ magus job apply -f - <<'EOF'
 {"schema_version": 11, "id": "release-1.3/notes", "criteria": "release notes exist for 1.3", "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created release-1.3/notes, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Two people take an item each in their own worktree. The changelog gets written. The
@@ -187,9 +193,9 @@ The board says both items came back, and nothing more:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  exited  -      1      alone     -
-release-1.3/notes      notes      exited  -      1      disjoint  -
+JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  exited  standard  1      alone     -
+release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -221,15 +227,15 @@ unresolved risks its holder reported
 ```
 
 Exit 1, every unmet rule named, and the risk repeated where the person deciding
-reads it. The board is the checklist:
+reads it. The board with its ended rows is the checklist:
 
 <!-- golden: job_people_release.txtar ls-board.out -->
 
 ```console
-$ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass    -      1      alone     -
-release-1.3/notes      notes      exited  -      1      disjoint  -
+$ magus ls jobs --all
+JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass    standard  1      alone     -
+release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

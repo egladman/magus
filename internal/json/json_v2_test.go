@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -115,17 +116,10 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
 	allowed := map[string]bool{
-		"internal/json/json_v2.go":                  true,
-		"libs/gopherbuzz/internal/codec/json.go":    true,
-		"libs/gopherbuzz/internal/codec/json_v2.go": true,
+		"internal/json/json_v2.go": true,
 		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
 		// with the codec the binary actually ships to prove structured content survives it.
 		"internal/handler/mcp/mcp_test.go": true,
-		// proofread lives in its own module and ships as its own binary; it cannot import
-		// this one without the magus module depending on repo policy. A key ending in "/"
-		// allows every file directly in that directory.
-		"libs/conventions/cmd/proofread/": true,
-		"libs/conventions/proofread/":     true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
@@ -164,13 +158,18 @@ func encodingJSONImporters(root string, allowed map[string]bool) ([]string, erro
 			if skipJSONScanDir(d.Name()) {
 				return filepath.SkipDir
 			}
+			// A nested module ships apart from magus and cannot import this package
+			// without the magus module depending on repo policy.
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && path != root {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)
-		if err != nil || allowed[rel] || allowed[filepath.Dir(rel)+"/"] {
+		if err != nil || allowed[rel] {
 			return err
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
@@ -195,4 +194,30 @@ func skipJSONScanDir(name string) bool {
 	default:
 		return false
 	}
+}
+
+// UnmarshalStrict and StrictDecoder answer a typed input one way: the same refusals, worded
+// the same and placed at an offset.
+func TestUnmarshalStrictRefusesAsStrictDecoderDoes(t *testing.T) {
+	type doc struct {
+		A int `json:"a"`
+	}
+	for name, tc := range map[string]struct{ in, want string }{
+		"a repeated name":     {in: `{"a":1,"a":2}`, want: `duplicate key "a"`},
+		"an undeclared field": {in: `{"a":1,"b":2}`, want: `unknown field "b"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got doc
+			var strict *StrictError
+			require.ErrorAs(t, UnmarshalStrict([]byte(tc.in), &got), &strict)
+			assert.Equal(t, tc.want, strict.Error())
+			assert.Positive(t, strict.Offset)
+		})
+	}
+
+	var got doc
+	require.NoError(t, UnmarshalStrict([]byte(`{"a":1}`), &got))
+	assert.Equal(t, 1, got.A)
+	assert.ErrorIs(t, UnmarshalStrict(nil, &got), io.ErrUnexpectedEOF)
+	assert.Error(t, UnmarshalStrict([]byte(`{"a":1} {}`), &got), "a second document is trailing data")
 }

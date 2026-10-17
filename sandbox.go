@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -23,6 +25,14 @@ import (
 // on must therefore call this first in main, before any configuration, logging or
 // connection is set up, or its children start it again in their place.
 func MaybeLaunchSandbox() { sandbox.MaybeLaunch() }
+
+// jobPlace places this workspace's job store and checkout record. A user state dir that
+// will not resolve is left empty: the store reports it, which the sandbox meets by
+// failing open with a warning, and the checkout reads as having no record.
+func (m *Magus) jobPlace() job.Location {
+	stateBase, _ := xdg.StateDir()
+	return job.Location{CacheDir: m.CacheDir(), StateBase: stateBase, Root: m.ws.Root}
+}
 
 // SandboxMode is the sandbox mode this workspace's runs are confined under.
 func (m *Magus) SandboxMode() types.SandboxMode { return m.cfg.Sandbox.Mode.Resolved() }
@@ -44,16 +54,20 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if !mode.Enabled() {
 		return ctx, nil
 	}
-	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
+	loc := m.jobPlace()
 	// Every spell the workspace loaded, so a script, a magusfile body and a nested magus
 	// get every toolchain's grants; runTarget narrows a spell op's child to its project's.
 	// A service spell's grants are kept for its own ops alone (sandbox.ForProvider).
 	loaded := project.DefaultSpellRegistry().All()
-	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)
+	storeDir, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
 		return ctx, err
 	}
-	lease, from := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
+	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, storeDir, m.cfg.Sandbox, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)
+	if err != nil {
+		return ctx, err
+	}
+	lease, from := job.RunLease(ctx, loc)
 	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
 	confines, err := p.KernelConfines()
 	if err != nil {
@@ -96,7 +110,7 @@ var warnedKernelUnavailable sync.Once
 // landlock. A nested magus says nothing: the invocation that started it already did,
 // and a line per nested run would teach a reader to skip it.
 func warnKernelUnavailable(ctx context.Context) {
-	if procrun.CurrentLevel() > 0 {
+	if spawn.CurrentLevel() > 0 {
 		return
 	}
 	warnedKernelUnavailable.Do(func() {
@@ -112,22 +126,16 @@ func warnKernelUnavailable(ctx context.Context) {
 
 // recordRules reports the allow-rules p was built from under the workspace scope.
 func recordRules(ctx context.Context, prov observability.Provider, p *sandbox.Policy) {
-	var read, write, exec int64
+	access := map[filesystem.Access]int64{}
 	for _, r := range p.FS.Rules {
-		if r.Read {
-			read++
-		}
-		if r.Write {
-			write++
-		}
-		if r.Exec {
-			exec++
+		for _, a := range []filesystem.Access{filesystem.Read, filesystem.Write, filesystem.Exec} {
+			if r.Grants(a) {
+				access[a]++
+			}
 		}
 	}
 	prov.RecordSandboxRules(ctx, observability.SandboxRules{
-		Read:     read,
-		Write:    write,
-		Exec:     exec,
+		Access:   access,
 		EnvExact: int64(len(p.Env.Names)),
 		EnvGlob:  int64(len(p.Env.Prefixes)),
 		Scope:    "workspace",

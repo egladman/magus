@@ -57,8 +57,8 @@ console/gen/
 
 # The graph exports (knowledge-graph.json, target-graph.json): GitHub Pages already
 # serves the fresh pair at /magus/console/graph/, rebuilt every deploy, so a committed
-# copy here only ever went stale between deploys. Rooted and single-star so gen/mocks/
-# (tracked Go, its own linguist-generated entry above) is untouched.
+# copy here only ever went stale between deploys. Rooted and single-star so the
+# gen/<pkg>test/ doubles (tracked Go, their own linguist-generated entry) are untouched.
 /gen/*.json
 
 # Coverage intermediates: Go profiles from `magus run test`, Buzz LCOV fragments and the
@@ -83,8 +83,8 @@ coverage.cmd.out
 # The standalone Buzz runner, built by `magus run buzz-build libs/gopherbuzz`.
 # Same rule as /magus above: a build output, never committed.
 /libs/gopherbuzz/buzz
-# proofread, built by `magus run proofread-build libs/conventions` for the guard to run.
-/libs/conventions/gen/
+# proofread, built by `magus run proofread-build libs/proofread` for the guard to run.
+/libs/proofread/gen/
 
 # release output from `magus run release` — cross-compiled tarballs + SHA256SUMS,
 # published to the GitHub release, never committed
@@ -129,7 +129,7 @@ coverage.cmd.out
 # the workspace. Regenerate the ignored trees instead:
 #   magus agent install .claude/skills --force
 #
-# magus-skill-authoring, magus-local-development and shepherd-pull-requests are the exceptions and
+# magus-skill-authoring, magus-local-development, idiomatic-adrs and shepherd-pull-requests are the exceptions and
 # stay tracked: each is hand-authored, never embedded in the binary, and nothing regenerates
 # it. Hand-authored stays, generated goes. magus-local-development is additionally the name magus RESERVES for a
 # workspace's own rules (internal/agent.LocalSkillName, held by TestLocalSkillNameIsReserved),
@@ -140,6 +140,7 @@ coverage.cmd.out
 .claude/skills/*
 !.claude/skills/magus-skill-authoring/
 !.claude/skills/magus-local-development/
+!.claude/skills/idiomatic-adrs/
 !.claude/skills/shepherd-pull-requests/
 
 # launch.json pins one machine's dev-server command and port, so it stays per developer.

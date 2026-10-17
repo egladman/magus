@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -76,9 +77,9 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 // The exit code IS the feature at the process boundary. Both cases used to be 2, so a
 // script could not tell "this does not exist" from "I could not look".
 func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
-	assert.Equal(t, errSilent{exitCode: 1}, exitForVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
+	assert.Equal(t, exit.Reported(exit.Failure), exitForVerdict(types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil).Verdict),
 		"unknown is exit 1: invoked correctly, the work could not be done")
-	assert.Equal(t, errSilent{exitCode: 2}, exitForVerdict(types.ClassifyAnswer(false, "", nil).Verdict),
+	assert.Equal(t, exit.Reported(exit.Usage), exitForVerdict(types.ClassifyAnswer(false, "", nil).Verdict),
 		"absent is exit 2: the request cannot be carried out as stated")
 }
 
@@ -86,7 +87,7 @@ func TestExitForVerdictSplitsUnknownFromAbsent(t *testing.T) {
 // hits a stale index and reads 0 as "not in the graph" falls back to a text search, which
 // is the habit the graph exists to replace.
 func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
-	assert.Equal(t, errSilent{exitCode: 1},
+	assert.Equal(t, exit.Reported(exit.Failure),
 		exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
 		"unknown is exit 1: magus could not search what the question was about")
 	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),

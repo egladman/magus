@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"reflect"
+	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -17,60 +21,6 @@ import (
 //
 //go:embed gen/job.schema.json
 var DeclarationSchema string
-
-// foldStoredNames moves the renamed fields a previous magus wrote out of each row's
-// unknown members onto their current spelling, then drops every name [types.JobSchema]
-// reserves, so a reserved name is never carried back out as data.
-//
-// compat: see the legacy fields on [Declaration]. Without it a plan written before the rename
-// comes back with every boundary empty, and the next put stores that as the truth.
-func foldStoredNames(rows []types.Job) error {
-	for i := range rows {
-		if len(rows[i].Unknown) == 0 {
-			continue
-		}
-		var old struct {
-			WritePaths []string `json:"owned_paths"`
-			DenyPaths  []string `json:"forbidden_paths"`
-			ReadPaths  []string `json:"focus"`
-			Model      string   `json:"tier"`
-		}
-		bag, err := json.Marshal(rows[i].Unknown)
-		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(bag, &old); err != nil {
-			return fmt.Errorf("row %s: %w", rows[i].ID, err)
-		}
-		for _, name := range types.JobSchema.Reserved {
-			delete(rows[i].Unknown, name)
-		}
-		fold := func(name string, into *[]string, from []string) error {
-			if len(from) == 0 {
-				return nil
-			}
-			if len(*into) > 0 {
-				return fmt.Errorf("row %s carries %s and its renamed spelling, and nothing here can say which one it meant", rows[i].ID, name)
-			}
-			*into = from
-			return nil
-		}
-		if err := errors.Join(
-			fold("owned_paths", &rows[i].WritePaths, old.WritePaths),
-			fold("forbidden_paths", &rows[i].DenyPaths, old.DenyPaths),
-			fold("focus", &rows[i].ReadPaths, old.ReadPaths),
-		); err != nil {
-			return err
-		}
-		if old.Model != "" {
-			if rows[i].Model != "" {
-				return fmt.Errorf("row %s carries tier and its renamed spelling, and nothing here can say which one it meant", rows[i].ID)
-			}
-			rows[i].Model = old.Model
-		}
-	}
-	return nil
-}
 
 // maxInputBytes bounds one decoded record. A row and a report are both a few hundred
 // bytes of paths and sentences; the cap is what keeps a caller that piped the wrong file
@@ -104,23 +54,132 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 }
 
 // DecodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
-// same two passes over the job's schema.
+// same two passes over the job's schema. A record that is not a job (blank, too large, no
+// schema_version, an unknown member) fails as JobRecordInvalid problems, each unknown member
+// its own, and a job that decodes fails with every problem [types.Declaration.Problems]
+// finds. A newer schema_version, or a requirement this magus lacks, is no defect of the
+// record and fails as a plain error naming the update.
 func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 	raw, err := readInput(r, "job")
-	if err != nil {
-		return types.Declaration{}, err
+	switch {
+	case err != nil:
+		return types.Declaration{}, asRecordInvalid(err)
+	case !json.Valid(raw):
+		return types.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Err()
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
+		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
+			return types.Declaration{}, recordInvalid("schema_version", err).Err()
+		}
 		return types.Declaration{}, err
 	}
 	var row types.Declaration
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
-		return types.Declaration{}, fmt.Errorf("job: the input is not a version %d job: %w", types.JobSchemaVersion, err)
+		return types.Declaration{}, memberProblems(raw, err).Err()
 	}
-	if err := row.FoldLegacyNames(); err != nil {
-		return types.Declaration{}, err
+	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
+}
+
+// recordInvalid is err, the reason a record could not be read as a job, as its one problem.
+func recordInvalid(field string, err error) types.JobProblems {
+	return types.JobProblems{{
+		Code:    types.JobRecordInvalid,
+		Field:   field,
+		Message: strings.TrimPrefix(err.Error(), "job: "),
+		Fix:     fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
+	}}
+}
+
+// memberProblems is the strict decode's failure err on raw as problems: one per member
+// [types.Declaration] does not declare, or err itself when every member is known and a
+// value is what failed.
+func memberProblems(raw []byte, err error) types.JobProblems {
+	members, _ := objectMembers(raw)
+	known := jsonMembers(reflect.TypeFor[types.Declaration]())
+	var ps types.JobProblems
+	for _, name := range slices.Sorted(maps.Keys(members)) {
+		if slices.Contains(known, name) {
+			continue
+		}
+		ps = append(ps, types.JobProblem{
+			Code:    types.JobRecordInvalid,
+			Field:   name,
+			Message: fmt.Sprintf("%q is an unknown member of a version %d job", name, types.JobSchemaVersion),
+			Fix:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
+		})
 	}
-	return row, row.Validate()
+	if len(ps) > 0 {
+		return ps
+	}
+	return recordInvalid("", fmt.Errorf("the input is not a version %d job: %w", types.JobSchemaVersion, err))
+}
+
+// storeStamped are the members of a stored row that the store computes and a declaration
+// cannot carry. `magus describe job -o json` prints them beside the declared ones, and the
+// edit loop (describe, edit, apply) hands that record back, so [DecodeDeclarations] drops
+// them rather than refusing the loop at its second step. [DecodeDeclaration] still refuses
+// them, as `magus job fork` should: a caller declaring a creation time is wrong, while one
+// re-applying a record it read back is not. Any other unknown member is an error in both.
+var storeStamped = jobOnlyMembers()
+
+// jobOnlyMembers are the JSON members [types.Job] serializes that [types.Declaration]
+// does not: a field added to Job alone is the store's by construction.
+func jobOnlyMembers() []string {
+	declared := jsonMembers(reflect.TypeFor[types.Declaration]())
+	return slices.DeleteFunc(jsonMembers(reflect.TypeFor[types.Job]()), func(name string) bool {
+		return slices.Contains(declared, name)
+	})
+}
+
+// jsonMembers are the names t serializes its fields under, promoted ones included.
+func jsonMembers(t reflect.Type) []string {
+	var out []string
+	for _, f := range reflect.VisibleFields(t) {
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if f.Anonymous || !f.IsExported() || name == "" || name == "-" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// dropStoreStamped is raw without the members in storeStamped; without `state`, the
+// status a described row prints and apply never writes; and without `validation` beside a
+// `check`: a stored row renders its check into that line, and a declaration carrying both
+// is refused. A record that is not an object comes back as it was, for
+// [DecodeDeclaration] to refuse in its own words.
+func dropStoreStamped(raw []byte) ([]byte, error) {
+	members, isObject := objectMembers(raw)
+	if !isObject {
+		return raw, nil
+	}
+	dropped := false
+	for _, name := range append(slices.Clone(storeStamped), "state") {
+		if _, ok := members[name]; ok {
+			delete(members, name)
+			dropped = true
+		}
+	}
+	if _, ok := members["check"]; ok {
+		if _, ok := members["validation"]; ok {
+			delete(members, "validation")
+			dropped = true
+		}
+	}
+	if !dropped {
+		return raw, nil
+	}
+	return json.Marshal(members)
+}
+
+// objectMembers is raw's top-level members, false for a record that is not a JSON object.
+func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &members); err != nil {
+		return nil, false
+	}
+	return members, true
 }
 
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
@@ -130,7 +189,7 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	raw, err := readInput(r, "records")
 	if err != nil {
-		return nil, err
+		return nil, asRecordInvalid(err)
 	}
 	var parts []json.RawMessage
 	trimmed := strings.TrimSpace(string(raw))
@@ -149,12 +208,16 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 		}
 	}
 	if len(parts) == 0 {
-		return nil, errors.New("job: the records hold no job")
+		return nil, recordInvalid("", errors.New("the records hold no job")).Err()
 	}
 	rows := make([]types.Declaration, 0, len(parts))
 	seen := map[string]int{}
 	for i, part := range parts {
-		row, err := DecodeDeclaration(strings.NewReader(string(part)))
+		declared, err := dropStoreStamped(part)
+		if err != nil {
+			return nil, fmt.Errorf("record %d: %w", i+1, err)
+		}
+		row, err := DecodeDeclaration(strings.NewReader(string(declared)))
 		if err != nil {
 			return nil, fmt.Errorf("record %d: %w", i+1, err)
 		}
@@ -167,18 +230,50 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	return rows, nil
 }
 
+// readInput reads what r holds. It fails as an *invalidInput when the input is no record at
+// all (blank, or larger than any), and as a plain error when r could not be read.
 func readInput(r io.Reader, what string) ([]byte, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxInputBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("job: read the %s: %w", what, err)
 	}
 	if len(raw) > maxInputBytes {
-		return nil, fmt.Errorf("job: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what)
+		return nil, &invalidInput{what: what, reason: fmt.Sprintf("is larger than %d bytes, which no %s is", maxInputBytes, what)}
 	}
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, fmt.Errorf("job: the %s is empty", what)
+		return nil, &invalidInput{what: what, reason: "is empty"}
 	}
 	return raw, nil
+}
+
+// invalidInput is readInput's failure for input that is no record at all, a defect of the
+// record rather than of reading it.
+type invalidInput struct {
+	what, reason string
+}
+
+func (e *invalidInput) Error() string {
+	return "job: the " + e.what + " " + e.reason
+}
+
+// asRecordInvalid is err as a JobRecordInvalid problem when it is an *invalidInput, and err
+// itself otherwise.
+func asRecordInvalid(err error) error {
+	if invalid := (*invalidInput)(nil); errors.As(err, &invalid) {
+		return recordInvalid("", invalid).Err()
+	}
+	return err
+}
+
+// missingVersion is checkVersion's failure for a record that names no schema_version, the
+// one version failure that is the record's own defect rather than this magus's age.
+type missingVersion struct {
+	what      string
+	supported int
+}
+
+func (e *missingVersion) Error() string {
+	return fmt.Sprintf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", e.what, e.supported)
 }
 
 // checkVersion reads the envelope that decides whether the rest can be read at all.
@@ -193,7 +288,7 @@ func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
 	supported := ledger.Version
 	switch v := envelope.Version; {
 	case v <= 0:
-		return fmt.Errorf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", what, supported)
+		return &missingVersion{what: what, supported: supported}
 	case v > supported:
 		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d:"+
 			" a newer record is not readable by an older magus, update magus or send version %d", what, v, supported, supported)

@@ -16,11 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/dropin"
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -94,16 +94,16 @@ type MintRequest struct {
 	TTL   time.Duration
 }
 
-// StateDir is <UserStateDir>/magus, the directory the operator token and tokens.d live in.
+// StateDir is <xdg.StateDir>/magus, the directory the operator token and tokens.d live in.
 func StateDir() (string, error) {
-	dir, err := config.UserStateDir()
+	dir, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("auth: locate state dir: %w", err)
 	}
 	return filepath.Join(dir, "magus"), nil
 }
 
-// StoreDir is the token store: <UserStateDir>/magus/tokens.d.
+// StoreDir is the token store: <xdg.StateDir>/magus/tokens.d.
 func StoreDir() (string, error) {
 	dir, err := StateDir()
 	if err != nil {

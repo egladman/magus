@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/changeset"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // diffdemo renders a unified patch into the wire shape the console's Diff app consumes,

@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,9 +26,7 @@ func durationHistoryWith(t *testing.T, project string, runs map[string]time.Dura
 			RecentOutcomes: []forecast.Outcome{{Result: "pass", DurationMs: d.Milliseconds()}},
 		}
 	}
-	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
-	return path
+	return writeHistory(t, h)
 }
 
 // The direction that costs a build: the target has grown into its ceiling, so the

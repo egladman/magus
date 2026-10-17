@@ -18,7 +18,7 @@ Semantic version parsing and comparison (SemVer 2.0.0).
 
 Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.
 
-**Signature:** `semver\compare(a, b) -> int` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L110)
+**Signature:** `semver\compare(a, b) -> int` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -31,7 +31,7 @@ Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 whe
 
 Whether v parses as a semantic version. Use it instead of calling parse purely to see whether it raises.
 
-**Signature:** `semver\isValid(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L164)
+**Signature:** `semver\isValid(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -43,7 +43,7 @@ Whether v parses as a semantic version. Use it instead of calling parse purely t
 
 Whether v is a stable release version: "v0.4.0" and "v1.2.3+build-1" are, "v0.5.0-rc.1" is not, and neither is anything that is not a semantic version. The ok of the Go ParseVersion the release index and self update decide with.
 
-**Signature:** `semver\isStable(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L172)
+**Signature:** `semver\isStable(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -55,7 +55,7 @@ Whether v is a stable release version: "v0.4.0" and "v1.2.3+build-1" are, "v0.5.
 
 Canonical "vX.Y.Z" form of v, filling in missing components and discarding build metadata; errors on invalid input.
 
-**Signature:** `semver\canonical(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L183)
+**Signature:** `semver\canonical(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -67,7 +67,7 @@ Canonical "vX.Y.Z" form of v, filling in missing components and discarding build
 
 The major prefix of v as a string: major("1.2.3") is "v1". This is the cache token a spell's VersionKey{upTo = "major"} produces; parse().major is the same number as an int.
 
-**Signature:** `semver\major(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L197)
+**Signature:** `semver\major(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -79,7 +79,7 @@ The major prefix of v as a string: major("1.2.3") is "v1". This is the cache tok
 
 The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is the cache token a spell's VersionKey{upTo = "minor"} produces.
 
-**Signature:** `semver\majorMinor(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L207)
+**Signature:** `semver\majorMinor(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -91,7 +91,7 @@ The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is 
 
 Whether v meets constraint, the full range syntax magus.yaml required_version uses: ">= 1.2, < 2.0", "^1.2.3", "~1.2". compare() tests one relation; this tests a range.
 
-**Signature:** `semver\satisfies(v, constraint) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L220)
+**Signature:** `semver\satisfies(v, constraint) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter    | Type     | Optional | Description |
 | ------------ | -------- | -------- | ----------- |
@@ -104,7 +104,7 @@ Whether v meets constraint, the full range syntax magus.yaml required_version us
 
 Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.
 
-**Signature:** `semver\parse(v) -> SemverVersion` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L123)
+**Signature:** `semver\parse(v) -> SemverVersion` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -116,7 +116,7 @@ Parse a semver string into {major, minor, patch, prerelease, metadata, original}
 
 Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the result of bumping the major, minor, or patch component. Errors on invalid input.
 
-**Signature:** `semver\next(v) -> SemverNext` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L144)
+**Signature:** `semver\next(v) -> SemverNext` - [source](https://github.com/egladman/magus/blob/main/std/semver.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |

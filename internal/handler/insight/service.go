@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -53,8 +54,8 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only
-// volatility is nilable, and a nil report stays nil so a reader can tell "no run history
-// recorded" from "no volatile targets".
+// volatility, the model-tier lens and conformance are nilable, and a nil report stays nil so a
+// reader can tell "no run history recorded" from "no volatile targets".
 func insightToProto(v types.InsightView) *insightv1.Insight {
 	return &insightv1.Insight{
 		Hotspots: &insightv1.HotspotOutput{
@@ -82,7 +83,97 @@ func insightToProto(v types.InsightView) *insightv1.Insight {
 			Since:      v.Trend.Since,
 			Projects:   mapSlice(v.Trend.Projects, trendToProto),
 		},
-		Volatility: volatilityToProto(v.Volatility),
+		Volatility:  volatilityToProto(v.Volatility),
+		ModelTiers:  modelTiersToProto(v.ModelTiers),
+		Conformance: conformanceToProto(v.Conformance),
+	}
+}
+
+func conformanceToProto(o *types.ConformanceOutput) *insightv1.ConformanceOutput {
+	if o == nil {
+		return nil
+	}
+	return &insightv1.ConformanceOutput{
+		Definition: o.Definition,
+		Rows: mapSlice(o.Rows, func(r types.ConformanceRow) *insightv1.ConformanceRow {
+			return &insightv1.ConformanceRow{
+				Key: &insightv1.ConformanceKey{
+					Metric:     string(r.Key.Metric),
+					Population: string(r.Key.Population),
+					Scope:      r.Key.Scope,
+				},
+				N:          int32(r.N),
+				P50:        int32(r.P50),
+				P90:        int32(r.P90),
+				P95:        int32(r.P95),
+				P99:        int32(r.P99),
+				Live:       int32(r.Live),
+				Value:      int32(r.Value),
+				Anchor:     int32(r.Anchor),
+				Propose:    int32(r.Propose),
+				Known:      int32(r.Known),
+				Source:     string(r.Source),
+				Violations: mapSlice(r.Violations, conformanceItemToProto),
+			}
+		}),
+		Stale: mapSlice(o.Stale, func(k types.ConformanceKnown) *insightv1.ConformanceKnown {
+			return &insightv1.ConformanceKnown{Metric: string(k.Metric), Items: k.Items, Reason: k.Reason}
+		}),
+		Excluded: int32(o.Excluded),
+		Answer:   answerToProto(o.Answer),
+	}
+}
+
+func conformanceItemToProto(i types.ConformanceItem) *insightv1.ConformanceItem {
+	return &insightv1.ConformanceItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
+}
+
+// answerToProto is the graph handler's mapping of a coverage verdict, kept beside its one
+// other use rather than exported from that package: each gap flattens to the two project
+// fields that go on the wire, and Dir, an absolute host path, never does.
+func answerToProto(a types.KnowledgeAnswer) *graphv1.Answer {
+	return &graphv1.Answer{
+		Verdict: string(a.Verdict),
+		Reason:  string(a.Reason),
+		Gaps: mapSlice(a.Gaps, func(g types.KnowledgeSymbolGap) *graphv1.SymbolGap {
+			return &graphv1.SymbolGap{
+				ProjectPath: g.Project.Path,
+				ProjectName: g.Project.Name,
+				State:       string(g.State),
+				Detail:      g.Detail,
+			}
+		}),
+	}
+}
+
+func modelTiersToProto(o *types.ModelTierOutput) *insightv1.ModelTierOutput {
+	if o == nil {
+		return nil
+	}
+	return &insightv1.ModelTierOutput{
+		Definition: o.Definition,
+		Rows: mapSlice(o.Rows, func(r types.ModelTierRecord) *insightv1.ModelTierRecord {
+			return &insightv1.ModelTierRecord{
+				Rank:            int32(r.Rank),
+				ModelTier:       r.ModelTier,
+				Kind:            string(r.Kind),
+				Jobs:            int32(r.Jobs),
+				Pass:            int32(r.Pass),
+				Fail:            int32(r.Fail),
+				NoReturn:        int32(r.NoReturn),
+				PassLower:       r.PassLower,
+				ChecksPerJob:    r.ChecksPerJob,
+				ForksPerId:      r.ForksPerID,
+				ReworkPerJob:    r.ReworkPerJob,
+				WideningsPerJob: r.WideningsPerJob,
+				MeanCostUsd:     r.MeanCostUSD,
+				MedianTokens:    r.MedianTokens,
+				FirstAttempts:   int32(r.FirstAttempts),
+				FirstPass:       int32(r.FirstPass),
+				FirstPassLower:  r.FirstPassLower,
+				NotRetryable:    int32(r.NotRetryable),
+			}
+		}),
 	}
 }
 

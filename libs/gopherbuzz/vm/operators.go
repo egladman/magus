@@ -462,7 +462,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		enumDef := vm.asEnumDef(obj)
 		for i, c := range enumDef.Cases {
 			if c == name {
-				return vm.enumCase(enumDef, i), nil
+				return vm.enumCase(obj, i), nil
 			}
 		}
 		return Null, fmt.Errorf("buzz: enum %s has no case %q", enumDef.Name, name)
@@ -1027,20 +1027,28 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 
 // strMethod returns the callable for the named built-in String method, or nil if
 // name is not a known string method.
-// enumCase returns the interned Value for one case of def, building the table on
-// first use. See enumDefObj.vals for why sharing is safe.
-func (vm *VM) enumCase(def *enumDefObj, i int) Value {
-	if def.vals == nil {
-		def.vals = make([]Value, len(def.Cases))
-		for j := range def.Cases {
-			def.vals[j] = vm.allocEnumVal(&enumValObj{
-				Enum: def.Name,
-				Case: def.Cases[j],
-				Val:  def.Values[j],
+// enumCase returns the interned Value for one case of def. See enumDefObj.vals for
+// why sharing is safe.
+func (vm *VM) enumCase(def Value, i int) Value { return vm.enumCases(def)[i] }
+
+// enumCases returns def's interned cases, building the table on first use. Each
+// case is charged to def's owner (allocEnumVal), not vm's: def keeps the table, and
+// a definition one session holds can be read from another, whose release would
+// otherwise free cases def still hands out.
+func (vm *VM) enumCases(def Value) []Value {
+	d := def.asEnumDef()
+	if d.vals == nil {
+		vals := make([]Value, len(d.Cases))
+		for j := range d.Cases {
+			vals[j] = vm.allocEnumVal(def, &enumValObj{
+				Enum: d.Name,
+				Case: d.Cases[j],
+				Val:  d.Values[j],
 			})
 		}
+		d.vals = vals
 	}
-	return def.vals[i]
+	return d.vals
 }
 
 func strMethod(vm *VM, s Value, name string) *directObj {

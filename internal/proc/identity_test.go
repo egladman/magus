@@ -1,15 +1,11 @@
 package proc
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // devVersionSentinel's doc says to keep it in sync with ward.DevVersion (and cmd/magus's
@@ -57,26 +53,15 @@ func TestAdoptionIdentityStampedDirtyIsNotShared(t *testing.T) {
 	const stamped = "v0.4.2-2-g6bfd32710-dirty"
 	got := adoptionIdentity(stamped)
 	assert.NotEqual(t, stamped, got, "a dirty build must not gate adoption on its shared describe string")
-	assert.Equal(t, binaryIdentity, got, "a dirty build identifies as the executable file it runs from")
+	assert.Equal(t, buildinfo.File(), got, "a dirty build identifies as the executable file it runs from")
 	assert.NotEmpty(t, got)
 
 	// The escape hatch outranks the dirty rule: "" still disables the gate.
 	assert.Equal(t, "", adoptionIdentity(""))
 }
 
-// binaryIdentity is never empty (an empty identity would disable the version gate) and
-// maps the same executable file to the same value, so a process and the children it
-// forks from that file keep adopting each other.
-func TestBinaryIdentityStableAndNonEmpty(t *testing.T) {
-	assert.NotEmpty(t, binaryIdentity)
-	if binaryIdentity != devUnverifiable {
-		assert.Contains(t, binaryIdentity, "dev-bin-")
-		assert.Equal(t, binaryIdentity, computeBinaryIdentity(), "the same executable file must map to the same identity")
-	}
-}
-
 // A dev build's identity is never the raw sentinel: it is either "dev-<revision>" (clean)
-// or the per-process devUnverifiable token (dirty / no VCS). Whichever this test binary is,
+// or the per-process unverifiable token (dirty / no VCS). Whichever this test binary is,
 // the result must differ from "unknown" so two dev builds cannot match on the placeholder.
 func TestAdoptionIdentityDevIsFingerprinted(t *testing.T) {
 	got := adoptionIdentity(devVersionSentinel)
@@ -89,23 +74,16 @@ func TestAdoptionIdentityDevIsFingerprinted(t *testing.T) {
 	switch {
 	case ok && modified:
 		// Dirty build: the identity is the executable file's, per-file not per-process.
-		assert.Equal(t, binaryIdentity, got)
+		assert.Equal(t, buildinfo.File(), got)
 	case !ok || rev == "":
 		// Unprovable build: identity is the per-process token, which never matches anything.
-		assert.Equal(t, devUnverifiable, got)
+		assert.Equal(t, buildinfo.Unverifiable(), got)
 	default:
 		// Clean build with an embedded revision: identity encodes it and is stable per build.
 		assert.Equal(t, "dev-"+rev, got)
-		assert.NotEqual(t, devUnverifiable, got, "a clean build has a revision-derived, not per-process, identity")
+		assert.NotEqual(t, buildinfo.Unverifiable(), got, "a clean build has a revision-derived, not per-process, identity")
 		assert.Equal(t, got, adoptionIdentity(devVersionSentinel), "a clean build's identity is deterministic")
 	}
-}
-
-// devUnverifiable must be a per-process-unique token so two unprovable builds never adopt
-// each other. Regenerating it must not reproduce the same value.
-func TestDevUnverifiableIsUnique(t *testing.T) {
-	assert.NotEqual(t, "dev-unverifiable-"+randomToken(), devUnverifiable, "the unverifiable token must be freshly random per process")
-	assert.NotEqual(t, randomToken(), randomToken(), "randomToken must not repeat")
 }
 
 // versionAdmits is the shared gate. It admits when either side is empty (check disabled) or
@@ -130,70 +108,4 @@ func TestVersionAdmits(t *testing.T) {
 		s := &service{gateVersion: tc.gate}
 		assert.Equalf(t, tc.wantAdmits, s.versionAdmits(tc.req), "%s", tc.name)
 	}
-}
-
-func TestBinaryBuildIsStable(t *testing.T) {
-	build := BinaryBuild()
-	assert.Len(t, build, 16, "the test binary carries a Go build ID")
-	assert.Equal(t, build, BinaryBuild())
-}
-
-// With no readable build ID the key still gets a never-empty identity, while a per-build
-// store has no name and the digest says so.
-func TestBinaryBuildFallsBackToTheFileIdentityWithoutABuildID(t *testing.T) {
-	old := binaryDigest
-	binaryDigest = func() string { return "" }
-	t.Cleanup(func() { binaryDigest = old })
-
-	assert.Empty(t, BinaryDigest())
-	assert.Equal(t, binaryIdentity, BinaryBuild())
-}
-
-// CI builds a fresh binary on every run: same bytes, new file, new mtime. It is the same
-// build, so its cache entries and compiled chunks are the ones the last run wrote.
-func TestBinaryBuildIsTheBuildsContentNotItsFile(t *testing.T) {
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	body, err := os.ReadFile(exe)
-	require.NoError(t, err)
-	fresh := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(fresh, body, 0o755))
-	long := time.Now().Add(-48 * time.Hour)
-	require.NoError(t, os.Chtimes(fresh, long, long))
-
-	digest, err := buildIDDigest(exe)
-	require.NoError(t, err)
-	require.NotEmpty(t, digest)
-	assert.Equal(t, digest, BinaryBuild())
-	freshDigest, err := buildIDDigest(fresh)
-	require.NoError(t, err)
-	assert.Equal(t, digest, freshDigest)
-
-	id, err := readBuildID(exe)
-	require.NoError(t, err)
-	require.NotEmpty(t, id, "the test binary carries a Go build ID")
-	replacement := []byte(id)
-	replacement[0] ^= 1
-	other := bytes.ReplaceAll(body, []byte(id), replacement)
-	require.False(t, bytes.Equal(body, other), "the test must change the stored build ID")
-	rebuilt := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
-	rebuiltID, err := readBuildID(rebuilt)
-	require.NoError(t, err)
-	assert.Equal(t, string(replacement), rebuiltID)
-	rebuiltDigest, err := buildIDDigest(rebuilt)
-	require.NoError(t, err)
-	assert.NotEqual(t, digest, rebuiltDigest, "another build is another identity")
-}
-
-// A file that carries no build ID is not an unreadable one: only the second is an error.
-func TestReadBuildIDTellsAbsentFromUnreadable(t *testing.T) {
-	script := filepath.Join(t.TempDir(), "script")
-	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho hi\n"), 0o755))
-	id, err := readBuildID(script)
-	require.NoError(t, err)
-	assert.Empty(t, id)
-
-	_, err = readBuildID(filepath.Join(t.TempDir(), "missing"))
-	require.ErrorIs(t, err, os.ErrNotExist)
 }

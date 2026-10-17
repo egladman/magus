@@ -21,7 +21,7 @@ type WorkspaceShellRule struct {
 	Dialect  string
 }
 
-// workspaceShellPrefix namespaces workspace rule ids on Verdict.Rule so the
+// workspaceShellPrefix namespaces workspace rule ids on GuardJudgment.Rule so the
 // activity trail and doctor's recurring-guard-denials check never confuse them
 // with built-ins.
 const workspaceShellPrefix = "workspace:"

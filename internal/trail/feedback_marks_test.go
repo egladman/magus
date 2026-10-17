@@ -15,9 +15,9 @@ import (
 func TestFeedbackMarksRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	at := time.UnixMilli(1790000000000)
-	first := types.FeedbackMark{
-		ID: "fb0123456789ab", Section: types.FeedbackUnguarded, Key: "grep -nr <arg>",
-		Verdict: types.FeedbackShouldDeny, Note: "guard it next time", Session: "s1",
+	first := types.TrailMark{
+		ID: "fb0123456789ab", Section: types.TrailUnguarded, Key: "grep -nr <arg>",
+		Verdict: types.TrailShouldDeny, Note: "guard it next time", Session: "s1",
 		Examples: []string{"grep -rn a b", "grep -rn c d", "grep -rn e f", "grep -rn g h"},
 	}
 	stored, err := AppendFeedbackMark(dir, first, at)
@@ -26,7 +26,7 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	assert.Len(t, stored.Examples, 3, "a mark keeps a few examples, not the trail")
 
 	second := first
-	second.Verdict, second.Session, second.Examples = types.FeedbackFine, "s2", nil
+	second.Verdict, second.Session, second.Examples = types.TrailFine, "s2", nil
 	_, err = AppendFeedbackMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
@@ -34,17 +34,17 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
-	assert.Equal(t, types.FeedbackFine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
+	assert.Equal(t, types.TrailFine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
 }
 
 func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 	dir := t.TempDir()
-	valid := types.FeedbackMark{ID: "fb0123456789ab", Section: types.FeedbackRefused, Key: "raw-tool", Verdict: types.FeedbackWrongDeny}
-	for name, mutate := range map[string]func(*types.FeedbackMark){
-		"page label as id": func(m *types.FeedbackMark) { m.ID = "C3" },
-		"unknown section":  func(m *types.FeedbackMark) { m.Section = "passed" },
-		"unknown verdict":  func(m *types.FeedbackMark) { m.Verdict = "bad" },
-		"no key":           func(m *types.FeedbackMark) { m.Key = " " },
+	valid := types.TrailMark{ID: "fb0123456789ab", Section: types.TrailRefused, Key: "raw-tool", Verdict: types.TrailWrongDeny}
+	for name, mutate := range map[string]func(*types.TrailMark){
+		"page label as id": func(m *types.TrailMark) { m.ID = "C3" },
+		"unknown section":  func(m *types.TrailMark) { m.Section = "passed" },
+		"unknown verdict":  func(m *types.TrailMark) { m.Verdict = "bad" },
+		"no key":           func(m *types.TrailMark) { m.Key = " " },
 	} {
 		m := valid
 		mutate(&m)

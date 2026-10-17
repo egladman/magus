@@ -291,30 +291,50 @@ func TestHashKeyByteLayout(t *testing.T) {
 	assert.Equal(t, expected, got, "cache key byte layout changed (layout:\n%s)", want.String())
 }
 
-// The binary line is how a step that asks the binary for its answer keys on that binary.
-// It lands right after spellDefVersion, and a step without one hashes as
-// TestHashKeyByteLayout's does: no other key may move for it.
-func TestHashKeyWritesTheBinaryLineOnlyForABinaryAnswer(t *testing.T) {
+// The catalogs line is how a step that asks the binary for its answer keys on what the
+// binary serves it. It lands right after spellDefVersion, and a step without one hashes
+// as TestHashKeyByteLayout's does: no other key may move for it.
+func TestHashKeyWritesTheCatalogsLineOnlyForABinaryAnswer(t *testing.T) {
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
 	step := Step{ProjectPath: "docs", Target: "content-generate", SpellDefVersion: "v1", ToolVersions: []string{"go:1.25"}}
 
 	without, err := c.hashStep(t.Context(), &step)
 	require.NoError(t, err)
-	step.BinaryBuild = "0123456789abcdef"
+	step.Catalogs = "0123456789abcdef"
 	got, err := c.hashStep(t.Context(), &step)
 	require.NoError(t, err)
 
-	layout := func(binary string) string {
+	layout := func(catalogs string) string {
 		var b bytes.Buffer
 		fmt.Fprintf(&b, "keyVersion:%d\n", KeyVersion)
 		b.WriteString("projectPath:docs\ntarget:content-generate\nspellDefVersion:v1\n")
-		b.WriteString(binary)
+		b.WriteString(catalogs)
 		b.WriteString("tool:go:1.25\n")
 		sum := sha256.Sum256(b.Bytes())
 		return hex.EncodeToString(sum[:])
 	}
-	assert.Equal(t, layout(""), without, "an empty BinaryBuild writes no line")
-	assert.Equal(t, layout("binary:0123456789abcdef\n"), got)
+	assert.Equal(t, layout(""), without, "an empty Catalogs writes no line")
+	assert.Equal(t, layout("catalogs:0123456789abcdef\n"), got)
+}
+
+// An active charm the step cannot read keys nothing: the step hashes as it does without
+// the charm, so a default rw run and a ci run share one entry. A charm it can read still
+// splits the two.
+func TestHashKeySkipsUnreadCharms(t *testing.T) {
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	bare := Step{ProjectPath: ".", Target: "go-test"}
+	plain, err := c.hashStep(t.Context(), &bare)
+	require.NoError(t, err)
+
+	unread := Step{ProjectPath: ".", Target: "go-test", Charms: []string{"rw"}, UnreadCharms: []string{"rw"}}
+	got, err := c.hashStep(t.Context(), &unread)
+	require.NoError(t, err)
+	assert.Equal(t, plain, got)
+
+	read := Step{ProjectPath: ".", Target: "go-test", Charms: []string{"rw"}}
+	got, err = c.hashStep(t.Context(), &read)
+	require.NoError(t, err)
+	assert.NotEqual(t, plain, got)
 }
 
 // TestHashStepKeysExtraArgs locks in that args after `--` participate in the

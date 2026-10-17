@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,10 +23,13 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -126,7 +130,7 @@ func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -182,7 +186,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	assert.Equal(t, "the full verdict\n", out)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, queryTrailPayload(ctx, "", ref, OutputOptions{Format: FormatJSON}))
+		require.NoError(t, queryTrailPayload(ctx, "", ref, output.Options{Format: outputJSON}))
 	})
 	assert.JSONEq(t, `{"ref":"`+ref+`","output":"the full verdict"}`, out)
 
@@ -190,8 +194,8 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 
 	missing := "grd" + strings.Repeat("0", 16)
 	stderr := captureStderr(t, func() {
-		var silent errSilent
-		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, OutputOptions{Format: FormatText}), &silent)
+		var silent reportedExit
+		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, output.Options{Format: outputText}), &silent)
 	})
 	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)
 }
@@ -210,7 +214,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -222,7 +226,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	ref := cache.PortableRef(key)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, output.Options{}))
 	})
 	assert.Contains(t, out, "rev:     "+firstRev[:12], "the descriptor records the revision HEAD was at when the target ran")
 	assert.NotContains(t, out, "recorded at", "HEAD has not moved yet, so nothing to call out")
@@ -233,7 +237,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	require.NotEqual(t, firstRev, secondRev)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, showOutputIdentity(ctx, m, ref, OutputOptions{}))
+		require.NoError(t, showOutputIdentity(ctx, m, ref, output.Options{}))
 	})
 	assert.Contains(t, out,
 		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",
@@ -262,7 +266,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -311,7 +315,7 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Inspect")
 	m, ok := ws.(*magus.Magus)
 	require.True(t, ok, "magus.Inspect returns a *magus.Magus under types.WorkspaceRepository")
@@ -365,7 +369,7 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	globalCfg = cfg
 
 	ctx := context.Background()
-	local, err := magus.Open(ctx, root, magus.WithLoadedConfig(cfg))
+	local, err := magus.Open(ctx, root, workspace.WithLoadedConfig(cfg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 
@@ -404,7 +408,7 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead
 		var g *knowledge.Graph
 		g, err = loadRefsGraph(ctx, f.local, f.cfg, false, read.Input)
 		if err == nil {
-			res = lookupRefs(ctx, f.local, f.cfg, g, read)
+			res = lookupRefs(ctx, f.local, f.cfg, g, read, measuredCoverage(ctx, f.local, f.cfg))
 		}
 	}
 	require.NoError(tb, err)
@@ -439,15 +443,122 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	out := g.Query(read.Input, read.Budget)
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, measureSymbolCoverage(ctx, ws, cfg, read.Input, true))
-	res := queryResult{Out: out}
-	if out.MatchCount == 0 && read.Nearest {
-		res.Nearest = g.NearestNode(read.Input)
-	}
-	b, err := json.Marshal(res)
+	b, err := json.Marshal(searchLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
+}
+
+// memoCoverage measures ws once per kind of read and answers every later read of that
+// kind from it, for many reads of a tree and indexes that do not change between them.
+// measureSymbolCoverage reads its input only through knowledge.CouldMatchLazyLayer.
+func memoCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) coverageFunc {
+	type kind struct{ couldMatch, seeded bool }
+	var mu sync.Mutex
+	memo := map[kind]knowledge.Coverage{}
+	return func(input string, seeded bool) knowledge.Coverage {
+		k := kind{knowledge.CouldMatchLazyLayer(input), seeded}
+		mu.Lock()
+		defer mu.Unlock()
+		cov, ok := memo[k]
+		if !ok {
+			cov = measureSymbolCoverage(ctx, ws, cfg, input, seeded)
+			memo[k] = cov
+		}
+		return cov
+	}
+}
+
+// loadedGraphs is the default graph and the default graph with every symbol shard merged,
+// each loaded once, with the coverage measured once: what the retrieval eval answers
+// every judgment from.
+type loadedGraphs struct {
+	domain, symbols *knowledge.Graph
+	coverage        coverageFunc
+}
+
+func (f graphReadFixture) loadGraphs(tb testing.TB) loadedGraphs {
+	tb.Helper()
+	ctx := context.Background()
+	domain, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, false)
+	require.NoError(tb, err)
+	symbols, err := loadWorkspaceGraph(ctx, f.local, f.cfg, false, false, true)
+	require.NoError(tb, err)
+	return loadedGraphs{domain: domain, symbols: symbols, coverage: memoCoverage(ctx, f.local, f.cfg)}
+}
+
+// loadedAnswer is localAnswer from graphs loaded once rather than per read.
+func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb string, read graphRead) any {
+	tb.Helper()
+	ctx := context.Background()
+	g := gs.domain
+	if knowledge.SeedsLazyLayer(read.Input) {
+		g = gs.symbols
+	}
+	switch verb {
+	case readQuery:
+		return searchLoaded(ctx, g, read, gs.coverage)
+	case readExplain:
+		return explainLoaded(ctx, g, read, gs.coverage)
+	case readRefs:
+		return lookupRefs(ctx, f.local, f.cfg, gs.symbols, read, gs.coverage)
+	}
+	tb.Fatalf("no read %q", verb)
+	return nil
+}
+
+// The retrieval eval answers every judgment from one pair of loaded graphs; each answer
+// must be the one a read that loads its own graph gives.
+func TestLoadedGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
+	f := newGraphReadFixture(t)
+	gs := f.loadGraphs(t)
+	for _, tc := range graphReadCases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := json.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
+			require.NoError(t, err)
+			assert.JSONEq(t, f.localAnswer(t, tc.verb, tc.read), string(b))
+		})
+	}
+}
+
+// The text renderers print exactly what the CLI verbs do, so the bytes the retrieval eval
+// counts from one rendered answer are the bytes a run of the verb prints.
+func TestTextRenderersPrintWhatTheVerbPrints(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	f := newGraphReadFixture(t)
+	gs := f.loadGraphs(t)
+	globalCfg.Server.Enabled = false
+	// The gate prints a next step's reason once per session; silent drops it from both.
+	global.silent = true
+	ctx := context.Background()
+	nx := newNextGate(f.root)
+	for _, tc := range []struct {
+		verb  string
+		input string
+		cmd   func(context.Context, string, []string) error
+	}{
+		{readQuery, "guide", queryCmd},
+		{readQuery, "SearchVerdict kind=symbol", queryCmd},
+		{readQuery, "zzzunmatched", queryCmd},
+		{readExplain, "docs", explainCmd},
+	} {
+		t.Run(tc.verb+" "+tc.input, func(t *testing.T) {
+			var cmdErr error
+			want := captureStdout(t, func() { cmdErr = tc.cmd(ctx, f.root, []string{tc.input}) })
+
+			read := graphRead{Input: tc.input, Nearest: tc.verb == readQuery}
+			var got strings.Builder
+			var err error
+			switch res := f.loadedAnswer(t, gs, tc.verb, read).(type) {
+			case queryResult:
+				err = writeQueryText(ctx, &got, nx, nx.served(hint.NextForQuery(res.Out)), res)
+			case explainResult:
+				require.True(t, res.Found)
+				err = writeExplainText(&got, f.root, tc.input, nx, nx.served(hint.NextForExplain(res.Out)), res)
+			}
+			assert.Equal(t, want, got.String())
+			assert.Equal(t, cmdErr, err, "the same exit status")
+		})
+	}
 }
 
 // A symbol-seeded query ranks from the symbol names index and decodes only the shards its answer
@@ -514,7 +625,7 @@ func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
 	require.NoError(t, err)
 	t.Cleanup(stopWatch)
-	_, err = e.m.KnowledgeGraph(ctx, false)
+	_, err = viewInternals(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
 	require.NoError(t, err, "warm the watched graph before the edit")
 	f.reg.release(e)
 
@@ -584,7 +695,7 @@ func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
 // timings include the index freshness check, so build the graph first: a stale index
 // pays a tool-version probe on every read.
 func BenchmarkServerGraphReads(b *testing.B) {
-	root, err := magus.FindRoot(".")
+	root, err := workspace.FindRoot(".")
 	require.NoError(b, err)
 	f := openGraphReadFixture(b, root)
 	for _, name := range []string{"searchVerdict", "SetReadCacheLimit", "QueryKnowledgeGraph", "ensureAdj"} {
@@ -664,14 +775,14 @@ func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
 	m := newQueryTestWorkspace(t)
 	ctx := withMagus(context.Background(), m)
 
-	runCtx, finish := m.BeginInvocation(ctx, journal.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
+	runCtx, finish := m.BeginInvocation(ctx, magus.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
 	id := journal.InvocationIDFromContext(runCtx)
 	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusFail, Project: "api", Target: "lint", Ref: "out9bddb214656e", Text: "exit status 1\nsecond line"})
 	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusPass, Project: "web", Target: "build", Ref: "out0123456789ab"})
 	finish(errors.New("lint failed"))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, queryInvocation(ctx, "", id, false, OutputOptions{Format: FormatText}))
+		require.NoError(t, queryInvocation(ctx, "", id, false, output.Options{Format: outputText}))
 	})
 
 	assert.Contains(t, out, "result    fail api lint out9bddb214656e exit status 1\n", "the first line of the text follows the ref")

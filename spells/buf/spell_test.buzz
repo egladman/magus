@@ -1,0 +1,19 @@
+import "std";
+import "./spell" as buf;
+
+test "no op inherits a gen/** output" {
+    final provided = buf\mgs_listProvidedGlobs();
+    foreach (glob in provided) {
+        std\assert(glob.value != "gen/**", message: "gen/** is declared by the target that runs buf-generate");
+    }
+    std\assert(provided.len() == 0, message: "the spell cannot read buf.gen.yaml, so it claims no output");
+}
+
+test "inputs still cover the proto sources and buf config" {
+    final needs = mut [<str>];
+    foreach (glob in buf\mgs_listRequiredGlobs()) {
+        needs.append(glob.value);
+    }
+    std\assert(needs.indexOf("**/*.proto") != null, message: "proto sources");
+    std\assert(needs.indexOf("buf.gen.yaml") != null, message: "buf.gen.yaml");
+}

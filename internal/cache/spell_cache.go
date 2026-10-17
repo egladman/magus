@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/types"
 )
 
 // A SPELL CACHE BUNDLE carries the caches a spell declares (for go, GOCACHE and
@@ -549,7 +550,7 @@ func (c *Cache) saveSpellCache(ctx context.Context, key SpellCacheKey, roots []S
 		return res, err
 	}
 	switch {
-	case errors.Is(putErr, ErrRemoteExists):
+	case errors.Is(putErr, types.ErrCacheExists):
 		res.Present = true
 		return res, nil
 	case putErr != nil:
@@ -602,7 +603,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		tried[want.name] = struct{}{}
 		start := time.Now()
 		rc, err := c.remote.backend.GetArtifact(ctx, spellCacheNamespace, want.name)
-		if errors.Is(err, ErrRemoteMiss) {
+		if errors.Is(err, types.ErrCacheMiss) {
 			return false, nil
 		}
 		if err != nil {
@@ -642,7 +643,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 	for i := range spellCacheLookback {
 		pk := key.pointerKey(now.AddDate(0, 0, -i))
 		rc, err := ns.Get(ctx, pk)
-		if errors.Is(err, ErrRemoteMiss) {
+		if errors.Is(err, types.ErrCacheMiss) {
 			continue
 		}
 		if err != nil {

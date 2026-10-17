@@ -1,0 +1,84 @@
+# A fork that passes still notes what its claims leave open, one line each and never in
+# the row: a claim on a declaration its file does not hold yet, and a file a job not yet
+# taken in this checkout also writes, with the claim pair that would split it. `job apply`
+# notes each row it applies the same way, and both carry the notes in json.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'run.go and util.go'
+
+exec magus job fork wave/new --criteria 'add helper' --write-paths 'util.go#helper' --check 'lint .'
+stdout '^note: "util.go#helper" names no declaration of util.go yet; it holds one once written, so check the spelling$'
+
+exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
+! stdout '^note:'
+
+stdin c.json
+exec magus job fork --stdin
+stdout '^note: wave/b and wave/a both write run.go. Claim `run.go#C` on wave/b \(its symbol goals name it\) and a declaration other than that on wave/a, or add `--depends-on wave/a` to wave/b, or fold wave/b into wave/a$'
+! stdout 'wave/new both write'
+
+stdin c.json
+exec magus job fork --stdin -o json
+stdout '"claim_notes": \['
+stdout 'wave/b and wave/a both write run\.go'
+
+exec magus job apply -f $WORK/both.jsonl -o json
+stdout '"claim_notes": \['
+stdout '"util\.go#helper\\" names no declaration of util\.go yet'
+stdout 'wave/b and wave/a both write run\.go'
+
+-- .gitignore --
+.magus/
+home/
+-- .gitattributes --
+*.go diff=golang
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({
+    "name": "site",
+    "targets": {
+        "lint": {"timeout": "5m"},
+    },
+});
+
+// lint fails on an empty file.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("**/*.go");
+    proc\exec("sh", ["-c", "for f in *.go; do test -s \"$f\" || exit 1; done"]);
+}
+-- run.go --
+package run
+
+func A(ctx int) {
+	a()
+}
+
+func B(ctx int) {
+	b()
+}
+
+func C() {
+	c()
+}
+-- util.go --
+package run
+
+func Open(ctx int) {
+	open()
+}
+-- c.json --
+{"schema_version": 11, "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+ "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+-- both.jsonl --
+{"schema_version": 11, "id": "wave/new", "criteria": "add helper", "write_paths": ["util.go#helper"], "check": {"target": "lint", "project": "."}}
+{"schema_version": 11, "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."}, "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}

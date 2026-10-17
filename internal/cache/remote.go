@@ -21,44 +21,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 )
-
-// RemoteBackend is the store behind the remote tier: an opaque blob store keyed by
-// (namespace, key). Build entries use the project path as the namespace and the cache
-// key as the key; output bundles and knowledge shards use reserved namespaces no
-// project can occupy. The payload's format is the cache's concern, not the store's.
-// Implementations must be safe for concurrent use.
-type RemoteBackend interface {
-	// Name identifies the backend to a human: the spell that provides it ("s3", "gha").
-	// It must not probe or dial: the run header calls it before any work, precisely so
-	// the header cannot be what makes a run hang.
-	Name() string
-	// Active reports whether the backend is usable in the current environment.
-	// The cache skips every call when it returns false, so a backend gated on its
-	// environment (e.g. one that only runs under a specific CI provider) costs nothing
-	// per build elsewhere. Implementations should make it cheap and cache any probe.
-	Active(ctx context.Context) bool
-	// GetArtifact streams the stored bytes for (namespace, key). It returns
-	// [ErrRemoteMiss] when nothing is stored, and any other error when the store could
-	// not answer, which the cache counts as a failure rather than a miss.
-	GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error)
-	// PutArtifact stores r under (namespace, key). It returns [ErrRemoteExists] when
-	// the key is already stored or another writer is storing it: content addressing
-	// makes that the same bytes, so the cache counts it as neither an upload nor a
-	// failure.
-	PutArtifact(ctx context.Context, namespace, key string, r io.Reader) error
-	// HasArtifact reports whether (namespace, key) is stored, without transferring it.
-	// A backend that cannot answer returns [errors.ErrUnsupported]; the cache then
-	// skips backfilling the remote tier rather than uploading to find out.
-	HasArtifact(ctx context.Context, namespace, key string) (bool, error)
-}
-
-// ErrRemoteMiss is GetArtifact's answer when the store holds nothing for the key.
-var ErrRemoteMiss = errors.New("cache: not in the remote store")
-
-// ErrRemoteExists is PutArtifact's answer when the key is already stored, or is being
-// stored by another writer.
-var ErrRemoteExists = errors.New("cache: already in the remote store")
 
 // RetentionPolicy describes which remote cache artifacts a prune should evict. The
 // two bounds are independent and additive: an artifact is evicted if it is older than
@@ -69,7 +33,7 @@ type RetentionPolicy struct {
 	DryRun    bool          // report intended deletions without performing them
 }
 
-// RemotePruner is an optional capability a [RemoteBackend] may implement to support
+// RemotePruner is an optional capability a [types.CacheBackend] may implement to support
 // retention-based eviction (`magus config cache prune --remote`). A backend that
 // does not implement it cannot be pruned — the cache's built-in eviction governs
 // only the local store. PruneArtifacts enumerates the remote store and evicts artifacts
@@ -80,7 +44,7 @@ type RemotePruner interface {
 }
 
 // WithRemoteBackend configures the backend behind the remote tier.
-func WithRemoteBackend(t RemoteBackend) Option {
+func WithRemoteBackend(t types.CacheBackend) Option {
 	return func(c *Cache) { c.backend = t }
 }
 
@@ -102,17 +66,17 @@ func (c *Cache) PruneRemote(ctx context.Context, policy RetentionPolicy) error {
 	return pruner.PruneArtifacts(ctx, policy)
 }
 
-// remoteBackendOpener builds a RemoteBackend from an opaque selector string. It is an
+// remoteBackendOpener builds a types.CacheBackend from an opaque selector string. It is an
 // extension point, not a hard dependency: a backend that needs the Buzz VM (the
 // spell-backed store) lives in the interp bindings layer and registers itself here
 // at init, so this low-level package stays free of the VM. A build that does not
 // link such a backend leaves it nil.
-var remoteBackendOpener func(ctx context.Context, selector string) (RemoteBackend, error)
+var remoteBackendOpener func(ctx context.Context, selector string) (types.CacheBackend, error)
 
 // RegisterRemoteBackendOpener installs the opener that [OpenRemoteBackend] delegates to.
 // It is meant to be called once, from a backend package's init; a second call
 // panics rather than silently shadowing the first.
-func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (RemoteBackend, error)) {
+func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (types.CacheBackend, error)) {
 	if remoteBackendOpener != nil {
 		panic("cache: remote backend opener already registered")
 	}
@@ -121,7 +85,7 @@ func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (
 
 // OpenRemoteBackend opens the registered remote backend for selector, or errors when no
 // opener has been registered (no backend was linked into this binary).
-func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, error) {
+func OpenRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) {
 	if remoteBackendOpener == nil {
 		return nil, errors.New("cache: no remote backend registered in this binary, the spell-backed opener is wired by internal/interp/bindings (blank-imported by cmd/magus), so a program that uses this package as a library without that import never registers one")
 	}
@@ -287,7 +251,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(c.dir, absPath)
+		rel, err := filepath.Rel(c.store, absPath)
 		if err != nil {
 			return err
 		}
@@ -336,7 +300,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		return fmt.Errorf("exportArtifact: read manifest: %w", err)
 	}
 	manifestBytes = secret.Redact(ctx, manifestBytes)
-	manifestRel, err := filepath.Rel(c.dir, c.manifestPath(projectPath, hash))
+	manifestRel, err := filepath.Rel(c.store, c.manifestPath(projectPath, hash))
 	if err != nil {
 		return fmt.Errorf("exportArtifact: manifest path: %w", err)
 	}
@@ -361,8 +325,8 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	// The build log, redacted like the manifest because it crosses the same trust
 	// boundary. Absent is fine (a quiet target captures nothing); a read error is not
 	// worth failing a push over.
-	if logBytes, err := os.ReadFile(c.logPath(projectPath, hash)); err == nil {
-		rel, relErr := filepath.Rel(c.dir, c.logPath(projectPath, hash))
+	if logBytes, err := os.ReadFile(c.entryLogPath(projectPath, hash)); err == nil {
+		rel, relErr := filepath.Rel(c.store, c.entryLogPath(projectPath, hash))
 		if relErr != nil {
 			return fmt.Errorf("exportArtifact: log path: %w", relErr)
 		}

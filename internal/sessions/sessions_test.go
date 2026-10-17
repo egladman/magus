@@ -7,7 +7,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,27 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	var got TargetResult
 	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &got))
 	assert.Equal(t, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
+}
+
+// A result carries what the target claimed and cost under the names a reader of
+// `magus session -o json` sees, and a replay's zero claim writes only its sizing.
+func TestTargetResultEncodesTheClaimAndCost(t *testing.T) {
+	t.Parallel()
+	ran := TargetResult{
+		Target: "go-test", Outcome: OutcomePass, StartedMs: 1_700_000_000_000,
+		Slots: 4, MemoryMB: 3800, Sizing: journal.SizingMeasured, WaitedMs: 1500,
+		MaxRSSBytes: 2 << 30, CPUMs: 90_000,
+	}
+	b, err := json.Marshal(ran)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"target":"go-test","outcome":"pass","duration_ms":0,"replayed":false,"started_ms":1700000000000,"slots":4,"memory_mb":3800,"sizing":"measured","waited_ms":1500,"max_rss_bytes":2147483648,"cpu_ms":90000}`, string(b))
+	var got TargetResult
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, ran, got)
+
+	b, err = json.Marshal(TargetResult{Target: "go-test", Outcome: OutcomePass, Replayed: true, Sizing: journal.SizingNone})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"target":"go-test","outcome":"pass","duration_ms":0,"replayed":true,"sizing":"none"}`, string(b))
 }
 
 // Open must not create the file: a magus command that records no fact should leave

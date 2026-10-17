@@ -42,6 +42,12 @@ function isExecutable(candidate: string): boolean {
   }
 }
 
+/** env without BAGGAGE, the W3C channel a lease claim rides in. */
+function withoutBaggage(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { BAGGAGE: _, ...rest } = env;
+  return rest;
+}
+
 function resolveOnPath(name: string): string | null {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (dir === "") continue;
@@ -104,7 +110,14 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       //
       // An EMPTY cache for the same reason: a rule that reads the workspace's run log would
       // otherwise answer from this checkout's own history.
-      env: { ...process.env, XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
+      //
+      // No BAGGAGE: a worker running these tests under its own lease would hand the child
+      // a lease the empty job store never declared, and every case would be refused for it.
+      env: {
+        ...withoutBaggage(process.env),
+        XDG_STATE_HOME: stateHome,
+        MAGUS_CACHE_DIR: cacheHome,
+      },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 
@@ -138,16 +151,21 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
   return warnings;
 }
 
-/** The plugin ignores its PluginInput entirely (it is declared `async () =>`). */
+/** The slice of PluginInput these cases touch: no session has a parent, every call is a root's. */
+const pluginInput = {
+  directory: WORKSPACE_ROOT,
+  client: { session: { get: async () => ({ data: {} }) } },
+};
+
 async function hooks() {
-  const plugin = MagusGuard as unknown as () => Promise<{
+  const plugin = MagusGuard as unknown as (input: unknown) => Promise<{
     "tool.execute.before": (
       input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
   }>;
-  return await plugin();
+  return await plugin(pluginInput);
 }
 
 test("live: bash arm denies git stash with the whole-tree reason", { skip }, async () => {

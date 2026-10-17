@@ -101,67 +101,131 @@ func (m *Magus) hostUsableBytes() int64 {
 	return m.hostMemBytes
 }
 
-// claimMemory folds a target's ctx.needs chain into the figure both halves of
-// admission read, sets it and the slots it is worth on step, and returns how the
-// figure was sized. See types.SizedChainMemory; this supplies the workspace's
-// cross-project lookup.
+// sizeClaim sets on step what it claims from both halves of admission: its memory, the
+// target that figure came from, its slots, and how each was sized. It returns that
+// sizing.
+//
+// A declaration always wins. Memory folds the target's ctx.needs chain (see
+// types.SizedChainMemory, supplied the workspace's cross-project lookup), each
+// declaration narrowed by what its runs measured and each member declaring nothing
+// sized from its measured peak. Slots are the target's declaration,
+// else its measured width, else one, raised to what the memory is worth on this host
+// (see slotsForPolicy).
 //
 // The claim is held for the whole step, including the phases that do not need it,
 // which is conservative in the direction the machine survives: the alternative is
 // admitting the chain and refusing it twenty minutes in, when the work already done
 // is wasted.
 //
-// size is nil to claim the declarations as written, or memorySizer's answer to claim
+// size is nil to claim the declarations as written, or newClaimSizer's answer to claim
 // what this shape of run has measured.
-func (m *Magus) claimMemory(step *cache.Step, p *types.Project, target string, size types.MemorySizer) types.MemorySizing {
-	c := types.SizedChainMemory(p, target, m.Get, size)
-	step.MemoryMB, step.MemoryDeclaredBy = c.MB, c.DeclaredBy
-	step.Slots = slotsForPolicy(p.TargetPolicies[target].Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
+func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, size *claimSizer) types.MemorySizing {
+	var sizeDeclared types.MemorySizer
+	if size != nil {
+		sizeDeclared = size.memory
+	}
+	c := types.SizedChainMemory(p, target, m.Get, sizeDeclared)
+	slots, slotSizing := p.TargetPolicies[target].Slots, types.SlotSizing{Source: types.SlotsDeclared}
+	if slots == 0 {
+		slotSizing = types.SlotSizing{Source: types.SlotsUnmeasured}
+		if size != nil {
+			slots, slotSizing = size.slots(p, target, m.limiter().Capacity())
+		}
+	}
+	step.Slots = slotsForPolicy(slots, c.MB, m.limiter().Capacity(), m.hostUsableBytes())
+	if step.Slots > max(slots, 1) {
+		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
+	}
+	c.Sizing.Slots = slotSizing
+	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing = c.MB, c.DeclaredBy, c.Sizing
 	return c.Sizing
 }
 
 const (
 	// peakMargin is the headroom a measured claim carries over the highest peak seen.
-	// A recorded peak is a floor, sampled every 200ms (see internal/proc/run), and
+	// A recorded peak is a floor, sampled every 200ms (see internal/proc/spawn), and
 	// 1.25 is the same ratio doctor's MGS1030 treats as a material under-declaration,
 	// so a claim sized here is never one that check would flag.
 	peakMargin = 1.25
-	// minPeakRuns is how many successful measured runs a claim needs before it
-	// replaces the declaration: the floor forecast already sets before trusting a
-	// duration percentile. One or two runs may both be narrow or warm-cached ones; a
-	// third that agrees makes the maximum worth sizing a machine against.
-	minPeakRuns = 3
+	// minMeasuredRuns is how many successful measured runs a claim needs before it is
+	// sized from them: the floor forecast already sets before trusting a duration
+	// percentile. One or two runs may both be narrow or warm-cached ones; a third that
+	// agrees makes the figure worth sizing a machine against.
+	minMeasuredRuns = 3
 )
 
-// memorySizer sizes each declaration from the measured peaks of runs shaped like this
-// one, and nil when there is no history to read. See sizeMemoryClaim.
-func memorySizer(peaks *forecast.PeakIndex, shape forecast.Shape) types.MemorySizer {
-	if peaks == nil {
-		return nil
-	}
-	return func(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing) {
-		same, all := peaks.Peak(proj.Path, target, shape)
-		return sizeMemoryClaim(declaredMB, same, all)
-	}
+// claimSizer sizes claims from the measured runs of one shape: the charms and forwarded
+// args an invocation runs every target with.
+type claimSizer struct {
+	runs  *forecast.MeasuredRuns
+	shape forecast.Shape
 }
 
-// sizeMemoryClaim is min(declaredMB, ceil(peakMargin x the measured maximum)), taking
-// the maximum over runs of the same shape, else over every run of the target, else
-// claiming the declaration. The declaration stays the ceiling: it is a human's
-// statement of the worst case, and a measurement only ever narrows it.
-func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.MeasuredPeak) (int, types.MemorySizing) {
-	peak, sizing := sameShape, types.MemorySizing{Samples: sameShape.Runs}
-	if sameShape.Runs < minPeakRuns {
-		peak, sizing = anyShape, types.MemorySizing{Samples: anyShape.Runs, AnyShape: true}
+// newClaimSizer is nil when there is no history to read, which leaves every claim at
+// its declaration.
+func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape) *claimSizer {
+	if runs == nil {
+		return nil
 	}
-	if peak.Runs < minPeakRuns {
+	return &claimSizer{runs: runs, shape: shape}
+}
+
+// memory sizes target's memory claim; declaredMB is 0 when it declares none. See
+// sizeMemoryClaim.
+func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing) {
+	same, all := s.runs.Peak(proj.Path, target, s.shape)
+	return sizeMemoryClaim(declaredMB, same, all)
+}
+
+// slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
+func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
+	same, all := s.runs.Width(proj.Path, target, s.shape)
+	return sizeSlotClaim(same, all, capacity)
+}
+
+// trustedMeasurement picks what a claim is sized from: the runs of this shape, else
+// every run of the target, and neither when fewer than minMeasuredRuns measured it.
+func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Measurement, types.MemorySizing, bool) {
+	switch {
+	case sameShape.Runs >= minMeasuredRuns:
+		return sameShape, types.MemorySizing{Samples: sameShape.Runs}, true
+	case anyShape.Runs >= minMeasuredRuns:
+		return anyShape, types.MemorySizing{Samples: anyShape.Runs, AnyShape: true}, true
+	}
+	return forecast.Measurement{}, types.MemorySizing{}, false
+}
+
+// sizeMemoryClaim is ceil(peakMargin x the measured peak) in MiB, capped at declaredMB
+// when the target declares one (declaredMB > 0). Too few measured runs claim the
+// declaration, which is 0 for a target that declares none. The declaration stays the
+// ceiling: it is a human's statement of the worst case, and a measurement only ever
+// narrows it.
+func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.Measurement) (int, types.MemorySizing) {
+	peak, sizing, ok := trustedMeasurement(sameShape, anyShape)
+	if !ok {
 		return declaredMB, types.MemorySizing{}
 	}
-	mb := int(math.Ceil(float64(peak.MaxBytes) * peakMargin / (1 << 20)))
-	if mb >= declaredMB {
+	mb := int(math.Ceil(float64(peak.Value) * peakMargin / (1 << 20)))
+	if declaredMB > 0 && mb >= declaredMB {
 		return declaredMB, types.MemorySizing{}
 	}
 	return mb, sizing
+}
+
+// sizeSlotClaim is the measured width (forecast.MeasuredRuns.Width), capped at capacity
+// when the budget is limited, or 0, which takes one slot, when too few runs measured
+// it. A run whose claim capped its width doubles the claim, so a Go-heavy target that
+// runs only as wide as its slots (spawn.SeatJobserver) still measures its way wider.
+func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) (int, types.SlotSizing) {
+	width, measured, ok := trustedMeasurement(sameShape, anyShape)
+	if !ok {
+		return 0, types.SlotSizing{Source: types.SlotsUnmeasured}
+	}
+	sizing := types.SlotSizing{Source: types.SlotsMeasured, Samples: measured.Samples, AnyShape: measured.AnyShape}
+	if capacity > 0 {
+		return min(int(width.Value), capacity), sizing
+	}
+	return int(width.Value), sizing
 }
 
 // slotsForPolicy resolves a target's declared policy to the number of concurrency

@@ -302,6 +302,23 @@ func TestTraceProject_slotsBelowOne(t *testing.T) {
 	assert.Contains(t, g.Diag.Msg, "slots must be >= 1")
 }
 
+// TestTraceProject_humanOnlyNeedsReason holds the preview to the real binding's bar, so
+// a magusfile `magus run` refuses to load never previews green.
+func TestTraceProject_humanOnlyNeedsReason(t *testing.T) {
+	for name, value := range map[string]string{"bare true": "true", "empty": `""`, "whitespace": `"  "`, "a number": "4"} {
+		t.Run(name, func(t *testing.T) {
+			src := `import "magus"; magus\project({"targets": {"bench": {"human_only": ` + value + `}}});`
+			g := LoadMagusfile(context.Background(), src)
+			require.False(t, g.OK)
+			require.NotNil(t, g.Diag)
+			assert.Contains(t, g.Diag.Msg, `targets["bench"].human_only needs a reason string`)
+		})
+	}
+	const ok = `import "magus"; magus\project({"targets": {"bench": {"human_only": "launches paid sessions"}}});`
+	g := LoadMagusfile(context.Background(), ok)
+	assert.True(t, g.OK, "a reason loads: %+v", g.Diag)
+}
+
 // TestTraceProject_targetPolicyAndLists flattens a per-target policy plus the top-level
 // depends_on/sources/outputs fields into the project.
 func TestTraceProject_targetPolicyAndLists(t *testing.T) {
@@ -668,7 +685,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.
 func TestRun_insightLensesAreShaped(t *testing.T) {
-	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets"} {
+	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets", "modelTiers.rows"} {
 		t.Run(lens, func(t *testing.T) {
 			src := `
 import "magus";

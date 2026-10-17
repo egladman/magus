@@ -4,15 +4,47 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
 )
+
+// TestDockerfilesCopyLocalReplaces holds the repository's two Dockerfiles to its go.mod.
+// `go mod download` reads each local replacement's go.mod, and the Dockerfiles copy only
+// manifests before it, so a replace with no COPY line fails the release image build.
+func TestDockerfilesCopyLocalReplaces(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..")
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	require.NoError(t, err)
+	mod, err := modfile.Parse("go.mod", data, nil)
+	require.NoError(t, err)
+
+	var dirs []string
+	for _, r := range mod.Replace {
+		if r.New.Version == "" {
+			dirs = append(dirs, filepath.ToSlash(filepath.Clean(r.New.Path)))
+		}
+	}
+	require.NotEmpty(t, dirs, "go.mod has no local replace, so this test checks nothing")
+
+	for _, name := range []string{"Dockerfile", "Dockerfile.static"} {
+		dockerfile, err := os.ReadFile(filepath.Join(root, name))
+		require.NoError(t, err)
+		lines := strings.Split(string(dockerfile), "\n")
+		for _, dir := range dirs {
+			want := "COPY " + dir + "/go.mod " + dir + "/"
+			assert.Contains(t, lines, want, "%s copies no go.mod for the local replace %s", name, dir)
+		}
+	}
+}
 
 // extractFixture writes testdata/<name> into a temp dir and returns the dir. The
 // fixtures are txtar archives because a bare lockfile under testdata would be neither

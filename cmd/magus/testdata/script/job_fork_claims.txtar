@@ -1,0 +1,154 @@
+# `magus job fork` refuses a file another checkout already holds (MGS3032) and prints the
+# claim pair that would split it, computed from what the holder has touched and the symbols
+# the new job's goals name, without writing either claim. A claim word that several
+# declarations of its file share is refused (MGS3031), with words that name one each. A
+# project's magusfile held whole is refused (MGS3036) in favour of its key claims.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+env GIT_AUTHOR_DATE=2026-10-01T09:00:00Z
+env GIT_COMMITTER_DATE=2026-10-01T09:00:00Z
+cd site
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'run.go with three functions'
+exec git worktree add -q ../ana
+exec git worktree add -q ../ben
+exec git worktree add -q ../cara
+
+cd ../ana
+exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
+exec magus job exec wave/a
+cp $WORK/run_a.go run.go
+
+# The holder has touched A and the new job's goals name C: the pair is disjoint.
+cd ../ben
+stdin $WORK/c.json
+! exec magus job fork --stdin
+stderr 'MGS3032'
+stderr 'wave/a has touched func A\(ctx int\) \{ in it so far'
+stderr 'Claim `run.go#A` on wave/a and `run.go#C` on wave/b, which name different declarations \(nothing was written to either row\)'
+exec magus ls jobs -o name
+! stdout 'wave/b'
+
+# Both reach A, so no claim splits them.
+stdin $WORK/a.json
+! exec magus job fork --stdin
+stderr 'MGS3032'
+stderr 'wave/b.s symbol goals and wave/a.s touched work both reach A in it, so a claim cannot split them'
+
+# A word every function shares guards all of them.
+! exec magus job fork wave/ctx --criteria 'change ctx' --write-paths 'util.go#ctx' --check 'lint .'
+stderr 'MGS3031'
+stderr '"util.go#ctx" names 2 declarations of util.go'
+stderr 'such as `Open`, `Close`'
+exec magus ls jobs -o name
+! stdout 'wave/ctx'
+
+# A word one function has, and one nothing has yet, both fork.
+exec magus job fork wave/open --criteria 'change Open' --write-paths 'util.go#Open' --check 'lint .'
+exec magus job fork wave/new --criteria 'add helper' --write-paths 'util.go#helper' --check 'lint .'
+exec magus ls jobs -o name
+stdout '^wave/open$'
+stdout '^wave/new$'
+
+# A job holding every Buzz file by a pattern, in a third checkout. A leading ** is refused
+# as too broad (MGS3043) unless the record waives it.
+cd ../cara
+! exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
+stderr 'MGS3043'
+stderr 'waive'
+stdin $WORK/cfg.json
+exec magus job fork --stdin
+exec magus job exec wave/cfg
+
+# The magusfile whole is refused with the claims it has (MGS3036), and the holder is asked
+# to release it in one attention request however often the fork is refused.
+cd ../ben
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+stderr 'MGS3036'
+stderr '`magusfile.buzz#project.name`, `magusfile.buzz#project.targets.lint`'
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+exec magus session attention
+stdout -count=1 'job wave/cfg holds magusfile.buzz'
+
+# A key claim forks; a key whose entries it would also hold is a word several share.
+exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .'
+! exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
+stderr 'MGS3031'
+stderr '"magusfile.buzz#project.targets" names 2 declarations of magusfile.buzz'
+
+-- cfg.json --
+{"schema_version": 11, "id": "wave/cfg", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
+ "check": {"target": "lint", "project": "."},
+ "waivers": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
+-- site/.gitignore --
+.magus/
+-- site/.gitattributes --
+*.go diff=golang
+*.buzz diff=buzz
+-- site/magus.yaml --
+concurrency: 2
+-- site/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({
+    "name": "site",
+    "targets": {
+        "lint": {"timeout": "5m"},
+    },
+});
+
+// lint fails on an empty file.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("**/*.go");
+    proc\exec("sh", ["-c", "for f in *.go; do test -s \"$f\" || exit 1; done"]);
+}
+-- site/run.go --
+package run
+
+func A(ctx int) {
+	a()
+}
+
+func B(ctx int) {
+	b()
+}
+
+func C() {
+	c()
+}
+-- site/util.go --
+package run
+
+func Open(ctx int) {
+	open()
+}
+
+func Close(ctx int) {
+	closeIt()
+}
+-- run_a.go --
+package run
+
+func A(ctx int) {
+	a2()
+}
+
+func B(ctx int) {
+	b()
+}
+
+func C() {
+	c()
+}
+-- c.json --
+{"schema_version": 11, "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+ "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
+-- a.json --
+{"schema_version": 11, "id": "wave/b", "criteria": "change A again", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+ "goals": [{"id": "a", "kind": "symbol", "expect": "changed", "symbols": ["A"]}]}

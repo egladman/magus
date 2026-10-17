@@ -18,7 +18,7 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register API registers only from init
 	register.Plugin("testlayout", newPlugin)
 	register.Plugin("testpair", newPairingPlugin)
 }

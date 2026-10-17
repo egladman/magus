@@ -1,0 +1,139 @@
+import "std";
+import "fs";
+import "env";
+import "magus";
+import "project/../.." as workspace;
+import "../../hack/magusfile/advisories" as advisories;
+import "sources";
+import "holdout";
+import "pairs";
+
+import "magus/spell/go";
+
+// Its own go.mod keeps GoMLX, go-xla and gonum out of the root module, govulncheck's root
+// scan and the shipped binary. The teacher targets read and write the cache root
+// (XDG_CACHE_HOME/magus-embed, else ~/.cache/magus-embed), which no cache entry records.
+magus\project({
+    "spells": [go],
+    "sources": ["inputs.jsonl"],
+    "targets": {
+        "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
+        "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
+        "fetch": {"skip_cache": "downloads the pinned inputs into the cache root, outside the tree"},
+        "vocab": {"skip_cache": "writes the training texts and token texts into the cache root, outside the tree"},
+        "teacher": {"skip_cache": "writes teacher shards into the cache root, outside the tree"},
+        "train": {"skip_cache": "reads teacher runs from the cache root, outside the tree"},
+        "teacher-parity": {"skip_cache": "reads reference vectors from the cache root, outside the tree"},
+    },
+});
+
+// go-xla's PJRT binding is cgo; magus runs Go with cgo off unless a target turns it on.
+final cgo = {"CGO_ENABLED": "1"};
+
+export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx.withEnv(cgo)); }
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    go["go-build"](ctx.withEnv(cgo), {"args": ["./..."]});
+}
+// Tiny fixtures only: the teacher on GoMLX's pure-Go backend against a naive forward
+// pass, finite-difference checks of every training gradient, and the commands' helpers.
+// No XLA, no downloads.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    go["go-test"](ctx, {"args": ["./..."] + args});
+}
+
+// Fails on a vulnerable symbol this module calls.
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    final inheritedFatal = advisories\inheritedFatal(args);
+    ctx.needs(format);
+    advisories\govulncheck(ctx, go: go, inheritedFatal: inheritedFatal);
+}
+
+// Mines gen/: the sources (tracked files, the pinned downloads, the forced vocabulary,
+// the figures), the holdout files and the training pairs, all read off the tracked
+// tree and the knowledge graph. symbol-index.json keys the cache on the symbol index.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(workspace\symbol_digest_generate);
+    ctx.readsFiles("sources.buzz", "holdout.buzz", "pairs.buzz",
+        workspace\file("gen/symbol-index.json"), workspace\file("**/*.go"), workspace\file("**/*.buzz"),
+        workspace\file("**/*.md"), workspace\file("**/*.ts"), workspace\file("**/*.tsx"),
+        workspace\file("docs/assets/gen/diagram-*-light.svg"));
+    ctx.writesFiles("gen/sources.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl");
+    fs\mkdirAll("gen");
+    final c = sources\load();
+    final paths: mut [str] = mut [];
+    foreach (f in c.files) {
+        paths.append(f.path);
+    }
+    final held = holdout\write(paths, target: fs\join("gen", name: "holdout.jsonl"));
+    final figs = pairs\figures(c);
+    final files = sources\write(c, figures: figs, target: fs\join("gen", name: "sources.jsonl"));
+    final mined = pairs\write(c, figs: figs, target: fs\join("gen", name: "pairs.jsonl"));
+    std\print("source files {files}; holdout files {held}; pairs {mined}");
+}
+
+// Downloads every input inputs.jsonl pins, verifying each sha256. Args after -- name
+// input prefixes, e.g. `-- CodeRankEmbed/`.
+export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "fetch"] + args});
+}
+
+// Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
+// figures, and CoRNStack rows) and the forced tokens under the cache root's training/, then
+// the vocabulary's token texts beside them. FineWeb-Edu is left out: the module has no
+// parquet reader. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
+export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    final dir = fs\join(cache, name: "training");
+    go["go-run"](ctx, {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
+        "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
+    go["go-run"](ctx, {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
+        "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl")] + args});
+}
+
+// Embeds the vocabulary's token texts, then the training texts, each into resumable,
+// content-addressed shards under the cache root's teacher/, and appends each run's
+// totals to runs.jsonl. A rerun skips finished shards. Args after -- go to `embed
+// teacher`; the model is CodeRankEmbed unless they name another with `-model <name>`.
+// Manual, never part of ci.
+export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(vocab);
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    var model = "CodeRankEmbed";
+    foreach (i, arg in args) {
+        if (arg == "-model" and i + 1 < args.len()) {
+            model = args[i + 1];
+        }
+    }
+    foreach (name in ["tokens.jsonl", "texts.jsonl"]) {
+        final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "training", name), "-model", model];
+        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
+        go["go-run"](ctx, {"args": ["./cmd/embed", "record", "-out", "runs.jsonl"] + run});
+    }
+}
+
+// Encodes the 1,024-text parity sample with one teacher, checks every row against the
+// reference vectors (cosine >= 0.999) and the tokens against the reference tokenizer, and
+// reports texts/s. Needs `-- -model <name>`.
+export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher-parity"] + args});
+}
+
+// Distills and trains the table from finished teacher runs, with the flags `embed train
+// -h` lists after --; manual, never part of ci.
+export fun train(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "train"] + args});
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test, security);
+}

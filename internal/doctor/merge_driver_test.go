@@ -71,9 +71,12 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			".gitattributes: *.ts diff=typescript",
 			".gitattributes: *.tsx diff=typescript",
 			".gitattributes: *.buzz diff=buzz",
+			".gitattributes: *.yaml diff=yaml",
+			".gitattributes: *.yml diff=yaml",
 			"git config diff.golang.xfuncname",
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
+			"git config diff.yaml.xfuncname",
 			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +
 				"and logs `merge-driver: could not refresh registration` with the cause when it cannot",
 		},

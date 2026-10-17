@@ -15,6 +15,31 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestBriefForAnIsolatedWorkerHoldsItToPlainCommands(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		brief    string
+		isolated bool
+		want     bool
+	}{
+		{"says it", "Fix the bug. Run one plain command per call; no `$()`, loops or exec.", true, false},
+		{"says it in other words", "Use plain commands only.", true, false},
+		{"never says it", "Fix the bug and report the sha.", true, true},
+		{"teaches a substitution", "Run one command per call. Then `git log $(git merge-base HEAD main)..HEAD`.", true, true},
+		{"teaches a loop", "Run one command per call:\n```bash\nfor f in a b; do ./magus describe file $f; done\n```\n", true, true},
+		{"a shared checkout", "Fix the bug and report the sha.", false, false},
+	} {
+		v := judgeBriefPlainCommands(briefInput{text: tt.brief, isolated: tt.isolated})
+		if tt.want {
+			assert.Equal(t, denyRuleBriefPlainCommands, v.Rule.Name, tt.name)
+			assert.NotEmpty(t, v.Deny, tt.name)
+		} else {
+			assert.Empty(t, v.Deny, tt.name)
+		}
+	}
+}
+
 // TestBriefThatTeachesADeniedCommandIsRefused: a worker runs its brief's commands as
 // written. Measured 2026-09-24, 33 briefs seeded 462 prefixes of a retired variable. A
 // command the brief presents as one to run is graded like a shell line; a command it
@@ -103,7 +128,10 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 
 // TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"
 // lint, and two ran it at once. A brief naming a live row is held to that row's check before
-// any worker exists.
+// any worker exists. Only a run the brief teaches, in a code span or a shell block, is held
+// to it: on 2026-10-14 a brief that only described a refused run in running text was refused.
+// A run the row allows is still held to the write paths under the rw charm, as the worker's
+// own run would be.
 func TestBriefOffCheckIsRefused(t *testing.T) {
 	row := figuresLease()
 	produces := func() func(target, project string) bool {
@@ -111,38 +139,97 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 			return targetName(target) == "figures-generate" && project == "docs"
 		}
 	}
-	defines := func(target string) bool {
-		return slices.Contains([]string{"lint", "lint-files", "diagrams-generate", "figures-generate"}, targetName(target))
+	deps := figuresWorkspace(t)
+	judgeWith := func(row types.Job, defaults []string) rowJudge {
+		d := deps
+		d.DefaultCharms = defaults
+		d.Spells = spellCatalog
+		judge := newRowJudge(t.Context(), d, row, location{}, lazyWorkspace(t.Context(), d, ""))
+		judge.produces = produces
+		return judge
 	}
 	for _, tt := range []struct {
 		name, brief, target string // target is what the refusal names; "" for none
 	}{
 		{"may also run", "You may also run `./magus run lint docs` beside the check.", "lint"},
-		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", "lint"},
 		{"a shell block", "Validate:\n```bash\n./magus run diagrams_generate docs\n./magus run lint docs\n```", "lint"},
 		{"the gate", "Finish with `./magus affected ci`.", "ci"},
-		{"run the X target", "Then run the lint target and report.", "lint"},
-
+		{"may also run, in prose", "You may also run ./magus run lint docs, lint-files . and observe.", ""},
+		{"run the X target", "Then run the lint target and report.", ""},
+		{"a run described in prose", "The guard refused magus run go-build . for the last worker; report it.", ""},
 		{"never run", "Never run `./magus run lint docs`; the orchestrator does.", ""},
 		{"do not run, in prose", "Do not run lint docs: validations serialize.", ""},
 		{"the row's own check", "Run `./magus run diagrams_generate docs` once at the end.", ""},
 		{"the check with a charm, in prose", "Run ./magus run diagrams-generate:rw docs -- -v and report.", ""},
-		{"a target regenerating the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", ""},
+		{"a target regenerating past the write paths", "Regenerate with `./magus run figures-generate:rw docs`.", "figures-generate:rw"},
+		{"a target regenerating the write paths, read-only", "Check with `./magus run figures-generate docs`.", ""},
 		{"a word the workspace defines as no target", "Run the check target once, then magus run takes over.", ""},
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
-		off, found := briefOffCheck(briefRuns(tt.brief), row, produces, defines)
+		runs := briefRuns(tt.brief)
+		off, v, found := briefOffCheck(runs, judgeWith(row, nil))
 		if tt.target == "" {
 			assert.False(t, found, "%s: refused over %q", tt.name, off.line)
+			if slices.ContainsFunc(runs, func(r briefRun) bool { return r.prose }) {
+				assert.NotEmpty(t, briefPassNotes(runs, judgeWith(row, nil)), "%s: a pass says why the run was not graded", tt.name)
+			}
 			continue
 		}
 		require.True(t, found, tt.name)
 		assert.Equal(t, tt.target, off.run.target, tt.name)
-		deny := briefOffCheckDeny(row, off.line, off.run.target)
+		deny := briefOffCheckDeny(row, off, v)
 		assert.Contains(t, deny, strconv.Quote(strings.TrimSpace(off.line)), "%s: the refusal quotes the line", tt.name)
-		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
 		assert.Contains(t, deny, "["+string(denyRuleWorkerCheckOnly)+"]", tt.name)
+		if len(v.outside) > 0 {
+			assert.Contains(t, deny, "rewrites files outside its write paths", tt.name)
+			why := briefOffCheckWhy(row, v, nil)
+			assert.Contains(t, why, "`docs/gen/figures/*.svg`", "%s: the refusal names the glob", tt.name)
+			assert.Contains(t, why, "Narrow the brief's command to `", "%s: the spawner is told what to change", tt.name)
+			assert.Contains(t, why, "widen the row's write paths", tt.name)
+			assert.NotContains(t, why, "unresolved risks", "%s: the Why is not the worker's", tt.name)
+			continue
+		}
+		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
+	}
+
+	plain := briefRuns("Check with `./magus run figures-generate docs`.")
+	_, v, found := briefOffCheck(plain, judgeWith(row, []string{"rw"}))
+	require.True(t, found, "default_charms [rw] rewrite a plain run")
+	assert.NotEmpty(t, v.outside)
+	_, _, found = briefOffCheck(briefRuns("Check with `./magus run figures-generate docs --no-default-charms`."), judgeWith(row, []string{"rw"}))
+	assert.False(t, found, "--no-default-charms keeps the defaults off")
+
+	vet := figuresLease()
+	vet.Check = &types.LeaseCheck{Target: "go-vet", Project: "docs"}
+	_, _, found = briefOffCheck(briefRuns("Check with `./magus run go::go-vet docs`."), judgeWith(vet, []string{"rw"}))
+	assert.False(t, found, "a check declaring no write passes under default rw")
+}
+
+// TestBriefAndWorkerShareOneVerdict: a brief is refused exactly when its worker's run would
+// be. A slice of the check, an op it composes and an install pass both; a target off the
+// check is refused by both.
+func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
+	deps := composingWorkspace(t)
+	row := types.Job{
+		ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	ctx, root := fleetFixture(t, row)
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	for _, tt := range []struct {
+		name, command string
+		refused       bool
+	}{
+		{"a slice of the check", "./magus run go-test . -- -run TestX", false},
+		{"an op the check composes", "./magus run go::go-vet .", false},
+		{"an install", "./magus run install .", false},
+		{"a target off the check", "./magus run lint .", true},
+	} {
+		worker := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		_, _, briefRefused := briefOffCheck(briefRuns("Run `"+tt.command+"`."), judge)
+		assert.Equal(t, tt.refused, worker.refused(), "%s: the worker", tt.name)
+		assert.Equal(t, tt.refused, briefRefused, "%s: the brief", tt.name)
 	}
 }
 
@@ -201,6 +288,11 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Run `./magus run diagrams_generate docs` once."), Host: "claude-code"})
 		assert.Equal(t, "pass", v.Decision, v.Context)
 	})
+	t.Run("an integrate spawn is not held to its row's check", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/integrate figures/flow", "JOB ID: figures/flow\nRun `./magus run go-build .`, then "+offCheck), Host: "claude-code"})
+		assert.NotEqual(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Context, "the spawn's role is integrate")
+	})
 }
 
 // TestBriefNamesItsRow: the row is found by the lease a brief exports, the job it takes, or
@@ -217,7 +309,6 @@ func TestBriefNamesItsRow(t *testing.T) {
 
 	for name, change := range map[string]func(*types.Job){
 		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
 		"a row declaring no check": func(j *types.Job) { j.Check = nil },
 	} {
 		r := figuresLease()

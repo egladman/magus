@@ -1,0 +1,16 @@
+Abbreviations that cost more tokens than the word they replace.
+-- hit/agent-compact --
+Deploy to k8s.
+Run w/o cache.
+Skip b/c stale.
+Pick target, e.g. test.
+One gate, i.e. ci.
+Read mssg first.
+Run tst before push.
+Run w/ b/c stale.
+-- pass/agent-compact --
+Deploy to Kubernetes.
+Set cfg dir.
+Open PR after gate.
+Read docs/w/x.
+Run `k8s` check.

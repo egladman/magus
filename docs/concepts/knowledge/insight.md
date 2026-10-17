@@ -65,6 +65,78 @@ Each lens is a field on the report:
   so without it the lens would be most reassuring exactly where it knows least.
   Alongside them the report carries the knowledge graph's shape, the same numbers
   [`magus graph stats`](../../reference/manpage/magus-graph.md) prints.
+- `conformance`: how large and how coupled the code is, measured over the same graph, one
+  row per metric and population. Like `unreferenced` it takes no window, and a missing or
+  stale symbol index answers `unknown`, never a pass. Read it through the report or
+  `magus\conformance()`, which also returns each symbol index's freshness.
+
+  A row has a metric: file lines, function lines, methods per type, top-level
+  declarations per file, workspace imports per package, tokens in a body whose shape
+  another body shares, or exported symbols nothing outside their package uses. It has a
+  population too: `source`, `main` (Go's `package main`) or `test`, measured apart so
+  moving code into tests cannot shift the source numbers. Generated files and the globs
+  in `knowledge.conformance.exclude` belong to none; `excluded` counts what the globs hid, so
+  a widened exclusion shows.
+
+  Each row sets two values side by side. `live` is the configured percentile of the code
+  today. `value` is what a check enforces, and `source` says where it came from: `ratchet`
+  when a person committed it to the record `knowledge.conformance.ratchet` names, `anchor`
+  when nothing is committed and the configured bound applies. They differ on purpose.
+  Nothing enforces a live percentile, because a threshold that follows the code loosens
+  as the code grows. `violations` lists what sits past `value`, apart from the `known`
+  entries the record accepts; `stale` lists known entries that no longer violate. magus
+  never deletes them: a person does, or a target the workspace writes. In the magus
+  repository, `magus run format .` deletes them.
+
+  A known item follows its code through a rename or a move. A known line may record each
+  item's shape in `shapes`: a function's or type's body shape, which ignores names, or for
+  a file the set of its symbols' body digests. When a listed item matches nothing the
+  lens measured, and exactly one item past `value` that no known line lists has an equal
+  shape, the lens judges that item as the listed one and reports the pair in `carried`.
+  Two or more such items, or one that a second listed item also claims, carry nothing:
+  `ambiguous` reports them, the old item is stale and the new one is a violation, as if
+  no shape were recorded. Packages are never carried. In the magus repository,
+  `magus run format .` records missing shapes and re-keys carried items.
+
+  `propose` is the lens's only suggestion: the live percentile, offered when at least
+  `min_sample` items back it and it sits `step` below `value`. It is never looser than
+  `value`. The lens proposes and a person commits: you copy the proposed value, its
+  sample size and percentile into the record, and the commit is the review. Nothing here
+  edits the record or the configuration, and a committed value looser than its anchor,
+  or a record that is missing or malformed, is an error rather than a quiet fallback.
+
+  The record is a JSON Lines file, one JSON object per line, so `grep threshold` and
+  `diff` read it. Blank lines are skipped, and JSON has no comments: a `threshold`'s
+  `why` member carries the reason. The path is workspace-relative, and
+  `hack/policy/conformance.jsonl` is the usual name.
+
+  ```text
+  {"kind":"schema","schema":1}
+  {"kind":"measured","rev":"<rev>","date":"<date>"}
+  {"kind":"threshold","metric":"<metric>","population":"<population>","scope":"<scope>","value":<value>,"n":<n>,"percentile":<percentile>,"why":"<why>"}
+  {"kind":"known","metric":"<metric>","reason":"<reason>","items":["<item>"],"shapes":{"<item>":"<shape>"}}
+  ```
+
+  `schema` is required and names the format version, 1. `scope`, `why` and `shapes` are
+  optional, and `scope` is absent when the key has none. A `known` line lists the
+  items it accepts in `items`, and a shape only for an item it lists. An unknown kind, member, metric or population, a
+  repeated member, a value of the wrong type, a missing required member, a repeated
+  line or a key committed twice is an error naming the file and line. The
+  tab-separated and single-document JSON formats before this one are refused the same
+  way; rewrite them as lines.
+
+- `grouping`: what splitting work across workers cost in this workspace, read from the
+  job outcomes in the history file, not git. Each job is `chained` (one worker whose
+  write paths reach two or more projects), `split` (two or more jobs forked under one
+  attempt of one parent) or `solo`. Per shape the row sets the context a worker loaded
+  before its first write beside the context, wall time, denials and unattributed writes
+  per group, folded from the guard's trail when each job ended.
+
+  A shape with fewer than `min_sample` groups, or with most trails rotated away, answers
+  `unknown` with its counts and no figure. `unclassified` counts jobs whose projects did
+  not resolve. The lens is observational: bigger work is split more often, so it says
+  what each shape cost, never which to choose. `magus describe job` prints the same rows
+  for the groups that wrote in the job's projects.
 
 ## Bounding the scan
 

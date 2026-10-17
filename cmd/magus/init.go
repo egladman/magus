@@ -12,13 +12,14 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -61,7 +62,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	inf := gen.BindInit(fs)
+	inf := flaggen.BindInit(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus init [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -177,7 +178,7 @@ func logConfigInit(ctx context.Context, cfgPath string, wrote bool) {
 // xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
 // so --dry-run can name the destination without making it.
 func xdgConfigTarget() (string, error) {
-	dir, err := config.UserConfigDir()
+	dir, err := xdg.ConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
 	}

@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files."
 tags: [agents, skills, magus-architecture-review]
 skill_full_bytes: 12444
-skill_short_bytes: 10852
+skill_short_bytes: 9253
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
-| `knowledge-schema-version` | `17` |
-| `skill-content` | `455fb15eb7b4` |
+| `agent-skill-version` | `142` |
+| `knowledge-schema-version` | `23` |
+| `skill-content` | `782d142fa230` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,34 +54,28 @@ magus agent install --tar | tar -xO -f - magus-architecture-review/SKILL.md
 ```
 
 ````markdown
-# Architecture decisions from the graph
+# Architecture decisions from graph
 
-magus already holds the workspace's structure: which package imports which, the
-directory tree, declared layers, each symbol's callers, churn, and ownership. Gather
-architecture evidence from it, not by reading files.
+Gather architecture evidence from magus: holds package imports, directory tree, declared layers, each symbol's callers, churn, ownership.
 
-## Fast path: one command per question
+## Fast path
 
-| question | run | read |
-| --- | --- | --- |
-| what does X import; what imports X | `magus explain dir:<path>` | the `imports` and `imported by` edges |
-| what transitively depends on X | `magus\neighborhood` with `direction = "in"` (below) | `nodes`; `"out"` walks what X needs |
-| is there an import cycle; would A importing B make one | the `magus\importGraph` script below | `cycle edge` lines, or `B already reaches A: true` |
-| is this layer clean | `magus\layer("<name>")` | each covered Dir's `imports` against the layers it may use |
-| what already does this; where does new code belong | `magus query "kind=symbol <name>"` | existing implementations and their files |
-| who calls this symbol | `magus explain '<symbol id>'` | `called by` symbols and `referenced by` files |
-| what a file holds | `magus explain <path/to/file>` | `defines (N)` |
-| which packages are central | `magus graph stats --symbols --kind dir` | the `IN` column: fan-in |
-| how churned, owned or duplicated | `magus\insight()` | `hotspots`, `ownership`, `duplication` |
-| what breaks if I change a symbol | `magus refs <symbol> --occurrences` | `N occurrence(s) in M file(s)` |
-| what a changeset reaches | `magus affected --impact` | the seed and affected projects |
+Question: run; read
+- what X imports; what imports X: `magus explain dir:<path>`; `imports` and `imported by` edges
+- what transitively depends on X: `magus\neighborhood` with `direction = "in"` (below); `nodes`; `"out"` walks what X needs
+- import cycle; would A importing B make one: `magus\importGraph` script below; `cycle edge` lines, or `B already reaches A: true`
+- layer clean: `magus\layer("<name>")`; each covered Dir's `imports` against layers it may use
+- what already does this; where new code belongs: `magus query "kind=symbol <name>"`; existing implementations, files
+- who calls symbol: `magus explain '<symbol id>'`; `called by` symbols, `referenced by` files
+- what file holds: `magus explain <path/to/file>`; `defines (N)`
+- which packages central: `magus graph stats --symbols --kind dir`; `IN` column: fan-in
+- how churned, owned, duplicated: `magus\insight()`; `hotspots`, `ownership`, `duplication`
+- what breaks if I change symbol: `magus refs <symbol> --occurrences`; `N occurrence(s) in M file(s)`
+- what changeset reaches: `magus affected --impact`; seed and affected projects
 
-A symbol id is the `symbol:...` id a `kind=symbol` query prints; quote it, since it
-holds spaces and backticks.
-
-Run a Buzz call through `magus buzz` (`-e` for a one-liner, or a script file) or
-the `client` MCP tool. Load magus-buzz-lang before writing one. Save
-the transitive walk as `dependents.buzz` and run `magus buzz dependents.buzz <path>`:
+Symbol id: `symbol:...` from `kind=symbol` query; quote it (spaces, backticks).
+Buzz call via `magus buzz` (`-e` one-liner, or script file) or `client` MCP tool; load magus-buzz-lang before writing one.
+Transitive walk: save `dependents.buzz`, run `magus buzz dependents.buzz <path>`:
 
 ```buzz
 import "std";
@@ -96,40 +90,29 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-`magus\dir("<path>")` is the same card as a record: `imports`, `importedBy`,
-`files`, `layer`, and `importsIndexed`. `magus\dirs("<glob>", opts:
-magus\DirsOptions{ layer = "<name>" })` filters directories by layer, `language` or
-`depth`.
+`magus\dir("<path>")`: same card as record: `imports`, `importedBy`, `files`, `layer`, `importsIndexed`.
+`magus\dirs("<glob>", opts: magus\DirsOptions{ layer = "<name>" })`: filters directories by layer, `language` or `depth`.
 
-## Every structural claim carries its evidence
+## Every claim carries evidence
 
-A proposal states facts about structure: what imports what, what is central, what is
-duplicated, what a move breaks. Attach to EACH fact the command that produced it and
-its output ref or a pasted excerpt. Drop any claim without one.
+Structure facts: imports, centrality, duplication, what move breaks.
+Each fact: command that produced it, plus output ref or pasted excerpt. Drop any claim without one.
+Wrong: "pkg/store is a god package and leans on pkg/config."
+Right: "pkg/store has 31 importers (`magus explain dir:pkg/store`, 31 `imported by` edges) and imports pkg/config (the same card's `imports`)."
+Read source only to confirm line graph pointed at; never to discover structure.
 
-WRONG: "pkg/store is a god package and leans on pkg/config."
-CORRECT: "pkg/store has 31 importers (`magus explain dir:pkg/store`, 31 `imported
-by` edges) and imports pkg/config (the same card's `imports`)."
+Empty or thin answer: evidence only once verdict says so:
+- `importsIndexed: false` on Dir: no symbol index read that directory -> run `magus graph build`, then ask again.
+- verdict `unknown`: some project had no symbol index; CLI names which. Build it, or cite answer partial, naming gap.
+- `stale index` note: tree moved since last index; answer may miss new sites -> rebuild before citing.
+- `absent`: verified; magus searched every index workspace declares.
 
-Read source only to confirm a specific line the graph already pointed at. Never read
-files to discover structure.
+## Cycles, layering
 
-An empty or thin answer is evidence only once its verdict says so:
-
-- `importsIndexed: false` on a Dir means no symbol index read that directory. Run
-  `magus graph build`, then ask again.
-- A verdict of `unknown` means some project had no symbol index; the CLI names
-  which. Build it, or cite the answer as partial and name the gap.
-- A `stale index` note means the tree moved since the last index. The answer may
-  miss new sites; rebuild before you cite it.
-- `absent` is verified: magus searched every index the workspace declares.
-
-## Cycles and layering
-
-There is no built-in cycle check. `magus\importGraph()` maps every package to
-the packages it imports, which is enough. Save this as `cycles.buzz`. Run
-`magus buzz cycles.buzz` to list every import edge that sits on a cycle. Run
-`magus buzz cycles.buzz <A> <B>` to ask whether A importing B would close one.
+No built-in cycle check; `magus\importGraph()` maps every package to its imports; enough.
+Save `cycles.buzz`.
+`magus buzz cycles.buzz`: lists every import edge on cycle.
+`magus buzz cycles.buzz <A> <B>`: would A importing B close one.
 
 ```buzz
 import "std";
@@ -171,86 +154,51 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-A move adds import edges. Every package that calls the moved code now imports its
-new home, and the new home imports whatever the code calls. Ask the two-argument
-form once per new edge.
+Move adds import edges: every caller of moved code imports new home; new home imports what code calls.
+Ask two-argument form once per new edge.
+Layering declared, never inferred. `magus\layer("<name>")` returns Dirs declared layer covers; raises naming declared layers when name is not one.
+No layers declared -> say so; do not invent from directory names.
 
-Layering is declared, never inferred. `magus\layer("<name>")` returns the Dirs a
-declared layer covers, and raises naming the declared layers when the name is not
-one. With no layers declared, say so; do not invent them from directory names.
+## False answers
 
-## What only looks like an answer
+Each: correct command in fast path.
+- `magus graph stats` without `--symbols` counts no package imports -> god nodes not packages; orphans: unused spells, isolated nodes, not unimported packages.
+- `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.
+- `magus path` walks edges both directions: found path means connected, not dependent. Use `magus\neighborhood` with `direction`.
+- `N nodes reach this` line on `magus explain` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.
+- `affinity` in `magus\insight` pairs projects -> inside one project sees nothing.
+- `hotspots` ranks generated files too: `magus describe file <path>` before calling hotspot design problem.
+- `kind=owner` exists only where repo commits CODEOWNERS file; otherwise `ownership` lens: each project's primary author, `busFactor1`.
+- Free-text `magus query` does not search symbols; name `kind=symbol`. `relation=imports` matches nothing without `kind=dir`.
+- `magus graph deps`: declared project DAG, not package imports.
 
-Each of these has a correct command in the fast path.
+## Then: too thin for boundary
 
-- `magus graph stats` without `--symbols` counts no package imports, so its god
-  nodes are not packages. Its orphans are unused spells and isolated nodes, not
-  unimported packages.
-- `--kind dir` degree counts contained files too, so a directory of many files
-  ranks high on `OUT` alone. Read `IN` for fan-in.
-- `magus path` walks edges in both directions. A found path says two nodes
-  connect, not that one depends on the other. Use `magus\neighborhood` with a
-  `direction`.
-- The `N nodes reach this` line on an `magus explain` card saturates: a private
-  helper with one caller reports over a thousand. It does not size a migration;
-  `refs --occurrences` does.
-- `affinity` in `magus\insight` pairs PROJECTS, so inside one project it sees
-  nothing.
-- `hotspots` ranks generated files too. Run `magus describe file <path>` before
-  calling a hotspot a design problem.
-- `kind=owner` exists only where the repo commits a CODEOWNERS file. Otherwise use
-  the `ownership` lens: each project's primary author and `busFactor1`.
-- Free-text `magus query` does not search symbols; name `kind=symbol`.
-  `relation=imports` matches nothing without `kind=dir`.
-- `magus graph deps` is the declared project DAG, not package imports.
+Every lens above finds too big, central, churned; none finds inverse; over-abstraction more common in young codebase.
+Ask explicitly; nothing prompts it.
+Boundary not free: in Go, splitting package forces exports, widening public API you meant to shrink; no churn/coupling metric records cost.
 
-## Then survey the opposite: what is too thin to justify a boundary
+Suspect shapes, clearest first (shape: why; shown by):
+- imported only from inside own subtree: parent's implementation, not boundary; every `importedBy` entry of `magus\dir("<path>")` under its parent
+- exactly one importer, no encapsulation behind it: file in wrong place; one `importedBy` entry; `magus explain <file>` shows definitions
+- single file, single exported symbol: package name just renames one function; `files` is 1 on Dir; `magus explain <file>`
 
-Every lens above finds something too big, too central, or too churned. None finds
-the inverse, and over-abstraction is the more common failure in a young codebase.
-Ask it explicitly; nothing prompts it.
-
-A boundary is not free: in
-Go, splitting a package forces exports, widening the public API you meant to shrink.
-No churn or coupling metric records that cost.
-
-The shapes worth flagging, most clearly wrong first:
-
-| shape | why it is suspect | shown by |
-| --- | --- | --- |
-| imported only from inside its own subtree | it is a parent's implementation, not a boundary | every `importedBy` entry of `magus\dir("<path>")` sits under its parent |
-| exactly one importer, and no encapsulation behind it | a file in the wrong place | one `importedBy` entry; `magus explain <file>` shows what it defines |
-| single file, single exported symbol | the package name is a second name for one function | `files` is 1 on the Dir; `magus explain <file>` |
-
-Size is NOT a column: small is not needless. Check what a package HIDES before
-proposing a merge:
-
-- One exported function over four unexported helpers is real encapsulation at any
-  line count.
-- Two importers in different trees means a merge makes one depend on the other.
-
-WRONG: proposing a merge because a package is under N lines.
-CORRECT: proposing a merge because its importers all live inside its own parent,
-and nothing it exports would need to be exported once merged.
+Size NOT a criterion: small is not needless. Check what package hides before proposing merge:
+- One exported function over four unexported helpers: real encapsulation at any line count.
+- Two importers in different trees: merge makes one depend on other.
+Merge only when importers all live inside own parent and nothing exported needs exporting after merge; never because package under N lines.
 
 ## Fold before adding
 
-Before proposing new code, a new package, or a new abstraction, show that nothing
-already does the job:
+Before proposing new code, package, abstraction: show nothing does job already:
+1. `magus query "kind=symbol <name>"` for each name new code would need. Try synonyms: duplicates under other names common.
+2. Read `duplication` lens of `magus\insight()`: functions calling same symbols, same proportions: copied logic.
+3. Place new code where `imports` of `magus\dir` already cover its needs -> no new import edge.
+State observed convention in proposal, plus command showing it.
 
-1. `magus query "kind=symbol <name>"` for each name the new code would need. Try
-   synonyms; a second implementation under another name is the common case.
-2. Read the `duplication` lens of `magus\insight()`: functions that call the same
-   symbols in the same proportions, which is what copied logic looks like.
-3. Place new code where the `imports` of `magus\dir` already cover what it
-   needs, so the change adds no import edge.
+## Audit domain model
 
-State the observed convention in the proposal, with the
-command that shows it.
-
-## Audit the domain model itself
-
-Census the kinds, then read the stats for smells:
+Census kinds, then read stats for smells:
 
 ```sh
 magus query "kind=<kind>"          # the matches line is the population
@@ -259,41 +207,30 @@ magus explain "<node>"             # compare a kind's edges against a neighbor's
 ```
 
 Then ask of each finding:
+- Singleton kind (one member): often over-modeled. Distinct kind earned, or fold into attr on existing one?
+- Two kinds with near-identical population AND edge shape: maybe one concept, two names. Keep distinct only if PROVENANCE differs.
+- ORPHAN (nothing links to it): dead weight or missing edge; decide which.
+- NODE LABEL varying by checkout (worktree name where stable module name belongs): identity smell.
+Kind or edge earns place only by answering question others cannot.
+Prefer folding into existing mechanism over adding one.
 
-- A SINGLETON kind (one member) is often over-modeled. Does it earn a distinct
-  kind, or fold into an attr on an existing one?
-- Two kinds with near-identical population AND edge shape may be one concept under
-  two names. Keep them distinct only if their PROVENANCE differs.
-- An ORPHAN (nothing links to it) is dead weight or a missing edge; decide
-  which.
-- A NODE LABEL that varies by checkout (a worktree name where a stable module name
-  belongs) is an identity smell.
+## When not to build
 
-A kind or edge earns its place only by answering a question the others cannot.
-Prefer folding into an existing mechanism over adding one.
+Mechanism that acts (guard, refusal, cancellation, auto-fix): judged on wrong firings.
+Name two cases its predicate cannot separate, and cost of guessing each wrong.
+When it cannot separate them -> do not build it.
+Wrong firings cost more: gaps get noticed; crying-wolf check teaches routing around it.
 
-## Say when not to build it
+## Verify change
 
-A mechanism that ACTS (a guard, a refusal, a cancellation, an auto-fix) is judged on
-its wrong firings. Name the two cases its predicate cannot separate and the cost of
-guessing each wrong. When it cannot separate them, do not build it.
+After restructuring: `magus graph diff --rev <base> -o markdown` lists domain nodes, edges added, removed, altered.
+Base built without symbols -> rerun cycle script for import edges.
+Then `magus affected ci` proves affected projects still pass.
 
-Wrong firings are the expensive direction: a gap gets noticed, while a check that
-cries wolf teaches people to route around it.
+## Never render graph
 
-## Verify the change
-
-After restructuring, show the impact in graph terms. `magus graph diff --rev <base>
--o markdown` lists the domain nodes and edges the change added, removed, or
-altered. It builds the base without
-symbols, so rerun the cycle script for import edges. Then run `magus affected ci`
-to prove the affected projects still pass.
-
-## Do not render the graph yourself
-
-magus emits; it does not render. To look at structure, offer an export:
-`magus graph export --symbols -o json` (or `-o graphml`) for Gephi, yEd, or a
-browser graph tool. Without `--symbols` the export has no package imports.
+magus emits, never renders; offer export: `magus graph export --symbols -o json` (or `-o graphml`) for Gephi, yEd, or browser graph tool.
+Without `--symbols`, export has no package imports.
 ````
 
 

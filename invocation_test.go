@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
-	json "github.com/egladman/magus/internal/json"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -24,11 +24,11 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
 	root := w.Root()
-	m, err := Inspect(context.Background(), root)
+	m, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	ctx, finish := workspace.BeginInvocation(context.Background(), journal.Command{
+	ctx, finish := workspace.BeginInvocation(context.Background(), Command{
 		Arguments: []string{"test"},
 		Cwd:       root,
 		Trigger:   journal.TriggerRun,
@@ -77,7 +77,7 @@ func TestAttributeRunNamesAnAnonymousRun(t *testing.T) {
 // report MGS3007. Both fallbacks fire only on an empty ctx, so the adopt must come first.
 func TestAttributeRunAdoptsAncestryFromTheEnvironment(t *testing.T) {
 	parent := "4242:invparent"
-	t.Setenv(procrun.AncestorsEnvVar, parent)
+	t.Setenv(spawn.AncestorsEnvVar, parent)
 
 	ctx := attributeRun(context.Background())
 
@@ -117,7 +117,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -136,7 +136,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 func covInspect(t *testing.T) *Magus {
 	t.Helper()
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	return ws.(*Magus)
 }
@@ -147,7 +147,7 @@ func covInspect(t *testing.T) *Magus {
 // events BeginInvocation brackets the run with.
 func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	m := covInspect(t)
-	cmd := journal.Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}
+	cmd := Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}
 
 	ctx, finish := m.BeginInvocation(context.Background(), cmd, "v0.cov")
 	id := journal.InvocationIDFromContext(ctx)
@@ -198,7 +198,7 @@ func TestBeginInvocationReusesAnIDFromTheContext(t *testing.T) {
 	preset := journal.NewInvocationID()
 
 	ctx, finish := m.BeginInvocation(journal.WithInvocationID(context.Background(), preset),
-		journal.Command{Arguments: []string{"run"}, Trigger: journal.TriggerDirect}, "v0.cov")
+		Command{Arguments: []string{"run"}, Trigger: journal.TriggerDirect}, "v0.cov")
 	assert.Equal(t, preset, journal.InvocationIDFromContext(ctx))
 	finish(nil)
 

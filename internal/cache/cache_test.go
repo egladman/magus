@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -120,7 +120,7 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 
 	const marker = "BUILD OUTPUT MARKER"
 	fn := func(ctx context.Context) error {
-		stdout, _ := runPkg.OutputWriters(ctx)
+		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, marker)
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
@@ -147,8 +147,8 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 }
 
 // TestRunSnapshotFailureReportsLikeRunErr verifies that a snapshot failure
-// after a successful fn is reported the same way an fn failure is: onError
-// fires, OnResult fires with the error, the Error stat is incremented, and
+// after a successful fn is reported the same way an fn failure is: OnResult
+// fires with the error, the Error stat is incremented, and
 // recordOutput runs (result.Ref is set). Before the fix, this path returned
 // bare, so observers and the journal never saw the step finish.
 func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
@@ -166,11 +166,9 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	var onErrorErr error
 	var onResultErr error
 	var onResultCalled bool
 	opts := []RunOption{
-		OnError(func(err error) { onErrorErr = err }),
 		OnResult(func(_ *Step, _ *Result, err error) {
 			onResultCalled = true
 			onResultErr = err
@@ -180,7 +178,6 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 	r, err := c.Run(context.Background(), step, fn, opts...)
 	require.Error(t, err, "snapshot failure must surface as Run's error")
 
-	assert.Error(t, onErrorErr, "onError must fire on a snapshot failure")
 	assert.True(t, onResultCalled, "OnResult must fire on a snapshot failure")
 	assert.Error(t, onResultErr, "OnResult must receive the snapshot error")
 	assert.Equal(t, 1, c.Stats().Error, "the Error stat must count a snapshot failure")
@@ -705,7 +702,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
 			return nil
 		})
@@ -724,7 +721,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 
 	stderrOut := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
 			return want
 		})
@@ -769,7 +766,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
 			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
 			return nil
@@ -791,7 +788,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
 				fmt.Fprintf(stdout, "line %d\n", i)
 			}
@@ -821,7 +818,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 
 	_ = testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
 			return want
 		})
@@ -839,7 +836,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 
 	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-			stdout, _ := runPkg.OutputWriters(ctx)
+			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
 			return nil
 		})
@@ -1324,13 +1321,13 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 	var mu sync.Mutex
 	got := map[string][2]string{}
 	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
-		flags, err := runPkg.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, runPkg.ExecOptions{Capture: true, Quiet: true})
+		flags, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
 		if err != nil {
 			return err
 		}
-		var tokens runPkg.ExecResult
+		var tokens spawn.ExecResult
 		if s.Slots > 1 {
-			if tokens, err = runPkg.Exec(ctx, "sh", []string{"-c", "head -c 2 <&3"}, runPkg.ExecOptions{Capture: true, Quiet: true}); err != nil {
+			if tokens, err = spawn.Exec(ctx, "sh", []string{"-c", "head -c 2 <&3"}, spawn.ExecOptions{Capture: true, Quiet: true}); err != nil {
 				return err
 			}
 		}
@@ -1376,7 +1373,7 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 			require.NoError(t, err)
 			assert.Nil(t, c.remote)
 			assert.Equal(t, []tier{c.local}, c.tiers)
-			tierDesc, mode := c.Description()
+			tierDesc, mode, _ := c.Description()
 			assert.Equal(t, "local (remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset)", tierDesc)
 			assert.Equal(t, "read+write", mode)
 		})
@@ -1422,7 +1419,7 @@ func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 	assert.Contains(t, order, "run:peer", "an unrelated step still runs")
 }
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestMain(m *testing.M) { testkit.Main(m, "CACHETEST_*") }
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
 // results clean.
@@ -1728,7 +1725,10 @@ func ExampleCache_RunAll() {
 		context.Background(), steps,
 		func(_ context.Context, _ Step) error { return nil },
 		WithLimiter(NewLimiter(4)),
-		OnMiss(func(r *Result) {
+		OnResult(func(_ *Step, r *Result, err error) {
+			if err != nil || r.Hit {
+				return
+			}
 			mu.Lock()
 			missed = append(missed, r.ProjectPath)
 			mu.Unlock()

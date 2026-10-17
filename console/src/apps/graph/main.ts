@@ -157,6 +157,7 @@ const KINDS = [
   "module",
   "file",
   "dir",
+  "figure",
   "target",
   "spell",
   "op",

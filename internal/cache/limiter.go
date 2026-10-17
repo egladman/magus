@@ -22,22 +22,37 @@ type Limiter struct {
 	// limiter, where no caller ever queues. See deadlock.go.
 	watch *slotWatch
 
-	onAcquire atomic.Pointer[func(waitNs int64, n int)]
-	onRelease atomic.Pointer[func(n int)]
-	onWait    atomic.Pointer[func(delta int)]
+	hook atomic.Pointer[func(PoolEvent)]
 }
 
-// SetHooks installs optional callbacks fired on every Acquire/Release. Must not block.
-// Stored atomically so a SetHooks racing with concurrent Acquire/Release is safe.
-//
-// onWait mirrors the internal queued counter exactly: it fires with +n the instant a caller
-// begins waiting for n slots (before the blocking Acquire) and with -n once that Acquire
-// returns, whether it acquired or the context was cancelled. Net inflight of onWait tracks
-// [Limiter.Snapshot]'s Queued.
-func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n int), onWait func(delta int)) {
-	l.onAcquire.Store(&onAcquire)
-	l.onRelease.Store(&onRelease)
-	l.onWait.Store(&onWait)
+// PoolEvent is one change to a Limiter's slots; exactly one of Queued and Running is
+// non-zero. Queued is +n the instant a caller begins waiting for n slots (before the
+// blocking acquire) and -n once that acquire returns, whether it acquired or its context
+// was cancelled, so the running sum of Queued tracks [Limiter.Snapshot]'s Queued. Running is
+// +n when a caller acquires n slots and -n when it releases them. Wait is how long the
+// acquire waited, set only with a positive Running.
+type PoolEvent struct {
+	Queued  int
+	Running int
+	Wait    time.Duration
+}
+
+// SetHooks installs fn, called on every change to the slots; nil removes it. fn must not
+// block. Stored atomically, so a SetHooks racing with a concurrent Acquire or Release is
+// safe.
+func (l *Limiter) SetHooks(fn func(PoolEvent)) {
+	if fn == nil {
+		l.hook.Store(nil)
+		return
+	}
+	l.hook.Store(&fn)
+}
+
+// fire reports ev to the installed hook, if any.
+func (l *Limiter) fire(ev PoolEvent) {
+	if fn := l.hook.Load(); fn != nil {
+		(*fn)(ev)
+	}
 }
 
 // NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
@@ -74,23 +89,17 @@ func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 		return fmt.Errorf("limiter: acquire %d exceeds capacity %d", n, l.cap)
 	}
 	l.queued.Add(int64(n))
-	if fn := l.onWait.Load(); fn != nil && *fn != nil {
-		(*fn)(n)
-	}
+	l.fire(PoolEvent{Queued: n})
 	defer func() {
 		l.queued.Add(-int64(n))
-		if fn := l.onWait.Load(); fn != nil && *fn != nil {
-			(*fn)(-n)
-		}
+		l.fire(PoolEvent{Queued: -n})
 	}()
 	start := time.Now()
 	if err := l.sem.Acquire(ctx, int64(n)); err != nil {
 		return err
 	}
 	l.running.Add(int64(n))
-	if fn := l.onAcquire.Load(); fn != nil && *fn != nil {
-		(*fn)(time.Since(start).Nanoseconds(), n)
-	}
+	l.fire(PoolEvent{Running: n, Wait: time.Since(start)})
 	return nil
 }
 
@@ -106,9 +115,7 @@ func (l *Limiter) ReleaseN(n int) {
 	}
 	l.running.Add(-int64(n))
 	l.sem.Release(int64(n))
-	if fn := l.onRelease.Load(); fn != nil && *fn != nil {
-		(*fn)(n)
-	}
+	l.fire(PoolEvent{Running: -n})
 }
 
 // Yield releases the caller's slots for the duration of fn and re-acquires them before

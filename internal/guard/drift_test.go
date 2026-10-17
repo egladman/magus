@@ -1,12 +1,16 @@
 package guard
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -113,6 +117,29 @@ func TestScopeDriftFiresOncePerProject(t *testing.T) {
 	assert.Equal(t, []string{"app", "libs/ui"}, touchedProjects(markers))
 }
 
+// A workspace open that never answers holds the drift rule no longer than ctx allows, and
+// generatedOutput, which has no ctx, no longer than inspectBudget: both go silent.
+func TestDriftAndGeneratedOutputBoundAStalledOpen(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	release := make(chan struct{})
+	defer close(release)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		<-release
+		return nil, errors.New("released")
+	}}
+
+	short, cancel := context.WithTimeout(ctx, judgeReserve+100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	drift := gradeScopeDrift(short, deps, hint.NewGate(t.TempDir(), "s1"), "", "app/main.go")
+	assert.Empty(t, drift.project)
+	assert.Less(t, time.Since(start), time.Second)
+
+	start = time.Now()
+	assert.False(t, generatedOutput(deps, "gen/out.go"))
+	assert.Less(t, time.Since(start), inspectBudget+time.Second)
+}
+
 // A gate with no cache base remembers nothing, and a rule that cannot remember must
 // not pretend the session has touched something.
 func TestScopeDriftRecordsNothingWithoutABase(t *testing.T) {
@@ -128,7 +155,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 	testkit.Isolate(t)
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
-	store := job.NewStore(job.Location{CacheDir: base, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: base, Root: root})
 	row := types.Job{
 		ID:         "unit-a",
 		State:      types.StateRunning,

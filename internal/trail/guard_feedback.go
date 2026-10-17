@@ -2,11 +2,13 @@ package trail
 
 import (
 	"cmp"
+	"iter"
 	"slices"
 	"strings"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // GuardFeedback is a deduplicated pattern in pre-tool observations. It is not
@@ -51,20 +53,8 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		followed   map[sessionKey]bool
 	}
 	candidates := map[string]*candidate{}
-	for _, event := range events {
-		if event.Kind != KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
-			continue
-		}
-		var request agentCommandRequest
-		var response agentCommandResponse
-		raw, readErr := ReadBlob(base, event.RequestRef)
-		if readErr != nil || json.Unmarshal(raw, &request) != nil {
-			continue
-		}
-		raw, readErr = ReadBlob(base, event.ResponseRef)
-		if readErr != nil || json.Unmarshal(raw, &response) != nil {
-			continue
-		}
+	for command := range agentCommands(base, events) {
+		event, request, response := command.event, command.request, command.response
 		if session != "" && request.Session != session {
 			continue
 		}
@@ -127,6 +117,77 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		return cmp.Compare(a.Rule+"\x00"+a.Tool, b.Rule+"\x00"+b.Tool)
 	})
 	return out, nil
+}
+
+// LeaseDenials are the guard's denials of a caller acting under lease since since (unix
+// seconds), oldest first and at most limit of them, the newest kept. The bool says the
+// retained trail reaches back to since, so an empty result means none rather than unknown:
+// the whole trail fits the retained window, or it holds an agent command at or before since.
+// A missing trail is an empty one; an empty base or lease has no trail to read.
+func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial, bool, error) {
+	if base == "" || lease == "" || limit <= 0 {
+		return nil, false, nil
+	}
+	events, err := ReadRecent(base, maxEvents)
+	if err != nil {
+		return nil, false, err
+	}
+	slices.Reverse(events)
+	from := since * 1000
+	// Rotation keeps a floor of every kind, so only an agent command dates how far back the
+	// agent commands reach.
+	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e Event) bool {
+		return e.Kind == KindAgentCommand && e.Ts <= from
+	})
+	held := slices.DeleteFunc(events, func(e Event) bool { return e.Lease != lease || e.Ts < from })
+	var out []types.JobDenial
+	for command := range agentCommands(base, held) {
+		if command.response.Decision != "deny" {
+			continue
+		}
+		out = append(out, types.JobDenial{
+			Rule:       command.response.Rule,
+			Reason:     command.response.Reason,
+			Action:     command.event.Action,
+			VerdictRef: command.event.VerdictRef,
+			Ts:         command.event.Ts / 1000,
+		})
+	}
+	if len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out, known, nil
+}
+
+// agentCommand is one agent-command event with its request and response blobs decoded.
+type agentCommand struct {
+	event    Event
+	request  agentCommandRequest
+	response agentCommandResponse
+}
+
+// agentCommands yields the agent-command events among events, in their order, whose request
+// and response blobs both read and decode. An event whose blobs rotated away is skipped.
+func agentCommands(base string, events []Event) iter.Seq[agentCommand] {
+	return func(yield func(agentCommand) bool) {
+		for _, event := range events {
+			if event.Kind != KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
+				continue
+			}
+			command := agentCommand{event: event}
+			raw, err := ReadBlob(base, event.RequestRef)
+			if err != nil || json.Unmarshal(raw, &command.request) != nil {
+				continue
+			}
+			raw, err = ReadBlob(base, event.ResponseRef)
+			if err != nil || json.Unmarshal(raw, &command.response) != nil {
+				continue
+			}
+			if !yield(command) {
+				return
+			}
+		}
+	}
 }
 
 func isMagusRunRequest(command string) bool {

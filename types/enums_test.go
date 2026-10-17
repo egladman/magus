@@ -20,3 +20,24 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 		map[PrecedentFamily]bool{"": PrecedentFamily("").Valid(), PrecedentDepFanout: PrecedentDepFanout.Valid(), "dep-fan-out": PrecedentFamily("dep-fan-out").Valid()})
 	assert.Equal(t, "unset", PrecedentFamily("").String())
 }
+
+func TestEnumConformanceSetsClose(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		[]string{
+			"file-lines", "func-lines", "type-methods", "file-symbols", "dep-fanout", "clone-tokens", "export-scope",
+			"call-sequence", "shared-body", "shared-reach", "caller-spread", "mode-knobs", "alias-share", "name-clash",
+		},
+		ConformanceMetric("").Values())
+	assert.Equal(t, []string{"source", "main", "test"}, ConformancePopulation("").Values())
+	assert.Equal(t, []string{"ratchet", "anchor"}, ConformanceSource("").Values())
+	assert.Equal(t,
+		[]bool{true, false, true, false, true, false},
+		[]bool{
+			ConformanceCloneTokens.Valid(), ConformanceMetric("clones").Valid(),
+			ConformancePopMain.Valid(), ConformancePopulation("vendor").Valid(),
+			ConformanceFromAnchor.Valid(), ConformanceSource("live").Valid(),
+		})
+	assert.Equal(t, "unset", ConformanceMetric("").String())
+}

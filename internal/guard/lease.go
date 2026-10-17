@@ -19,11 +19,14 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -70,6 +73,81 @@ func adviseRepeatGate(runsDir string, now time.Time) (full advice, brief string)
 	return gateRepeatAdvice(runs, spent), gateRepeatBrief(runs, spent)
 }
 
+// denyRepeatGate refuses the gate from its third run in the window when the newest
+// verdict this branch recorded is green and nothing in the tree changed after it, or
+// refuses nothing. The advisory above states the cost, and callers gated past it again and
+// again. A gate over a tree it already passed can only pass again, so the refusal costs the
+// caller nothing it needed.
+//
+// "Changed" is read off version control: every file that differs from the green gate's
+// commit, committed or not, compared by modification time against the verdict. A file
+// edited before the gate ran was in the tree it passed; one it cannot stat counts as a
+// change. Anything unreadable (no run log, no store, no version control) refuses nothing.
+func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) denial {
+	if !commandRunsGate(command) {
+		return denial{}
+	}
+	at := hookLocation(ctx, deps)
+	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
+	if runs < gateRepeatDenyRuns {
+		return denial{}
+	}
+	green, ok := greenGateUnchanged(ctx, deps, at.workspace)
+	if !ok {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago and nothing changed since: gate after your next change.",
+			types.TargetCI, time.Since(green.At).Round(time.Second)),
+		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s, covers the tree as it stands: no file that differs from that commit was written after it. "+
+			"A gate over a tree it already passed only repeats the pass. %s.",
+			runs, gateRepeatWindow, green.Commit, gateCadence),
+	}
+}
+
+// gateRepeatDenyRuns is how many gate runs inside the window refuse the next over an
+// unchanged green tree: the third run is the first refused.
+const gateRepeatDenyRuns = 2
+
+// greenGateUnchanged is the newest gate verdict this branch recorded, when it passed and
+// no file that differs from its commit was written after it.
+func greenGateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
+	if workspace == "" {
+		return sessions.GateRecord{}, false
+	}
+	res, err := vcs.Resolve(ctx, workspace, "", deps.VCS)
+	if err != nil || res.VCS == nil {
+		return sessions.GateRecord{}, false
+	}
+	ref, err := res.VCS.Ref(ctx, workspace)
+	if err != nil || ref == "" {
+		return sessions.GateRecord{}, false
+	}
+	dir, err := sessions.Dir(workspace)
+	if err != nil {
+		return sessions.GateRecord{}, false
+	}
+	fold, err := sessions.ReadGateResults(dir)
+	if err != nil {
+		return sessions.GateRecord{}, false
+	}
+	green, ok := sessions.LatestGate(fold, ref, string(types.TargetCI))
+	if !ok || green.Outcome != sessions.OutcomePass || green.Commit == "" {
+		return sessions.GateRecord{}, false
+	}
+	changed, err := res.VCS.ChangedFiles(ctx, workspace, green.Commit)
+	if err != nil {
+		return sessions.GateRecord{}, false
+	}
+	for _, rel := range changed {
+		info, err := os.Lstat(filepath.Join(workspace, filepath.FromSlash(rel)))
+		if err != nil || info.ModTime().After(green.At) {
+			return sessions.GateRecord{}, false
+		}
+	}
+	return green, true
+}
+
 // workspaceRunsDir is where this workspace logs its invocations, or "" when there is none
 // to read.
 //
@@ -92,60 +170,22 @@ func workspaceRunsDir(cacheDir string) string {
 // clock.
 //
 // One log file is one invocation, so there is nothing to cluster and no way to count
-// the same run twice. Candidates are filtered by file modification time before any
-// file is opened, which keeps a directory of thousands cheap.
+// the same run twice.
 func recentGateRuns(runsDir string, now time.Time) (runs int, spent time.Duration) {
-	if runsDir == "" {
-		return 0, 0
-	}
-	entries, err := os.ReadDir(runsDir)
-	if err != nil {
-		return 0, 0
-	}
 	cutoff := now.Add(-gateRepeatWindow)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, ierr := e.Info()
-		if ierr != nil || info.ModTime().Before(cutoff) {
-			continue
-		}
-		started, ok := readGateInvocation(filepath.Join(runsDir, e.Name()))
-		if !ok || started.Before(cutoff) {
-			continue
+	recentRunLogs(runsDir, cutoff, func(started journal.Event, modified time.Time, _ *bufio.Reader) {
+		start := time.UnixMilli(started.Ts)
+		if !isGateCommand(started.Command.Arguments) || start.Before(cutoff) {
+			return
 		}
 		runs++
 		// The log's last write is the run's end; a run still in flight measures as
 		// however far it has got, which is the honest reading of "spent so far".
-		if d := info.ModTime().Sub(started); d > 0 {
+		if d := modified.Sub(start); d > 0 {
 			spent += d
 		}
-	}
+	})
 	return runs, spent
-}
-
-// readGateInvocation reports when an invocation started, and whether it was the CI
-// gate, by reading only its first line: the started event, which carries the argv.
-func readGateInvocation(path string) (time.Time, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return time.Time{}, false
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	if !sc.Scan() {
-		return time.Time{}, false
-	}
-	var ev journal.Event
-	if json.Unmarshal(sc.Bytes(), &ev) != nil || ev.Kind != journal.KindStarted || ev.Command == nil {
-		return time.Time{}, false
-	}
-	if !isGateCommand(ev.Command.Arguments) {
-		return time.Time{}, false
-	}
-	return time.UnixMilli(ev.Ts), true
 }
 
 // commandRunsGate reports whether a shell line would invoke the CI gate.
@@ -284,14 +324,22 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) {
+	if !ok || actingIntegrator(ctx, deps, me) {
 		return denial{}
 	}
-	const gated = "The orchestrator gates once, in its own tree, after every unit lands."
+	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands."
+	if source, names := LeaseGateSource(me); names {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s names it as its check; a job's check is never the gate.",
+				elideCommand(command), me.ID),
+			Why: fmt.Sprintf("%s Lease %s's %s names `%s`, and this caller is not the checkout's integrator. If this unit integrates the checkout, the orchestrator spawns it as `<parent>/%s %s` in that checkout; otherwise %s\n%s",
+				gated, me.ID, source, types.TargetCI, integrateRole, me.ID, leaseActorClause("give this row the narrowest target covering its paths"), leaseActorWhy),
+		}
+	}
 	checks := rowChecks(me)
 	if len(checks) == 0 && me.Validation == "" {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
+			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
 				elideCommand(command), me.ID),
 			Why: gated + " Report what that target said, and that this row names no check: " + leaseActorClause("record a check on this row") + "\n" + leaseActorWhy,
 		}
@@ -301,7 +349,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		check = checkCommand(checks[0])
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate; run your check: `%s`.", elideCommand(command), check),
+		Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `%s`.", elideCommand(command), check),
 		Why: fmt.Sprintf("%s `%s` runs the `%s` gate, and the check on lease %s's row, %q, does not name it. If the unit needs the gate, %s\n%s",
 			gated, elideCommand(command), types.TargetCI, me.ID, check, leaseActorClause("widen that check"), leaseActorWhy),
 	}
@@ -311,12 +359,20 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 
 // denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
-// row's check and the targets declaring an output in its write paths, or refuses nothing. Two
-// worktrees share no cache key, so a second run of the same target only doubles the load.
+// row's check, a slice of the work that check composes, a dependency install, and the
+// targets declaring an output in its write paths, or refuses nothing. Two worktrees share
+// no cache key, so a second run of some other target only doubles the load.
 //
-// Silent where there is nothing to hold the run to: no lease, no live row, a row that owns
-// the gate (the orchestrator's), or a row declaring no check at all, which denyLeaseGate
-// already answers for the gate. Every other verb, and a run that only reports (--plan,
+// A slice passes because it is the iteration the check exists to end in: `go-test . --
+// -run X` under a `test .` check runs a part of the check's own work, and refusing it sent
+// workers to a raw `go test` that nothing graded at all. An install passes because a fresh
+// worktree can run nothing, its check included, until its dependencies are there. Every
+// other run it lets through, the check included, is held to the write paths under the rw
+// charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
+//
+// Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
+// integrator, which builds, regenerates and gates there, or a row declaring no check at
+// all, which denyLeaseGate already answers for the gate. Every other verb, and a run that only reports (--plan,
 // --dry-run, --graph, --help), passes.
 func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
@@ -336,7 +392,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || LeaseOwnsGate(me) {
+	if !ok || actingIntegrator(ctx, deps, me) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -344,25 +400,245 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	at := hookLocation(ctx, deps)
-	produces := sync.OnceValue(func() func(target, project string) bool {
-		return leaseProducers(ctx, deps, at.workspace, me.WritePaths)
-	})
+	judge := newRowJudge(ctx, deps, me, at, lazyWorkspace(ctx, deps, at.workspace))
 	for _, r := range runs {
-		if r.allowed(checks, produces) {
+		v := judge.verdict(r)
+		switch {
+		case v.unchecked != nil:
+			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
+		case v.op:
+			return opRewriteDenial(v, me, deps.DefaultCharms)
+		case len(v.outside) > 0:
+			return rewriteDenial(v, me, deps.DefaultCharms)
+		case v.permitted:
 			continue
 		}
+		r = v.run
 		commands := make([]string, len(checks))
 		for i, c := range checks {
 			commands[i] = "`" + checkCommand(c) + "`"
 		}
+		if buildsCheckoutBinary(ctx, judge.workspace, r) {
+			return denial{
+				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
+				Why: onePerBase + "\n" +
+					"When this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `" +
+					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
+			}
+		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
-			Why: fmt.Sprintf("Lease %s's checks: %s. The orchestrator runs every other target serially, in its own tree, after it integrates the units.\n"+
+			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, "+integratorIs+", runs every other target serially, in its own tree, after it integrates the units.\n"+
 				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
 	}
 	return denial{}
+}
+
+// lazyWorkspace opens the workspace at root on its first call and keeps it, or the error
+// opening it. It is the only opener a judgment uses: one open costs seconds inside the
+// hook's deadline.
+func lazyWorkspace(ctx context.Context, deps Dependencies, root string) func() (types.WorkspaceRepository, error) {
+	return sync.OnceValues(func() (types.WorkspaceRepository, error) {
+		ws, err := deps.inspect(ctx, root)
+		if err == nil && ws == nil {
+			err = fmt.Errorf("opening the workspace at %s found none", root)
+		}
+		return ws, err
+	})
+}
+
+// rowJudge judges the runs a row's worker would make, for the worker's own call and for a
+// brief teaching them. Every lookup reads the one workspace it is handed, on first use.
+type rowJudge struct {
+	deps   Dependencies
+	row    types.Job
+	checks []types.LeaseCheck
+	// root is the workspace, and dir the directory the runs are made in.
+	root, dir string
+	workspace func() (types.WorkspaceRepository, error)
+	graph     func() (types.TargetGraphOutput, error)
+	produces  lazyProducers
+	composes  lazyProducers
+}
+
+func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
+	checks := rowChecks(row)
+	graph := lazyTargetGraph(ctx, workspace)
+	return rowJudge{
+		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
+		produces: sync.OnceValue(func() func(target, project string) bool {
+			return leaseProducers(ctx, workspace, row.WritePaths)
+		}),
+		composes: sync.OnceValue(func() func(target, project string) bool {
+			return checksCompose(graph, checks)
+		}),
+	}
+}
+
+// lazyTargetGraph reads the workspace's static target graph on its first call and keeps
+// it, or the error reading it: the graph parses every magusfile, so a judgment reads it
+// once.
+func lazyTargetGraph(ctx context.Context, workspace func() (types.WorkspaceRepository, error)) func() (types.TargetGraphOutput, error) {
+	return sync.OnceValues(func() (types.TargetGraphOutput, error) {
+		ws, err := workspace()
+		if err != nil {
+			return types.TargetGraphOutput{}, err
+		}
+		return ws.TargetGraph(ctx)
+	})
+}
+
+// runVerdict is how a row's rule judges one run its worker would make.
+type runVerdict struct {
+	// run has the projects it selects resolved.
+	run targetRun
+	// permitted is the row's check, a slice of what the check composes, a target declaring
+	// an output in the write paths, or a dependency install.
+	permitted bool
+	// outside are the globs a permitted run writes past the write paths under the rw charm.
+	outside []string
+	// op is a permitted run of a spell op on its own under an rw charm the op honors: no
+	// declaration says what it writes. composers are the magusfile targets calling it in
+	// the projects the run selects.
+	op        bool
+	composers []string
+	// unchecked is why the run could not be judged: the workspace it is read against did
+	// not load.
+	unchecked error
+}
+
+// verdict judges r. A permitted run under the rw charm, named on its target or carried by
+// default_charms, is held to the write paths; a target whose chain declares no write
+// passes, since nothing says what it touches. A spell op run on its own under an rw charm
+// it honors is refused: an op declares no writes, so it would always pass.
+func (j rowJudge) verdict(r targetRun) runVerdict {
+	r, err := r.fromDir(j.root, j.dir, j.workspace)
+	v := runVerdict{run: r}
+	switch {
+	case err != nil:
+		v.unchecked = err
+	case r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes):
+		v.permitted = true
+		if r.verb != "run" || !r.rewrites(j.deps.DefaultCharms) {
+			break
+		}
+		ws, err := j.workspace()
+		if err != nil {
+			v.unchecked = fmt.Errorf("reading what %s writes: %w", r.target, err)
+			break
+		}
+		if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
+			v.op, v.composers = true, r.composers(j.graph)
+			break
+		}
+		v.outside = r.writesOutside(ws, j.row.WritePaths)
+	case r.installs(j.deps):
+		v.permitted = true
+	}
+	return v
+}
+
+// rewriteDenial words the refusal of a run the rw charm would have write past the row's
+// write paths.
+func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
+	r, next := v.run, v.run.readOnly(defaults)
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
+		Why: fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.\n"+
+			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
+			r.target, strings.Join(v.outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
+	}
+}
+
+// opRewriteDenial words the refusal of a spell op run on its own under the rw charm. It
+// names a magusfile target composing the op, whose declarations the rule judges, or the
+// run without the charm when none does.
+func opRewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
+	r, next := v.run, v.opNext(defaults)
+	why := fmt.Sprintf("A rewrite is held to lease %s's write paths by what its target declares writing, and a spell op run on its own declares nothing: what `%s` rewrites is known only once MGS3001 reports it, after the write.\n", me.ID, r.target)
+	if len(v.composers) > 0 {
+		why += fmt.Sprintf("`%s` calls it in the projects the run selects, and that run is judged by its declarations.", strings.Join(v.composers, "`, `"))
+	} else {
+		why += "No magusfile target calls it in the projects the run selects. `" + next + "` reports the same drift without writing it; the checkout's integrator, " + integratorIs + ", rewrites the rest after it integrates the units."
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` runs a spell op under the rw charm, and no declaration says what it writes; run `%s`.", r.target, next),
+		Why: why,
+	}
+}
+
+// opNext is the run a refused op run is sent to: its first composer, with the run's
+// charms and projects, or the run without the rw charm when nothing composes it. The
+// forwarded arguments are the op's own, so a composer's run drops them.
+func (v runVerdict) opNext(defaults []string) string {
+	r := v.run
+	if len(v.composers) == 0 {
+		return r.readOnly(defaults)
+	}
+	_, t, _ := r.parse()
+	name := v.composers[0]
+	if len(t.Charms) > 0 {
+		name += ":" + strings.Join(t.Charms, ",")
+	}
+	args := append([]string{name}, r.projects...)
+	if r.noDefaultCharms {
+		args = append(args, "--no-default-charms")
+	}
+	return hint.Run.With(args...)
+}
+
+// uncheckedDenial words the refusal of a run the rule could not judge. It refuses rather
+// than pass the run unchecked: no silent default stands in for the write paths. The next
+// run is judged without the workspace: a permitted run without the rw charm, or the check,
+// which names its project.
+func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defaults []string) denial {
+	next := checkCommand(checks[0])
+	if v.permitted {
+		next = v.run.readOnly(defaults)
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: the workspace did not load; run `%s`.", v.run.target, me.ID, next),
+		Why: fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project `%s` selects or what it writes, so it is refused rather than run unchecked. Once the workspace loads, the run is judged as usual.",
+			v.unchecked, v.run.target),
+	}
+}
+
+// denyWorkerRawTool refuses a bound worker a raw tool a spell op covers, naming the check
+// it may run instead, or refuses nothing. raw-tool only advises by default, so without this
+// a worker refused a target ran the same tool raw, outside the cache, the sandbox and this
+// rule, and the refusal taught the bypass. Silent where denyWorkerCheckOnly is.
+func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if actingLease == "" {
+		return denial{}
+	}
+	raw, ok := firstRawToolDenied(deps, command)
+	if !ok {
+		return denial{}
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || actingIntegrator(ctx, deps, me) {
+		return denial{}
+	}
+	checks := rowChecks(me)
+	if len(checks) == 0 {
+		return denial{}
+	}
+	match, _ := rawToolMatch(deps, raw)
+	op := match.spell + "::" + match.operation
+	why := "A bound worker runs its work through targets, where the cache, the sandbox and the rules that hold it to its row all apply."
+	project := cmp.Or(checks[0].Project, ".")
+	if checksCompose(lazyTargetGraph(ctx, lazyWorkspace(ctx, deps, hookLocation(ctx, deps).workspace)), checks)(op, project) {
+		why += " The check composes " + op + ", so a narrower run of it passes too: `" + hint.Run.With(op, project) + "`, with the tool's own flags after `--`."
+	} else {
+		why += " If the unit needs " + op + ", name it in your result's unresolved risks."
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` runs %s outside magus; run lease %s's check: `%s`.",
+			elideCommand(resolvedCommand(raw)), op, me.ID, checkCommand(checks[0])),
+		Why: why,
+	}
 }
 
 // targetRun is one `magus run` or `magus affected` a command line makes, read far enough to
@@ -371,6 +647,14 @@ type targetRun struct {
 	verb     string
 	target   string
 	projects []string
+	// cwdProject is the project a run naming none selects from its directory, when one
+	// holds that directory (see fromDir).
+	cwdProject string
+	// forwarded are the arguments after `--`, passed to the target's tools.
+	forwarded []string
+	// noDefaultCharms is --no-default-charms, which keeps the workspace's default_charms
+	// off this run.
+	noDefaultCharms bool
 }
 
 // runReportFlags turn a run into a report about one: nothing executes, so nothing contends.
@@ -387,16 +671,20 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 	}
 	var r targetRun
 	skip := false
-	for _, a := range c.Args {
+	for i, a := range c.Args {
 		switch {
 		case skip:
 			skip = false
 		case a == "--":
+			r.forwarded = c.Args[i+1:]
 			return r, r.target != ""
 		case len(a) > 1 && a[0] == '-':
-			name, _, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+			name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 			if slices.Contains(runReportFlags, name) {
 				return targetRun{}, false
+			}
+			if name == "no-default-charms" {
+				r.noDefaultCharms = !joined || value != "false"
 			}
 			skip = !joined && verbFlagTakesValue(r.verb, name)
 		case r.verb == "":
@@ -416,12 +704,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 // verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
 // in the registry the CLI parses with before magus's global set.
 func verbFlagTakesValue(verb, name string) bool {
-	for _, cmd := range cli.All {
+	for _, cmd := range commands.Root.Children {
 		if cmd.Name != verb {
 			continue
 		}
-		if i := slices.IndexFunc(cmd.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
-			return cmd.Flags[i].Kind != cli.FlagBool
+		if i := slices.IndexFunc(cmd.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
+			return cmd.Flags[i].Kind != cmdline.Bool
 		}
 	}
 	takes, _ := MagusFlagTakesValue(name)
@@ -430,15 +718,12 @@ func verbFlagTakesValue(verb, name string) bool {
 
 // allowed reports whether a bound worker may make this run: its row's check, or a target
 // declaring an output in its write paths. A rebuild of magus's own binary is never on the
-// list: there is one binary per base, the orchestrator builds it in the root and places a
-// copy in each worker checkout, so a worker's own build is a second binary for the same base.
+// list: there is one binary per base, the integrator builds it and a copy is placed in each
+// worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
 func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
-	projects := r.projects
-	if len(projects) == 0 {
-		projects = []string{"."}
-	}
+	projects := r.selection()
 	if r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
 		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
 	}) {
@@ -449,6 +734,340 @@ func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bo
 	}
 	writes := produces()
 	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })
+}
+
+// selection is the projects a run selects: the ones it names, else the project fromDir
+// found holding its directory, else every project, which is what `magus run` picks from
+// the root or from a directory no project holds.
+func (r targetRun) selection() []string {
+	switch {
+	case len(r.projects) > 0:
+		return r.projects
+	case r.cwdProject != "":
+		return []string{r.cwdProject}
+	}
+	return []string{"/"}
+}
+
+// fromDir resolves the project a run naming none selects from dir, the innermost project
+// holding it, as `magus run` does. It opens the workspace only for a dir below root, and
+// errs when that open fails, since the run's projects are then unknown.
+func (r targetRun) fromDir(root, dir string, workspace func() (types.WorkspaceRepository, error)) (targetRun, error) {
+	if len(r.projects) > 0 || r.verb != "run" || dir == "" || filepath.Clean(dir) == filepath.Clean(root) {
+		return r, nil
+	}
+	ws, err := workspace()
+	if err != nil {
+		return r, fmt.Errorf("finding the project %s selects from %s: %w", r.target, dir, err)
+	}
+	if p, ok := ws.Where(dir); ok {
+		r.cwdProject = p.Path
+	}
+	return r, nil
+}
+
+// composedByCheck reports a run of a target one of the row's checks composes, on every
+// project it selects: part of the check's own work, however its forwarded arguments narrow it.
+func (r targetRun) composedByCheck(composes lazyProducers) bool {
+	if r.verb != "run" {
+		return false
+	}
+	composed := composes()
+	return !slices.ContainsFunc(r.selection(), func(p string) bool { return !composed(r.target, p) })
+}
+
+// runsOp reports a run of a spell op rather than a magusfile target: one naming a spell
+// other than the magusfile's, or a target the magusfile of a project it selects does not
+// export. Over every project it is an op when no project exports it.
+func (r targetRun) runsOp(ws types.WorkspaceReader) bool {
+	if spell, _ := splitSpell(r.target); spell != "" && spell != types.MagusfileSpellName {
+		return true
+	}
+	name := targetName(r.target)
+	exports := func(p *types.Project) bool { return p != nil && slices.Contains(p.MagusfileTargets, name) }
+	if slices.Contains(r.selection(), "/") {
+		return !slices.ContainsFunc(ws.All(), exports)
+	}
+	return slices.ContainsFunc(r.selection(), func(p string) bool { return !exports(ws.Get(path.Clean(p))) })
+}
+
+// opHonorsRewrite reports whether the rw charm changes target's op: a catalog op declaring
+// it, or an op the catalog does not hold, since nothing then says the charm is ignored. An
+// op declaring no rw runs its argv unpatched, so default_charms [rw] write nothing through
+// it.
+func opHonorsRewrite(catalog []*spells.Spell, target string) bool {
+	spell, _ := splitSpell(target)
+	name := targetName(target)
+	found := false
+	for _, s := range catalog {
+		if spell != "" && s.Name() != spell {
+			continue
+		}
+		if _, ok := s.Op(name); !ok {
+			continue
+		}
+		if slices.Contains(s.Charms(name), types.CharmReadWrite) {
+			return true
+		}
+		found = true
+	}
+	return !found
+}
+
+// composers are the magusfile targets, in the projects the run selects, whose body calls
+// the op the run names. A graph that cannot be read names none.
+func (r targetRun) composers(graph func() (types.TargetGraphOutput, error)) []string {
+	g, err := graph()
+	if err != nil {
+		return nil
+	}
+	op := targetName(r.target)
+	selected := r.selection()
+	var names []string
+	for _, p := range g.Projects {
+		dir := path.Clean(cmp.Or(p.Path, "."))
+		if !slices.Contains(selected, "/") && !slices.ContainsFunc(selected, func(s string) bool { return path.Clean(s) == dir }) {
+			continue
+		}
+		for _, n := range p.Nodes {
+			calls := slices.ContainsFunc(n.Spells, func(u types.TargetSpellUse) bool {
+				return slices.ContainsFunc(u.Ops, func(o string) bool { return targetName(o) == op })
+			})
+			if name := targetName(n.Name); calls && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
+// parse splits the run's target into its spell filter and the target with its charms.
+func (r targetRun) parse() (spell string, t types.Target, err error) {
+	spell, name := splitSpell(r.target)
+	t, err = types.ParseTarget(name)
+	return spell, t, err
+}
+
+// rewrites reports a run under the rw charm: named on its target, or carried by defaults,
+// the workspace's default_charms, on a `magus run` without --no-default-charms.
+func (r targetRun) rewrites(defaults []string) bool {
+	_, t, err := r.parse()
+	if err != nil {
+		return false
+	}
+	if slices.Contains(t.Charms, types.CharmReadWrite) {
+		return true
+	}
+	return r.verb == "run" && !r.noDefaultCharms && defaultsRewrite(defaults)
+}
+
+// defaultsRewrite reports default_charms carrying the rw charm.
+func defaultsRewrite(defaults []string) bool {
+	return slices.ContainsFunc(defaults, func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmReadWrite
+	})
+}
+
+// readOnly is the run's command without the rw charm, keeping its other charms, its
+// projects and its forwarded arguments. It adds --no-default-charms only when defaults
+// would put rw back, so a default charm that does not write stays on.
+func (r targetRun) readOnly(defaults []string) string {
+	spell, t, _ := r.parse()
+	name := t.Name
+	if kept := slices.DeleteFunc(slices.Clone(t.Charms), func(c string) bool { return c == types.CharmReadWrite }); len(kept) > 0 {
+		name += ":" + strings.Join(kept, ",")
+	}
+	if spell != "" {
+		name = spell + "::" + name
+	}
+	args := append([]string{name}, r.projects...)
+	if r.noDefaultCharms || defaultsRewrite(defaults) {
+		args = append(args, "--no-default-charms")
+	}
+	if len(r.forwarded) > 0 {
+		args = append(append(args, "--"), r.forwarded...)
+	}
+	return hint.Run.With(args...)
+}
+
+// writesOutside reads what a run under the rw charm writes from the workspace's
+// declarations, in every project the run selects: its target's ctx.writesFiles and
+// ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
+// its ctx.needs chain reaches in that project. It returns the rooted globs no write path
+// covers.
+//
+// A needed step's outputs and another project's steps are left out: they build what the
+// run consumes, and another project's ci settles its own formatting.
+func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside []string) {
+	var projects []*types.Project
+	if slices.Contains(r.selection(), "/") {
+		projects = ws.All()
+	} else {
+		for _, p := range r.selection() {
+			if found := ws.Get(path.Clean(p)); found != nil {
+				projects = append(projects, found)
+			}
+		}
+	}
+	name := targetName(r.target)
+	for _, p := range projects {
+		var globs []types.Glob
+		for _, ref := range p.TargetOutputs[name] {
+			globs = append(globs, ref.Rooted(p.Path))
+		}
+		for _, ref := range p.TargetUpdates[name] {
+			globs = append(globs, ref.Rooted(p.Path))
+		}
+		// A nil lookup keeps the chain in p.
+		for _, g := range append(globs, types.ChainUpdates(p, name, nil)...) {
+			if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
+				outside = append(outside, g.Pattern)
+			}
+		}
+	}
+	return outside
+}
+
+// leaseCoversGlob reports whether writePaths cover every path glob can match.
+//
+// declarationCovering matches a declaration against the glob's own text, which holds for
+// `*`: a declared `docs/gen/*` matches the output `docs/gen/*.svg` and covers it. It fails
+// for `**`, which a declared `docs/*` would match as one segment while the output reaches
+// every depth. A glob holding `**` is covered only by a declaration spelling the same
+// glob, one claiming a whole directory its literal prefix lies in, or a declared
+// `<dir>/**/<tail>` whose dir holds that prefix and whose tail ends the glob.
+func leaseCoversGlob(writePaths []string, glob string) bool {
+	if !strings.Contains(glob, "**") {
+		_, covered, _ := declarationCovering(writePaths, glob)
+		return covered
+	}
+	var prefix []string
+	for _, segment := range strings.Split(glob, "/") {
+		if types.IsGlobMeta(segment) {
+			break
+		}
+		prefix = append(prefix, segment)
+	}
+	literal := strings.Join(prefix, "/")
+	under := func(dir string) bool { return literal == dir || strings.HasPrefix(literal, dir+"/") }
+	return slices.ContainsFunc(writePaths, func(raw string) bool {
+		file, _ := types.SplitClaim(raw)
+		declared := path.Clean(file)
+		if declared == glob || declared == "**" {
+			return true
+		}
+		if literal == "" {
+			return false
+		}
+		if dir, tail, ok := strings.Cut(declared, "/**/"); ok && !types.IsGlobMeta(dir) && !strings.Contains(tail, "**") {
+			return under(dir) && strings.HasSuffix(glob, "/"+tail)
+		}
+		dir := strings.TrimSuffix(declared, "/**")
+		if dir == "." || dir == "/" || types.IsGlobMeta(dir) {
+			return false
+		}
+		return under(dir)
+	})
+}
+
+// installs reports a run of a dependency install: the workspace's `install` target, or a
+// spell op of the install kind, with no charm. A charm is refused because `update` is one,
+// and re-resolving a lockfile writes outside every worker's paths.
+func (r targetRun) installs(deps Dependencies) bool {
+	spell, target := splitSpell(r.target)
+	if r.verb != "run" || strings.Contains(target, ":") {
+		return false
+	}
+	if spell == "" && targetName(target) == "install" {
+		return true
+	}
+	for _, s := range deps.spells() {
+		if spell != "" && s.Name() != spell {
+			continue
+		}
+		if op, ok := s.Op(targetName(target)); ok && op.Kind == spells.OpKindInstall {
+			return true
+		}
+	}
+	return false
+}
+
+// checksCompose reports which targets the checks compose: every target a check's target
+// reaches through ctx.needs, in its own project or another, and every spell op those
+// targets call, read from the workspace's static target graph. A workspace that cannot
+// be read composes nothing, which leaves each run to the check alone.
+func checksCompose(targetGraph func() (types.TargetGraphOutput, error), checks []types.LeaseCheck) func(target, project string) bool {
+	graph, err := targetGraph()
+	if err != nil {
+		return func(string, string) bool { return false }
+	}
+	type key struct{ target, project string }
+	nodes := map[key]types.TargetGraphNode{}
+	for _, p := range graph.Projects {
+		for _, n := range p.Nodes {
+			nodes[key{targetName(n.Name), path.Clean(cmp.Or(p.Path, "."))}] = n
+		}
+	}
+	composed := map[key]bool{}
+	var walk func(k key)
+	walk = func(k key) {
+		if composed[k] {
+			return
+		}
+		composed[k] = true
+		n, ok := nodes[k]
+		if !ok {
+			return
+		}
+		for _, d := range n.Dependencies {
+			walk(key{targetName(d), k.project})
+		}
+		for _, d := range n.CrossDependencies {
+			walk(key{targetName(d.Target), path.Clean(d.Project)})
+		}
+		for _, use := range n.Spells {
+			for _, op := range use.Ops {
+				composed[key{targetName(op), k.project}] = true
+			}
+		}
+	}
+	for _, c := range checks {
+		walk(key{targetName(c.Target), path.Clean(cmp.Or(c.Project, "."))})
+	}
+	return func(target, project string) bool { return composed[key{targetName(target), path.Clean(project)}] }
+}
+
+// checkoutBinary is the binary the hooks and the guard run, by the name they find it by
+// at the checkout's root.
+const checkoutBinary = "magus"
+
+// buildsCheckoutBinary reports a run of a target the workspace declares as the producer
+// of ./magus: only a workspace that builds magus itself declares one.
+func buildsCheckoutBinary(ctx context.Context, workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
+	if r.verb != "run" {
+		return false
+	}
+	ws, err := workspace()
+	if err != nil {
+		return false
+	}
+	files, err := ws.ClassifyFiles(ctx, []string{checkoutBinary})
+	if err != nil {
+		return false
+	}
+	selected := r.selection()
+	for _, f := range files {
+		if path.Clean(f.Path) != checkoutBinary {
+			continue
+		}
+		for _, c := range f.Claims {
+			if c.Role == "output" && targetName(c.Target) == targetName(r.target) &&
+				(slices.Contains(selected, "/") || slices.Contains(selected, path.Clean(cmp.Or(c.Project, ".")))) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // rowChecks are the runs a row names as its checks: the check record and every check goal.
@@ -471,7 +1090,7 @@ func rowChecks(row types.Job) []types.LeaseCheck {
 
 // sameTarget reports whether a run names a check's target. The charm is ignored, since
 // `lint:rw` is the same work written back; a spell filter is compared only when both name
-// one, as internal/job.bindsTo does.
+// one, as internal/job.ranCheck does.
 func sameTarget(check, ran string) bool {
 	cs, ct := splitSpell(check)
 	rs, rt := splitSpell(ran)
@@ -498,15 +1117,16 @@ func targetName(s string) string {
 //
 // A workspace that cannot be read falls back to this repository's producer spelling, a
 // `-generate` name or a charm such as `:rw`: a rule the guard cannot evaluate must not
-// block a tool call.
-func leaseProducers(ctx context.Context, deps Dependencies, workspace string, writePaths []string) func(target, project string) bool {
+// block a tool call. A run under the rw charm is still refused by rowJudge, which reads
+// the same workspace to hold it to the write paths.
+func leaseProducers(ctx context.Context, workspace func() (types.WorkspaceRepository, error), writePaths []string) func(target, project string) bool {
 	looksGenerating := func(target, _ string) bool {
 		name := targetName(target)
 		_, t := splitSpell(target)
 		return name == "generate" || strings.HasSuffix(name, "-generate") || strings.Contains(t, ":")
 	}
-	ws, err := deps.inspect(ctx, workspace)
-	if err != nil || ws == nil {
+	ws, err := workspace()
+	if err != nil {
 		return looksGenerating
 	}
 	paths := make([]string, 0, len(writePaths))
@@ -802,8 +1422,9 @@ func adviseTerminalLease(standing leaseStanding, actingLease string) advice {
 }
 
 // denyOverdueLease refuses a write graded under a live lease past its deadline, or returns
-// "" for one with no deadline or time left. The row stays live: ending it is the
-// orchestrator's, and magus never transitions a row on its own.
+// "" for one with no deadline or time left. A taken row past its deadline is ended by the
+// next sweep of the store, so this refuses writes under one nobody took, which only
+// `magus job prune` ends, and under a taken one read before that sweep.
 func denyOverdueLease(me types.Job, now int64) string {
 	if !me.Overdue(now) {
 		return ""
@@ -844,11 +1465,15 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	if err != nil {
 		return denial{}
 	}
+	// The magus the line runs resolves its store's actor as job.RunLease does: the
+	// checkout's record, else the BAGGAGE it starts with, which is the line's own when it
+	// sets one and the session's otherwise, the environment this hook shares.
+	claim := cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv())
 	h := holder{
 		id:       actingLease,
 		standing: sync.OnceValue(func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) }),
 		storeLease: func() string {
-			lease, _ := job.ActingLease(hookLocation(ctx, deps).cacheDir, "")
+			lease, _ := job.ActingLease(hookLocation(ctx, deps).jobs(), claim)
 			return lease
 		},
 	}
@@ -880,6 +1505,36 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 		why += "\n" + leaseActorWhy
 	}
 	return denial{Say: "magus workspace: `" + elideCommand(command) + "` " + what.problem + "; " + fix, Why: why}
+}
+
+// lineBaggageLease is the lease the last BAGGAGE assignment in f names, exported,
+// assigned or prefixed to a command, "" when f sets none. A prefix counts for the whole
+// line, not only the command it precedes: it can only make the line's store write as a
+// lease, which the store then grades.
+func lineBaggageLease(f *syntax.File) string {
+	lease := ""
+	take := func(a *syntax.Assign) {
+		if a == nil || a.Name == nil || a.Name.Value != trail.EnvBaggage || a.Value == nil {
+			return
+		}
+		if l := trail.LeaseFromBaggage(literalWord(a.Value.Parts)); l != "" {
+			lease = l
+		}
+	}
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch x := n.(type) {
+		case *syntax.DeclClause:
+			for _, a := range x.Args {
+				take(a)
+			}
+		case *syntax.CallExpr:
+			for _, a := range x.Assigns {
+				take(a)
+			}
+		}
+		return true
+	})
+	return lease
 }
 
 // rebind is what the rebind rule refuses a bound caller's command, worded as the verdict
@@ -1047,9 +1702,9 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 }
 
 // forkFlagsUnbounded are the `job fork` flags, and the magus\job.put opts, that declare no
-// boundary: the lineage, the prose, the timing and read_only.
+// boundary: the lineage, the prose, the timing, read_only and the checkout the child works in.
 var forkFlagsUnbounded = map[string]bool{
-	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true,
+	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true, "checkout": true,
 	"read-only": true, "read_only": true, "depends-on": true, "depends_on": true,
 	"stdin": true, "op": true, "id": true,
 }
@@ -1104,7 +1759,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		takes, _ := MagusFlagTakesValue(name)
 		if own, ok := verbFlag(verb, name); ok {
-			takes = own.Kind != cli.FlagBool
+			takes = own.Kind != cmdline.Bool
 		}
 		switch {
 		case joined:
@@ -1120,8 +1775,8 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 }
 
 // verbFlag looks name up among verb's own flags in the registry the CLI parses with.
-func verbFlag(verb hint.Command, name string) (cli.Flag, bool) {
-	for _, group := range cli.All {
+func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
+	for _, group := range commands.Root.Children {
 		if group.Name != verb.Head() {
 			continue
 		}
@@ -1129,12 +1784,12 @@ func verbFlag(verb hint.Command, name string) (cli.Flag, bool) {
 			if sub.Name != verb.Leaf() {
 				continue
 			}
-			if i := slices.IndexFunc(sub.Flags, func(f cli.Flag) bool { return f.Name == name }); i >= 0 {
+			if i := slices.IndexFunc(sub.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
 				return sub.Flags[i], true
 			}
 		}
 	}
-	return cli.Flag{}, false
+	return cmdline.Flag{}, false
 }
 
 // stdinRecord is the text a statement feeds its command from a heredoc or a here-string,
@@ -1276,18 +1931,40 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	return true
 }
 
-// LeaseOwnsGate reports whether a lease's declared check IS the gate, in which case the
-// lease owns it and nothing is refused.
+// integrateRole is the spawn-title role of the worker that integrates its checkout.
+const integrateRole = "integrate"
+
+// integratorIs names the checkout's integrator in a verdict.
+const integratorIs = "the subagent spawned `<parent>/" + integrateRole + " <job>` for a row taken in that checkout"
+
+// integrates reports whether a caller spawned as spawned, acting under row, integrates the
+// checkout at workspace: the title is `<parent>/integrate <job>` naming row, row is live,
+// and row was taken in that checkout. The integrator builds, regenerates and gates there;
+// the root has no spawn title and a worker spawned under a change role in its own worktree
+// has another role, so neither does.
 //
-// The check RECORD decides it whenever the row carries one: a target field cannot be
-// confused by a stray word the way a rendered line can.
-func LeaseOwnsGate(row types.Job) bool {
-	_, owns := LeaseGateSource(row)
-	return owns
+// The role, not the row's check: a job's check is never the gate, so the check cannot say
+// who integrates. One build at a time per checkout is the project lock's, which refuses a
+// second run of a project the checkout is already running and names its holder.
+func integrates(row types.Job, spawned, workspace string) bool {
+	head, _, ok := strings.Cut(spawned, " ")
+	if !ok || path.Base(head) != integrateRole || !row.State.Live() || row.CheckoutRoot == "" || workspace == "" {
+		return false
+	}
+	if titled, ok := spawnTitleRow([]types.Job{row}, spawned); !ok || titled.ID != row.ID {
+		return false
+	}
+	return samePath(row.CheckoutRoot, workspace)
 }
 
-// LeaseGateSource is LeaseOwnsGate plus WHICH declaration named the gate, so a refusal can
-// quote the offending one.
+// actingIntegrator reports whether the caller of this judgment, acting under me, integrates
+// the checkout the call runs in.
+func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job) bool {
+	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), hookLocation(ctx, deps).workspace)
+}
+
+// LeaseGateSource reports which of a row's declarations names the gate, so a refusal can
+// quote the offending one, and false for a row naming none.
 //
 // It exists because the refusal quoted row.Validation whatever had actually matched, and a
 // row can now name the gate from any of several places: told that its check `go-test api`
@@ -1334,9 +2011,11 @@ func validationNamesGate(validation string) bool {
 // denyLeaseScopedVCS refuses a worker lease the version-control operations the
 // orchestrator owns. The orchestrator lands every unit from the worker's tree, so a
 // worker that pushes, stashes, reverts or rewrites history edits the state it is being
-// integrated from, and a whole-tree revert destroys a sibling's uncommitted work. A commit
-// is the exception: one on the worker's own branch, in the checkout its lease was taken
-// in, adds to that tree without moving anything the orchestrator reads.
+// integrated from, and a whole-tree revert destroys a sibling's uncommitted work. A commit,
+// a cherry-pick or an applied patch is the exception (see workerLands): one on the worker's
+// own branch, in the checkout its lease was taken in, adds to that tree without moving
+// anything the orchestrator reads. So is an init that creates a repository outside the
+// checkout, and the verbs after it on the same line inside that repository.
 //
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not version control.
@@ -1356,20 +2035,40 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if role == "" {
 		return ""
 	}
-	for _, c := range cmds {
-		if op := workerVCSOp(c); op != "" && !recordsCommit(c) {
-			return workerVCSDenial("`"+command+"`", op, me, role, "")
+	// A line that creates a repository is located call by call, whatever else it runs:
+	// the verbs after the init may belong to the repository it made.
+	creates := slices.ContainsFunc(cmds, isInit)
+	if !creates {
+		for _, c := range cmds {
+			if op := workerVCSOp(c); op != "" && !workerLands(c) {
+				if cwd, _ := deps.workingDir(); isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
+					continue
+				}
+				if addsCheckout(c) {
+					return checkoutAddDenial("`"+command+"`", me, role)
+				}
+				return workerVCSDenial("`"+command+"`", vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
+			}
 		}
+	}
+	matches := workerLands
+	if creates {
+		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" }
 	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
-	calls, ok := locateCalls(command, d, cwd, recordsCommit, false)
+	calls, ok := locateCalls(command, d, cwd, matches, false)
 	if !ok {
-		return workerVCSDenial("`"+command+"`", "commit", me, role, "The line does not parse, so where it commits cannot be read.")
+		unparsed := vcsRefusal{op: "commit", kind: vcsOpLands, why: "The line does not parse, so where it commits cannot be read."}
+		return workerVCSDenial("`"+command+"`", unparsed, me, role)
 	}
 	envDir, envWhy := gitDirAssigned(command, d)
+	var fresh []string
 	for _, c := range calls {
 		site, unlocated := shellCommitSite(c)
+		if isInit(c.inv) && unlocated == "" {
+			unlocated = nonLiteralInit(c)
+		}
 		if c.inv.Name == "git" && unlocated == "" {
 			switch {
 			case envWhy != "":
@@ -1380,15 +2079,38 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 				site.gitDir = filepath.Join(site.dir, envDir)
 			}
 		}
-		op, refused, why := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
-		if refused {
-			return workerVCSDenial("`"+command+"`", op, me, role, why)
+		if inFreshRepo(c.inv, site, unlocated, fresh) {
+			continue
+		}
+		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
+		if r.refused() {
+			return workerVCSDenial("`"+command+"`", r, me, role)
+		}
+		if r.kind == vcsOpInit {
+			fresh = append(fresh, r.dest)
 		}
 	}
 	return ""
 }
 
-func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
+// nonLiteralInit says why a shell line's init cannot be placed, "" when every word of it is
+// literal. The directory operand and the options that move the repository are read off
+// those words, so one the shell expands, or an init reached through a wrapper whose
+// arguments arrive as rendered text, could create the repository anywhere.
+func nonLiteralInit(c locatedCall) string {
+	if c.args == nil {
+		return "It runs through a wrapper, so where it commits cannot be read."
+	}
+	for _, w := range c.args {
+		lit, ok := literalArg(w.Parts)
+		if !ok || strings.ContainsAny(lit, "*?[{") {
+			return "A word of it is not one literal string, so where it commits cannot be read."
+		}
+	}
+	return ""
+}
+
+func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) } //nolint:gochecknoinits // std cannot import guard; every binary that links the guard registers the vcs lease gate
 
 // vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
 // env, the environment the child starts with. The process knows no session or subagent, so
@@ -1398,17 +2120,17 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	site, unlocated := argvSite(inv, dir)
 	relocated := false
 	if backend == "git" && unlocated == "" {
-		site, unlocated, relocated = gitEnvSite(site, env)
+		site, unlocated, relocated = gitEnvSite(site, env, row.CheckoutRoot)
 	}
-	if unlocated == "" && !relocated && backend == "git" && actsInPlace(inv) &&
+	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) && actsInPlace(inv) &&
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
-	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
-	if !refused {
+	r := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
+	if !r.refused() {
 		return nil
 	}
-	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
+	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), r, row, workerRole(row, job.Caller{})))
 }
 
 // gitLocationVars are the environment variables that move git's repository, work tree or
@@ -1419,11 +2141,15 @@ var gitLocationVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GI
 // directory as --git-dir does, unless the arguments already named one; any other of
 // gitLocationVars leaves the commit unplaced. relocated reports that env set any of them,
 // which rules out the scratch-repository exemption: that exemption reads the repository
-// off the directory alone.
-func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, relocated bool) {
+// off the directory alone. A GIT_INDEX_FILE is the exception when both it and site lie
+// outside checkout and its git directory: a scratch index there moves no file of the job's.
+func gitEnvSite(site vcsSite, env []string, checkout string) (_ vcsSite, unlocated string, relocated bool) {
 	for _, name := range gitLocationVars {
 		value, ok := envValue(env, name)
 		if !ok {
+			continue
+		}
+		if name == "GIT_INDEX_FILE" && scratchIndex(site.dir, value, checkout) {
 			continue
 		}
 		relocated = true
@@ -1440,6 +2166,23 @@ func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, reloca
 		}
 	}
 	return site, "", relocated
+}
+
+// scratchIndex reports whether index, a GIT_INDEX_FILE value, names a literal path that,
+// like dir, lies outside checkout and outside the git directory its checkouts share.
+// False when checkout is unset or its git directory cannot be read.
+func scratchIndex(dir, index, checkout string) bool {
+	if checkout == "" || index == "" || strings.HasPrefix(index, "~") {
+		return false
+	}
+	if !filepath.IsAbs(index) {
+		index = filepath.Join(dir, index)
+	}
+	if within(dir, checkout) || within(index, checkout) {
+		return false
+	}
+	_, common, ok := gitCheckout(checkout)
+	return ok && !within(index, common)
 }
 
 // envValue is name's value in env as exec hands it to a child: the last entry wins, and
@@ -1521,20 +2264,61 @@ func workerRole(row types.Job, caller job.Caller) string {
 }
 
 // workerVCSDenial words a lease-vcs refusal. what is the refused call as the reader typed
-// it; why is the commit's own reason, "" for an operation no worker may run.
-func workerVCSDenial(what, op string, row types.Job, role, why string) string {
+// it.
+func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
-	lead := "magus workspace: `" + op + "` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`."
-	if why != "" {
-		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
-	} else {
-		why = "The orchestrator lands the work from there. " +
-			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator."
+	switch r.kind {
+	case vcsOpInit:
+		return fmt.Sprintf("magus workspace: a worker creates a repository only outside its checkout, %s.\n"+
+			"%s runs `%s`, and lease %s is %s. %s "+
+			leaseActorClause("create it"),
+			checkout, what, r.op, row.ID, role, r.why)
+	case vcsOpLands:
+		return landDenial(what, r.op, row, role, "magus workspace: a worker commits only on its own branch in its own checkout, "+checkout+".", r.why)
 	}
+	return landDenial(what, r.op, row, role,
+		"magus workspace: `"+r.op+"` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.",
+		"The orchestrator lands the work from there. "+
+			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator.")
+}
+
+// landDenial is workerVCSDenial for every call but an init: lead, then why, then what a
+// worker may land and where.
+func landDenial(what, op string, row types.Job, role, lead, why string) string {
+	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
-		"A worker may commit, with any backend, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
+		"A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
 		leaseActorClause("land it"),
 		lead, what, op, row.ID, role, why, checkout)
+}
+
+// vcsOpKind is how lease-vcs grades and words a version-control mutation.
+type vcsOpKind int
+
+const (
+	// vcsOpOrchestrated is a mutation that stays with the orchestrator, refused with no why.
+	vcsOpOrchestrated vcsOpKind = iota
+	// vcsOpLands is a commit, a git cherry-pick or a git apply (see workerLands), refused
+	// with a why unless it lands on the worker's own branch in its own checkout.
+	vcsOpLands
+	// vcsOpInit creates a repository, refused with a why unless it lies wholly outside the
+	// worker's checkout.
+	vcsOpInit
+)
+
+// vcsRefusal is lease-vcs's answer for one call.
+type vcsRefusal struct {
+	// op names the mutation as the deny words it, "" for a call that mutates nothing.
+	op   string
+	kind vcsOpKind
+	// why is the reason a call that lands or an init is refused, "" when it is not.
+	why string
+	// dest is the work tree an init that is not refused creates.
+	dest string
+}
+
+func (r vcsRefusal) refused() bool {
+	return r.op != "" && (r.kind == vcsOpOrchestrated || r.why != "")
 }
 
 // vcsSite is where a version-control call acts: the directory it runs in once every
@@ -1546,25 +2330,253 @@ type vcsSite struct {
 }
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
-// vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
-// the mutation, "" for a call that mutates nothing. A commit is refused with why; every
-// other mutation is refused with no why. unlocated is why site could not be read, which
-// refuses a commit, since a commit that cannot be placed cannot be shown to be in the
-// worker's own checkout.
-func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
-	op = workerVCSOp(inv)
+// vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site.
+// unlocated is why site could not be read, which refuses a commit, since a commit that
+// cannot be placed cannot be shown to be in the worker's own checkout.
+func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	op := workerVCSOp(inv)
 	switch {
 	case op == "":
-		return "", false, ""
-	case !recordsCommit(inv):
-		return op, true, ""
+		return vcsRefusal{}
+	case isInit(inv):
+		return initRefusal(row, inv, site, unlocated)
+	case !workerLands(inv):
+		return vcsRefusal{op: op, kind: vcsOpOrchestrated}
 	case unlocated != "":
-		return op, true, unlocated
+		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
 	}
-	if why := commitRefusal(ctx, opts, row, inv.Name, site); why != "" {
-		return op, true, why
+	return vcsRefusal{op: op, kind: vcsOpLands, why: commitRefusal(ctx, opts, row, inv.Name, site)}
+}
+
+// workerLands reports a call that lands work on the branch its checkout is on: a commit, a
+// git cherry-pick, or a git apply. All three are graded where the commit is, its own
+// branch in its own checkout, because a cherry-pick and `git diff | git apply -3 && git
+// commit -C` land the same change, and a rule that answered them differently taught
+// whichever spelling it let through.
+func workerLands(inv hint.Invocation) bool {
+	if recordsCommit(inv) {
+		return true
 	}
-	return op, false, ""
+	sub, _ := vcsSubcommand(inv)
+	return inv.Name == "git" && (sub == "cherry-pick" || sub == "apply")
+}
+
+// initArgs returns the words after an init's subcommand and reports whether inv is one:
+// git, hg and sl `init`, and `jj git init`.
+func initArgs(inv hint.Invocation) (args []string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	switch inv.Name {
+	case "git", "hg", "sl":
+		return rest, sub == "init"
+	case "jj":
+		if sub != "git" {
+			return nil, false
+		}
+		nested, nestedRest := vcsSubcommand(hint.Invocation{Name: inv.Name, Args: rest})
+		return nestedRest, nested == "init"
+	}
+	return nil, false
+}
+
+func isInit(inv hint.Invocation) bool {
+	_, ok := initArgs(inv)
+	return ok
+}
+
+// initOp names an init as workerVCSDenial words it.
+func initOp(inv hint.Invocation) string {
+	if inv.Name == "jj" {
+		return "jj git init"
+	}
+	return inv.Name + " init"
+}
+
+// initOption describes one option of an init: whether it takes a value, as the next word
+// or after `=`, and whether that value is a directory the repository's files land in.
+type initOption struct{ valued, dir bool }
+
+// vcsBackend names a version-control program as a command line runs it.
+type vcsBackend string
+
+const (
+	backendGit vcsBackend = "git"
+	backendHg  vcsBackend = "hg"
+	backendSl  vcsBackend = "sl"
+	backendJJ  vcsBackend = "jj"
+)
+
+// initOptions are the options each backend's init takes. One outside the table refuses
+// the init: git reads unique prefixes of its long options, so an unlisted spelling may be
+// one that relocates the repository.
+var initOptions = map[vcsBackend]map[string]initOption{
+	backendGit: {
+		"-q": {}, "--quiet": {}, "--bare": {}, "--shared": {}, "--template": {valued: true},
+		"-b": {valued: true}, "--initial-branch": {valued: true}, "--object-format": {valued: true},
+		"--ref-format": {valued: true}, "--separate-git-dir": {valued: true, dir: true},
+	},
+	backendHg: {"--git": {}, "--no-git": {}},
+	backendSl: {"--git": {}, "--no-git": {}},
+	backendJJ: {"--colocate": {}, "--no-colocate": {}, "--git-repo": {valued: true, dir: true}},
+}
+
+// initOperands reads an init's words into the one directory operand it names, "" for none,
+// and the directories its options point the repository's files at. unread is why the words
+// cannot be read, worded for the deny; "" when they were.
+func initOperands(backend vcsBackend, args []string) (operand string, dirs []string, unread string) {
+	var operands []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			operands = append(operands, a)
+			continue
+		}
+		name, value, joined := strings.Cut(a, "=")
+		opt, known := initOptions[backend][name]
+		if !known {
+			return "", nil, "Its option " + name + " is not one init is known to take, so where it creates the repository cannot be read."
+		}
+		if opt.valued && !joined {
+			if i++; i >= len(args) {
+				return "", nil, "Its option " + name + " has no value."
+			}
+			value = args[i]
+		}
+		if opt.dir {
+			dirs = append(dirs, value)
+		}
+	}
+	if len(operands) > 1 {
+		return "", nil, "It names more than one directory."
+	}
+	if len(operands) == 1 {
+		operand = operands[0]
+	}
+	return operand, dirs, ""
+}
+
+// initRefusal is lease-vcs's answer for a worker's init: refused with why unless it creates
+// its repository wholly outside the lease's checkout, in a directory no checkout of the
+// job's repository holds, and then dest is that repository's work tree. unlocated is why
+// site could not be read.
+//
+// Everything that decides where the files land is read: the directory operand, -C, a git
+// directory named by --git-dir, GIT_DIR or --separate-git-dir, and jj's --git-repo. One that
+// cannot be read refuses the init, as does any that points back into the checkout.
+func initRefusal(row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	refuse := func(why string) vcsRefusal { return vcsRefusal{op: initOp(inv), kind: vcsOpInit, why: why} }
+	if unlocated != "" {
+		return refuse(strings.ReplaceAll(unlocated, "commits", "initializes"))
+	}
+	if row.CheckoutRoot == "" {
+		return refuse("The lease records no checkout_root, so it cannot be shown that the repository lies outside the worker's checkout; `magus job exec` stamps one.")
+	}
+	if inv.Name == "git" {
+		if parseGit(inv.Args).configured {
+			return refuse("It sets inline config, which can move where the repository lands.")
+		}
+	} else {
+		if slices.ContainsFunc(inv.Args, func(a string) bool { return relocatesDir(inv.Name, a) }) {
+			return refuse("It names another directory to run in, so where it creates the repository cannot be read.")
+		}
+		if parseVCS(inv.Name, inv.Args).alias != "" {
+			return refuse("It defines an alias or loads config, which can change what init does.")
+		}
+	}
+	args, _ := initArgs(inv)
+	operand, dirs, unread := initOperands(vcsBackend(inv.Name), args)
+	if unread != "" {
+		return refuse(unread)
+	}
+	dest := site.dir
+	if operand != "" {
+		if strings.HasPrefix(operand, "~") || strings.Contains(operand, "://") {
+			return refuse("The directory it names is not one local literal path, so where it creates the repository cannot be read.")
+		}
+		dest = resolveFrom(site.dir, operand)
+	}
+	dest, err := filepath.Abs(dest)
+	if err != nil {
+		return refuse("Where it creates the repository cannot be read.")
+	}
+	dirs = append(dirs, dest)
+	if site.gitDir != "" {
+		dirs = append(dirs, site.gitDir)
+	}
+	for _, d := range dirs {
+		if !filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
+			return refuse("A directory it names is not an absolute literal path, so where it creates the repository cannot be read.")
+		}
+		if why := checkoutOverlap(row.CheckoutRoot, d); why != "" {
+			return refuse(why)
+		}
+	}
+	return vcsRefusal{op: initOp(inv), kind: vcsOpInit, dest: dest}
+}
+
+// relocatesDir reports whether arg is hg, sl or jj's option moving the program off its
+// working directory, or an abbreviation hg and sl accept of one.
+func relocatesDir(backend, arg string) bool {
+	name, _, _ := strings.Cut(arg, "=")
+	return slices.ContainsFunc(relocatingFlags[backend], func(flag string) bool {
+		switch {
+		case len(flag) == 2:
+			return strings.HasPrefix(arg, flag)
+		case backend == "jj":
+			return name == flag
+		}
+		return name == flag || strings.HasPrefix(name, "--") && len(name) > 3 && strings.HasPrefix(flag, name)
+	})
+}
+
+// checkoutOverlap says why dir may not hold a repository a worker creates: it lies in the
+// lease's checkout, holds it, or belongs to a checkout of the same repository, one that
+// shares the checkout's common git directory. "" when dir is clear of all three.
+func checkoutOverlap(checkout, dir string) (why string) {
+	switch {
+	case within(dir, checkout):
+		return fmt.Sprintf("%s lies in the lease's checkout, %s.", dir, checkout)
+	case within(checkout, dir):
+		return fmt.Sprintf("%s holds the lease's checkout, %s.", dir, checkout)
+	}
+	if _, common, ok := gitCheckout(dir); ok {
+		if _, own, ok := gitCheckout(checkout); ok && samePath(common, own) {
+			return fmt.Sprintf("%s lies in a checkout of the repository the lease works in.", dir)
+		}
+	}
+	return ""
+}
+
+// inFreshRepo reports whether a worker may run inv at site because site is inside a
+// repository an earlier init on the same line created, listed in fresh. The call must act
+// in that repository alone: not push, not name config the worker could point at the
+// checkout, and not be a verb that writes to a path its operands name.
+func inFreshRepo(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
+	if unlocated != "" || !slices.ContainsFunc(fresh, func(f string) bool {
+		return within(site.dir, f) && (site.gitDir == "" || within(site.gitDir, f))
+	}) || isPush(inv) || isInit(inv) {
+		return false
+	}
+	if inv.Name != "git" {
+		return parseVCS(inv.Name, inv.Args).alias == ""
+	}
+	g := parseGit(inv.Args)
+	switch {
+	case g.configured:
+		return false
+	case slices.Contains([]string{"clone", "worktree", "archive", "format-patch", "bundle", "submodule", "checkout-index"}, g.sub):
+		return false
+	case g.sub == "config":
+		return !slices.ContainsFunc(g.rest, func(a string) bool {
+			a = strings.ToLower(a)
+			return strings.Contains(a, "worktree") || strings.HasPrefix(a, "--file") || strings.HasPrefix(a, "--blob") ||
+				a == "--global" || a == "--system" || a == "-f"
+		})
+	}
+	return !slices.ContainsFunc(g.rest, func(a string) bool { return strings.HasPrefix(a, "--output") })
 }
 
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the
@@ -1591,7 +2603,7 @@ func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, ba
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
 	case err != nil || ref == "":
-		return root + " has no branch checked out; switch to the job's branch first."
+		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID)
 	case isBaseBranch(ref, res.Base):
 		return fmt.Sprintf("%s is on %s, the base branch.", root, ref)
 	}
@@ -1602,6 +2614,17 @@ func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, ba
 // segment for a remote-tracking base such as origin/main.
 func isBaseBranch(ref, base string) bool {
 	return ref == base || ref == path.Base(base)
+}
+
+// switchToJobBranch is the line that puts a detached checkout on the job's branch, named
+// after the job as the orchestrator names it, or creates that branch when it does not exist.
+// A detached HEAD is never a place to commit: the orchestrator lands a branch, and a commit
+// on no branch is one it cannot name.
+func switchToJobBranch(backend, job string) string {
+	if backend != "git" {
+		return "check out a branch named " + job + " first."
+	}
+	return fmt.Sprintf("run `git switch %s`, or `git switch -c %s` when no such branch exists.", job, job)
 }
 
 // siteCheckout resolves site to the root of the checkout it stands in.
@@ -1933,14 +2956,29 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	dialect := effectiveDialect(deps.ShellDialect)
 	redirects := redirectTargets(command, 0, dialect)
-	for _, candidate := range writeTargetCandidates(command, 0, dialect) {
+	// A relative word names a path under the directory the call runs in, which for a
+	// command run from a subdirectory is not the checkout's root, and the line's cds move it.
+	checkout := leaseCheckout(ctx, location, actingLease)
+	start, home := cmp.Or(deps.callDir, checkout), userHome()
+	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
-		if strings.HasPrefix(candidate, "-") {
+		if strings.HasPrefix(candidate.word, "-") {
 			continue
 		}
-		rel, inside := workspaceRelative(location.workspace, candidate)
+		target, placed := candidate.place(home)
+		if !placed {
+			continue
+		}
+		rel, inside := workspaceRelative(checkout, target)
 		if !inside {
+			// A checkout nested under this one is another checkout, which the file-write
+			// rules refuse a lease outright.
+			if nestedCheckout(checkout, target) {
+				if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+					return g.Reason
+				}
+			}
 			continue
 		}
 		declared, byCatchAll := declaredPath(live, rel)
@@ -1949,14 +2987,106 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		// A catch-all covers every word, `print(1)` included, so under one only a
 		// redirect target or a word shaped like a file stands in for a path.
-		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(location.workspace, rel) {
+		if byCatchAll && !slices.Contains(redirects, candidate.word) && !pathShaped(checkout, rel) {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == decisionDeny {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
 			return g.Reason
 		}
 	}
+	me, enrolled := liveLease(live, actingLease)
+	if !enrolled || len(me.WritePaths) == 0 {
+		return ""
+	}
+	for _, operand := range removedOrMovedOperands(command, 0, dialect, start, home) {
+		target, placed := operand.place(home)
+		if !placed {
+			continue
+		}
+		rel, inside := workspaceRelative(checkout, target)
+		if !inside {
+			continue
+		}
+		if outside := reachOutside(checkout, me, rel); outside != "" {
+			what := outside + " is"
+			if outside != rel {
+				what = rel + " holds " + outside + ", which is"
+			}
+			return denial{
+				Say: fmt.Sprintf("magus workspace: %s outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
+					what, me.ID, strings.Join(me.WritePaths, ", ")),
+				Why: fmt.Sprintf("A remove or move writes each path it names, and a directory with everything in it, so every one of them must be inside the write paths lease %s (%s) declared and outside its deny paths. "+
+					"`%s` shows what the job holds.\n"+leaseActorWhy,
+					me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID)),
+			}.full()
+		}
+	}
 	return ""
+}
+
+// reachOutside is the first path at or in rel that me may not write: one outside its write
+// paths, or inside its deny paths. "" when every path there is me's. Of a directory only
+// the subdirectories that lead to a write path are walked, and a pattern that cannot be
+// read ends the walk silently, as every uncertainty here does.
+func reachOutside(checkout string, me types.Job, rel string) string {
+	root := filepath.Join(checkout, filepath.FromSlash(rel))
+	// Lstat: a remove of a link to a directory removes the link.
+	if info, err := os.Lstat(root); err != nil || !info.IsDir() {
+		_, denied, errDeny := declarationCovering(me.DenyPaths, rel)
+		_, mine, errMine := declarationCovering(me.WritePaths, rel)
+		if errDeny != nil || errMine != nil || mine && !denied {
+			return ""
+		}
+		return rel
+	}
+	outside := ""
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			// WalkDir reports an error only for a directory it could not list.
+			return filepath.SkipDir
+		}
+		under, err := filepath.Rel(root, p)
+		if err != nil {
+			return filepath.SkipAll
+		}
+		r := path.Join(rel, filepath.ToSlash(under))
+		_, denied, errDeny := declarationCovering(me.DenyPaths, r)
+		_, mine, errMine := declarationCovering(me.WritePaths, r)
+		switch {
+		case errDeny != nil || errMine != nil:
+			return filepath.SkipAll
+		case denied:
+		case mine && d.IsDir() && !holdsDeclaredPath(me.DenyPaths, r):
+			return filepath.SkipDir
+		case mine:
+			return nil
+		case d.IsDir() && holdsDeclaredPath(me.WritePaths, r):
+			return nil
+		}
+		outside = r
+		return filepath.SkipAll
+	})
+	return outside
+}
+
+// holdsDeclaredPath reports whether the directory dir holds a path one of decls could name: it is an
+// ancestor of a declaration's literal part, or a declaration starts with a pattern.
+func holdsDeclaredPath(decls []string, dir string) bool {
+	for _, raw := range decls {
+		file, _ := types.SplitClaim(raw)
+		var literal []string
+		for _, seg := range strings.Split(path.Clean(file), "/") {
+			if strings.ContainsAny(seg, "*?[{") {
+				break
+			}
+			literal = append(literal, seg)
+		}
+		prefix := strings.Join(literal, "/")
+		if prefix == "" || dir == "." || strings.HasPrefix(prefix+"/", dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // declaredPath reports whether any live lease named rel in a boundary, as a path it owns

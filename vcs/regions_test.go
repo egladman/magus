@@ -115,7 +115,8 @@ func TestRegions(t *testing.T) {
 				replaceIn(t, dir, "a.go", "\treturn 1\n}\n\nfunc B() int {\n\treturn 2",
 					"\treturn 11\n} // A\n// between\nfunc B2() int {\n\treturn 22")
 			},
-			// The comment directly above B2 is B2's; the blank line it replaced was A's.
+			// The comment directly above B2 is B2's. The blank line B2 replaced is mid-hunk,
+			// between lines the edit touches, so it keeps A's name.
 			want: []types.RegionChange{
 				golang(was, 6, 8, declA), golang(was, 9, 10, declB),
 				golang(now, 6, 7, declA), golang(now, 8, 10, "func B2() int {"),
@@ -307,8 +308,9 @@ func TestRegionsBetween(t *testing.T) {
 			want: []types.RegionChange{region("a.go", was, 10, 10, "func B() int {", "golang"), region("a.go", now, 10, 10, "func B() int {", "golang")},
 		},
 		{
-			name: "an added function is itself", path: "a.go", before: regionsGo, after: added,
-			want: []types.RegionChange{region("a.go", now, 16, 16, "func C() {", "golang"), region("a.go", now, 17, 18, "func D() {", "golang")},
+			// Line 16 is the blank line the hunk starts with; it leads into D, not C.
+			name: "an added function is itself, its leading blank line included", path: "a.go", before: regionsGo, after: added,
+			want: []types.RegionChange{region("a.go", now, 16, 18, "func D() {", "golang")},
 		},
 		{
 			name: "no before places every line", path: "a.go", after: "package a\n\nfunc X() {\n}\n",
@@ -355,6 +357,25 @@ func TestRegionsBetween(t *testing.T) {
 				region("d.md", now, 1, 3, "# T", "markdown"),
 				region("d.md", now, 4, 6, "## S", "markdown"),
 			},
+		},
+		{
+			// The hunk starts with the blank line, which git names by the const above.
+			name: "an added const with a doc comment takes the blank line before it", path: "a.go",
+			before: "const A = 1\nconst B = 2\n",
+			after:  "const A = 1\n\n// C is new.\nconst C = 3\nconst B = 2\n",
+			want:   []types.RegionChange{region("a.go", now, 2, 4, "const C = 3", "golang")},
+		},
+		{
+			name: "an added func with a doc comment takes the blank line before it", path: "a.go",
+			before: "const A = 1\nconst B = 2\n",
+			after:  "const A = 1\n\n// C does it.\nfunc C() {\n}\nconst B = 2\n",
+			want:   []types.RegionChange{region("a.go", now, 2, 5, "func C() {", "golang")},
+		},
+		{
+			name: "an added func with no doc comment takes the blank line before it", path: "a.go",
+			before: "const A = 1\nconst B = 2\n",
+			after:  "const A = 1\n\nfunc C() {\n}\nconst B = 2\n",
+			want:   []types.RegionChange{region("a.go", now, 2, 4, "func C() {", "golang")},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -447,15 +468,17 @@ func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
 
 // The pure placement (types.DiffDriver.Declarations) names every line as git's funcname
 // matching does, for every driver magus routes files to, so a region a merge reports is
-// the region git's hunk headers, a footprint and a job claim name.
+// the region git's hunk headers, a footprint and a job claim name. The buzz fixture holds a
+// project call and the yaml one nested keys, so key paths are placed alike too.
 func TestPurePlacementMatchesGit(t *testing.T) {
 	fixtures := map[string]string{
-		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\nfunc F(x int) int {\n\treturn x\n}\n",
-		"python":     "import os\n\nclass A:\n    def m(self):\n        return 1\n\nasync def f():\n    pass\n",
+		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\n// M prints.\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\n// F returns x.\n// Twice.\nfunc F(x int) int {\n\treturn x\n}\n",
+		"python":     "import os\n\nclass A:\n    def m(self):\n        return 1\n\n# f waits.\nasync def f():\n    pass\n",
 		"rust":       "use std::fmt;\n\npub struct S {\n    a: i32,\n}\n\nimpl S {\n    pub fn new() -> Self {\n        S { a: 1 }\n    }\n}\n",
-		"markdown":   "Intro line\n\n# Title\n\ntext\n\n## Section two\n\n   ### Indented heading\n\n    #### code block, not a heading\n",
-		"typescript": "import x from 'y'\n\nexport function f(a: number): number {\n  if (a) {\n    return a\n  }\n  return 0\n}\n\nclass C {\n  m(a: string): void {\n  }\n}\n",
-		"buzz":       "import \"std\";\n\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+		"markdown":   "Intro line\n\n# Title\n\ntext\n\n<!-- note -->\n## Section two\n\n   ### Indented heading\n\n    #### code block, not a heading\n",
+		"typescript": "import x from 'y'\n\n// f returns a number.\nexport function f(a: number): number {\n  if (a) {\n    return a\n  }\n  return 0\n}\n\nclass C {\n  m(a: string): void {\n  }\n}\n",
+		"buzz":       "import \"std\";\n\nmagus\\project({\n    \"name\": \"x\",\n    \"targets\": {\n        \"test\": {\"timeout\": \"5m\"},\n    },\n});\n\n// main runs.\nexport fun main(args: [str]) > void {\n    std\\print(\"x\");\n}\n\nobject O {\n    fun m() > void {}\n}\n\ntest \"it works\" {\n}\n",
+		"yaml":       "# config\nversion: 1\njobs:\n  stale_after: 2h\n  nested:\n    deep: 1\nlist:\n  - a\nblock: |\n  text: here\n",
 	}
 	var funcnames []string
 	for _, f := range gitFuncnames {
@@ -470,4 +493,112 @@ func TestPurePlacementMatchesGit(t *testing.T) {
 			assert.Equal(t, want, d.Declarations(types.SplitLines([]byte(body))))
 		})
 	}
+}
+
+const projectMagusfile = `import "magus";
+
+fun helper() > void {
+}
+
+// The project.
+magus\project({
+    "name": "demo",
+    "sources": [
+        "a.txt",
+    ],
+    "targets": {
+        // Runs the suite.
+        "test": {
+            "timeout": "25m",
+            "slots": 4,
+        },
+        "go-test": {"slots": 4},
+    },
+});
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+}
+`
+
+func TestPlaceProjectKeys(t *testing.T) {
+	var funcnames []string
+	for _, f := range gitFuncnames {
+		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+	}
+	for _, tc := range []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "keys and the entries of a map key",
+			body: projectMagusfile,
+			want: []string{
+				"", "", "fun helper() > void {", "fun helper() > void {", "fun helper() > void {",
+				"project", "project",
+				"project.name",
+				"project.sources", "project.sources", "project.sources",
+				"project.targets",
+				"project.targets.test", "project.targets.test", "project.targets.test", "project.targets.test", "project.targets.test",
+				"project.targets.go-test",
+				"project.targets",
+				"project",
+				"project",
+				"export fun build(ctx: magus\\Context, args: [str]) > void {", "export fun build(ctx: magus\\Context, args: [str]) > void {",
+			},
+		},
+		{
+			name: "an aliased import and a one-line call",
+			body: "import \"magus\" as m;\nm\\project({\"name\": \"x\"});\n",
+			want: []string{"", "project"},
+		},
+		{
+			name: "braces inside strings and comments are not counted",
+			body: "magus\\project({\n    \"name\": \"{\", // }\n    \"tools\": [],\n});\n",
+			want: []string{"project", "project.name", "project.tools", "project"},
+		},
+		{
+			name: "a file with no project call keeps git's names",
+			body: "fun a() > void {\n}\n",
+			want: []string{"fun a() > void {", "fun a() > void {"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := gitPlaceLines(t.Context(), t.TempDir(), "buzz", funcnames, []byte(tc.body))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A footprint names an edit inside one target's settings by its key path, which is what a
+// `magusfile.buzz#project.targets.test` claim names.
+func TestRegionsBetweenNamesProjectKeys(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.buzz diff=buzz\n"}).Root()
+	after := []byte(strings.Replace(projectMagusfile, `"timeout": "25m"`, `"timeout": "30m"`, 1))
+	got, err := gitVCS{}.RegionsBetween(t.Context(), dir, "magusfile.buzz", []byte(projectMagusfile), after)
+	require.NoError(t, err)
+	assert.Equal(t, []types.RegionChange{
+		region("magusfile.buzz", types.RegionOld, 15, 15, "project.targets.test", "buzz"),
+		region("magusfile.buzz", types.RegionNew, 15, 15, "project.targets.test", "buzz"),
+	}, got)
+	for _, r := range got {
+		assert.True(t, types.NamesDeclaration("project.targets.test", r.Declaration))
+		assert.False(t, types.NamesDeclaration("project.targets.go-test", r.Declaration))
+	}
+}
+
+// A YAML line is named by its top-level key and the second-level key under it, which is
+// what a `magus.yaml#jobs.stale_after` claim names.
+func TestPlaceYAMLKeys(t *testing.T) {
+	var funcnames []string
+	for _, f := range gitFuncnames {
+		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+	}
+	body := "# config\nversion: 1\njobs:\n  stale_after: 2h\n  nested:\n    deep: 1\nlist:\n  - a\nblock: |\n  text: here\n"
+	got, err := gitPlaceLines(t.Context(), t.TempDir(), "yaml", funcnames, []byte(body))
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"", "version", "jobs", "jobs.stale_after", "jobs.nested", "jobs.nested", "list", "list", "block", "block",
+	}, got)
 }

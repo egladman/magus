@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/cmd/magus/gen"
-	json "github.com/egladman/magus/internal/json"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -612,8 +612,8 @@ func TestSelfUpdate_ConfirmNonInteractiveWithoutYes(t *testing.T) {
 	var out bytes.Buffer
 	err := confirmInstall(&out, strings.NewReader(""), false, false, "v0.4.0", "example.com", "/usr/local/bin/magus")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--"+gen.FlagSelfUpdateYes)
-	assert.Contains(t, err.Error(), "-"+gen.FlagSelfUpdateY)
+	assert.Contains(t, err.Error(), "--"+flaggen.FlagSelfUpdateYes)
+	assert.Contains(t, err.Error(), "-"+flaggen.FlagSelfUpdateY)
 	assert.NotContains(t, err.Error(), "uf.")
 }
 

@@ -2,7 +2,7 @@
 name: "magus-scout"
 description: "Answers standalone lookups and proves or refutes claims about a magus workspace with read-only magus queries, reporting each command and its output ref. Use for where-is, what-depends-on, is-this-generated and did-this-pass questions; not for edits or design."
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: claude-haiku-5-5
 ---
 
 # magus-scout

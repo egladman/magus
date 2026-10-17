@@ -1,3 +1,4 @@
+// Tier 1, mechanical: the fix is a `was=` marker on the section header.
 namespace casemoves;
 
 import "assert";
@@ -19,7 +20,7 @@ object Section {
 }
 
 export fun reads() > [str] {
-    return ["libs/conventions/proofread/testdata/cases/*.txtar"];
+    return ["libs/proofread/internal/calibrate/cases/*.txtar"];
 }
 
 // check fails a case that sat in an fp section at the merge base and sits in a pass section
@@ -233,7 +234,7 @@ test "a text that stays fp, a new pass case and a hit moved to pass are not move
 }
 
 test "a file with no base copy has no moves, and a deleted fp is not a move" {
-    final files = support\fixture({"libs/conventions/proofread/testdata/cases/absolute.txtar": "-- pass/change-description --\n- It never fired.\n"});
+    final files = support\fixture({"libs/proofread/internal/calibrate/cases/absolute.txtar": "-- pass/change-description --\n- It never fired.\n"});
     final none = fun (p: str) > str? {
         return null;
     };
@@ -242,7 +243,7 @@ test "a file with no base copy has no moves, and a deleted fp is not a move" {
 }
 
 test "a finding names the file, the line and the note to add" {
-    final path = "libs/conventions/proofread/testdata/cases/absolute.txtar";
+    final path = "libs/proofread/internal/calibrate/cases/absolute.txtar";
     final files = support\fixture({path: "-- pass/change-description --\n- It never fired.\n"});
     final before = fun (p: str) > str? {
         return baseFile;

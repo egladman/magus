@@ -231,7 +231,7 @@ func applyDisplay() {
 	// text on stderr while a caller parses this run as JSONL. They land as run.notice
 	// records on the stderr encoder a -o jsonl sink writes its notices through.
 	switch {
-	case global.output == string(FormatJSONL):
+	case global.output == string(outputJSONL):
 		h = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), lvl))
 	case globalCfg.Log.Format == "json":
 		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
@@ -249,7 +249,7 @@ func applyDisplay() {
 	}
 	// -o jsonl notices stay whole: a parser selects what it reads. The run log never passes
 	// through here, so it keeps what a quiet display drops.
-	if global.output != string(FormatJSONL) && quietDisplay() {
+	if global.output != string(outputJSONL) && quietDisplay() {
 		h = quiet.Wrap(h, global.verbose >= 1)
 	}
 	slog.SetDefault(slog.New(dirHandler{h}))

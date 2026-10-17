@@ -87,6 +87,21 @@ func TestBuildGuard(t *testing.T) {
 		}, reg.Builtins())
 	})
 
+	t.Run("builtins records declared markers", func(t *testing.T) {
+		reg := workspace.NewWorkspaceRegistry()
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+
+		compat := vm.NewMap()
+		compat.MapSet("decision", vm.StrValue("advise"))
+		compat.MapSet("markers", vm.ListValue([]vm.Value{vm.StrValue("legacy:"), vm.StrValue("Deprecated:")}))
+		settings := vm.NewMap()
+		settings.MapSet("compat-marker", compat)
+		require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "builtins"), settings))
+		assert.Equal(t, map[string]builtin.Setting{
+			"compat-marker": {Decision: builtin.Advise, Markers: []string{"legacy:", "Deprecated:"}},
+		}, reg.Builtins())
+	})
+
 	t.Run("bad decision is rejected", func(t *testing.T) {
 		guard := buildGuard(context.Background(), nil, nil)
 		rule := vm.NewMap()
@@ -146,6 +161,21 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		{"an unknown setting field", one("read-navigation", setting(map[string]vm.Value{
 			"decision": vm.StrValue("deny"), "limit": vm.IntValue(120),
 		})), `unknown field "limit"`},
+		{"markers on a rule that takes none", one("whole-tree", setting(map[string]vm.Value{
+			"decision": vm.StrValue("deny"), "markers": vm.ListValue([]vm.Value{vm.StrValue("x")}),
+		})), "takes no markers parameter; only compat-marker does"},
+		{"a blank marker", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue([]vm.Value{vm.StrValue("legacy:"), vm.StrValue(" ")}),
+		})), "a marker is blank"},
+		{"markers that list nothing", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue(nil),
+		})), `"markers" must be a list of one or more strings`},
+		{"markers that are not a list", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.StrValue("legacy:"),
+		})), `"markers" must be a list`},
+		{"a marker that is not a string", one("compat-marker", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "markers": vm.ListValue([]vm.Value{vm.IntValue(1)}),
+		})), `"markers"[0] must be a string`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -182,5 +212,67 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "builtins"), one("whole-tree", vm.StrValue("deny")))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "root magusfile")
+	})
+	t.Run("tokens on a rule that takes none", func(t *testing.T) {
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "tokens": vm.IntValue(200_000),
+		})))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
+		assert.ErrorContains(t, err, "takes no tokens parameter")
+	})
+	t.Run("calls below 1 is refused before resolution", func(t *testing.T) {
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
+			"decision": vm.StrValue("advise"), "calls": vm.IntValue(0),
+		})))
+		assert.ErrorContains(t, err, `"calls" must be an int of 1 or more`)
+	})
+}
+
+func TestProfileRecordsTheLevel(t *testing.T) {
+	reg := workspace.NewWorkspaceRegistry()
+	guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+	require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "profile"), vm.StrValue("strict")))
+	assert.Equal(t, types.GuardProfileStrict, reg.Profile())
+}
+
+// A level the guard could not honor stops the load with MGS1045 and records nothing: a
+// workspace that believes it chose strict and runs light is the failure this prevents.
+func TestProfileMisdeclarationIsCoded(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []vm.Value
+		want string
+	}{
+		{"no level", nil, "expected one level, off, light, standard, strict"},
+		{"not a string", []vm.Value{vm.IntValue(3)}, "expected one level"},
+		{"two levels", []vm.Value{vm.StrValue("light"), vm.StrValue("strict")}, "expected one level"},
+		{"unknown level", []vm.Value{vm.StrValue("max")}, `unknown level "max"; give one of off, light, standard, strict`},
+		{"empty level", []vm.Value{vm.StrValue("")}, `unknown level ""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := workspace.NewWorkspaceRegistry()
+			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+			err := callVoidDirect(t, requireDirect(t, guard, "profile"), tc.args...)
+			require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
+			assert.ErrorContains(t, err, tc.want)
+			assert.Empty(t, reg.Profile())
+		})
+	}
+	t.Run("declared twice", func(t *testing.T) {
+		profile := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil), "profile")
+		require.NoError(t, callVoidDirect(t, profile, vm.StrValue("strict")))
+		err := callVoidDirect(t, profile, vm.StrValue("off"))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
+		assert.ErrorContains(t, err, "already declared")
+	})
+	t.Run("outside the root magusfile", func(t *testing.T) {
+		reg := workspace.NewWorkspaceRegistry()
+		ctx := interp.WithProjectPath(workspace.ContextWithRegistry(t.Context(), reg), "libs/foo")
+		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "profile"), vm.StrValue("strict"))
+		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
+		assert.ErrorContains(t, err, "root magusfile")
+		assert.Empty(t, reg.Profile())
 	})
 }

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -22,17 +21,16 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module magus -lang buzz -out ../internal/interp/bindings/gen/magus.go
-
-func init() { Register(Magus) }
+//go:generate go run ../cmd/magus-utils bindings -module magus -lang buzz -out ../internal/interp/bindings/gen/magus.go -pkg bindgen
 
 // Magus declares the host-declarable subset of the magus module. The remaining
 // methods (target, dispatch, deps, pry, register) and the PROVIDER NAMESPACES
@@ -232,6 +230,14 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap}},
 			Raises:  true,
 			Impl:    MagusPrecedents,
+		},
+		{
+			Name:    "conformance",
+			Doc:     "The conformance lens as data: {definition, rows, stale, excluded, answer, indexes}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, anchor, propose, known, source, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is what a check enforces, the committed ratchet value when source is ratchet and the configured anchor otherwise; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value that no known entry accepts, each {id, source, measure}. propose is zero, or a tighter value a person may commit to the ratchet record knowledge.conformance.ratchet names; it is never looser than value, and nothing enforces live. stale lists known entries that no longer violate; magus never writes the record, so a person or a workspace target deletes them, as `magus run format .` does in the magus repository. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a ratchet record that is missing, malformed or looser than its anchor.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusConformance,
 		},
 		{
 			Name:    "symbols",
@@ -514,13 +520,26 @@ var Magus = Module{
 				{
 					Name: "builtins",
 					Doc: "Set compiled guard rules by name: each value is \"off\", \"advise\" or \"deny\", or " +
-						"{\"decision\": ..., \"lines\": int} where the rule takes lines (read-navigation alone). " +
-						"A rule left out keeps the decision `magus describe rules` lists. Declared at the top " +
+						"{\"decision\": ..., \"lines\": int, \"tokens\": int, \"calls\": int, \"chars\": int} " +
+						"with only the parameters the rule takes (lines: read-navigation). A rule left out " +
+						"keeps what the profile level sets, else the decision `magus describe rules` lists. Declared at the top " +
 						"level of the root magusfile, once. When the magusfile is tracked, each rule takes the " +
 						"stricter of the committed and the working-tree setting, so a loosening applies only " +
-						"once committed. An unknown rule name, an unknown decision, lines on a rule that takes " +
-						"none, declaring twice or from another project is MGS1045.",
+						"once committed. An unknown rule name, an unknown decision, a parameter on a rule that " +
+						"takes none or out of its range, declaring twice or from another project is MGS1045.",
 					Args:   []Arg{{Name: "rules", Type: TypeAnyMap}},
+					Extern: true,
+				},
+				{
+					Name: "profile",
+					Doc: "Pick the level the guard's compiled rules start from: \"off\", \"light\", \"standard\" " +
+						"or \"strict\". A level sets the rules it names, and a rule named in builtins " +
+						"overrides the level's setting for it. Unset is light. Declared at the top level " +
+						"of the root magusfile, once. When the magusfile is tracked, the stricter of the " +
+						"committed and the working-tree level applies, and a person's agents.profile in " +
+						"magus.yaml may raise it, never lower it. An unknown level, declaring twice or " +
+						"from another project is MGS1045.",
+					Args:   []Arg{{Name: "level", Type: TypeString}},
 					Extern: true,
 				},
 				{
@@ -619,10 +638,11 @@ var Magus = Module{
 			Name: "harness",
 			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.",
 			Methods: []Method{{
-				Name:   "provider",
-				Doc:    "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Name:    "provider",
+				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness's HarnessKey, which keys the hosts map of magus\\job.modelTiers; a call that ignores it wires the harness as before.",
+				Args:    []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessKey"}},
+				Extern:  true,
 			}},
 		},
 		{
@@ -734,14 +754,24 @@ var Magus = Module{
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"criteria, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
 						"check (`<target> <project> [-- args]`, or the rendered `magus run` line as " +
-						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only. A " +
+						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only, " +
+						"max_attempts (how many times the job may be forked, its first fork included; 0 clears " +
+						"the cap; checked only when an ended row is forked again, since magus never retries a job " +
+						"on its own). A " +
 						"key opts omits is left untouched, so a later put in a job's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
 						"the worker's prompt, so the console can join activity to the row. " +
-						"created/updated/releases/write_proof are stamped by the store and cannot be set " +
-						"here. A put that CREATES a row raises when its write_paths cover a file the " +
+						"created/updated/releases/write_proof, generation, attempts, prior and rejection " +
+						"are stamped by the store and cannot be set " +
+						"here. A put is validated whole before anything is stored, and raises every " +
+						"problem at once (codes MGS3037 through MGS3046), each with the field it is " +
+						"on and the fix. The record's schema is what `magus job fork --schema` prints. " +
+						"waivers, a list of {code, subject, reason}, keeps a write path broader than " +
+						"the workspace allows (MGS3043), an output a target regenerates outside the " +
+						"write paths (MGS3044) or a ci target the job does not run (MGS3045). " +
+						"A put that CREATES a row raises when its write_paths cover a file the " +
 						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
 						"while another live job with write paths is bound to this checkout: that job " +
 						"needs a worktree of its own, since a half-saved one of those stops the " +
@@ -760,10 +790,11 @@ var Magus = Module{
 				},
 				{
 					Name: "register",
-					Doc: "Report the base a worker actually landed on, and learn how it compares " +
-						"with the checkpoint the job was handed. reported_base is a checkpoint token " +
-						"in the form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
-						"when the tree is dirty. Returns {job, advice}: the stored row, and a " +
+					Doc: "Take job id in this checkout: record the base it is on, and learn how it " +
+						"compares with the checkpoint the job was handed. The base is read from the " +
+						"checkout's version control, never passed in, as `magus vcs checkpoint -o name` " +
+						"prints it: `<rev>`, or `<rev>+<digest>` when the tree is dirty; a checkout " +
+						"that reports no revision raises. Returns {job, advice}: the stored row, and a " +
 						"sentence naming both revisions and what to do next. The row carries " +
 						"reported_base, registered, and base_verdict - one of match (same token), " +
 						"revision-match (same revision, different uncommitted patch), diverged " +
@@ -773,13 +804,12 @@ var Magus = Module{
 						"like any other, and what to do about it is the caller's and the " +
 						"orchestrator's call. The one write here that does not create the row it " +
 						"names - an id nothing declared means the worker was handed the wrong id, so " +
-						"it raises rather than inventing a row. Read straight off the workspace " +
-						"already open on the context - no subprocess. Works from a magusfile target " +
-						"and from a `magus buzz` script run inside a workspace; raises MGS1022 only " +
-						"when there is no workspace to read.",
+						"it raises rather than inventing a row. Reads the job store of the workspace " +
+						"already open on the context, and runs its version control to read the base. " +
+						"Works from a magusfile target and from a `magus buzz` script run inside a " +
+						"workspace; raises MGS1022 when there is no workspace to read.",
 					Args: []Arg{
 						{Name: "id", Type: TypeString},
-						{Name: "reported_base", Type: TypeString},
 					},
 					Returns: []Ret{{Type: TypeAnyMap}},
 					Raises:  true,
@@ -833,7 +863,47 @@ var Magus = Module{
 					Raises:  true,
 					Extern:  true,
 				},
+				{
+					Name: "modelTiers",
+					Doc: "Declare the model tiers a fork assigns: an enum of your own, cheapest case first, " +
+						"which magus reads once at load. tiers is that enum and default one of its cases. " +
+						"hosts maps each harness the magusfile wired, keyed by the HarnessKey " +
+						"magus\\harness.provider returns, to a function from a tier to the model alias that harness spawns; " +
+						"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
+						"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
+						"function as an exhaustive match over the enum, so a tier added later fails " +
+						"`magus check` until every function covers it. No model name is magus's: the aliases " +
+						"are yours. hosts, bounds and skills are checked at load against the enum, and the " +
+						"declaration must follow the magus\\harness.provider calls it maps. A declaration " +
+						"magus cannot use is MGS1052, and so is a second call or one outside the root " +
+						"magusfile. magus\\job.modelTiers(null) turns tiers off. With no call the workspace " +
+						"gets the magus/modeltiers module: economy, standard and principal. This declares; " +
+						"it never selects a model for a call, retries or escalates, and prints nothing.",
+					Args: []Arg{
+						{Name: "tiers", Type: TypeAny},
+						{Name: "default", Type: TypeAny, Optional: true},
+						{Name: "hosts", Type: TypeAny, Optional: true},
+						{Name: "bounds", Type: TypeAny, Optional: true},
+						{Name: "skills", Type: TypeAny, Optional: true},
+					},
+					Extern: true,
+				},
+				{
+					Name: "modelTier",
+					Doc: "Register the one function a fork calls to choose a job's model tier: " +
+						"fun(req: ModelTierRequest) > any, returning null to leave the declared default to " +
+						"decide, else an object with tier (a case of the modelTiers enum), skills (a " +
+						"SkillVariant) and a non-empty reason. It runs once per fork, never during a run, and " +
+						"a row that names its own tier or model bypasses it. The job store is read-only inside " +
+						"it: every magus\\job member raises, so it decides from the request and the recorded " +
+						"history alone. A non-null answer lacking tier, skills or a reason fails the fork. " +
+						"Declared at the top level of the root magusfile, once; a second call, a call from " +
+						"another project, or a non-function is MGS1052.",
+					Args:   []Arg{{Name: "matrix", Type: TypeFunc, Func: "fun (req: ModelTierRequest) > any !> any"}},
+					Extern: true,
+				},
 			},
+			Objects: []string{"ModelTierRequest", "ModelTierBounds", "JobModelTier"},
 		},
 		{
 			Name: "describe",
@@ -1032,7 +1102,7 @@ var Magus = Module{
 						"Reads the trail of every checkout of this repository that changed inside the window, because a session's hooks record into the checkout they ran from. " +
 						"An unknown option or an unreadable time raises, and MGS1022 outside a workspace.",
 					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
-					Returns: []Ret{{Type: TypeAny, Object: "FeedbackTrail"}},
+					Returns: []Ret{{Type: TypeAny, Object: "Trail"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1053,7 +1123,7 @@ var Magus = Module{
 				{
 					Name:    "marks",
 					Doc:     "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark on an id supersedes an earlier one. Kept per repository identity, so every checkout reads the same marks. Raises on a store line that does not decode, and MGS1022 outside a workspace.",
-					Returns: []Ret{{Type: TypeAny, Object: "[FeedbackMark]"}},
+					Returns: []Ret{{Type: TypeAny, Object: "[TrailMark]"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1062,8 +1132,8 @@ var Magus = Module{
 					Doc: "Record a person's verdict on one trail row and return it as stored, its time stamped. " +
 						"id is the row's stable id (fb and 12 hex digits), section one of refused, advised, unguarded, next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule or shape the row groups by. " +
 						"Appends to the per-repository store and rewrites nothing. Raises on a malformed mark, an unwritable store, and MGS1022 outside a workspace.",
-					Args:    []Arg{{Name: "mark", Type: TypeAnyMap, Object: "FeedbackMark"}},
-					Returns: []Ret{{Type: TypeAny, Object: "FeedbackMark"}},
+					Args:    []Arg{{Name: "mark", Type: TypeAnyMap, Object: "TrailMark"}},
+					Returns: []Ret{{Type: TypeAny, Object: "TrailMark"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1580,7 +1650,18 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 	if err != nil {
 		return types.InsightReport{}, err
 	}
-	return buildInsightReport(ctx, a, iopts)
+	report, err := buildInsightReport(ctx, a, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	// Best effort like volatility: a history file that does not read omits the section.
+	if tiers, terr := a.ModelTierLens(ctx); terr == nil {
+		report.ModelTiers = tiers
+	}
+	if grouping, gerr := a.GroupingLens(ctx); gerr == nil {
+		report.Grouping = grouping
+	}
+	return report, nil
 }
 
 // insightAnalyzer resolves the workspace that will answer the lenses.
@@ -1682,6 +1763,13 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 	if dr, derr := a.Duplication(ctx); derr == nil {
 		report.Duplication = dr
 	}
+	// Not best-effort like its siblings: the lens fails only on a configuration it cannot
+	// honor, and a report that hid that would read as a conforming workspace.
+	cr, err := a.Conformance(ctx)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	report.Conformance = cr
 	return report, nil
 }
 
@@ -1697,32 +1785,6 @@ type workspaceCacheDir interface {
 // workspaceJobLimits is the magus.yaml jobs section, recovered the same way.
 type workspaceJobLimits interface {
 	JobLimits() config.Jobs
-}
-
-// jobGrader is the CheckGrader for the Stores jobStoreFromContext opens, nil until the
-// composition root registers one.
-var (
-	jobGraderMu sync.RWMutex
-	jobGrader   job.CheckGrader
-)
-
-// RegisterJobGrader installs the grader magus\job.put and its siblings judge a declared
-// check with, as Location.Grader for the workspace on the context. It is registered rather
-// than imported because the grader runs the guard's rules, and the guard imports this
-// package; with none registered a check is not graded. A later call replaces it and
-// returns the one it replaced, for a test that swaps in its own to put back. Safe to call
-// while a magus\job member runs; that member sees the old grader or the new one.
-func RegisterJobGrader(g job.CheckGrader) (previous job.CheckGrader) {
-	jobGraderMu.Lock()
-	defer jobGraderMu.Unlock()
-	previous, jobGrader = jobGrader, g
-	return previous
-}
-
-func currentJobGrader() job.CheckGrader {
-	jobGraderMu.RLock()
-	defer jobGraderMu.RUnlock()
-	return jobGrader
 }
 
 // jobStoreFromContext opens the job store for the workspace already on ctx. A
@@ -1748,13 +1810,40 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader()}
-	// A Buzz process keeps the lease it was launched under in context. Do not
+	// No Grader: the store grades with the one the composition root installed through
+	// job.SetCheckGrader.
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return nil, fmt.Errorf("%s: resolve the user state dir that holds the job store: %w", member, err)
+	}
+	loc := job.Location{CacheDir: cd.CacheDir(), StateBase: stateBase, Root: ws.Root()}
+	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
+	// declaration this door owns.
+	type modelTiered interface {
+		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTierMatrix() types.ModelTierMatrix
+	}
+	if tiers, ok := ws.(modelTiered); ok {
+		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
+	}
+	if owned, ok := ws.(interface {
+		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)
+	}); ok {
+		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
+			res, err := owned.AffectedFromPaths(ctx, files)
+			if err != nil {
+				return nil, err
+			}
+			return res.Seed, nil
+		}
+	}
+	// Ctx-only on purpose, not job.RunLease: a Buzz process keeps the lease it was launched
+	// under in context, and the daemon's own environment names nobody's lease. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's record still outranks it.
-	if claim := proc.LeaseFromContext(ctx); claim != "" {
-		lease, _ := job.ActingLease(loc.CacheDir, claim)
+	if claim := types.JobLeaseFromContext(ctx); claim != "" {
+		lease, _ := job.ActingLease(loc, claim)
 		loc.Actor = &job.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil
@@ -1795,40 +1884,56 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 
-// MagusPutJob backs magus\job.put. The field merge is decoded by
-// internal/job.ParseMerge, the same decoder `magus job fork` calls, so
-// a caller of either accepts the same fields and rejects the same mistakes.
-func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
+// MagusPutJob backs magus\job.put: it merges the fields put sets into row id, through
+// internal/job.PutMerge, and refuses what that refuses. The Buzz opts map is decoded into
+// put by internal/job.DecodePut at the binding.
+func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
 		return types.Job{}, err
 	}
-	merge, err := job.ParseMerge(opts)
+	merge, err := job.PutMerge(put)
 	if err != nil {
 		return types.Job{}, err
 	}
+	ws := types.WorkspaceFromContext(ctx)
 	var limits config.Jobs
-	if l, ok := types.WorkspaceFromContext(ctx).(workspaceJobLimits); ok {
+	if l, ok := ws.(workspaceJobLimits); ok {
 		limits = l.JobLimits()
 	}
+	// A view that wraps no repository answers All by panicking; that is reported as
+	// Unavailable like an empty one, so the checks that need projects say they did not run.
+	validated := func() (validated job.Workspace) {
+		defer func() {
+			if r := recover(); r != nil {
+				validated = job.Workspace{Unavailable: fmt.Sprintf("the workspace on the context could not list its projects: %v", r)}
+			}
+		}()
+		projects := ws.All()
+		if len(projects) == 0 {
+			return job.Workspace{Unavailable: "the workspace on the context lists no projects"}
+		}
+		return job.Workspace{Projects: projects, Ignored: job.VCSIgnored(ctx, ws.Root())}
+	}()
 	// No symbol reader: a magusfile target holds no loaded graph, so only the ambiguity
 	// check is skipped here, and the gate still refuses to certify an unresolved name.
-	return job.ForkMerge(ctx, store, strings.TrimSpace(id), merge, limits, nil)
+	return job.ForkMerge(ctx, store.InWorkspace(validated), strings.TrimSpace(id), merge, limits, nil)
 }
 
-// MagusRegisterJob backs magus\job.register: a worker reports the base it actually
-// landed on, and learns how that compares with the checkpoint its job was handed. It
-// returns the stored row and internal/job.BaseAdvice's reading of the verdict, the
-// same pair `magus job exec` answers with.
+// MagusRegisterJob backs magus\job.register: it records the base the workspace's
+// checkout is on, read from its version control, for job id, and reports how that
+// compares with the checkpoint the job was handed. It returns the stored row and
+// internal/job.BaseAdvice's reading of the verdict, the same pair `magus job exec`
+// answers with.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
 // reported like any other. See types.Job.
-func MagusRegisterJob(ctx context.Context, id, base string) (types.Job, string, error) {
+func MagusRegisterJob(ctx context.Context, id string) (types.Job, string, error) {
 	store, err := jobStoreFromContext(ctx, "job.register")
 	if err != nil {
 		return types.Job{}, "", err
 	}
-	row, err := store.Exec(ctx, strings.TrimSpace(id), base)
+	row, err := store.Exec(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return types.Job{}, "", err
 	}
@@ -1845,16 +1950,15 @@ func MagusClearJob(ctx context.Context) (int, error) {
 	return store.Clear(ctx)
 }
 
-// jobResultFromMap applies the exact same versioned, strict decoder a JSON result uses.
-// Buzz's untyped map is deliberately treated as the JSON-shaped input contract rather
-// than as a partial Go struct: an unknown field must be rejected here too, or a result
-// an agent sends through a Buzz target could claim a field no verifier actually reads.
-func jobResultFromMap(result map[string]any) (types.JobResult, error) {
-	raw, err := json.Marshal(result)
-	if err != nil {
-		return types.JobResult{}, fmt.Errorf("magus\\job: encode result: %w", err)
+// MagusJobSchema is the JSON Schema `magus job fork --schema` prints, decoded, for the
+// magus\job.schema method that lets a caller with no CLI read the record it must put. It
+// needs no workspace.
+func MagusJobSchema(_ context.Context) (map[string]any, error) {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
+		return nil, fmt.Errorf("decode the job record schema: %w", err)
 	}
-	return job.DecodeResult(strings.NewReader(string(raw)))
+	return schema, nil
 }
 
 // jobAttemptFromContext reads the output descriptor from the workspace already on ctx.
@@ -1876,7 +1980,7 @@ func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, e
 	desc, err := cache.NewOutputStore(cd.CacheDir()).DescriptorByRef(ref)
 	switch {
 	case err == nil:
-		return types.JobAttempt{Found: true, Ref: ref, Project: desc.Project, Target: desc.Target, Spell: desc.Spell, Failed: desc.Failed, TimestampMs: desc.TimestampMs}, nil
+		return desc.JobAttempt(ref), nil
 	case errors.Is(err, fs.ErrNotExist):
 		return types.JobAttempt{}, nil
 	default:
@@ -1884,18 +1988,14 @@ func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, e
 	}
 }
 
-// MagusExitJob backs magus\job.exit with a result map. The result map follows the
-// versioned JSON result contract; see jobResultFromMap.
-func MagusExitJob(ctx context.Context, id string, result map[string]any) (types.Job, error) {
+// MagusExitJob backs magus\job.exit with a result: it files result as the holder's
+// report on row id.
+func MagusExitJob(ctx context.Context, id string, result types.JobResult) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
 		return types.Job{}, err
 	}
-	report, err := jobResultFromMap(result)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return job.Exit(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext)
+	return job.Exit(ctx, store, strings.TrimSpace(id), &result, jobAttemptFromContext)
 }
 
 // MagusAbandonJob backs magus\job.exit without a result.
@@ -1908,8 +2008,8 @@ func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
 }
 
 // MagusWaitJob backs magus\job.wait. A nil result selects the evidence Exit filed;
-// otherwise the supplied JSON-shaped map is decoded and resolved locally.
-func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.JobStatus, error) {
+// otherwise result is resolved locally.
+func MagusWaitJob(ctx context.Context, id string, result *types.JobResult) (types.JobStatus, error) {
 	store, err := jobStoreFromContext(ctx, "job.wait")
 	if err != nil {
 		return types.JobStatus{}, err
@@ -1923,10 +2023,7 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 	if result == nil {
 		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe, nil)
 	}
-	report, err := jobResultFromMap(result)
-	if err != nil {
-		return types.JobStatus{}, err
-	}
+	report := *result
 	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe, nil)
 }
 
@@ -2074,9 +2171,9 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 //     case it exists for: an argument would put the token in a process listing and in every
 //     run log. It was missing, so the magusfile that pipes a token to `graph push` had it
 //     dropped on the floor and the publish failed on every push to main.
-func nestedExecOptions(ctx context.Context, opts map[string]any, env []string) run.ExecOptions {
+func nestedExecOptions(ctx context.Context, opts map[string]any, env []string) spawn.ExecOptions {
 	quiet, _ := opts["quiet"].(bool)
-	return run.ExecOptions{
+	return spawn.ExecOptions{
 		Dir:     resolveRunDir(ctx, opts),
 		Env:     env,
 		Capture: true,
@@ -2106,7 +2203,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	var rec types.ExecResult
 	var cmdErr error
 	runFn := func() error {
-		res, err := run.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
+		res, err := spawn.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
 		rec, cmdErr = nestedResult(label, full, res, err, opts)
 		return nil
 	}
@@ -2119,7 +2216,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 // nestedResult turns a nested magus's exit into what the calling method returns.
 // A non-zero exit raises unless opts.allow_failure is true, which returns the
 // result instead, as proc.exec's runResult does; a sandbox denial always raises.
-func nestedResult(label string, full []string, res run.ExecResult, err error, opts map[string]any) (types.ExecResult, error) {
+func nestedResult(label string, full []string, res spawn.ExecResult, err error, opts map[string]any) (types.ExecResult, error) {
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
@@ -2165,10 +2262,10 @@ func nestedResult(label string, full []string, res run.ExecResult, err error, op
 // process value, so a script cannot shed its bound lease before calling magus\cmd.
 func recursiveMagusEnv(ctx context.Context) []string {
 	var env []string
-	if lease := proc.LeaseFromContext(ctx); lease != "" {
+	if lease := types.JobLeaseFromContext(ctx); lease != "" {
 		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
 	}
-	for _, k := range run.ProcForwardVars {
+	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
 			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,

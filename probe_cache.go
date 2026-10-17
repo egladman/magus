@@ -127,6 +127,9 @@ func lookupProbeSpec(probe spells.Command) (probeRecipe, bool) {
 // ancestry, by path and identity. Two project directories that see the same files resolve
 // the same version, so they share one answer; a file created in either adds a line and
 // moves its key, which is what an absent-file line used to catch.
+//
+// Every environment read under it is this process's, never the workspace's (WithEnv): a
+// probe forks with the process environment, so that is what decides the version it caches.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	recipe, ok := lookupProbeSpec(probe)
 	if !ok || !filepath.IsAbs(dir) {

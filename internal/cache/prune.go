@@ -12,7 +12,7 @@ import (
 // When dryRun is true no files are deleted; counts are still returned.
 func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int, freed int64, err error) {
 	_, entries := c.scanManifests()
-	casDir := filepath.Join(c.dir, "cas")
+	casDir := filepath.Join(c.store, "cas")
 
 	// Blob refcount across ALL entries (pruned and surviving), matching evictLRU:
 	// gcBlobs below only removes a blob once every manifest referencing it is
@@ -64,7 +64,7 @@ func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int
 
 	// GC any blobs now unreferenced (no-op in dry-run mode).
 	if !dryRun && n > 0 {
-		err = c.gcBlobs(ctx)
+		err = c.gcBlobs(ctx, nil)
 	}
 	return n, freed, err
 }

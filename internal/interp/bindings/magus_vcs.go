@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -20,7 +20,7 @@ func buildVCS(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return bindinggen.ObjectVCSCheckpoint(cp), nil
+		return bindgen.ObjectVCSCheckpoint(cp), nil
 	}))
 	return vcs
 }

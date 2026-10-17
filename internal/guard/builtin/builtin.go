@@ -1,8 +1,8 @@
 // Package builtin holds the decision each compiled guard rule takes when the workspace
 // declares nothing for it, and resolves what a workspace does declare against that set.
 //
-// It is a leaf (stdlib and types only) so the guard, the Buzz binding and the CLI can all
-// read one table without importing the guard engine.
+// It imports only leaves (stdlib and types) so the guard, the Buzz binding and the CLI can
+// all read one table without importing the guard engine.
 package builtin
 
 import (
@@ -25,24 +25,139 @@ const (
 	Deny   Decision = "deny"
 )
 
-// Setting is one rule's resolved configuration. Lines is read-navigation's size of a whole
-// read worth flagging; 0 means unset, and the binary ships no number for it.
+// Setting is one rule's resolved configuration. Each parameter is a threshold the rule
+// fires at, taken only by the rules params lists for it; 0 means unset, and the binary
+// ships no number for it.
 type Setting struct {
-	Decision Decision
-	Lines    int
+	Decision Decision `json:"decision"`
+	// Lines is the size of a whole read worth flagging.
+	Lines int `json:"lines"`
+	// Tokens is a context size in tokens.
+	Tokens int `json:"tokens"`
+	// Calls is a count of calls in a row.
+	Calls int `json:"calls"`
+	// Chars is the size of one tool result in characters.
+	Chars int `json:"chars"`
+	// Markers are text a rule notices a write adding, each matched literally. Resolve
+	// fills the rule's own list when none is declared.
+	Markers []string `json:"markers"`
+	// Profile is the level whose row gave this setting, empty for one the workspace
+	// declared or a compiled default. A rule whose figures depend on the level and the
+	// account's billing reads it when no parameter is set.
+	Profile types.GuardProfile `json:"profile"`
 }
 
-const readNavigation = "read-navigation"
+const (
+	compatMarker           = "compat-marker"
+	modelTierContextCap    = "model-tier-context-cap"
+	orchestratorGroundwork = "orchestrator-groundwork"
+	readNavigation         = "read-navigation"
+	rootContextBudget      = "root-context-budget"
+	rootHeavyCommand       = "root-heavy-command"
+	rootResultCap          = "root-result-cap"
+	rootRepeat             = "root-repeat"
+	spawnNamesModel        = "spawn-names-model"
+	spawnAboveModelTier    = "spawn-above-model-tier"
+	spawnAboveParentTier   = "spawn-above-parent-tier"
+	stall                  = "stall"
+)
+
+// paramSpec is one numeric parameter: its name as magus\guard.builtins spells it, the
+// lowest value that loads, and the Setting field that holds it. No parameter has a
+// ceiling: only the workspace's model rows know the largest window, and they load later.
+type paramSpec struct {
+	name  string
+	min   int
+	field func(*Setting) *int
+}
+
+// paramSpecs are the numeric parameters, in the order validate reports them.
+var paramSpecs = []paramSpec{
+	{"lines", 1, func(s *Setting) *int { return &s.Lines }},
+	{"tokens", 1, func(s *Setting) *int { return &s.Tokens }},
+	{"calls", 2, func(s *Setting) *int { return &s.Calls }},
+	{"chars", 1000, func(s *Setting) *int { return &s.Chars }},
+}
+
+// SetParam sets the numeric parameter name to n, reporting false for a name that is no
+// numeric parameter. Which rules take it, and its floor, are Resolve's to judge.
+func (s *Setting) SetParam(name string, n int) bool {
+	for _, p := range paramSpecs {
+		if p.name == name {
+			*p.field(s) = n
+			return true
+		}
+	}
+	return false
+}
+
+// params maps each rule that takes a parameter to the parameters it takes: a paramSpecs
+// name, or markers.
+var params = map[string][]string{
+	compatMarker:      {"markers"},
+	readNavigation:    {"lines"},
+	rootContextBudget: {"tokens"},
+	rootHeavyCommand:  {"calls"},
+	rootResultCap:     {"chars"},
+	rootRepeat:        {"calls"},
+	stall:             {"calls"},
+}
+
+// neverDeny names the rules that only ever explain, so a deny declared for one is a
+// misdeclaration rather than a refusal nobody would see.
+var neverDeny = map[string]string{
+	compatMarker:        "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
+	rootContextBudget:   "size only tunes advice; refusing a session's groundwork is orchestrator-groundwork's, by its role",
+	rootHeavyCommand:    "it nudges a session that has handed out no work; refusing an orchestrator's groundwork is orchestrator-groundwork's",
+	rootRepeat:          "a repeat is advice to a session that has handed out no work; an orchestrator's repeat is groundwork, which orchestrator-groundwork refuses",
+	rootResultCap:       "it reads a result the call already returned",
+	spawnAboveModelTier: "work can outgrow the tier its row was forked at, and only the root can tell when it has",
+	stall:               "it routes a block to the root and refuses nothing itself",
+}
+
+// profiles maps each level to the settings it gives the rules it names. A level leaves
+// every other rule at its default, and a rule magus\guard.builtins names overrides the
+// level's setting for it. The figures each level fires at belong to the rules, which read
+// them by the level ResolveProfile stamps on the setting.
+var profiles = map[types.GuardProfile]map[string]Setting{
+	types.GuardProfileOff: {},
+	types.GuardProfileLight: {
+		rootContextBudget: {Decision: Advise},
+		rootResultCap:     {Decision: Advise},
+		stall:             {Decision: Advise},
+	},
+	types.GuardProfileStandard: {
+		rootContextBudget:   {Decision: Advise},
+		rootHeavyCommand:    {Decision: Advise},
+		rootResultCap:       {Decision: Advise},
+		rootRepeat:          {Decision: Advise},
+		spawnNamesModel:     {Decision: Advise},
+		spawnAboveModelTier: {Decision: Advise},
+		stall:               {Decision: Advise},
+	},
+	types.GuardProfileStrict: {
+		rootContextBudget:   {Decision: Advise},
+		rootHeavyCommand:    {Decision: Advise},
+		rootResultCap:       {Decision: Advise},
+		rootRepeat:          {Decision: Advise},
+		spawnNamesModel:     {Decision: Deny},
+		spawnAboveModelTier: {Decision: Advise},
+		stall:               {Decision: Advise},
+	},
+}
 
 // defaults must name exactly the rules internal/guard catalogs. A rule that refuses
 // something the caller can recover from by running a different command advises, so
 // a workspace that wants it refused says so; a rule guarding something no later
-// command undoes, or a boundary a lease or person drew, denies.
+// command undoes, or a boundary a lease or person drew, denies. The timer rules
+// (busy-wait, process-poll, sleep-poll) deny too: a background task notifies on exit, so
+// no wait is needed, and an advising default would let timers through whenever the
+// workspace policy fails to load.
 var defaults = map[string]Decision{
 	// Recoverable: the served command answers what the refused one asked.
 	"architecture-unbriefed": Advise,
 	"brief-command":          Advise,
-	"busy-wait":              Advise,
+	"brief-plain-commands":   Advise,
 	"buzz-unbriefed":         Advise,
 	"chained-run":            Advise,
 	"exit-status-echo":       Advise,
@@ -50,29 +165,39 @@ var defaults = map[string]Decision{
 	"grep-reader":            Advise,
 	"interpreter-rewrite":    Advise,
 	"magus-timeout":          Advise,
+	"monitor-duplicate":      Advise,
+	"monitor-pile":           Advise,
 	"output-pipe":            Advise,
 	"output-redirect":        Advise,
-	"process-poll":           Advise,
 	"raw-tool":               Advise,
 	readNavigation:           Advise,
+	"read-paging":            Advise,
 	"scripted-rewrite":       Advise,
 	"search-translation":     Advise,
 	"sed-in-place":           Advise,
 	"sibling-checkout":       Advise,
 	"spawn-unbriefed":        Advise,
+	"spawn-waiter":           Advise,
 	"stage-all":              Advise,
 	"symbol-search":          Advise,
 	"throwaway-copy":         Advise,
+	"unjudged-tool":          Advise,
 	"unknown-env":            Advise,
 
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,
+	"background-left":       Deny,
+	"background-unbounded":  Deny,
 	"backtick-substitution": Deny,
+	"busy-wait":             Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
 	"credential-verb":       Deny,
 	"focus-read":            Deny,
+	"heredoc-write":         Deny,
 	"hook-wiring-write":     Deny,
+	"hooks-off":             Deny,
+	"human-only":            Deny,
 	"inline-alias":          Deny,
 	"lease-gate":            Deny,
 	"lease-harness":         Deny,
@@ -84,8 +209,13 @@ var defaults = map[string]Decision{
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
 	"policy-unloaded":       Deny,
+	"process-poll":          Deny,
 	"push-ungated":          Deny,
 	"shared-stash":          Deny,
+	"sleep-poll":            Deny,
+	"spawn-duplicate":       Deny,
+	"spawn-unvalidated":     Deny,
+	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
@@ -97,45 +227,70 @@ var defaults = map[string]Decision{
 	// Advisories never refused anything, so they keep advising; a workspace may still
 	// raise one to deny or turn it off. lease-state, lease-invalid and lease-terminal are
 	// advisories, not the lease-* denies above.
-	"capture-filter":     Advise,
-	"check-timeout":      Advise,
-	"checkpoint-state":   Advise,
-	"dependency-install": Advise,
-	"dependency-update":  Advise,
-	"echo-on-success":    Advise,
-	"focus":              Advise,
-	"gate-repeat":        Advise,
-	"generated-write":    Advise,
-	"graph-pipe":         Advise,
-	"graph-stale":        Advise,
-	"hook-wiring":        Advise,
-	"installed-skill":    Advise,
-	"instruction-write":  Advise,
-	"lease-invalid":      Advise,
-	"lease-state":        Advise,
-	"lease-terminal":     Advise,
-	"leased-path":        Advise,
-	"new-file":           Advise,
-	"new-source-dir":     Advise,
-	"precedent-search":   Advise,
-	"push-gate":          Advise,
-	"read-symbol":        Advise,
-	"regen-source":       Advise,
-	"revert-classify":    Advise,
-	"scope-drift":        Advise,
-	"shared-checkout":    Advise,
-	"skill-source":       Advise,
-	"source-read":        Advise,
-	"split-run":          Advise,
-	"stage-classify":     Advise,
-	"stdin-closed":       Advise,
-	"timed-magus":        Advise,
-	"unleased-write":     Advise,
+	"capture-filter":      Advise,
+	"check-timeout":       Advise,
+	compatMarker:          Advise,
+	"checkpoint-state":    Advise,
+	"dependency-install":  Advise,
+	"dependency-update":   Advise,
+	"echo-on-success":     Advise,
+	"focus":               Advise,
+	"gate-repeat":         Advise,
+	"generated-write":     Advise,
+	"graph-pipe":          Advise,
+	"graph-stale":         Advise,
+	"hook-wiring":         Advise,
+	"installed-skill":     Advise,
+	"instruction-write":   Advise,
+	"lease-invalid":       Advise,
+	"lease-state":         Advise,
+	"lease-terminal":      Advise,
+	"leased-path":         Advise,
+	modelTierContextCap:   Advise,
+	"new-file":            Advise,
+	"new-source-dir":      Advise,
+	"precedent-search":    Advise,
+	"push-gate":           Advise,
+	"read-symbol":         Advise,
+	"regen-source":        Advise,
+	"release-requested":   Advise,
+	"revert-classify":     Advise,
+	"scope-drift":         Advise,
+	"shared-checkout":     Advise,
+	"skill-source":        Advise,
+	"source-read":         Advise,
+	"spawn-unplaced":      Advise,
+	"spawn-nested-waiter": Advise,
+	"split-run":           Advise,
+	"stage-classify":      Advise,
+	"timed-magus":         Advise,
+	"unleased-write":      Advise,
+
+	// A session's role, not its size or level, decides whether its groundwork is refused,
+	// so no level names this rule and the off level leaves it on. It judges only a session
+	// magus recorded handing out work: proof refuses, an inference advises.
+	orchestratorGroundwork: Deny,
+
+	// The cost rules and the stall rule are off until a level turns them on, and the
+	// level a workspace gets when it declares none is light.
+	rootContextBudget:   Off,
+	rootHeavyCommand:    Off,
+	rootResultCap:       Off,
+	rootRepeat:          Off,
+	spawnNamesModel:     Off,
+	spawnAboveModelTier: Off,
+	stall:               Off,
 
 	"guard-unfinished":         Advise,
 	"workspace-command-failed": Advise,
 	"workspace-spawn-failed":   Advise,
 	"workspace-write-failed":   Advise,
+}
+
+// defaultMarkers are what a rule taking markers notices when the workspace names none: the
+// labels code kept for older data or callers carries.
+var defaultMarkers = map[string][]string{
+	compatMarker: {"compat(until:", "Deprecated:"},
 }
 
 // fixed maps each rule a workspace may not set, with any value, to why. Its entries are
@@ -148,10 +303,43 @@ var fixed = map[string]string{
 	"workspace-write-failed":   "a write rule",
 }
 
+// removal is why a rule the guard no longer has under its name is gone, and the name it
+// now has when it was renamed rather than dropped.
+type removal struct {
+	replacement string
+	why         string
+}
+
+// removed maps each rule the guard no longer has under that name to its removal. A
+// workspace that still names one gets that reason rather than a guess at the nearest live
+// name.
+//
+// compat(until: no workspace's guard.builtins still names a removed rule): the entry
+// exists only to name the removal in the load error.
+var removed = map[string]removal{
+	"stdin-closed": {
+		why: "the guard no longer rewrites a shell command to close its stdin, since the hosts that need it already do",
+	},
+	"spawn-principal-for-economy": {
+		replacement: spawnAboveModelTier,
+		why:         "it compares any two model tiers by rank, not only principal against economy",
+	},
+}
+
 // Fixed reports whether name is a rule a workspace may not set.
 func Fixed(name string) bool {
 	_, ok := fixed[name]
 	return ok
+}
+
+// Verdicts returns the verdicts rule name can give under any setting a workspace may
+// declare, least refusing first: advise alone for a rule that never refuses or that a
+// workspace may not set, advise and deny for any other.
+func Verdicts(name string) []types.GuardDecision {
+	if _, never := neverDeny[name]; never || Fixed(name) {
+		return []types.GuardDecision{types.GuardAdvise}
+	}
+	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
 }
 
 // Defaults returns every compiled rule's name mapped to the decision it takes when the
@@ -163,12 +351,13 @@ func Defaults() map[string]Decision {
 // Resolve returns a setting for every compiled rule: the declared one where the workspace
 // declared it, the default otherwise. Every misdeclaration is reported at once, each as an
 // MGS1045 error: a name no rule has (naming the nearest one), a rule that is fixed, a
-// decision other than off, advise or deny, Lines on a rule that takes no such parameter,
-// or Lines below 1.
+// decision other than off, advise or deny, a parameter on a rule that takes no such
+// parameter, or a parameter out of its range (see validate). declared takes no profile;
+// expand one with ResolveProfile first.
 func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 	out := make(map[string]Setting, len(defaults))
 	for name, d := range defaults {
-		out[name] = Setting{Decision: d}
+		out[name] = Setting{Decision: d, Markers: slices.Clone(defaultMarkers[name])}
 	}
 	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(declared)) {
@@ -176,6 +365,9 @@ func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 		if err := validate(name, s); err != nil {
 			errs = append(errs, err)
 			continue
+		}
+		if len(s.Markers) == 0 {
+			s.Markers = slices.Clone(defaultMarkers[name])
 		}
 		out[name] = s
 	}
@@ -187,6 +379,14 @@ func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 
 func validate(name string, s Setting) error {
 	if _, ok := defaults[name]; !ok {
+		if r, gone := removed[name]; gone {
+			if r.replacement != "" {
+				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					"built-in rule %q was renamed to %q; declare it under that name", name, r.replacement).WithWhy(r.why)
+			}
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q was removed; delete it from the declaration", name).WithWhy(r.why)
+		}
 		if near := nearest(name); near != "" {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 				"unknown built-in rule %q; did you mean %q?", name, near)
@@ -203,20 +403,57 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
 	}
-	if s.Lines != 0 && name != readNavigation {
+	if why, ok := neverDeny[name]; ok && s.Decision == Deny {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q takes no lines parameter; only %s does", name, readNavigation)
+			"built-in rule %q never refuses; give off or advise", name).WithWhy(why)
 	}
-	if s.Lines < 0 {
+	for _, p := range paramSpecs {
+		value := *p.field(&s)
+		if value == 0 {
+			continue
+		}
+		if !slices.Contains(params[name], p.name) {
+			return takesNo(name, p.name)
+		}
+		if value < p.min {
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q: %s is %d; give %d or more, or leave it out", name, p.name, value, p.min)
+		}
+	}
+	if len(s.Markers) > 0 && !slices.Contains(params[name], "markers") {
+		return takesNo(name, "markers")
+	}
+	if slices.ContainsFunc(s.Markers, func(m string) bool { return strings.TrimSpace(m) == "" }) {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q: lines is %d; give 1 or more, or leave it out", name, s.Lines)
+			"built-in rule %q: a marker is blank; give the text to notice, or leave markers out", name)
 	}
 	return nil
 }
 
+// takesNo is the misdeclaration of param on a rule that does not take it, naming every
+// rule that does.
+func takesNo(name, param string) error {
+	var takers []string
+	for rule, ps := range params {
+		if slices.Contains(ps, param) {
+			takers = append(takers, rule)
+		}
+	}
+	slices.Sort(takers)
+	if len(takers) == 1 {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q takes no %s parameter; only %s does", name, param, takers[0])
+	}
+	return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		"built-in rule %q takes no %s parameter; only %s do", name, param, strings.Join(takers, ", "))
+}
+
 // Stricter returns whichever of a and b refuses more, ranking off < advise < deny. At the
-// same decision the smaller Lines wins, and an unset Lines beats any set one: unset
-// judges every whole read rather than only the long ones.
+// same decision each parameter takes the lower threshold of the two, since a lower one
+// fires sooner. An unset Lines beats any set one, since unset judges every whole read
+// rather than only the long ones; any other unset parameter yields to a set one, since
+// unset defers to the rule's own figure. Of two levels the higher-ranked one stands, since
+// its figures are the lower.
 func Stricter(a, b Setting) Setting {
 	ra, rb := rank(a.Decision), rank(b.Decision)
 	switch {
@@ -224,11 +461,49 @@ func Stricter(a, b Setting) Setting {
 		return a
 	case rb > ra:
 		return b
-	case a.Lines != 0 && (b.Lines == 0 || b.Lines < a.Lines):
-		return b
-	default:
-		return a
 	}
+	lower := func(x, y int) int {
+		if x == 0 || (y != 0 && y < x) {
+			return y
+		}
+		return x
+	}
+	out := a
+	if a.Lines != 0 && (b.Lines == 0 || b.Lines < a.Lines) {
+		out.Lines = b.Lines
+	}
+	out.Tokens = lower(a.Tokens, b.Tokens)
+	out.Calls = lower(a.Calls, b.Calls)
+	out.Chars = lower(a.Chars, b.Chars)
+	out.Markers = slices.Clone(a.Markers)
+	for _, m := range b.Markers {
+		if !slices.Contains(out.Markers, m) {
+			out.Markers = append(out.Markers, m)
+		}
+	}
+	if b.Profile != "" && (a.Profile == "" || b.Profile.Rank() > a.Profile.Rank()) {
+		out.Profile = b.Profile
+	}
+	return out
+}
+
+// ResolveProfile expands profile p into the declaration Resolve takes: the settings p
+// gives its rules, each stamped with p's level, with declared applied over them rule by
+// rule. Unset p is light. An unknown p is an MGS1045 error. Neither map is modified.
+func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[string]Setting, error) {
+	level := p.Effective()
+	row, ok := profiles[level]
+	if !ok {
+		return nil, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"unknown guard profile %q; give one of %s", string(p), strings.Join(p.Values(), ", "))
+	}
+	out := make(map[string]Setting, len(row)+len(declared))
+	for name, s := range row {
+		s.Profile = level
+		out[name] = s
+	}
+	maps.Copy(out, declared)
+	return out, nil
 }
 
 // rank orders decisions by how much they refuse; an unknown one ranks below off.

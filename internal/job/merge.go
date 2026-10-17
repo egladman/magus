@@ -4,69 +4,67 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
-// ParseMerge builds the field merge one put applies to a row, from a param map shaped like
-// magus\job.put's opts: only the keys the
-// caller named, so the second put in a job's lifecycle (state=running) advances the
-// state without erasing the row an earlier put declared, and a key present with an
-// empty value is an explicit clear.
+// DecodePut reads one put from a param map shaped like magus\job.put's opts, the map
+// contract at the Buzz edge: only the keys the caller named are set, and a key present
+// with an empty value is an explicit clear.
 //
-// It is the ONE decoder both write doors call (internal/handler/mcp/job.go and
-// std/magus.go's MagusPutJob), so a client using either door gets the same
-// accepted fields and the same rejections, rather than two hand-maintained lists that
-// can silently drift apart.
-//
-// Every value is read and validated HERE rather than inside the returned merge, because
-// Store.Update runs it while holding the lock and has no way to report a failure. Errors
-// are joined rather than returned at the first one: a client that mistyped two params
-// should learn about both in one round trip, and a key outside [mergeFields] is one of
-// those mistakes rather than something to drop.
-func ParseMerge(params map[string]any) (func(*types.Job), error) {
-	var (
-		set []func(*types.Job)
-		err error
-	)
-	err = unknownParams(params)
-	str := func(key string, apply func(*types.Job, string)) {
+// It is strict. A key outside [mergeFields], a value of the wrong type, check beside
+// validation, and every refusal [PutMerge] makes are errors, joined rather than returned
+// at the first one: a client that mistyped two params learns about both in one round trip.
+// `op` and `id` may ride alongside, since they are how a door names the call.
+func DecodePut(params map[string]any) (types.JobPut, error) {
+	var put types.JobPut
+	err := unknownParams(params)
+	str := func(key string, dst **string) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Job) { apply(u, v) })
+			*dst = &v
 		}
 	}
-	list := func(key string, apply func(*types.Job, []string)) {
+	list := func(key string, dst **[]string) {
 		v, ok, e := mergeList(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Job) { apply(u, v) })
+			*dst = &v
 		}
 	}
-
-	str("parent", func(u *types.Job, v string) { u.Parent = strings.TrimSpace(v) })
-	str("criteria", func(u *types.Job, v string) { u.Criteria = v })
-	str("checkpoint", func(u *types.Job, v string) { u.Checkpoint = strings.TrimSpace(v) })
-	list("write_paths", func(u *types.Job, v []string) { u.WritePaths = v })
-	list("deny_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
-	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
-	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
-	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
-	if goals, ok, e := mergeGoals(params, "goals"); e != nil {
+	str("parent", &put.Parent)
+	str("criteria", &put.Criteria)
+	str("checkpoint", &put.Checkpoint)
+	str("model", &put.Model)
+	str("timeout", &put.Timeout)
+	str("enter", &put.Enter)
+	list("write_paths", &put.WritePaths)
+	list("deny_paths", &put.DenyPaths)
+	list("read_paths", &put.ReadPaths)
+	list("depends_on", &put.DependsOn)
+	list("breaks", &put.Breaks)
+	if goals, ok, e := decodeObjects[types.Goal](params, "goals", "goals"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		set = append(set, func(u *types.Job) { u.Goals = goals })
+		put.Goals = &goals
+	}
+	if waivers, ok, e := decodeObjects[types.JobWaiver](params, "waivers", "waivers"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.Waivers = &waivers
 	}
 
-	// check and validation are two spellings of one field, and the row stores both halves,
-	// so a put naming each of them is a caller that does not know which one it meant.
+	// check and validation are two spellings of one field, so a put naming each of them is
+	// a caller that does not know which one it meant.
 	check := func(key string, parse func(string) (types.LeaseCheck, error)) {
 		v, ok, e := mergeString(params, key)
 		switch {
@@ -74,14 +72,14 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			set = append(set, func(u *types.Job) { u.Check, u.Validation = nil, "" })
+			put.Check = &types.LeaseCheck{}
 		default:
 			c, perr := parse(v)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			set = append(set, func(u *types.Job) { u.Check, u.Validation = &c, c.String() })
+			put.Check = &c
 		}
 	}
 	_, hasCheck := params["check"]
@@ -97,22 +95,111 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 		check("validation", types.ParseLeaseRunLine)
 	}
 
-	// state is the one param with a vocabulary, so it is checked against it here.
 	if v, ok, e := mergeString(params, "state"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
 		s := types.JobState(strings.TrimSpace(v))
-		if !types.ValidJobState(s) {
+		put.State = &s
+	}
+	if v, present := params["read_only"]; present {
+		if b, ok := v.(bool); ok {
+			put.ReadOnly = &b
+		} else {
+			err = errors.Join(err, errors.New("job: read_only must be a boolean"))
+		}
+	}
+	if n, ok, e := mergeCount(params, "max_attempts"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.MaxAttempts = &n
+	}
+	if _, perr := PutMerge(put); perr != nil {
+		err = errors.Join(err, perr)
+	}
+	if err != nil {
+		return types.JobPut{}, err
+	}
+	return put, nil
+}
+
+// PutMerge validates p and returns the merge it applies to a row: only the fields p sets,
+// so a later put advances a row without erasing what an earlier one declared.
+//
+// Every value is checked HERE rather than inside the returned merge, because Store.Update
+// runs it while holding the lock and has no way to report a failure. A state outside the
+// vocabulary, a timeout that does not parse, goals that do not validate, a negative
+// max_attempts, and an enter beside any other field are errors, joined.
+func PutMerge(p types.JobPut) (func(*types.Job), error) {
+	var (
+		set []func(*types.Job)
+		err error
+	)
+	if p.Parent != nil {
+		v := strings.TrimSpace(*p.Parent)
+		set = append(set, func(u *types.Job) { u.Parent = v })
+	}
+	if p.Criteria != nil {
+		v := *p.Criteria
+		set = append(set, func(u *types.Job) { u.Criteria = v })
+	}
+	if p.Checkpoint != nil {
+		v := strings.TrimSpace(*p.Checkpoint)
+		set = append(set, func(u *types.Job) { u.Checkpoint = v })
+	}
+	if p.Model != nil {
+		v := strings.TrimSpace(*p.Model)
+		set = append(set, func(u *types.Job) { u.Model = v })
+	}
+	for _, l := range []struct {
+		v     *[]string
+		apply func(*types.Job, []string)
+	}{
+		{p.WritePaths, func(u *types.Job, v []string) { u.WritePaths = v }},
+		{p.DenyPaths, func(u *types.Job, v []string) { u.DenyPaths = v }},
+		{p.ReadPaths, func(u *types.Job, v []string) { u.ReadPaths = v }},
+		{p.DependsOn, func(u *types.Job, v []string) { u.DependsOn = v }},
+		{p.Breaks, func(u *types.Job, v []string) { u.Breaks = v }},
+	} {
+		if l.v != nil {
+			v, apply := slices.Clone(*l.v), l.apply
+			set = append(set, func(u *types.Job) { apply(u, v) })
+		}
+	}
+	if p.Goals != nil {
+		goals := slices.Clone(*p.Goals)
+		if e := (types.Declaration{ID: "merge", Goals: goals}).Validate(); e != nil {
+			err = errors.Join(err, e)
+		} else {
+			set = append(set, func(u *types.Job) { u.Goals = goals })
+		}
+	}
+	if p.Waivers != nil {
+		waivers := slices.Clone(*p.Waivers)
+		if e := (types.Declaration{ID: "merge", Waivers: waivers}).Validate(); e != nil {
+			err = errors.Join(err, e)
+		} else {
+			set = append(set, func(u *types.Job) { u.Waivers = waivers })
+		}
+	}
+	if p.Check != nil {
+		if p.Check.Target == "" && p.Check.Script == "" {
+			set = append(set, func(u *types.Job) { u.Check, u.Validation = nil, "" })
+		} else {
+			c := *p.Check
+			c.Args = slices.Clone(c.Args)
+			set = append(set, func(u *types.Job) { u.Check, u.Validation = &c, c.String() })
+		}
+	}
+	if p.State != nil {
+		if s := *p.State; !types.ValidJobState(s) {
 			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", types.JobStateVocabulary()))
 		} else {
 			set = append(set, func(u *types.Job) { u.State = s })
 		}
 	}
 	// A length, never an instant: the deadline is stamped when the store applies the merge.
-	if v, ok, e := mergeString(params, "timeout"); e != nil {
-		err = errors.Join(err, e)
-	} else if ok {
-		if d, perr := types.ParseJobTimeout(v); perr != nil {
+	if p.Timeout != nil {
+		if d, perr := types.ParseJobTimeout(*p.Timeout); perr != nil {
 			err = errors.Join(err, perr)
 		} else {
 			set = append(set, func(u *types.Job) {
@@ -125,14 +212,10 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	}
 	// An entry changes no declared field, so it travels alone and the store grades it as
 	// an entry; see Store.Enter.
-	if v, ok, e := mergeString(params, "enter"); e != nil {
-		err = errors.Join(err, e)
-	} else if ok {
-		rel, perr := entryPath(v)
-		for key := range params {
-			if key != "op" && key != "id" && key != "enter" {
-				perr = errors.Join(perr, fmt.Errorf("job: a put carrying enter enters a job and declares nothing, so %s does not belong beside it", key))
-			}
+	if p.Enter != nil {
+		rel, perr := entryPath(*p.Enter)
+		for _, key := range declaredKeys(p) {
+			perr = errors.Join(perr, fmt.Errorf("job: a put carrying enter enters a job and declares nothing, so %s does not belong beside it", key))
 		}
 		if perr != nil {
 			err = errors.Join(err, perr)
@@ -140,12 +223,15 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 		}
 	}
-	if v, present := params["read_only"]; present {
-		b, ok := v.(bool)
-		if !ok {
-			err = errors.Join(err, errors.New("job: read_only must be a boolean"))
+	if p.ReadOnly != nil {
+		b := *p.ReadOnly
+		set = append(set, func(u *types.Job) { u.ReadOnly = b })
+	}
+	if p.MaxAttempts != nil {
+		if n := *p.MaxAttempts; n < 0 {
+			err = errors.Join(err, errors.New("job: max_attempts must be a whole number of at least 0"))
 		} else {
-			set = append(set, func(u *types.Job) { u.ReadOnly = b })
+			set = append(set, func(u *types.Job) { u.MaxAttempts = n })
 		}
 	}
 	if err != nil {
@@ -158,17 +244,42 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	}, nil
 }
 
+// declaredKeys names the fields p sets other than Enter, by the keys a put map spells
+// them with.
+func declaredKeys(p types.JobPut) []string {
+	var keys []string
+	for _, f := range []struct {
+		key string
+		set bool
+	}{
+		{"parent", p.Parent != nil}, {"criteria", p.Criteria != nil}, {"checkpoint", p.Checkpoint != nil},
+		{"model", p.Model != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
+		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
+		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
+		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
+		{"max_attempts", p.MaxAttempts != nil},
+	} {
+		if f.set {
+			keys = append(keys, f.key)
+		}
+	}
+	return keys
+}
+
 // mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "model", "check", "validation", "goals", "state", "read_only", "timeout",
-	"enter",
+	"depends_on", "breaks", "model", "check", "validation", "goals", "waivers", "state", "read_only",
+	"timeout", "max_attempts", "enter",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
 // like one that was taken into account, and the tool then reports the row as written.
 func unknownParams(params map[string]any) error {
+	if dir, ok := params["checkout"]; ok {
+		return fmt.Errorf("job: a put names checkout %v, which only a fork makes, `%s` makes it", dir, hint.JobFork.With("<job>", "--checkout", fmt.Sprint(dir)))
+	}
 	var unknown []string
 	for key := range params {
 		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {
@@ -200,6 +311,41 @@ func mergeString(params map[string]any, key string) (string, bool, error) {
 	return s, true, nil
 }
 
+// mergeCount reads a whole number of at least 0: a JSON number decodes as float64 and a Buzz
+// int as int64, and a client the MCP descriptor holds to strings sends it as decimal text.
+// A fraction or a negative is refused, never truncated or clamped.
+func mergeCount(params map[string]any, key string) (int, bool, error) {
+	v, present := params[key]
+	if !present {
+		return 0, false, nil
+	}
+	bad := fmt.Errorf("job: %s must be a whole number of at least 0", key)
+	var n int
+	switch t := v.(type) {
+	case int:
+		n = t
+	case int64:
+		n = int(t)
+	case float64:
+		if t != float64(int(t)) {
+			return 0, false, bad
+		}
+		n = int(t)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(t))
+		if err != nil {
+			return 0, false, bad
+		}
+		n = parsed
+	default:
+		return 0, false, bad
+	}
+	if n < 0 {
+		return 0, false, bad
+	}
+	return n, true, nil
+}
+
 // mergeList accepts the natural JSON/Buzz array shape as well as the space-separated
 // string the MCP descriptor schema forces on typed clients (magus\describe.file's paths
 // set the precedent). A caller sending a real array must not silently record nothing,
@@ -229,11 +375,10 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 	return nil, false, badType
 }
 
-// mergeGoals accepts the natural JSON/Buzz object array, or that array as a JSON string for
-// a client the MCP descriptor holds to scalars, and validates it through the same typed
-// declaration boundary stdin uses. Authorization then treats the collection as a declared
-// plan field, so a bound holder cannot rewrite it.
-func mergeGoals(params map[string]any, key string) ([]types.Goal, bool, error) {
+// decodeObjects accepts the natural JSON/Buzz object array, or that array as a JSON string
+// for a client the MCP descriptor holds to scalars; what names the elements in the error.
+// [PutMerge] validates them through the same typed declaration boundary stdin uses.
+func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, error) {
 	v, present := params[key]
 	if !present {
 		return nil, false, nil
@@ -243,14 +388,11 @@ func mergeGoals(params map[string]any, key string) ([]types.Goal, bool, error) {
 		body, err = []byte(s), nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
+		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
-	var gates []types.Goal
-	if err := json.Unmarshal(body, &gates); err != nil {
-		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
+	var objects []T
+	if err := json.Unmarshal(body, &objects); err != nil {
+		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
-	if err := (types.Declaration{ID: "merge", Goals: gates}).Validate(); err != nil {
-		return nil, false, err
-	}
-	return gates, true, nil
+	return objects, true, nil
 }

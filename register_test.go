@@ -8,37 +8,16 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	// Register minimal test spells so WithSpell name lookups resolve without
-	// linking interp/bindings into the library's test binary. (There is no import
-	// cycle — bindings does not import this package; the point is to keep the
-	// library free of the Buzz VM. bindings' init also eagerly registers the real
-	// built-in spells, which would collide with these shims.)
-	for _, meta := range []struct {
-		name    string
-		sources []string
-	}{
-		{"go", []string{"**/*.go", "go.mod", "go.sum"}},
-		{"rust", []string{"**/*.rs", "Cargo.toml"}},
-		{"ts", []string{"**/*.ts", "**/*.tsx", "package.json"}},
-		{"json", []string{"**/*.json", "**/*.jsonc"}},
-	} {
-		m := meta
-		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-			m.name,
-			spells.WithSources(m.sources...),
-		))
-	}
-}
 
 // makeWorkspaceRoot lays down project manifest stubs and returns the
 // temp directory path. Does not call Open — lets the caller register
@@ -65,7 +44,7 @@ func TestWithDependsOnRelativeSibling(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("extensions/drape", WithDependsOn("../api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get("extensions/drape")
 	require.NotNil(t, p, "project extensions/drape not found")
@@ -83,7 +62,7 @@ func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("a/b/c", WithDependsOn("../../.."))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get("a/b/c")
 	require.NotNil(t, p, "project a/b/c not found")
@@ -102,7 +81,7 @@ func TestWithDependsOnBarePathUnchanged(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -117,7 +96,7 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("../outside"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.Error(t, err, "Inspect: expected error for path escaping workspace root")
 }
 
@@ -125,13 +104,13 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 // both the Spell and Spells fields via Register.
 func TestWithSpellAddsLanguage(t *testing.T) {
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("//go:build magus\npackage main\n")
+	w.Magusfile("")
 	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not discovered")
@@ -147,7 +126,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"), WithSpell("rust"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -160,13 +139,13 @@ func TestWithSpellMultipleTools(t *testing.T) {
 // out at Open time rather than silently doing nothing.
 func TestWithSpellUnknownTool(t *testing.T) {
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("//go:build magus\npackage main\n")
+	w.Magusfile("")
 	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("nope"))
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.ErrorIs(t, err, types.ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
 }
 
@@ -183,7 +162,7 @@ func TestApplyIdempotent(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -202,7 +181,7 @@ func TestApplyIdempotent(t *testing.T) {
 
 	// A second Inspect with the same registry must not double the deps;
 	// each *Workspace is distinct.
-	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws2, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "second Open")
 	p2 := ws2.Get(".")
 	require.NotNil(t, p2, "project . not found in second workspace")
@@ -216,7 +195,7 @@ func TestWithSpell(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
@@ -225,39 +204,37 @@ func TestWithSpell(t *testing.T) {
 	assert.Equal(t, "go", p.Bindings[0].Name)
 }
 
-func init() {
-	// A spell whose ci op stands in for a provider-driven toolchain's own composed
-	// pipeline (e.g. `nx run project:ci`): the RunCI anchor tests below need a
-	// registered spell with a ci op, and a provided project has no magusfile to
-	// declare one in. Registered for the WHOLE package (the registry is a process
-	// singleton with no scoped teardown), so every test in package magus sees this
-	// phantom spell; a test enumerating registered spells must account for it.
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("ci-capable", spells.WithTargets("ci")))
-}
-
 // These tests live in package magus, beside no provider.go, because what they cover
 // is the LOAD ORDER in magus.go: that providers run after magusfile evaluation and
 // before WorkspaceRegistry.Apply, and that a provided project is indistinguishable
 // from a declared one everywhere downstream. The unit-level behaviour of the fold
 // itself is tested in internal/workspace/provider_test.go.
 
-// providedProjects is what the fake runner reports for the next Inspect. The
-// library's test binary does not link the bindings package, so the real runner is
-// never registered and this one owns the hook for the whole test binary. It is
-// package state, so these tests must not call t.Parallel.
-var providedProjects []spells.ProvidedProject
-
-func init() {
-	workspace.RegisterProviderRunner(func(context.Context, string, string) ([]spells.ProvidedProject, error) {
-		return providedProjects, nil
-	})
-}
-
-// withProvided sets the fake runner's answer for one test.
-func withProvided(t *testing.T, pp ...spells.ProvidedProject) {
+// provider registers a spell whose list_projects answers pp as a Buzz spell would, and
+// returns its name to wire. The engine's own runner invokes it, so these tests cover the
+// decode a real provider's answer goes through.
+func provider(t *testing.T, pp ...spells.ProvidedProject) string {
 	t.Helper()
-	providedProjects = pp
-	t.Cleanup(func() { providedProjects = nil })
+	list := func(ss []string) []any {
+		out := make([]any, 0, len(ss))
+		for _, s := range ss {
+			out = append(out, s)
+		}
+		return out
+	}
+	items := make([]any, 0, len(pp))
+	for _, p := range pp {
+		items = append(items, map[string]any{
+			"path": p.Path, "name": p.Name, "spells": list(p.Spells),
+			"depends_on": list(p.DependsOn), "sources": list(p.Sources), "outputs": list(p.Outputs),
+		})
+	}
+	return register.Spell(t, "provider", spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+		if req.Target != spells.ListProjectsContract {
+			return nil, nil
+		}
+		return items, nil
+	}))
 }
 
 // TestProvidedProjectIsAFullProject is the end-to-end claim the whole mechanism
@@ -266,27 +243,28 @@ func withProvided(t *testing.T, pp ...spells.ProvidedProject) {
 // the dependency graph) purely because a provider named it.
 func TestProvidedProjectIsAFullProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json", "libs/shared/package.json")
-	withProvided(t,
-		spells.ProvidedProject{Path: "libs/shared", Spells: []string{"ts"}},
+	ts := register.Spell(t, "ts", spells.WithSources("**/*.ts", "package.json"))
+	nx := provider(t,
+		spells.ProvidedProject{Path: "libs/shared", Spells: []string{ts}},
 		spells.ProvidedProject{
 			Path:      "libs/foo",
 			Name:      "@acme/foo",
-			Spells:    []string{"ts"},
+			Spells:    []string{ts},
 			DependsOn: []string{"libs/shared"},
 			Outputs:   []string{"dist/**"},
 		},
 	)
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
 	require.NotNil(t, foo, "a provided project must be addressable like any other")
 	assert.Equal(t, "@acme/foo", foo.Name) //nolint:fieldwise // an Inspect-built Project carries resolved spells, bindings and discovery state this test cannot construct
-	assert.Equal(t, types.ProvidedBy("nx"), foo.Origin)
-	assert.Equal(t, []string{"ts"}, foo.Spells)
+	assert.Equal(t, types.ProvidedBy(nx), foo.Origin)
+	assert.Equal(t, []string{ts}, foo.Spells)
 	assert.Equal(t, []string{"libs/shared"}, foo.DependsOn)
 	assert.Equal(t, []types.Glob{{Pattern: "dist/**"}}, foo.Outputs)
 	assert.Equal(t, filepath.Join(ws.Root(), "libs", "foo"), foo.Dir)
@@ -304,12 +282,12 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
 	// No spell here on purpose: binding one unions its own globs into Sources, which
 	// would obscure the ordering this test exists to pin.
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Sources: []string{"**/*.ts"}})
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Sources: []string{"**/*.ts"}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 	reg.RegisterProject("libs/foo", workspace.WithSources("schema/**/*.json"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -322,11 +300,11 @@ func TestProviderThenCentralFormComposes(t *testing.T) {
 // directory that declares itself keeps its own definition.
 func TestProviderCannotShadowAMagusfile(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/magusfile.buzz")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Name: "from-provider"})
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Name: "from-provider"})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	foo := ws.Get("libs/foo")
@@ -339,9 +317,9 @@ func TestProviderCannotShadowAMagusfile(t *testing.T) {
 // every workspace that does not use one.
 func TestNoProviderWiredChangesNothing(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo"})
+	provider(t, spells.ProvidedProject{Path: "libs/foo"})
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(NewWorkspaceRegistry()), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	assert.Nil(t, ws.Get("libs/foo"), "no wiring, no fold")
@@ -354,11 +332,11 @@ func TestNoProviderWiredChangesNothing(t *testing.T) {
 func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
 	require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(root), "outside"), 0o755))
-	withProvided(t, spells.ProvidedProject{Path: "../outside"})
+	nx := provider(t, spells.ProvidedProject{Path: "../outside"})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
-	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(types.ProviderPathRejected))
@@ -372,12 +350,15 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 // run that would otherwise succeed.
 func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ci-capable"}})
+	// The ci op stands in for a provider-driven toolchain's own composed pipeline (e.g.
+	// `nx run project:ci`): a provided project has no magusfile to declare one in.
+	ci := register.Spell(t, "ci-capable", spells.WithTargets("ci"))
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{ci}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -391,12 +372,13 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 // counting provided projects at all must not make the anchor unconditionally pass.
 func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
-	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ts"}})
+	ts := register.Spell(t, "ts", spells.WithSources("**/*.ts", "package.json"))
+	nx := provider(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{ts}})
 	reg := NewWorkspaceRegistry()
-	reg.AddProvider("nx")
+	reg.AddProvider(nx)
 
 	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	defer func() { _ = m.Close() }()
 
@@ -422,7 +404,7 @@ func TestWithWatchIgnoreReachesTheProject(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreGlob("**/*.tmp"), IgnoreLiteral("node_modules")))
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -445,7 +427,7 @@ func TestWithWatchIgnoreRejectsAMalformedRegexAtOpen(t *testing.T) {
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject("api", WithWatchIgnore(IgnoreRegex("(unclosed")))
 
-	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	_, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	assert.Error(t, err, "an ignore pattern that cannot compile must not open the workspace")
 }
 
@@ -457,7 +439,7 @@ func TestWorkspaceRegistryRidesTheContext(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	ctx := WithWorkspaceRegistryContext(context.Background(), reg)
-	assert.Same(t, reg, WorkspaceRegistryFromContext(ctx))
+	assert.Same(t, reg.r, WorkspaceRegistryFromContext(ctx).r)
 }
 
 // TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone: the option suppresses
@@ -469,7 +451,7 @@ func TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone(t *testing.T) {
 		"api/magusfile.buzz": "",
 	})
 
-	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders())
+	ws, err := Inspect(context.Background(), root, WithoutWorkspaceProviders(), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	paths := make([]string, 0, len(ws.All()))
@@ -518,7 +500,7 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 			if tc.yaml != "" {
 				files["magus.yaml"] = tc.yaml
 			}
-			m, err := Open(t.Context(), writeWorkspace(t, files), tc.opts...)
+			m, err := Open(t.Context(), writeWorkspace(t, files), append(tc.opts, WithSpawnRule(TierCeiling))...)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				return
@@ -527,4 +509,131 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 			require.NoError(t, m.Close())
 		})
 	}
+}
+
+// The push gate needs a passing `ci`, so a human_only target anywhere in its chain makes
+// every agent push unclearable; the load refuses it rather than the push.
+func TestRefuseHumanOnlyInGate(t *testing.T) {
+	bench := types.Target{HumanOnly: true, HumanOnlyReason: "launches paid sessions"}
+	proj := func(path string, chains map[string][]types.ChainStep, policies map[string]types.Target) *types.Project {
+		return &types.Project{Path: path, TargetChains: chains, TargetPolicies: policies}
+	}
+	benchPolicy := map[string]types.Target{"bench": bench}
+	gateOnBench := map[string][]types.ChainStep{"ci": {{Target: "test"}}, "test": {{Target: "bench"}}}
+	gateOnTest := map[string][]types.ChainStep{"ci": {{Target: "test"}}}
+	gateOnEvals := map[string][]types.ChainStep{"ci": {{Project: "evals", Target: "grade"}}}
+	cases := map[string]struct {
+		projects []*types.Project
+		wantErr  []string
+	}{
+		"ci itself": {
+			projects: []*types.Project{proj(".", nil, map[string]types.Target{"ci": bench})},
+			wantErr:  []string{"project \".\" declares its `ci` human_only"},
+		},
+		"a member ci reaches": {
+			projects: []*types.Project{proj(".", gateOnBench, benchPolicy)},
+			wantErr:  []string{"`ci` in project \".\" reaches human_only target .:bench", "run `magus run bench .` as its own CI step"},
+		},
+		"a member in another project": {
+			projects: []*types.Project{proj(".", gateOnEvals, nil), proj("evals", nil, map[string]types.Target{"grade": bench})},
+			wantErr:  []string{"`ci` in project \".\" reaches human_only target evals:grade"},
+		},
+		"a target outside the gate": {
+			projects: []*types.Project{proj(".", gateOnTest, benchPolicy)},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			lookup := func(path string) *types.Project {
+				for _, p := range tc.projects {
+					if p.Path == path {
+						return p
+					}
+				}
+				return nil
+			}
+			err := refuseHumanOnlyInGate(tc.projects, lookup)
+			if len(tc.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			for _, want := range tc.wantErr {
+				assert.ErrorContains(t, err, want)
+			}
+		})
+	}
+}
+
+// modelTiers declares low and high, cheapest first, as a magusfile's enum would.
+func modelTiers(t *testing.T) (low, high types.ModelTier) {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum:   "Tier",
+		Site:   "magusfile.buzz:1",
+		Cases:  []string{"low", "high"},
+		Bounds: make([]types.ModelTierBounds, 2),
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+	})
+	require.NoError(t, err)
+	low, err = set.Parse("low")
+	require.NoError(t, err)
+	high, err = set.Parse("high")
+	require.NoError(t, err)
+	return low, high
+}
+
+// TestTierCeilingHoldsAChildAtMostItsParentsTier: a child may run at its parent's tier or
+// below, never above, and an unassigned tier bounds nothing.
+func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
+	low, high := modelTiers(t)
+	assert.NoError(t, TierCeiling(high, low))
+	assert.NoError(t, TierCeiling(high, high))
+	err := TierCeiling(low, high)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"low"`)
+	assert.Contains(t, err.Error(), `"high"`)
+	assert.NoError(t, TierCeiling(types.ModelTier{}, high), "an unassigned parent bounds nothing")
+	assert.NoError(t, TierCeiling(low, types.ModelTier{}), "an unassigned child is bounded by nothing")
+
+	otherLow, _ := modelTiers(t)
+	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")
+}
+
+// TestSpawnRuleHasNoDefault: an omitted or nil rule fails the open, naming the reference
+// rule, so no workspace exists that allows every spawn.
+func TestSpawnRuleHasNoDefault(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	_, err := Inspect(t.Context(), root)
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	_, err = Open(t.Context(), root)
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+	_, err = Inspect(t.Context(), root, WithSpawnRule(nil))
+	require.ErrorContains(t, err, "WithSpawnRule(magus.TierCeiling)")
+
+	low, high := modelTiers(t)
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	assert.NoError(t, ws.(*Magus).internals().CheckSpawn(high, low))
+	assert.Error(t, ws.(*Magus).internals().CheckSpawn(low, high))
+}
+
+// TestWithVCSDriverIsTheWorkspacesVCS: the driver given rides the workspace's VCS options;
+// a nil one, or one magus.yaml's vcs.name contradicts, fails the open.
+func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	driver := typestest.NewMockVCSDriver(t)
+	driver.EXPECT().Name().Return("fossil").Maybe()
+
+	ws, err := Inspect(t.Context(), root, WithVCSDriver(driver), WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	assert.Same(t, driver, ws.VCSOptions().Driver)
+
+	_, err = Inspect(t.Context(), root, WithVCSDriver(nil), WithSpawnRule(TierCeiling))
+	require.ErrorContains(t, err, "nil driver")
+
+	_, err = Inspect(t.Context(), root, WithVCSDriver(driver), workspace.WithLoadedConfig(config.Config{VCS: config.VCS{Name: "git"}}), WithSpawnRule(TierCeiling))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"fossil"`)
+	assert.Contains(t, err.Error(), `"git"`)
 }

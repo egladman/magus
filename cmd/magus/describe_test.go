@@ -33,7 +33,7 @@ import "magus/spell/markdown";
 
 magus\project({"spells": [typescript, go, markdown, bash]})
 `)
-	m, err := magus.Open(t.Context(), w.Root())
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

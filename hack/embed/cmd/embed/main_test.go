@@ -1,0 +1,198 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/hack/embed/teacher"
+)
+
+func TestChunks(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		max  int
+		want []chunk
+	}{
+		{"whole lines pack", "ab\ncd\nef\n", 6, []chunk{
+			{first: 1, last: 2, text: "ab\ncd\n"}, {first: 3, last: 3, text: "ef\n"},
+		}},
+		{"no final newline", "ab\ncd", 64, []chunk{{first: 1, last: 2, text: "ab\ncd"}}},
+		{"blank pieces drop", "ab\n\n\n\ncd\n", 3, []chunk{
+			{first: 1, last: 1, text: "ab\n"}, {first: 5, last: 5, text: "cd\n"},
+		}},
+		{"long line splits on runes", "a\néééé\nb\n", 5, []chunk{
+			{first: 1, last: 1, text: "a\n"},
+			{first: 2, last: 2, part: 1, text: "éé"}, {first: 2, last: 2, part: 2, text: "éé\n"},
+			{first: 3, last: 3, text: "b\n"},
+		}},
+		{"empty", "", 8, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := chunks(tc.text, tc.max)
+			require.Equal(t, tc.want, got)
+			for _, c := range got {
+				require.LessOrEqual(t, len(c.text), tc.max)
+			}
+		})
+	}
+}
+
+func TestChunkSpan(t *testing.T) {
+	require.Equal(t, "3-9", chunk{first: 3, last: 9}.span())
+	require.Equal(t, "4-4#2", chunk{first: 4, last: 4, part: 2}.span())
+}
+
+func TestReadBatch(t *testing.T) {
+	r := bufio.NewReader(strings.NewReader("aaa blob 3\nabc\nbbb blob 0\n\n"))
+	got, err := readBatch(r, "HEAD", []string{"x.go", "y.go"})
+	require.NoError(t, err)
+	require.Equal(t, map[string][]byte{"x.go": []byte("abc"), "y.go": {}}, got)
+
+	_, err = readBatch(bufio.NewReader(strings.NewReader("HEAD:z.go missing\n")), "HEAD", []string{"z.go"})
+	require.ErrorContains(t, err, "HEAD:z.go missing")
+}
+
+func TestHoldoutGroupsNeverSpanSplits(t *testing.T) {
+	file := func(path, group, split string) sourceRecord {
+		return sourceRecord{Kind: "file", Path: path, Group: group, Split: split}
+	}
+	together := []sourceRecord{
+		file("std/crypto.go", "dir:std", "holdout"),
+		file("std/crypto_test.go", "dir:std", "holdout"),
+		file("docs/reference/buzz/crypto.md", "dir:std", "holdout"),
+		file("internal/agent/skills/magus-multi-agent/SKILL.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		file("internal/agent/skills/magus-multi-agent/reference.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		file("docs/reference/skills/magus-multi-agent.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		{Kind: "forced", Tokens: []string{"x"}},
+	}
+	require.NoError(t, checkGroups(together))
+
+	for _, tc := range []struct {
+		name  string
+		stray sourceRecord
+		want  string
+	}{
+		{"a test file split from its source", file("std/crypto_test.go", "dir:std", "train"), "group dir:std spans both splits: std/crypto_test.go is train"},
+		{"a generated page split from its source", file("docs/reference/buzz/crypto.md", "dir:std", "train"), "group dir:std spans both splits"},
+		{"a skill copy split from its skill", file("docs/reference/skills/magus-multi-agent.md", "dir:internal/agent/skills/magus-multi-agent", "holdout"), "spans both splits"},
+		{"a file with no group", file("README.md", "", "train"), "README.md names no provenance group"},
+		{"a file with no split", file("README.md", "dir:.", ""), `README.md has split ""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorContains(t, checkGroups(append(slices.Clone(together), tc.stray)), tc.want)
+		})
+	}
+}
+
+func TestTextsLeaveOutGeneratedFilesAndChangelogs(t *testing.T) {
+	kept := []byte("package textrank\n")
+	records := []sourceRecord{
+		{Kind: "file", Path: "internal/textrank/tokens.go", Split: "train", SHA256: sha256Hex(kept)},
+		{Kind: "file", Path: "docs/reference/buzz/crypto.md", Split: "train", Generated: true},
+		{Kind: "file", Path: "changes/unreleased/split-holdout.md", Split: "train"},
+		{Kind: "file", Path: "CHANGELOG.md", Split: "train"},
+		{Kind: "file", Path: "std/crypto.go", Split: "holdout"},
+	}
+	files := map[string][]byte{"internal/textrank/tokens.go": kept}
+	d, err := newDecontaminator(&evalCorpus{}, 1)
+	require.NoError(t, err)
+	m := textMix{forced: map[string]bool{}, excluded: map[string]int{}, decontam: d}
+	require.NoError(t, m.addRepo(records, files, "HEAD", "sources.jsonl", 512))
+	require.Equal(t, []teacher.Text{{ID: "internal/textrank/tokens.go:1-1", Text: "package textrank\n"}}, m.texts)
+	require.Equal(t, map[string]int{"generated": 1, "changelog-fragment": 1, "changelog": 1}, m.excluded)
+}
+
+func TestForcedReportCountsHoldoutOnlyWords(t *testing.T) {
+	forced := map[string]bool{"fs\\readFile": true, "MGS2001": true, "hasCharm": true}
+	texts := []teacher.Text{{ID: "a.go:1-2", Text: "data, err := fs.ReadFile(path)"}}
+	holdout := [][]byte{[]byte("// MGS2001 names a target the magusfile never declares\n")}
+	got, err := countForced(forced, texts, holdout)
+	require.NoError(t, err)
+	// fs, readfile, read and file are in a training text; mgs2001 is only in a holdout
+	// file; hascharm, has and charm are nowhere.
+	require.Equal(t, forcedReport{Tokens: 8, InTrainingTexts: 4, HoldoutOnly: 1, Unseen: 3}, got)
+
+	_, err = countForced(map[string]bool{"--": true}, texts, holdout)
+	require.ErrorContains(t, err, "yields no token")
+}
+
+func TestRecord(t *testing.T) {
+	cache := t.TempDir()
+	texts := filepath.Join(cache, "training", "texts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(texts), 0o755))
+	require.NoError(t, os.WriteFile(texts, []byte(`{"id":"a","text":"x"}`+"\n"+`{"id":"b","text":"y"}`+"\n"+`{"id":"c","text":"z"}`+"\n"), 0o644))
+	digest, err := teacher.FileSHA256(texts)
+	require.NoError(t, err)
+
+	spec := teacher.RunSpec{Model: "M", Revision: "r1", MaxLen: 256, Dim: 4, ShardSize: 2, TextsSHA256: digest}
+	dir := filepath.Join(cache, "teacher", "M", spec.Key())
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	manifest := filepath.Join(dir, "manifest.jsonl")
+	writeRecords(t, manifest,
+		teacher.Record{Kind: "run", Spec: &spec},
+		teacher.Record{Kind: "shard", Shard: 0, Rows: 2, Tokens: 10, Seconds: 1.5},
+	)
+	out := filepath.Join(t.TempDir(), "runs.jsonl")
+	args := []string{"-cache", cache, "-model", "M", "-texts", texts, "-max-len", "256", "-out", out}
+
+	require.NoError(t, runRecord(args))
+	require.NoError(t, runRecord(args), "an unchanged manifest is not recorded twice")
+	lines := readRunLines(t, out)
+	require.Len(t, lines, 1)
+	require.Equal(t, runLine{
+		Kind: "teacher", Run: spec.Key(), Teacher: "M", Revision: "r1", TextsSHA256: digest,
+		TextsFile: "training/texts.jsonl", MaxLen: 256, ShardSize: 2, Shards: 1, Texts: 3, Rows: 2,
+		Tokens: 10, Seconds: 1.5, Manifest: "teacher/M/" + spec.Key() + "/manifest.jsonl",
+		ManifestSHA256: lines[0].ManifestSHA256,
+	}, lines[0])
+
+	writeRecords(t, manifest,
+		teacher.Record{Kind: "run", Spec: &spec},
+		teacher.Record{Kind: "shard", Shard: 0, Rows: 2, Tokens: 10, Seconds: 1.5},
+		teacher.Record{Kind: "shard", Shard: 1, Rows: 1, Tokens: 4, Seconds: 0.5},
+		teacher.Record{Kind: "shard", Shard: 1, Rows: 1, Tokens: 5, Seconds: 0.25},
+	)
+	require.NoError(t, runRecord(args))
+	lines = readRunLines(t, out)
+	require.Len(t, lines, 2)
+	last := lines[1]
+	require.True(t, last.Complete)
+	require.Equal(t, []int{2, 3, 15}, []int{last.Shards, last.Rows, last.Tokens}, "a re-encoded shard counts once, by its later record")
+	require.InDelta(t, 1.8, last.Seconds, 1e-9)
+
+	err = runRecord([]string{"-cache", cache, "-model", "M", "-texts", texts, "-max-len", "512", "-out", out})
+	require.ErrorContains(t, err, "0 M runs")
+}
+
+func writeRecords(t *testing.T, path string, records ...teacher.Record) {
+	t.Helper()
+	var b strings.Builder
+	for _, r := range records {
+		line, err := json.Marshal(r)
+		require.NoError(t, err)
+		b.Write(append(line, '\n'))
+	}
+	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0o644))
+}
+
+func readRunLines(t *testing.T, path string) []runLine {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var out []runLine
+	for line := range strings.Lines(string(b)) {
+		var r runLine
+		require.NoError(t, json.Unmarshal([]byte(line), &r))
+		out = append(out, r)
+	}
+	return out
+}

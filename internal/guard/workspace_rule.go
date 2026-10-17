@@ -8,16 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
-// The decisions a Verdict carries. A workspace rule answers advise or deny, spelled by
+// The decisions a GuardJudgment carries. A workspace rule answers advise or deny, spelled by
 // types; pass and ask exist only on the wire.
 const (
 	decisionPass   = "pass"
@@ -83,7 +83,7 @@ type rulesAnswer struct {
 	// workspace rule's own.
 	rule denyRuleName
 	// next is the command denyUnloaded's deny serves, nil for none.
-	next []hint.Next
+	next []types.NextStep
 }
 
 // resolveShares is the approved resolve's weight against a rule call's one. Resolving runs a
@@ -102,7 +102,8 @@ const resolveShares = 2
 //
 // Each phase (resolving the approved rule, calling it, calling the working tree's) gets its
 // share of what remains of ctx's deadline, and runs to completion when ctx has none. One
-// that runs out, or a rule load deps reports lapsed, is the answer's lapse, for denyLapse
+// that runs out, a rule load deps reports lapsed, or a job store read that ran out
+// (withJobStoreRows) is the answer's lapse, for denyLapse
 // to judge. Any other failure contributes nothing and is reported, following
 // magus\guard.shell's standing on a broken workspace rule: the built-ins still apply and
 // the agent is not bricked by a typo in the magusfile. No side loading at all is reported
@@ -125,6 +126,14 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	case deps.LoadFailure != nil:
 		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
 	}
+	// The lease rules read the job store, and one that could not be read in time judged
+	// nothing.
+	if p, ok := log.lapsedPhase(phaseJobRows); ok {
+		lapsed(ruleLapse{
+			side: decidedByBuiltin, budget: time.Duration(p.BudgetMs) * time.Millisecond,
+			said: lapseWording{"reading the job store", "finish"}, failed: lapseWording{"the job store", "answer"},
+		})
+	}
 	shares := phaseShares{}
 	if resolveApproved != nil {
 		shares[phaseApprovedResolve] = resolveShares
@@ -134,6 +143,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 		shares[phaseWorktreeRule] = 1
 	}
 	ask := func(by, phase string, rule ruleCall) {
+		log.begin(phase)
 		budget, bounded := shares.take(ctx, phase)
 		if out.answer.Decision == types.GuardDeny {
 			return
@@ -166,6 +176,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	}
 	approvedLoaded := false
 	if resolveApproved != nil {
+		log.begin(phaseApprovedResolve)
 		budget, bounded := shares.take(ctx, phaseApprovedResolve)
 		var rule ruleCall
 		var err error
@@ -258,6 +269,14 @@ type judgedCall struct {
 	what string
 	// lease is the acting lease, "" for the orchestrator or a person.
 	lease string
+	// builds is whether the caller builds this checkout's binary: the root, or the
+	// checkout's integrator.
+	builds bool
+	// command and dialect are a command call's shell line, for loadRestore.
+	command string
+	dialect Dialect
+	// path is a write call's target, for loadRestore.
+	path string
 }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
@@ -269,7 +288,8 @@ type judgedCall struct {
 // The binary judging the call cannot read the tree (older than it, or the checkout has no
 // ./magus): every call that changes state is denied, and it needs no record of an earlier
 // load, because a fresh worktree has none and is where this happens. The magusfile visibly
-// registering a guard rule is enough.
+// registering a guard rule is enough. A call that puts back a file the load error names
+// (loadRestore) is advised instead, since the load cannot recover otherwise.
 //
 // Otherwise a gated verb is denied when the last policy that did load registered seam's
 // rule. No record means no rule was ever seen to protect, and the call passes.
@@ -279,11 +299,19 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
-	cause := unloadCause(asked.loadFailure, at.workspace)
+	reason := unloadCause(asked.loadFailure, at.workspace)
+	holds := call.changes && reason.Cause != unloadNone && (recorded || declaresGuardRule(at.workspace))
+	if holds {
+		if why := loadRestore(call, asked.loadFailure, at); why != "" {
+			asked.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: why}
+			asked.rule, asked.by = denyRuleStaleBinary, decidedByBuiltin
+			return false
+		}
+	}
 	var d denial
 	switch {
-	case call.changes && cause != "" && (recorded || declaresGuardRule(at.workspace)):
-		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
+	case holds:
+		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && recorded:
 		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
 	default:
@@ -291,9 +319,33 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
-	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease).next(asked.rule)
+	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease, call.builds).next(asked.rule)
 	asked.by = decidedByBuiltin
 	return true
+}
+
+// unknownSpellImport is the refusal of an import naming a spell this build does not ship,
+// as the spell bindings raise it.
+type unknownSpellImport interface{ UnknownSpell() string }
+
+// skewedSpell names the spell loadFailure says this build does not ship when root, a
+// checkout of magus itself, carries that spell's sources: the judging ./magus was built from
+// a commit on the other side of the spell's addition or removal. "" otherwise. Outside
+// magus's own checkout nothing tells a spell from a newer or older release apart from a
+// misspelled import, so that stays the typo it may be.
+func skewedSpell(loadFailure error, root string) string {
+	if loadFailure == nil || root == "" || !ownSourceRoot(root) {
+		return ""
+	}
+	var unknown unknownSpellImport
+	if !errors.As(loadFailure, &unknown) {
+		return ""
+	}
+	name := unknown.UnknownSpell()
+	if info, err := os.Stat(filepath.Join(root, "spells", name)); err != nil || !info.IsDir() {
+		return ""
+	}
+	return name
 }
 
 // failureLines renders each failure as the side and the head of its error. An error
@@ -311,7 +363,7 @@ func failureLines(failures []trail.RuleFailure) []string {
 // unloadedDenial is the deny for a gated verb while the policy that registered seam's rule
 // does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
 func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
-	fix := binaryRemedy(own, hasBinary, call.lease)
+	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
 	var why strings.Builder
 	why.WriteString("This workspace registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
 	for _, f := range failures {
@@ -347,7 +399,7 @@ func gatedCalls(seam functionSeam) string {
 //
 // seamRule is what an unnamed answer reports under; a named one reports as
 // workspace:<name>, the id magus\guard.shell rules already carry.
-func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, seamRule string) (Verdict, string) {
+func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rulesAnswer, seamRule string) (types.GuardJudgment, string) {
 	answer := asked.answer
 	rule := seamRule
 	switch {
@@ -358,9 +410,9 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, se
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
+		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason
@@ -371,7 +423,7 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, se
 
 // applyRuleFailureNote adds the note that a workspace rule judged nothing to every
 // verdict: a deny or an ask reached with a rule missing must say it was judged short.
-func applyRuleFailureNote(verdict Verdict, note string, kind hint.MarkerKind) Verdict {
+func applyRuleFailureNote(verdict types.GuardJudgment, note string, kind hint.MarkerKind) types.GuardJudgment {
 	switch {
 	case note == "":
 	case verdict.Decision == decisionDeny || verdict.Decision == decisionAsk:
@@ -460,10 +512,10 @@ type judgingBinary struct {
 	hasBinary bool
 	// same reports that path is the checkout's own ./magus.
 	same bool
-	// stale reports that the load failure is the binary being older than the tree; fix is
-	// then the remedy to name.
-	stale bool
-	fix   string
+	// unload is why the binary cannot load the tree, stale or a skewed spell; fix is then
+	// the remedy to name. A missing ./magus is hasBinary's to tell.
+	unload unloadReason
+	fix    string
 }
 
 // judgingBinaryNote names the magus that judged the call and how it relates to the
@@ -481,8 +533,18 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 			b, errB := os.Stat(filepath.Join(j.root, "magus"))
 			j.same = errA == nil && errB == nil && os.SameFile(a, b)
 		}
-		if j.stale = ward.IsStaleBinary(loadFailure); j.stale {
-			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease).say
+		j.unload = unloadCause(loadFailure, j.root)
+		if j.unload.Cause == unloadNoBinary {
+			j.unload.Cause = unloadNone
+			if j.unload.Spell != "" {
+				j.unload.Cause = unloadSkewedSpell
+			}
+		}
+		switch j.unload.Cause {
+		case unloadStale:
+			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease, false).say
+		case unloadSkewedSpell:
+			j.fix = binaryRemedy(true, j.hasBinary, lease, false).say
 		}
 	}
 	return j.String()
@@ -505,7 +567,9 @@ func (j judgingBinary) String() string {
 		who += ", which is not this checkout's ./magus."
 	}
 	switch {
-	case !j.stale:
+	case j.unload.Cause == unloadSkewedSpell:
+		return who + " It ships no spell " + strconv.Quote(j.unload.Spell) + ", which the tree carries, so it was built from another commit. Fix: " + j.fix + "."
+	case j.unload.Cause != unloadStale:
 		return who
 	case j.hasBinary && !j.same:
 		return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + j.fix + "."

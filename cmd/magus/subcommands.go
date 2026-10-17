@@ -1,85 +1,109 @@
 package main
 
-// subcommand is one entry in magus's top-level subcommands.
-type subcommand struct {
-	Name  string
-	Short string // the one-line description shown by `magus help`
-	// Group is the heading `magus help` files this command under. Entries are listed
-	// in slice order, so a group's members must be contiguous.
-	Group string
-}
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
 
-// The groups `magus help` prints, in order.
-const (
-	groupWork      = "Projects and targets"
-	groupKnowledge = "Knowledge graph"
-	groupChanges   = "Changes and history"
-	groupIntegrate = "Integrations and services"
-	groupSetup     = "Setup and maintenance"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
-// subcommands is the SINGLE source of truth for magus's top-level subcommands, in the
-// order `magus help` lists them.
-//
-// Three copies of this list used to exist and all three had drifted: usage() had the
-// descriptions, knownSubcommands had the names for did-you-mean matching, and the four
-// completion scripts each had their own. `memory` reached knownSubcommands but never
-// usage(), so the dispatcher accepted and suggested a command `magus help` did not
-// list; `refs`, `memory` and `agent` reached neither completion script.
-//
-// magus-utils reads this declaration to generate the completion scripts, so a
-// subcommand added here shows up in help, in did-you-mean, and in every shell without
-// anyone remembering to update five files.
-//
-//go:generate go run ../magus-utils completions -subcommands subcommands.go -out completions
-var subcommands = []subcommand{
-	{Group: groupWork, Name: "ls", Short: "list all discovered projects"},
-	{Group: groupWork, Name: "describe", Short: "define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)"},
-	{Group: groupWork, Name: "where", Short: "print the absolute path of a project (fuzzy match)"},
-	{Group: groupWork, Name: "run", Short: "run a target for selected projects"},
-	{Group: groupWork, Name: "affected", Short: "run a target for VCS-diff affected projects"},
-	{Group: groupWork, Name: "x", Short: "interactive shorthand: pick project + target (TTY only)"},
-	{Group: groupWork, Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
-	{Group: groupWork, Name: "shell", Short: "check a command against this workspace's conventions and name the better one (shell '<command>')"},
-
-	{Group: groupKnowledge, Name: "query", Short: "search the knowledge graph and show a node's neighborhood"},
-	{Group: groupKnowledge, Name: "refs", Short: "list where an ingested code symbol is defined and referenced"},
-	{Group: groupKnowledge, Name: "explain", Short: "show one knowledge-graph node: its edges, provenance, blast radius"},
-	{Group: groupKnowledge, Name: "path", Short: "show the shortest path between two knowledge-graph nodes"},
-	{Group: groupKnowledge, Name: "graph", Short: "the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)"},
-
-	{Group: groupChanges, Name: "diff", Short: "read uncommitted changes in the order they deserve attention, generated folded"},
-	{Group: groupChanges, Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},
-	{Group: groupChanges, Name: "session", Short: "what magus invocations did and what agents are blocked on: humans read (ls, attention) and dispose; hosts write (notify)"},
-	{Group: groupChanges, Name: "job", Short: "declare and act on jobs (fork, exec, exit, wait, run)"},
-	{Group: groupChanges, Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify, capture)"},
-	{Group: groupChanges, Name: "queue", Short: "merge approved changes through a speculative, partitioned merge queue (describe, ls, plan, validate, apply)"},
-
-	{Group: groupIntegrate, Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
-	{Group: groupIntegrate, Name: "events", Short: "stream workspace events as JSONL for an editor plugin or other integration"},
-	{Group: groupIntegrate, Name: "server", Short: "the server a person starts: MCP, the console, APIs and jobs (start / stop / status / reload)"},
-	{Group: groupIntegrate, Name: "broker", Short: "the per-user process holding this host's capacity and shared services (status / stop)"},
-	{Group: groupIntegrate, Name: "mcp", Short: "serve MCP over stdio for the agent host that launched it (no server, no token)"},
-	{Group: groupIntegrate, Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
-	{Group: groupIntegrate, Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
-	{Group: groupIntegrate, Name: "spell", Short: "build, push, pull and list spells as OCI artifacts, and pin them in magus.lock (spell build|push|pull|ls|lock)"},
-	{Group: groupIntegrate, Name: "agent", Short: "install the knowledge-graph agent skills into a repo (agent install <dir>)"},
-
-	{Group: groupSetup, Name: "init", Short: "bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)"},
-	{Group: groupSetup, Name: "doctor", Short: "validate the workspace"},
-	{Group: groupSetup, Name: "config", Short: "view or update magus configuration"},
-	{Group: groupSetup, Name: "completion", Short: "print a shell completion script (bash, zsh, fish, powershell)"},
-	{Group: groupSetup, Name: "man", Short: "install the man pages embedded in this binary"},
-	{Group: groupSetup, Name: "self", Short: "manage the magus binary (self update / install)"},
-	{Group: groupSetup, Name: "version", Short: "print version, commit, and build date"},
-	{Group: groupSetup, Name: "help", Short: "show this message"},
+func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, subArgs []string) error {
+	switch sub {
+	case "ls":
+		return ls(ctx, root, subArgs)
+	case "describe":
+		return describeCmd(ctx, root, subArgs)
+	case "run":
+		return runTarget(ctx, root, rc, subArgs)
+	case "x":
+		return x(ctx, root, rc, subArgs)
+	case "where":
+		return whereCmd(ctx, root, subArgs)
+	case "affected":
+		return affected(ctx, root, rc, subArgs)
+	case "query":
+		return queryCmd(ctx, root, subArgs)
+	case "explain":
+		return explainCmd(ctx, root, subArgs)
+	case "path":
+		return pathCmd(ctx, root, subArgs)
+	case "refs":
+		return refsCmd(ctx, root, subArgs)
+	case "graph":
+		return graphCmd(ctx, root, subArgs)
+	case "spell":
+		return spellCmd(ctx, root, subArgs)
+	case "watch":
+		return watchCmd(ctx, root, rc, subArgs)
+	case "events":
+		return eventsCmd(ctx, root, subArgs)
+	case "status":
+		return status(ctx, subArgs)
+	case "clean":
+		return cleanCmd(ctx, root, subArgs)
+	case "vcs":
+		return vcsCmd(ctx, root, rc, subArgs)
+	case "queue":
+		return queueCmd(ctx, root, subArgs)
+	case "doctor":
+		return doctorCmd(ctx, root, rc, subArgs)
+	case "config":
+		return configCmd(ctx, root, globalCfg, subArgs)
+	case "session":
+		return sessionCmd(ctx, root, subArgs)
+	case "shell":
+		return shellCmd(ctx, subArgs)
+	case "job":
+		return jobCmd(ctx, root, subArgs)
+	case "notes":
+		return notesCmd(ctx, root, subArgs)
+	case "diff":
+		return diffCmd(ctx, root, subArgs)
+	case "server":
+		return serverCmd(ctx, root, subArgs)
+	case "broker":
+		return brokerCmd(ctx, subArgs)
+	case "mcp":
+		return mcpCmd(ctx, root, subArgs)
+	case "completion":
+		return completion(subArgs)
+	case "man":
+		return manCmd(subArgs)
+	case "init":
+		return initCmd(ctx, root, subArgs)
+	case "agent":
+		return agentCmd(ctx, root, subArgs)
+	case "self":
+		return selfCmd(ctx, root, subArgs)
+	case "buzz":
+		return buzzCmd(ctx, root, subArgs)
+	default:
+		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice(""), attr.Component("magus"))
+		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {
+			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", suggestion))
+		}
+		unknownSubcommandUsage()
+		return exit.Reported(exit.Usage)
+	}
 }
 
-// knownSubcommands is the dispatcher's set, derived so it cannot disagree with help.
+// knownSubcommands is the dispatcher's set, read from the registry so it cannot
+// disagree with help, the man pages or the completions.
 var knownSubcommands = func() []string {
-	names := make([]string, 0, len(subcommands))
-	for _, s := range subcommands {
-		names = append(names, s.Name)
+	names := make([]string, 0, len(commands.Root.Children)+1)
+	for _, c := range commands.Root.Children {
+		names = append(names, c.Name)
 	}
-	return names
+	return append(names, commands.Help.Name)
 }()
+
+func unknownSubcommandUsage() {
+	fmt.Fprintln(os.Stderr, "")
+	usage()
+}

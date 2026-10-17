@@ -17,11 +17,11 @@ exec magus job fork scout-b --read-only --criteria 'read the tax code'
 exec magus job fork scout-c --read-only --criteria 'read the tests'
 
 exec magus job exit scout-a scout-b
-stdout '^abandoned scout-a, recorded no_return$'
-stdout '^abandoned scout-b, recorded no_return$'
+stdout '^ended scout-a, recorded no_return: ended with no result filed, before any holder ran'
+stdout '^ended scout-b, recorded no_return: ended with no result filed, before any holder ran'
 
 ! exec magus job exit scout-c nobody
-stdout '^abandoned scout-c, recorded no_return$'
+stdout '^ended scout-c, recorded no_return: ended with no result filed, before any holder ran'
 stderr '1 of 2 jobs not ended'
 stderr 'nobody'
 

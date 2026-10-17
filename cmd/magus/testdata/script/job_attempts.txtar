@@ -1,0 +1,61 @@
+# Forking a job that ended starts its next attempt: describe job names the attempt and
+# prints the one before it, and a fork past max_attempts is refused naming the cap. An
+# ended job takes no `apply`, so the fork's own record is what raises the cap, and that
+# fork passes.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+stdin $WORK/two.json
+exec magus job fork --stdin
+exec magus describe job scout
+stdout '^attempt 1 of 2$'
+! stdout 'previous attempts'
+
+exec magus job exit scout
+stdout '^ended scout, recorded no_return: ended with no result filed, before any holder ran `magus job exec scout` on it$'
+stdin $WORK/two.json
+exec magus job fork --stdin
+exec magus describe job scout
+stdout '^attempt 2 of 2$'
+stdout '^previous attempts$'
+stdout '^  attempt 1: no_return'
+stdout '^    retryable$'
+exec magus describe job scout -o json
+stdout '"attempts": 2'
+stdout '"generation": 1'
+
+exec magus job exit scout
+stdin $WORK/two.json
+! exec magus job fork --stdin
+stderr 'max_attempts reached: scout used 2 of its 2 attempt\(s\)'
+exec magus ls jobs --all
+stdout 'scout .*no_return'
+
+! exec magus job apply -f $WORK/three.json
+stderr 'already ended'
+
+stdin $WORK/three.json
+exec magus job fork --stdin
+exec magus describe job scout
+stdout '^attempt 3 of 3$'
+stdout '^  attempt 2: no_return'
+stdout '^  attempt 1: no_return.*, retryable$'
+
+-- two.json --
+{"schema_version": 13, "id": "scout", "read_only": true, "criteria": "read the pricing code", "max_attempts": 2}
+-- three.json --
+{"schema_version": 13, "id": "scout", "read_only": true, "criteria": "read the pricing code", "max_attempts": 3}
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";

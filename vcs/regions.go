@@ -96,39 +96,42 @@ func (v gitVCS) Regions(ctx context.Context, root, base string, files []types.Fi
 	var regions []types.RegionChange
 	for _, f := range patched {
 		driver := drivers[f.path]
-		place := func(side types.RegionSide) ([]string, error) {
+		place := func(side types.RegionSide) (placement, error) {
 			if driver == "" {
-				return nil, nil
+				return placement{}, nil
 			}
+			var body []byte
 			if side == types.RegionOld {
-				body, err := v.ReadFileAt(ctx, root, base, f.path)
+				text, err := v.ReadFileAt(ctx, root, base, f.path)
 				if err != nil {
-					return nil, err
+					return placement{}, err
 				}
-				return gitPlaceLines(ctx, tmp, driver, funcnames, []byte(body))
-			}
-			body, ok := working[f.path]
-			if !ok {
-				if body, ok = readWorkingFile(root, f.path); !ok {
-					return nil, nil
+				body = []byte(text)
+			} else {
+				var ok bool
+				if body, ok = working[f.path]; !ok {
+					if body, ok = readWorkingFile(root, f.path); !ok {
+						return placement{}, nil
+					}
 				}
 			}
-			return gitPlaceLines(ctx, tmp, driver, funcnames, body)
+			decls, err := gitPlaceLines(ctx, tmp, driver, funcnames, body)
+			return placement{lines: types.SplitLines(body), decls: decls}, err
 		}
-		var oldDecls, newDecls []string
+		var oldPlaced, newPlaced placement
 		if f.hasSide(types.RegionOld) {
-			if oldDecls, err = place(types.RegionOld); err != nil {
+			if oldPlaced, err = place(types.RegionOld); err != nil {
 				return nil, err
 			}
 		}
 		if f.hasSide(types.RegionNew) {
-			if newDecls, err = place(types.RegionNew); err != nil {
+			if newPlaced, err = place(types.RegionNew); err != nil {
 				return nil, err
 			}
 		}
 		for _, h := range f.hunks {
-			regions = appendRegions(regions, f.path, types.RegionOld, h.oldStart, h.oldCount, driver, oldDecls)
-			regions = appendRegions(regions, f.path, types.RegionNew, h.newStart, h.newCount, driver, newDecls)
+			regions = appendRegions(regions, f.path, types.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
+			regions = appendRegions(regions, f.path, types.RegionNew, h.newStart, h.newCount, driver, newPlaced)
 		}
 	}
 	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
@@ -182,30 +185,35 @@ func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, a
 		return nil, err
 	}
 	driver := drivers[path]
-	var funcnames, oldDecls, newDecls []string
+	var funcnames []string
+	var oldPlaced, newPlaced placement
 	if driver != "" {
 		if funcnames, err = gitFuncnameConfig(ctx, root); err != nil {
 			return nil, err
 		}
-		place := filepath.Join(tmp, "place")
-		if err := os.Mkdir(place, 0o700); err != nil {
+		dir := filepath.Join(tmp, "place")
+		if err := os.Mkdir(dir, 0o700); err != nil {
 			return nil, err
 		}
 		if f.hasSide(types.RegionOld) {
-			if oldDecls, err = gitPlaceLines(ctx, place, driver, funcnames, before); err != nil {
+			decls, err := gitPlaceLines(ctx, dir, driver, funcnames, before)
+			if err != nil {
 				return nil, err
 			}
+			oldPlaced = placement{lines: types.SplitLines(before), decls: decls}
 		}
 		if f.hasSide(types.RegionNew) {
-			if newDecls, err = gitPlaceLines(ctx, place, driver, funcnames, after); err != nil {
+			decls, err := gitPlaceLines(ctx, dir, driver, funcnames, after)
+			if err != nil {
 				return nil, err
 			}
+			newPlaced = placement{lines: types.SplitLines(after), decls: decls}
 		}
 	}
 	var regions []types.RegionChange
 	for _, h := range f.hunks {
-		regions = appendRegions(regions, path, types.RegionOld, h.oldStart, h.oldCount, driver, oldDecls)
-		regions = appendRegions(regions, path, types.RegionNew, h.newStart, h.newCount, driver, newDecls)
+		regions = appendRegions(regions, path, types.RegionOld, h.oldStart, h.oldCount, driver, oldPlaced)
+		regions = appendRegions(regions, path, types.RegionNew, h.newStart, h.newCount, driver, newPlaced)
 	}
 	slices.SortStableFunc(regions, func(a, b types.RegionChange) int {
 		return cmp.Or(cmp.Compare(sideOrder(a.Side), sideOrder(b.Side)), cmp.Compare(a.Lines[0], b.Lines[0]))
@@ -213,15 +221,24 @@ func (v gitVCS) RegionsBetween(ctx context.Context, root, path string, before, a
 	return regions, nil
 }
 
+// placement is the lines of one version of a file and the declaration enclosing each, indexed
+// by line-1. decls is nil when the lines were not placed.
+type placement struct {
+	lines, decls []string
+}
+
 // appendRegions splits count lines from start on side into one region per run of lines
-// sharing a declaration. decls is indexed by line-1 and nil when the lines were not placed.
-func appendRegions(regions []types.RegionChange, path string, side types.RegionSide, start, count int, driver string, decls []string) []types.RegionChange {
-	if decls == nil {
+// sharing a declaration, as types.PlaceHunk names them.
+func appendRegions(regions []types.RegionChange, path string, side types.RegionSide, start, count int, driver string, p placement) []types.RegionChange {
+	var hunk []string
+	if p.decls == nil {
 		driver = ""
+	} else if count > 0 {
+		hunk = types.PlaceHunk(p.lines, p.decls, start-1, start-1+count)
 	}
 	declAt := func(line int) string {
-		if line-1 < len(decls) {
-			return decls[line-1]
+		if hunk != nil {
+			return hunk[line-start]
 		}
 		return ""
 	}
@@ -421,7 +438,9 @@ const regionMarker = "\x01magus-region\x01"
 // .gitattributes outranks core.attributesFile, and a `*` rule there would replace the driver.
 //
 // git matches funcname patterns line by line, so a declaration it finds on a line inside a
-// Go string or comment is dropped afterwards (types.DiffDriver.DropOpaque).
+// Go string or comment is dropped afterwards, and config keys are named by their path, as
+// types.DiffDriver.Declarations names them (types.DiffDriver.Conform), a doc comment included
+// in the declaration below it.
 func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, body []byte) ([]string, error) {
 	lines := strings.SplitAfter(string(body), "\n")
 	if lines[len(lines)-1] == "" {
@@ -469,46 +488,10 @@ func gitPlaceLines(ctx context.Context, tmp, driver string, funcnames []string, 
 	}
 	for _, d := range types.DiffDrivers {
 		if d.Name == driver {
-			d.DropOpaque(lines, decls)
+			d.Conform(lines, decls)
 		}
 	}
-	handLeadersDown(decls, lines, declarationLeaders[driver])
 	return decls, nil
-}
-
-// declarationLeaders are the line prefixes, per diff driver, of what is written directly
-// above a declaration and belongs to it: a doc comment, a decorator, an attribute.
-var declarationLeaders = map[string][]string{
-	"golang":     {"//", "/*", "*"},
-	"buzz":       {"//"},
-	"typescript": {"//", "/*", "*", "@"},
-	"python":     {"#", "@"},
-	"rust":       {"//", "/*", "*", "#["},
-	"markdown":   {"<!--"},
-}
-
-// handLeadersDown gives the run of leader lines directly above each declaration to that
-// declaration. git names a line by searching up from it, so without this a doc comment
-// belongs to the declaration above, and a claim on a function does not cover an edit to
-// its own documentation. The run stops at a blank line or any other line, so a comment
-// separated from the declaration by a blank line stays where git put it.
-func handLeadersDown(decls, lines, leaders []string) {
-	if len(leaders) == 0 {
-		return
-	}
-	leads := func(line string) bool {
-		line = strings.TrimLeft(line, " \t")
-		return slices.ContainsFunc(leaders, func(p string) bool { return strings.HasPrefix(line, p) })
-	}
-	for i := 1; i < len(decls); i++ {
-		above := decls[i-1]
-		if decls[i] == above {
-			continue
-		}
-		for j := i - 1; j >= 0 && decls[j] == above && leads(lines[j]); j-- {
-			decls[j] = decls[i]
-		}
-	}
 }
 
 // readWorkingFile reads a regular file at repository-relative path p under root. Anything

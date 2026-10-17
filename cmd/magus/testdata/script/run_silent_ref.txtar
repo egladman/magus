@@ -1,0 +1,37 @@
+# A passing `run -s` prints its output ref as one line, so a caller does not rerun
+# without -s only to learn it. Everything else about a pass stays dropped.
+
+cd ws
+
+exec magus run ok:rw . -s
+stderr '^ref  out[0-9a-f]+$'
+! stderr '\[pass\]'
+
+# A replay mints no new execution but still names the ref that holds the output.
+exec magus run ok:rw . -s
+stderr '^ref  out[0-9a-f]+$'
+
+# A structured format owns stdout and stderr's records, so no free-text line joins it.
+exec magus run ok:rw . -s -o json
+! stderr '^ref  '
+
+# A failure keeps its own output; no success line is added.
+! exec magus run bad:rw . -s
+! stderr '^refs? '
+
+-- ws/magus.yaml --
+{}
+-- ws/.gitignore --
+.magus/
+-- ws/magusfile.buzz --
+import "magus";
+import "proc";
+magus\project({"name": "silentref"});
+
+export fun ok(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo fine"]);
+}
+
+export fun bad(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "exit 4"]);
+}

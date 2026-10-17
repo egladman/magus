@@ -2,37 +2,32 @@ package types
 
 import "time"
 
-// Observer receives structured events from a Graph.
+// Observer receives one event per dependency-graph build and per top-level query.
 // Implementations must be safe for concurrent calls.
 type Observer interface {
-	OnBuild(BuildStats)
-	OnQuery(QueryEvent)
-	OnError(error)
+	Observe(GraphEvent)
 }
 
-// BuildStats is emitted once per successful dependency-graph build.
-type BuildStats struct {
-	Nodes    int
-	Edges    int
-	Duration time.Duration
-}
+// GraphOpBuild is GraphEvent.Op for a graph build; every other Op names a query method.
+const GraphOpBuild = "build"
 
-// QueryEvent is emitted once per top-level query method.
-type QueryEvent struct {
+// GraphEvent is one dependency-graph build or top-level query. Err is set when it failed:
+// a build that found a cycle, or a query whose context ended before it finished.
+type GraphEvent struct {
 	Op          string
-	Nodes       int
-	Seeds       int
-	Strategy    string
-	ResultCount int
-	Duration    time.Duration
+	Nodes       int           // |V|
+	Edges       int           // |E|, builds only
+	Seeds       int           // seed-set size, or 0 when N/A
+	Strategy    string        // "bfs" or "bitset", or empty
+	ResultCount int           // closure size, path count, or pair count
+	Duration    time.Duration // zero for a failure
+	Err         error
 }
 
 // NoopObserver discards every event.
 type NoopObserver struct{}
 
-func (NoopObserver) OnBuild(BuildStats) {}
-func (NoopObserver) OnQuery(QueryEvent) {}
-func (NoopObserver) OnError(error)      {}
+func (NoopObserver) Observe(GraphEvent) {}
 
 // Direction is the traversal direction for dependency-graph rendering.
 type Direction int
@@ -62,20 +57,8 @@ func FanOut(obs ...Observer) Observer {
 
 type fanOut []Observer
 
-func (f fanOut) OnBuild(s BuildStats) {
+func (f fanOut) Observe(e GraphEvent) {
 	for _, o := range f {
-		o.OnBuild(s)
-	}
-}
-
-func (f fanOut) OnQuery(e QueryEvent) {
-	for _, o := range f {
-		o.OnQuery(e)
-	}
-}
-
-func (f fanOut) OnError(err error) {
-	for _, o := range f {
-		o.OnError(err)
+		o.Observe(e)
 	}
 }

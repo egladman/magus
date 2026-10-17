@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -61,10 +63,34 @@ type OutputRecord struct {
 }
 
 func (c *Cache) manifestPath(projectPath, hash string) string {
-	return manifestPathIn(c.dir, projectPath, hash)
+	return manifestPathIn(c.store, projectPath, hash)
 }
 
-func (c *Cache) blobPath(blob string) string { return blobPathIn(c.dir, blob) }
+func (c *Cache) blobPath(blob string) string { return blobPathIn(c.store, blob) }
+
+// entryLogPath is the stored entry's build log, which a hit replays. The log a run writes
+// as it goes is logPath, in this checkout's dir, and the local tier publishes it here.
+func (c *Cache) entryLogPath(projectPath, hash string) string {
+	return logPathIn(c.store, projectPath, hash)
+}
+
+// publishLog copies the run's log into the store as the entry's, by temp file and rename:
+// another checkout sharing the store may replay that path at any moment, and two checkouts
+// running one key at once each publish whole bytes. Nothing to do when the store is dir, or
+// the run left no log.
+func (c *Cache) publishLog(projectPath, hash string) error {
+	if c.store == c.dir {
+		return nil
+	}
+	data, err := os.ReadFile(c.logPath(projectPath, hash))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return writeAtomic(c.entryLogPath(projectPath, hash), data)
+}
 
 // The store layout, relative to a cache root: the local store's or a staging one's.
 func manifestPathIn(root, projectPath, hash string) string {

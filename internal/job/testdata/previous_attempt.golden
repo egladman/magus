@@ -1,0 +1,22 @@
+job: harness/retry
+
+criteria
+Retry the store.
+
+attempt 3 of 4
+
+previous attempts
+  attempt 2: fail, tier standard, 2 rework round(s), 1 widening(s)
+    unmet: check, a, b, c, d and 1 more
+    violation: changed path "docs/x.md" is outside the job's write paths (internal/ledger)
+    unresolved risk: the second worktree was not tried
+    denied: lease-write: docs/x.md belongs to no lease you hold
+    failed run: reopen with `magus query output out0123456789ab`
+    not retryable until widening: the guard denied its holder under lease-write: docs/x.md belongs to no lease you hold
+  attempt 1: no_return (its checkout is gone), tier economy, 0 rework round(s), 0 widening(s), retryable
+
+write paths
+  internal/ledger
+
+the only check you run
+magus run test internal/ledger

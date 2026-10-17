@@ -37,15 +37,15 @@ message StreamMetricsResponse {
 // aggregated for the dashboard.
 message Snapshot {
   google.protobuf.Timestamp capture_time = 1;
-  Latency target = 2; // magus.target.duration + magus.target.runs
-  // cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+  Latency target = 2; // magus.target.duration
+  // cache is the local Cache.Run family (magus.cache.duration + magus.cache.reads).
   // Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
   // this family measures a Cache.Run, not a resolved op.
   Latency cache = 3;
   Latency pool_wait = 4; // magus.pool.wait.duration
-  Latency graph_query = 5; // magus.graph.query.duration + magus.graph.queries
+  Latency graph_query = 5; // magus.graph.query.duration
   Remote remote = 6; // magus.cache.remote.*
-  repeated TargetStat target_stats = 7; // per-target rollup of magus.target.{duration,runs}
+  repeated TargetStat target_stats = 7; // per-target rollup of magus.target.duration
   repeated MCPToolStat mcp_tools = 8; // per-tool rollup of magus.mcp.tool.*
   Buzz buzz = 9; // magus.buzz.* families
   Sandbox sandbox = 10; // magus.sandbox.* filesystem families
@@ -65,8 +65,8 @@ message Latency {
   double sum_seconds = 6; // total observed, for averages / throughput
 }
 
-// Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
-// volume.
+// Remote is the remote-cache instrument family: outcome tallies from magus.cache.remote.ops
+// plus transfer latency and volume.
 message Remote {
   int64 hits = 1;
   int64 misses = 2;
@@ -89,7 +89,7 @@ message TargetStat {
   double p95_seconds = 6;
   double p99_seconds = 7;
   double cache_hit_rate = 8; // [0,1]; fraction of runs served from cache
-  int64 success = 9; // runs with outcome=success
+  int64 success = 9; // runs with outcome=ok
   int64 errors = 10; // runs with outcome=error
 }
 

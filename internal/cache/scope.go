@@ -7,8 +7,9 @@ import (
 	"strings"
 )
 
-// Description returns the cache header's facts: which tiers this run can reach, and
-// whether it may write to them.
+// Description returns the cache header's facts: which tiers this run can reach, whether
+// it may write to them, and the directory holding the local tier's entries, which every
+// checkout of a repository shares unless cache.dir moves it.
 //
 // It names the backend rather than probing it. Active() is a spell op on the real
 // implementation (arbitrary Buzz, with every host module), and calling it here put
@@ -21,7 +22,8 @@ import (
 // with what the run does. They stay strings rather than a per-tier struct: they are the
 // run.cache record's schema, and a structured form would break its readers for no
 // behavior the header lacks.
-func (c *Cache) Description() (tier, mode string) {
+func (c *Cache) Description() (tier, mode, dir string) {
+	dir = c.store
 	switch {
 	case c.remote != nil:
 		tier = c.remote.name() + " + local"
@@ -38,7 +40,7 @@ func (c *Cache) Description() (tier, mode string) {
 	default:
 		mode = "read+write"
 	}
-	return tier, mode
+	return tier, mode, dir
 }
 
 // Collapsing reports whether the cache is withholding per-project subprocess output

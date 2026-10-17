@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"

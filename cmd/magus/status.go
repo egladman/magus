@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,14 +15,15 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/broker"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,9 +37,9 @@ const statusWatchMin = 15 * time.Second
 // usage banner. The hand-written options struct this replaced described itself as
 // "the middle ground between loose per-flag vars and a declarative registry"; the
 // registry now exists, so the middle ground is gone.
-func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
+func bindStatus(f **flaggen.StatusFlags) func(*flag.FlagSet) {
 	return func(fs *flag.FlagSet) {
-		*f = gen.BindStatus(fs)
+		*f = flaggen.BindStatus(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
 			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
@@ -51,14 +51,14 @@ func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
 }
 
 func status(ctx context.Context, args []string) error {
-	var f *gen.StatusFlags
+	var f *flaggen.StatusFlags
 	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
 		return err
 	}
 
 	if f.Wait {
 		if f.Probe != "" || f.Watch != 0 {
-			return usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
+			return exit.Usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
 		}
 		return awaitBudget(ctx, extractRootFlag(args))
 	}
@@ -80,7 +80,16 @@ func status(ctx context.Context, args []string) error {
 	}
 
 	if f.Watch == 0 {
-		return printStatus(buildStatusSnapshot(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
+		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
+		if err := printStatus(snapshot, opts, 0, f.Compact); err != nil {
+			return err
+		}
+		if snapshot.Broker != nil && opts.Format == outputText && !f.Compact {
+			if work, err := queryWork(ctx); err == nil {
+				printWorkByOwner(os.Stdout, work, time.Now())
+			}
+		}
+		return nil
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
@@ -132,78 +141,6 @@ func status(ctx context.Context, args []string) error {
 	}
 }
 
-// awaitBudget is `status --wait`. The gate goes up before anything slow, since the run
-// reading the pipe looks for it once, on its way to its locks.
-func awaitBudget(ctx context.Context, rootOverride string) error {
-	if root, err := magus.FindRoot(rootOverride); err == nil {
-		magus.GatePipe(root, globalCfg)
-	}
-	start := time.Now()
-	waited := false
-	err := cache.AwaitMachine(ctx, queryCapacity, pipedRunClaims(ctx, rootOverride), func(msg string) {
-		waited = true
-		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"), attr.Elapsed(time.Since(start)))
-	})
-	if err == nil && waited {
-		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
-	}
-	return err
-}
-
-func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
-	st, err := queryBroker(ctx)
-	return st.Capacity, err
-}
-
-// pipedRunClaims is what the magus run reading stdout will claim, read from its argv the
-// way run reads its own. Anything else, or nothing, reading stdout waits for one free
-// slot, as does a run this cannot follow: that run reports its own error once it starts.
-func pipedRunClaims(ctx context.Context, rootOverride string) []types.MachineClaim {
-	slot := []types.MachineClaim{{Slots: 1}}
-	argv, ok := magus.ReaderArgv(ctx, os.Stdout)
-	if !ok || len(argv) == 0 {
-		return slot
-	}
-	sub, subArgs := peekSub(argv[1:])
-	if sub != "run" || runReadsPlan(subArgs) {
-		return slot
-	}
-	prescan := func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
-	raw, rest, ok := splitTargetFromArgs(subArgs, prescan)
-	if !ok {
-		return slot
-	}
-	_, name := parseTarget(raw)
-	t, err := types.ParseTarget(name)
-	if err != nil {
-		return slot
-	}
-	t.Name = canonicalTarget(t.Name)
-	flagArgs, extraArgs := splitOnDashDash(rest)
-	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
-	bindDisplayFlags(fs)
-	prescan(fs)
-	_, projects := partitionFlags(fs, flagArgs)
-
-	m, err := loadMagus(ctx, rootOverride)
-	if err != nil {
-		return slot
-	}
-	targets, _, err := resolveTargets(ctx, m, t, runSelection{projects: projects, cwd: clientCwd(ctx)})
-	if err == nil && len(targets) > 0 {
-		targets, err = filterServedTargets(ctx, m, targets, t.Name)
-	}
-	if err != nil {
-		return slot
-	}
-	charms := withDefaultCharms(t.Charms, globalCfg.DefaultCharms, hasModeFlag(flagArgs, "no-default-charms"))
-	if t.Name == "ci" {
-		charms = magus.CharmsForCI(charms)
-	}
-	return m.MachineClaims(ctx, targets, charms, extraArgs)
-}
-
 // clampStatusWatch floors the poll interval at statusWatchMin. Zero passes
 // through untouched: it is the caller's "not watching" sentinel, answered with a
 // single snapshot before this runs. A NEGATIVE interval clamps rather than
@@ -217,15 +154,13 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+func printStatus(r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
-// writeStatus renders one status frame to w. Split from printStatus so the
-// watch loop can render into a buffer and redraw it in place, rather than
-// printing straight at the terminal and having to erase the whole screen to
-// get rid of it.
-func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+// writeStatus renders one status frame to w, so the watch loop can redraw a buffer
+// in place rather than erase the whole screen.
+func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,
 	// so the terminal being rendered FOR is still standard output.
@@ -246,7 +181,7 @@ func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFr
 // must already account for TERM=dumb (see [tty.CanRender]): the grid draws
 // SGR colors and a braille spinner unconditionally, so a dumb terminal that
 // merely passed a bare TTY check would render them as garbage.
-func gridEnabled(opts OutputOptions, canRender bool) bool {
+func gridEnabled(opts output.Options, canRender bool) bool {
 	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
@@ -594,6 +529,60 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 		fmt.Fprintf(tw, "draining\t-\tseats nothing new; exits once what it holds is released\n")
 	case st.IdleExitSeconds > 0:
 		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", formatDur(time.Duration(st.IdleExitSeconds)*time.Second))
+	}
+	_ = tw.Flush()
+}
+
+// queryWork asks the broker what runs against it and who owns each piece.
+func queryWork(ctx context.Context) (broker.WorkReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return broker.QueryWork(ctx, broker.DefaultAddr())
+}
+
+// printWorkByOwner renders what runs against the broker grouped by owner (a job lease,
+// or unleased for a person or a root session), each with its kind, pid, age, slots and
+// deadline, then the work the broker stopped lately and why. It prints nothing when
+// nothing runs and nothing was stopped.
+func printWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
+	if len(r.Running) == 0 && len(r.Ended) == 0 {
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if len(r.Running) > 0 {
+		fmt.Fprintln(tw, "\nwork by owner")
+		byOwner := map[string][]broker.Work{}
+		var owners []string
+		for _, work := range r.Running {
+			o := work.Owner()
+			if _, seen := byOwner[o]; !seen {
+				owners = append(owners, o)
+			}
+			byOwner[o] = append(byOwner[o], work)
+		}
+		for _, o := range owners {
+			fmt.Fprintf(tw, "  %s\n", o)
+			for _, work := range byOwner[o] {
+				deadline := "no deadline"
+				switch left := work.Deadline.Sub(now).Round(time.Second); {
+				case work.Deadline.IsZero():
+				case left > 0:
+					deadline = "deadline in " + formatDur(left)
+				default:
+					deadline = "past its deadline"
+				}
+				fmt.Fprintf(tw, "    %s\tpid %d\tup %s\tslots %d\t%s\t%s\t%s\n", work.Kind, work.PID,
+					cmp.Or(formatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
+					truncate(work.Command, 60), work.Dir)
+			}
+		}
+	}
+	if len(r.Ended) > 0 {
+		fmt.Fprintln(tw, "\nstopped by the broker")
+		for _, e := range r.Ended {
+			fmt.Fprintf(tw, "  %s\t%s\t%s ago\t%s\t%s\n", e.Owner(), e.Kind,
+				cmp.Or(formatDur(now.Sub(e.At).Round(time.Second)), "0s"), truncate(e.Command, 60), e.Reason)
+		}
 	}
 	_ = tw.Flush()
 }
@@ -1355,7 +1344,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}

@@ -193,15 +193,15 @@ func (*StreamMetricsResponse_Snapshot) isStreamMetricsResponse_Of() {}
 type Snapshot struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	CaptureTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=capture_time,json=captureTime,proto3" json:"capture_time,omitempty"`
-	Target      *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // magus.target.duration + magus.target.runs
-	// cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+	Target      *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // magus.target.duration
+	// cache is the local Cache.Run family (magus.cache.duration + magus.cache.reads).
 	// Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
 	// this family measures a Cache.Run, not a resolved op.
 	Cache         *Latency       `protobuf:"bytes,3,opt,name=cache,proto3" json:"cache,omitempty"`
 	PoolWait      *Latency       `protobuf:"bytes,4,opt,name=pool_wait,json=poolWait,proto3" json:"pool_wait,omitempty"`          // magus.pool.wait.duration
-	GraphQuery    *Latency       `protobuf:"bytes,5,opt,name=graph_query,json=graphQuery,proto3" json:"graph_query,omitempty"`    // magus.graph.query.duration + magus.graph.queries
+	GraphQuery    *Latency       `protobuf:"bytes,5,opt,name=graph_query,json=graphQuery,proto3" json:"graph_query,omitempty"`    // magus.graph.query.duration
 	Remote        *Remote        `protobuf:"bytes,6,opt,name=remote,proto3" json:"remote,omitempty"`                              // magus.cache.remote.*
-	TargetStats   []*TargetStat  `protobuf:"bytes,7,rep,name=target_stats,json=targetStats,proto3" json:"target_stats,omitempty"` // per-target rollup of magus.target.{duration,runs}
+	TargetStats   []*TargetStat  `protobuf:"bytes,7,rep,name=target_stats,json=targetStats,proto3" json:"target_stats,omitempty"` // per-target rollup of magus.target.duration
 	McpTools      []*MCPToolStat `protobuf:"bytes,8,rep,name=mcp_tools,json=mcpTools,proto3" json:"mcp_tools,omitempty"`          // per-tool rollup of magus.mcp.tool.*
 	Buzz          *Buzz          `protobuf:"bytes,9,opt,name=buzz,proto3" json:"buzz,omitempty"`                                  // magus.buzz.* families
 	Sandbox       *Sandbox       `protobuf:"bytes,10,opt,name=sandbox,proto3" json:"sandbox,omitempty"`                           // magus.sandbox.* filesystem families
@@ -398,8 +398,8 @@ func (x *Latency) GetSumSeconds() float64 {
 	return 0
 }
 
-// Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
-// volume.
+// Remote is the remote-cache instrument family: outcome tallies from magus.cache.remote.ops
+// plus transfer latency and volume.
 type Remote struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Hits               int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
@@ -505,7 +505,7 @@ type TargetStat struct {
 	P95Seconds    float64                `protobuf:"fixed64,6,opt,name=p95_seconds,json=p95Seconds,proto3" json:"p95_seconds,omitempty"`
 	P99Seconds    float64                `protobuf:"fixed64,7,opt,name=p99_seconds,json=p99Seconds,proto3" json:"p99_seconds,omitempty"`
 	CacheHitRate  float64                `protobuf:"fixed64,8,opt,name=cache_hit_rate,json=cacheHitRate,proto3" json:"cache_hit_rate,omitempty"` // [0,1]; fraction of runs served from cache
-	Success       int64                  `protobuf:"varint,9,opt,name=success,proto3" json:"success,omitempty"`                                  // runs with outcome=success
+	Success       int64                  `protobuf:"varint,9,opt,name=success,proto3" json:"success,omitempty"`                                  // runs with outcome=ok
 	Errors        int64                  `protobuf:"varint,10,opt,name=errors,proto3" json:"errors,omitempty"`                                   // runs with outcome=error
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

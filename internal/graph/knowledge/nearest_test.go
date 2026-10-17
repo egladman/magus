@@ -89,10 +89,12 @@ func TestNearestNodeTieBreaksOnLowerID(t *testing.T) {
 func TestNearestNodeNeverEntersResults(t *testing.T) {
 	g := nearestGraph()
 
-	out := g.Query("kind=file guard_shel.go", DefaultBudget)
+	// The near miss shares no word with any node: ranked free text matches any one
+	// term, so "guard_shel.go" would match every .go file on "go".
+	out := g.Query("kind=target buld", DefaultBudget)
 	require.Zero(t, out.MatchCount, "a near miss must not become a match")
 	assert.Empty(t, out.Matches)
-	assert.NotEmpty(t, g.NearestNode("kind=file guard_shel.go"), "the suggestion lives outside the result set")
+	assert.NotEmpty(t, g.NearestNode("kind=target buld"), "the suggestion lives outside the result set")
 }
 
 // BenchmarkNearestNode measures the cost of the zero-result scan at real

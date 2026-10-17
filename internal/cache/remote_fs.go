@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/types"
 )
 
-// FSRemoteBackend is a local-filesystem RemoteBackend: artifacts are stored as
+// FSRemoteBackend is a local-filesystem [types.CacheBackend]: artifacts are stored as
 // gzip-tarballs under <dir>/<flat-project>/<hash>.tar.gz. Useful for testing
 // and for sharing a cache between local workspaces on the same machine.
 type FSRemoteBackend struct {
@@ -37,11 +38,11 @@ func (r *FSRemoteBackend) artifactPath(namespace, key string) string {
 	return filepath.Join(r.dir, flattenPath(namespace), key+".tar.gz")
 }
 
-// GetArtifact opens the artifact file, or returns [ErrRemoteMiss].
+// GetArtifact opens the artifact file, or returns [types.ErrCacheMiss].
 func (r *FSRemoteBackend) GetArtifact(_ context.Context, namespace, key string) (io.ReadCloser, error) {
 	f, err := os.Open(r.artifactPath(namespace, key))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, ErrRemoteMiss
+		return nil, types.ErrCacheMiss
 	}
 	return f, err
 }
@@ -56,13 +57,13 @@ func (r *FSRemoteBackend) HasArtifact(_ context.Context, namespace, key string) 
 }
 
 // PutArtifact writes the artifact to the filesystem atomically, or returns
-// [ErrRemoteExists] without reading data when the key is already stored. Two pushes of
+// [types.ErrCacheExists] without reading data when the key is already stored. Two pushes of
 // one key that overlap both write, each through its own temp file, and the later rename
 // wins with the same bytes.
 func (r *FSRemoteBackend) PutArtifact(_ context.Context, namespace, key string, data io.Reader) error {
 	path := r.artifactPath(namespace, key)
 	if _, err := os.Stat(path); err == nil {
-		return ErrRemoteExists
+		return types.ErrCacheExists
 	}
 	return file.WriteFrom(path, data, 0o600)
 }

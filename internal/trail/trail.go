@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 )
@@ -256,12 +256,9 @@ type AgentCommand struct {
 	Reason     string
 	Context    string
 	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
-	Rule string
-	// StdinClosed records that the guard handed the host the command rewritten to run
-	// with stdin at end-of-file.
-	StdinClosed bool
-	Lease       string
-	LeaseFrom   types.LeaseSource
+	Rule      string
+	Lease     string
+	LeaseFrom types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -280,6 +277,8 @@ type AgentCommand struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
+	// AgentFacts are the caller's cost facts, recorded in the request blob.
+	types.AgentFacts
 }
 
 const agentCommandSchemaVersion = 1
@@ -293,6 +292,8 @@ type agentCommandRequest struct {
 	Tool          string `json:"tool,omitempty"`
 	Command       string `json:"command,omitempty"`
 	Path          string `json:"path,omitempty"`
+	// Additive for the reason agentCommandResponse.PreauthorizedBy gives.
+	types.AgentFacts
 }
 
 type agentCommandResponse struct {
@@ -305,7 +306,6 @@ type agentCommandResponse struct {
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
 	RuleFailures    []RuleFailure `json:"rule_failures,omitempty"`
-	StdinClosed     bool          `json:"stdin_closed,omitzero"`
 }
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may
@@ -341,6 +341,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Path = secret.RedactString(ctx, command.Path)
 	command.Reason = secret.RedactString(ctx, command.Reason)
 	command.Context = secret.RedactString(ctx, command.Context)
+	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	request, _ := json.Marshal(agentCommandRequest{
 		SchemaVersion: agentCommandSchemaVersion,
 		Host:          command.Host,
@@ -350,6 +351,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Tool:          command.Tool,
 		Command:       command.Command,
 		Path:          command.Path,
+		AgentFacts:    command.AgentFacts,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
 		SchemaVersion:   agentCommandSchemaVersion,
@@ -359,7 +361,6 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
 		RuleFailures:    redactFailures(ctx, command.RuleFailures),
-		StdinClosed:     command.StdinClosed,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
@@ -457,6 +458,9 @@ type AgentSpawn struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
+	// AgentFacts are the CALLER's, as on AgentCommand. Its ContextModel is the model the
+	// caller runs as, never the child's: that one is DeclaredModel.
+	types.AgentFacts
 }
 
 // RuleFailure is one side of a workspace guard rule that judged nothing, and why.
@@ -485,6 +489,7 @@ type agentSpawnRequest struct {
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
 	Target       string        `json:"target,omitempty"`
 	RuleFailures []RuleFailure `json:"rule_failures,omitempty"`
+	types.AgentFacts
 }
 
 const (
@@ -519,6 +524,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// name is short, and an unbounded claim is a cost every later read of the
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
+	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
@@ -533,6 +539,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		DeclaredModel: spawn.DeclaredModel,
 		Target:        spawn.Target,
 		RuleFailures:  failures,
+		AgentFacts:    spawn.AgentFacts,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 
@@ -647,16 +654,7 @@ func Append(ctx context.Context, base string, e Event) {
 	if err != nil {
 		return
 	}
-	d := filepath.Join(base, dir)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return
-	}
-	f, err := os.OpenFile(filepath.Join(d, eventsFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return
-	}
-	_, _ = f.Write(append(line, '\n'))
-	_ = f.Close()
+	_ = file.AppendLines(eventsPath(base), [][]byte{line}, 0o644, file.WithoutSync())
 }
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte

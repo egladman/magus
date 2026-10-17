@@ -1,14 +1,22 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -33,8 +41,8 @@ var multiAgentSkill = agent.MustSkill("magus-multi-agent")
 // Fires once per session by construction: the first spawn is denied, the model loads the
 // skill, the marker lands, and every later spawn passes. A session that never spawns never
 // sees it.
-func denySpawnWithoutBrief(markers hint.Gate, reportsSkills bool, workspace string) string {
-	return denyUntilSkillLoaded(markers, reportsSkills, workspace, multiAgentSkill,
+func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace string) string {
+	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, multiAgentSkill,
 		"spawning",
 		"It carries the lease, worktree, model-naming and git rules a spawn cannot be fixed for later.")
 }
@@ -90,4 +98,263 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 			"half-saved, it stops the workspace loading for everybody here at once. " +
 			"A worktree of its own skips the proof, and it is the answer whenever the write paths touch workspace configuration.",
 	}
+}
+
+// spawnShapeKeys are the tool_input fields only a spawn carries. A message with none of
+// them could be any tool's, so it is not read as a spawn.
+var spawnShapeKeys = []string{"agent_type", "task_name", "fork_context", "fork_turns", "reasoning_effort", "model"}
+
+// envelopeSpawn reads the prompt of a spawn by shape, and reports whether tool_input is one.
+//
+// `prompt` is the spelling most hosts use. Another host names it `message`, or sends
+// `items` of text parts, and tells a spawn from a continuation by the absence of an
+// addressee: a call with a target is [envelopeContinuation]'s.
+func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
+	if p := envelopeString(input, "prompt"); p != "" {
+		return p, true
+	}
+	if envelopeTarget(input) != "" {
+		return "", false
+	}
+	_, hasItems := input["items"].([]any)
+	text := cmp.Or(envelopeString(input, "message"), envelopeItemsText(input))
+	if text == "" && !hasItems {
+		return "", false
+	}
+	if !hasItems && !slices.ContainsFunc(spawnShapeKeys, func(k string) bool { _, present := input[k]; return present }) {
+		return "", false
+	}
+	return text, true
+}
+
+// pendingSpawnPrefix starts the kind of a spawn that passed and has not yet been joined to
+// the child it started, named by when it was judged.
+const pendingSpawnPrefix = "spawn-pending-"
+
+// pendingSpawnJoined ends the kind marking a pending spawn as joined to its child.
+const pendingSpawnJoined = "-joined"
+
+// pendingSpawnWindow is how long after its spawn a child's start is still paired with it.
+// A host starts the child as the spawn runs, so a start later than this is another spawn's.
+const pendingSpawnWindow = 2 * time.Minute
+
+// pendingSpawn is what a spawn handed its child, kept until the child's start names it.
+type pendingSpawn struct {
+	Record  spawnedAgent `json:"record"`
+	Spawner string       `json:"spawner,omitempty"`
+}
+
+// recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
+// joined to it. A host whose finished spawn already names the child never reads it.
+func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {
+	body, err := json.Marshal(pendingSpawn{
+		Record:  spawnedAgent{Description: env.Spawn.Description, Name: env.Spawn.Name, Model: env.DeclaredModel},
+		Spawner: spawner,
+	})
+	if err != nil {
+		return
+	}
+	writeAgentMarker(facts, hint.MarkerKind(pendingSpawnPrefix+strconv.FormatInt(now.UnixNano(), 10)), body)
+}
+
+// pendingSpawnEntry is one pending spawn still waiting for its child, with the marker kind
+// it is filed under.
+type pendingSpawnEntry struct {
+	kind  hint.MarkerKind
+	spawn pendingSpawn
+}
+
+// livePendingSpawns lists, oldest first, the spawns of this session that no child has joined
+// and that are not older than pendingSpawnWindow.
+func livePendingSpawns(facts hint.Gate, now time.Time) []pendingSpawnEntry {
+	var out []pendingSpawnEntry
+	for _, kind := range facts.Kinds(pendingSpawnPrefix) {
+		if strings.HasSuffix(string(kind), pendingSpawnJoined) {
+			continue
+		}
+		nanos, err := strconv.ParseInt(strings.TrimPrefix(string(kind), pendingSpawnPrefix), 10, 64)
+		if err != nil || now.Sub(time.Unix(0, nanos)) > pendingSpawnWindow {
+			continue
+		}
+		body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
+		var p pendingSpawn
+		if err != nil || json.Unmarshal(body, &p) != nil {
+			continue
+		}
+		out = append(out, pendingSpawnEntry{kind: kind, spawn: p})
+	}
+	return out
+}
+
+// joinStartedChild pairs a child whose start names only its own id with the oldest spawn
+// in this session still waiting for one, and files the child under that spawn as a
+// finished spawn call would: its title's job, its name and its model. A host whose spawn
+// is answered by a name, and whose child's own calls carry an id, joins the two here.
+// Nothing is joined to a child magus already has a record of, or to a spawn older than
+// pendingSpawnWindow.
+//
+// A host that sends no start for a foreground child has only the child's first call to join
+// it by, which names no spawn, and several foreground spawns can wait at once. That join
+// (firstCall) guesses nothing. It reads the spawn title the host filed for the child (see
+// hostSpawnTitle) and joins the pending spawn with that title, or none. A host that files
+// no title leaves the lease the hook process declares (see [trail.LeaseFromEnv]), which is
+// the host's environment and not a worker's shell export. When spawns naming jobs are
+// waiting and that declaration matches none, the caller runs unbound and advice says so: a
+// subagent that is no worker must not be refused while spawns wait. Two waiting spawns of
+// the declared job are refused, since either could be the caller's.
+func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time, firstCall bool) (refusal, advice string) {
+	if _, known := readSpawnedAgent(facts, child); known {
+		return "", ""
+	}
+	pending := livePendingSpawns(facts, now)
+	join := func(e pendingSpawnEntry) {
+		if facts.MarkFired(e.kind + pendingSpawnJoined) {
+			return
+		}
+		recordSpawnedAgent(ctx, at, facts, who, hookRequest{
+			SpawnedAgent:  child,
+			DeclaredModel: e.spawn.Record.Model,
+			Spawn:         spawnFields{Description: e.spawn.Record.Description, Name: e.spawn.Record.Name},
+		}, e.spawn.Spawner)
+	}
+	if !firstCall {
+		if len(pending) > 0 {
+			join(pending[0])
+		}
+		return "", ""
+	}
+	if title, filed := hostSpawnTitle(who.Transcript, child); filed {
+		// Two spawns with one title name one job, so the oldest binds the same lease.
+		if i := slices.IndexFunc(pending, func(e pendingSpawnEntry) bool { return e.spawn.Record.Description == title }); i >= 0 {
+			join(pending[i])
+		}
+		return "", ""
+	}
+	var titled, matched []pendingSpawnEntry
+	claim := trail.LeaseFromEnv()
+	for _, e := range pending {
+		row, ok := spawnTitleJob(ctx, at, e.spawn.Record.Description)
+		if !ok {
+			continue
+		}
+		titled = append(titled, e)
+		if claim != "" && row.ID == claim {
+			matched = append(matched, e)
+		}
+	}
+	switch {
+	case len(titled) == 0:
+		return "", ""
+	case len(matched) == 1:
+		join(matched[0])
+		return "", ""
+	case len(matched) > 1:
+		return fmt.Sprintf("magus workspace: %d waiting spawns name job %s; title each spawn for its own job.",
+			len(matched), claim), ""
+	}
+	return "", fmt.Sprintf("magus workspace: none of the %d waiting spawn(s) names this caller; it runs under no lease until it binds with `%s`.",
+		len(titled), hint.JobExec.With("<job>"))
+}
+
+// hostSpawnTitle is the spawn title the host filed for child beside the session transcript:
+// the host writes <session>/subagents/agent-<id>.meta.json when the child starts, before
+// its first call, with the spawn's description. ok is false for a host that files none.
+func hostSpawnTitle(transcript, child string) (title string, ok bool) {
+	if transcript == "" || child == "" || child != filepath.Base(child) || child == "." || child == ".." {
+		return "", false
+	}
+	name := "agent-" + child + ".meta.json"
+	dirs := []string{filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")}
+	if filepath.Base(filepath.Dir(transcript)) == "subagents" {
+		// A nested child's calls may name its parent's transcript, which sits in the same folder.
+		dirs = append(dirs, filepath.Dir(transcript))
+	}
+	for _, dir := range dirs {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		var meta struct {
+			Description string `json:"description"`
+		}
+		if json.Unmarshal(body, &meta) == nil && meta.Description != "" {
+			return meta.Description, true
+		}
+	}
+	return "", false
+}
+
+// scheduleShapeKeys are the tool_input fields of a call that queues a prompt for a later
+// turn of the same session: a delay, or a cron expression.
+var scheduleShapeKeys = []string{"cron", "delaySeconds", "delay_seconds"}
+
+// envelopeSchedules reports a prompt queued for later in this session, which carries a
+// prompt as a spawn does and briefs no new agent.
+func envelopeSchedules(input map[string]any) bool {
+	return envelopeString(input, "prompt") != "" && slices.ContainsFunc(scheduleShapeKeys, func(k string) bool {
+		_, present := input[k]
+		return present
+	})
+}
+
+// envelopeTarget is the agent a call addresses: `to` on one host, `target` on another.
+func envelopeTarget(input map[string]any) string {
+	return cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"))
+}
+
+// envelopeContinuation reads a message to an agent that already exists, with the text it
+// carries. A structured message has no text to hand a rule, so it yields "".
+func envelopeContinuation(input map[string]any) (target, message string, ok bool) {
+	target = envelopeTarget(input)
+	if target == "" {
+		return "", "", false
+	}
+	_, hasItems := input["items"].([]any)
+	if input["message"] == nil && !hasItems {
+		return "", "", false
+	}
+	return target, cmp.Or(envelopeString(input, "message"), envelopeItemsText(input)), true
+}
+
+// envelopeItemsText joins the text parts of an `items` list, the form a host uses to hand
+// a prompt as parts rather than as one string. A part that is not text carries none.
+func envelopeItemsText(input map[string]any) string {
+	list, _ := input["items"].([]any)
+	var parts []string
+	for _, item := range list {
+		fields, _ := item.(map[string]any)
+		if text := envelopeString(fields, "text"); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// writeShapeKeys are the tool_input fields only a write carries. The envelope cannot tell
+// a read from a write by tool, so a call holding any of them is never a read.
+var writeShapeKeys = []string{
+	"content", "contents", "old_string", "new_string", "old_str", "new_str", "edits",
+	"replace_all", "patch", "patchText", "command", "text", "insert_text",
+}
+
+// envelopeSkillRead is the skill a call reads by opening its SKILL.md, or "".
+//
+// A host that loads a skill by reading the file has no skill tool to report it, so the
+// read is the load. Only `.../skills/<name>/SKILL.md` counts, and only from a call that
+// names nothing to write: a write to that path loads nothing.
+func envelopeSkillRead(input map[string]any) string {
+	for _, key := range writeShapeKeys {
+		if _, present := input[key]; present {
+			return ""
+		}
+	}
+	rest, ok := strings.CutSuffix(filepath.ToSlash(envelopeWritePath(input)), "/SKILL.md")
+	if !ok {
+		return ""
+	}
+	dir, name := path.Split(rest)
+	if !strings.HasSuffix("/"+dir, "/skills/") || !isSkillName(name) {
+		return ""
+	}
+	return name
 }

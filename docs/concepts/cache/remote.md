@@ -19,8 +19,8 @@ aliases: [concepts/remote-cache]
 
 magus's [build cache](../../../README.md#build-model) is content-addressed: a target's
 output is keyed by the SHA-256 of its inputs, so an unchanged target replays its
-previous output instead of rebuilding. That cache lives on disk (`.magus/` in the
-workspace root) and is **local** to one machine.
+previous output instead of rebuilding. That cache lives on disk, in one store every
+checkout of the repository shares, and is **local** to one machine.
 
 A **remote cache** shares those artifacts across **CI runners**, machine to
 machine. When the local cache misses, magus asks the remote provider for the
@@ -398,11 +398,11 @@ gate built with. This repository's `ci.yaml` does exactly that, saving from main
 When [telemetry](../telemetry.md) is enabled, magus instruments every remote
 `get`/`put` automatically, with no provider changes, since the wrapping
 happens around the `RemoteBackend` interface, not inside the spell. You get the
-`magus.cache.remote.{hits,misses,errors,duration,io.size}` metrics (hit-rate,
-latency, bytes moved) plus a `magus.cache.remote.get`/`.put` span per operation,
-so a slow fetch or upload shows up inline in the build trace. Remote metrics live
-under their own `.remote` prefix and are never folded into the local
-`magus.cache.*` counters. See the
+`magus.cache.remote.{ops,duration,io.size}` metrics (operations by method and
+outcome, latency, bytes moved) plus a `magus.cache.remote.get`/`.put` span per
+operation, so a slow fetch or upload shows up inline in the build trace. Remote
+metrics live under their own `.remote` prefix and are never folded into the local
+`magus.cache.reads` counter. See the
 [telemetry reference](../telemetry.md#remote-cache) for the full instrument list.
 
 ## Writing your own provider

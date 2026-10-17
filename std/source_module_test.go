@@ -80,29 +80,28 @@ func TestDescribeSourceReportsAParseFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse:")
 }
 
-// TestRegisterSourcePanicsRatherThanStoringABadModule covers all three refusals.
-// None reaches the registry, so the global source-module set is left as the
-// package's own init built it.
-func TestRegisterSourcePanicsRatherThanStoringABadModule(t *testing.T) {
+// TestIndexSourcesPanicsRatherThanIndexingABadModule covers all three refusals. It
+// indexes a throwaway list, so the real source-module set is untouched.
+func TestIndexSourcesPanicsRatherThanIndexingABadModule(t *testing.T) {
 	assert.PanicsWithValue(t, `std: "uuid" is already registered as a Go module`, func() {
-		RegisterSource(SourceModule{Name: "uuid", Source: covSourceFixture})
+		indexSources([]SourceModule{{Name: "uuid", Source: covSourceFixture}})
 	})
 
-	assert.PanicsWithValue(t, `std: duplicate source module registration: "lcov"`, func() {
-		RegisterSource(SourceModule{Name: "lcov", Source: covSourceFixture})
+	assert.PanicsWithValue(t, `std: duplicate source module registration: "covsrc"`, func() {
+		indexSources([]SourceModule{
+			{Name: "covsrc", Source: covSourceFixture},
+			{Name: "covsrc", Source: covSourceFixture},
+		})
 	})
 
 	assert.Panics(t, func() {
-		RegisterSource(SourceModule{Name: "zzz-cov-unparseable", Source: "export fun ("})
-	}, "a source that does not parse is a programmer error, caught at init")
-
-	_, ok := GetSource("zzz-cov-unparseable")
-	assert.False(t, ok, "the rejected module must not be stored")
+		indexSources([]SourceModule{{Name: "zzz-cov-unparseable", Source: "export fun ("}})
+	}, "a source that does not parse is a programmer error, caught when the registry builds")
 }
 
 func TestSourceModuleRegistryReads(t *testing.T) {
 	got, ok := GetSource("lcov")
-	require.True(t, ok, "lcov registers from std/lib.go's init")
+	require.True(t, ok, "lcov is in std/lib.go's sourceBuiltin")
 	assert.Equal(t, "lcov", got.Name)
 	assert.NotEmpty(t, got.Source)
 

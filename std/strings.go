@@ -9,9 +9,7 @@ import (
 	"github.com/samber/lo"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module strings -lang buzz -out ../internal/interp/bindings/gen/strings.go
-
-func init() { Register(Strings) }
+//go:generate go run ../cmd/magus-utils bindings -module strings -lang buzz -out ../internal/interp/bindings/gen/strings.go -pkg bindgen
 
 // Strings is the "strings" host module: the string operations Buzz's builtins
 // lack. Buzz strings already do upper/lower/trim/split/replace/sub, but two

@@ -1,7 +1,7 @@
 package types
 
 import (
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

@@ -23,7 +23,7 @@ type rebuildingWorkspace struct {
 	probed   bool
 }
 
-func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ bool) (*knowledge.Graph, error) {
+func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
 	return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
 }
 

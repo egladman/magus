@@ -10,10 +10,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
@@ -210,7 +211,7 @@ func topPatterns(counts map[string]int, n int) []patternCount {
 func agentAdoptionCmd(args []string) error {
 	fset := flag.NewFlagSet("agent adoption", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	af := gen.BindAgentAdoption(fset)
+	af := flaggen.BindAgentAdoption(fset)
 	fset.Usage = func() { agentAdoptionUsage(os.Stderr) }
 	if err := fset.Parse(args); err != nil {
 		return err
@@ -230,7 +231,7 @@ func agentAdoptionCmd(args []string) error {
 		src = f
 	} else if stdinIsTerminal() {
 		agentAdoptionUsage(os.Stderr)
-		return usagef("magus agent adoption: reads commands from stdin or --commands <file>")
+		return exit.Usagef("magus agent adoption: reads commands from stdin or --commands <file>")
 	}
 
 	var lines []string

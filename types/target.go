@@ -157,8 +157,8 @@ type Target struct {
 	// and holds that many slots, so there is ONE admission path rather than two
 	// budgets that can disagree.
 	//
-	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
-	// exactly the behavior that existed before this field.
+	// Undeclared (0) claims what the target's runs measured once enough of them have,
+	// and no memory before that. An unmeasurable host converts no memory to slots.
 	//
 	// A COMPOSED target inherits the largest declaration in its chain; see
 	// ChainMemoryMB. A run claims less than this when it has measured less: see
@@ -228,6 +228,15 @@ type Target struct {
 	// here does not mean the change is wrong, and a bare `true` leaves the next reader
 	// no way to tell that claim from a gate somebody switched off after a bad week.
 	AdvisoryReason string `json:"advisory_reason,omitempty" buzz:"advisory_reason"`
+	// HumanOnly marks a target a person starts and an agent never runs unasked: the
+	// guard asks the person before an unbound session's run reaches it and refuses a
+	// leased worker's. A person's own shell never meets the guard, so it changes nothing
+	// there. No gate may reach one, since the push gate would then be unclearable.
+	HumanOnly bool `json:"human_only,omitempty" buzz:"human_only"`
+	// HumanOnlyReason is what running the target costs, in the magusfile's own words,
+	// required for the reason SkipCacheReason is. The guard quotes it to the agent and
+	// to the person approving the run, so it carries any figure the author knows.
+	HumanOnlyReason string `json:"human_only_reason,omitempty" buzz:"human_only_reason"`
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//
@@ -423,7 +432,7 @@ func ParseTarget(s string) (Target, error) {
 
 // ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec
 // call returns (proc.exec, magus.cmd, a captured spell op); ok is code == 0. It is
-// the boundary mirror of the richer internal run.ExecResult.
+// the boundary mirror of the richer internal spawn.ExecResult.
 //
 // The Buzz `object ExecResult` mirror is generated from this struct by
 // cmd/magus-utils types (go:generate); keep them in lockstep through the generator.
@@ -498,6 +507,50 @@ type MemorySizing struct {
 	// AnyShape is set when runs with this invocation's charms and forwarded args were
 	// too few, so the figure was sized from every run of the target.
 	AnyShape bool `json:"any_shape,omitzero" yaml:"any_shape,omitempty"`
+	// Slots is where the same claim's slot count came from. It rides here because this
+	// is the one provenance record a claim carries from sizing to a refusal.
+	Slots SlotSizing `json:"slots,omitzero" yaml:"slots,omitempty"`
+}
+
+// SlotSource is where a claim's slot count came from.
+type SlotSource string
+
+const (
+	// SlotsUnmeasured is one slot: the target declares none and too few runs measured it.
+	SlotsUnmeasured SlotSource = "unmeasured"
+	// SlotsDeclared is the target's own slots policy.
+	SlotsDeclared SlotSource = "declared"
+	// SlotsMeasured is the width the target's runs measured.
+	SlotsMeasured SlotSource = "measured"
+	// SlotsForMemory is what the memory claim is worth on this host, which is more than
+	// the declared or measured slots.
+	SlotsForMemory SlotSource = "memory"
+)
+
+// SlotSizing says where a claim's slot count came from. The zero value records nothing,
+// as on a claim from a magus that did not report it.
+type SlotSizing struct {
+	Source SlotSource `json:"source,omitempty" yaml:"source,omitempty"`
+	// Samples and AnyShape say what a measured count was sized from, as on MemorySizing.
+	Samples  int  `json:"samples,omitzero" yaml:"samples,omitempty"`
+	AnyShape bool `json:"any_shape,omitzero" yaml:"any_shape,omitempty"`
+}
+
+// Measured reports whether the count came from recorded runs.
+func (s SlotSizing) Measured() bool { return s.Source == SlotsMeasured }
+
+// String renders the provenance for a person, or "" when none was recorded.
+func (s SlotSizing) String() string {
+	switch {
+	case s.Source == SlotsForMemory:
+		return "for its memory"
+	case !s.Measured():
+		return string(s.Source)
+	case s.AnyShape:
+		return fmt.Sprintf("measured over %d runs of any shape", s.Samples)
+	default:
+		return fmt.Sprintf("measured over %d runs", s.Samples)
+	}
 }
 
 // Measured reports whether the figure came from recorded peaks rather than a declaration.
@@ -516,8 +569,8 @@ func (s MemorySizing) String() string {
 	}
 }
 
-// MemorySizer turns one target's own memory declaration, always positive, into the
-// figure it claims. It must not return more than declaredMB.
+// MemorySizer turns one target's own memory declaration, 0 when it declares none, into
+// the figure it claims. It must not return more than a positive declaredMB.
 type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing)
 
 // ChainMemory is a folded memory claim: the figure, the target whose declaration it
@@ -528,10 +581,10 @@ type ChainMemory struct {
 	Sizing     MemorySizing
 }
 
-// SizedChainMemory is ChainMemoryMB with every declaration in the chain passed through
-// size before it folds, so a composed step claims the sized figures of its members
-// rather than their declarations. A nil size folds the declarations as written. A
-// target declaring nothing is never sized: it claims slots, not memory.
+// SizedChainMemory is ChainMemoryMB with every member of the chain passed through size
+// before it folds, so a composed step claims the sized figures of its members rather
+// than their declarations, and a member declaring nothing claims what its runs
+// measured. A nil size folds the declarations as written.
 //
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
 func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
@@ -548,12 +601,13 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		}
 		seen[key] = true
 
-		var peak ChainMemory
-		if declared := proj.TargetPolicies[name].MemoryMB; declared > 0 {
-			peak = ChainMemory{MB: declared, DeclaredBy: name}
-			if size != nil {
-				peak.MB, peak.Sizing = size(proj, name, declared)
-			}
+		declared := proj.TargetPolicies[name].MemoryMB
+		peak := ChainMemory{MB: declared, DeclaredBy: name}
+		if size != nil {
+			peak.MB, peak.Sizing = size(proj, name, declared)
+		}
+		if peak.MB <= 0 {
+			peak = ChainMemory{}
 		}
 		// One sum per call; a call's members run together, and the calls run in turn.
 		var call, top ChainMemory

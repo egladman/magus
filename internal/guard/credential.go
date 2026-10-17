@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -29,7 +28,7 @@ type credentialInvocation struct {
 }
 
 // credentialInvocations is every such command. TestCredentialVerbsExistInTheRegistry holds
-// each to a command internal/cli declares, so a rename fails there rather than dropping out.
+// each to a command internal/commands declares, so a rename fails there rather than dropping out.
 var credentialInvocations = []credentialInvocation{
 	{words: []string{"config", "token", "print"}},
 	{words: []string{"config", "token", "generate"}},
@@ -117,12 +116,8 @@ func namesTokenState(location location, candidate string) bool {
 	if tokenStateSegmentRe.MatchString(filepath.ToSlash(p)) {
 		return true
 	}
-	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return false
-		}
-		p = filepath.Join(home, rest)
+	if p = expandHome(p, userHome()); strings.HasPrefix(p, "~") {
+		return false
 	}
 	abs := filepath.Clean(filepath.FromSlash(p))
 	if !filepath.IsAbs(abs) {
@@ -135,17 +130,17 @@ func namesTokenState(location location, candidate string) bool {
 		}
 		abs = filepath.Join(dir, abs)
 	}
-	abs = resolveSymlinks(abs)
+	abs = realPath(abs)
 	state, err := auth.StateDir()
 	if err != nil {
 		return false
 	}
 	operator, _ := auth.OperatorPath()
 	store, _ := auth.StoreDir()
-	if abs == resolveSymlinks(state) || abs == resolveSymlinks(operator) {
+	if abs == realPath(state) || abs == realPath(operator) {
 		return true
 	}
-	rel, err := filepath.Rel(resolveSymlinks(store), abs)
+	rel, err := filepath.Rel(realPath(store), abs)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 

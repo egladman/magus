@@ -436,7 +436,10 @@ does have (spells, the magusfile, charms, skills, config) is a DECLARATION the
 sealed engine evaluates, auditable in a diff the way code loaded at startup never
 is. The test for a proposed extension seam: it may change what magus does, never
 what a verdict means. And one seam is absent deliberately rather than sealed:
-there is no model adapter, because magus never calls a model.
+there is no model adapter, because magus never calls a model. There is no agent
+loop either: the SDK answers what a loop asks (may this call run, who owns this
+path, what is this code, what happened, is it done) and never decides what runs
+next.
 
 ## Prior art and terminology
 

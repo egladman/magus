@@ -2,13 +2,20 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,30 +28,67 @@ type rowNotes struct {
 	ForegroundOverrun  *job.ForegroundOverrun
 }
 
-// jobNotes is rowNotes for each writing row, keyed by job id, over one workspace load. A
-// workspace that will not load yields nothing: the listing states a fact, and it must
-// never be the reason a fork or an apply fails.
-func jobNotes(ctx context.Context, root string, rows []types.Job) map[string]rowNotes {
-	var m *magus.Magus
-	var foregroundMax func() (time.Duration, bool)
-	out := map[string]rowNotes{}
-	for _, row := range rows {
-		if row.ReadOnly || len(row.WritePaths) == 0 {
-			continue
+// refuseFork refuses the fork with every problem of v listed in full.
+func refuseFork(v types.JobValidation) error {
+	var list strings.Builder
+	job.RenderValidation(&list, v, false)
+	return listedProblems{list: list.String(), err: v.Err()}
+}
+
+// listedProblems is a refusal whose text is its problems as [job.RenderValidation] lists
+// them, so the one error record carries the whole list. It unwraps to the problems.
+type listedProblems struct {
+	list string
+	err  error
+}
+
+func (e listedProblems) Error() string { return strings.TrimSuffix(e.list, "\n") }
+func (e listedProblems) Unwrap() error { return e.err }
+func (listedProblems) ExitCode() int   { return exit.Failure }
+
+// forkDryRun reports what a fork would do and writes nothing: the validation as
+// [types.JobValidation] for a structured format, or the rendered problems and record. It
+// exits Failure while a problem remains, as the fork it stands for would refuse.
+func forkDryRun(opts output.Options, v types.JobValidation) error {
+	var err error
+	switch opts.Format {
+	case outputName:
+		if len(v.Problems) == 0 {
+			err = emitNames(os.Stdout, []string{v.Job.ID})
 		}
-		if m == nil {
-			loaded, err := loadMagus(ctx, root)
-			if err != nil {
-				return nil
-			}
-			m = loaded
-			foregroundMax = hostForegroundMax(ctx, m)
-		}
-		if notes := rowNotesWith(ctx, m, row, foregroundMax); len(notes.RegeneratedOutside) > 0 || len(notes.UnrunGates) > 0 || notes.ForegroundOverrun != nil {
-			out[row.ID] = notes
-		}
+	case outputText:
+		job.RenderValidation(os.Stdout, v, true)
+		fmt.Println("dry run: nothing written; rerun without --dry-run to fork it")
+	default:
+		err = emitFormatted(opts, v)
 	}
-	return out
+	if err != nil {
+		return err
+	}
+	if len(v.Problems) > 0 {
+		return exit.Reported(exit.Failure)
+	}
+	return nil
+}
+
+// warnWorkspaceUnloaded names on stderr what a workspace that will not load left unchecked,
+// so a row stored without those checks never reads as a clean one.
+func warnWorkspaceUnloaded(ctx context.Context, err error) {
+	slog.WarnContext(ctx, "the workspace did not load, so the outputs regenerated outside the write paths, the ci targets no goal runs and a check too long for the foreground were not listed",
+		attr.Notice("unchecked"), attr.Error(err))
+}
+
+// forkOverrun is row's check when its last real run here took longer than a wired host
+// lets a foreground call wait. A workspace that will not load is the error, which the
+// fork lists among the checks that could not run rather than failing on: the note states a
+// fact and must never be the reason a fork fails, nor read as a clean bill when it was
+// never computed.
+func forkOverrun(ctx context.Context, root string, row types.Job) (*job.ForegroundOverrun, error) {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return checkOverrun(m, row, hostForegroundMax(ctx, m)), nil
 }
 
 // collectNotes is row's notes over the already loaded workspace m.
@@ -97,16 +141,22 @@ func checkOverrun(m *magus.Magus, row types.Job, foregroundMax func() (time.Dura
 }
 
 // forkOutput is `job fork`'s structured output: the row as stored, plus its notes. The
-// embedded row flattens, so the wire shape is the job's own with regenerated_outside,
-// unrun_gates and foreground_overrun added.
+// embedded row flattens, so the wire shape is the job's own with deletion_candidates,
+// referenced_outside, referenced_outside_gap, foreground_overrun and claim_notes added.
 type forkOutput struct {
 	types.Job `yaml:",inline"`
-	// RegeneratedOutside is computed when the fork renders and never stored.
-	RegeneratedOutside []job.RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
-	// UnrunGates is computed beside it: ci targets over the write paths that neither the
-	// check nor a goal runs.
-	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
+	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
+	// finish or delete, never goals.
+	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	// ReferencedOutside are the files outside the write paths that use what they define.
+	ReferencedOutside []job.ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
+	// ReferencedOutsideGap says why ReferencedOutside is unknown; empty when a symbol index
+	// answered.
+	ReferencedOutsideGap string `json:"referenced_outside_gap,omitempty" yaml:"referenced_outside_gap,omitempty"`
 	// ForegroundOverrun is the check, when its last real run took longer than a wired host
 	// lets a foreground call wait.
 	ForegroundOverrun *job.ForegroundOverrun `json:"foreground_overrun,omitempty" yaml:"foreground_overrun,omitempty"`
+	// ClaimNotes are job.ForkNotes for the row: a claim naming no declaration yet, and the
+	// claim pair that would split a file a job in this checkout also writes.
+	ClaimNotes []string `json:"claim_notes,omitempty" yaml:"claim_notes,omitempty"`
 }

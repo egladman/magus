@@ -2272,41 +2272,87 @@ func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]s
 	return append(installed, removed...), err
 }
 
-// gitSettleHookBody is the shell one settle hook runs. The pre-commit and post-commit
-// guards read the operation state off the git dir so an ordinary commit, which is most
-// of them, never starts magus; post-rewrite fires for an amend too, which is not a
-// merge. The guards are `if` blocks rather than early exits so a section below this one
-// still runs.
+// gitSettleHookBody is the shell one settle hook runs. The guard is GitHookOperation's
+// decision, made from the git dir so that no commit but the one that settles starts
+// magus: an ordinary commit, every pick of a sequence before the last, a rebase's picks,
+// an amend and every patch of an am series before the last exit here. Under
+// magus.settle=defer the settle point records where the operation started instead (see
+// DeferredSettle) and starts nothing either. The guard is an `if` block rather than an
+// early exit so a section below this one still runs.
 func gitSettleHookBody(name, command string) string {
 	bin, _, _ := strings.Cut(command, " ")
 	run := command + " " + name
-	tolerate := "magus_rc=$?\n" +
+	if name == HookPostRewrite {
+		run += ` "$@"`
+	}
+	settle := run + "\n" +
+		"magus_rc=$?\n" +
 		"if [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" +
 		"  echo \"magus: the settle hook did not run: " + bin + " is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run '" + bin + " vcs resolve' once it is\" >&2\n"
-	stop := "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
-	const end = "fi\n"
-	guarded := func(test, body string) string {
-		var b strings.Builder
-		b.WriteString("if " + test + "; then\n")
-		for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
-			b.WriteString("  " + line)
-		}
-		b.WriteString("\nfi\n")
-		return b.String()
+	if name == HookPreMergeCommit || name == HookPreCommit {
+		settle += "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
 	}
-	const stateHeads = "magus_git_dir=$(git rev-parse --git-dir) && { [ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
+	settle += "fi\n"
+	record := "magus_base=$(" + gitSettleBase(name) + ") && { [ -e \"$magus_git_dir/" + deferredSettleFile + "\" ] || echo \"$magus_base\" >\"$magus_git_dir/" + deferredSettleFile + "\"; }\n"
+	deferred := record + "echo \"magus: magus.settle is defer, so this operation was not regenerated; '" + bin + " vcs resolve' regenerates everything deferred\" >&2\n"
+	body := "if [ \"$(git config --get magus.settle)\" = defer ]; then\n" + indentShell(deferred)
+	if name == HookPreCommit {
+		// The commit concluding a sequence's stopped last pick: `--continue` compares the
+		// index it read before this commit with the HEAD it made, so staging into it would
+		// stop the sequence half done. GitHookOperation refuses it the same way.
+		sequenced := record + "echo \"magus: this commit concludes the last pick of a sequence, and its --continue stops when a hook changes that commit, so nothing was regenerated; once the sequence finishes, run '" + bin + " vcs resolve && git commit --amend --no-edit'\" >&2\n"
+		body += "elif [ -s \"$magus_git_dir/sequencer/todo\" ]; then\n" + indentShell(sequenced)
+	}
+	body += "else\n" + indentShell(settle) + "fi\n"
+	return "if magus_git_dir=$(git rev-parse --git-dir)" + gitSettleGuard(name) + "; then\n" + indentShell(body) + "fi\n"
+}
+
+// gitSettleGuard is the test, after the git dir is read, that a settle hook settles.
+func gitSettleGuard(name string) string {
+	const (
+		rebasing = " && ! { [ -d \"$magus_git_dir/rebase-merge\" ] || [ -d \"$magus_git_dir/rebase-apply\" ]; }"
+		// sequencerPending's count: the last pick's todo still lists itself.
+		lastPick = " && { magus_picks=$(grep -c -E '^[[:space:]]*(pick|p|revert)([[:space:]]|$)' \"$magus_git_dir/sequencer/todo\" 2>/dev/null); [ \"${magus_picks:-0}\" -le 1 ]; }"
+		picking  = "[ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
+	)
+	switch name {
+	case HookPreCommit:
+		return " && { " + picking + " || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }" + rebasing + lastPick
+	case HookPostCommit:
+		return " && { " + picking + "; }" + rebasing + lastPick
+	case HookPostRewrite:
+		return " && [ \"$1\" = rebase ]"
+	case HookPostApplypatch:
+		return " && [ ! -e \"$magus_git_dir/rebase-apply/rebasing\" ] && magus_next=$(cat \"$magus_git_dir/rebase-apply/next\" 2>/dev/null) && [ \"$magus_next\" = \"$(cat \"$magus_git_dir/rebase-apply/last\" 2>/dev/null)\" ]"
+	default:
+		return ""
+	}
+}
+
+// gitSettleBase prints the revision the hook's operation started from: operationBase,
+// spelled in shell.
+func gitSettleBase(name string) string {
 	switch name {
 	case HookPreMergeCommit:
-		return run + "\n" + tolerate + stop + end
+		return "git rev-parse HEAD"
 	case HookPreCommit:
-		return guarded(stateHeads+" || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }", run+"\n"+tolerate+stop+end)
+		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD"
 	case HookPostCommit:
-		return guarded(stateHeads+"; }", run+"\n"+tolerate+end)
+		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD~1"
 	case HookPostRewrite:
-		return guarded("[ \"$1\" = rebase ]", run+" \"$@\"\n"+tolerate+end)
+		return "cat \"$magus_git_dir/rebase-merge/onto\" 2>/dev/null || cat \"$magus_git_dir/rebase-apply/onto\" 2>/dev/null || git rev-parse ORIG_HEAD"
 	default:
-		return run + "\n" + tolerate + end
+		return "git rev-parse ORIG_HEAD"
 	}
+}
+
+func indentShell(body string) string {
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
+		b.WriteString("  " + line)
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // removeGitHookSections deletes the m section from each named hook of root's repository
@@ -2566,39 +2612,47 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 // need not exist. The .gitignore files inside the tree are not listed, since anything
 // that reads the tree already sees them.
 func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error) {
-	exclude, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	return gitConfigSources(ctx, root, "info/exclude", "core.excludesFile", "ignore")
+}
+
+// gitConfigSources lists the repository file at gitPath, which a linked worktree shares
+// with its main checkout, and the global file the config key names, or git's XDG default
+// xdgName when the key is unset. A listed file need not exist.
+func gitConfigSources(ctx context.Context, root, gitPath, key, xdgName string) ([]string, error) {
+	local, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", gitPath)
 	if err != nil {
-		return nil, fmt.Errorf("git rev-parse --git-path info/exclude: %w", err)
+		return nil, fmt.Errorf("git rev-parse --git-path %s: %w", gitPath, err)
 	}
-	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.excludesFile")
+	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", key)
 	switch {
 	case err == nil:
 	case exitCode(err) == 1: // unset: git falls back to its XDG location
-		global, err = gitDefaultExcludesFile()
+		global, err = gitXDGConfigFile(xdgName)
 		if err != nil {
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("git config core.excludesFile: %w", err)
+		return nil, fmt.Errorf("git config %s: %w", key, err)
 	}
-	out := []string{strings.TrimSpace(exclude)}
+	out := []string{strings.TrimSpace(local)}
 	if g := strings.TrimSpace(global); g != "" {
 		out = append(out, g)
 	}
 	return out, nil
 }
 
-// gitDefaultExcludesFile is where git looks for global ignore rules when core.excludesFile
-// is unset: $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore.
-func gitDefaultExcludesFile() (string, error) {
+// gitXDGConfigFile is where git looks for its global file name when the config key naming
+// it (core.excludesFile for ignore, core.attributesFile for attributes) is unset:
+// $XDG_CONFIG_HOME/git/<name>, or ~/.config/git/<name>.
+func gitXDGConfigFile(name string) (string, error) {
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-		return filepath.Join(x, "git", "ignore"), nil
+		return filepath.Join(x, "git", name), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "git", "ignore"), nil
+	return filepath.Join(home, ".config", "git", name), nil
 }
 
 // gitRedirectVars are the environment variables that move git off the repository the
@@ -3728,7 +3782,8 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 // is removed by deleting its directory and its git directory, which reads none of the
 // files code run in it could have rewritten. Any other goes through `git worktree
 // remove`, whose doubled --force removes a locked worktree, one with changes in it, and
-// the registration of one whose directory is gone.
+// the registration of one whose directory is gone; a worktree CreateCheckout did not
+// make gets there only once foreignCheckout finds nothing in it to lose.
 func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
@@ -3751,12 +3806,69 @@ func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	}
 	registered, ok := owned[realPath(dir)]
 	if !ok {
-		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
+		if registered, err = v.foreignCheckout(ctx, root, dir); err != nil {
+			return err
+		}
 	}
 	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "remove", "--force", "--force", "--", registered); err != nil {
 		return fmt.Errorf("git worktree remove %s: %w", dir, err)
 	}
 	return nil
+}
+
+// foreignCheckout returns the path git registered dir under when dir is a linked worktree
+// of root that removing loses nothing from: no changed or untracked file, and a HEAD that
+// a branch, tag or remote-tracking ref reaches. Ignored files do not count. The main
+// checkout is refused.
+func (v gitVCS) foreignCheckout(ctx context.Context, root, dir string) (string, error) {
+	all, err := gitWorktrees(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	want := realPath(dir)
+	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return realPath(co.Root) == want })
+	if i < 0 {
+		return "", fmt.Errorf("vcs: %s is not a checkout of %s", dir, root)
+	}
+	co := all[i]
+	if co.Primary {
+		return "", fmt.Errorf("vcs: %s is the main checkout of %s", dir, root)
+	}
+	switch _, err := os.Lstat(co.Root); {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return "", err
+	default:
+		// Without its .git file, git status in the directory reads whichever repository
+		// encloses it, and its answer says nothing about the directory itself.
+		if _, err := os.Lstat(filepath.Join(co.Root, ".git")); err != nil {
+			return "", fmt.Errorf("vcs: %s is no longer a git checkout: %w", dir, err)
+		}
+		dirty, err := v.DirtyFiles(ctx, co.Root, nil)
+		if err != nil {
+			return "", err
+		}
+		if len(dirty) > 0 {
+			named := strings.Join(dirty[:min(len(dirty), 5)], ", ")
+			if len(dirty) > 5 {
+				named += ", ..."
+			}
+			return "", fmt.Errorf("vcs: %s has %d changed or untracked file(s), which removing it would lose: %s",
+				dir, len(dirty), named)
+		}
+	}
+	if co.Head == "" {
+		return co.Root, nil
+	}
+	out, err := gitOutput(ctx, root, gitOpts{}, "rev-list", co.Head, "--not", "--branches", "--tags", "--remotes", "--")
+	if err != nil {
+		return "", fmt.Errorf("git rev-list %s: %w", co.Head, err)
+	}
+	if stranded := splitLines([]byte(out)); len(stranded) > 0 {
+		return "", fmt.Errorf("vcs: %s has %d commit(s) no branch, tag or remote reaches, newest %s, which removing it would strand",
+			dir, len(stranded), stranded[0])
+	}
+	return co.Root, nil
 }
 
 // Checkouts implements types.CheckoutProvisioner.
@@ -3842,6 +3954,22 @@ func (gitVCS) UnpublishedRevisions(ctx context.Context, dir, rev string, bases .
 	out, err := gitOutput(ctx, dir, gitOpts{}, append(args, "--")...)
 	if err != nil {
 		return nil, fmt.Errorf("git rev-list %s: %w", rev, err)
+	}
+	return splitLines([]byte(out)), nil
+}
+
+// StrandedRevisions implements types.CheckoutProvisioner with one `rev-list` from the
+// checkout's HEAD that excludes everything a local branch, a remote-tracking ref or a base
+// reaches. A HEAD on a branch strands nothing; a detached one strands what it alone holds,
+// which gc collects once the worktree no longer names it.
+func (gitVCS) StrandedRevisions(ctx context.Context, dir string, bases ...string) ([]string, error) {
+	if err := checkRequiredRev(bases...); err != nil {
+		return nil, err
+	}
+	args := append([]string{"rev-list", "HEAD", "--not", "--branches", "--remotes"}, bases...)
+	out, err := gitOutput(ctx, dir, gitOpts{}, append(args, "--")...)
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list HEAD: %w", err)
 	}
 	return splitLines([]byte(out)), nil
 }
@@ -4078,4 +4206,31 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 		return fmt.Errorf("git bundle unbundle %s: %w", file, err)
 	}
 	return nil
+}
+
+// RegionsConfig is the configuration Regions places lines in root with besides the files and
+// revisions it is handed, so a cache of Regions can key on it. It holds every funcname
+// pattern the placement runs with: magus's defaults and each diff.<driver>.funcname and
+// xfuncname the repository sees. Then it holds the path and content of each attribute file
+// outside the tree that picks a file's diff driver (info/attributes and
+// core.attributesFile). A missing attribute file reads as empty.
+func (gitVCS) RegionsConfig(ctx context.Context, root string) (string, error) {
+	args, err := gitFuncnameConfig(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	sources, err := gitConfigSources(ctx, root, "info/attributes", "core.attributesFile", "attributes")
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString(strings.Join(args, "\x00"))
+	for _, path := range sources {
+		content, err := os.ReadFile(path)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		fmt.Fprintf(&b, "\x00%s\x00%d\x00%s", path, len(content), content)
+	}
+	return b.String(), nil
 }
