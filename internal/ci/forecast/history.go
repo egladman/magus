@@ -17,7 +17,8 @@
 //	              volatile_count(int), recent_outcomes([]Outcome)
 //	Outcome:      result(OutcomeResult, a string: "pass"|"fail"|"volatile"), affected(bool),
 //	              duration_ms(int64), at(time), attempts(int), max_rss_bytes(int64),
-//	              charms([]string: charm names), args_hash(string: 32 bits of a hash)
+//	              cpu_ms(int64), slots(int), charms([]string: charm names),
+//	              args_hash(string: 32 bits of a hash)
 //	Run:          commit(string: a commit id), ref(string), target(string),
 //	              status(string: "passed"|"failed"), at(time)
 //
