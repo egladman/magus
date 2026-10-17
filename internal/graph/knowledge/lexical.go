@@ -93,11 +93,11 @@ func lexicalClass(name string) bool {
 func lexicalDocument(n types.KnowledgeNode, body string) textrank.Document {
 	fields := map[string][]string{}
 	add := func(field string, texts ...string) {
-		var toks []string
+		parts := make([][]string, 0, len(texts))
 		for _, t := range texts {
-			toks = append(toks, textrank.Tokens(t)...)
+			parts = append(parts, textrank.Tokens(t))
 		}
-		if len(toks) > 0 {
+		if toks := slices.Concat(parts...); len(toks) > 0 {
 			fields[field] = toks
 		}
 	}
