@@ -79,6 +79,7 @@ const textsSalt = "embed-texts/v1:"
 type sourceRecord struct {
 	Kind   string   `json:"kind"`
 	Path   string   `json:"path"`
+	Group  string   `json:"group"`
 	Split  string   `json:"split"`
 	SHA256 string   `json:"sha256"`
 	Name   string   `json:"name"`
@@ -119,6 +120,9 @@ func runTexts(args []string) error {
 	records, err := readSources(*sourcesPath)
 	if err != nil {
 		return err
+	}
+	if err := checkGroups(records); err != nil {
+		return fmt.Errorf("%s: %w", *sourcesPath, err)
 	}
 	if *rev == "" {
 		if *rev, err = lastCommit(*root, *sourcesPath); err != nil {
@@ -299,6 +303,29 @@ func readSources(path string) ([]sourceRecord, error) {
 		return nil, fmt.Errorf("%s holds no records", path)
 	}
 	return out, nil
+}
+
+// checkGroups refuses a manifest whose file records leave a provenance group unnamed or
+// put one group on both sides of the split: either would let a holdout file's text, or
+// its generated copy, reach training.
+func checkGroups(records []sourceRecord) error {
+	sides := map[string]string{}
+	for _, r := range records {
+		if r.Kind != "file" {
+			continue
+		}
+		if r.Group == "" {
+			return fmt.Errorf("file %s names no provenance group", r.Path)
+		}
+		if r.Split != "train" && r.Split != "holdout" {
+			return fmt.Errorf("file %s has split %q", r.Path, r.Split)
+		}
+		if side, ok := sides[r.Group]; ok && side != r.Split {
+			return fmt.Errorf("group %s spans both splits: %s is %s", r.Group, r.Path, r.Split)
+		}
+		sides[r.Group] = r.Split
+	}
+	return nil
 }
 
 func lastCommit(root, path string) (string, error) {

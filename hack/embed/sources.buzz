@@ -13,6 +13,7 @@ export object SourceFile {
     generated: bool,
     bytes: int,
     sha256: str,
+    group: str,
     holdout: bool,
 }
 
@@ -44,11 +45,12 @@ export object Snapshot {
         return ls[n - 1];
     }
 
-    fun isHoldout(path: str) > bool {
+    // isHoldout refuses a path outside the snapshot: only the snapshot knows its group.
+    fun isHoldout(path: str) > bool !> any {
         if (this.byPath[path] -> f) {
             return f.holdout;
         }
-        return holdout\isHoldout(path);
+        throw "sources: {path} is not a source file, so it has no provenance group";
     }
 
     fun isGenerated(path: str) > bool {
@@ -124,8 +126,51 @@ export fun nodes(kind: str) > [magus\KnowledgeNode] !> any {
     return found;
 }
 
-// load reads the tracked tree and the symbol index. It refuses a partial index: a
-// project the index could not read would silently drop its pairs.
+// figureSvgs is every drawn figure's light SVG under root, sorted.
+export fun figureSvgs(root: str) > [str] !> any {
+    final paths: mut [str] = mut [];
+    foreach (p in fs\glob(fs\join(root, name: "docs/assets/gen/diagram-*-light.svg"))) {
+        paths.append(p.value);
+    }
+    paths.sort(fun (a: str, b: str) > bool => a < b);
+    return paths;
+}
+
+// figureId is the id in a figure SVG's name, diagram-<id>-light.svg.
+export fun figureId(svg: str) > str {
+    final base = fs\basename(svg);
+    return base.sub(8, len: base.len() - 8 - 10);
+}
+
+// outputLinks pairs each generated page among kept with every tracked file an extracted
+// `documents` edge says it documents: the source it was generated from. A generated page
+// with no such edge, and every generated Go file, stays in the group its path starts in.
+fun outputLinks(generated: {str: bool}, kept: {str: bool}) > [[str]] !> any {
+    final probe: magus\QueryResult = magus\query("kind=doc", opts: {"limit": 1, "budget": 1});
+    final q: magus\QueryResult = magus\query("kind=doc", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 8 + 1000});
+    final links: mut [[str]] = mut [];
+    foreach (e in q.links) {
+        if (e.relation != "documents" or e.confidence != "extracted" or !e.source.startsWith("doc:")) {
+            continue;
+        }
+        final page = e.source.sub(4, len: e.source.len() - 4);
+        var source = "";
+        if (e.target.startsWith("file:")) {
+            source = e.target.sub(5, len: e.target.len() - 5);
+        } else if (e.target.startsWith("doc:")) {
+            source = e.target.sub(4, len: e.target.len() - 4);
+        }
+        if ((generated[page] ?? false) and kept[page] != null and kept[source] != null and source != page) {
+            links.append([page, source]);
+        }
+    }
+    links.sort(fun (a: [str], b: [str]) > bool => if (a[0] == b[0]) a[1] < b[1] else a[0] < b[0]);
+    return links;
+}
+
+// load reads the tracked tree and the symbol index, and deals the provenance groups. It
+// refuses a partial index: a project the index could not read would silently drop its
+// pairs.
 export fun load() > Snapshot !> any {
     final root = vcs\root();
     final paths = trackedPaths();
@@ -134,23 +179,36 @@ export fun load() > Snapshot !> any {
     foreach (d in described.files) {
         generated[d.path] = d.role == "output";
     }
+    final sizes: mut {str: int} = mut {};
+    final kept: mut [str] = mut [];
+    final keptSet: mut {str: bool} = mut {};
+    foreach (p in paths) {
+        final size = fs\size(fs\join(root, name: p));
+        if (size <= maxBytes) {
+            sizes[p] = size;
+            kept.append(p);
+            keptSet[p] = true;
+        }
+    }
+    final figures: mut {str: bool} = mut {};
+    foreach (svg in figureSvgs(root)) {
+        figures[figureId(svg)] = true;
+    }
+    final split = holdout\deal(kept, generated: generated, figures: figures, links: outputLinks(generated, kept: keptSet));
     final files: mut [SourceFile] = mut [];
     final byPath: mut {str: SourceFile} = mut {};
-    foreach (p in paths) {
-        final abs = fs\join(root, name: p);
-        final size = fs\size(abs);
-        if (size > maxBytes) {
-            continue;
-        }
+    foreach (p in kept) {
         final language = languages[fs\ext(p)] ?? "";
+        final group = split.group[p] ?? "";
         final f = SourceFile{
             path = p,
             slice = sliceOf(p, language: language),
             language = language,
             generated = generated[p] ?? false,
-            bytes = size,
-            sha256 = crypto\sha256File(abs),
-            holdout = holdout\isHoldout(p),
+            bytes = sizes[p] ?? 0,
+            sha256 = crypto\sha256File(fs\join(root, name: p)),
+            group = group,
+            holdout = split.held[group] ?? false,
         };
         files.append(f);
         byPath[p] = f;
@@ -527,6 +585,7 @@ export fun write(c: Snapshot, figures: [{str: any}], target: str) > {str: int} !
             "generated": f.generated,
             "bytes": f.bytes,
             "sha256": f.sha256,
+            "group": f.group,
             "split": splitOf(f.holdout),
         }));
         final key = f.slice + "/" + splitOf(f.holdout);

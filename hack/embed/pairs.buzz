@@ -20,7 +20,7 @@ object Miner {
     pairs: mut [Pair],
     seen: mut {str: bool},
 
-    fun add(source: str, query: str, doc: str, held: bool) > void {
+    fun add(source: str, query: str, doc: str, held: bool) > void !> any {
         if (query == "" or doc == "" or query == doc) {
             return;
         }
@@ -532,16 +532,10 @@ export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
             }
         }
     }
-    final svgs = fs\glob(fs\join(c.root, name: "docs/assets/gen/diagram-*-light.svg"));
-    final paths: mut [str] = mut [];
-    foreach (p in svgs) {
-        paths.append(p.value);
-    }
-    paths.sort(fun (a: str, b: str) > bool => a < b);
     final found: mut [{str: any}] = mut [];
-    foreach (p in paths) {
+    foreach (p in sources\figureSvgs(c.root)) {
         final base = fs\basename(p);
-        final id = base.sub(8, len: base.len() - 8 - 10);
+        final id = sources\figureId(p);
         final svg = fs\readFile(p);
         final anchors: mut [str] = mut [];
         foreach (a in attrValues(svg, attr: "data-anchor")) {

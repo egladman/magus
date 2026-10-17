@@ -3,9 +3,9 @@ import "crypto";
 import "fs";
 import "encoding/json";
 
-// The version in the salt lets a later split re-deal files without colliding with
-// tables trained on this one.
-final salt = "embed-holdout/v1:";
+// The salt deals provenance groups; v1 dealt single files. The version keeps a table
+// trained on one split from being scored on another.
+final salt = "embed-holdout/v2:";
 final hexDigits = "0123456789abcdef";
 
 fun prefixValue(digest: str) > int {
@@ -16,15 +16,15 @@ fun prefixValue(digest: str) > int {
     return v;
 }
 
-// bucket is the first 8 hex digits of sha256(salt + path), read as a uint32, mod 10.
-export fun bucket(path: str) > int {
-    return prefixValue(crypto\sha256Hex(salt + path)) % 10;
+// bucket is the first 8 hex digits of sha256(salt + group), read as a uint32, mod 10.
+export fun bucket(group: str) > int {
+    return prefixValue(crypto\sha256Hex(salt + group)) % 10;
 }
 
-// isHoldout reports whether path is evaluation-only: about 20% of files, every
-// language alike. Its text never reaches the vocab counts, the targets or a train pair.
-export fun isHoldout(path: str) > bool {
-    return bucket(path) < 2;
+// isHoldout reports whether a group is evaluation-only: about 20% of groups. Its files'
+// text never reaches the vocab counts, the targets or a train pair.
+export fun isHoldout(group: str) > bool {
+    return bucket(group) < 2;
 }
 
 // figureFold deals a figure into one of 3 folds by sha256 of its id; fold 0 evaluates.
@@ -32,26 +32,145 @@ export fun figureFold(id: str) > int {
     return prefixValue(crypto\sha256Hex(id)) % 3;
 }
 
-// write records every holdout path among paths, sorted, one {"path", "bucket"} per line.
-export fun write(paths: [str], target: str) > int !> any {
-    final held: mut [str] = mut [];
-    foreach (p in paths) {
-        if (isHoldout(p)) {
-            held.append(p);
+// groupKey is the group a file starts in before links merge groups. Most start in their
+// directory, which is their Go package, so foo.go and foo_test.go share one. A changelog
+// fragment and a generated Markdown page start alone, because their directory holds
+// unrelated pages; the link to their source merges them into its group. A figure's
+// builder starts in its figure's group.
+export fun groupKey(path: str, generated: bool, figures: {str: bool}) > str {
+    final base = fs\basename(path);
+    if (path.startsWith("docs/site/diagrams/") and base.endsWith(".buzz")) {
+        final id = base.sub(0, len: base.len() - 5);
+        if (figures[id] != null) {
+            return "figure:{id}";
         }
     }
-    held.sort(fun (a: str, b: str) > bool => a < b);
+    if (path.startsWith("changes/") or base == "CHANGELOG.md" or (generated and base.endsWith(".md"))) {
+        return "file:{path}";
+    }
+    return "dir:{fs\dirname(path)}";
+}
+
+// Groups is a union-find over group keys. A merged group is named by its least key, so
+// the names, and the split they hash to, do not depend on the order links arrive in.
+export object Groups {
+    parent: mut {str: str},
+
+    fun find(key: str) > str {
+        var k = key;
+        var up = this.parent[k] ?? k;
+        while (up != k) {
+            k = up;
+            up = this.parent[k] ?? k;
+        }
+        return k;
+    }
+
+    fun join(a: str, b: str) > void {
+        final ra = this.find(a);
+        final rb = this.find(b);
+        if (ra < rb) {
+            this.parent[rb] = ra;
+        } else if (rb < ra) {
+            this.parent[ra] = rb;
+        }
+    }
+}
+
+// Split is each file's group and each group's side.
+export object Split {
+    group: {str: str},
+    held: {str: bool},
+}
+
+// deal groups paths, merges each link's two files into one group, and sides each group.
+// A group holding a figure builder takes that figure's fold, held out when any of its
+// figures is in fold 0; every other group is sided by its bucket.
+export fun deal(paths: [str], generated: {str: bool}, figures: {str: bool}, links: [[str]]) > Split {
+    final g = mut Groups{parent = mut {}};
+    final keys: mut {str: str} = mut {};
+    foreach (p in paths) {
+        keys[p] = groupKey(p, generated: generated[p] ?? false, figures: figures);
+    }
+    foreach (l in links) {
+        if (keys[l[0]] -> a) {
+            if (keys[l[1]] -> b) {
+                g.join(a, b: b);
+            }
+        }
+    }
+    final group: mut {str: str} = mut {};
+    final figureSide: mut {str: bool} = mut {};
+    foreach (p, k in keys) {
+        final name = g.find(k);
+        group[p] = name;
+        if (k.startsWith("figure:")) {
+            figureSide[name] = (figureSide[name] ?? false) or figureFold(k.sub(7, len: k.len() - 7)) == 0;
+        }
+    }
+    final held: mut {str: bool} = mut {};
+    foreach (p, name in group) {
+        held[name] = figureSide[name] ?? isHoldout(name);
+        dealt[p] = name;
+        dealtHeld[name] = held[name] ?? false;
+    }
+    return Split{group = group, held = held};
+}
+
+// dealt is every path the last deal grouped, with its group. The magusfile hands write
+// only paths, so write reads their groups from here.
+final dealt: mut {str: str} = mut {};
+final dealtHeld: mut {str: bool} = mut {};
+
+// write records every holdout path among paths, sorted, one {"path", "group"} per line.
+// It refuses a path no deal has grouped.
+export fun write(paths: [str], target: str) > int !> any {
+    final kept: mut [str] = mut [];
+    foreach (p in paths) {
+        final group = dealt[p];
+        if (group == null) {
+            throw "holdout: no deal grouped {p}; sources\\load deals the split before write";
+        }
+        if (dealtHeld[group!] ?? false) {
+            kept.append(p);
+        }
+    }
+    kept.sort(fun (a: str, b: str) > bool => a < b);
     final lines: mut [str] = mut [];
-    foreach (p in held) {
-        lines.append(json\stringify({"path": p, "bucket": bucket(p)}));
+    foreach (p in kept) {
+        lines.append(json\stringify({"path": p, "group": dealt[p] ?? ""}));
     }
     fs\writeFile(target, content: lines.join("\n") + "\n");
-    return held.len();
+    return kept.len();
 }
 
 test "bucket is stable and in range" {
-    std\assert(bucket("internal/textrank/tokens.go") == bucket("internal/textrank/tokens.go"), message: "stable");
+    std\assert(bucket("dir:internal/textrank") == bucket("dir:internal/textrank"), message: "stable");
     std\assert(bucket("a") >= 0 and bucket("a") < 10, message: "range");
     std\assert(prefixValue("0000000a") == 10, message: "hex prefix");
     std\assert(prefixValue("ffffffff") == 4294967295, message: "uint32");
+}
+
+test "a test file, a generated page and a skill's files share their source's group" {
+    final paths = [
+        "std/crypto.go", "std/crypto_test.go", "docs/reference/buzz/crypto.md", "docs/reference/buzz/vcs.md",
+        "internal/agent/skills/magus-multi-agent/SKILL.md", "internal/agent/skills/magus-multi-agent/reference.md",
+        "docs/reference/skills/magus-multi-agent.md", "docs/site/diagrams/bootstrap.buzz", "docs/site/diagrams/all.buzz",
+    ];
+    final generated = {"docs/reference/buzz/crypto.md": true, "docs/reference/buzz/vcs.md": true, "docs/reference/skills/magus-multi-agent.md": true};
+    final links = [
+        ["docs/reference/buzz/crypto.md", "std/crypto.go"],
+        ["docs/reference/skills/magus-multi-agent.md", "internal/agent/skills/magus-multi-agent/SKILL.md"],
+    ];
+    final s = deal(paths, generated: generated, figures: {"bootstrap": true}, links: links);
+    std\assert(s.group["std/crypto_test.go"] == s.group["std/crypto.go"], message: "test file");
+    std\assert(s.group["docs/reference/buzz/crypto.md"] == s.group["std/crypto.go"], message: "generated page");
+    std\assert(s.group["docs/reference/buzz/vcs.md"] == "file:docs/reference/buzz/vcs.md", message: "an unlinked page stays alone");
+    std\assert(s.group["docs/reference/skills/magus-multi-agent.md"] == s.group["internal/agent/skills/magus-multi-agent/reference.md"], message: "skill page and reference");
+    std\assert(s.group["docs/site/diagrams/bootstrap.buzz"] == "figure:bootstrap", message: "figure builder");
+    std\assert(s.held["figure:bootstrap"] == (figureFold("bootstrap") == 0), message: "builder takes its figure's fold");
+    std\assert(s.group["docs/site/diagrams/all.buzz"] == "dir:docs/site/diagrams", message: "a helper is no builder");
+    foreach (p, name in s.group) {
+        std\assert(s.held[name] != null, message: "{p} has a side");
+    }
 }

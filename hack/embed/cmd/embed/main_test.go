@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,6 +59,38 @@ func TestReadBatch(t *testing.T) {
 
 	_, err = readBatch(bufio.NewReader(strings.NewReader("HEAD:z.go missing\n")), "HEAD", []string{"z.go"})
 	require.ErrorContains(t, err, "HEAD:z.go missing")
+}
+
+func TestHoldoutGroupsNeverSpanSplits(t *testing.T) {
+	file := func(path, group, split string) sourceRecord {
+		return sourceRecord{Kind: "file", Path: path, Group: group, Split: split}
+	}
+	together := []sourceRecord{
+		file("std/crypto.go", "dir:std", "holdout"),
+		file("std/crypto_test.go", "dir:std", "holdout"),
+		file("docs/reference/buzz/crypto.md", "dir:std", "holdout"),
+		file("internal/agent/skills/magus-multi-agent/SKILL.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		file("internal/agent/skills/magus-multi-agent/reference.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		file("docs/reference/skills/magus-multi-agent.md", "dir:internal/agent/skills/magus-multi-agent", "train"),
+		{Kind: "forced", Tokens: []string{"x"}},
+	}
+	require.NoError(t, checkGroups(together))
+
+	for _, tc := range []struct {
+		name  string
+		stray sourceRecord
+		want  string
+	}{
+		{"a test file split from its source", file("std/crypto_test.go", "dir:std", "train"), "group dir:std spans both splits: std/crypto_test.go is train"},
+		{"a generated page split from its source", file("docs/reference/buzz/crypto.md", "dir:std", "train"), "group dir:std spans both splits"},
+		{"a skill copy split from its skill", file("docs/reference/skills/magus-multi-agent.md", "dir:internal/agent/skills/magus-multi-agent", "holdout"), "spans both splits"},
+		{"a file with no group", file("README.md", "", "train"), "README.md names no provenance group"},
+		{"a file with no split", file("README.md", "dir:.", ""), `README.md has split ""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorContains(t, checkGroups(append(slices.Clone(together), tc.stray)), tc.want)
+		})
+	}
 }
 
 func TestRecord(t *testing.T) {
