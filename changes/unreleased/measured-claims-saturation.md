@@ -10,6 +10,9 @@
 - **A build budget refusal says how the slots were sized.** It names them declared,
   measured over N runs, unmeasured, or taken for the memory claim, beside how the memory
   was sized.
+- **`magus run` and `magus affected` started inside a step schedule at the machine's
+  width.** They inherited the step's GOMAXPROCS, one core for a one-slot claim, though
+  they take claims of their own.
 - **`magus doctor` advises declaring `memory_mb` only for an unstable target.** An
   undeclared target now claims its measured peak, so MGS1030 reports one only when its
   passing peaks spread more than a quarter apart.
