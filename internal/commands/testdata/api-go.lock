@@ -2705,6 +2705,7 @@ github.com/egladman/magus/types.KindDir const untyped string = "dir"
 github.com/egladman/magus/types.KindDoc const untyped string = "doc"
 github.com/egladman/magus/types.KindDocSection const untyped string = "docsection"
 github.com/egladman/magus/types.KindExchange const CredentialKind = "exchange"
+github.com/egladman/magus/types.KindFigure const untyped string = "figure"
 github.com/egladman/magus/types.KindFile const untyped string = "file"
 github.com/egladman/magus/types.KindFunction const untyped string = "function"
 github.com/egladman/magus/types.KindImport const untyped string = "import"
@@ -3018,7 +3019,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 22
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 23
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""
@@ -3860,6 +3861,7 @@ github.com/egladman/magus/types.RelationConsumes const RelationID = "consumes"
 github.com/egladman/magus/types.RelationContains const RelationID = "contains"
 github.com/egladman/magus/types.RelationDefines const RelationID = "defines"
 github.com/egladman/magus/types.RelationDependsOn const RelationID = "depends_on"
+github.com/egladman/magus/types.RelationDepicts const RelationID = "depicts"
 github.com/egladman/magus/types.RelationDocuments const RelationID = "documents"
 github.com/egladman/magus/types.RelationEmits const RelationID = "emits"
 github.com/egladman/magus/types.RelationID type string

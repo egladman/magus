@@ -44,6 +44,7 @@
 {"bucket":0,"path":"changes/unreleased/checkout-reporter.md"}
 {"bucket":0,"path":"changes/unreleased/clean-member.md"}
 {"bucket":0,"path":"changes/unreleased/conformance-alias-metrics.md"}
+{"bucket":1,"path":"changes/unreleased/conformance-carry-crash.md"}
 {"bucket":1,"path":"changes/unreleased/console-figure-links.md"}
 {"bucket":1,"path":"changes/unreleased/console-links-carry-one-time-code.md"}
 {"bucket":1,"path":"changes/unreleased/conventions-importceiling-deleted.md"}
@@ -65,6 +66,7 @@
 {"bucket":0,"path":"changes/unreleased/diff-symbols-coverage.md"}
 {"bucket":0,"path":"changes/unreleased/doctrine-principles.md"}
 {"bucket":0,"path":"changes/unreleased/drift-opaque-untracked-directories.md"}
+{"bucket":1,"path":"changes/unreleased/ended-checkout-cleaned.md"}
 {"bucket":0,"path":"changes/unreleased/exec-kills-orphaned-processes.md"}
 {"bucket":1,"path":"changes/unreleased/exited-job-releases-its-paths.md"}
 {"bucket":0,"path":"changes/unreleased/failed-remote-cache-exchange-names-step.md"}
@@ -101,6 +103,7 @@
 {"bucket":1,"path":"changes/unreleased/interrupt-arms-for-work.md"}
 {"bucket":0,"path":"changes/unreleased/job-attempts-prior.md"}
 {"bucket":0,"path":"changes/unreleased/job-claim-guard.md"}
+{"bucket":0,"path":"changes/unreleased/job-fork-needs-write-paths-or-read-only.md"}
 {"bucket":1,"path":"changes/unreleased/job-previous-attempt.md"}
 {"bucket":0,"path":"changes/unreleased/job-prune.md"}
 {"bucket":1,"path":"changes/unreleased/job-schema-patterns.md"}
@@ -112,6 +115,7 @@
 {"bucket":1,"path":"changes/unreleased/jobs-retain.md"}
 {"bucket":0,"path":"changes/unreleased/lease-commits-in-another-repo.md"}
 {"bucket":1,"path":"changes/unreleased/lexical-index.md"}
+{"bucket":1,"path":"changes/unreleased/lint-never-composes-format.md"}
 {"bucket":1,"path":"changes/unreleased/lint-rollout-tiers.md"}
 {"bucket":0,"path":"changes/unreleased/ls-jobs-live-only.md"}
 {"bucket":0,"path":"changes/unreleased/magus-affected-plan-prints-affected-unbounded.md"}
@@ -124,6 +128,8 @@
 {"bucket":0,"path":"changes/unreleased/mcp-job-actor.md"}
 {"bucket":1,"path":"changes/unreleased/mcp-token-checks-answer-from-memory.md"}
 {"bucket":0,"path":"changes/unreleased/mcp-unix-socket.md"}
+{"bucket":0,"path":"changes/unreleased/measured-claims-saturation.md"}
+{"bucket":0,"path":"changes/unreleased/measured-claims.md"}
 {"bucket":1,"path":"changes/unreleased/merge-queue-dashboard.md"}
 {"bucket":0,"path":"changes/unreleased/mgs1021-advice-names-generators.md"}
 {"bucket":1,"path":"changes/unreleased/mgs1021-own-build-names-way-out.md"}
@@ -136,6 +142,7 @@
 {"bucket":1,"path":"changes/unreleased/model-tier-usage-unknown.md"}
 {"bucket":0,"path":"changes/unreleased/model-tiers-default.md"}
 {"bucket":1,"path":"changes/unreleased/model-tiers-exhaustive.md"}
+{"bucket":0,"path":"changes/unreleased/name-words-lint.md"}
 {"bucket":0,"path":"changes/unreleased/nested-index-lock.md"}
 {"bucket":1,"path":"changes/unreleased/nested-root-lock.md"}
 {"bucket":0,"path":"changes/unreleased/op-env-keys.md"}
@@ -165,6 +172,7 @@
 {"bucket":1,"path":"changes/unreleased/read-rules-judge-every-read-grep-reader.md"}
 {"bucket":1,"path":"changes/unreleased/refactor-remove-preflight.md"}
 {"bucket":0,"path":"changes/unreleased/refs-rename.md"}
+{"bucket":0,"path":"changes/unreleased/refusal-names-slot-sizing.md"}
 {"bucket":1,"path":"changes/unreleased/release-rc-images-use-tagged.md"}
 {"bucket":0,"path":"changes/unreleased/remote-hit-one-cache-hit-record.md"}
 {"bucket":0,"path":"changes/unreleased/replaying-fully-cached-run-fast-again.md"}
@@ -189,6 +197,7 @@
 {"bucket":1,"path":"changes/unreleased/sdk-seams-stream.md"}
 {"bucket":1,"path":"changes/unreleased/sdk-seams.md"}
 {"bucket":1,"path":"changes/unreleased/sdk-testing-guide.md"}
+{"bucket":0,"path":"changes/unreleased/session-claim-fields.md"}
 {"bucket":1,"path":"changes/unreleased/session-scope-checkout.md"}
 {"bucket":1,"path":"changes/unreleased/share-wrong-method-failures-answer-in.md"}
 {"bucket":1,"path":"changes/unreleased/shared-step-no-longer-inherits-one.md"}
@@ -226,6 +235,7 @@
 {"bucket":1,"path":"changes/unreleased/vcs-capabilities-that-combine-revisions-without.md"}
 {"bucket":1,"path":"changes/unreleased/vcs-cmd-asks-lease-vcs.md"}
 {"bucket":1,"path":"changes/unreleased/vulnerability-database-release-no-longer-invalidates.md"}
+{"bucket":1,"path":"changes/unreleased/worker-fast-forwards-to-binary.md"}
 {"bucket":1,"path":"changes/unreleased/workspace-load-reports-every-broken-magusfile.md"}
 {"bucket":0,"path":"changes/unreleased/writing-rules.md"}
 {"bucket":1,"path":"cmd/magus-docs/main.go"}
@@ -272,6 +282,7 @@
 {"bucket":0,"path":"cmd/magus/session_load_next_test.go"}
 {"bucket":0,"path":"cmd/magus/stale_index.go"}
 {"bucket":0,"path":"cmd/magus/startup_trace.go"}
+{"bucket":0,"path":"cmd/magus/status_wait.go"}
 {"bucket":0,"path":"cmd/magus/stream.go"}
 {"bucket":0,"path":"cmd/magus/subcommands.go"}
 {"bucket":0,"path":"cmd/magus/timeout.go"}
@@ -917,7 +928,6 @@
 {"bucket":0,"path":"internal/workspace/provider_cache_test.go"}
 {"bucket":1,"path":"internal/workspace/view.go"}
 {"bucket":0,"path":"invocation.go"}
-{"bucket":0,"path":"knowledge_cochange_test.go"}
 {"bucket":1,"path":"libs/cmdline/cmdline_test.go"}
 {"bucket":1,"path":"libs/cmdline/exit/exit.go"}
 {"bucket":1,"path":"libs/cmdline/generate/man_test.go"}
@@ -1174,7 +1184,6 @@
 {"bucket":1,"path":"types/machine.go"}
 {"bucket":1,"path":"types/model_tier_test.go"}
 {"bucket":0,"path":"types/next_step.go"}
-{"bucket":0,"path":"types/peakrss.go"}
 {"bucket":0,"path":"types/public_api.go"}
 {"bucket":1,"path":"types/returns.go"}
 {"bucket":0,"path":"types/rule.go"}

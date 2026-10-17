@@ -15,6 +15,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Quick start
 - Query first
 - Project: magus
+- Project: hack/embed
 - Project: libs/figure
 
 ## Route by question
@@ -41,7 +42,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v22). Query it instead of grepping:
+This workspace has a knowledge graph (schema v23). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -51,26 +52,27 @@ magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph
 ```
 
-| Kind       |     Size | List them                     | Anchors (most connected)                                                                                         |
-| ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                               |
-| target     |     100+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `content-generate`                                                                    |
-| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                       |
-| op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                  |
-| tool       | built in | `magus query kind=tool`       |                                                                                                                  |
-| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `mutable`                                                                                            |
-| module     | built in | `magus query kind=module`     |                                                                                                                  |
-| method     | built in | `magus query kind=method`     |                                                                                                                  |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3032`, `MGS3018`                                                                                  |
-| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md` |
-| dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                         |
-| file       |     400+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                        |
-| function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                    |
-| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
-| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
-| package    |     100+ | `magus query kind=package`    | `golang.org/x/tools`, `gopkg.in/yaml.v3`, `@biomejs/biome`                                                       |
-| link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`               |
-| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                        |
+| Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                       |
+| ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                                                             |
+| target     |     200+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `content-generate`                                                                                                                  |
+| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                     |
+| op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
+| tool       | built in | `magus query kind=tool`       |                                                                                                                                                                |
+| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `mutable`                                                                                                                                          |
+| module     | built in | `magus query kind=module`     |                                                                                                                                                                |
+| method     | built in | `magus query kind=method`     |                                                                                                                                                                |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3032`, `MGS3018`                                                                                                                                |
+| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
+| dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
+| file       |     400+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
+| function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                                                                  |
+| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                           |
+| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
+| package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
+| link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                                                             |
+| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                                                                      |
+| figure     |      20+ | `magus query kind=figure`     | `One pipeline, and the modules each host registers`, `One library draws every figure, here and in the console`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
@@ -78,6 +80,7 @@ magus graph export -o json  # the whole graph
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                               |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
+| hack/embed                                                                  |      13 | `magus query project=hack/embed`                      | `format`, `build`, `ci`                                  |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                                   |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                                   |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                                   |
@@ -140,7 +143,7 @@ magus graph export -o json  # the whole graph
 | `agent-bench-report`     | Turns a results tree into the benchmark report.                                                                                                                                                                                |
 | `agent-bench-run`        | Runs a benchmark manifest (default pilot.manifest) with CLAUDE_BENCH_TOKEN read through the secret provider, so the launching shell never holds it.                                                                            |
 | `agent-eval`             | Runs cmd/magus's agent eval, which skips in the ordinary test target because it spends tokens.                                                                                                                                 |
-| `retrieval-eval`         | Replays testdata/retrieval/judgments.jsonl through query, refs and explain and prints recall, MRR and nDCG; report-only, so no score fails it.                                                                                 |
+| `retrieval-eval`         | Replays each eval set under testdata/retrieval through query, refs and explain and prints recall, MRR and nDCG per set; no score fails it.                                                                                     |
 | `hoste-2-e-test`         | Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired workspace; see docs/guides/integrations/agents.md.                                                                                       |
 | `deploy-generate`        | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root and the console under /console/.                                                                                               |
 | `toolchain-report`       | Reports installed toolchains; excluded from CI because it probes remote tags.                                                                                                                                                  |
@@ -158,6 +161,24 @@ magus graph export -o json  # the whole graph
 | `harness-drift`          | Fails when a committed host config file lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                           |
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                      |
 | `compress-cgo-test`      | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                |
+
+## Project: hack/embed
+
+| Target           | What it does                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `install`        |                                                                                                                                                                                                                           |
+| `lint`           |                                                                                                                                                                                                                           |
+| `build`          |                                                                                                                                                                                                                           |
+| `test`           | Tiny fixtures only: the teacher on GoMLX's pure-Go backend against a naive forward pass, finite-difference checks of every training gradient, and the commands' helpers.                                                  |
+| `security`       | Fails on a vulnerable symbol this module calls.                                                                                                                                                                           |
+| `generate`       | Mines gen/: the sources (tracked files, the pinned downloads, the forced vocabulary, the figures), the holdout files and the training pairs, all read off the tracked tree and the knowledge graph.                       |
+| `fetch`          | Downloads every input inputs.jsonl pins, verifying each sha256.                                                                                                                                                           |
+| `teacher`        | Embeds the vocabulary's token texts, then the training texts, each into resumable, content-addressed shards under the cache root's teacher/, and appends each run's totals to runs.jsonl.                                 |
+| `teacher-parity` | Encodes the 1,024-text parity sample with one teacher, checks every row against the reference vectors (cosine >= 0.999) and the tokens against the reference tokenizer, and reports texts/s.                              |
+| `train`          | Distills and trains the table from finished teacher runs, with the flags `embed train -h` lists after --; manual, never part of ci.                                                                                       |
+| `ci`             | The anchor `magus affected ci` keys off.                                                                                                                                                                                  |
+| `format`         |                                                                                                                                                                                                                           |
+| `vocab`          | Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its figures, and CoRNStack rows) and the forced tokens under the cache root's training/, then the vocabulary's token texts beside them. |
 
 ## Project: libs/figure
 
