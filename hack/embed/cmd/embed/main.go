@@ -34,6 +34,7 @@ commands:
   teacher-parity  check the Go teacher against the reference vectors and report texts/s
   record          append a teacher run's totals to runs.jsonl
   train           distill, train and quantize the table from finished teacher runs
+  bench           write CodeRankEmbed's runs over a subset the external benchmark exported
 
 run "embed <command> -h" for a command's flags`
 
@@ -58,6 +59,8 @@ func main() {
 		err = runRecord(os.Args[2:])
 	case "train":
 		err = runTrain(os.Args[2:])
+	case "bench":
+		err = runBench(os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
