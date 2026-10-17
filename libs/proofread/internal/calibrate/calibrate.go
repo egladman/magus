@@ -97,13 +97,13 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // the rule its cases judge, <rule>.txtar, and its comment is free text. Each
 // section header reads
 //
-//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [callable] [thread=N] [event=EVENT]
+//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
 //
 // where label is hit, pass, fp or fn and kind is one the rule judges. Each
 // non-blank line of a section is one case; whole makes the section one case,
 // for a text whose lines belong together. A one-line change-description case
 // is judged as a bullet under a fixed title and opening paragraph; a whole one
-// as written. name, owner and callable describe a doc-comment case's symbol,
+// as written. name and owner describe a doc-comment case's symbol,
 // thread sets a review case's thread length, and event a review-summary case's
 // verdict: APPROVE, REQUEST_CHANGES or COMMENT.
 //
@@ -251,8 +251,6 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 			out.Symbol.Name = value
 		case "owner":
 			out.Symbol.Owner = value
-		case "callable":
-			out.Symbol.Callable = true
 		case "thread":
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 0 {

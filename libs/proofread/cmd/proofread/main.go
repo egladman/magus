@@ -522,10 +522,9 @@ func judgeSymbols(stdin io.Reader, opts []proofread.Option) ([]finding, error) {
 
 	for _, r := range records {
 		symbol := proofread.Symbol{
-			Name:     r.Name,
-			Owner:    r.Owner,
-			Callable: r.Kind == "function" || r.Kind == "method",
-			Doc:      r.Doc,
+			Name:  r.Name,
+			Owner: r.Owner,
+			Doc:   r.Doc,
 		}
 
 		for _, f := range proofread.Judge(symbol, opts...) {

@@ -277,12 +277,12 @@ func TestDocStubReportsADocThatOnlyRepeatsTheName(t *testing.T) {
 		},
 		{
 			name: "a constructor creating its type",
-			sym:  Symbol{Name: "NewClient", Callable: true, Doc: "NewClient creates a new Client."},
+			sym:  Symbol{Name: "NewClient", Doc: "NewClient creates a new Client."},
 			want: []Finding{docStubFinding("NewClient", "NewClient creates a new Client.")},
 		},
 		{
 			name: "a method name and an ellipsis",
-			sym:  Symbol{Name: "Close", Owner: "Client", Callable: true, Doc: "Close ..."},
+			sym:  Symbol{Name: "Close", Owner: "Client", Doc: "Close ..."},
 			want: []Finding{docStubFinding("Close", "Close ...")},
 		},
 		{
@@ -290,9 +290,9 @@ func TestDocStubReportsADocThatOnlyRepeatsTheName(t *testing.T) {
 			sym:  Symbol{Name: "DefaultTimeout", Doc: "DefaultTimeout is the default timeout."},
 			want: []Finding{docStubFinding("DefaultTimeout", "DefaultTimeout is the default timeout.")},
 		},
-		{name: "a contract", sym: Symbol{Name: "NewServer", Callable: true, Doc: "NewServer validates the config and does not dial."}},
-		{name: "an implemented interface", sym: Symbol{Name: "String", Owner: "Client", Callable: true, Doc: "String implements fmt.Stringer."}},
-		{name: "an edge case", sym: Symbol{Name: "Reset", Owner: "Client", Callable: true, Doc: "Reset returns the client to its zero state; it is safe on a nil client."}},
+		{name: "a contract", sym: Symbol{Name: "NewServer", Doc: "NewServer validates the config and does not dial."}},
+		{name: "an implemented interface", sym: Symbol{Name: "String", Owner: "Client", Doc: "String implements fmt.Stringer."}},
+		{name: "an edge case", sym: Symbol{Name: "Reset", Owner: "Client", Doc: "Reset returns the client to its zero state; it is safe on a nil client."}},
 		{
 			name: "a second paragraph",
 			sym: Symbol{Name: "Options", Doc: "Options is a Options.\n\n" +
@@ -305,12 +305,12 @@ func TestDocStubReportsADocThatOnlyRepeatsTheName(t *testing.T) {
 		},
 		{
 			name: "the name alone",
-			sym:  Symbol{Name: "ApplyEnv", Callable: true, Doc: "ApplyEnv"},
+			sym:  Symbol{Name: "ApplyEnv", Doc: "ApplyEnv"},
 			want: []Finding{docStubFinding("ApplyEnv", "ApplyEnv")},
 		},
 		{
 			name: "a method naming its owner",
-			sym:  Symbol{Name: "Close", Owner: "PoolRegistry", Callable: true, Doc: "Close closes every Pool in the registry."},
+			sym:  Symbol{Name: "Close", Owner: "PoolRegistry", Doc: "Close closes every Pool in the registry."},
 			want: []Finding{docStubFinding("Close", "Close closes every Pool in the registry.")},
 		},
 		{
@@ -369,7 +369,7 @@ func TestMarkersSilenceHistoryAndDocStub(t *testing.T) {
 		want []Finding
 	}{
 		{name: "TODO", sym: Symbol{Name: "Client", Doc: "TODO: Client is a Client until the pool lands."}},
-		{name: "Deprecated", sym: Symbol{Name: "Open", Callable: true, Doc: "Deprecated: Open is Open; use Dial."}},
+		{name: "Deprecated", sym: Symbol{Name: "Open", Doc: "Deprecated: Open is Open; use Dial."}},
 		{name: "a bare TODO", sym: Symbol{Name: "Count", Doc: "TODO count"}},
 		{name: "FIXME", sym: Symbol{Name: "Run", Doc: "FIXME: step 1 of 2 runs twice."}},
 		{name: "BUG", sym: Symbol{Name: "Run", Doc: "BUG(eli): x := count"}},

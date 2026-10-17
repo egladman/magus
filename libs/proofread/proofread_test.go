@@ -19,7 +19,7 @@ func runJudgeCases(t *testing.T, cases []judgeCase) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(Symbol{Name: "Resolve", Callable: true, Doc: tc.doc}, houseOn), tc.want)
+			assertFindings(t, Judge(Symbol{Name: "Resolve", Doc: tc.doc}, houseOn), tc.want)
 		})
 	}
 }
@@ -207,9 +207,8 @@ func TestCatalogDocumentsEveryRuleWithAUniqueCode(t *testing.T) {
 
 func TestJudgeReportsInRuleOrderThenTextOrder(t *testing.T) {
 	s := Symbol{
-		Name:     "valueOf",
-		Callable: true,
-		Doc:      "It used to read a sub-agent - basically twice. It simply rereads a Sub-agent.",
+		Name: "valueOf",
+		Doc:  "It used to read a sub-agent - basically twice. It simply rereads a Sub-agent.",
 	}
 
 	want := []Finding{
@@ -229,7 +228,7 @@ func TestJudgeReportsInRuleOrderThenTextOrder(t *testing.T) {
 }
 
 func TestJudgeFindsNothingInAnEmptyDoc(t *testing.T) {
-	assertFindings(t, Judge(Symbol{Name: "Resolve", Owner: "Client", Callable: true}), nil)
+	assertFindings(t, Judge(Symbol{Name: "Resolve", Owner: "Client"}), nil)
 }
 
 func TestProseLinesDropCodeAndKeepListItems(t *testing.T) {

@@ -1,17 +1,17 @@
 A one-line doc that only repeats its symbol's name. Each section is one symbol.
 -- hit/doc-comment name=Client --
 Client is a Client.
--- hit/doc-comment name=NewClient callable --
+-- hit/doc-comment name=NewClient --
 NewClient creates a new Client.
 -- hit/doc-comment name=DefaultTimeout --
 DefaultTimeout is the default timeout.
--- hit/doc-comment name=ApplyEnv callable --
+-- hit/doc-comment name=ApplyEnv --
 ApplyEnv
--- hit/doc-comment name=Close owner=PoolRegistry callable --
+-- hit/doc-comment name=Close owner=PoolRegistry --
 Close closes every Pool in the registry.
--- pass/doc-comment name=NewServer callable --
+-- pass/doc-comment name=NewServer --
 NewServer validates the config and does not dial.
--- pass/doc-comment name=String owner=Client callable --
+-- pass/doc-comment name=String owner=Client --
 String implements fmt.Stringer.
 -- pass/doc-comment name=Client --
 Client is an http.Client.

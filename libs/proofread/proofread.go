@@ -370,8 +370,6 @@ type Symbol struct {
 	Name string
 	// Owner is the display name of the enclosing type when Name is a method.
 	Owner string
-	// Callable marks a function or method.
-	Callable bool
 	// Doc is the doc comment, with any signature code block the indexer
 	// prepends already dropped.
 	Doc string

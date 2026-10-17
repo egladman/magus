@@ -50,7 +50,7 @@ func TestEveryRuleHasAHitAndAPassCase(t *testing.T) {
 
 func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 	fsys := fstest.MapFS{"docstub.txtar": {Data: []byte("Comment line one.\nline two.\n" +
-		"-- hit/doc-comment name=Close owner=Pool callable --\n" +
+		"-- hit/doc-comment name=Close owner=Pool --\n" +
 		"Close closes.\n\nClose closes the Pool.\n" +
 		"-- pass/doc-comment name=Open whole --\n" +
 		"Open dials.\n\nIt blocks.\n")}}
@@ -60,7 +60,7 @@ func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sym := proofread.Symbol{Name: "Close", Owner: "Pool", Callable: true}
+	sym := proofread.Symbol{Name: "Close", Owner: "Pool"}
 	want := []labeledCase{
 		{File: "docstub.txtar", Line: 4, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: labelHit, Text: "Close closes.", Symbol: sym},
 		{File: "docstub.txtar", Line: 6, Rule: proofread.RuleDocStub, Kind: proofread.KindDocComment, Label: labelHit, Text: "Close closes the Pool.", Symbol: sym},
