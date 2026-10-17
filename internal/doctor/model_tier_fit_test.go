@@ -3,7 +3,6 @@ package doctor
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,10 +58,8 @@ func tierFitRunner(t *testing.T, set *types.ModelTierSet, outcomes ...[]types.Jo
 	for _, o := range outcomes {
 		h.Jobs = append(h.Jobs, o...)
 	}
-	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(t.Context(), path))
 	return &runner{
-		opts: options{cfg: config.Config{HistoryPath: path}},
+		opts: options{cfg: config.Config{HistoryPath: writeHistory(t, h)}},
 		ws:   tieredWorkspace{set: set},
 		ctx:  t.Context(),
 	}

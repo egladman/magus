@@ -1,7 +1,6 @@
 package doctor
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -29,8 +28,17 @@ func historyWith(t *testing.T, project string, peaks map[string]int64) string {
 			RecentOutcomes: []forecast.Outcome{{Result: "pass", MaxRSSBytes: bytes}},
 		}
 	}
+	return writeHistory(t, h)
+}
+
+// writeHistory writes h to a temp file and returns its path.
+func writeHistory(t *testing.T, h forecast.History) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), path, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
 	return path
 }
 
@@ -54,8 +62,7 @@ func TestMemoryDeclarationsReadsEveryShape(t *testing.T) {
 			{Result: forecast.OutcomePass, MaxRSSBytes: 300 * mb, Charms: narrow.Charms, ArgsHash: narrow.ArgsHash},
 		}}}},
 	}
-	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
+	path := writeHistory(t, h)
 
 	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
@@ -100,9 +107,7 @@ func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
 			Version:  forecast.HistoryVersion,
 			Projects: map[string]map[string]forecast.Stats{"console": {"typescript/test": {RecentOutcomes: outcomes}}},
 		}
-		path := filepath.Join(t.TempDir(), "history.json")
-		require.NoError(t, h.Save(context.Background(), path))
-		return newRunner(path).checkMemoryDeclarations([]*types.Project{projectWith("console", nil)})
+		return newRunner(writeHistory(t, h)).checkMemoryDeclarations([]*types.Project{projectWith("console", nil)})
 	}
 	run := func(result forecast.OutcomeResult, peakMB int64) forecast.Outcome {
 		return forecast.Outcome{Result: result, MaxRSSBytes: peakMB * mb}

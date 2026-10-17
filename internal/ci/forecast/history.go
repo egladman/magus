@@ -1033,27 +1033,6 @@ func changedLines(path string, entries []historyLine, fn func(*History) error) (
 	return add, nil
 }
 
-// Save replaces the store at path with h, one line per entry, through a rename. A writer
-// sharing the file with other processes uses [UpdateHistory] instead.
-func (h *History) Save(ctx context.Context, path string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	lines := h.lines()
-	encoded := make([][]byte, len(lines))
-	for i, l := range lines {
-		b, err := json.Marshal(l)
-		if err != nil {
-			return fmt.Errorf("forecast: encode history: %w", err)
-		}
-		encoded[i] = b
-	}
-	if err := file.RewriteLines(path, encoded, 0o644); err != nil {
-		return fmt.Errorf("forecast: write history: %w", err)
-	}
-	return nil
-}
-
 // PredictPeakRSS returns the highest peak resident memory recorded for
 // (project, target), and whether anything was recorded at all.
 //

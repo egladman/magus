@@ -2183,7 +2183,10 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 		}}, 3)}},
 	}}
 	historyPath := filepath.Join(root, "history.json")
-	require.NoError(t, seeded.Save(context.Background(), historyPath))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), historyPath, func(h *forecast.History) error {
+		*h = seeded
+		return nil
+	}))
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithTarget("work", workspace.MemoryMB(64)))

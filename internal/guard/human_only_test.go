@@ -321,7 +321,10 @@ func TestHumanOnlyReasonCarriesTheRecord(t *testing.T) {
 	h := forecast.History{Version: forecast.HistoryVersion, Projects: map[string]map[string]forecast.Stats{
 		".": {"magusfile/agent-bench-run": {P75Ms: 372_000, Samples: 4}},
 	}}
-	require.NoError(t, h.Save(ctx, history))
+	require.NoError(t, forecast.UpdateHistory(ctx, history, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
 	t.Setenv("MAGUS_HISTORY_PATH", history)
 
 	for _, src := range humanOnlySources {

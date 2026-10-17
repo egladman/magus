@@ -146,7 +146,7 @@ func TestHistorySchemaLock(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	require.NoError(t, h.Save(t.Context(), path))
+	seedHistory(t, path, h)
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 
@@ -901,9 +901,9 @@ func TestLoad_missingFileIsZeroHistory(t *testing.T) {
 	assert.Equal(t, History{Version: HistoryVersion, Projects: map[string]map[string]Stats{}}, h)
 }
 
-// TestSaveThenLoad round-trips a populated history through the atomic writer
-// and decoder, covering the happy paths of both Save and Load plus map init.
-func TestSaveThenLoad(t *testing.T) {
+// TestUpdateHistoryThenLoad round-trips a populated history through the writer
+// and decoder, covering the happy paths of both UpdateHistory and Load plus map init.
+func TestUpdateHistoryThenLoad(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "history.json")
@@ -916,7 +916,7 @@ func TestSaveThenLoad(t *testing.T) {
 			"svc": {"ci": {P75Ms: 12_000, Samples: 5, LastUpdated: fixedNow, Recent: []int64{12_000}}},
 		},
 	}
-	require.NoError(t, orig.Save(context.Background(), path))
+	seedHistory(t, path, orig)
 
 	var got History
 	require.NoError(t, got.Load(context.Background(), path))
@@ -938,7 +938,7 @@ func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 			{Result: OutcomePass, DurationMs: 20},
 		}}},
 	}}
-	require.NoError(t, orig.Save(context.Background(), path))
+	seedHistory(t, path, orig)
 
 	lines := readLines(t, path)
 	require.Len(t, lines, 2, "the workspace line, then the one (project, target)")
@@ -968,12 +968,13 @@ func TestLoad_versionTooNew(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "future.jsonl")
-	// Hand-craft a future-version file via the codec used by Save.
-	future := History{Version: HistoryVersion + 1}
-	require.NoError(t, future.Save(context.Background(), path))
+	// Hand-crafted, since UpdateHistory stamps the build's own version.
+	future, err := json.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, append(future, '\n'), 0o644))
 
 	var h History
-	err := h.Load(context.Background(), path)
+	err = h.Load(context.Background(), path)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported history version")
 }
@@ -1014,6 +1015,14 @@ func recordDuration(project, target string, ms int64) func(*History) error {
 		h.Update(fixedNow, []Sample{{Project: project, Target: target, DurationMs: ms}}, nil)
 		return nil
 	}
+}
+
+func seedHistory(tb testing.TB, path string, h History) {
+	tb.Helper()
+	require.NoError(tb, UpdateHistory(tb.Context(), path, func(dst *History) error {
+		*dst = h
+		return nil
+	}))
 }
 
 // TestUpdateHistoryAppendsWhatChangedThenReloads pins the store as a log: an update
@@ -1162,18 +1171,6 @@ func TestLoad_contextCancelled(t *testing.T) {
 
 	var h History
 	err := h.Load(ctx, filepath.Join(t.TempDir(), "any.json"))
-	require.ErrorIs(t, err, context.Canceled)
-}
-
-// TestSave_contextCancelled asserts the pre-encode ctx guard short-circuits.
-func TestSave_contextCancelled(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	h := History{Version: HistoryVersion}
-	err := h.Save(ctx, filepath.Join(t.TempDir(), "any.json"))
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -1522,27 +1519,11 @@ func syntheticStats(seed int, _ string) Stats {
 func BenchmarkHistoryLoad(b *testing.B) {
 	dir := b.TempDir()
 	path := filepath.Join(dir, "history.jsonl")
-	h := syntheticHistory(100)
-	if err := h.Save(context.Background(), path); err != nil {
-		b.Fatal(err)
-	}
+	seedHistory(b, path, syntheticHistory(100))
 	b.ResetTimer()
 	for range b.N {
 		var h2 History
 		if err := h2.Load(context.Background(), path); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// BenchmarkHistorySave measures the full Save path: encoding one line per entry and the
-// atomic rewrite for a 100-project history file.
-func BenchmarkHistorySave(b *testing.B) {
-	path := filepath.Join(b.TempDir(), "history.jsonl")
-	h := syntheticHistory(100)
-	b.ResetTimer()
-	for range b.N {
-		if err := h.Save(context.Background(), path); err != nil {
 			b.Fatal(err)
 		}
 	}

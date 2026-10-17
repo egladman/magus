@@ -17,11 +17,14 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// writeHistory saves h to a temp file and returns its path.
+// writeHistory writes h to a temp file and returns its path.
 func writeHistory(t *testing.T, h forecast.History) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), path, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
 	return path
 }
 

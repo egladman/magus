@@ -103,7 +103,7 @@ func TestHistory_PredictDuration_lowSampleFloor(t *testing.T) {
 	assert.NotEqual(t, 100*time.Second, got, "with only 1 sample, alpha should not return its own 100s value")
 }
 
-func TestHistory_SaveLoadRoundTrip(t *testing.T) {
+func TestHistory_WriteLoadRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history.json")
@@ -118,7 +118,7 @@ func TestHistory_SaveLoadRoundTrip(t *testing.T) {
 		{SetupMs: 25_000, TotalMs: 100_000, WorkMs: 200_000, NShards: 4},
 	})
 
-	require.NoError(t, h.Save(context.Background(), path), "Save")
+	seedHistory(t, path, h)
 
 	var got History
 	require.NoError(t, got.Load(context.Background(), path), "Load")

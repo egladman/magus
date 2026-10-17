@@ -273,7 +273,10 @@ func TestBuildReport(t *testing.T) {
 		},
 	}
 	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, hist.Save(context.Background(), path))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), path, func(h *forecast.History) error {
+		*h = hist
+		return nil
+	}))
 
 	cfg := Config{Enabled: true, BootstrapSamples: 4, MinSamples: 4, Threshold: 0.01}
 	report, err := BuildReport(context.Background(), path, cfg)
@@ -445,7 +448,10 @@ func TestHistorySaveKeepsAnOverlappingRunsOutcomes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.json")
 	seed := forecast.History{Version: forecast.HistoryVersion}
 	applyOutcome(&seed, ".", "go/test", forecast.Outcome{Result: forecast.OutcomePass, At: time.Unix(1, 0)})
-	require.NoError(t, seed.Save(t.Context(), path))
+	require.NoError(t, forecast.UpdateHistory(t.Context(), path, func(h *forecast.History) error {
+		*h = seed
+		return nil
+	}))
 
 	load := func() *Runtime {
 		var h forecast.History
