@@ -265,19 +265,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // format runs dprint over the authored pages.
-// The paths go in argv because dprint would otherwise descend into the agents project's
-// own dprint.json (MGS3001). Keep them in step with dprint.json `includes`: every authored
-// directory except guides/integrations/agents, which formats itself.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    // Keep in step with the dprint args below.
-    ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "decisions/**/*.md", "guides/*.md",
-        "guides/integrations/*.md", "guides/integrations/editor/**/*.md", "guides/jobs/**/*.md",
-        "guides/migrating/**/*.md", "guides/setup/**/*.md", "reference/**/*.md");
-    markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./decisions/**/*.md",
-        "./guides/*.md", "./guides/integrations/*.md", "./guides/integrations/editor/**/*.md",
-        "./guides/jobs/**/*.md", "./guides/migrating/**/*.md", "./guides/setup/**/*.md",
-        "./reference/**/*.md"]});
+    // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
+    // own project.
+    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
+        "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
+        "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
+        "reference/**/*.md");
+    markdown["dprint"](ctx);
 }
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.

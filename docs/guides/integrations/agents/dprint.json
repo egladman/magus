@@ -6,10 +6,8 @@
   // Patterns are "./"-anchored: a slash-less dprint pattern matches at any depth, so a
   // bare "*.md" would sweep every project from here.
   //
-  // The parent (docs) scopes its own dprint run by ARGV so it stops short of this
-  // directory - a parent exclude alone would not be enough, because dprint discovers a
-  // nested config and formats that subtree under it, which is the parent target writing
-  // into a descendant project (MGS3001).
+  // The parent (docs) excludes this directory, and the markdown spell runs dprint with
+  // --config-discovery=ignore-descendants, so docs' format never writes here (MGS3001).
   "extends": "../../../../dprint-base.json",
   "includes": ["./*.md"]
 }

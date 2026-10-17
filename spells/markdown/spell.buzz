@@ -24,7 +24,9 @@ fun dprint(target: Target) > Command {
     // The formatter half, next to markdownlint's linter half. Scope comes from
     // dprint.json (includes/excludes), not argv, so there are no globs here and no
     // empty-glob problem. The `rw` charm swaps the check for the write.
-    final args = ["check"];
+    // ignore-descendants: by default dprint also formats every subtree with its own
+    // dprint.json, which is another project.
+    final args = ["check", "--config-discovery=ignore-descendants"];
     return Command{bin = "dprint", args = args, charms = {
         "rw": set(args, "check", "fmt"),
     }};

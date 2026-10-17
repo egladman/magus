@@ -5,11 +5,9 @@
   // Patterns are "./"-anchored: a slash-less dprint pattern matches at any depth, so a
   // bare "*.md" would sweep every project from here.
   //
-  // dprint DISCOVERS nested configs, so a run started at the workspace root also formats
-  // each child project under that child's own config. That is dprint's monorepo model and
-  // cannot be excluded away - a parent exclude does not prune a subtree that owns a
-  // config. `magus run format <project>` still scopes correctly, because the op runs in
-  // that project's directory.
+  // The markdown spell runs dprint with --config-discovery=ignore-descendants, so a child
+  // project's dprint.json is not picked up from here; `magus run format <project>` formats
+  // each child under its own config.
   "extends": "./dprint-base.json",
   //
   // internal/agent/agents-section.md is here because it is EMBEDDED and then pasted into

@@ -3,9 +3,12 @@
   // output yet - the documented fallback, not the goal (docs/concepts/generated-files.md).
   // The list mirrors ../.markdownlintignore; both should eventually be written from
   // declared outputs, the way .gitattributes already is.
+  //
+  // guides/integrations/agents is its own project with its own dprint.json.
   "extends": "../dprint-base.json",
   "includes": ["./**/*.md"],
   "excludes": [
+    "./guides/integrations/agents/**",
     "./node_modules/**",
     "./vendor/**",
     "./gen/**",

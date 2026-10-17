@@ -2449,13 +2449,10 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
     go["go-mod-tidy"](ctx);
     // Not a project, so no project's format tidies it.
     go["go-mod-tidy"](ctx.withCwd("libs/gopherbuzz/benchmarks/comparison"));
-    // Scoped by argv: dprint formats a nested dprint.json's subtree under its own config,
-    // which writes into child projects (MGS3001). Keep this list in step with dprint.json's
-    // `includes`.
+    // Keep in step with dprint.json's `includes`.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
         "internal/agent/agents-section.md");
-    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
-        "./internal/agent/agents-section.md"]});
+    markdown["dprint"](ctx);
     // After go-fmt, so the lens measures the formatted tree lint_rules then judges.
     ctx.modifiesExistingFiles("hack/policy/conformance.jsonl");
     ratchet\run("hack/policy/conformance.jsonl");
