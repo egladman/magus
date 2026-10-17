@@ -43,7 +43,7 @@ export fun run(dir: str, args: [str]) > void !> any {
 // stays on one line: hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses it without testpair.
 export fun lintLib(dir: str, fix: bool) > void !> any {
     final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-    var args = mut ["--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings];
+    var args = mut ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testlayout,testpair" + errorStrings];
     if (fix) {
         args.append("--fix");
     }

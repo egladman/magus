@@ -32,6 +32,7 @@ func TestPluginsRegister(t *testing.T) {
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
 		"nameoutput":    map[string]any{"package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
+		"namewords":     map[string]any{"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"}},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
 		"stderrprint": map[string]any{
