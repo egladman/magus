@@ -110,20 +110,11 @@ func WithGroupWatch(ctx context.Context, w func(pgid int, command string) (relea
 	return context.WithValue(ctx, groupWatchKey{}, groupWatch(w))
 }
 
-// groupWatcher is a procGroup whose wait releases a watch between its leader's exit and
-// the reap. A host without the method cannot see that moment.
-type groupWatcher interface {
-	watch(w groupWatch, command string)
-}
-
-// watchGroup hands group to the watch ctx carries, where the host can release it in time.
-func watchGroup(ctx context.Context, group any, command string) {
-	w, ok := ctx.Value(groupWatchKey{}).(groupWatch)
-	if !ok {
-		return
-	}
-	if g, ok := group.(groupWatcher); ok {
-		g.watch(w, command)
+// watchGroup hands group to the watch ctx carries. A host that cannot see its leader exit
+// before the reap leaves the group unwatched.
+func watchGroup(ctx context.Context, group *procGroup, command string) {
+	if w, ok := ctx.Value(groupWatchKey{}).(groupWatch); ok {
+		group.watch(w, command)
 	}
 }
 

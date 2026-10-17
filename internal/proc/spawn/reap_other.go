@@ -2,6 +2,9 @@
 
 package spawn
 
+// watch leaves the group unwatched: no release could come before the reap.
+func (g *procGroup) watch(groupWatch, string) {}
+
 // wait reaps the child. Here its exit cannot be seen without reaping it, and a group
 // killed after the reap could be another's, so what outlives the child is left running.
 func (g *procGroup) wait() error {
