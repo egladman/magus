@@ -1305,7 +1305,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 		}
 	}
-	referenced, indexed := referencedOutside(ctx, graph.load, root, stored, jobWS.Projects)
+	referenced, referencedGap := referencedOutside(ctx, graph.load, root, stored, jobWS.Projects)
 	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
@@ -1323,7 +1323,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			}
 		}
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
-		job.RenderReferencedOutside(os.Stdout, referenced, indexed)
+		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the build budget so the job's holder never does.
 		if globalCfg.Broker.Resolved() != types.BrokerOff {
@@ -1338,11 +1338,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, forkReport{
 			forkOutput{
-				Job:                stored,
-				DeletionCandidates: deletionCandidates(ctx, graph.load, stored),
-				ReferencedOutside:  referenced,
-				ForegroundOverrun:  overrun,
-				ClaimNotes:         job.ForkNotes(ctx, store, plan, stored),
+				Job:                  stored,
+				DeletionCandidates:   deletionCandidates(ctx, graph.load, stored),
+				ReferencedOutside:    referenced,
+				ReferencedOutsideGap: referencedGap,
+				ForegroundOverrun:    overrun,
+				ClaimNotes:           job.ForkNotes(ctx, store, plan, stored),
 			},
 			derived,
 		})

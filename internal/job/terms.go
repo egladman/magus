@@ -74,6 +74,9 @@ type Terms struct {
 	// ReferencedOutside are the files outside the write paths that use what they define,
 	// from [ReferencedOutside]: findings, never a boundary.
 	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
+	// ReferencedOutsideGap says why ReferencedOutside is unknown, such as [NoSymbolIndex];
+	// empty when a symbol index answered.
+	ReferencedOutsideGap string `json:"referenced_outside_gap,omitempty" yaml:"referenced_outside_gap,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -114,36 +117,38 @@ type TermsAffinity struct {
 // derive from the row alone, because it needs a knowledge graph and a loadable workspace.
 // The zero value is a brief rendered from the row and nothing else.
 type TermsFacts struct {
-	Evidence           []TermsEvidence
-	GraphCold          bool
-	WorkspaceCold      bool
-	Projects           []string
-	DerivedDenyPaths   []TermsBoundary
-	RegeneratedOutside []RegeneratedOutput
-	UnrunGates         []UnrunGate
-	Affinity           []TermsAffinity
-	Grouping           *types.GroupingOutput
-	Stage              types.ReleaseStage
-	DeletionCandidates []types.UnreferencedEntry
-	ReferencedOutside  []ReferencedFile
+	Evidence             []TermsEvidence
+	GraphCold            bool
+	WorkspaceCold        bool
+	Projects             []string
+	DerivedDenyPaths     []TermsBoundary
+	RegeneratedOutside   []RegeneratedOutput
+	UnrunGates           []UnrunGate
+	Affinity             []TermsAffinity
+	Grouping             *types.GroupingOutput
+	Stage                types.ReleaseStage
+	DeletionCandidates   []types.UnreferencedEntry
+	ReferencedOutside    []ReferencedFile
+	ReferencedOutsideGap string
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
 func NewTerms(row types.Job, facts TermsFacts) Terms {
 	return Terms{
-		Lease:              row,
-		Evidence:           facts.Evidence,
-		GraphCold:          facts.GraphCold,
-		WorkspaceCold:      facts.WorkspaceCold,
-		Projects:           facts.Projects,
-		DerivedDenyPaths:   facts.DerivedDenyPaths,
-		RegeneratedOutside: facts.RegeneratedOutside,
-		UnrunGates:         facts.UnrunGates,
-		Affinity:           facts.Affinity,
-		Grouping:           facts.Grouping,
-		Stage:              facts.Stage,
-		DeletionCandidates: facts.DeletionCandidates,
-		ReferencedOutside:  facts.ReferencedOutside,
+		Lease:                row,
+		Evidence:             facts.Evidence,
+		GraphCold:            facts.GraphCold,
+		WorkspaceCold:        facts.WorkspaceCold,
+		Projects:             facts.Projects,
+		DerivedDenyPaths:     facts.DerivedDenyPaths,
+		RegeneratedOutside:   facts.RegeneratedOutside,
+		UnrunGates:           facts.UnrunGates,
+		Affinity:             facts.Affinity,
+		Grouping:             facts.Grouping,
+		Stage:                facts.Stage,
+		DeletionCandidates:   facts.DeletionCandidates,
+		ReferencedOutside:    facts.ReferencedOutside,
+		ReferencedOutsideGap: facts.ReferencedOutsideGap,
 	}
 }
 
@@ -170,7 +175,7 @@ func (b Terms) String() string {
 	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
 	writeList(&s, "write paths", b.Lease.WritePaths)
 	writeList(&s, "deny paths", b.Lease.DenyPaths)
-	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside))
+	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside, b.ReferencedOutsideGap))
 	writeList(&s, "projects", b.Projects)
 
 	switch {

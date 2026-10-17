@@ -38,17 +38,17 @@ func deletionCandidates(ctx context.Context, load func(context.Context) *knowled
 }
 
 // referencedOutside is the files outside row's write paths that use what they define, and
-// whether a symbol index answered. With no graph, or one holding no symbols, Referrers
+// the gap that makes the list unknown. With no graph, or one holding no symbols, Referrers
 // answers nil for every file, which reads the same as nothing outside using them.
-func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, indexed bool) {
+func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, gap string) {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
-		return nil, true
+		return nil, ""
 	}
 	g := load(ctx)
 	if g == nil || !g.HasSymbols() {
-		return nil, false
+		return nil, job.NoSymbolIndex()
 	}
-	return job.ReferencedOutside(root, row, projects, g.Referrers), true
+	return job.ReferencedOutside(root, row, projects, g.Referrers), ""
 }
 
 // leaseAffinityCommits is how far back the co-change scan reads. Wide enough that a
@@ -96,9 +96,7 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		Stage:              workspaceStage(ctx, m),
 		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.WritePaths), row),
 	}
-	// TODO: Terms has no field for an unindexed answer, so a graph holding no symbols still
-	// renders as no file outside using the write paths here; fork prints the gap.
-	facts.ReferencedOutside, _ = referencedOutside(ctx, graph.loadScoped(row.WritePaths), m.Root(), row, m.All())
+	facts.ReferencedOutside, facts.ReferencedOutsideGap = referencedOutside(ctx, graph.loadScoped(row.WritePaths), m.Root(), row, m.All())
 	// A history file that does not read leaves the section out, the way Affinity's scan does.
 	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
 		facts.Grouping = &grouping

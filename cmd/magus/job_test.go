@@ -1017,7 +1017,17 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 	out := captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed", "--check", "test .", "--write-paths", "a.go"}))
 	})
-	assert.Contains(t, out, "referenced outside the write paths: unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one")
+	assert.Contains(t, out, "\n  unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one\n")
+
+	prev := global.output
+	t.Cleanup(func() { global.output = prev })
+	global.output = "json"
+	raw := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed-json", "--check", "test .", "--write-paths", "a.go"}))
+	})
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &got))
+	assert.Equal(t, job.NoSymbolIndex(), got["referenced_outside_gap"], "-o json carries the gap beside the empty list")
 }
 
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose

@@ -169,19 +169,23 @@ func generatedFile(projects []*types.Project, file string) bool {
 	})
 }
 
-// RenderReferencedOutside writes files as the block [Terms] renders, for a command that
-// prints no terms. Nothing is written for none. Unindexed, no symbol index answered and none
-// would read as nothing outside using the write paths, so a line saying the list is unknown
-// is written in its place.
-func RenderReferencedOutside(w io.Writer, files []ReferencedFile, indexed bool) {
-	if !indexed {
-		fmt.Fprintf(w, "referenced outside the write paths: unknown, no symbol index answered; `%s` builds one\n", hint.GraphBuild)
-		return
-	}
-	renderBlock(w, referencedHeading, referencedLines(files))
+// NoSymbolIndex is the gap a referenced-outside answer carries when no symbol index
+// answered: an empty list then reads the same as nothing outside using the write paths.
+func NoSymbolIndex() string {
+	return fmt.Sprintf("no symbol index answered; `%s` builds one", hint.GraphBuild)
 }
 
-func referencedLines(files []ReferencedFile) []string {
+// RenderReferencedOutside writes files as the block [Terms] renders, for a command that
+// prints no terms. A non-empty gap says why the list is unknown and is written in its
+// place. Nothing is written for no files and no gap.
+func RenderReferencedOutside(w io.Writer, files []ReferencedFile, gap string) {
+	renderBlock(w, referencedHeading, referencedLines(files, gap))
+}
+
+func referencedLines(files []ReferencedFile, gap string) []string {
+	if gap != "" {
+		return []string{"unknown, " + gap}
+	}
 	if len(files) == 0 {
 		return nil
 	}

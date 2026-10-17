@@ -86,6 +86,8 @@ tax() { echo $(( $1 / 10 )); }
 -- fork.out --
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- shell.out --
 advise
 -- ls-overlap.out --
@@ -120,6 +122,9 @@ prices carry a currency code
 write paths
   pricing/format.sh
   checkout/tax.sh
+
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 
 projects
   .

@@ -98,6 +98,8 @@ total() { echo $(( $1 + $2 )); }
 -- fork.out --
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- ls-declared.out --
 JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
 refactor/pricing  -       declared  standard  1      alone     magus run test .
@@ -117,6 +119,9 @@ totals are computed in cents
 
 write paths
   pricing/total.sh
+
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 
 projects
   .

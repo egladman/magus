@@ -57,6 +57,8 @@ stdout '^  write_paths \+docs/manpage/\*\.md$'
 -- fork.out --
 forked flags/shell, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/shell` and takes it with `magus job exec flags/shell`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+referenced outside the write paths: files that use what the write paths define
+  unknown, no symbol index answered; `magus graph build` builds one
 -- widen.json --
 {"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."}}

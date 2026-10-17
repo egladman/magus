@@ -86,6 +86,10 @@ func TestTermsRendersReferencedOutsideAfterThePaths(t *testing.T) {
 	assert.Contains(t, got, "\n"+referencedHeading+"\n  internal/ledger/x_test.go (tests internal/ledger/x.go, 2 reference(s))\n")
 	assert.Less(t, strings.Index(got, "write paths"), strings.Index(got, referencedHeading))
 	assert.Less(t, strings.Index(got, referencedHeading), strings.Index(got, "the only check you run"))
+
+	unknown := NewTerms(briefRow(), TermsFacts{ReferencedOutsideGap: NoSymbolIndex()}).String()
+	assert.Contains(t, unknown, "\n"+referencedHeading+"\n  unknown, "+NoSymbolIndex()+"\n",
+		"an unindexed graph says the list is unknown rather than dropping the heading")
 }
 
 // The grouping history renders only when it was read, and a lens with nothing for the

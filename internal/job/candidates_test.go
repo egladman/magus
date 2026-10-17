@@ -95,12 +95,12 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 	t.Parallel()
 
 	var empty strings.Builder
-	RenderReferencedOutside(&empty, nil, true)
+	RenderReferencedOutside(&empty, nil, "")
 	assert.Empty(t, empty.String(), "nothing is written for none")
 
 	var unknown strings.Builder
-	RenderReferencedOutside(&unknown, nil, false)
-	assert.Equal(t, "referenced outside the write paths: unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one\n", unknown.String(),
+	RenderReferencedOutside(&unknown, nil, NoSymbolIndex())
+	assert.Equal(t, referencedHeading+"\n  unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one\n", unknown.String(),
 		"an unindexed graph says the list is unknown rather than empty")
 
 	files := []ReferencedFile{{File: "a_test.go", Count: 2, Uses: []string{"a.go"}}}
@@ -108,7 +108,7 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 		files = append(files, ReferencedFile{File: fmt.Sprintf("f%02d.go", i), Count: 1, Uses: []string{"a.go#Run"}})
 	}
 	var out strings.Builder
-	RenderReferencedOutside(&out, files, true)
+	RenderReferencedOutside(&out, files, "")
 	got := out.String()
 
 	assert.True(t, strings.HasPrefix(got, referencedHeading+"\n  a_test.go (tests a.go, 2 reference(s))\n  f00.go (uses a.go#Run, 1 reference(s))\n"), got)
