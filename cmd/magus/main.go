@@ -72,7 +72,23 @@ func main() {
 	// launcher, which must confine itself and exec the child before anything else runs.
 	magus.MaybeLaunchSandbox()
 	relaxStartupGC(startupGCWindow)
+	// Here and not in runCLI: testscript drives runCLI in process, where the width is the
+	// test binary's own.
+	if schedulesSteps(os.Args[1:]) {
+		spawn.RestoreGoWidth()
+	}
 	os.Exit(runCLI())
+}
+
+// schedulesSteps reports whether args name a verb that seats its own steps, and so takes
+// claims of its own rather than running inside the parent step's seat. `ci` is a target
+// these verbs reach, not a verb.
+func schedulesSteps(args []string) bool {
+	switch sub, _ := peekSub(expandVerbosityArgs(args)); sub {
+	case "run", "affected":
+		return true
+	}
+	return false
 }
 
 // runCLI is the CLI entry point as a function returning an exit code, so both main

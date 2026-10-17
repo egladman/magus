@@ -175,6 +175,21 @@ func TestPeekSubConsumesTheShortGlobalValues(t *testing.T) {
 	}
 }
 
+// Only the verbs that seat their own steps drop the width a parent step seated this
+// process at; any other verb is that step's tool, and the seat counted its work.
+func TestSchedulesStepsNamesTheVerbsThatSeatTheirOwnSteps(t *testing.T) {
+	for _, args := range [][]string{{"run", "ci", "."}, {"-v", "affected", "ci"}, {"-C", "/ws", "run", "test"}} {
+		if !schedulesSteps(args) {
+			t.Errorf("schedulesSteps(%v) = false, want true", args)
+		}
+	}
+	for _, args := range [][]string{{"query", "run"}, {"describe", "job", "x"}, {}, {"--version"}} {
+		if schedulesSteps(args) {
+			t.Errorf("schedulesSteps(%v) = true, want false", args)
+		}
+	}
+}
+
 // TestPeekSubRecognizesVersion pins `magus --version`: peekSub used to treat
 // --version like any other dash-prefixed token (skip it, keep scanning for a
 // subcommand), so `magus --version` alone found no subcommand, fell through to
