@@ -613,6 +613,16 @@ jobs:
           artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
           artifact-commit: ${{ github.sha }}
 
+      # Each job gets a fresh runner. mise provides the released indexers, while
+      # scip-buzz is built from this checkout for both the PR and base graph.
+      - name: Install and verify SCIP indexers
+        working-directory: libs/scipbuzz
+        run: |
+          go install ./cmd/scip-buzz
+          scip-go --version
+          scip-buzz --version
+          scip-typescript --version
+
       # Symbols, for BOTH sides. Without an index of this tree every file reads as visibility
       # unknown and the exported-api advisor says nothing at all, which is what it has been
       # doing here; without one of the merge base there is nothing to compare a signature
@@ -691,6 +701,16 @@ jobs:
           artifact: ${{ needs.plan.outputs.magus_artifact }}
           artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
           artifact-commit: ${{ github.sha }}
+
+      # This is a fresh runner, not the plan job: install the checkout's indexer
+      # before graph build asks every symbol-capable project to use it.
+      - name: Install and verify SCIP indexers
+        working-directory: libs/scipbuzz
+        run: |
+          go install ./cmd/scip-buzz
+          scip-go --version
+          scip-buzz --version
+          scip-typescript --version
 
       # A project whose indexer fails is reported and skipped, not fatal. The step below
       # is what refuses: with no index it fails, and a partial one fails on whatever
