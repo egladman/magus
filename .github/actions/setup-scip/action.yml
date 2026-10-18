@@ -10,7 +10,12 @@ runs:
       shell: bash
       working-directory: libs/scipbuzz
       run: |
+        scip_bin="$(go env GOPATH)/bin"
         go install ./cmd/scip-buzz
+        # `go install` writes outside Mise's shims. Make this checkout-built indexer
+        # available to this step and every later step in the job, just like Mise tools.
+        printf '%s\n' "$scip_bin" >> "$GITHUB_PATH"
+        export PATH="$scip_bin:$PATH"
         scip-go --version
         scip-buzz --version
         scip-typescript --version
