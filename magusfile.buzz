@@ -2274,6 +2274,9 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // Runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its
 // cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
 export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
+    // The custom linters read Go sources that format may rewrite. Keep the reader after
+    // that writer whenever lint runs on its own as well as under the CI composition.
+    ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/conventions/go.mod", "libs/conventions/go.sum",
