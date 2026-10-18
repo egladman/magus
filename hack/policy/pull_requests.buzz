@@ -9,8 +9,10 @@
 // denied, every one listed with its rule; one decided advise is told once per pull request.
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
 // This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
-// shape past the lead, the areas the diff touches and the title. When the text cannot be
-// read, the whole line is judged for credit and typography instead.
+// shape past the lead, the areas the diff touches, an unfinished-work checklist and the
+// title. A Not verified section makes its outstanding work GitHub task-list items, so a
+// draft's next steps are legible and cannot look finished. When the text cannot be read,
+// the whole line is judged for credit and typography instead.
 //
 // A description gets a word budget that grows with the change, counted after its lead so a
 // cut never removes the outcome or how the work came up: W = baseWords + wordsPerChange * U,
@@ -121,6 +123,8 @@ final heading = $"^ {0,3}#{1,6}(\s|$)";
 final bullet = $"^\s*([-*+]|[0-9]+[.)])\s";
 final codeSpan = $"`[^`]*`";
 final sentenceEnd = $"[.!?]+(\s|$)";
+final notVerifiedHeading = $"^#{1,6}\s+not verified\s*$";
+final uncheckedTask = $"^\[ \]\s+\S";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
 final maxCitedRefs = 10;
@@ -978,6 +982,43 @@ fun listItems(list: Block) > [str] {
     return items;
 }
 
+// unfinishedChecklistProblems makes a Not verified section an explicit list of work that
+// remains. GitHub renders an unchecked Markdown task as both a visible status and a task a
+// reviewer can follow; prose or ordinary bullets look too much like finished work.
+fun unfinishedChecklistProblems(body: str) > [str] {
+    final problems = mut [<str>];
+    var notVerified = false;
+    var hasEntry = false;
+    foreach (b in splitBlocks(body)) {
+        if (b.kind == "heading") {
+            if (notVerified and !hasEntry) {
+                problems.append("the Not verified section is empty: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
+            }
+            notVerified = notVerifiedHeading.match(b.lines[0].trim().lower()) != null;
+            hasEntry = false;
+            continue;
+        }
+        if (!notVerified or b.kind == "code") {
+            continue;
+        }
+        if (b.kind != "list") {
+            problems.append("the Not verified section uses prose: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
+            notVerified = false;
+            continue;
+        }
+        foreach (item in listItems(b)) {
+            hasEntry = true;
+            if (uncheckedTask.match(item) == null) {
+                problems.append("a Not verified entry is not an unchecked GitHub task: write `- [ ] {item}`");
+            }
+        }
+    }
+    if (notVerified and !hasEntry) {
+        problems.append("the Not verified section is empty: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
+    }
+    return problems;
+}
+
 // sentencesIn counts sentence ends outside code spans, so `v0.4.3` or `a.b` is not one.
 fun sentencesIn(text: str) > int {
     final n = (sentenceEnd.matchAll(codeSpan.replaceAll(text, with: "")) ?? [<[str]>]).len();
@@ -1134,6 +1175,9 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
         }
         foreach (question in areaQuestions(unnamedAreas(read.areas, text: text))) {
             advice.append(question);
+        }
+        foreach (problem in unfinishedChecklistProblems(t.body!)) {
+            problems.append(problem);
         }
     }
     if (t.kind == descriptionKind and t.title != null and t.title! != "") {
@@ -2224,7 +2268,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
         lead + "\n\nInside the key:\n- The digest.\n- The platform.\n\nA test pins both.",
         lead + "\n\n- Pins it.\n\n```\nmagus run build\n```",
         lead + "\n\n- Pins it.\n\n## Why this approach\n\nA per-process cache suited one worker. It stops holding at eight.\n\n"
-            + "## Not verified\n\nLinux, which CI runs.",
+            + "## Not verified\n\n- [ ] Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: unknownFacts());
         std\assert(v.decision == "allow", message: "{body}: {v.reason}");
@@ -2314,6 +2358,17 @@ test "other commands and a line that only mentions gh pr create stay silent" {
 test "no message sends the reader to a skill" {
     final reason = judgedReason("Pin the key", body: "Pins the key - for now.");
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
+}
+
+test "a Not verified section uses unchecked GitHub tasks" {
+    final plain = judgeText(Text{ kind = descriptionKind, title = goodTitle,
+        body = "The fix is ready for review.\n\n## Not verified\n- The full CI gate still needs to pass." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(plain.denies.len() == 1 and plain.denies[0].indexOf("unchecked GitHub task") != null, message: "{plain.denies}");
+    final tasks = judgeText(Text{ kind = descriptionKind, title = goodTitle,
+        body = "The fix is ready for review.\n\n## Not verified\n- [ ] The full CI gate still needs to pass." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(tasks.denies.len() == 0, message: "{tasks.denies}");
 }
 
 test "the example a denial teaches passes proofread and this rule" {

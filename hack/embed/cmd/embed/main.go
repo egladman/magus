@@ -177,12 +177,19 @@ func runTexts(args []string) error {
 	if err := mix.addCornstack(*cache, skipped, *ratio, *maxBytes); err != nil {
 		return err
 	}
+	return writeTextsArtifacts(&mix, records, files, repo, *rev, *cache, *out, *runsPath)
+}
+
+// writeTextsArtifacts persists a completed text mix and records the run after every input
+// text has passed decontamination.
+func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string][]byte, repo int, rev, cache, out, runsPath string) error {
+	d := mix.decontam
 	sortByHash(mix.texts)
-	digest, err := mix.write(*out)
+	digest, err := mix.write(out)
 	if err != nil {
 		return err
 	}
-	if err := writeDropped(filepath.Join(*out, "dropped.jsonl"), d.dropped); err != nil {
+	if err := writeDropped(filepath.Join(out, "dropped.jsonl"), d.dropped); err != nil {
 		return err
 	}
 	var holdout [][]byte
@@ -196,14 +203,14 @@ func runTexts(args []string) error {
 		return err
 	}
 	line := textsLine{
-		Kind: "texts", Rev: *rev, TextsSHA256: digest, TextsFile: relativize(*cache, filepath.Join(*out, "texts.jsonl")),
+		Kind: "texts", Rev: rev, TextsSHA256: digest, TextsFile: relativize(cache, filepath.Join(out, "texts.jsonl")),
 		Texts: len(mix.texts), Excluded: mix.excluded, Decontam: d.report, Forced: forced,
 	}
-	if err := appendLine(*runsPath, line); err != nil {
+	if err := appendLine(runsPath, line); err != nil {
 		return err
 	}
 	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
-		*rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
+		rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
 	fmt.Printf("train files left out of the texts: %v; dropped as eval repeats: %v, by kind/reason/set %v; %d of %d eval grams are boilerplate\n",
 		mix.excluded, d.report.Dropped, d.report.DroppedBy, d.report.CommonGrams, d.report.Grams)
 	fmt.Printf("forced tokens: %d, %d in the training texts, %d only in holdout files, %d in neither\n",
