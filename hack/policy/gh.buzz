@@ -15,9 +15,9 @@ final ciWatchDenial = "watching CI costs a wake-up per completion and buys nothi
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
 
-final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole board at once:\n"
-    + "  {board}\n"
-    + "One call answers every open pull request, and green changes nothing: the human merges.";
+final ciStatusDenial = "a per-pull-request CI status is not evidence that its commands ran; inspect the failing job: "
+    + "`gh run view <run-id> --log`, then act on that output.\n"
+    + "Use the board only for a one-shot overview: `{board}`.";
 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
@@ -47,6 +47,9 @@ final prWatchDenial = "watching a pull request's state costs a call per pass and
 export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool, line: str = "") > GuardVerdict {
     final calls = ghCalls(programs);
     foreach (call in calls) {
+        if (readsOneCI(call)) {
+            return magus\guard.deny(ciStatusDenial);
+        }
         if (blocksOnCI(call)) {
             return magus\guard.deny(ciWatchDenial);
         }
@@ -63,12 +66,6 @@ export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool
     foreach (call in calls) {
         if (pollsQueue(call)) {
             if (once("queue-poll")) { return magus\guard.advise(queuePollAdvice); }
-            return magus\guard.allow();
-        }
-    }
-    foreach (call in calls) {
-        if (readsOneCI(call)) {
-            if (once("ci-batch-poll")) { return magus\guard.advise(ciBatchAdvice); }
             return magus\guard.allow();
         }
     }
@@ -100,14 +97,14 @@ fun ghCalls(programs: [helpers\Program]) > [GhCall] {
     return calls;
 }
 
-// blocksOnCI: `gh run watch`, the --watch form of `gh run view` and `gh pr checks`, and any
+// blocksOnCI: `gh run watch`, the --watch form of `gh run view`, and any
 // CI or queue read a loop or watch repeats. Reading a result that already exists is left
 // to the advisories: the rule is about the WAITING.
 fun blocksOnCI(call: GhCall) > bool {
     if (runs(call, first: "run", second: "watch")) {
         return true;
     }
-    if (helpers\hasFlag(call.args, long: "--watch") and (runs(call, first: "run", second: "view") or runs(call, first: "pr", second: "checks"))) {
+    if (helpers\hasFlag(call.args, long: "--watch") and runs(call, first: "run", second: "view")) {
         return true;
     }
     return call.repeats and (readsOneCI(call) or pollsQueue(call));
@@ -249,9 +246,7 @@ test "a gh call that blocks until CI finishes is denied" {
     foreach (argv in [
         ["gh", "run", "watch", "34069443069"],
         ["gh", "run", "watch", "34069443069", "--exit-status", "--interval", "60"],
-        ["gh", "pr", "checks", "183", "--watch"],
         ["gh", "run", "view", "34069443069", "--watch"],
-        ["gh", "--repo", "egladman/magus", "pr", "checks", "183", "--watch=true"],
     ]) {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
@@ -261,9 +256,8 @@ test "a gh call that blocks until CI finishes is denied" {
 }
 
 test "a CI read that a loop or watch repeats is a watch too" {
-    final looped = judged(helpers\request([["loop:", "gh", "pr", "checks", "183"], ["loop:", "sleep", "30"]]), once: helpers\counter());
-    std\assert(looped.decision == "deny", message: "a while loop over gh pr checks");
-    std\assert(ask(["watch", "-n", "30", "gh", "pr", "view", "183", "--json", "statusCheckRollup"]).decision == "deny", message: "the watch program over gh pr view");
+    final looped = judged(helpers\request([["loop:", "gh", "run", "view", "34069443069", "--watch"], ["loop:", "sleep", "30"]]), once: helpers\counter());
+    std\assert(looped.decision == "deny", message: "a while loop over gh run view");
 }
 
 test "watching the merge queue's runs is denied, naming the queue" {
@@ -278,19 +272,17 @@ test "watching the merge queue's runs is denied, naming the queue" {
     }
 }
 
-test "reading one pull request's CI is advised once per session" {
-    final once = helpers\counter();
+test "per-pull-request CI status reads are denied in favor of the job log" {
     foreach (argv in [
         ["gh", "pr", "checks", "183"],
+        ["gh", "pr", "checks", "183", "--watch"],
         ["gh", "pr", "view", "183", "--json", "state,statusCheckRollup"],
         ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs"],
     ]) {
-        std\assert(ask(argv).decision == "advise", message: argv.join(" "));
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("gh run view <run-id> --log") != null, message: v.reason);
     }
-    final first = judged(helpers\request([["gh", "pr", "checks", "183"]]), once: once);
-    std\assert(first.decision == "advise", message: "the first read is advised");
-    std\assert(first.reason.indexOf(board) != null, message: "names the board");
-    std\assert(judged(helpers\request([["gh", "pr", "checks", "184"]]), once: once).decision == "allow", message: "and only once");
 }
 
 test "polling the merge queue through GitHub is advised once per session" {
@@ -299,7 +291,6 @@ test "polling the merge queue through GitHub is advised once per session" {
         ["gh", "run", "list", "--workflow", "queue.yaml"],
         ["gh", "run", "list", "-w", "queue-apply.yaml", "--limit", "5"],
         ["gh", "pr", "view", "212", "--json", "labels", "--jq", ".labels[] | select(.name == \"queue\")"],
-        ["gh", "pr", "view", "212", "--json", "statusCheckRollup", "--jq", ".statusCheckRollup[] | select(.context == \"magus/queue\")"],
     ]) {
         final v = ask(argv);
         std\assert(v.decision == "advise", message: argv.join(" "));

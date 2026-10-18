@@ -169,8 +169,9 @@ jobs:
       # uses it. Version probes make a missing PATH entry fail here, not midway
       # through generation with a partial index.
       - name: Install and verify SCIP indexers
+        working-directory: libs/scipbuzz
         run: |
-          go install ./libs/scipbuzz/cmd/scip-buzz
+          go install ./cmd/scip-buzz
           scip-go --version
           scip-buzz --version
           scip-typescript --version
