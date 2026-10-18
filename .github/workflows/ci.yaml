@@ -212,6 +212,13 @@ jobs:
       #
       # Before the replay step, which runs under rw and would rewrite a drifted file
       # before this gate could compare it.
+      # Some generators, notably hack/embed, read the symbol index as an input.
+      # Build it in this job before generate, rather than relying on the later
+      # advisor/diagram jobs, which run in separate runners and cannot populate
+      # this checkout's index.
+      - name: Build the symbol index for generation
+        run: magus graph build --no-sessions
+
       - id: plan
         name: Compute shard matrix
         env:
