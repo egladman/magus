@@ -21,6 +21,13 @@ type rebuildingWorkspace struct {
 	in       knowledge.Inputs
 	gaps     []types.KnowledgeSymbolGap
 	probed   bool
+	freshen  error
+	calls    int
+}
+
+func (f *rebuildingWorkspace) FreshenSymbolIndexes(context.Context) error {
+	f.calls++
+	return f.freshen
 }
 
 func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
@@ -44,6 +51,21 @@ func indexWorkspace(t *testing.T) *rebuildingWorkspace {
 }
 
 func TestMagusSymbolIndexDigest(t *testing.T) {
+	t.Run("freshens indexes before reading the digest", func(t *testing.T) {
+		ws := indexWorkspace(t)
+		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws))
+		require.NoError(t, err)
+		assert.Equal(t, 1, ws.calls)
+	})
+
+	t.Run("does not read a digest when indexes cannot be freshened", func(t *testing.T) {
+		ws := indexWorkspace(t)
+		ws.freshen = assert.AnError
+		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws))
+		require.ErrorIs(t, err, assert.AnError)
+		assert.Equal(t, 1, ws.calls)
+	})
+
 	t.Run("no index is not indexed", func(t *testing.T) {
 		got, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), indexWorkspace(t)))
 		require.NoError(t, err)

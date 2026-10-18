@@ -330,7 +330,9 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // Two stages so build waits for lint's format instead of racing it (MGS4008).
-    ctx.needs(generate, lint, test);
+    // diagrams-generate belongs to this gate: symbol_digest_generate freshens the index
+    // it reads, so CI needs no separate figures runner or pre-built graph.
+    ctx.needs(generate, lint, test, diagrams_generate);
     ctx.needs(build);
 }
 
@@ -354,8 +356,8 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // diagrams-generate lays every figure out from the knowledge graph and fails when the
-// committed files move. It is not a generate stage: generate runs where no symbol index
-// exists. The files stay in docs because writing the root's assets/gen is MGS1012.
+// committed files move. It is a CI stage rather than a generate stage because it writes
+// docs assets. The files stay in docs because writing the root's assets/gen is MGS1012.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
