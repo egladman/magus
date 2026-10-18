@@ -928,6 +928,7 @@ fun splitBlocks(body: str) > [Block] {
         if (current.len() > 0) {
             blocks.append(Block{ kind = kind, lines = current });
             current = mut [<str>];
+            kind = "";
         }
     };
     foreach (line in body.split("\n")) {
