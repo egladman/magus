@@ -164,6 +164,17 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
+      # mise installs the released Go and TypeScript indexers. scip-buzz is this
+      # repository's own indexer, so build the exact checkout before graph build
+      # uses it. Version probes make a missing PATH entry fail here, not midway
+      # through generation with a partial index.
+      - name: Install and verify SCIP indexers
+        run: |
+          go install ./libs/scipbuzz/cmd/scip-buzz
+          scip-go --version
+          scip-buzz --version
+          scip-typescript --version
+
       # Reported to the gate instead of failing this job, which is not leniency: the run
       # still goes red, and it goes red with the shard results in hand.
       #
