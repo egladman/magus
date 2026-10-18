@@ -1,21 +1,14 @@
 name: Setup SCIP indexers
-description: Install the checkout's SCIP indexer and verify every indexer Magus declares.
+description: Verify every Mise-pinned SCIP indexer Magus declares.
 
 runs:
   using: composite
   steps:
-    # scip-go and scip-typescript come from the caller's pinned mise environment. scip-buzz
-    # is built from this checkout so graph preparation and target execution use one indexer set.
+    # Every indexer is pinned in mise.toml; this catches a runner whose environment did
+    # not activate the same toolchain Magus will use for target execution.
     - name: Install and verify SCIP indexers
       shell: bash
-      working-directory: libs/scipbuzz
       run: |
-        scip_bin="$(go env GOPATH)/bin"
-        go install ./cmd/scip-buzz
-        # `go install` writes outside Mise's shims. Make this checkout-built indexer
-        # available to this step and every later step in the job, just like Mise tools.
-        printf '%s\n' "$scip_bin" >> "$GITHUB_PATH"
-        export PATH="$scip_bin:$PATH"
         scip-go --version
         scip-buzz --version
         scip-typescript --version
