@@ -28,8 +28,9 @@ import (
 // release it sooner.
 //
 // Callers may set Env, Dir, stdio and SysProcAttr, and append to ExtraFiles: the
-// command sees appended entry i at descriptor 3+LauncherFiles+i, and descriptor 3
-// closed. Args ends with the command's argv, name then args, and a caller may rewrite
+// command sees appended entry i at descriptor 3+LauncherFiles+i. The launcher closes its
+// ruleset descriptor before exec; the command's runtime may subsequently reuse descriptor 3.
+// Args ends with the command's argv, name then args, and a caller may rewrite
 // that name to change the argv[0] the command sees. Replacing ExtraFiles, Path or the
 // rest of Args makes the launcher refuse to run name. A bare name is resolved against
 // PATH now, as exec.Command does.
