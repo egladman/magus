@@ -100,9 +100,11 @@ func launch(args []string) error {
 	if err := restrictSelf(rulesetFD); err != nil {
 		return err
 	}
-	// Keep the ruleset's slot reserved until exec: closing it here lets exec setup reuse
-	// descriptor 3, violating Command's promise that the command never sees a ruleset.
-	unix.CloseOnExec(rulesetFD)
+	// syscall.Exec does not perform os/exec descriptor setup. Close the launcher's
+	// ruleset descriptor explicitly so the command never inherits descriptor 3.
+	if err := unix.Close(rulesetFD); err != nil {
+		return fmt.Errorf("sandbox: launcher: close ruleset descriptor: %w", err)
+	}
 	if err := syscall.Exec(path, argv, os.Environ()); err != nil { //nolint:gosec // G702: the command the parent chose and resolved, now under the ruleset
 		return fmt.Errorf("sandbox: launcher: exec %s: %w", path, err)
 	}
