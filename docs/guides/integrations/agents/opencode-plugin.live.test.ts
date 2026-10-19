@@ -177,23 +177,19 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
   );
 });
 
-// go test ./... now has an exact magus equivalent (magus run go::go-test) and is
-// DENIED, not advised - the plan this test was written from predates that rule.
-// ci-batch-poll advises once per state directory, and this file's is fresh.
-test("live: bash arm advises on gh pr checks and appends non-empty context", { skip }, async () => {
+test("live: bash arm directs CI status reads to failure artifacts", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1", sessionID: "s1" },
-      { args: { command: "gh pr checks 5" } },
+    await assert.rejects(
+      h["tool.execute.before"](
+        { tool: "bash", callID: "c1", sessionID: "s1" },
+        { args: { command: "gh pr checks 5" } },
+      ),
+      /hack\/ci\/show-failures\.buzz/,
     );
   });
-  assert.deepEqual(warnings, [], "an advise is delivered to the model, not logged for the person");
-
-  const result = { output: "checks" };
-  await h["tool.execute.after"]({ callID: "c1" }, result);
-  assert.match(result.output, /\[magus guard\] .+\S/);
+  assert.deepEqual(warnings, [], "the denial reaches the call without a second warning");
 });
 
 test("live: edit arm passes on a path that is not a declared output", { skip }, async () => {

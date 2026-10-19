@@ -8,6 +8,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestFailureExcerptFindsFileLevelLintFindingPastAdvice(t *testing.T) {
+	t.Parallel()
+	var log strings.Builder
+	for i := range 100 {
+		fmt.Fprintf(&log, "advice: shared-reach source: attr.go#Error measures %d, past 7\n", i)
+	}
+	const finding = "hack/lint/policy.buzz: sanctions file:internal/textembed/eval_test.go, which no longer departs [policy]"
+	const remedy = "    Delete the entry: the list only shrinks."
+	log.WriteString(finding + "\n" + remedy + "\n")
+	got, omitted := failureExcerpt([]byte(log.String()), 6)
+	assert.Equal(t, finding+"\n"+remedy+"\n", string(got))
+	assert.Equal(t, 100, omitted)
+}
+
 func TestFailureExcerptFindsEarlyDiagnostic(t *testing.T) {
 	t.Parallel()
 	data := []byte("preparing suite\n# example.test\nlink: fingerprint mismatch: got A, want B\nok package/one\nok package/two\nFAIL\n")

@@ -1,4 +1,4 @@
-package textembed_test
+package textembed
 
 import (
 	"bytes"
@@ -47,58 +47,6 @@ const (
 	bm25K1        = 1.2
 	bm25B         = 0.75
 )
-
-type externalText struct {
-	ID   string `json:"id"`
-	Text string `json:"text"`
-}
-
-type externalSubset struct {
-	name    string
-	queries []externalText
-	docs    []externalText
-	qrels   map[string]map[string]int
-	notes   []string
-}
-
-// TestExternalEval is the external benchmark: one harness and one subset list for
-// every system, each scored from its TREC run by rankeval.ReadRun, never against a
-// model card's numbers. It exports every subset under the cache root's bench/<subset>/,
-// runs the lexical arms and potion-code-16M-v2, fuses each lexical arm with potion and
-// with every run `embed bench` left there, and writes bench/eval.md. MAGUS_EXTERNAL_EVAL names the subsets to run,
-// comma separated, or "all"; unset, the test skips, since it reads gigabyte-scale
-// downloads no fixture can stand in for.
-func TestExternalEval(t *testing.T) {
-	want := os.Getenv("MAGUS_EXTERNAL_EVAL")
-	if want == "" {
-		t.Skip("MAGUS_EXTERNAL_EVAL is unset; set it to \"all\" or a comma-separated subset list to run the external benchmark")
-	}
-	subsets := externalSubsets
-	if want != "all" {
-		subsets = strings.Split(want, ",")
-		for _, s := range subsets {
-			require.Contains(t, externalSubsets, s, "MAGUS_EXTERNAL_EVAL names an unknown subset")
-		}
-	}
-	cache, err := xdg.CacheDir()
-	require.NoError(t, err)
-	root := filepath.Join(cache, "magus-embed")
-	data, bench := filepath.Join(root, "data"), filepath.Join(root, "bench")
-	potion, err := loadPotion(filepath.Join(root, "hf", "hub", "models--minishlab--potion-code-16M-v2", "snapshots", potionRevision))
-	require.NoError(t, err)
-
-	var results []externalResult
-	for _, name := range subsets {
-		s, err := loadExternalSubset(data, name)
-		require.NoError(t, err, name)
-		res, err := runExternalSubset(filepath.Join(bench, name), s, potion)
-		require.NoError(t, err, name)
-		results = append(results, res)
-	}
-	report := externalReport(bench, results)
-	require.NoError(t, os.WriteFile(filepath.Join(bench, "eval.md"), []byte(report), 0o644))
-	t.Log("\n" + report)
-}
 
 type externalResult struct {
 	subset  externalSubset
@@ -815,7 +763,8 @@ func isControlRune(r rune) bool {
 // every Unicode P category.
 func isBertPunct(r rune) bool {
 	if r < 0x80 {
-		return r > ' ' && r < 0x7f && !('0' <= r && r <= '9' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z')
+		return r > ' ' && r < 0x7f &&
+			(r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
 	}
 	return unicode.IsPunct(r)
 }
@@ -898,7 +847,7 @@ func loadExternalSubset(data, name string) (externalSubset, error) {
 		if err != nil {
 			return externalSubset{}, err
 		}
-		return dedupeExternalCorpus(s), nil
+		return dedupeDocuments(s), nil
 	case "csn-python":
 		return loadCodeSearchNet(data, "python")
 	case "csn-go":
@@ -1028,16 +977,6 @@ func loadCodeToCode(data, lang string) (externalSubset, error) {
 	return s, checkQrels(s)
 }
 
-func addQrel(qrels map[string]map[string]int, q, d string, grade int) {
-	if grade <= 0 {
-		return
-	}
-	if qrels[q] == nil {
-		qrels[q] = map[string]int{}
-	}
-	qrels[q][d] = max(qrels[q][d], grade)
-}
-
 // checkQrels refuses a subset whose qrels name a query or doc it does not hold.
 func checkQrels(s externalSubset) error {
 	queries, docs := map[string]bool{}, map[string]bool{}
@@ -1089,32 +1028,6 @@ func columnMap(cols [][]string) map[string]string {
 		m[id] = cols[1][i]
 	}
 	return m
-}
-
-// dedupeExternalCorpus collapses docs with identical text onto the smallest id among
-// them before indexing, and maps the qrels onto it at the highest grade. Collapsing
-// after ranking instead would shrink a top-100 list below 100 unique docs.
-func dedupeExternalCorpus(s externalSubset) externalSubset {
-	canonical, first := map[string]string{}, map[string]string{}
-	var docs []externalText
-	for _, d := range s.docs {
-		if id, ok := first[d.Text]; ok {
-			canonical[d.ID] = id
-			continue
-		}
-		first[d.Text], canonical[d.ID] = d.ID, d.ID
-		docs = append(docs, d)
-	}
-	qrels := map[string]map[string]int{}
-	for q, gold := range s.qrels {
-		for d, g := range gold {
-			addQrel(qrels, q, canonical[d], g)
-		}
-	}
-	return externalSubset{
-		name: s.name + "-dedup", queries: s.queries, docs: docs, qrels: qrels,
-		notes: append(slices.Clone(s.notes), fmt.Sprintf("%d docs collapsed onto %d distinct texts.", len(s.docs), len(docs))),
-	}
 }
 
 var (
@@ -1818,6 +1731,45 @@ func (r *thriftReader) skipElement(typ byte) {
 	r.skip(typ)
 }
 
+// TestExternalEval is the external benchmark: one harness and one subset list for
+// every system, each scored from its TREC run by rankeval.ReadRun, never against a
+// model card's numbers. It exports every subset under the cache root's bench/<subset>/,
+// runs the lexical arms and potion-code-16M-v2, fuses each lexical arm with potion and
+// with every run `embed bench` left there, and writes bench/eval.md. MAGUS_EXTERNAL_EVAL names the subsets to run,
+// comma separated, or "all"; unset, the test skips, since it reads gigabyte-scale
+// downloads no fixture can stand in for.
+func TestExternalEval(t *testing.T) {
+	want := os.Getenv("MAGUS_EXTERNAL_EVAL")
+	if want == "" {
+		t.Skip("MAGUS_EXTERNAL_EVAL is unset; set it to \"all\" or a comma-separated subset list to run the external benchmark")
+	}
+	subsets := externalSubsets
+	if want != "all" {
+		subsets = strings.Split(want, ",")
+		for _, s := range subsets {
+			require.Contains(t, externalSubsets, s, "MAGUS_EXTERNAL_EVAL names an unknown subset")
+		}
+	}
+	cache, err := xdg.CacheDir()
+	require.NoError(t, err)
+	root := filepath.Join(cache, "magus-embed")
+	data, bench := filepath.Join(root, "data"), filepath.Join(root, "bench")
+	potion, err := loadPotion(filepath.Join(root, "hf", "hub", "models--minishlab--potion-code-16M-v2", "snapshots", potionRevision))
+	require.NoError(t, err)
+
+	var results []externalResult
+	for _, name := range subsets {
+		s, err := loadExternalSubset(data, name)
+		require.NoError(t, err, name)
+		res, err := runExternalSubset(filepath.Join(bench, name), s, potion)
+		require.NoError(t, err, name)
+		results = append(results, res)
+	}
+	report := externalReport(bench, results)
+	require.NoError(t, os.WriteFile(filepath.Join(bench, "eval.md"), []byte(report), 0o644))
+	t.Log("\n" + report)
+}
+
 func TestExternalHarnessHybridDecoding(t *testing.T) {
 	// An RLE run of five 3s, then one bit-packed group of eight 3-bit values 0..7.
 	b := []byte{5 << 1, 3, 1<<1 | 1, 0b10001000, 0b11000110, 0b11111010}
@@ -1900,10 +1852,14 @@ func TestExternalHarnessDedupeCorpus(t *testing.T) {
 		docs:    []externalText{{"d1", "same"}, {"d2", "other"}, {"d3", "same"}},
 		qrels:   map[string]map[string]int{"q1": {"d3": 1}, "q2": {"d2": 1, "d1": 2}},
 	}
-	got := dedupeExternalCorpus(s)
-	assert.Equal(t, "toy-dedup", got.name)
-	assert.Equal(t, []externalText{{"d1", "same"}, {"d2", "other"}}, got.docs)
-	assert.Equal(t, map[string]map[string]int{"q1": {"d1": 1}, "q2": {"d2": 1, "d1": 2}}, got.qrels)
+	got := dedupeDocuments(s)
+	assert.Equal(t, externalSubset{
+		name:    "toy-dedup",
+		queries: s.queries,
+		docs:    []externalText{{"d1", "same"}, {"d2", "other"}},
+		qrels:   map[string]map[string]int{"q1": {"d1": 1}, "q2": {"d2": 1, "d1": 2}},
+		notes:   []string{"3 docs collapsed onto 2 distinct texts."},
+	}, got)
 }
 
 func TestExternalHarnessLuceneTokens(t *testing.T) {

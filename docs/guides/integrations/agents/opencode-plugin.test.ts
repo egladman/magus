@@ -179,6 +179,8 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
     "--agent-name",
     "opencode",
     "--renders-ask",
+    "--tool-rows",
+    ".opencode/magus/tools",
     "-o",
     "json",
   ]);
@@ -204,6 +206,8 @@ test("a call carries OpenCode's session, so push authority can tell the root fro
     "--agent-name",
     "opencode",
     "--renders-ask",
+    "--tool-rows",
+    ".opencode/magus/tools",
     "-o",
     "json",
     "--session",
@@ -228,6 +232,8 @@ test("a file write is judged on the path input, also over stdin", async () => {
     "--agent-name",
     "opencode",
     "--renders-ask",
+    "--tool-rows",
+    ".opencode/magus/tools",
     "-o",
     "json",
   ]);
@@ -568,6 +574,8 @@ test("a call to magus's MCP server is judged as the tool it names, in the Claude
     "--agent-name",
     "opencode",
     "--renders-ask",
+    "--tool-rows",
+    ".opencode/magus/tools",
     "-o",
     "json",
   ]);

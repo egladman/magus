@@ -6,18 +6,18 @@ import "magus";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 
-// The one command that answers CI for every open pull request.
-final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
+final failureReader = "magus buzz hack/ci/show-failures.buzz -- --commit <pr-head> | magus query output --stdin";
+final failureRunReader = "magus buzz hack/ci/show-failures.buzz -- --run <run-id> | magus query output --stdin";
 
-final ciWatchDenial = "watching CI costs a wake-up per completion and buys nothing; ask for the board once: `{board}`.\n"
+final ciWatchDenial = "read failed targets instead of watching: `{failureReader}`.\n"
     + "Watching buys nothing because GREEN CHANGES NOTHING: "
-    + "the human merges, not you. Poll that command instead while you are acting on a RED run.\n"
+    + "the human merges, not you. Fix the failures the records name.\n"
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
 
-final ciStatusDenial = "a per-pull-request CI status is not evidence that its commands ran; inspect the failing job: "
-    + "`gh run view <run-id> --log`, then act on that output.\n"
-    + "Use the board only for a one-shot overview: `{board}`.";
+final ciStatusDenial = "read the failed targets: `{failureReader}`.\n"
+    + "CI status summaries and raw job logs do not isolate the failed target output. "
+    + "For a known run: `{failureRunReader}`. Select the pull request's current head, not the checkout's HEAD.";
 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
@@ -47,11 +47,11 @@ final prWatchDenial = "watching a pull request's state costs a call per pass and
 export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool, line: str = "") > GuardVerdict {
     final calls = ghCalls(programs);
     foreach (call in calls) {
-        if (readsOneCI(call)) {
-            return magus\guard.deny(ciStatusDenial);
-        }
         if (blocksOnCI(call)) {
             return magus\guard.deny(ciWatchDenial);
+        }
+        if (readsOneCI(call) or readsRunLog(call)) {
+            return magus\guard.deny(ciStatusDenial);
         }
         if (runs(call, first: "pr", second: "merge") and helpers\hasFlag(call.args, long: "--admin")) {
             return magus\guard.deny(adminMergeDenial);
@@ -104,27 +104,40 @@ fun blocksOnCI(call: GhCall) > bool {
     if (runs(call, first: "run", second: "watch")) {
         return true;
     }
-    if (helpers\hasFlag(call.args, long: "--watch") and runs(call, first: "run", second: "view")) {
+    if (helpers\hasFlag(call.args, long: "--watch")
+        and (runs(call, first: "run", second: "view") or runs(call, first: "pr", second: "checks"))) {
         return true;
     }
     return call.repeats and (readsOneCI(call) or pollsQueue(call));
 }
 
-// readsOneCI: one pull request's or one commit's checks, where the board answers them all.
+// Status summaries identify checks, but the failure artifacts carry their captured output.
 fun readsOneCI(call: GhCall) > bool {
     if (runs(call, first: "pr", second: "checks")) {
         return true;
     }
-    if (runs(call, first: "pr", second: "view") and jsonFields(call.args).indexOf("statusCheckRollup") != null) {
+    if ((runs(call, first: "pr", second: "view") or runs(call, first: "pr", second: "list"))
+        and jsonFields(call.args).indexOf("statusCheckRollup") != null) {
         return true;
     }
     final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
     if (ops.len() > 1 and ops[0] == "api") {
+        final endpoint = ops[1].split("?")[0];
         foreach (suffix in ["/check-runs", "/check-suites", "/status", "/statuses"]) {
-            if (ops[1].endsWith(suffix)) { return true; }
+            if (endpoint.endsWith(suffix)) { return true; }
         }
     }
     return false;
+}
+
+fun readsRunLog(call: GhCall) > bool {
+    if (runs(call, first: "run", second: "view")) {
+        return helpers\hasFlag(call.args, long: "--log") or helpers\hasFlag(call.args, long: "--log-failed");
+    }
+    final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
+    final method = helpers\flagValue(call.args, long: "--method", short: "-X") ?? "GET";
+    return ops.len() > 1 and ops[0] == "api" and method.upper() == "GET"
+        and ops[1].split("?")[0].endsWith("/logs");
 }
 
 // pollsQueue: the merge queue's runs or its marks on a pull request, read through GitHub.
@@ -251,7 +264,7 @@ test "a gh call that blocks until CI finishes is denied" {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("GREEN CHANGES NOTHING") != null, message: "keeps the reason");
-        std\assert(v.reason.indexOf(board) != null, message: "names the board");
+        std\assert(v.reason.indexOf(failureReader) != null, message: "names the failure reader");
     }
 }
 
@@ -272,16 +285,24 @@ test "watching the merge queue's runs is denied, naming the queue" {
     }
 }
 
-test "per-pull-request CI status reads are denied in favor of the job log" {
+test "CI status summaries and raw logs name the failure artifact reader" {
     foreach (argv in [
         ["gh", "pr", "checks", "183"],
         ["gh", "pr", "checks", "183", "--watch"],
         ["gh", "pr", "view", "183", "--json", "state,statusCheckRollup"],
+        ["gh", "pr", "list", "--state", "open", "--json", "number,mergeable,statusCheckRollup"],
+        ["gh", "pr", "list", "--json=statusCheckRollup"],
+        ["gh", "run", "view", "34069443069", "--log"],
+        ["gh", "run", "view", "34069443069", "--log-failed"],
         ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs"],
+        ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs?per_page=100"],
+        ["gh", "api", "repos/egladman/magus/actions/jobs/123/logs"],
+        ["gh", "api", "repos/egladman/magus/actions/runs/123/logs?raw=true"],
     ]) {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
-        std\assert(v.reason.indexOf("gh run view <run-id> --log") != null, message: v.reason);
+        std\assert(v.reason.indexOf(failureReader) != null, message: v.reason);
+        std\assert(v.reason.indexOf("gh pr list") == null, message: "does not route back to status summaries");
     }
 }
 
@@ -301,12 +322,13 @@ test "polling the merge queue through GitHub is advised once per session" {
     std\assert(judged(poll, once: once).decision == "allow", message: "only once");
 }
 
-test "the board itself, an unrelated gh run list, and other programs stay silent" {
+test "PR content, artifact retrieval and unrelated programs stay silent" {
     foreach (argv in [
-        ["gh", "pr", "list", "--state", "open", "--json", "number,mergeable,statusCheckRollup"],
+        ["gh", "pr", "list", "--state", "open", "--json", "number,title,headRefOid"],
         ["gh", "run", "list", "--branch", "main", "--limit", "5"],
         ["gh", "run", "list", "--workflow", "ci.yaml"],
-        ["gh", "run", "view", "34069443069", "--log"],
+        ["gh", "run", "download", "34069443069", "--pattern", "magus-logs-*"],
+        ["gh", "api", "repos/egladman/magus/actions/runs/34069443069/artifacts?per_page=100"],
         ["gh", "pr", "view", "183", "--json", "labels"],
         ["watch", "-n", "5", "free", "-m"],
         ["git", "status"],

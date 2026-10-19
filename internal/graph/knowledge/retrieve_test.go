@@ -153,13 +153,15 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	assert.Empty(t, ranking.Skipped)
 	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
 	why := *z.Why
+	why.Seeds = slices.Clone(why.Seeds)
+	slices.Sort(why.Seeds)
 	require.Len(t, why.Terms, 1)
 	assert.Equal(t, types.KnowledgeMatchWhy{
 		Matched: 1,
 		Of:      1,
 		Terms:   []types.KnowledgeTermScore{{Term: "parse", Field: textrank.FieldName, Score: why.Terms[0].Score}},
 		Lists:   []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listGraph, Rank: 1}},
-		Seeds:   []string{"symbol:z", fileID("pkg/y.go"), fileID("pkg/x.go")},
+		Seeds:   []string{fileID("pkg/x.go"), fileID("pkg/y.go"), "symbol:z"},
 		Prior:   1,
 	}, why)
 

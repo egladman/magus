@@ -89,6 +89,12 @@ and 0004 pin and `flags` cannot express.
 
 ## ci/
 
+For GitHub CI failures, select the pull request's current head with `--commit`
+or its run with `--run` in `show-failures.buzz`, then pipe its records to
+`magus query output --stdin`. PR status summaries and raw job logs do not
+isolate the captured output for each failed target. A run without retained
+failure artifacts is reported as such; do not treat that as a passing run.
+
 | script | does | cost |
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |

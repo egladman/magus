@@ -328,7 +328,7 @@ func runAStepUntilKilled(t *testing.T, addr string) int {
 
 // groupAlive reports whether any process is left in group pgid.
 func groupAlive(pgid int) bool {
-	return exec.Command("sh", "-c", `kill -0 -- "-$1" 2>/dev/null`, "sh", strconv.Itoa(pgid)).Run() == nil
+	return exec.Command("sh", "-c", `kill -0 "-$1" 2>/dev/null`, "sh", strconv.Itoa(pgid)).Run() == nil
 }
 
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run

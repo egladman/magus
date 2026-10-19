@@ -174,11 +174,7 @@ export function edited(ms: number): string {
 // because the subject is gone rather than merely changed, and both outrank an unverified
 // anchor, which is an absence of evidence rather than a finding.
 function worstAnchor(n: Note): { label: string; status: Status; count: number } | null {
-  for (const status of [
-    AnchorStatus.DANGLING,
-    AnchorStatus.DRIFTED,
-    AnchorStatus.UNVERIFIED,
-  ]) {
+  for (const status of [AnchorStatus.DANGLING, AnchorStatus.DRIFTED, AnchorStatus.UNVERIFIED]) {
     const hits = n.anchors.filter((a) => a.status === status);
     const copy = ANCHOR_COPY[status];
     if (hits.length > 0 && copy) {

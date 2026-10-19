@@ -24,7 +24,6 @@ export final LANGUAGES = ["go"];
 export final SANCTIONED = {
     "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/magusErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
     "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/inspectErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
-    "file:internal/textembed/external_eval_test.go": "the external harness needs package-private parquet helpers and fixtures",
 };
 
 // THIS is where a finding sends a reader to sanction a departure.

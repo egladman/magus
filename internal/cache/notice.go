@@ -76,6 +76,9 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	rank := make([]int, len(lines))
 	mark := func(i, tier int) {
 		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
+			if strings.HasPrefix(strings.TrimSpace(lines[j]), "advice:") {
+				continue
+			}
 			rank[j] = max(rank[j], tier)
 		}
 	}
@@ -85,7 +88,7 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 		case structuralFailureLine.MatchString(line), findingLine.MatchString(line):
 			mark(i, structuralFailure)
 			matched = true
-		case diagnosticLine.MatchString(line):
+		case diagnosticLine.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "advice:"):
 			mark(i, keywordMatch)
 			matched = true
 		}
@@ -147,7 +150,7 @@ var diagnosticLine = regexp.MustCompile(
 // package-and-duration summary "FAIL\t<pkg>\t<dur>").
 var structuralFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)
 
-// findingLine matches the file:line:col: form every compiler and linter emits, which
+// findingLine matches file diagnostics, with optional line and column numbers, which
 // carries no keyword at all: a golangci-lint finding says "comment uses ... write a
 // colon instead", a tsc one says "Type 'x' is not assignable to 'y'". Neither trips
 // diagnosticLine, so a lint failure used to match NOTHING and fall back to a tail,
@@ -156,4 +159,4 @@ var structuralFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|
 // Anchored, and the extension must be letters, so a timestamp ("13:21:11.393-04:00")
 // and a bare host:port cannot match. The trailing ": " is what separates a real
 // finding from a path someone mentioned in a sentence.
-var findingLine = regexp.MustCompile(`^\s*\S+\.[A-Za-z]+:\d+(:\d+)?: `)
+var findingLine = regexp.MustCompile(`^\s*\S+\.[A-Za-z]+:(\d+(:\d+)?:)? `)

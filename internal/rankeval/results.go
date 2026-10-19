@@ -144,7 +144,13 @@ type worstFirst []Hit
 func (w worstFirst) Len() int           { return len(w) }
 func (w worstFirst) Less(i, j int) bool { return CompareHits(w[i], w[j]) > 0 }
 func (w worstFirst) Swap(i, j int)      { w[i], w[j] = w[j], w[i] }
-func (w *worstFirst) Push(x any)        { *w = append(*w, x.(Hit)) }
+func (w *worstFirst) Push(x any) {
+	hit, ok := x.(Hit)
+	if !ok {
+		panic("rankeval: heap requires a Hit")
+	}
+	*w = append(*w, hit)
+}
 func (w *worstFirst) Pop() any {
 	old := *w
 	h := old[len(old)-1]
@@ -154,7 +160,7 @@ func (w *worstFirst) Pop() any {
 
 func tieHash(doc string) uint64 {
 	h := fnv.New64a()
-	h.Write([]byte(doc))
+	_, _ = h.Write([]byte(doc))
 	return h.Sum64()
 }
 

@@ -3,6 +3,8 @@ package sandbox
 import (
 	"context"
 	"log/slog"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
@@ -66,29 +68,33 @@ func recordCheck(ctx context.Context, access filesystem.Access, err error) {
 
 // RecordEnvDropped reports the number of environment variables p withheld from its
 // frozen BaseEnv, attributed to the current step's project (a no-op when no recorder is
-// on ctx or nothing was dropped), and logs MGS2003 once for this exec of cmd so a
+// on ctx or nothing was dropped), and logs MGS2003 once per target and dropped-name set so a
 // behavior change from a missing variable is traceable
 // (docs/reference/codes/sandbox/MGS2003.md).
 func RecordEnvDropped(ctx context.Context, p *Policy, cmd string) {
 	if p == nil || len(p.EnvDropped) == 0 {
 		return
 	}
-	slog.InfoContext(ctx, types.FormatDiagnostic(types.EnvStripped,
-		"env vars stripped from child process by sandbox (use --log-level=debug to see stripped variable names)"),
-		"cmd", cmd, "stripped_count", len(p.EnvDropped))
-	slog.DebugContext(ctx, types.FormatDiagnostic(types.EnvStripped,
-		"env variable names stripped from child process by sandbox"),
-		"cmd", cmd, "stripped_names", p.EnvDropped)
-	rec := metricsFromContext(ctx)
-	if rec == nil {
+	project, target, _ := journal.StepFromContext(ctx)
+	if rec := metricsFromContext(ctx); rec != nil {
+		rec.RecordSandboxEnvDropped(ctx, project, int64(len(p.EnvDropped)))
+	}
+	names := slices.Clone(p.EnvDropped)
+	slices.Sort(names)
+	// The empty variable name separates these keys from MGS2013's per-variable reads.
+	if !p.withheld.firstReport(project + "\x00" + target + "\x00\x00" + strings.Join(names, "\x00")) {
 		return
 	}
-	project, _, _ := journal.StepFromContext(ctx)
-	rec.RecordSandboxEnvDropped(ctx, project, int64(len(p.EnvDropped)))
+	slog.InfoContext(ctx, types.FormatDiagnostic(types.EnvStripped,
+		"env vars stripped from child process by sandbox (use --log-level=debug to see stripped variable names)"),
+		"cmd", cmd, "stripped_count", len(names), "project", project, "target", target)
+	slog.DebugContext(ctx, types.FormatDiagnostic(types.EnvStripped,
+		"env variable names stripped from child process by sandbox"),
+		"cmd", cmd, "stripped_names", names, "project", project, "target", target)
 }
 
-// withheldReads is the set of (project, target, variable) reads RecordEnvWithheld has
-// already reported. A nil set reports every read: a Policy assembled by hand, as a test
+// withheldReads tracks sandbox environment notices already reported for each target.
+// A nil set reports every event: a Policy assembled by hand, as a test
 // does, has none.
 type withheldReads struct {
 	mu       sync.Mutex

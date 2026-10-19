@@ -130,8 +130,7 @@ const NOTES: NoteSpec[] = [
         kind: AnchorKind.SYMBOL,
         target: "m identity/token/Verify().",
         status: AnchorStatus.DRIFTED,
-        detail:
-          "The anchored code still exists and no longer matches the signature recorded here.",
+        detail: "The anchored code still exists and no longer matches the signature recorded here.",
       },
     ],
     staleness: Staleness.OUTRUN,
