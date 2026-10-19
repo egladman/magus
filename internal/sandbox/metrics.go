@@ -74,8 +74,11 @@ func RecordEnvDropped(ctx context.Context, p *Policy, cmd string) {
 		return
 	}
 	slog.InfoContext(ctx, types.FormatDiagnostic(types.EnvStripped,
-		"env vars stripped from child process by sandbox"),
+		"env vars stripped from child process by sandbox (use --log-level=debug to see stripped variable names)"),
 		"cmd", cmd, "stripped_count", len(p.EnvDropped))
+	slog.DebugContext(ctx, types.FormatDiagnostic(types.EnvStripped,
+		"env variable names stripped from child process by sandbox"),
+		"cmd", cmd, "stripped_names", p.EnvDropped)
 	rec := metricsFromContext(ctx)
 	if rec == nil {
 		return
