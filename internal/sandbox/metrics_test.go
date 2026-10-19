@@ -82,9 +82,29 @@ func TestRecordEnvDroppedLogsMGS2003(t *testing.T) {
 	assert.Contains(t, got, "MGS2003")
 	assert.Contains(t, got, "cmd=go")
 	assert.Contains(t, got, "stripped_count=3")
+	assert.Contains(t, got, "--log-level=debug")
+	assert.NotContains(t, got, "A_KEY")
+	assert.NotContains(t, got, "B_TOKEN")
+	assert.NotContains(t, got, "C_TOKEN")
 
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), nil, "go") }), "sandbox off")
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), &Policy{}, "go") }), "nothing dropped")
+}
+
+func TestRecordEnvDroppedDebugLogsNamesWithoutValues(t *testing.T) {
+	t.Setenv("B_TOKEN", "secret-value-must-not-be-logged")
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	RecordEnvDropped(context.Background(), &Policy{EnvDropped: []string{"A_KEY", "B_TOKEN"}}, "go")
+	got := buf.String()
+	assert.Contains(t, got, "level=DEBUG")
+	assert.Contains(t, got, "MGS2003")
+	assert.Contains(t, got, "cmd=go")
+	assert.Contains(t, got, `stripped_names="[A_KEY B_TOKEN]"`)
+	assert.NotContains(t, got, "secret-value-must-not-be-logged")
 }
 
 // RecordEnvWithheld logs MGS2013 naming the variable and the target, never a value, and
