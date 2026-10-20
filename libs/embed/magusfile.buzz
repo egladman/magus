@@ -1,0 +1,49 @@
+import "magus";
+import "../../hack/magusfile/advisories" as advisories;
+
+import "magus/spell/go";
+
+// The table codec, Embed, Index, Search and rankeval: pure Go that magus core imports.
+// The trainer under train/ is its own module, so GoMLX and cgo stay out of this one.
+magus\project({
+    "spells": [go],
+    "targets": {
+        "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
+        "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
+    },
+});
+
+export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+}
+// testdata/probe.txt is embedded in the package, and the go spell claims only Go files.
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("testdata/*");
+    go["go-vet"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("testdata/*");
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."]});
+}
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("testdata/*");
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."] + args});
+}
+
+// Fails on a vulnerable symbol this module calls.
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    final inheritedFatal = advisories\inheritedFatal(args);
+    ctx.readsFiles("testdata/*");
+    advisories\govulncheck(ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), go: go, inheritedFatal: inheritedFatal);
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Only ci rewrites files: format first, so lint, build, test and security read the formatted tree.
+    ctx.needs(format);
+    ctx.needs(lint, build, test, security);
+}

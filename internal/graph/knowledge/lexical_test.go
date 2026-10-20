@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,7 +49,7 @@ func lexicalWeights(t *testing.T) textrank.BM25F {
 func hitIDs(t *testing.T, ix *textrank.Index, query string) []string {
 	t.Helper()
 	var ids []string
-	for _, h := range ix.Score(textrank.Tokens(query), lexicalWeights(t)) {
+	for _, h := range ix.Score(embed.Tokens(query), lexicalWeights(t)) {
 		ids = append(ids, h.ID)
 	}
 	return ids

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -89,13 +90,13 @@ func lexicalClass(name string) bool {
 // lexicalDocument is n as a ranked document. name holds the id's last segment and the
 // label, path the source file, doc the node doc and a symbol's doc comment, signature a
 // symbol's signature, and body the node's Text entry. Every field goes through
-// textrank.Tokens, so an identifier is found by its whole name or any of its words.
+// embed.Tokens, so an identifier is found by its whole name or any of its words.
 func lexicalDocument(n types.KnowledgeNode, body string) textrank.Document {
 	fields := map[string][]string{}
 	add := func(field string, texts ...string) {
 		parts := make([][]string, 0, len(texts))
 		for _, t := range texts {
-			parts = append(parts, textrank.Tokens(t))
+			parts = append(parts, embed.Tokens(t))
 		}
 		if toks := slices.Concat(parts...); len(toks) > 0 {
 			fields[field] = toks

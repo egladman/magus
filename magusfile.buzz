@@ -107,7 +107,8 @@ magus\project({
     "name": "magus",
     // Only this edge puts a .proto edit in the affected set and orders proto's generate first.
     // libs/figure: go-build embeds figure.buzz.
-    "depends_on": ["proto", "libs/figure"],
+    // libs/embed: go.mod replaces it with the local module, so its Go builds into magus.
+    "depends_on": ["proto", "libs/figure", "libs/embed"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
@@ -148,7 +149,7 @@ magus\project({
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
         "benchmarks/agent/internal/bench/testdata/*",
-        "internal/textembed/testdata/*",
+        "libs/embed/testdata/*",
         // Embedded in the textrank package, and no other glob matches it.
         "internal/textrank/weights.json",
         // The retrieval eval's judgments and its holdout ledger.
@@ -2348,14 +2349,15 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/proofread/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
-                   "libs/cmdline/**/*.go", "hack/embed/**/*.go",
+                   "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
                    "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                    "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                    "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
-                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "hack/embed/**/*.buzz",
+                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "libs/embed/**/*.buzz",
+                   "libs/embed/train/**/*.buzz",
                    "proto/**/*.buzz",
                    "**/*.css", "console/**/*.css", "docs/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",

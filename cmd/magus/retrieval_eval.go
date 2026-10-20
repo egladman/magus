@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/rankeval"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/embed/rankeval"
 	"github.com/egladman/magus/types"
 )
 

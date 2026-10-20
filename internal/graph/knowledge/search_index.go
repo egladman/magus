@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -360,7 +361,7 @@ func (ix *searchIndex) lexicalIndex() *textrank.Index {
 				_, n.Source, _ = strings.Cut(n.ID, ":")
 			}
 			docs[i] = lexicalDocument(n, "")
-			docs[i].Fields[textrank.FieldPath] = append(docs[i].Fields[textrank.FieldPath], textrank.Tokens(n.Kind)...)
+			docs[i].Fields[textrank.FieldPath] = append(docs[i].Fields[textrank.FieldPath], embed.Tokens(n.Kind)...)
 		}
 		ix.lex = textrank.NewIndex(docs)
 	})
