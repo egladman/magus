@@ -66,6 +66,20 @@ var boundaryTypes = []boundaryType{
 	// [ReleaseCycle].
 	{Name: "ReleaseCycle", Type: reflect.TypeFor[spells.ReleaseCycle]()},
 	{Name: "Lifecycle", Type: reflect.TypeFor[spells.Lifecycle]()},
+	// A provider op's records (provider_ops.go). magus encodes each request, so it is a
+	// RuntimeObject; it decodes each response, so that one is listed in inboundTypes.
+	{Name: "Empty", Type: reflect.TypeFor[types.Empty](), RuntimeObject: true},
+	{Name: "SecretRef", Type: reflect.TypeFor[types.SecretRef](), RuntimeObject: true},
+	{Name: "CIGroup", Type: reflect.TypeFor[types.CIGroup](), RuntimeObject: true},
+	{Name: "CIGroupEnd", Type: reflect.TypeFor[types.CIGroupEnd](), RuntimeObject: true},
+	{Name: "CIAnnotation", Type: reflect.TypeFor[types.CIAnnotation](), RuntimeObject: true},
+	{Name: "ArtifactRequest", Type: reflect.TypeFor[types.ArtifactRequest](), RuntimeObject: true},
+	{Name: "PruneRequest", Type: reflect.TypeFor[types.PruneRequest](), RuntimeObject: true},
+	{Name: "LifecycleQuery", Type: reflect.TypeFor[types.LifecycleQuery](), RuntimeObject: true},
+	{Name: "Ack", Type: reflect.TypeFor[types.Ack]()},
+	{Name: "GreenRun", Type: reflect.TypeFor[types.GreenRun]()},
+	{Name: "Strings", Type: reflect.TypeFor[types.Strings]()},
+	{Name: "PruneResult", Type: reflect.TypeFor[types.PruneResult]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "ShellCommand", Type: reflect.TypeFor[types.ShellCommand](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
