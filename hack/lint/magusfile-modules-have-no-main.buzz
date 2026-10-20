@@ -2,6 +2,8 @@
 // a module in hack/magusfile/ is imported by a magusfile and never run, so it declares no
 // main; and a file in a script directory (support\SCRIPT_DIRS) is run, so it declares one.
 // A file that breaks either sits in the wrong directory.
+//
+// Tier 1, mechanical: the fix moves the file to the directory of its caller.
 namespace magusfilemodules;
 
 import "assert";

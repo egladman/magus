@@ -1,7 +1,9 @@
 // magus guard hook: judges ONE file path an agent is about to write.
 //
-// Companion to magus-command.buzz, wired to your host's file-editing tool
-// rather than its shell tool. It needs neither jq nor a POSIX shell.
+// Companion to magus-command.buzz, for a host config that wires its file-editing tool
+// apart from the rest. The shipped harnesses do not: they wire magus-command.buzz to every
+// tool, and it judges a write by the shape of the whole event. It needs neither jq nor a
+// POSIX shell.
 //
 // Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
 // load-bearing. It imports no magus Buzz module
@@ -34,7 +36,7 @@
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
 // attribution recorded on the activity event, never an input to the verdict. So does
-// `-- --reports-skills`, the one capability an entry here may declare.
+// `-- --observes-skill-loads`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -61,9 +63,8 @@
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 24
+// magus-guard-template: 31
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";
@@ -114,6 +115,16 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     });
 }
 
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag is magus-command.buzz's: only a flag the binary predates is asked again.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
 fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
@@ -132,7 +143,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
 // a config that also matches its host's skill tool says so, and a rule that wants a skill
 // read before a write can then hold the write.
-final SUPPORTED_FLAGS = ["--reports-skills"];
+final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 
 // EntryArgs is what this script's argv says: the host, and the supported flags it named.
 object EntryArgs {
@@ -165,7 +176,8 @@ fun readEntryArgs(args: [str]) > EntryArgs {
 fun main(args: [str]) > void {
     final entry = readEntryArgs(args);
     final agentName = entry.agentName;
-    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    // Empty unless the host names a field: the whole event goes, content included.
+    final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -223,13 +235,11 @@ fun main(args: [str]) > void {
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
-    // printing usage to stdout and exiting non-zero, which leaves the host with no verdict
+    // printing usage to stderr and exiting non-zero, which leaves the host with no verdict
     // rather than an unattributed one. Try with attribution, fall back to the call this
     // script made before it existed.
     //
-    // The retry tests status AND emptiness together, for the same reason as the command
-    // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
-    // on stdout, so retrying on status alone would judge every blocked write twice.
+    // Only that refusal is asked again: see rejectedFlag.
     //
     // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
     // binary too old for one cannot report a skill load either.
@@ -240,7 +250,7 @@ fun main(args: [str]) > void {
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 

@@ -3,8 +3,8 @@
 #
 # Reported twice as "a failure replayed as a pass": golangci-lint lost its lock to a
 # parallel run, the next `run lint -s` printed "inputs unchanged since <ref>, which
-# failed" and exited 0. The re-run had passed. Under -s a pass prints nothing else, so
-# the hint was the only line, and it read as the verdict.
+# failed" and exited 0. The re-run had passed. Under -s a pass then printed nothing
+# else, so the hint was the only line, and it read as the verdict.
 #
 # The marker sits outside the workspace, so removing it leaves the cache key alone:
 # the same key failing once for an environmental reason, then passing.

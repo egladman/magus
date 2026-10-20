@@ -109,6 +109,13 @@ func TestWithTarget_TrackVolatile(t *testing.T) {
 	assert.Equal(t, "hits a shared broker that drops a connection under load", pol.RetryOnVolatileReason)
 }
 
+func TestWithTarget_HumanOnly(t *testing.T) {
+	p := &types.Project{Path: "."}
+	require.NoError(t, WithTarget("agentBenchRun", HumanOnly("launches paid model sessions"))(p))
+	assert.Equal(t, types.Target{HumanOnly: true, HumanOnlyReason: "launches paid model sessions"},
+		p.TargetPolicies["agent-bench-run"], "the policy lands under the normalized name")
+}
+
 func TestWithTarget_Slots(t *testing.T) {
 	p := &types.Project{Path: "."}
 	opt := WithTarget("lint", Slots(4))

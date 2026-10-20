@@ -3,14 +3,19 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 var errFake = errors.New("fake error")
@@ -86,29 +91,112 @@ func TestDoAppliesDefaults(t *testing.T) {
 	assert.Equal(t, 3, calls, "default Attempts == 3")
 }
 
-func TestDoBackoffCaps(t *testing.T) {
-	t.Parallel()
-	cap := 4 * time.Millisecond
+// doGaps runs Do against an always-failing fn under a fake clock and returns the
+// pause before each retry.
+func doGaps(t *testing.T, opts ...Option) []time.Duration {
+	t.Helper()
 	var gaps []time.Duration
-	prev := time.Now()
-
-	Do(
-		context.Background(), func() error {
+	synctest.Test(t, func(t *testing.T) {
+		var prev time.Time
+		_ = Do(context.Background(), func() error {
 			now := time.Now()
-			gaps = append(gaps, now.Sub(prev))
+			if !prev.IsZero() {
+				gaps = append(gaps, now.Sub(prev))
+			}
 			prev = now
 			return errFake
-		},
-		WithAttempts(5),
-		WithDelay(2*time.Millisecond),
-		WithMaxDelay(cap),
-	)
+		}, opts...)
+	})
+	return gaps
+}
 
-	// gaps[0] is the time to the first attempt, which carries no backoff; every
-	// later gap is the sleep between attempts and must respect the cap.
-	for i, g := range gaps[1:] {
-		assert.LessOrEqualf(t, g, cap+20*time.Millisecond, "gap[%d]", i+1) // generous for scheduler jitter
+func TestDoBackoffCaps(t *testing.T) {
+	gaps := doGaps(t, WithAttempts(5), WithDelay(2*time.Millisecond), WithMaxDelay(4*time.Millisecond))
+	ms := time.Millisecond
+	assert.Equal(t, []time.Duration{2 * ms, 4 * ms, 4 * ms, 4 * ms}, gaps)
+}
+
+func TestDoFixedDelayHoldsThePause(t *testing.T) {
+	gaps := doGaps(t, WithAttempts(4), WithDelay(3*time.Millisecond), WithMaxDelay(time.Hour), WithFixedDelay())
+	ms := time.Millisecond
+	assert.Equal(t, []time.Duration{3 * ms, 3 * ms, 3 * ms}, gaps)
+}
+
+func TestDoStopsOnANonRetryableError(t *testing.T) {
+	t.Parallel()
+	cause := types.NonRetryable(errFake, types.RetryAfterConfig, "edit the config")
+	tests := map[string]error{
+		"typed":              cause,
+		"typed and wrapped":  fmt.Errorf("fetch: %w", cause),
+		"canceled by person": context.Canceled,
 	}
+	for name, failure := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			err := Do(context.Background(), func() error {
+				calls++
+				return failure
+			}, WithAttempts(5), WithDelay(time.Nanosecond))
+			require.Error(t, err)
+			assert.Equal(t, 1, calls)
+			assert.ErrorIs(t, err, failure)
+			assert.Contains(t, err.Error(), "not retried after 1 attempt(s)")
+			assert.NotContains(t, err.Error(), "5 attempts")
+		})
+	}
+}
+
+func TestDoStopsWhenALaterAttemptIsNonRetryable(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	err := Do(context.Background(), func() error {
+		calls++
+		if calls < 3 {
+			return errFake
+		}
+		return types.NonRetryable(errFake, types.RetryAfterPerson, "no")
+	}, WithAttempts(5), WithDelay(time.Nanosecond))
+	require.Error(t, err)
+	assert.Equal(t, 3, calls)
+	assert.Contains(t, err.Error(), "not retried after 3 attempt(s)")
+}
+
+func TestBackoff(t *testing.T) {
+	t.Parallel()
+	ms := time.Millisecond
+	tests := []struct {
+		name            string
+		delay, maxDelay time.Duration
+		attempt         int
+		want            time.Duration
+	}{
+		{"first attempt is the base delay", ms, time.Second, 1, ms},
+		{"doubles", ms, time.Second, 4, 8 * ms},
+		{"cap hit exactly", ms, 8 * ms, 4, 8 * ms},
+		{"cap clamps a non-power", ms, 5 * ms, 4, 5 * ms},
+		{"base above the cap", 10 * ms, 5 * ms, 1, 5 * ms},
+		{"zero base stays zero", 0, time.Second, 70, 0},
+		{"attempt below one is the base", ms, time.Second, 0, ms},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, Backoff(tt.delay, tt.maxDelay, tt.attempt))
+		})
+	}
+}
+
+func TestBackoffNeverWrapsOrExceedsTheCap(t *testing.T) {
+	t.Parallel()
+	for _, maxDelay := range []time.Duration{time.Second, 30 * time.Second, math.MaxInt64} {
+		for attempt := 1; attempt <= 70; attempt++ {
+			got := Backoff(time.Second, maxDelay, attempt)
+			require.GreaterOrEqual(t, got, time.Duration(0), "attempt %d", attempt)
+			require.LessOrEqual(t, got, maxDelay, "attempt %d", attempt)
+		}
+	}
+	assert.Equal(t, time.Duration(math.MaxInt64), Backoff(time.Second, math.MaxInt64, 70))
 }
 
 // recordingTransport records the request body seen on each attempt and fails

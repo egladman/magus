@@ -402,7 +402,7 @@ func main() {
 			return a.size < b.size
 		}
 		// scenario order
-		si, sj := scenarioIdx(a.scenario), scenarioIdx(b.scenario)
+		si, sj := scenarioIndex(a.scenario), scenarioIndex(b.scenario)
 		return si < sj
 	})
 
@@ -510,7 +510,7 @@ func main() {
 	}
 }
 
-func scenarioIdx(s string) int {
+func scenarioIndex(s string) int {
 	for i, sc := range scenarioOrder {
 		if sc == s {
 			return i

@@ -20,25 +20,23 @@ func TestGeneratorProjectsCountsMovedOutputs(t *testing.T) {
 	assert.Equal(t, []string{".", "api", "docs"}, got)
 }
 
-// TestSettleInvocationsRunDeepestFirst: one `<target>:rw` run per depth and target,
-// nested projects before the ancestors that index their output, the owed records'
-// own targets beside the generate convention, and a project with no such target left
-// out rather than failing the run.
-func TestSettleInvocationsRunDeepestFirst(t *testing.T) {
+// TestSettleInvocationsOneRunPerTarget: every project of a target shares one
+// `<target>:rw` run, whatever its depth, so the scheduler orders and parallelizes them;
+// the owed records' own targets sit beside the generate convention, and a project with
+// no such target is left out rather than failing the run.
+func TestSettleInvocationsOneRunPerTarget(t *testing.T) {
 	defines := func(path, target string) bool {
 		return target != "generate" || (path != "api" && path != "gone")
 	}
-	got := Invocations([]string{".", "api", "docs", "docs/site", "gone"}, []vcs.OwedRegeneration{
+	got := Invocations([]string{".", "api", "docs", "docs/site", "gone", "libs/a"}, []vcs.OwedRegeneration{
 		{Project: ".", Target: "index-generate"},
 		{Project: "docs", Target: "generate"},
 		{Project: "api", Target: "proto"},
 	}, defines)
 	assert.Equal(t, [][]string{
-		{"generate:rw", "docs/site"},
-		{"generate:rw", "docs"},
-		{"proto:rw", "api"},
-		{"generate:rw", "."},
+		{"generate:rw", ".", "docs", "docs/site", "libs/a"},
 		{"index-generate:rw", "."},
+		{"proto:rw", "api"},
 	}, got)
 }
 

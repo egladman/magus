@@ -6,13 +6,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/generate"
 )
 
 func manCmd(args []string) error {
 	if len(args) == 0 {
 		manUsage()
-		return usagef("magus man: subcommand required (want install)")
+		return exit.Usagef("magus man: subcommand required (want install)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		manUsage()
@@ -20,7 +23,7 @@ func manCmd(args []string) error {
 	}
 	if args[0] != "install" {
 		manUsage()
-		return usagef("magus man: unknown subcommand %q (want install)", args[0])
+		return exit.Usagef("magus man: unknown subcommand %q (want install)", args[0])
 	}
 
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)
@@ -34,7 +37,9 @@ func manCmd(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
-	pages := cli.RoffPages("", version)
+	root := commands.Root
+	root.Env = config.EnvVars()
+	pages := generate.Roff(root, "", version)
 	// Before MkdirAll: the destination is usually outside the repo, so describing
 	// it must not create it.
 	if *dryRun {

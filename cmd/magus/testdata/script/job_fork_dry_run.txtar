@@ -1,0 +1,59 @@
+# The global --dry-run validates a whole job record without forking it: every problem at
+# once, each with its code and fix, then the record as it would be stored. It exits 1 while
+# any problem remains and writes no row. A real fork with the same problems prints the
+# same list and writes nothing either. A waiver accepts a broad write path, and the dry run
+# names it.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+mkdir src
+cp $WORK/code.go src/code.go
+
+! exec magus job fork wave/many --dry-run --write-paths 'src,**/*.go' --check 'nosuch .'
+stdout '^3 problems:$'
+stdout '\[MGS3018\] write_paths\[0\]'
+stdout '\[MGS3040\] check\.target'
+stdout '\[MGS3043\] write_paths\[1\]'
+stdout '^     fix: '
+stdout '^would store:$'
+stdout '"id": "wave/many"'
+stdout 'dry run: nothing written'
+! stderr '\[error\]'
+exec magus ls jobs -o name
+! stdout .
+
+! exec magus job fork wave/many --write-paths 'src,**/*.go' --check 'nosuch .'
+! stdout .
+stderr '^\[error\] 3 problems:$'
+stderr '\[MGS3040\] check\.target'
+exec magus ls jobs -o name
+! stdout .
+
+exec magus job fork wave/clean --dry-run --write-paths src/code.go --check 'test .'
+stdout '^no problems$'
+stdout '^would store:$'
+stdout '"id": "wave/clean"'
+stdout '"write_paths"'
+exec magus ls jobs -o name
+! stdout .
+
+! exec magus job fork wave/many --dry-run -o json --write-paths 'src,**/*.go' --check 'nosuch .'
+stdout '"problems"'
+stdout '"code": "MGS3040"'
+exec magus ls jobs -o name
+! stdout .
+
+stdin $WORK/broad.json
+exec magus job fork --stdin --dry-run
+stdout '^no problems$'
+stdout '^waived 1:$'
+stdout 'waived: the job tunes every Go file'
+exec magus ls jobs -o name
+! stdout .
+
+-- code.go --
+package pkg
+-- broad.json --
+{"schema_version": 11, "id": "wave/broad", "write_paths": ["**/*.go"],
+ "check": {"target": "test", "project": "."},
+ "waivers": [{"code": "MGS3043", "subject": "**/*.go", "reason": "the job tunes every Go file"}]}

@@ -11,7 +11,7 @@ import (
 )
 
 func testSiblingCheckoutDeny(command string) string {
-	return denySiblingCheckout(".", command, DialectBash)
+	return denySiblingCheckout(".", command, DialectBash, nil)
 }
 
 // twoCheckouts builds the layout this rule is about, without invoking git: one
@@ -71,14 +71,43 @@ func TestDenySiblingCheckoutJudgesFromTheCallDirectory(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout(wt, "cd "+wt+" && ./magus run lint .", DialectBash),
+	assert.Empty(t, denySiblingCheckout(wt, "cd "+wt+" && ./magus run lint .", DialectBash, nil),
 		"a cd into the session's own worktree is not a relocation")
-	assert.Empty(t, denySiblingCheckout(wt, "cd internal && ./magus run lint .", DialectBash),
+	assert.Empty(t, denySiblingCheckout(wt, "cd internal && ./magus run lint .", DialectBash, nil),
 		"a relative cd stays inside the session's checkout")
-	assert.NotEmpty(t, denySiblingCheckout(wt, "cd "+main+" && ./magus run lint .", DialectBash),
+	assert.NotEmpty(t, denySiblingCheckout(wt, "cd "+main+" && ./magus run lint .", DialectBash, nil),
 		"the process's own checkout is a sibling of the session's")
-	assert.NotEmpty(t, denySiblingCheckout(main, "cd ../wt-feature && ./magus run lint .", DialectBash),
+	assert.NotEmpty(t, denySiblingCheckout(main, "cd ../wt-feature && ./magus run lint .", DialectBash, nil),
 		"a relative cd that leaves the session's checkout is still refused")
+}
+
+// A checkout a fork made for the caller's job, or a job it forked, is the caller's own to
+// run magus in; any other sibling stays refused.
+func TestDenySiblingCheckoutPassesAJobsOwnCheckout(t *testing.T) {
+	main, wt := twoCheckouts(t)
+	t.Chdir(main)
+	ownsWT := func(root string) bool { return samePath(root, wt) }
+	ownsNothing := func(string) bool { return false }
+
+	assert.Empty(t, denySiblingCheckout(main, "cd "+wt+" && ./magus run lint .", DialectBash, ownsWT),
+		"the job's own checkout is not a sibling to its holder or its root")
+	assert.NotEmpty(t, denySiblingCheckout(main, "cd "+wt+" && ./magus run lint .", DialectBash, ownsNothing),
+		"a checkout no job of the caller's owns is refused")
+}
+
+// A `~` or $HOME target was joined under the call directory as a literal directory, which
+// no checkout holds, so the deny was skipped.
+func TestDenySiblingCheckoutPlacesAHomeTarget(t *testing.T) {
+	main, wt := twoCheckouts(t)
+	t.Setenv("HOME", filepath.Dir(main))
+	for _, line := range []string{
+		"cd ~/repo && ./magus run lint .",
+		"cd $HOME/repo && ./magus run lint .",
+		`cd "${HOME}/repo" && ./magus run lint .`,
+		"cd ~ && cd repo && ./magus run lint .",
+	} {
+		assert.NotEmpty(t, denySiblingCheckout(wt, line, DialectBash, nil), line)
+	}
 }
 
 // The boundary that keeps this shippable. A cd into a DIFFERENT repository is

@@ -10,20 +10,57 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// The records-swept log is read by its last line and compacted to one line once it is due.
+func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	rows := []types.Job{{ID: "a"}}
+	passes := int64(2 + file.CompactSlack + 1)
+	for at := range passes {
+		s.writeRecordsSwept(at, rows)
+	}
+	read, err := file.ReadLines(filepath.Join(filepath.Dir(path), recordsSweptFile))
+	require.NoError(t, err)
+	assert.Len(t, read.Lines, 1, "the pass that made the log due rewrote it")
+	assert.True(t, s.recordsSwept(passes-1, rows))
+	assert.False(t, s.recordsSwept(passes-1, nil), "a row the last pass saw has gone")
+}
+
 // TestMain isolates the environment: lease markers live under XDG_STATE_HOME, and the
 // parallel tests here cannot pin it one test at a time.
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// envStateBase is the user state dir the test's environment names, resolved as a door
+// outside this package resolves it.
+func envStateBase(t *testing.T) string {
+	t.Helper()
+	base, err := xdg.StateDir()
+	require.NoError(t, err)
+	return base
+}
+
+// placeAt is the Location of the checkout whose cache dir is cacheDir, under envStateBase.
+func placeAt(t *testing.T, cacheDir string) Location {
+	t.Helper()
+	return Location{CacheDir: cacheDir, StateBase: envStateBase(t)}
+}
+
 // writeMarker writes content as cacheDir's checkout record.
 func writeMarker(t *testing.T, cacheDir, content string) {
 	t.Helper()
-	path := MarkerPath(cacheDir)
+	path := placeAt(t, cacheDir).MarkerPath()
 	require.NotEmpty(t, path)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -36,6 +73,13 @@ func loadableRoot(t *testing.T) string {
 	w := testkit.NewWorkspace(t)
 	w.WriteTree(loadableFiles)
 	return w.Root()
+}
+
+// loadableRepo is loadableRoot committed to a git repository, for a fixture that execs:
+// Exec reads its base from the checkout.
+func loadableRepo(t *testing.T) string {
+	t.Helper()
+	return testkit.NewRepo(t, loadableFiles).Root()
 }
 
 var loadableFiles = map[string]string{
@@ -61,8 +105,8 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRoot(t)
-	loc := tmpLoc(t, root)
+	root := loadableRepo(t)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	limits := config.Jobs{}
 
@@ -70,7 +114,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
-	_, err = s.Exec(ctx, held.ID, "rev")
+	_, err = s.Exec(ctx, held.ID)
 	require.NoError(t, err)
 
 	_, err = ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
@@ -90,11 +134,49 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	})
 
 	t.Run("an empty checkout refuses nothing", func(t *testing.T) {
-		alone := NewStore(tmpLoc(t, root))
+		alone := NewStore(tempLocation(t, root))
 		_, err := ForkMerge(ctx, alone, "solo", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
 		}, limits, nil)
 		require.NoError(t, err)
+	})
+}
+
+// TestForkIntoItsOwnCheckoutJudgesThatCheckout is why a `--checkout` fork may claim a load
+// file beside a live job: the new job edits its own checkout, where nobody holds anything.
+func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRepo(t)
+	s := NewStore(tempLocation(t, root))
+	limits := config.Jobs{}
+
+	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+	}, limits, nil)
+	require.NoError(t, err)
+	_, err = s.Exec(ctx, held.ID)
+	require.NoError(t, err)
+
+	own := filepath.Join(t.TempDir(), "worker-two")
+	loadClaim := func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
+	}
+
+	t.Run("a fork naming a checkout passes", func(t *testing.T) {
+		stored, err := ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
+			loadClaim(u)
+			u.Worktree = &types.JobWorktree{Root: own}
+		}, limits, nil)
+		require.NoError(t, err)
+		assert.Equal(t, types.WriteProofAlone, stored.WriteProof, "nobody else works in %s", own)
+	})
+
+	t.Run("the same fork without one is still refused", func(t *testing.T) {
+		_, err := ForkMerge(ctx, s, "wave/worker-three", loadClaim, limits, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "wave/worker-one")
 	})
 }
 
@@ -105,8 +187,8 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := loadableRoot(t)
-	loc := tmpLoc(t, root)
+	root := loadableRepo(t)
+	loc := tempLocation(t, root)
 	s := NewStore(loc)
 
 	alone, err := ForkMerge(ctx, s, "wave/first", func(u *types.Job) {
@@ -114,7 +196,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofAlone, alone.WriteProof, "nothing else holds the checkout")
-	_, err = s.Exec(ctx, alone.ID, "rev")
+	_, err = s.Exec(ctx, alone.ID)
 	require.NoError(t, err)
 
 	disjoint, err := ForkMerge(ctx, s, "wave/second", func(u *types.Job) {
@@ -139,7 +221,7 @@ func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
 
 	ctx := context.Background()
 	root := loadableRoot(t)
-	s := NewStore(tmpLoc(t, root))
+	s := NewStore(tempLocation(t, root))
 	fork := func(name string, paths ...string) types.Job {
 		t.Helper()
 		row, err := ForkMerge(ctx, s, name, func(u *types.Job) {
@@ -186,12 +268,12 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 		{"the workspace root, itself a project", []string{"."}, `".", the workspace root`},
 		{"the workspace root spelled as a glob", []string{"**"}, `"**" (matching the directory "."), the workspace root`},
 		{"a wildcard subtree of a project root", []string{"libs/lib/**"}, `"libs/lib/**" (matching the directory "libs/lib"), the root of project "libs/lib"`},
-		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"internal", inside project "."; "libs/lib/src"`},
+		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"libs/lib/src", inside project "libs/lib" is a directory`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := NewStore(tmpLoc(t, root))
+			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
@@ -201,8 +283,8 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			}
 			require.ErrorIs(t, err, types.WritePathIsDirectory)
 			assert.Contains(t, err.Error(), tc.want)
-			assert.Contains(t, err.Error(), "A write path names files")
-			assert.Contains(t, err.Error(), "List the files the job will edit")
+			assert.Contains(t, err.Error(), "a write path names files")
+			assert.Contains(t, err.Error(), "list the files the job will edit")
 			rows, lerr := s.List()
 			require.NoError(t, lerr)
 			assert.Empty(t, rows, "a refused fork writes no row")
@@ -211,7 +293,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 
 	t.Run("an update to a row that exists is not a fork", func(t *testing.T) {
 		t.Parallel()
-		s := NewStore(tmpLoc(t, root))
+		s := NewStore(tempLocation(t, root))
 		ctx := context.Background()
 		_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
@@ -234,14 +316,14 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			root := loadableRoot(t)
-			s := NewStore(tmpLoc(t, root))
+			root := loadableRepo(t)
+			s := NewStore(tempLocation(t, root))
 
 			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"magus.yaml"}
 			}, config.Jobs{}, nil)
 			require.NoError(t, err)
-			_, err = s.Exec(ctx, done.ID, "rev")
+			_, err = s.Exec(ctx, done.ID)
 			require.NoError(t, err)
 			_, err = s.Update(ctx, done.ID, func(u *types.Job) { u.State = over })
 			require.NoError(t, err)
@@ -253,6 +335,59 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			assert.Equal(t, types.WriteProofAlone, next.WriteProof)
 		})
 	}
+}
+
+// The refusal names the live holder, how long since it wrote, the write paths it has not
+// used and the narrowing that frees them, and asks the holder to release them.
+func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRepo(t)
+	s := NewStore(tempLocation(t, root))
+	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+	_, err = s.Exec(ctx, held.ID)
+	require.NoError(t, err)
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	ps := sharedCheckoutProblems(s, rows, types.Job{ID: "wave/worker-two", WritePaths: []string{"magusfile.buzz"}})
+	require.Len(t, ps, 1)
+	require.ErrorIs(t, ps.Err(), types.CheckoutConfigHeld)
+	assert.Contains(t, ps[0].Message, "wave/worker-one is live in this checkout (")
+	assert.Contains(t, ps[0].Message, "; running, updated")
+	assert.Contains(t, ps[0].Message, "wave/worker-one has changed nothing under internal/job/store.go")
+	assert.Contains(t, ps[0].Fix, "--depends-on wave/worker-one")
+	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply -f <record>`")
+
+	requests := releaseRequests(t, root)
+	require.Len(t, requests, 1)
+	req := requests[0]
+	assert.Contains(t, req.Message, "job wave/worker-one holds magusfile.buzz")
+	assert.Equal(t, sessions.AttentionRequest{
+		ID: req.ID, Invocation: req.Invocation, OpenedMs: req.OpenedMs,
+		Outcome: "waiting", Severity: "warning", Source: "magus/job-release",
+		Where: "magusfile.buzz", Files: []types.FileRef{{Value: "magusfile.buzz"}}, Message: req.Message,
+	}, req)
+
+	t.Run("a dry run files no request", func(t *testing.T) {
+		t.Parallel()
+		root := loadableRepo(t)
+		s := NewStore(tempLocation(t, root))
+		held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+			u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
+		}, config.Jobs{}, nil)
+		require.NoError(t, err)
+		_, err = s.Exec(ctx, held.ID)
+		require.NoError(t, err)
+		rows, err := s.List()
+		require.NoError(t, err)
+		require.NotEmpty(t, sharedCheckoutProblems(s.dry(), rows, types.Job{ID: "wave/worker-two", WritePaths: []string{"magusfile.buzz"}}))
+		assert.Empty(t, releaseRequests(t, root))
+	})
 }
 
 // TestLeaseQueryResolvesInOneOrder pins the order every caller grades by. The claim ranks
@@ -329,15 +464,15 @@ func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
-	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
-	assert.True(t, strings.HasPrefix(MarkerPath(cacheDir), state+string(filepath.Separator)),
-		"the marker is under the state dir: %s", MarkerPath(cacheDir))
+	require.NoError(t, NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
+	assert.True(t, strings.HasPrefix(placeAt(t, cacheDir).MarkerPath(), state+string(filepath.Separator)),
+		"the marker is under the state dir: %s", placeAt(t, cacheDir).MarkerPath())
 	entries, err := os.ReadDir(cacheDir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "binding writes nothing into the cache dir")
 
 	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte("wave/root\n"), 0o644))
-	lease, from := ActingLease(cacheDir, "")
+	lease, from := ActingLease(placeAt(t, cacheDir), "")
 	assert.Equal(t, "wave/worker", lease, "a marker-shaped file in the cache dir binds nothing")
 	assert.Equal(t, types.LeaseSourceMarker, from)
 }
@@ -350,8 +485,8 @@ func TestBindRecordIsOwnerOnly(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 
-	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
-	fi, err := os.Stat(MarkerPath(cacheDir))
+	require.NoError(t, NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))
+	fi, err := os.Stat(placeAt(t, cacheDir).MarkerPath())
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
@@ -363,8 +498,8 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 	main, worktree := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
 		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
-	spawner := NewStore(Location{CacheDir: filepath.Join(main, ".magus"), Root: main})
-	worker := NewStore(Location{CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
+	spawner := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(main, ".magus"), Root: main})
+	worker := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
 	child := Caller{Host: "claude-code", Session: "s1", Agent: "a1b2c3"}
 
 	require.NoError(t, spawner.Bind(child, "wave/worker"))
@@ -383,7 +518,7 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
-	s := NewStore(Location{CacheDir: filepath.Join(root, ".magus"), Root: root})
+	s := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(root, ".magus"), Root: root})
 	bound := map[string]Caller{
 		"wave/child":    {Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
 		"wave/parent":   {Host: "claude-code", Session: "s1"},
@@ -416,7 +551,7 @@ func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 		"another host":               "",
 		"an agent with no session":   "",
 	}, got)
-	lease, from := ActingLease(filepath.Join(root, ".magus"), "")
+	lease, from := ActingLease(placeAt(t, filepath.Join(root, ".magus")), "")
 	assert.Equal(t, []any{"wave/checkout", types.LeaseSourceMarker}, []any{lease, from},
 		"a process that is not a hook reads the checkout's record")
 }
@@ -426,11 +561,11 @@ func TestNoRecordAnswersForAnotherKey(t *testing.T) {
 func TestARecordThatDoesNotReadIsNone(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cacheDir := t.TempDir()
-	s := NewStore(Location{CacheDir: cacheDir})
+	s := NewStore(Location{StateBase: envStateBase(t), CacheDir: cacheDir})
 
 	writeMarker(t, cacheDir, "not a lease id!\n")
 	assert.Empty(t, s.Bound(Caller{}))
-	lease, from := ActingLease(cacheDir, "wave/claim")
+	lease, from := ActingLease(placeAt(t, cacheDir), "wave/claim")
 	assert.Equal(t, []any{"wave/claim", types.LeaseSourceEnv}, []any{lease, from})
 
 	require.NoError(t, s.Bind(Caller{}, "wave/worker"), "a binding replaces what did not read")
@@ -523,6 +658,44 @@ func TestListPrunesTombstonesAfterStaleAfter(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// A pass over the binding records reads one file per caller that ever bound, so a read
+// runs one only when it ended a row, when a row the last pass saw is gone, or once
+// recordSweepEvery has passed. A record naming a row that never existed waits for the
+// interval; one naming a row somebody removed is tombstoned by the next read.
+func TestListSweepsRecordsOncePerIntervalUnlessARowGoes(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	s, _ := sweepStore(t, 1_000, time.Hour)
+	here := t.TempDir()
+	plant(t, s,
+		types.Job{ID: "w/here", State: types.StateRunning, CheckoutRoot: here, Registered: 900, Created: 900, Updated: 900},
+		types.Job{ID: "w/removed", State: types.StateRunning, CheckoutRoot: here, Registered: 900, Created: 900, Updated: 900},
+	)
+	nobody := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	removed := Caller{Host: "claude-code", Session: "s1", Agent: "a2"}
+	require.NoError(t, s.Bind(removed, "w/removed"))
+	_, err := s.List()
+	require.NoError(t, err)
+
+	require.NoError(t, s.Bind(nobody, "w/nobody"))
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/nobody"}, s.Binding(nobody), "inside the interval, with every row still there, no pass runs")
+
+	_, err = s.Delete(t.Context(), "w/removed", false)
+	require.NoError(t, err)
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/removed", Gone: true, swept: 1_000}, s.Binding(removed), "a row the last pass saw is gone")
+	assert.Equal(t, Binding{Job: "w/nobody", Gone: true, swept: 1_000}, s.Binding(nobody), "the pass reads every record")
+
+	require.NoError(t, s.Bind(nobody, "w/nobody-again"))
+	s.clock = func() time.Time { return time.Unix(1_000, 0).Add(recordSweepEvery) }
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/nobody-again", Gone: true, swept: 1_000 + int64(recordSweepEvery/time.Second)}, s.Binding(nobody),
+		"the interval runs a pass")
 }
 
 // A tombstoned caller binds again the way any caller does, and the new record replaces

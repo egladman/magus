@@ -142,6 +142,30 @@ message Job {
   // the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
   // holder's own attempts untouched; this is the second fact beside them.
   JobIntegration waiter_evidence = 39;
+  // breaks are the flags, JSON keys, exported symbols or stored formats the root approved this
+  // job breaking; empty means it breaks nothing on its own authority.
+  repeated string breaks = 40;
+  // model_tier is the tier the store assigned the job and why; unset when the workspace
+  // declared no model tiers. rework_rounds counts continuations sent to the job's worker
+  // after it handed back, and widenings the times write paths were added to the job after
+  // it was taken. All three are store-computed.
+  JobModelTier model_tier = 41;
+  int32 rework_rounds = 42;
+  int32 widenings = 43;
+}
+
+// JobModelTier is the model tier recorded on a job when it was assigned. skills is the
+// variant its worker loads (short or full) and source says which declaration chose the tier
+// (row, matrix or default). site is the file:line of that declaration, and model the alias
+// the host spawns; both are empty when the source gave none.
+message JobModelTier {
+  string name = 1;
+  int32 rank = 2;
+  string skills = 3;
+  string source = 4;
+  string reason = 5;
+  string site = 6;
+  string model = 7;
 }
 
 // JobOrigin is who did something to a row, one field per channel, as the activity trail
@@ -175,6 +199,11 @@ message JobAttempt {
   // tree also held uncommitted changes then, so revision alone does not name what it read.
   string revision = 10;
   bool dirty = 11;
+  // lease is the job lease the run acted under, empty for a run under none.
+  string lease = 12;
+  // extra_args are the args the run forwarded after `--`, empty when it forwarded none or its
+  // record predates the field.
+  repeated string extra_args = 13;
 }
 
 // JobGateAttempt is the newest recorded run of one goal's check.
@@ -251,6 +280,8 @@ message CompletionGate {
   repeated string paths = 6;
   repeated string symbols = 7;
   repeated string depends_on = 8;
+  // The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+  string signature = 9;
 }
 
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left

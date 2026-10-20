@@ -8,12 +8,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 )
 
 // recordShowcase drives the session and writes the marked capture.
 func recordShowcase(dir string) error {
-	s, err := run.StartTTY(context.Background(), "bash", []string{"--noprofile", "--norc"}, dir, showCols, showRows)
+	s, err := spawn.StartTTY(context.Background(), "bash", []string{"--noprofile", "--norc"}, dir, showCols, showRows)
 	if err != nil {
 		return fmt.Errorf("start session: %w", err)
 	}

@@ -7,12 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
 	queuetypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -88,8 +92,9 @@ type Config struct {
 	// exists for is the one where nobody is watching.
 	StallTimeout time.Duration `json:"stall_timeout" yaml:"stall_timeout"`
 
-	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
-	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
+	// HistoryPath is the path to the runtime-history JSON Lines store used by volatility
+	// detection, CI forecaster, graph timing, and bisect. Defaults to
+	// $XDG_STATE_HOME/magus/history/history.jsonl.
 	HistoryPath string `json:"history_path" yaml:"history_path"`
 
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.
@@ -127,6 +132,14 @@ type Config struct {
 	// worse than a flag: one MAGUS_REQUIRED_VERSION exported in a CI environment
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
+
+	// Agents states facts about the account agents run under and a person's guard level.
+	// See Agents.
+	//
+	// cli:"-": magus.yaml ONLY. A flag would be an AI-specific CLI flag on every verb, and
+	// one exported env var would flip billing or the level for every workspace a shell
+	// touches without a trace in any file.
+	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
 }
 
 // Queue configures the merge queue, `magus queue`.
@@ -189,7 +202,9 @@ type Diff struct {
 
 // Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
-// StaleAfter is the exception, because it decides when magus ends a row nobody took.
+// StaleAfter and Retain are the exceptions, because they decide when magus ends a row
+// nobody took and when it drops one that is over. So are MaxClaimFiles and MaxClaimProjects,
+// which are never zero: a claim has to be bounded by something.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -202,6 +217,24 @@ type Jobs struct {
 	// a taken one in `magus ls jobs` and `magus doctor`. Default 2h; 0 = never. Ending a row
 	// reads the workspace's own magus.yaml, never user-global config or the environment.
 	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after" validate:"gte=0" merge:"written"`
+	// Retain is how long a job that is over (graded, ended, or exited with its result never
+	// collected), and the archive a clear or a delete wrote, stay in the job store once
+	// nothing touches them. Default 168h; 0 keeps them forever. Like StaleAfter it reads the
+	// workspace's own magus.yaml only.
+	Retain time.Duration `json:"retain" yaml:"retain" validate:"gte=0" merge:"written"`
+	// MaxValidations is how many `magus run`s one job tree's leased workers may have going at
+	// once; a run past it waits for a seat and says whose run holds it. A run with no lease
+	// (the root, a person) is never counted. Default 1; 0 = unlimited. Workspace only, like
+	// StaleAfter.
+	MaxValidations int `json:"max_validations" yaml:"max_validations" validate:"gte=0" merge:"written"`
+	// MaxClaimFiles is how many files one glob write path may match before a job record
+	// refuses it as too broad (MGS3043). Default 50; zero or negative is an error. A sweep
+	// that needs more waives the path. Workspace only, like StaleAfter.
+	MaxClaimFiles int `json:"max_claim_files" yaml:"max_claim_files" validate:"gt=0" merge:"written"`
+	// MaxClaimProjects is how many projects one glob write path may reach before a job
+	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
+	// Workspace only, like StaleAfter.
+	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -298,8 +331,9 @@ type SandboxEnv struct {
 
 // Log controls log output.
 type Log struct {
-	// Format is pretty|plain|text|json. "jsonl" is set only by `-o jsonl`, after
-	// validation: it withholds target output and routes results to the report stream,
+	// Format is the log format: pretty, plain, text or json.
+	//
+	// "jsonl" is set only by `-o jsonl`, after validation: it withholds target output and routes results to the report stream,
 	// which a magus.yaml setting has no stream to route them to.
 	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"`
 	// Level is the minimum log level; "trace" also enables the startup timing table.
@@ -352,7 +386,7 @@ func (l Log) SlogLevel() slog.Level {
 
 // Cache controls the content-addressed build cache.
 type Cache struct {
-	Dir string `json:"dir" yaml:"dir"` // override default cache location (.magus/ in workspace root)
+	Dir string `json:"dir" yaml:"dir"` // one dir for the entries and the checkout's own files (default: entries shared per repository, the rest in .magus/)
 	// Write gates producing entries. It replaces a cache.immutable flag that named the
 	// absence of the behavior: answering "can this run write?" meant parsing a double
 	// negative, and the CI snippet that used it read inverted from its own intent.
@@ -368,7 +402,7 @@ type Cache struct {
 // Restoring is deliberately NOT gated: a read-only run still populates its local tier
 // from a remote-tier hit.
 type CacheWrite struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, replay cache hits but never write new entries, locally or to a remote (default true)
 }
 
 // CacheRemoteWrite gates writing the remote cache tier. Separate from CacheWrite so a
@@ -376,7 +410,7 @@ type CacheWrite struct {
 // setting rather than by a missing signing key. Declared true, remote writes are
 // required (see cache.WithRemoteWrite).
 type CacheRemoteWrite struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = written when the local tier is and a signing key is held
+	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, write the local tier but never the remote; unset writes the remote when the local tier is written and a signing key is held; true makes remote writes required
 }
 
 // CacheInclude selects which facts about the host enter every cache key.
@@ -397,7 +431,7 @@ type CacheInclude struct {
 // shared across platforms, where one key per platform beats every platform colliding on
 // one key and taking the guard's miss.
 type CacheIncludeFlag struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default false
+	Enabled *bool `json:"enabled" yaml:"enabled"` // when true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay
 }
 
 // WriteEnabled reports whether this run may write the local cache tier.
@@ -458,6 +492,7 @@ type CI struct {
 
 // Volatility controls volatility detection and auto-retry for test runs.
 type Volatility struct {
+	// Enabled is the master switch for volatility detection and auto-retry; false disables all retry logic.
 	Enabled          bool    `json:"enabled" yaml:"enabled"`
 	BootstrapSamples int     `json:"bootstrap_samples" yaml:"bootstrap_samples" validate:"gte=0"` // outcomes below which all failures retry once
 	MinSamples       int     `json:"min_samples" yaml:"min_samples" validate:"gte=0"`             // minimum outcomes before Wilson-score gates retry
@@ -488,7 +523,7 @@ type Secret struct {
 
 // MCP controls the Model Context Protocol server.
 type MCP struct {
-	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
+	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // when false, refuse to start the MCP server (default true)
 	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 	// HTTP serves /mcp on the server's HTTP listener. False leaves the route unmounted while
 	// `magus mcp` (stdio) and the server socket keep serving MCP, and the listener keeps the
@@ -507,7 +542,7 @@ func (m MCP) HTTPEnabled() bool { return m.HTTP == nil || *m.HTTP }
 // the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1alpha1 JobService
 // for triggering maintenance jobs (the server's one mutating route). Loopback only; bearer auth.
 type Console struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
+	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up)
 }
 
 // Server configures `magus server`: where it listens, which workspaces it serves, and its
@@ -571,7 +606,7 @@ type Maintenance struct {
 
 // VCS controls VCS-driven affected detection.
 type VCS struct {
-	Enabled *bool  `json:"enabled" yaml:"enabled"` // false = fall back to all projects; pointer distinguishes unset
+	Enabled *bool  `json:"enabled" yaml:"enabled"` // master switch for VCS-driven affected detection; false makes affected fall back to all projects (default true)
 	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/sl/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
 	BaseRef string `json:"base_ref" yaml:"base_ref"`
@@ -631,6 +666,12 @@ type Knowledge struct {
 	// The defaults were set against this repository; a codebase of many small helpers
 	// will want MinShared higher, one of large functions may want MinScore lower.
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
+	// Conformance is the policy of the conformance lens and its checks: which code distributions are
+	// measured, the shipped anchor each is bounded by, and the committed ratchet record.
+	//
+	// cli:"-": magus.yaml ONLY. A ratchet is committed policy, so a per-run flag or one
+	// exported env var would loosen every check without a trace in any file.
+	Conformance ConformanceConfig `json:"conformance" yaml:"conformance" cli:"-"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
 	// the layer that answers which code agents actually touch. `magus graph build` runs
 	// each declared adapter before assembling, so the server's sync-graph job keeps it
@@ -698,11 +739,11 @@ type NotesConfig struct {
 // DuplicationConfig is knowledge.duplication in magus.yaml. See types.DuplicationOptions for
 // what each threshold filters and why each can err in both directions.
 type DuplicationConfig struct {
-	MinCallees   int     `json:"min_callees" yaml:"min_callees" validate:"gte=1"`
-	MinShared    int     `json:"min_shared" yaml:"min_shared" validate:"gte=1"`
-	MinScore     float64 `json:"min_score" yaml:"min_score" validate:"gte=0,lte=1"`
-	MinSpanRatio float64 `json:"min_span_ratio" yaml:"min_span_ratio" validate:"gte=0,lte=1"`
-	IncludeTests bool    `json:"include_tests" yaml:"include_tests"`
+	MinCallees   int     `json:"min_callees" yaml:"min_callees" validate:"gte=1"`             // fewest callees a function needs before the lens compares it
+	MinShared    int     `json:"min_shared" yaml:"min_shared" validate:"gte=1"`               // fewest shared callees a pair needs to be reported
+	MinScore     float64 `json:"min_score" yaml:"min_score" validate:"gte=0,lte=1"`           // lowest similarity score in [0,1] the lens reports
+	MinSpanRatio float64 `json:"min_span_ratio" yaml:"min_span_ratio" validate:"gte=0,lte=1"` // lowest ratio in [0,1] of the shorter function's span to the longer one's
+	IncludeTests bool    `json:"include_tests" yaml:"include_tests"`                          // when true, the lens also compares test functions
 }
 
 // Options is the config as the graph package reads it, which cannot import this one.
@@ -713,6 +754,133 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 		MinScore:     c.MinScore,
 		MinSpanRatio: c.MinSpanRatio,
 		IncludeTests: c.IncludeTests,
+	}
+}
+
+// ConformanceConfig is knowledge.conformance in magus.yaml. See types.ConformanceOptions for how the
+// graph reads it.
+//
+// A key written in a magus.yaml replaces the default for that whole field, as every
+// non-zero config value does: writing checks states all of them.
+type ConformanceConfig struct {
+	// Ratchet is the workspace-relative path of the committed record of measured
+	// thresholds. Empty enforces the anchors alone and records no proposals.
+	Ratchet string `json:"ratchet" yaml:"ratchet"`
+	// MinSample is how many measurements a population needs before a proposal is made
+	// from it; a smaller population keeps its anchor.
+	MinSample int `json:"min_sample" yaml:"min_sample" validate:"gte=1"`
+	// Step is the fraction a live percentile must fall below its committed value before a
+	// tighter one is proposed.
+	Step float64 `json:"step" yaml:"step" validate:"gt=0,lt=1"`
+	// Exclude are workspace-relative globs of code kept out of every population, such as
+	// a vendored or upstream-shaped tree. Generated output is always out.
+	Exclude []string `json:"exclude" yaml:"exclude"`
+	// Gates are the absolute noise gates of the conformance checks.
+	Gates ConformanceGatesConfig `json:"gates" yaml:"gates"`
+	// Checks is the policy per metric and population. A metric or population left out is
+	// not checked.
+	Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig `json:"checks" yaml:"checks"`
+}
+
+// ConformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
+// binds a change, and how many findings are reported.
+type ConformanceGatesConfig struct {
+	MinCohort   int     `json:"min_cohort" yaml:"min_cohort" validate:"gte=1"`
+	MinShare    float64 `json:"min_share" yaml:"min_share" validate:"gte=0,lte=1"`
+	Bar         float64 `json:"bar" yaml:"bar" validate:"gte=0,lte=1"`
+	MaxFindings int     `json:"max_findings" yaml:"max_findings" validate:"gte=1"`
+}
+
+// ConformanceLimitConfig is the policy for one metric and population.
+type ConformanceLimitConfig struct {
+	// Percentile is the percentile of the live distribution a proposal measures at.
+	Percentile float64 `json:"percentile" yaml:"percentile"`
+	// Anchor is the ceiling no committed value may exceed, and the value enforced while
+	// nothing is committed.
+	Anchor int `json:"anchor" yaml:"anchor"`
+	// MinSubject is the fewest importers a package needs before alias-share or name-clash
+	// judges it; 0 judges every package with one. Other metrics ignore it.
+	MinSubject int `json:"min_subject" yaml:"min_subject" validate:"gte=0"`
+	// Scopes bounds a package directory or layer apart from the rest of the population,
+	// as directory to anchor, measured at this Percentile. Only dep-fanout has scopes. A
+	// package that legitimately sits past the population's anchor takes its own here, so
+	// the anchor itself stays tight.
+	Scopes map[string]int `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+}
+
+// Options is the config as the graph package reads it, which cannot import this one.
+// Ratchet and Generated are the caller's to fill from files. A scope becomes its own key.
+func (c ConformanceConfig) Options() types.ConformanceOptions {
+	limits := map[types.ConformanceKey]types.ConformanceLimit{}
+	for metric, pops := range c.Checks {
+		for pop, l := range pops {
+			limits[types.ConformanceKey{Metric: metric, Population: pop}] = types.ConformanceLimit{
+				Percentile: l.Percentile, Anchor: l.Anchor, MinSubject: l.MinSubject,
+			}
+			for scope, anchor := range l.Scopes {
+				limits[types.ConformanceKey{Metric: metric, Population: pop, Scope: scope}] = types.ConformanceLimit{
+					Percentile: l.Percentile, Anchor: anchor, MinSubject: l.MinSubject,
+				}
+			}
+		}
+	}
+	return types.ConformanceOptions{
+		Limits:      limits,
+		RatchetPath: c.Ratchet,
+		MinSample:   c.MinSample,
+		Step:        c.Step,
+		Exclude:     slices.Clone(c.Exclude),
+		Gates: types.ConformanceGates{
+			MinCohort:   c.Gates.MinCohort,
+			MinShare:    c.Gates.MinShare,
+			Bar:         c.Gates.Bar,
+			MaxFindings: c.Gates.MaxFindings,
+		},
+	}
+}
+
+// conformanceDefaults are magus's own numbers, in the way DuplicationConfig's are: a
+// workspace with no knowledge.conformance fails nothing magus would not fail on itself.
+//
+// An anchor is magus's own p99 at the measuring rev, rounded up to two significant
+// figures, with two exceptions. clone-tokens' anchor is the smallest body worth one shared
+// home, just above the typical function (p50 58). call-sequence's 7 is the run just below
+// maint-review's measured precision cut: a shared run of 8 callees caught B1, B7 and B15.
+// The coupling keys pool source and main code under source, and mode-knobs is a list, so
+// its anchor is 0. The alias keys judge packages with 5 or more importers, the median, and
+// name-clash's anchor is its one measured case, 62. The percentile is where a proposal
+// measures: p99 for test files, function lengths and call sequences, since a long table
+// test is deliberate, p50 for clones, p90 for a shared body, p95 elsewhere. They name no
+// path: an exclusion or a scope is one workspace's layout, so it lives in that workspace's
+// magus.yaml.
+func conformanceDefaults() ConformanceConfig {
+	limit := func(percentile float64, anchor int) ConformanceLimitConfig {
+		return ConformanceLimitConfig{Percentile: percentile, Anchor: anchor}
+	}
+	const (
+		src  = types.ConformancePopSource
+		main = types.ConformancePopMain
+		test = types.ConformancePopTest
+	)
+	return ConformanceConfig{
+		MinSample: 30,
+		Step:      0.05,
+		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
+			types.ConformanceFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
+			types.ConformanceFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
+			types.ConformanceTypeMethods:  {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
+			types.ConformanceFileSymbols:  {src: limit(95, 82)},
+			types.ConformanceCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
+			types.ConformanceDepFanout:    {src: limit(95, 62)},
+			types.ConformanceCallSequence: {src: limit(99, 7), main: limit(99, 7)},
+			types.ConformanceSharedBody:   {src: limit(90, 94)},
+			types.ConformanceSharedReach:  {src: limit(95, 7)},
+			types.ConformanceCallerSpread: {src: limit(95, 3)},
+			types.ConformanceModeKnobs:    {src: limit(0, 0)},
+			types.ConformanceAliasShare:   {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformanceNameClash:    {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
+		},
 	}
 }
 
@@ -735,6 +903,7 @@ type SymbolIndexingConfig struct {
 
 // KnowledgeVCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).
 type KnowledgeVCSConfig struct {
+	// Enabled folds VCS history (last commit, commit count) onto file nodes as the @vcs shard.
 	Enabled bool `json:"enabled" yaml:"enabled"`
 	// MaxCommits bounds the history walk to the most recent N commits. 0 uses a
 	// built-in default; a small value keeps the scan fast on a large repo at the cost
@@ -797,21 +966,14 @@ type SymbolIndex struct {
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.
 // When Enabled, magus connects to the OTLP collector you configure and sends data there only.
 type Telemetry struct {
+	// Enabled turns OTLP export on; magus connects to Endpoint when true.
 	Enabled     bool              `json:"enabled" yaml:"enabled"`
 	Endpoint    string            `json:"endpoint" yaml:"endpoint"`                                      // host:port; required when Enabled
-	Protocol    string            `json:"protocol" yaml:"protocol" validate:"omitempty,oneof=grpc http"` // "grpc" or "http"
+	Protocol    string            `json:"protocol" yaml:"protocol" validate:"omitempty,oneof=grpc http"` // OTLP wire protocol: grpc or http
 	Insecure    bool              `json:"insecure" yaml:"insecure"`                                      // disable TLS
 	ServiceName string            `json:"service_name" yaml:"service_name"`                              // resource attribute service.name
 	SampleRatio float64           `json:"sample_ratio" yaml:"sample_ratio" validate:"gte=0,lte=1"`       // head-based sampling ratio; 1.0 = all
 	Headers     map[string]string `json:"headers" yaml:"headers"`                                        // static OTLP request headers
-}
-
-// EnvVarDoc documents one MAGUS_* environment variable.
-type EnvVarDoc struct {
-	EnvVar  string // full name, e.g. "MAGUS_CACHE_DIR"
-	YAMLKey string // equivalent magus.yaml path, e.g. "cache.dir"
-	Default string // human-readable default; empty = unset
-	Desc    string // one-line description
 }
 
 // Report controls JSONL event emission for magus run.
@@ -820,130 +982,93 @@ type Report struct {
 	Filter []string `json:"filter" yaml:"filter"`
 }
 
-func boolPtr(v bool) *bool { return &v }
-
-// EnvVarDocs returns documentation for every MAGUS_* environment variable in declaration order.
+// EnvVars documents every MAGUS_* environment variable magus reads: one per config
+// field, from the generated schema with its built-in default, then the ones no field
+// carries.
 //
-// It is the complete registry of what magus itself reads, including the names it sets
-// for its own children: KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a
-// name missing here is reported as unknown by doctor and can draw a did-you-mean refusal.
-// TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name this list
-// lacks.
-func EnvVarDocs() []EnvVarDoc {
-	return []EnvVarDoc{
-		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
-		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
-		{"MAGUS_CACHE_REMOTE_WRITE_ENABLED", "cache.remote.write.enabled", "cache.write.enabled", "When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step"},
-		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
-		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
-		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
-		{"MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "cache.remote.trusted_keys", "", "Comma-separated base64 Ed25519 public keys a remote artifact must be signed by; required when a remote backend is wired"},
-		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only. Requires cache.remote.insecure_reason"},
-		{"MAGUS_CACHE_REMOTE_INSECURE_REASON", "cache.remote.insecure_reason", "", "Why this cache runs unverified; required whenever cache.remote.insecure is true"},
-		{"MAGUS_CACHE_SIGNING_KEY", "", "", "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
-		{"MAGUS_CACHE_TOOL_VERSION", "", "project", "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
-		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
-		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
-		{"MAGUS_LOG_SILENT", "log.silent", "false", "When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, print a failure's reasoning only at -v, and surface only lines a target marks as a notice"},
-		{"MAGUS_LOG_STREAM", "log.stream", "false", "When true, the env equivalent of -vv: stream every target's output live instead of withholding a passing target's output"},
-		{"MAGUS_CONCURRENCY", "concurrency", "concurrency_profile decides", "Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive"},
-		{"MAGUS_CONCURRENCY_PROFILE", "concurrency_profile", "balanced", "Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly"},
-		{"MAGUS_BROKER", "broker", "best-effort", "Whether a run asks the broker for this host's capacity and shared services: required refuses a step when none answers (MGS3022, exit 69), best-effort runs unarbitrated and says so once, off never starts or contacts one"},
-		{"MAGUS_SHUTDOWN_GRACE", "shutdown_grace", "5m", "How long the broker (waiting for the runs holding it) and the server (waiting for the runs it cancelled to unwind) take to stop after a first SIGTERM; a second SIGTERM stops either at once, and 0 stops at once"},
-		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect"},
-		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
-		{"MAGUS_MAX_FAILURES", "max_failures", "0", "How many projects may fail before a run stops starting more; 1 is fail-fast, 0 is unlimited"},
-		{"MAGUS_TARGET_TIMEOUT", "target_timeout", "0", "Duration after which magus cancels any single target, subprocesses included; 0 means no limit"},
-		{"MAGUS_STALL_TIMEOUT", "stall_timeout", "15m", "Abort an invocation that starts, finishes and prints nothing for this long; negative turns the watchdog off"},
-		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
-		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
-		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj"},
-		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
-		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
-		{"MAGUS_PROC_SOCKET", "", "", "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
-		{"MAGUS_PROC_TOKEN", "", "", "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
-		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
-		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
-		{"MAGUS_CI_RECORD_RUNS", "ci.record_runs", "true", "Keep the per-branch run log (which commit a branch passed or failed at) in the history file"},
-		{"MAGUS_SHARD", "", "", "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
-		{"MAGUS_N_SHARDS", "", "", "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
-		{"MAGUS_TELEMETRY_ENABLED", "telemetry.enabled", "false", "Turn OTLP export on; magus connects to telemetry.endpoint when true"},
-		{"MAGUS_TELEMETRY_ENDPOINT", "telemetry.endpoint", "", "OTLP collector address as host:port (no scheme); required when telemetry is enabled"},
-		{"MAGUS_TELEMETRY_PROTOCOL", "telemetry.protocol", "grpc", "OTLP wire protocol: grpc or http"},
-		{"MAGUS_TELEMETRY_INSECURE", "telemetry.insecure", "false", "Disable TLS for the OTLP exporter (plaintext local-collector setups)"},
-		{"MAGUS_TELEMETRY_SERVICE_NAME", "telemetry.service_name", "magus", "Value of the resource attribute service.name on emitted spans/metrics"},
-		{"MAGUS_TELEMETRY_SAMPLE_RATIO", "telemetry.sample_ratio", "1.0", "Head-based trace sampling ratio in [0,1]"},
-		{"MAGUS_SERVER_ENABLED", "server.enabled", "true", "When false, no command hands itself to a running `magus server`; each invocation runs self-contained"},
-		{"MAGUS_SERVER_ADDRESS", "server.address", "", "Socket `magus server` listens on, as a unix:// URL; empty is server.sock in the runtime directory"},
-		{"MAGUS_SERVER_IDLE_TTL", "server.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace server; e.g. \"6h\", \"30m\""},
-		{"MAGUS_SERVER_WORKSPACES", "server.workspaces", "", "Colon-separated list of workspace roots the server will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
-		{"MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES", "server.maintenance.rotate_activities", "1h", "How often the server checks whether the activity trail is due for a trim"},
-		{"MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS", "server.maintenance.rotate_logs", "168h", "How often the server checks the run-log journals, and the age past which it trims them"},
-		{"MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED", "server.maintenance.prune_preserved", "24h", "How often the server checks for expired `vcs checkpoint --preserve` captures"},
-		{"MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH", "server.maintenance.sync_graph", "6h", "How often the server reconciles the knowledge graph, a safety net behind the VCS refresh hook"},
-		{"MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW", "server.maintenance.check_review", "15m", "How often the server checks for a merge or a new remark on a review this tree took part in"},
-		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
-		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server `magus server` starts"},
-		{"MAGUS_MCP_HTTP", "mcp.http", "true", "When false, the server does not mount /mcp on its HTTP listener; `magus mcp` (stdio) and the server socket still serve MCP"},
-		{"MAGUS_MCP_INSECURE_BIND", "mcp.insecure_bind", "false", "Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error"},
-		{"MAGUS_CONSOLE_ENABLED", "console.enabled", "true when MCP is up", "When false, the MCP HTTP server does not mount the console's read-only API and job service"},
-		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
-		{"MAGUS_DIFF_TUI", "diff.tui", "true", "When false, `magus diff` prints its report instead of opening the interactive viewer"},
-		{"MAGUS_JOBS_MAX_DEPTH", "jobs.max_depth", "0", "How many levels below its root job a `magus job fork` may land; 0 means unlimited"},
-		{"MAGUS_JOBS_MAX_LIVE", "jobs.max_live", "0", "How many live jobs one root's tree may hold at once, the new one included; 0 means unlimited"},
-		{"MAGUS_JOBS_DEFAULT_TIMEOUT", "jobs.default_timeout", "0", "Timeout for a fork that names no --timeout; 0 means no bound"},
-		{"MAGUS_JOBS_STALE_AFTER", "jobs.stale_after", "0", "Flag a live job nobody updated for this long in `magus ls jobs` and `magus doctor`; 0 never flags"},
-		{"MAGUS_SECRET_INTERACTIVE_TIMEOUT", "secret.interactive_timeout", "60s", "Bound on a secret-provider read when stdin is a terminal"},
-		{"MAGUS_SECRET_UNATTENDED_TIMEOUT", "secret.unattended_timeout", "10s", "Bound on a secret-provider read with no terminal to prompt on"},
-		{"MAGUS_KNOWLEDGE_WORKSPACES", "knowledge.workspaces", "", "Comma-separated extra workspace roots a --global knowledge-graph query unions in"},
-		{"MAGUS_KNOWLEDGE_PUBLISHED_REF", "knowledge.published_ref", "", "OCI artifact a published knowledge graph is read from, as <registry>/<repository>:<tag>"},
-		{"MAGUS_KNOWLEDGE_MAX_SIZE_MB", "knowledge.max_size_mb", "0", "Soft cap on the knowledge shard store in MB; least-recently-used shards are evicted past it. 0 means unlimited"},
-		{"MAGUS_KNOWLEDGE_VCS_ENABLED", "knowledge.vcs.enabled", "false", "Fold VCS history (last commit, commit count) onto file nodes as the @vcs shard"},
-		{"MAGUS_KNOWLEDGE_VCS_MAX_COMMITS", "knowledge.vcs.max_commits", "0", "Bound the history walk to the most recent N commits; 0 uses a built-in default"},
-		{"MAGUS_KNOWLEDGE_VCS_AUTHORSHIP", "knowledge.vcs.authorship", "true", "Include author nodes and authored edges in the @vcs shard; false keeps only the per-file attributes"},
-		{"MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED", "knowledge.symbol_indexing.disabled", "false", "When true, the server never re-runs a project's scip op on its own"},
-		{"MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS", "knowledge.symbol_indexing.quiet_seconds", "0", "Seconds a project's sources must be quiet before the server re-indexes it; 0 uses a built-in default"},
-		{"MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS", "knowledge.symbol_indexing.min_interval_seconds", "0", "Minimum seconds between re-index runs for one project; 0 uses a built-in default"},
-		{"MAGUS_KNOWLEDGE_SESSIONS_DISABLED", "knowledge.sessions.disabled", "false", "When true, `graph build` runs no agent-session adapter"},
-		{"MAGUS_KNOWLEDGE_NOTES_SHARED", "knowledge.notes.shared", "", "Workspace-relative directory of the team's committed notes"},
-		{"MAGUS_KNOWLEDGE_NOTES_PRIVATE", "knowledge.notes.private", "", "A second notes directory, yours rather than the team's, anywhere on disk"},
-		{"MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES", "knowledge.duplication.min_callees", "3", "Fewest callees a function needs before the duplication lens compares it"},
-		{"MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED", "knowledge.duplication.min_shared", "4", "Fewest shared callees a pair needs to be reported as duplicates"},
-		{"MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE", "knowledge.duplication.min_score", "0.7", "Lowest similarity score in [0,1] the duplication lens reports"},
-		{"MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO", "knowledge.duplication.min_span_ratio", "0.5", "Lowest ratio in [0,1] of the shorter function's span to the longer one's"},
-		{"MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS", "knowledge.duplication.include_tests", "false", "When true, the duplication lens also compares test functions"},
-		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
-		{"MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "volatility.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},
-		{"MAGUS_VOLATILITY_MIN_SAMPLES", "volatility.min_samples", "20", "Minimum outcomes required before Wilson-score volatility rate gates retry decisions"},
-		{"MAGUS_VOLATILITY_THRESHOLD", "volatility.threshold", "0.05", "Wilson lower-bound volatility rate above which a project+target is considered volatile"},
-		{"MAGUS_VOLATILITY_ANNOTATE_GHA", "volatility.annotate_gha", "true", "When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY"},
-		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
-		{"MAGUS_SANDBOX", "sandbox.mode", "off", "off, best-effort, or required. On, magus scrubs child-process env to a minimum allowlist and refuses reads, writes and execs outside the workspace and a curated allowlist. Kernel landlock (Linux 5.13+) enforces that for every process magus starts; without it only magus's own bindings are checked, which best-effort accepts (MGS2005) and required refuses (MGS2012, which also needs landlock ABI 3). The variable is a floor: magus.yaml may raise it and never lower it, so a nested magus runs under the stronger of its parent's mode and its own workspace's, and --sandbox may only strengthen that (MGS2010). See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
-		{"MAGUS_SANDBOX_ENV_PASSTHROUGH", "sandbox.env.passthrough", "", "Comma-separated names or globs (e.g. MISE_*) added to the sandbox's child-process env allowlist"},
-		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
-		{"MAGUS_STAMPED_LEASE", "", "", "Set by a shared server on a script it forks for a remote caller: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant"},
-		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
-		{"MAGUS_OFFLINE", "", "false", "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
-		{"MAGUS_DIFFTOOL", "", "$DIFFTOOL, then git diff --no-index", "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},
-		{"MAGUS_LOG_VIEWER_URL", "", "the hosted log viewer", "Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror"},
-		{"MAGUS_CONSOLE_DIR", "", "<root>/console/gen", "Env-only, no magus.yaml equivalent: directory of the built console the LAN share serves"},
-		{"MAGUS_PPROF", "", "", "Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated"},
-		{"MAGUS_MCP_TOKEN", "", "", "Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable"},
-		{"MAGUS_MCP_BUZZ_PURE", "", "", "Set internally by the buzz MCP tool for its forked transform worker; never set it by hand"},
-		{"MAGUS_MCP_CLIENT", "", "", "Set internally by the client MCP tool for its forked worker; never set it by hand"},
-		{"MAGUS_MCP_CLIENT_HOST", "", "", "Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand"},
-		{"MAGUS_MCP_CLIENT_LEASE", "", "", "Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand"},
-		{"MAGUS_STAMPED_LEASE", "", "", "Set internally by an authenticated MCP caller for a child magus process: marks a missing lease as deliberately unstamped rather than inheriting server identity; never set it by hand"},
-		{"MAGUS_S3_BUCKET", "", "", "Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in"},
-		{"MAGUS_S3_ENDPOINT", "", "https://s3.<region>.amazonaws.com", "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
-		{"MAGUS_LEVEL", "", "", "Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand"},
-		{"MAGUS_INVOCATION_ANCESTORS", "", "", "Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand"},
-		{"MAGUS_BOOTSTRAP_EXEC_DONE", "", "", "Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand"},
-		{"MAGUS_SYMBOL_INDEX", "", "", "Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand"},
-		{"MAGUS_WORKSPACE_ROOT", "", "", "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
-		{"MAGUS_INTERNAL_ADVICE_MODE", "", "", "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
-		{"MAGUS_INTERNAL_ADVICE_BASE_BRANCH", "", "", "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
+// KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a name missing here is
+// reported as unknown by doctor and can draw a did-you-mean refusal.
+// TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
+func EnvVars() []cmdline.Env {
+	defaults := reflect.ValueOf(Defaults())
+	out := make([]cmdline.Env, 0, len(schema.Fields)+len(envOnly))
+	for _, f := range schema.Fields {
+		out = append(out, cmdline.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
 	}
+	return append(out, envOnly...)
+}
+
+// defaultText renders the field at goPath in defaults, or "" for a zero value. A path
+// the struct does not have panics: the schema is generated from this struct, so a miss
+// means the generated inventory is stale.
+func defaultText(defaults reflect.Value, goPath string) string {
+	v := defaults
+	for _, name := range strings.Split(goPath, ".") {
+		v = v.FieldByName(name)
+		if !v.IsValid() {
+			panic("config: schema field " + goPath + " is not in Config; regenerate schema/gen")
+		}
+	}
+	if v.IsZero() {
+		return ""
+	}
+	if d, ok := v.Interface().(time.Duration); ok {
+		// 6h0m0s reads as 6h: drop each trailing zero unit.
+		s := d.String()
+		if trimmed, ok := strings.CutSuffix(s, "m0s"); ok {
+			s = trimmed + "m"
+		}
+		if trimmed, ok := strings.CutSuffix(s, "h0m"); ok {
+			s = trimmed + "h"
+		}
+		return s
+	}
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Slice {
+		parts := make([]string, v.Len())
+		for i := range parts {
+			parts[i] = fmt.Sprint(v.Index(i).Interface())
+		}
+		return strings.Join(parts, ",")
+	}
+	return fmt.Sprint(v.Interface())
+}
+
+// envOnly are the variables no config field carries, so the schema cannot list them:
+// secrets kept out of committed files, overrides of build-time values, and the
+// plumbing magus sets for its own children.
+var envOnly = []cmdline.Env{
+	{Name: "MAGUS_CACHE_SIGNING_KEY", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
+	{Name: "MAGUS_CACHE_TOOL_VERSION", Key: "", Default: "project", Doc: "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
+	{Name: "MAGUS_VCS_<NAME>_BASE_REF", Key: "", Default: "", Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
+	{Name: "MAGUS_PROC_SOCKET", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
+	{Name: "MAGUS_PROC_TOKEN", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
+	{Name: "MAGUS_SHARD", Key: "", Default: "", Doc: "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
+	{Name: "MAGUS_N_SHARDS", Key: "", Default: "", Doc: "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
+	{Name: "MAGUS_UPDATE_URL", Key: "", Default: "https://eli.gladman.cc/magus/public/release/index.json", Doc: "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
+	{Name: "MAGUS_STAMPED_LEASE", Key: "", Default: "", Doc: "Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant; never set it by hand"},
+	{Name: "MAGUS_NO_BOOTSTRAP_EXEC", Key: "", Default: "false", Doc: "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
+	{Name: "MAGUS_OFFLINE", Key: "", Default: "false", Doc: "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
+	{Name: "MAGUS_DIFFTOOL", Key: "", Default: "$DIFFTOOL, then git diff --no-index", Doc: "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},
+	{Name: "MAGUS_LOG_VIEWER_URL", Key: "", Default: "the hosted log viewer", Doc: "Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror"},
+	{Name: "MAGUS_CONSOLE_DIR", Key: "", Default: "<root>/console/gen", Doc: "Env-only, no magus.yaml equivalent: directory of the built console the LAN share serves"},
+	{Name: "MAGUS_PPROF", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated"},
+	{Name: "MAGUS_MCP_TOKEN", Key: "", Default: "", Doc: "Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable"},
+	{Name: "MAGUS_MCP_BUZZ_PURE", Key: "", Default: "", Doc: "Set internally by the buzz MCP tool for its forked transform worker; never set it by hand"},
+	{Name: "MAGUS_MCP_CLIENT", Key: "", Default: "", Doc: "Set internally by the client MCP tool for its forked worker; never set it by hand"},
+	{Name: "MAGUS_MCP_CLIENT_HOST", Key: "", Default: "", Doc: "Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand"},
+	{Name: "MAGUS_MCP_CLIENT_LEASE", Key: "", Default: "", Doc: "Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand"},
+	{Name: "MAGUS_S3_BUCKET", Key: "", Default: "", Doc: "Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in"},
+	{Name: "MAGUS_S3_ENDPOINT", Key: "", Default: "https://s3.<region>.amazonaws.com", Doc: "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
+	{Name: "MAGUS_LEVEL", Key: "", Default: "", Doc: "Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand"},
+	{Name: "MAGUS_INVOCATION_ANCESTORS", Key: "", Default: "", Doc: "Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand"},
+	{Name: "MAGUS_BOOTSTRAP_EXEC_DONE", Key: "", Default: "", Doc: "Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand"},
+	{Name: "MAGUS_SYMBOL_INDEX", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand"},
+	{Name: "MAGUS_WORKSPACE_ROOT", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
+	{Name: "MAGUS_INTERNAL_ADVICE_MODE", Key: "", Default: "", Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
+	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
 }
 
 // DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
@@ -952,7 +1077,8 @@ func EnvVarDocs() []EnvVarDoc {
 // on the next one.
 const DefaultShutdownGrace = 5 * time.Minute
 
-// Defaults returns a Config populated with the magus built-in defaults.
+// Defaults returns a Config populated with the magus built-in defaults. It reads no
+// environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
 	return Config{
 		CI: CI{MaxShards: 8, RecordRuns: true},
@@ -966,9 +1092,8 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		HistoryPath:   DefaultHistoryPath(),
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
@@ -983,12 +1108,13 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Hints: Hints{Enabled: boolPtr(true)},
+		Hints: Hints{Enabled: new(true)},
 		Knowledge: Knowledge{
-			VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)},
+			VCS: KnowledgeVCSConfig{Authorship: new(true)},
 			// MinShared 4 is the line that mattered: at 3, identical triples of small
 			// helpers scored a perfect 1.0 and were most of the list.
 			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},
+			Conformance: conformanceDefaults(),
 		},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

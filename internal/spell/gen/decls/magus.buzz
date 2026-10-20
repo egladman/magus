@@ -61,6 +61,38 @@ export enum<str> SymbolIndexFreshness {
     unvouched = "unvouched",
 }
 
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
+}
+
+export enum<str> GroupingShape {
+    none = "",
+    chained = "chained",
+    split = "split",
+    solo = "solo",
+}
+
+export enum<str> GroupingVerdict {
+    none = "",
+    measured = "measured",
+    unknown = "unknown",
+}
+
+export enum<str> SkillVariant {
+    short = "short",
+    full = "full",
+}
+
+export enum<str> ModelTierSource {
+    row = "row",
+    matrix = "matrix",
+    default = "default",
+}
+
 export object Affected {
     base: str = "",
     changed: [str] = [],
@@ -197,6 +229,11 @@ export object ImpactProject {
     targets: [str] = [],
 }
 
+export object ReleaseStage {
+    tag: str = "",
+    major: int = 0,
+}
+
 export object DiffAPI {
     base: str = "",
     floor: str = "",
@@ -205,6 +242,7 @@ export object DiffAPI {
     removed: int = 0,
     signature: int = 0,
     body: int = 0,
+    stage: ReleaseStage = ReleaseStage{},
 }
 
 export object DiffHunkRef {
@@ -360,6 +398,14 @@ export object EdgeRef {
     attrs: {str: str} = {},
 }
 
+export object PublicSymbol {
+    id: str = "",
+    label: str = "",
+    dir: str = "",
+    signature: str = "",
+    usedBy: int = 0,
+}
+
 export object ExplainResult {
     definition: str = "",
     schemaVersion: int = 0,
@@ -369,6 +415,8 @@ export object ExplainResult {
     @"in": [EdgeRef] = [],
     docsURL: str = "",
     resolution: KnowledgeResolution = KnowledgeResolution.none,
+    publicAPI: [PublicSymbol] = [],
+    publicAPIGap: str = "",
 }
 
 export object ImpactSymbol {
@@ -583,6 +631,108 @@ export object Duplication {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
+export object ConformanceKey {
+    metric: str = "",
+    population: str = "",
+    scope: str = "",
+}
+
+export object ConformanceItem {
+    id: str = "",
+    source: str = "",
+    measure: int = 0,
+}
+
+export object ConformanceRow {
+    key: ConformanceKey = ConformanceKey{},
+    n: int = 0,
+    p50: int = 0,
+    p90: int = 0,
+    p95: int = 0,
+    p99: int = 0,
+    live: int = 0,
+    value: int = 0,
+    anchor: int = 0,
+    propose: int = 0,
+    known: int = 0,
+    source: str = "",
+    violations: [ConformanceItem] = [],
+}
+
+export object ConformanceKnown {
+    metric: str = "",
+    items: [str] = [],
+    reason: str = "",
+    shapes: {str: str} = {},
+}
+
+export object ConformanceCarry {
+    metric: str = "",
+    @"from": str = "",
+    to: [str] = [],
+}
+
+export object Conformance {
+    definition: str = "",
+    rows: [ConformanceRow] = [],
+    stale: [ConformanceKnown] = [],
+    carried: [ConformanceCarry] = [],
+    ambiguous: [ConformanceCarry] = [],
+    shapes: {str: str} = {},
+    excluded: int = 0,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object ModelTierRecord {
+    rank: int = 0,
+    modelTier: str = "",
+    kind: JobKind = JobKind.check,
+    jobs: int = 0,
+    pass: int = 0,
+    fail: int = 0,
+    noReturn: int = 0,
+    passLower: double = 0.0,
+    checksPerJob: double = 0.0,
+    forksPerID: double = 0.0,
+    reworkPerJob: double = 0.0,
+    wideningsPerJob: double = 0.0,
+    meanCostUSD: double? = null,
+    medianTokens: int? = null,
+    firstAttempts: int = 0,
+    firstPass: int = 0,
+    firstPassLower: double = 0.0,
+    notRetryable: int = 0,
+}
+
+export object ModelTierOutput {
+    definition: str = "",
+    rows: [ModelTierRecord] = [],
+}
+
+export object GroupingRecord {
+    shape: GroupingShape = GroupingShape.none,
+    verdict: GroupingVerdict = GroupingVerdict.none,
+    jobs: int = 0,
+    groups: int = 0,
+    known: int = 0,
+    passLower: double? = null,
+    setupTokensMedian: int? = null,
+    setupShare: double? = null,
+    contextPerGroup: double? = null,
+    wallMsPerGroup: double? = null,
+    denialsPerJob: double? = null,
+    unattributedPerJob: double? = null,
+    reworkPerJob: double? = null,
+    wideningsPerJob: double? = null,
+}
+
+export object Grouping {
+    definition: str = "",
+    minSample: int = 0,
+    unclassified: int = 0,
+    rows: [GroupingRecord] = [],
+}
+
 export object InsightReport {
     hotspots: Hotspots = Hotspots{},
     affinity: Affinity = Affinity{},
@@ -591,6 +741,9 @@ export object InsightReport {
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
     duplication: Duplication = Duplication{},
+    conformance: Conformance = Conformance{},
+    modelTiers: ModelTierOutput = ModelTierOutput{},
+    grouping: Grouping = Grouping{},
 }
 
 export object Layer {
@@ -669,13 +822,41 @@ export object Graph {
     blastRadius: {str: int} = {},
 }
 
+export object KnowledgeTermScore {
+    term: str = "",
+    field: str = "",
+    score: double = 0.0,
+}
+
+export object KnowledgeListRank {
+    list: str = "",
+    rank: int = 0,
+}
+
+export object KnowledgeMatchWhy {
+    matched: int = 0,
+    of: int = 0,
+    terms: [KnowledgeTermScore] = [],
+    lists: [KnowledgeListRank] = [],
+    seeds: [str] = [],
+    prior: double = 0.0,
+}
+
 export object Match {
     id: str = "",
     kind: str = "",
     label: str = "",
     score: int = 0,
+    why: KnowledgeMatchWhy? = null,
     staleness: str = "",
     outrunDays: int = 0,
+}
+
+export object KnowledgeRanking {
+    weights: str = "",
+    reader: [str] = [],
+    skipped: [str] = [],
+    note: str = "",
 }
 
 export object QueryResult {
@@ -689,6 +870,7 @@ export object QueryResult {
     nodes: [KnowledgeNode] = [],
     links: [KnowledgeEdge] = [],
     answer: KnowledgeAnswer = KnowledgeAnswer{},
+    ranking: KnowledgeRanking? = null,
 }
 
 export object RefSite {
@@ -706,6 +888,7 @@ export object RefsResult {
     refCount: int = 0,
     defs: [RefSite] = [],
     refs: [RefSite] = [],
+    signature: str? = null,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
@@ -772,6 +955,65 @@ export object GuardBinary {
     stamp: str = "",
 }
 
+export object JobModelTier {
+    name: str = "",
+    rank: int = 0,
+    skills: SkillVariant = SkillVariant.short,
+    source: ModelTierSource = ModelTierSource.row,
+    reason: str = "",
+    site: str = "",
+    model: str = "",
+}
+
+export object GateStatus {
+    id: str = "",
+    verified: bool = false,
+    outputRef: str = "",
+    violations: [str] = [],
+}
+
+export object JobDenial {
+    rule: str = "",
+    reason: str = "",
+    action: str = "",
+    verdictRef: str = "",
+    ts: int = 0,
+}
+
+export object RetryVerdict {
+    retryable: bool = false,
+    change: str = "",
+    reason: str = "",
+    code: str = "",
+}
+
+export object PriorAttempt {
+    n: int = 0,
+    state: str = "",
+    observedGeneration: int = 0,
+    endReason: str = "",
+    modelTier: str = "",
+    checkpoint: str = "",
+    reportedBase: str = "",
+    ended: int = 0,
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    unmet: [GateStatus] = [],
+    violations: [str] = [],
+    unresolvedRisks: [str] = [],
+    failingRefs: [str] = [],
+    denials: [JobDenial] = [],
+    denialsKnown: bool = false,
+    retry: RetryVerdict = RetryVerdict{},
+}
+
+export object JobRejection {
+    unmet: [GateStatus] = [],
+    violations: [str] = [],
+    at: int = 0,
+    observedGeneration: int = 0,
+}
+
 export object LeaseCheck {
     target: str = "",
     script: str = "",
@@ -789,6 +1031,7 @@ export object Goal {
     check: LeaseCheck = LeaseCheck{},
     paths: [str] = [],
     symbols: [str] = [],
+    signature: str = "",
 }
 
 export object JobRelease {
@@ -834,6 +1077,22 @@ export object JobEntry {
     consumed: int = 0,
 }
 
+export object JobWaiver {
+    code: str = "",
+    subject: str = "",
+    reason: str = "",
+}
+
+export object JobWorktree {
+    root: str = "",
+    source: str = "",
+    base: str = "",
+    created: int = 0,
+    binary: str = "",
+    removed: int = 0,
+    kept: str = "",
+}
+
 export object JobResultValidation {
     command: str = "",
     outputRef: str = "",
@@ -853,6 +1112,7 @@ export object JobResult {
     gateEvidence: [GateEvidence] = [],
     descendants: [str] = [],
     unresolvedRisks: [str] = [],
+    observedGeneration: int = 0,
 }
 
 export object JobAttempt {
@@ -867,6 +1127,9 @@ export object JobAttempt {
     durationMs: int = 0,
     revision: str = "",
     dirty: bool = false,
+    lease: str = "",
+    extraArgs: [str] = [],
+    observedGeneration: int = 0,
 }
 
 export object JobGateAttempt {
@@ -884,18 +1147,12 @@ export object JobRun {
     bytesReclaimed: int = 0,
 }
 
-export object GateStatus {
-    id: str = "",
-    verified: bool = false,
-    outputRef: str = "",
-    violations: [str] = [],
-}
-
 export object JobIntegration {
     checkout: str = "",
     at: int = 0,
     verified: bool = false,
     gates: [GateStatus] = [],
+    observedGeneration: int = 0,
 }
 
 export object Job {
@@ -909,7 +1166,16 @@ export object Job {
     denyPaths: [str] = [],
     readPaths: [str] = [],
     dependsOn: [str] = [],
+    breaks: [str] = [],
     model: str = "",
+    modelTier: JobModelTier? = null,
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    generation: int = 0,
+    maxAttempts: int = 0,
+    attempts: int = 0,
+    prior: [PriorAttempt] = [],
+    rejection: JobRejection? = null,
     check: LeaseCheck? = null,
     validation: str = "",
     goals: [Goal] = [],
@@ -920,11 +1186,14 @@ export object Job {
     unattributed: [JobUnattributedWrite] = [],
     entries: [JobEntry] = [],
     writeProof: str = "",
+    waivers: [JobWaiver] = [],
+    validated: int = 0,
     reportedBase: str = "",
     baseVerdict: str = "",
     registeredBy: Origin = Origin{},
     registered: int = 0,
     checkoutRoot: str = "",
+    worktree: JobWorktree? = null,
     endReason: str = "",
     created: int = 0,
     updated: int = 0,
@@ -935,6 +1204,13 @@ export object Job {
     lastRun: JobRun? = null,
     integration: JobIntegration? = null,
     waiterEvidence: JobIntegration? = null,
+}
+
+export object ContextWindow {
+    tokens: int = 0,
+    window: int = 0,
+    model: str = "",
+    source: str = "",
 }
 
 export object SpawnTarget {
@@ -961,6 +1237,11 @@ export object SpawnRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    modelTier: JobModelTier? = null,
+    thread: str = "",
+    threadFrom: str = "",
+    orchestration: str = "",
+    window: ContextWindow? = null,
     target: SpawnTarget? = null,
 }
 
@@ -994,9 +1275,14 @@ export object CommandRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    thread: str = "",
+    threadFrom: str = "",
+    orchestration: str = "",
+    window: ContextWindow? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
+    ownedCheckouts: [str] = [],
 }
 
 export object WriteRequest {
@@ -1006,11 +1292,19 @@ export object WriteRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    thread: str = "",
+    threadFrom: str = "",
+    orchestration: str = "",
+    window: ContextWindow? = null,
     path: str = "",
     workspace: str = "",
     content: str = "",
     oldText: str = "",
     newText: str = "",
+}
+
+export object HarnessKey {
+    id: str = "",
 }
 
 export object JobOverlapFootprint {
@@ -1110,15 +1404,47 @@ export object JobStatus {
     job: str = "",
     verified: bool = false,
     violations: [str] = [],
-    risks: [str] = [],
+    unresolvedRisks: [str] = [],
     command: str = "",
     gates: [GateStatus] = [],
+    notes: [str] = [],
     staleIndexes: [str] = [],
     footprint: [RegionChange] = [],
     footprintKnown: bool = false,
     footprintReason: str = "",
     footprintUnclaimed: [str] = [],
     entries: [JobEntry] = [],
+    linesAdded: int = 0,
+    linesDeleted: int = 0,
+    undeclaredExports: [str] = [],
+    leftUnreferenced: [str] = [],
+    symbolDeltaKnown: bool = false,
+    observedGeneration: int = 0,
+    priorGeneration: int = 0,
+}
+
+export object ModelTierRequest {
+    id: str = "",
+    parent: str = "",
+    criteria: str = "",
+    readOnly: bool = false,
+    check: LeaseCheck? = null,
+    goals: [Goal] = [],
+    kind: JobKind = JobKind.check,
+    writePaths: [str] = [],
+    writeProjects: [str] = [],
+    readPaths: [str] = [],
+    dependsOn: [str] = [],
+    writeFiles: int = 0,
+    parentRank: int? = null,
+    declaredRank: int? = null,
+    declaredModel: str = "",
+    history: [ModelTierRecord] = [],
+}
+
+export object ModelTierBounds {
+    maxLive: int = 0,
+    maxContext: int = 0,
 }
 
 export object CharmDeclaration {
@@ -1183,6 +1509,8 @@ export object Target {
     retry_on_volatile_reason: str = "",
     advisory: bool = false,
     advisory_reason: str = "",
+    human_only: bool = false,
+    human_only_reason: str = "",
 }
 
 export object EvaluatedProject {
@@ -1401,6 +1729,7 @@ export object Rule {
     decision: str = "",
     workspace: str = "",
     fixed: bool = false,
+    verdicts: [str] = [],
     catches: str = "",
     why: str = "",
 }
@@ -1521,7 +1850,7 @@ export object ServiceLease {
     idle: str = "",
 }
 
-export object FeedbackMark {
+export object TrailMark {
     id: str = "",
     section: str = "",
     key: str = "",
@@ -1533,7 +1862,7 @@ export object FeedbackMark {
     examples: [str] = [],
 }
 
-export object FeedbackObservation {
+export object TrailObservation {
     at: int = 0,
     agent: str = "",
     lease: str = "",
@@ -1548,7 +1877,7 @@ export object FeedbackObservation {
     shapes: [str] = [],
 }
 
-export object FeedbackSpawn {
+export object TrailSpawn {
     at: int = 0,
     agent: str = "",
     child: str = "",
@@ -1556,14 +1885,14 @@ export object FeedbackSpawn {
     model: str = "",
 }
 
-export object FeedbackTrail {
+export object Trail {
     session: str = "",
     host: str = "",
     start: int = 0,
     end: int = 0,
     checkouts: [str] = [],
-    observations: [FeedbackObservation] = [],
-    spawns: [FeedbackSpawn] = [],
+    observations: [TrailObservation] = [],
+    spawns: [TrailSpawn] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
@@ -1572,6 +1901,7 @@ export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun conformance() > {str: any} !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
@@ -1629,6 +1959,7 @@ export object guard {
     static extern fun count(key: str) > int;
     static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
+    static extern fun profile(level: str) > void;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
@@ -1636,7 +1967,7 @@ export object guard {
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
 export object harness {
-    static extern fun provider(spell: {str: any}) > void;
+    static extern fun provider(spell: {str: any}) > HarnessKey;
 }
 
 // Secret provider selection, and the credentials read through it.
@@ -1666,8 +1997,10 @@ export object job {
     static extern fun clear() > int !> any;
     static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
     static extern fun list() > JobList !> any;
+    static extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
+    static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun register(id: str, reported_base: str) > {str: any} !> any;
+    static extern fun register(id: str) > {str: any} !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
 }
 
@@ -1703,9 +2036,9 @@ export object vcs {
 
 // A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).
 export object trail {
-    static extern fun mark(mark: FeedbackMark) > FeedbackMark !> any;
-    static extern fun marks() > [FeedbackMark] !> any;
-    static extern fun read(opts: {str: any} = {<str: any>}) > FeedbackTrail !> any;
+    static extern fun mark(mark: TrailMark) > TrailMark !> any;
+    static extern fun marks() > [TrailMark] !> any;
+    static extern fun read(opts: {str: any} = {<str: any>}) > Trail !> any;
     static extern fun shape(command: str) > str;
     static extern fun shapes(command: str) > [str];
 }

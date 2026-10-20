@@ -43,6 +43,13 @@ const (
 	KindSecret = "secret"
 )
 
+// Sizing values for [Event.Sizing] on result events.
+const (
+	SizingDeclared = "declared" // the target's own memory_mb
+	SizingMeasured = "measured" // narrowed from recorded peaks
+	SizingNone     = "none"     // no memory claimed: undeclared, or a replay
+)
+
 // Stream values for [Event.Stream] on output events.
 const (
 	StreamStdout = "stdout"
@@ -85,6 +92,18 @@ type Event struct {
 	// DiagnosticCode is the MGS code behind a failed result that never ran, such as an
 	// admission refusal, which has no output ref to read the cause from.
 	DiagnosticCode string `json:"diagnostic_code,omitempty"`
+
+	// What a result's target claimed and cost, on result events only; each is omitted when
+	// zero. StartedMs is when it was admitted, in unix milliseconds; Slots and MemoryMB are
+	// its granted claim, and Sizing says where MemoryMB came from. WaitedMs is how long it
+	// queued for that claim. MaxRSSBytes and CPUMs are what its processes cost.
+	StartedMs   int64  `json:"started_ms,omitempty"`
+	Slots       int    `json:"slots,omitempty"`
+	MemoryMB    int    `json:"memory_mb,omitempty"`
+	Sizing      string `json:"sizing,omitempty"`
+	WaitedMs    int64  `json:"waited_ms,omitempty"`
+	MaxRSSBytes int64  `json:"max_rss_bytes,omitempty"`
+	CPUMs       int64  `json:"cpu_ms,omitempty"`
 
 	// Set ONLY on the started event (Kind==KindStarted): the run's identity, carried in the
 	// stream itself so both the durable file and any live watcher learn which command

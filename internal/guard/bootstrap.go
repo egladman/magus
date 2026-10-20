@@ -14,15 +14,15 @@ import (
 	"golang.org/x/mod/modfile"
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
 // ownModule is the module this guard was compiled from, read off a type rather than
-// spelled out so a renamed fork still recognizes its own tree.
-var ownModule = reflect.TypeFor[magus.Magus]().PkgPath()
+// spelled out so a renamed fork still recognizes its own tree. The types package sits
+// directly under the module root.
+var ownModule = path.Dir(reflect.TypeFor[types.GuardJudgment]().PkgPath())
 
 // goCall is a go command read the way cmd/go reads it: -C in either position it accepts
 // (`go -C dir build`, `go build -C dir`), and the argv from the subcommand on with that
@@ -157,7 +157,18 @@ func (g goCall) recoversMagus() bool {
 		args = trimpathOptional(args)
 		return len(args) == 3 && args[0] == "-o" && args[1] == "magus" && path.Clean(args[2]) == "cmd/magus"
 	case "generate":
-		return len(args) > 0 && !slices.ContainsFunc(args, func(a string) bool { return !insidePackage(a) })
+		if len(args) == 0 {
+			return false
+		}
+		for _, arg := range args {
+			if arg != "." && !strings.HasPrefix(arg, "./") {
+				return false
+			}
+			if !filepath.IsLocal(filepath.FromSlash(arg)) {
+				return false
+			}
+		}
+		return true
 	case "run":
 		args = trimpathOptional(args)
 		return len(args) >= 2 && path.Clean(args[0]) == "cmd/magus-utils" && slices.Contains(magusUtilsGenerators, args[1])
@@ -170,16 +181,6 @@ func trimpathOptional(args []string) []string {
 		return args[1:]
 	}
 	return args
-}
-
-// insidePackage reports a package operand naming a directory under the build root: no
-// flag, no absolute path, nothing that climbs out.
-func insidePackage(a string) bool {
-	if a == "" || strings.HasPrefix(a, "-") || path.IsAbs(a) {
-		return false
-	}
-	c := path.Clean(a)
-	return c != ".." && !strings.HasPrefix(c, "../")
 }
 
 // soleGoCall is the line's call when it is one go command and nothing else: no pipe,
@@ -225,13 +226,15 @@ func bootstrapLine(command string, d Dialect) bool {
 	return ok && shaped && "GOEXPERIMENT="+v == env
 }
 
-// cannotLoad reports whether the workspace at root fails to load with MGS1021 for the
-// binary judging the call. The hook runs the checkout's own ./magus when there is one, so
+// cannotLoad reports whether the workspace at root fails to load for the binary judging
+// the call in a way unloadCause blames on that binary: MGS1021, an unresolved import, or a
+// spell the binary does not ship. The hook runs the checkout's own ./magus when there is one, so
 // a binary that predates its sources answers for itself; with none, the binary on PATH
 // answers, and a tree it can load needs no recovery.
 func cannotLoad(ctx context.Context, deps Dependencies, root string) bool {
 	_, err := deps.inspect(ctx, root)
-	return errors.Is(err, types.WorkspaceNeedsNewerMagus)
+	cause := unloadCause(err, root).Cause
+	return cause == unloadStale || cause == unloadSkewedSpell
 }
 
 // ownSourceRoot reports whether dir is the root of a checkout of this guard's module.
@@ -276,8 +279,9 @@ type ownBuildOutcome struct {
 	// that needs replacing.
 	staleBootstrap         bool
 	staleBootstrapAdvisory ShellVerdict
-	// lease is the lease the call acts under, "" for the orchestrator or a person. A
-	// worker never builds the binary: there is one per base, and the main session places it.
+	// lease is the lease the call acts under, "" for the orchestrator, a person or the
+	// checkout's integrator. A worker never builds the binary: there is one per base, the
+	// integrator builds it and the main session places it.
 	lease string
 }
 
@@ -392,8 +396,12 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
 	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && cannotLoad(ctx, deps, root)
+	lease := deps.lease
+	if me, ok := actingLiveLease(ctx, deps, lease); ok && actingIntegrator(ctx, deps, me) {
+		lease = ""
+	}
 	return &ownBuildOutcome{
-		lease:         deps.lease,
+		lease:         lease,
 		root:          root,
 		bootstrapArgv: argv,
 		bootstrap:     call.bootstrapsMagus(),

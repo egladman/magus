@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // cacheNotice reports the outcome of a `magus config cache <verb>` run.
@@ -58,14 +59,14 @@ func configCacheCmd(ctx context.Context, root string, args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config cache: unknown subcommand %q", sub)
+		return exit.Usagef("magus config cache: unknown subcommand %q", sub)
 	}
 }
 
 func configCachePrune(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache prune", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	pf := gen.BindConfigCachePrune(fs)
+	pf := flaggen.BindConfigCachePrune(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache prune [--older-than <duration>] [--keep-last <count>] [--remote] [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -134,7 +135,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	// --to, not --output: the global --output selects a FORMAT on every other
 	// command, and one command redefining it to mean a destination path is the
 	// kind of inconsistency that makes callers stop trusting the flag set.
-	ef := gen.BindConfigCacheExport(fs)
+	ef := flaggen.BindConfigCacheExport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--to <file> | --remote]")
 		fmt.Fprintln(os.Stderr, "")
@@ -155,7 +156,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if ef.Remote && ef.To != "" {
-		return usagef("magus config cache export: --remote and --to are exclusive")
+		return exit.Usagef("magus config cache export: --remote and --to are exclusive")
 	}
 
 	m, err := loadMagus(ctx, root)
@@ -208,7 +209,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 func configCacheImport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	imf := gen.BindConfigCacheImport(fs)
+	imf := flaggen.BindConfigCacheImport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache import [<file> | --remote]")
 		fmt.Fprintln(os.Stderr, "")
@@ -229,7 +230,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if imf.Remote && len(fs.Args()) > 0 {
-		return usagef("magus config cache import: --remote reads no file")
+		return exit.Usagef("magus config cache import: --remote reads no file")
 	}
 
 	m, err := loadMagus(ctx, root)

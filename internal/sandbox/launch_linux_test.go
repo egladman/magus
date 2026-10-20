@@ -42,8 +42,9 @@ func TestMain(m *testing.M) {
 	case "bind":
 		os.Exit(helperBind(os.Getenv(helperPathEnv)))
 	case "fd":
-		// Before anything else opens a descriptor that could land on 3.
-		if _, err := unix.FcntlInt(3, unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+		// The launcher closed its ruleset before exec. A Go runtime may reuse fd 3
+		// before TestMain runs, but it must not inherit the Landlock ruleset itself.
+		if target, err := os.Readlink("/proc/self/fd/3"); err == nil && strings.Contains(target, "landlock") {
 			os.Exit(exitFDLeaked)
 		}
 		if os.Getenv(helperPathEnv) == "appended" {
@@ -144,12 +145,12 @@ func TestCommandConfinesTheChild(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestCommandLeavesNoRulesetInTheChild(t *testing.T) {
+func TestCommandDoesNotLeakRulesetToTheChild(t *testing.T) {
 	requireLandlock(t)
 
 	p := &Policy{FS: filesystem.Ruleset{Rules: testRules(t)}}
 	code, out := confinedHelper(t, p, "fd", "")
-	assert.Equal(t, 0, code, "descriptor 3 is closed before the exec: %s", out)
+	assert.Equal(t, 0, code, "the ruleset descriptor is not inherited by the exec: %s", out)
 }
 
 // A /proc/self grant is the child's own entry, not the entry of the magus that built
@@ -218,7 +219,7 @@ func TestCommandPassesAppendedFilesAfterTheRuleset(t *testing.T) {
 	cmd.ExtraFiles = append(cmd.ExtraFiles, r)
 
 	code, out := runHelper(t, cmd, "fd", "appended")
-	assert.Equal(t, 0, code, "descriptor 3 closed, the appended file at 3+LauncherFiles: %s", out)
+	assert.Equal(t, 0, code, "the ruleset is absent and the appended file is at 3+LauncherFiles: %s", out)
 }
 
 func TestCommandRefusesWithoutItsRuleset(t *testing.T) {

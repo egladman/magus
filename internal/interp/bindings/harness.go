@@ -19,6 +19,9 @@ import (
 //
 // The spell exports harness_config / harness_skills / harness_entries; Magus
 // invokes them by name on describe/verify. A workspace may use several harnesses.
+//
+// provider returns the harness's HarnessKey, the typed key a magus\job.modelTiers hosts
+// map is keyed by. A call that discards it wires the harness as before.
 func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	harness := vm.NewMap()
 	harness.MapSet("provider", directVal(obs, "magus.harness.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -36,7 +39,9 @@ func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.AddHarness(name)
 		}
-		return vm.Null, nil
+		key := vm.NewMap()
+		key.MapSet("id", vm.StrValue(name))
+		return key, nil
 	}))
 	return harness
 }

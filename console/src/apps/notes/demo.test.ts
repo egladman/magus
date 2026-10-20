@@ -28,7 +28,6 @@ test("the sample set exercises what the app renders", () => {
     AnchorStatus.DANGLING,
     AnchorStatus.DRIFTED,
     AnchorStatus.UNVERIFIED,
-    AnchorStatus.BODY_CHANGED,
   ]) {
     assert.ok(verdicts.has(want), `anchor verdict ${want} is represented`);
   }

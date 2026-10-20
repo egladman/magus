@@ -6,11 +6,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,7 +58,7 @@ func configConsoleCmd(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config console: unknown subcommand %q (want token)", sub)
+		return exit.Usagef("magus config console: unknown subcommand %q (want token)", sub)
 	}
 }
 
@@ -100,14 +101,14 @@ func configConsoleToken(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config console token: unknown subcommand %q", sub)
+		return exit.Usagef("magus config console token: unknown subcommand %q", sub)
 	}
 }
 
 func configConsoleTokenCreate(args []string) error {
 	fs := flag.NewFlagSet("config console token create", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	cf := gen.BindConfigConsoleTokenCreate(fs)
+	cf := flaggen.BindConfigConsoleTokenCreate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config console token create [--name <n>] [--expires <dur>] [--viewer]")
 		fmt.Fprintln(os.Stderr, "")

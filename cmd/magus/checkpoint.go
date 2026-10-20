@@ -10,10 +10,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -33,15 +35,15 @@ import (
 func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("checkpoint", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	cf := gen.BindSessionCheckpoint(fset)
+	cf := flaggen.BindSessionCheckpoint(fset)
 	fset.Usage = func() { checkpointUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus session checkpoint: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
+		return exit.Usagef("magus session checkpoint: takes no positional arguments (pass --note, or pipe a host's hook envelope in)")
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
@@ -88,7 +90,7 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	lease, leaseFrom, err := checkoutLease(wsRoot, spawn.Lease)
+	lease, leaseFrom, err := checkoutLease(ctx, wsRoot)
 	if err != nil {
 		return fmt.Errorf("magus session checkpoint: %w", err)
 	}
@@ -109,12 +111,11 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 	}
 
 	switch opts.Format {
-	case FormatText:
+	case outputText:
 		fmt.Fprintln(out, checkpointRecordedLine(stored, recorded))
 		return nil
-	case FormatName:
-		fmt.Fprintln(out, stored.Tree.Revision)
-		return nil
+	case outputName:
+		return emitNames(os.Stdout, []string{stored.Tree.Revision})
 	}
 	// recorded travels with the record: a wrapper reading the structured form has no
 	// other way to tell a new checkpoint from one identical to the last.

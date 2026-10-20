@@ -11,7 +11,7 @@ func sample(runs int64) *metricsv1.Sample {
 	return &metricsv1.Sample{TargetRuns: proto.Int64(runs)}
 }
 
-func runsOf(samples []*metricsv1.Sample) []int64 {
+func sampleRuns(samples []*metricsv1.Sample) []int64 {
 	out := make([]int64, len(samples))
 	for i, s := range samples {
 		out[i] = s.GetTargetRuns()
@@ -30,7 +30,7 @@ func TestRingPartialFillOldestFirst(t *testing.T) {
 	r := newRing(3)
 	r.Append(sample(1))
 	r.Append(sample(2))
-	got := runsOf(r.Snapshot())
+	got := sampleRuns(r.Snapshot())
 	want := []int64{1, 2}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("Snapshot = %v, want %v", got, want)
@@ -43,7 +43,7 @@ func TestRingWraparoundOldestFirst(t *testing.T) {
 		r.Append(sample(i))
 	}
 	// Capacity 3, appended 1..5: oldest two (1,2) evicted, oldest-first 3,4,5.
-	got := runsOf(r.Snapshot())
+	got := sampleRuns(r.Snapshot())
 	want := []int64{3, 4, 5}
 	if len(got) != len(want) {
 		t.Fatalf("Snapshot len = %d, want %d (%v)", len(got), len(want), got)
@@ -69,7 +69,7 @@ func TestRingIgnoresNil(t *testing.T) {
 	r := newRing(2)
 	r.Append(nil)
 	r.Append(sample(7))
-	got := runsOf(r.Snapshot())
+	got := sampleRuns(r.Snapshot())
 	if len(got) != 1 || got[0] != 7 {
 		t.Fatalf("Snapshot = %v, want [7]", got)
 	}

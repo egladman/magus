@@ -42,6 +42,12 @@ function isExecutable(candidate: string): boolean {
   }
 }
 
+/** env without BAGGAGE, the W3C channel a lease claim rides in. */
+function withoutBaggage(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { BAGGAGE: _, ...rest } = env;
+  return rest;
+}
+
 function resolveOnPath(name: string): string | null {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (dir === "") continue;
@@ -104,7 +110,14 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       //
       // An EMPTY cache for the same reason: a rule that reads the workspace's run log would
       // otherwise answer from this checkout's own history.
-      env: { ...process.env, XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
+      //
+      // No BAGGAGE: a worker running these tests under its own lease would hand the child
+      // a lease the empty job store never declared, and every case would be refused for it.
+      env: {
+        ...withoutBaggage(process.env),
+        XDG_STATE_HOME: stateHome,
+        MAGUS_CACHE_DIR: cacheHome,
+      },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 
@@ -138,16 +151,21 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
   return warnings;
 }
 
-/** The plugin ignores its PluginInput entirely (it is declared `async () =>`). */
+/** The slice of PluginInput these cases touch: no session has a parent, every call is a root's. */
+const pluginInput = {
+  directory: WORKSPACE_ROOT,
+  client: { session: { get: async () => ({ data: {} }) } },
+};
+
 async function hooks() {
-  const plugin = MagusGuard as unknown as () => Promise<{
+  const plugin = MagusGuard as unknown as (input: unknown) => Promise<{
     "tool.execute.before": (
       input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
   }>;
-  return await plugin();
+  return await plugin(pluginInput);
 }
 
 test("live: bash arm denies git stash with the whole-tree reason", { skip }, async () => {
@@ -159,23 +177,19 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
   );
 });
 
-// go test ./... now has an exact magus equivalent (magus run go::go-test) and is
-// DENIED, not advised - the plan this test was written from predates that rule.
-// ci-batch-poll advises once per state directory, and this file's is fresh.
-test("live: bash arm advises on gh pr checks and appends non-empty context", { skip }, async () => {
+test("live: bash arm directs CI status reads to failure artifacts", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1", sessionID: "s1" },
-      { args: { command: "gh pr checks 5" } },
+    await assert.rejects(
+      h["tool.execute.before"](
+        { tool: "bash", callID: "c1", sessionID: "s1" },
+        { args: { command: "gh pr checks 5" } },
+      ),
+      /hack\/ci\/show-failures\.buzz/,
     );
   });
-  assert.deepEqual(warnings, [], "an advise is delivered to the model, not logged for the person");
-
-  const result = { output: "checks" };
-  await h["tool.execute.after"]({ callID: "c1" }, result);
-  assert.match(result.output, /\[magus guard\] .+\S/);
+  assert.deepEqual(warnings, [], "the denial reaches the call without a second warning");
 });
 
 test("live: edit arm passes on a path that is not a declared output", { skip }, async () => {

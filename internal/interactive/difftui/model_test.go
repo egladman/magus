@@ -271,7 +271,7 @@ func TestCommentsAndPendingSuggestionsSitUnderTheirHunk(t *testing.T) {
 		},
 		Suggestions: []types.DiffSuggestion{
 			{ID: "s1", Path: "a.go", Hunk: 1, Reason: "look here"},
-			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Declined: true},
+			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Status: types.SuggestionDeclined},
 		},
 	})
 
@@ -366,7 +366,7 @@ func TestAGivenEmphasisSpanReachesItsRow(t *testing.T) {
 		Emph:   []changeset.Span{{}, {Start: 9, End: 10}, {Start: 9, End: 10}},
 		Digest: "d0",
 	}}}}})
-	assert.Equal(t, []string{"", "b", "c"}, emphasisOf(m))
+	assert.Equal(t, []string{"", "b", "c"}, emphasizedText(m))
 }
 
 // A caller that hands over no spans at all renders every line plain rather than panicking on
@@ -376,7 +376,7 @@ func TestNoEmphasisSliceIsNotAnIndexError(t *testing.T) {
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
 		{Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "d0"},
 	}}}})
-	assert.Equal(t, []string{"", ""}, emphasisOf(m))
+	assert.Equal(t, []string{"", ""}, emphasizedText(m))
 }
 
 func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
@@ -504,9 +504,9 @@ var sgrPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 func stripSGR(s string) string { return sgrPattern.ReplaceAllString(s, "") }
 
-// emphasisOf is the text each hunk line's span selects, in line order, "" where there is none.
+// emphasizedText is the text each hunk line's span selects, in line order, "" where there is none.
 // Compared as text rather than as offsets because text is what the renderer draws.
-func emphasisOf(m *Model) []string {
+func emphasizedText(m *Model) []string {
 	var out []string
 	for _, r := range m.Rows() {
 		if r.Kind != RowLine {

@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceCommandRule is the Verdict.Rule an unnamed magus\guard.command answer carries, in the
+// workspaceCommandRule is the GuardJudgment.Rule an unnamed magus\guard.command answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceCommandRule = workspaceShellPrefix + "command"
 
@@ -58,7 +58,11 @@ type commandRuleInput struct {
 //
 // A command magus itself served stays served: the rule's advice stands down on it as every
 // advisory does, while its deny still holds, like the other workspace-wide denies.
-func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+//
+// The cost and stall rules are graded first: they too only add, and they read the
+// verdict every compiled rule reached.
+func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, in commandRuleInput, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
+	verdict = gradeStall(deps, gradeMainCommand(ctx, deps, verdict, in, who, at), in.lease, at)
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
@@ -67,6 +71,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
+	req.OwnedCheckouts = ownedCheckouts(ctx, deps, at)
 	if deps.CheckoutState != nil {
 		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
@@ -167,26 +172,32 @@ func magusStateWrite(args []string) string {
 // from the envelope, parsed from the line, or taken from what magus recorded; none is
 // inferred from the host.
 func commandRequest(ctx context.Context, in commandRuleInput, who hookAttribution, at location, facts hint.Gate) types.CommandRequest {
-	role, lease := actingRole(ctx, at, in.lease)
+	spawned := spawnedAs(facts, who.Agent)
+	role, lease := actingRole(ctx, at, in.lease, spawned)
+	thread, from, window := callerCost(at, who, in.lease, facts)
 	return types.CommandRequest{
-		Host:        who.Host,
-		Session:     who.Session,
-		Command:     in.command,
-		Description: in.description,
-		Commands:    commandInvocations(in.command, in.dialect, at.dir),
-		Agent:       who.Agent,
-		Parent:      spawnedAs(facts, who.Agent),
-		Role:        role,
-		Lease:       lease,
-		Dir:         at.dir,
-		Workspace:   at.workspace,
+		Thread:        thread,
+		ThreadFrom:    from,
+		Orchestration: callerOrchestration(at, who, thread, from, in.lease),
+		Window:        window,
+		Host:          who.Host,
+		Session:       who.Session,
+		Command:       in.command,
+		Description:   in.description,
+		Commands:      commandInvocations(in.command, in.dialect, at.dir),
+		Agent:         who.Agent,
+		Parent:        spawned,
+		Role:          role,
+		Lease:         lease,
+		Dir:           at.dir,
+		Workspace:     at.workspace,
 	}
 }
 
-// actingRole is where a caller acting under lease stands, and the lease's job row. A bound
-// id the job store does not carry comes back with only its ID set, so the rule can tell a
-// dangling binding from no binding.
-func actingRole(ctx context.Context, at location, lease string) (types.AgentRole, *types.Job) {
+// actingRole is where a caller acting under lease, spawned as spawned, stands, and the
+// lease's job row. A bound id the job store does not carry comes back with only its ID set,
+// so the rule can tell a dangling binding from no binding.
+func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *types.Job) {
 	if lease == "" {
 		return types.AgentRoleRoot, nil
 	}
@@ -200,6 +211,9 @@ func actingRole(ctx context.Context, at location, lease string) (types.AgentRole
 				break
 			}
 		}
+	}
+	if integrates(*row, spawned, at.workspace) {
+		return types.AgentRoleIntegrator, row
 	}
 	return types.AgentRoleWorker, row
 }

@@ -13,15 +13,17 @@ import (
 // symbolIndexWorkspace is the part of *magus.Magus magus\symbolIndexDigest reads,
 // recovered by assertion because std cannot import root magus.
 type symbolIndexWorkspace interface {
-	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
+	FreshenSymbolIndexes(ctx context.Context) error
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	CacheDir() string
 }
 
 // MagusSymbolIndexDigest backs magus\symbolIndexDigest: a digest of the symbol index the
 // graph members load, which a target writes as an output for index readers to key their
-// cache on. It builds the graph first, so the digest covers the index files on disk now.
-// It raises when the gap probe cannot run, since the digest would then claim completeness.
+// cache on. It freshens declared indexes first, so a reader never has to depend on a
+// workflow-specific graph-build step. It raises when the gap probe cannot run, since the
+// digest would then claim completeness.
 func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -31,7 +33,10 @@ func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error
 	if !ok {
 		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\symbolIndexDigest: this workspace has no knowledge graph")
 	}
-	if _, err := w.KnowledgeGraph(ctx, false); err != nil {
+	if err := w.FreshenSymbolIndexes(ctx); err != nil {
+		return types.SymbolIndexDigest{}, err
+	}
+	if _, err := w.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()

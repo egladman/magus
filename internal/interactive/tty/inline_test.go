@@ -190,7 +190,7 @@ func TestInlineViewKeepsTheGridCorrectAcrossFrames(t *testing.T) {
 	assert.Equal(t, "spinner -", s.Row(3))
 	assert.Equal(t, "alpha", s.Row(4))
 	assert.Equal(t, "CHARLIE", s.Row(5))
-	assert.Equal(t, 5, cursorRowOf(s), "the cursor ends on the last line of the block, every time")
+	assert.Equal(t, 5, cursorRow(s), "the cursor ends on the last line of the block, every time")
 
 	// The transcript above is untouched, which is the whole point of redrawing
 	// in place rather than clearing.
@@ -214,7 +214,7 @@ func TestInlineViewSurvivesAHeightChangeThenDiffs(t *testing.T) {
 	assert.Equal(t, "CHANGED", s.Row(2))
 	assert.Equal(t, "", s.Row(3), "the rows the shorter block gave up are clean")
 	assert.Equal(t, "", s.Row(4))
-	assert.Equal(t, 2, cursorRowOf(s))
+	assert.Equal(t, 2, cursorRow(s))
 }
 
 // countingTTY records how many bytes reach the terminal. For an interactive

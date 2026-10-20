@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,7 +105,7 @@ func TestFSRemoteBackendPutArtifactConcurrentPushesDontTear(t *testing.T) {
 		"the stored artifact must be exactly one push's complete payload (got %d bytes), never a mix of both", len(got))
 }
 
-// A key already in the store is ErrRemoteExists, as the RemoteBackend contract says, and
+// A key already in the store is types.ErrCacheExists, as the types.CacheBackend contract says, and
 // the stored bytes stay: content addressing makes them the same entry.
 func TestFSRemoteBackendPutArtifactExistingKey(t *testing.T) {
 	r, err := NewFSRemoteBackend(t.TempDir())
@@ -112,7 +113,7 @@ func TestFSRemoteBackendPutArtifactExistingKey(t *testing.T) {
 	require.NoError(t, r.PutArtifact(t.Context(), "proj", "deadbeef", bytes.NewReader([]byte("first"))))
 
 	err = r.PutArtifact(t.Context(), "proj", "deadbeef", bytes.NewReader([]byte("second")))
-	require.ErrorIs(t, err, ErrRemoteExists)
+	require.ErrorIs(t, err, types.ErrCacheExists)
 	got, err := os.ReadFile(r.artifactPath("proj", "deadbeef"))
 	require.NoError(t, err)
 	assert.Equal(t, "first", string(got))

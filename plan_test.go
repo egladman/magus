@@ -22,7 +22,7 @@ func TestPlanFromChangedPaths(t *testing.T) {
 		"api/main.go":        "package main\n",
 	})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -80,7 +80,7 @@ func TestPlanCapsCrossShardConcurrency(t *testing.T) {
 		"api/main.go":        "package main\n",
 	})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -100,7 +100,7 @@ func TestPlanCapsCrossShardConcurrency(t *testing.T) {
 // plan describe a diff the caller did not ask for.
 func TestPlanRejectsBothSources(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -118,9 +118,9 @@ func TestPlanRejectsBothSources(t *testing.T) {
 func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": "",
-		"history.json":   "{ this is not json",
+		"history.json":   "{ this is not json\n",
 	})
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

@@ -222,6 +222,7 @@ The `targets` sub-map keys a target name to a policy table:
 | `drift`             | what happens when this target's declared outputs move under a read-only run: `"fail"` (the default for a target that declares outputs), `"warn"` to report without failing, or `"off"`. An unrecognized value is a load error                                                                   |
 | `drift_reason`      | prose for turning the drift gate off; required when `drift` is `"off"`, for the reason `skip_cache`'s is                                                                                                                                                                                        |
 | `retry_on_volatile` | a reason string stating why this target fails without the code being wrong; magus then routes its failures through volatility detection and reruns a predicted-volatile one once (see [volatility.md](volatility.md)). A bare `true` is a load error, and the opt-in binds to this target alone |
+| `human_only`        | a reason string stating what running this target costs; an agent's run reaching it is then put to the person through the host's own prompt and a leased worker's is refused ([guard](../guides/integrations/agents/guard.md)). A bare `true` is a load error, and so is `ci` reaching one       |
 | `cache.include`     | overrides the workspace's `cache.include.os/arch.enabled` for this target, for an artifact that varies along one axis but not the other. Nested to mirror `magus.yaml` exactly; a misspelled nesting level is a load error rather than a silent inherit                                         |
 
 ```buzz
@@ -238,9 +239,15 @@ magus\project({
         "security": { "timeout": "15m" },
         "integration": { "retry_on_volatile": "talks to a shared broker that drops a connection under load" },
         "image": { "cache": { "include": { "arch": { "enabled": false } } } },
+        "bench": { "human_only": "launches paid model sessions, up to $4 each" },
     },
 });
 ```
+
+`human_only` is where a
+[human in the loop](../doctrine.md#human-in-the-loop) meets cost: the reason string is what the
+person reads when the guard asks, and a person at their own terminal runs the target
+without being asked.
 
 ## depends_on: cross-project dependencies
 

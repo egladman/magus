@@ -19,6 +19,12 @@ const (
 	// MergeBothAdded keeps ours, then theirs, when both inserted lines into an empty base
 	// region.
 	MergeBothAdded MergeKind = 2
+	// MergeByClaim keeps the one side's edit in a region the other side's edit touches,
+	// because that side's job claimed the declaration it lies in.
+	MergeByClaim MergeKind = 3
+	// MergeImportSet merges the import lines both sides changed in a file's preamble as a
+	// set.
+	MergeImportSet MergeKind = 4
 )
 
 func (k MergeKind) String() string {
@@ -29,6 +35,10 @@ func (k MergeKind) String() string {
 		return "kind 1"
 	case MergeBothAdded:
 		return "kind 2"
+	case MergeByClaim:
+		return "kind 3"
+	case MergeImportSet:
+		return "kind 4"
 	}
 	return "MergeKind(" + strconv.Itoa(int(k)) + ")"
 }

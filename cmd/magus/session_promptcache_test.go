@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func TestPromptCacheForCheckoutReadsThisCheckoutsTrail(t *testing.T) {
 	assert.Empty(t, promptCacheForCheckout(root, time.Now()).Providers,
 		"a checkout no agent has run against has no activity to clock")
 
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass"})
 

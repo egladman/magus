@@ -97,7 +97,6 @@ const ANCHOR_COPY: Record<number, { label: string; status: Status }> = {
   [AnchorStatus.DANGLING]: { label: "dangling", status: "danger" },
   [AnchorStatus.DRIFTED]: { label: "drifted", status: "warning" },
   [AnchorStatus.UNVERIFIED]: { label: "unverified", status: "neutral" },
-  [AnchorStatus.BODY_CHANGED]: { label: "body changed", status: "info" },
 };
 
 const ANCHOR_KIND_NAME: Record<number, string> = {
@@ -175,12 +174,7 @@ export function edited(ms: number): string {
 // because the subject is gone rather than merely changed, and both outrank an unverified
 // anchor, which is an absence of evidence rather than a finding.
 function worstAnchor(n: Note): { label: string; status: Status; count: number } | null {
-  for (const status of [
-    AnchorStatus.DANGLING,
-    AnchorStatus.DRIFTED,
-    AnchorStatus.UNVERIFIED,
-    AnchorStatus.BODY_CHANGED,
-  ]) {
+  for (const status of [AnchorStatus.DANGLING, AnchorStatus.DRIFTED, AnchorStatus.UNVERIFIED]) {
     const hits = n.anchors.filter((a) => a.status === status);
     const copy = ANCHOR_COPY[status];
     if (hits.length > 0 && copy) {

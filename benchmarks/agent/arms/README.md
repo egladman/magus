@@ -23,7 +23,7 @@ Both provisioning scripts are idempotent: they clear `.benchmark/`, `.claude/`,
 
 | Component      | rampant (ARM-0)                                     | full (ARM-1)                                                                                                                               |
 | -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --prune` with the given binary (30 files: a short body per skill plus its `-full` twin)        |
+| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --skill-form both` with the given binary (a short body per skill plus its `-full` twin)        |
 | Guard hooks    | 3 PreToolUse entries kept, each `"command": "true"` | the shipped `magus-{command,path,observe}.buzz` copied to `.claude/hooks/`, wired by matcher, pinned to the given binary via `__MAGUS_BIN` |
 | MAGUS.md       | absent                                              | `magus describe graph -o markdown`, rendered with the given binary                                                                         |
 | CLAUDE.md      | `repo-description.md` verbatim                      | the same file plus the marker-bounded block `magus agent starter` prints                                                                   |
@@ -40,6 +40,22 @@ silent and exits 0.
 
 `repo-description.md` is shared by both arms so that the routing block, and not
 the repo prose, is what the arms differ by.
+
+## Skill-form arms
+
+Three arms reuse the full recipe and differ from it, and from each other, only
+in the skill bodies. Each is a pair of few-line wrappers over `full/`:
+
+| Arm            | Skills                                                                    |
+| -------------- | ------------------------------------------------------------------------- |
+| `skills-full`  | `--skill-form full`: one full body per skill                              |
+| `skills-short` | `--skill-form short`: one short body per skill                            |
+| `skills-c1`    | the directory `BENCH_C1_DIR` names, copied verbatim into `.claude/skills` |
+
+`full/provision.sh` reads the choice from `BENCH_SKILL_FORM` (default `both`)
+and `BENCH_SKILLS_DIR`, which wins when set, and records it in
+`.benchmark/skills.source`. `skills-c1` fails to provision when `BENCH_C1_DIR`
+is unset. `compress.manifest` runs the three over the eight fixture tasks.
 
 ## What is not switched: MCP
 
@@ -87,19 +103,23 @@ why the ablation is a 0/1 ladder rather than a menu of independent switches:
 
 Both probes exit non-zero at the first failing check, naming it.
 
-The full probe leans on `magus doctor` for currency (`agent-skills` must be ok,
-`guard-wiring` must be ok and must name the worktree's own `settings.json`,
-which is what proves the copied templates carry the current
-`magus-guard-template` version). Doctor runs with `HOME` pointed at
-`<worktree>/.benchmark/home`, because it also reads home-scoped hook configs:
-without that, a stale hook config belonging to whoever runs the benchmark would
-decide an arm's verdict.
+`magus doctor` grades installed skills and guard wiring only through a harness
+wired in a root magusfile, and the fixture carries none, so the full probe
+proves currency itself:
+
+- The skills must be byte-identical to what the given binary renders for the
+  recorded form (rendered again into a temporary directory and compared), or to
+  the custom directory for `skills-c1`.
+- The command wired for `Bash` in `settings.json` must answer a synthetic
+  `PreToolUse` event, run with `HOME` pointed at `<worktree>/.benchmark/home` so
+  that a hook config belonging to whoever runs the benchmark cannot decide the
+  verdict.
 
 Two limits worth knowing:
 
-- Doctor decides "installed" from ONE anchor skill and grades the skills it
-  finds, so a skill that goes missing after provisioning is invisible to it.
-  Provisioning records the installed count and the probe re-counts.
+- Nothing grades the `magus-guard-template` version against the binary any
+  more; the probe checks the marker is present, and provisioning copies the
+  templates from the same checkout the binary is meant to be built from.
 - The templates import `lib/hook.buzz` relative to themselves, so provisioning
   copies it beside them and the probe checks it is there: without it every hook
   fails to load.

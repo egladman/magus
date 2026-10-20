@@ -11,6 +11,9 @@
 // in prose or inside an identifier.
 //
 // A word in backticks on its own (`lane`) is a mention, not a use, and passes.
+//
+// Tier 1, mechanical: the fix is a word, and SANCTIONED names a finding kept on purpose
+// with why.
 namespace bannedwords;
 
 import "assert";
@@ -32,8 +35,8 @@ final SKIPPED = {
     "releases/**": "published release notes are history",
     "blog/**": "a post is one author's dated account",
     "**/testdata/hosts/**": "third-party host schemas, kept verbatim",
-    "libs/conventions/proofread/testdata/css_banned_*.css": "the CSS check's cases spell the words it refuses",
-    "libs/conventions/proofread/testdata/cases/banned-word.txtar": "the CSS check's cases spell the words it refuses",
+    "libs/proofread/testdata/css_banned_*.css": "the CSS check's cases spell the words it refuses",
+    "libs/proofread/internal/calibrate/cases/banned-word.txtar": "the CSS check's cases spell the words it refuses",
     "**/pnpm-lock.yaml": "pnpm writes it",
     "changes/unreleased/surface-names*.md": "the changelog entries name the identifiers they renamed",
     THIS: "it spells the words it refuses",
@@ -45,7 +48,17 @@ final LANES_ARE_ROUTING = ["libs/figure/figure.buzz"];
 
 // SANCTIONED holds each finding kept on purpose, by "<path>: <matched text>", with why. An
 // entry that no longer has a finding is itself a finding, so the list only shrinks.
-export final SANCTIONED = {<str: str>};
+export final SANCTIONED = {
+    "hack/embed/cmd/embed/bench.go: corpus": "the external export format fixes this filename",
+    "hack/embed/cmd/embed/bench_test.go: corpus": "the fixture proves the external export filename",
+    "hack/embed/cmd/embed/decontam.go: evalCorpus": "the evaluation input collection is named beside the decontamination algorithm",
+    "hack/embed/cmd/embed/decontam_test.go: evalCorpus": "the tests name the decontamination input collection",
+    "hack/embed/cmd/embed/main.go: evalCorpus": "the command wires the decontamination input collection",
+    "hack/embed/cmd/embed/main_test.go: evalCorpus": "the command test constructs the decontamination input collection",
+    "internal/rankeval/results.go: corpus": "the ranker comment names the standard retrieval input",
+    "internal/textembed/search_test.go: corpus": "the CoIR data layout and export protocol fix this term",
+    "internal/textembed/search_test.go: TestExternalHarnessDedupeCorpus": "the test names the external evaluation layout it covers",
+};
 
 final DETERMINER_ONE = std\pattern(`(?i)\b(?:a|an|this|every|each|one|another|neither|either|per)\s+surface\b`);
 final DETERMINER_MANY = std\pattern(`(?i)\b(?:both|two|three|four|five|these|those|several|all)\s+surfaces\b`);

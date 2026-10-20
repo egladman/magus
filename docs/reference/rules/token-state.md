@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 deny [token-state]: ...
 ```
 
+A workspace that sets this rule to `advise` sees `advise [token-state]: ...` instead.
+
 `magus describe rule token-state` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

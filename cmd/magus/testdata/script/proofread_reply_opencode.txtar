@@ -1,0 +1,71 @@
+# proofread-reply.buzz answers OpenCode in its own shape: a {"prompt": ...} the plugin sends
+# back with session.promptAsync. The plugin pipes the codex envelope on a root session's idle
+# event and reads only "prompt" from the reply (docs/guides/integrations/agents/opencode-plugin.ts).
+#
+# It carries no verdict, so it owes no `# case:` label. A stand-in proofread answers with
+# seven findings, the first echoing the argv it was run with.
+
+[windows] skip 'the fixtures stand in a POSIX sh script for proofread'
+
+chmod 0755 $WORK/fake-proofread
+chmod 0755 $WORK/failing-proofread
+env __PROOFREAD_BIN=$WORK/fake-proofread
+
+# Findings come back as one prompt to send the reply again, capped at five with the rest
+# counted. Nothing Claude Code, Codex or Cursor would read is printed.
+stdin $WORK/idle.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
+stdout '^\{"prompt":'
+stdout 'Send the reply again'
+stdout 'closing-offer \(line 3\): argv agent-reply --stdin -o json'
+stdout 'and 2 more'
+! stdout '"decision"'
+! stdout 'hookSpecificOutput'
+! stdout 'followup_message'
+! stderr .
+
+# A reply made while the plugin's follow-up has the agent continuing is never judged.
+stdin $WORK/idle-again.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
+! stdout .
+! stderr .
+
+# A missing proofread, one that fails, and an envelope with no reply are all silent.
+env __PROOFREAD_BIN=$WORK/nonexistent-proofread
+stdin $WORK/idle.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
+! stdout .
+! stderr .
+
+env __PROOFREAD_BIN=$WORK/failing-proofread
+stdin $WORK/idle.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
+! stdout .
+! stderr .
+
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/idle-empty.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name opencode
+! stdout .
+! stderr .
+
+-- idle.json --
+{"last_assistant_message": "Done. Want me to run the tests?", "stop_hook_active": false}
+-- idle-again.json --
+{"last_assistant_message": "Done. Want me to run the tests?", "stop_hook_active": true}
+-- idle-empty.json --
+{"last_assistant_message": "", "stop_hook_active": false}
+-- fake-proofread --
+#!/bin/sh
+# Stands in for proofread: seven findings, the first echoing the argv it was run with.
+printf '[{"source":"stdin:3","rule":"closing-offer","message":"argv %s"}' "$*"
+i=1
+while [ $i -lt 7 ]; do
+  printf ',{"source":"stdin:%s","rule":"filler","message":"x"}' "$i"
+  i=$((i + 1))
+done
+printf ']\n'
+-- failing-proofread --
+#!/bin/sh
+echo 'proofread: cannot judge' >&2
+exit 2

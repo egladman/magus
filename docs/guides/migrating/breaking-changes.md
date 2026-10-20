@@ -56,11 +56,11 @@ you ship.
 `magus-utils api` writes the public names (every subcommand, flag, project
 target, and config key) as a sorted, newline-delimited `.lock` file, the same flat
 format as `urls.lock`. The snapshot lives at
-`internal/cli/testdata/api.lock`, and `TestAPIUpToDate` regenerates it in
+`internal/commands/testdata/api.lock`, and `TestAPIUpToDate` regenerates it in
 memory and compares. Change the CLI and the test fails until you regenerate:
 
 ```console
-go generate ./internal/cli/...
+magus run man-generate .
 ```
 
 The regenerated diff is the review artifact. A new line is a new flag or command;

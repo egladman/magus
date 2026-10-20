@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -41,7 +41,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// stops at it. proc is the exception: its exec traces, so doctor can see what a
 	// target runs. A wasm registry lists no IO module, so there these imports reach the
 	// resolver below.
-	for name, reg := range bindinggen.Modules {
+	for name, reg := range bindgen.Modules {
 		if reg.Capabilities.Has(ffi.WASM) {
 			continue
 		}
@@ -100,7 +100,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // test TestMagusAPIMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
 // (magus.project, and the ctx.needs/ctx.glob a target declares) are modeled into the graph.
-func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
+func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
 	m.MapSet("project", fn("magus.project", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -373,6 +373,22 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		unreferenced.MapSet("symbols", vm.ListValue(nil))
 		unreferenced.MapSet("answer", answer)
 
+		duplication := vm.NewMap()
+		duplication.MapSet("definition", vm.StrValue(""))
+		duplication.MapSet("groups", vm.ListValue(nil))
+		duplication.MapSet("answer", answer)
+
+		conformance := vm.NewMap()
+		conformance.MapSet("definition", vm.StrValue(""))
+		conformance.MapSet("rows", vm.ListValue(nil))
+		conformance.MapSet("stale", vm.ListValue(nil))
+		conformance.MapSet("excluded", vm.IntValue(0))
+		conformance.MapSet("answer", answer)
+
+		modelTiers := vm.NewMap()
+		modelTiers.MapSet("definition", vm.StrValue(""))
+		modelTiers.MapSet("rows", vm.ListValue(nil))
+
 		res := vm.NewMap()
 		res.MapSet("hotspots", insightLens("nodes", "files"))
 		res.MapSet("affinity", insightLens("pairs"))
@@ -380,6 +396,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("trend", insightLens("projects"))
 		res.MapSet("volatility", volatility)
 		res.MapSet("unreferenced", unreferenced)
+		res.MapSet("duplication", duplication)
+		res.MapSet("conformance", conformance)
+		res.MapSet("modelTiers", modelTiers)
 		res.MapSet("graphStats", stats)
 		return res, nil
 	}))
@@ -490,6 +509,11 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("symbols", shaped("magus.symbols", map[string]vm.Value{
 		"symbols": empty, "indexes": empty,
 	}))
+	// Empty for the reason precedents is.
+	m.MapSet("conformance", shaped("magus.conformance", map[string]vm.Value{
+		"definition": vm.StrValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
+		"answer": vm.NewMap(), "indexes": empty,
+	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.
@@ -501,20 +525,20 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}
 	m.MapSet("dir", fn("magus.dir", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		p := firstStr(args)
-		return bindinggen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
+		return bindgen.ObjectDir(types.Dir{Path: p, ID: types.KindDir + ":" + p}), nil
 	}))
 	m.MapSet("dirs", fn("magus.dirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
 	}))
 	m.MapSet("layer", fn("magus.layer", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
+		return bindgen.ObjectLayer(types.Layer{Name: firstStr(args)}), nil
 	}))
-	m.MapSet("neighborhood", fn("magus.neighborhood", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
+	m.MapSet("neighborhood", fn("magus.neighborhood", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectKnowledgeNeighborhoodOutput(types.KnowledgeNeighborhoodOutput{
 			Definition: types.KnowledgeNeighborhoodDefinition,
 			Focus:      firstStr(args),
 			Answer:     types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown},
-		}), nil
+		}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("output", shaped("magus.output", map[string]vm.Value{
 		"ref": vm.StrValue(""), "project": vm.StrValue(""), "target": vm.StrValue(""),
@@ -532,7 +556,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// marks find no trail; mark echoes a zero row for the reason job.put does.
 	trail := vm.NewMap()
 	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectFeedbackTrail(types.FeedbackTrail{}), nil
+		return bindgen.ObjectTrail(types.Trail{}), nil
 	}))
 	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StrValue(""), nil
@@ -544,7 +568,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return vm.ListValue(nil), nil
 	}))
 	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectFeedbackMark(types.FeedbackMark{}), nil
+		return bindgen.ObjectTrailMark(types.TrailMark{}), nil
 	}))
 	m.MapSet("trail", trail)
 
@@ -843,6 +867,17 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 					}
 					p.NoCache = append(p.NoCache, name)
 				}
+				if hv, ok := pv.MapGet("human_only"); ok {
+					var reason string
+					if hv.IsStr() {
+						reason = strings.TrimSpace(hv.AsString())
+					}
+					if reason == "" {
+						return fmt.Errorf(
+							"magus.project: targets[%q].human_only needs a reason string saying what running this target costs, e.g. \"launches paid model sessions, up to $4 each\", "+
+								"the guard quotes it to the agent it stops and to the person it asks", rawName)
+					}
+				}
 				if sv, ok := pv.MapGet("slots"); ok {
 					if !sv.IsInt() {
 						return fmt.Errorf(
@@ -895,11 +930,11 @@ func buildProc(tr *Tracer) vm.Value {
 			}
 			tr.addExec(append([]string{bin}, rest...))
 		}
-		return bindinggen.ObjectExecResult(types.ExecResult{OK: true}), nil
+		return bindgen.ObjectExecResult(types.ExecResult{OK: true}), nil
 	}))
 	m.MapSet("shell", fn("proc.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		shell := cmp.Or(strArg(args, 1), "/bin/sh")
-		return bindinggen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
+		return bindgen.ObjectShellCommand(types.ShellCommand{Bin: shell, Args: []string{"-c", strArg(args, 0)}}), nil
 	}))
 	return m
 }

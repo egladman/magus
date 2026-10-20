@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -54,9 +55,17 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 	return &types.LeaseCheck{Target: "go-test", Project: ".", Args: args}
 }
 
-// refuseNarrowedIn is RefuseNarrowedTests with a store opened at root, which is all it reads.
+// refuseNarrowedIn is narrowedTestProblems with a store opened at root, which is all it
+// reads, each problem rendered as its message and fix on one line.
 func refuseNarrowedIn(root string, row types.Job) error {
-	return RefuseNarrowedTests(&Store{root: root}, row)
+	var errs []error
+	for _, p := range narrowedTestProblems(&Store{root: root}, row) {
+		if p.Code != types.JobCheckUnrunnable {
+			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
+		}
+		errs = append(errs, errors.New(p.Message+": "+p.Fix))
+	}
+	return errors.Join(errs...)
 }
 
 func TestRefuseNarrowedTestsListsWhatTheCheckLeavesOut(t *testing.T) {
@@ -113,6 +122,10 @@ func TestRefuseNarrowedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 		{"a whole-test alternative first skips it", goTestCheck("-skip", "Beta|Beta/case"), "TestBeta"},
 		{"another tool's -run is not go test's", &types.LeaseCheck{Target: "cargo-test", Project: ".", Args: []string{"-run", "Alpha"}}, ""},
 		{"the spell-qualified go test", &types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Alpha"}}, "TestBeta"},
+		{"the test target forwards -run to go test", &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}, "TestBeta"},
+		{"the test target under a charm", &types.LeaseCheck{Target: "test:extended", Project: ".", Args: []string{"-skip", "Beta"}}, "TestBeta"},
+		{"the test target covering every test", &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha|Beta|Gamma"}}, ""},
+		{"another spell's go-test op", &types.LeaseCheck{Target: "bazel::go-test", Project: ".", Args: []string{"-run", "Alpha"}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -164,7 +177,7 @@ func TestRefuseNarrowedTestsFindsPackagesFromWritePaths(t *testing.T) {
 		t.Parallel()
 
 		require.NoError(t, refuseNarrowedIn("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
-		require.NoError(t, RefuseNarrowedTests(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
+		assert.Empty(t, narrowedTestProblems(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
 	})
 }
 
@@ -313,7 +326,7 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	narrow := goTestCheck("-run", "Alpha")
 	paths := []string{"pkg/a.go"}
 
-	s := tmpStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root())
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
@@ -343,7 +356,7 @@ func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := tmpStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
@@ -358,7 +371,7 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	ctx := context.Background()
 	w := testRoot(t)
 	w.Write("other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
-	s := tmpStore(t, w.Root())
+	s := tempStore(t, w.Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)

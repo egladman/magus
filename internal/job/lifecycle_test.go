@@ -20,6 +20,52 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// A probe history appends what changed, and is rewritten to the entries still kept when one
+// is dropped, so a row no longer probed leaves the file.
+func TestLandingProbesAppendAndRewriteOnADrop(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	probes := filepath.Join(filepath.Dir(path), landingProbesFile)
+
+	s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 1, Updated: 1}, "b": {At: 1, Updated: 1}})
+	s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 2, Updated: 1}, "b": {At: 1, Updated: 1}})
+	got := s.readLandingProbes()
+	assert.Equal(t, probeLog{probes: map[string]landingProbe{"a": {At: 2, Updated: 1}, "b": {At: 1, Updated: 1}}, lines: 3}, got,
+		"the changed entry was appended")
+
+	s.writeLandingProbes(got, map[string]landingProbe{"b": {At: 1, Updated: 1}})
+	raw, err := os.ReadFile(probes)
+	require.NoError(t, err)
+	assert.Equal(t, `{"id":"b","at":1,"updated":1}`+"\n", string(raw))
+}
+
+// TestEndedReasonSaysWhichEnd: a read-only scout its holder finished, and a row the root
+// ended for an isolated worker that filed nothing, both read as abandoned no_return with no
+// reason (2026-10-14). Every no_return a write records now says which end it was.
+func TestEndedReasonSaysWhichEnd(t *testing.T) {
+	t.Parallel()
+	check := &types.LeaseCheck{Target: "test", Project: "."}
+	filed := &types.JobResult{}
+	for _, tt := range []struct {
+		name     string
+		row      types.Job
+		byHolder bool
+		want     string
+	}{
+		{"a read-only scout that filed a result", types.Job{ID: "s", ReadOnly: true, Registered: 1, Result: filed}, true, "returned ungraded"},
+		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, true, "ended ungraded"},
+		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1, Result: filed}, false, "ended unverified"},
+		{"a row nobody took", types.Job{ID: "w", Check: check}, false, "before any holder ran"},
+		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, "ended by someone other than its holder"},
+	} {
+		assert.Contains(t, endedReason(tt.row, tt.byHolder), tt.want, tt.name)
+	}
+}
+
 // observeClaim is an observer whose diff shows exactly what rep claims.
 func observeClaim(rep types.JobResult) Observer {
 	return func(context.Context, types.Job) (Observed, error) { return claimed(rep), nil }
@@ -31,7 +77,7 @@ func observeClaim(rep types.JobResult) Observer {
 func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
-	loc := declared(t, acceptRow())
+	loc := declared(t, coveredRow())
 	result := passingResult()
 	attempt := passingRun
 	attempt.Ref = result.Validation.OutputRef
@@ -46,18 +92,22 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.Equal(t, types.StateExited, exited.State)
 	require.NotNil(t, exited.Result)
 	require.NotNil(t, exited.Attempt)
-	assert.Equal(t, attempt, *exited.Attempt)
+	attempt.ObservedGeneration = 1
+	assert.Equal(t, attempt, *exited.Attempt, "the run is stamped with the generation it was filed at")
+	assert.Equal(t, 1, exited.Result.ObservedGeneration)
 
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)
 	// The primary check is LISTED, like any other gate: it is one, and reporting it only
 	// when other gates existed is what let `describe job` say a check-only job had none.
+	assert.True(t, status.Clean(), "a verified job carries no risk")
+	status.UnresolvedRisks = nil
 	assert.Equal(t, types.JobStatus{
-		Job:      result.Job,
-		Verified: true,
-		Risks:    []string{},
-		Command:  result.Validation.Command,
-		Gates:    []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Job:                result.Job,
+		Verified:           true,
+		Command:            result.Validation.Command,
+		Gates:              []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		ObservedGeneration: 1,
 	}, status)
 
 	rows, err := NewStore(loc).List()
@@ -90,6 +140,82 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	require.Len(t, status.Gates, 2)
 }
 
+// coveredRow is acceptRow holding only what passingResult changes, so its exit narrows
+// nothing and the spec keeps its generation.
+func coveredRow() types.Job {
+	row := acceptRow()
+	row.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"}
+	return row
+}
+
+// An exited job awaiting its wait holds only what its result changed, so a fork over a
+// file it never touched is not refused on its account; what it dropped is a release, and
+// the wait still grades the result clean. An abandonment keeps every path.
+func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	result := passingResult()
+	resolver := func(context.Context, string) (types.JobAttempt, error) {
+		attempt := passingRun
+		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+		return attempt, nil
+	}
+
+	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
+	require.NoError(t, err)
+	require.Len(t, exited.Releases, 1)
+	assert.False(t, exited.Releases[0].Revoked, "the holder gave it up")
+	assert.Equal(t, 2, exited.Result.ObservedGeneration, "the evidence proved the wider spec, so it grades the narrowed one")
+	want := row
+	want.Version = types.JobSchemaVersion
+	want.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"} // a directory covers what is under it
+	want.Releases = []types.JobRelease{{Path: "docs/reference/*.md", Digest: "absent", ReleasedAt: exited.Releases[0].ReleasedAt}}
+	want.Generation = 2 // narrowing is a spec change
+	want.Attempts, want.State = 1, types.StateExited
+	want.RegisteredBy, want.Created, want.Updated = exited.RegisteredBy, exited.Created, exited.Updated
+	want.Result, want.Attempt, want.GateAttempts = exited.Result, exited.Attempt, exited.GateAttempts
+	assert.Equal(t, want, exited)
+
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.True(t, status.Verified, status.Violations)
+
+	t.Run("a claim covers its file", func(t *testing.T) {
+		t.Parallel()
+		claims := acceptRow()
+		claims.WritePaths = []string{"run.go#A", "run.go#B", "other.go#C"}
+		loc := declared(t, claims)
+		changed := passingResult()
+		changed.ChangedPaths = []string{"run.go"}
+		exited, err := Exit(t.Context(), boundStore(loc, claims.ID), claims.ID, &changed, resolver)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"run.go#A", "run.go#B"}, exited.WritePaths)
+	})
+
+	t.Run("a result covering none of the paths keeps them for the grade to name", func(t *testing.T) {
+		t.Parallel()
+		stray := acceptRow()
+		loc := declared(t, stray)
+		off := passingResult()
+		off.ChangedPaths = []string{"elsewhere.go"}
+		exited, err := Exit(t.Context(), boundStore(loc, stray.ID), stray.ID, &off, resolver)
+		require.NoError(t, err)
+		assert.Equal(t, stray.WritePaths, exited.WritePaths)
+		assert.Empty(t, exited.Releases)
+	})
+
+	t.Run("an abandonment keeps every path", func(t *testing.T) {
+		t.Parallel()
+		kept := acceptRow()
+		loc := declared(t, kept)
+		stored, err := Exit(t.Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
+		require.NoError(t, err)
+		assert.Equal(t, kept.WritePaths, stored.WritePaths)
+	})
+}
+
 func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	t.Parallel()
 
@@ -120,6 +246,81 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	assert.Equal(t, types.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
+}
+
+// A rejection is recorded for the next attempt to read, in the verdict's write and with the
+// row's heartbeat untouched; a pass clears it.
+func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	loc := declared(t, row)
+	before, err := NewStore(loc).List()
+	require.NoError(t, err)
+	run := passingRun
+	run.Ref, run.TimestampMs = passingResult().Validation.OutputRef, 9_999_999_999_999
+	resolve := func(context.Context, string) (types.JobAttempt, error) { return run, nil }
+	empty := passingResult()
+	empty.ChangedPaths = nil
+
+	_, err = Wait(t.Context(), NewStore(loc), row.ID, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.NotNil(t, rows[0].Rejection)
+	assert.Contains(t, rows[0].Rejection.Violations, "job harness/ledger-accept is not read-only and the result claims no changed paths at all")
+	assert.Positive(t, rows[0].Rejection.At)
+	assert.Equal(t, 1, rows[0].Rejection.ObservedGeneration)
+	assert.Equal(t, before[0].Updated, rows[0].Updated, "the waiter is not the holder, so the heartbeat stays")
+
+	result := passingResult()
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, resolve, observeClaim(result), nil)
+	require.NoError(t, err)
+	require.True(t, status.Verified, status.Violations)
+	rows, err = NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Nil(t, rows[0].Rejection)
+}
+
+// Evidence filed before the spec changed never passes a wait: the wait says which generation
+// it came from and what to run again, and describe labels it prior. The run behind the check
+// belongs to the spec that asked for it, so it no longer grades.
+func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
+	t.Parallel()
+
+	loc := declared(t, coveredRow())
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
+	require.NoError(t, err)
+	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Criteria = "also cover the console" })
+	require.NoError(t, err)
+	require.Equal(t, 2, respecced.Generation)
+
+	described, err := GradeGates(t.Context(), NewStore(loc), result.Job, observeClaim(result))
+	require.NoError(t, err)
+	wantDescribed := described
+	wantDescribed.PriorGeneration, wantDescribed.ObservedGeneration = 1, 2
+	wantDescribed.Verified = false // the run of generation 1 no longer grades the check
+	assert.Equal(t, wantDescribed, described)
+
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.False(t, status.Verified)
+	assert.Equal(t, 1, status.PriorGeneration)
+	i := slices.IndexFunc(status.Violations, func(v string) bool {
+		return strings.HasPrefix(v, "the evidence is from generation 1 and the spec is now generation 2: run ")
+	})
+	require.GreaterOrEqual(t, i, 0, status.Violations)
+	assert.Contains(t, status.Violations[i], "go-test", "the violation names the check to run again")
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+	require.NotNil(t, rows[0].Rejection)
+	assert.Equal(t, 2, rows[0].Rejection.ObservedGeneration)
 }
 
 // lineageRow is acceptRow renamed into a tree under parent.
@@ -243,7 +444,7 @@ func plant(t *testing.T, s *Store, rows ...types.Job) {
 // stderr lines captured.
 func sweepStore(t *testing.T, now int64, staleAfter time.Duration) (*Store, *strings.Builder) {
 	t.Helper()
-	s := tmpStore(t, t.TempDir())
+	s := tempStore(t, t.TempDir())
 	var notices strings.Builder
 	s.clock = func() time.Time { return time.Unix(now, 0) }
 	s.staleAfter = &staleAfter
@@ -358,6 +559,20 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			ended: map[string]string{"forked": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
+			name: "a taken job past its deadline ends, and so does its tree; an untaken or returned one stays",
+			rows: []types.Job{
+				{ID: "late", State: types.StateRunning, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "late/c", Parent: "late", State: types.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "untaken", State: types.StateDeclared, Deadline: now - 600, Updated: fresh},
+				{ID: "returned", State: types.StateExited, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "in-time", State: types.StateRunning, Registered: fresh, Deadline: now + 600, Updated: fresh},
+			},
+			ended: map[string]string{
+				"late":   "overdue: its deadline passed 10m0s ago",
+				"late/c": "parent late ended as no_return, and its tree ends with it",
+			},
+		},
+		{
 			name: "a zero stale_after ends nothing for age",
 			rows: []types.Job{{ID: "untaken", State: types.StateDeclared, Updated: 1}},
 		},
@@ -430,13 +645,13 @@ func TestListSweepIsIdempotent(t *testing.T) {
 
 // Exec records where the job was taken, so removing that worktree ends the job.
 func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
-	checkout := t.TempDir()
-	s := tmpStore(t, checkout)
+	checkout := execRepo(t).Root()
+	s := tempStore(t, checkout)
 	var notices strings.Builder
 	s.notices = &notices
 	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc"})
 
-	taken, err := s.Exec(t.Context(), "w", "abc")
+	taken, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
 	abs, err := filepath.Abs(checkout)
 	require.NoError(t, err)
@@ -451,7 +666,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 		Criteria:     "rewritten",
 		Checkpoint:   "abc",
 		State:        types.StateNoReturn,
-		ReportedBase: "abc",
+		ReportedBase: taken.ReportedBase,
 		BaseVerdict:  taken.BaseVerdict,
 		Registered:   taken.Registered,
 		CheckoutRoot: abs,
@@ -464,7 +679,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 // That is not the job doing anything, and moving updated for it made dead rows look alive.
 func TestUnattributedWritesLeaveUpdatedAlone(t *testing.T) {
 	root := t.TempDir()
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	plant(t, s, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"a.go"}, Created: 50, Updated: 50})
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "w", "a.go"))
@@ -491,7 +706,7 @@ func TestSweepReadsStaleAfterFromTheWorkspace(t *testing.T) {
 			if tc.yaml != "" {
 				require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(tc.yaml), 0o644))
 			}
-			s := tmpStore(t, root)
+			s := tempStore(t, root)
 			s.notices = io.Discard
 			plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: old})
 
@@ -508,7 +723,7 @@ func TestSweepReadsStaleAfterFromTheWorkspace(t *testing.T) {
 func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  stale_aftr: 1h\n"), 0o644))
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: 1})
 
 	_, err := s.List()
@@ -553,6 +768,39 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 	assert.Equal(t, "ended landed: its work landed on origin/main at base1\n", notices.String())
 }
 
+// One read probes at most landingBudget rows, least recently probed first, and records
+// each before probing it: a guard hook killed mid-probe has still taken its turn, so the
+// next round moves on instead of starting the same probes over. Reads inside one
+// landingRound share that round and probe nothing more.
+func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
+	s, _ := sweepStore(t, 100_000, 0)
+	var rows []types.Job
+	for i := range landingBudget + 2 {
+		rows = append(rows, types.Job{ID: fmt.Sprintf("exited-%d", i), State: types.StateExited, Checkpoint: "c0",
+			CheckoutRoot: "/w", Result: &types.JobResult{ChangedPaths: []string{"a.go"}}, Updated: 90_000})
+	}
+	plant(t, s, rows...)
+	var probed []string
+	s.landed = func(_ context.Context, row types.Job) string {
+		assert.Contains(t, s.readLandingProbes().probes, row.ID, "recorded before the probe runs")
+		probed = append(probed, row.ID)
+		return ""
+	}
+
+	states(t, s)
+	assert.Equal(t, []string{"exited-0", "exited-1", "exited-2", "exited-3"}, probed)
+	probed = nil
+	states(t, s)
+	assert.Empty(t, probed, "a read inside the round probes nothing")
+	s.clock = func() time.Time { return time.Unix(100_000, 0).Add(landingRound) }
+	states(t, s)
+	assert.Equal(t, []string{"exited-4", "exited-5"}, probed, "the next round takes the rows the budget left")
+	probed = nil
+	s.clock = func() time.Time { return time.Unix(100_000, 0).Add(2 * landingRound) }
+	states(t, s)
+	assert.Empty(t, probed, "every row was probed within the interval")
+}
+
 // Two jobs whose branches were squashed into ONE base commit both end, judged by content
 // alone: no ancestry joins either branch to the squash. A job whose commit is not on the
 // base, and one whose change was never committed, both stay exited.
@@ -577,7 +825,7 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 	squash := repo.Head()
 	repo.Git("update-ref", "refs/remotes/origin/main", squash)
 
-	s := tmpStore(t, root)
+	s := tempStore(t, root)
 	var notices strings.Builder
 	s.notices = &notices
 	exited := func(id string, wt *testkit.Repo, file string) types.Job {
@@ -606,6 +854,27 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 	probes, err := os.ReadFile(filepath.Join(filepath.Dir(jobs), landingProbesFile))
 	require.NoError(t, err)
 	assert.Contains(t, string(probes), `"job-c"`, "an unproven row waits out the interval before its next probe")
+}
+
+// A result naming only the part of the work the base took does not end the job: the
+// landing is judged on the checkout's own diff, and the rest of it is still unlanded.
+func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	seedRev := repo.Head()
+	wt := repo.AddWorktree("job")
+	wt.Write("a.go", "package a // landed\n")
+	wt.Write("b.go", "package b // not merged\n")
+	wt.Git("commit", "-q", "-am", "job")
+
+	repo.Commit("take a.go alone", map[string]string{"a.go": "package a // landed\n"})
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+
+	s := tempStore(t, repo.Root())
+	s.notices = io.Discard
+	plant(t, s, types.Job{ID: "job", State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		WritePaths: []string{"a.go", "b.go"}, Result: &types.JobResult{ChangedPaths: []string{"a.go"}}, Updated: 1})
+
+	assert.Equal(t, types.StateExited, states(t, s)["job"].State)
 }
 
 // Exit resolves a ref the caller's checkout never recorded in the checkout the job was
@@ -646,8 +915,8 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 
 // goalSymbol is one symbol the goalGraph holds.
 type goalSymbol struct {
-	id, label, file string
-	refs            int
+	id, label, file, signature string
+	refs                       int
 }
 
 // goalGraph resolves the way the knowledge graph does: Refs takes the first symbol whose
@@ -674,6 +943,16 @@ func (g goalGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 	return out
 }
 
+// SignatureMatches compares text: the shape comparison is the knowledge graph's, tested there.
+func (g goalGraph) SignatureMatches(id, declared string) (string, bool, bool) {
+	for _, s := range g {
+		if s.id == id && s.signature != "" {
+			return s.signature, s.signature == declared, true
+		}
+	}
+	return "", false, false
+}
+
 // TestWaitGradesEveryGoal is the audit of every kind and expectation a goal can declare,
 // end to end: a real diff since the checkpoint, a real tree, and a graph that resolves
 // fuzzily. Each pair passes job wait when it holds and fails it when it does not.
@@ -697,7 +976,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 
 	// Legacy is gone and LegacyAdapter survives, which a fuzzy lookup of Legacy lands on.
 	graph := goalGraph{
-		{id: "symbol:go a/Api().", label: "Api", file: "api.go"},
+		{id: "symbol:go a/Api().", label: "Api", file: "api.go", signature: "func Api()"},
 		{id: "symbol:go a/Keep().", label: "Keep", file: "keep.go", refs: 2},
 		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
 		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
@@ -707,6 +986,9 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 	}
 	symbol := func(expect types.GoalExpect, name string) types.Goal {
 		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
+	}
+	signature := func(name, declared string) types.Goal {
+		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{name}, Signature: declared}
 	}
 	check := types.Goal{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
 	run := types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
@@ -745,6 +1027,15 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		{name: "symbol unreferenced holds when nothing references it", goal: symbol(types.ExpectUnreferenced, "Lonely"), holds: true},
 		{name: "symbol unreferenced fails while a reference remains", goal: symbol(types.ExpectUnreferenced, "Keep"),
 			why: `2 place(s) still reference "Keep"`},
+		{name: "symbol signature holds when the indexed declaration matches", goal: signature("Api", "func Api()"), holds: true},
+		{name: "symbol signature fails when the declaration differs", goal: signature("Api", "func Api(n int)"),
+			why: "\"Api\" is declared `func Api()`, and this goal expects `func Api(n int)`"},
+		{name: "symbol signature fails when the index holds none", goal: signature("Keep", "func Keep()"),
+			why: `the symbol index holds no signature for "Keep"`},
+		{name: "symbol signature fails on a symbol defined nowhere", goal: signature("Legacy", "func Legacy()"),
+			why: `"Legacy" is defined nowhere the graph can see`},
+		{name: "symbol signature fails when the graph is unreadable", goal: signature("Api", "func Api()"), blind: true,
+			why: "could not read the symbol graph"},
 		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(types.ExpectUnreferenced, "Legacy"),
 			why: "cannot count what still names it"},
 		{name: "check passed holds on a passing run", goal: check, run: run, holds: true},
@@ -758,7 +1049,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
 				Goals: []types.Goal{tc.goal.Resolve()},
 			}
-			loc := tmpLoc(t, t.TempDir())
+			loc := tempLocation(t, t.TempDir())
 			plant(t, NewStore(loc), row)
 			result := types.JobResult{Schema: types.Schema{Version: types.JobResultSchemaVersion}, Job: "goal", ChangedPaths: changed}
 			if tc.run.Found {
@@ -819,24 +1110,32 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	defaults := []Ending{
 		{ID: "exited", Reason: exited},
 		{ID: "late", Reason: overdue},
+		{ID: "late-held", Reason: overdue},
 		{ID: "late-idle", Reason: overdue},
 		{ID: "done", Reason: "exited 1m0s ago and nobody collected its result with `magus job wait`"},
 		{ID: "done/c", Reason: "parent done ended as no_return, and its tree ends with it"},
 	}
 	tests := []struct {
-		name string
-		all  bool
-		want []Ending
+		name     string
+		all      bool
+		restated []string
+		refused  string
+		want     []Ending
 	}{
-		{name: "the default ends what is provably not worked", want: defaults},
 		{
-			name: "all also ends a taken job nobody touched, and the root above it",
-			all:  true,
-			want: append(slices.Clone(defaults[:3]),
+			name:    "the default names a job that would end only with its ancestor, and ends nothing",
+			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken): restate each to end it too: `magus job prune done/c`",
+		},
+		{name: "restating that job ends it with what is provably not worked", restated: []string{"done/c"}, want: defaults},
+		{
+			name:     "all also ends a taken job nobody touched, and the root above it",
+			all:      true,
+			restated: []string{"done/c"},
+			want: append(slices.Clone(defaults[:4]),
 				Ending{ID: "idle", Reason: taken},
 				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 				Ending{ID: "old-plan/w", Reason: taken},
-				defaults[3], defaults[4],
+				defaults[4], defaults[5],
 			),
 		},
 	}
@@ -847,8 +1146,12 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 			rows := pruneRows(now)
 			plant(t, s, rows...)
 
-			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all})
-			require.NoError(t, err)
+			got, err := s.Prune(t.Context(), PruneOptions{All: tt.all}, tt.restated...)
+			if tt.refused != "" {
+				require.ErrorContains(t, err, tt.refused)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, tt.want, got)
 			assert.Empty(t, notices.String(), "prune reports its endings to its caller, not as sweep notices")
 
@@ -897,10 +1200,41 @@ func TestJobPruneDryRunEndsNothing(t *testing.T) {
 
 	got, err := s.Prune(t.Context(), PruneOptions{DryRun: true})
 	require.NoError(t, err)
-	assert.Len(t, got, 5, "a dry run lists what a prune would end")
+	assert.Len(t, got, 6, "a dry run lists what a prune would end")
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after))
+}
+
+// A dry-run store's read reports the rows its sweep would end, and writes nothing.
+func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
+	const now = int64(100_000)
+	s, notices := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s, types.Job{ID: "late", State: types.StateRunning, Registered: now - 60, Deadline: now - 600, Updated: now - 60})
+	path, err := s.Path()
+	require.NoError(t, err)
+	dir := func() map[string]string {
+		entries, err := os.ReadDir(filepath.Dir(path))
+		require.NoError(t, err)
+		out := map[string]string{}
+		for _, e := range entries {
+			body, err := os.ReadFile(filepath.Join(filepath.Dir(path), e.Name()))
+			require.NoError(t, err)
+			out[e.Name()] = string(body)
+		}
+		return out
+	}
+	before := dir()
+
+	s.dryRun = true
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateNoReturn, rows[0].State)
+	assert.Contains(t, rows[0].EndReason, overdueReasonPrefix)
+	assert.Equal(t, before, dir())
+	assert.Empty(t, notices.String())
 }
 
 func TestJobPruneRefusesABoundWorker(t *testing.T) {
@@ -943,7 +1277,7 @@ func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.J
 		}
 	}
 	row.CheckoutRoot = holder
-	loc := tmpLoc(t, waiter)
+	loc := tempLocation(t, waiter)
 	seed(t, NewStore(loc), row)
 	_, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, func(_ context.Context, ref string) (types.JobAttempt, error) {
 		return holderRuns[ref], nil
@@ -1191,6 +1525,33 @@ func TestWaitEvidenceRefusesAFileChangedAfterTheRun(t *testing.T) {
 
 	require.ErrorContains(t, err, "did not change after it")
 	assert.Contains(t, err.Error(), "cmd/magus/ledger.go")
+	j.requireUnmoved(t)
+}
+
+// The holder's own passing run grades the files it read; a changed path written after it
+// means the pass is for other files, and the job stays open.
+func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
+	t.Parallel()
+
+	// Dated within the range a file time holds, which passedHere's is not.
+	run := passedHere
+	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	graded, err := GradeGates(t.Context(), NewStore(j.loc), j.row.ID, observeClaim(j.result))
+	require.NoError(t, err)
+	require.True(t, graded.Verified, "the control: a run after every write passes")
+
+	later := time.UnixMilli(run.TimestampMs).Add(time.Hour)
+	changed := j.result.ChangedPaths[0]
+	require.NoError(t, os.Chtimes(filepath.Join(j.holder, filepath.FromSlash(changed)), later, later))
+
+	status, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, nil, observeClaim(j.result), nil)
+	require.NoError(t, err)
+	assert.False(t, status.Verified)
+	require.Len(t, status.Gates, 1)
+	require.Len(t, status.Gates[0].Violations, 1, status.Gates[0].Violations)
+	assert.Contains(t, status.Gates[0].Violations[0], "predates the job's last write")
+	assert.Contains(t, status.Gates[0].Violations[0], changed)
 	j.requireUnmoved(t)
 }
 

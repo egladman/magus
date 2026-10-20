@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
 	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
+	"github.com/egladman/magus/types"
 )
 
 // coldWorkspace is a workspace whose knowledge graph will not load, the ordinary state on a
@@ -22,7 +23,7 @@ type coldWorkspace struct{ root string }
 
 func (w coldWorkspace) Root() string { return w.root }
 
-func (w coldWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (w coldWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return nil, assert.AnError
 }
 
@@ -160,4 +161,84 @@ func TestGetNoteFromAnUndeclaredStoreIsNotFound(t *testing.T) {
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}
+
+// warmWorkspace is a workspace whose knowledge graph loads.
+type warmWorkspace struct {
+	root string
+	g    *knowledge.Graph
+}
+
+func (w warmWorkspace) Root() string { return w.root }
+
+func (w warmWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
+	return w.g, nil
+}
+
+// TestAnchorStatusIsTheNotesGrade: the console and `magus notes verify` read one grader, so
+// every row of the ladder renders the status verify's code names, in ListNotes and GetNote.
+func TestAnchorStatusIsTheNotesGrade(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n"), 0o644))
+	g := knowledge.NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "file:a.go", Kind: types.KindFile})
+	for target, sig := range map[string]string{
+		"m a/Moved().":    "func Moved()",
+		"m a/Resigned().": "func Resigned(ctx context.Context)",
+		"m a/Unrecorded.": "func Unrecorded()",
+	} {
+		g.AddNode(types.KnowledgeNode{ID: "symbol:" + target, Kind: types.KindSymbol, Source: "a.go:1",
+			Attrs: map[string]string{knowledge.AttrSignature: sig}})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "symbol:m a/Unrendered().", Kind: types.KindSymbol, Source: "a.go:1"})
+
+	dir := filepath.Join(root, "notes")
+	want := map[string]notesv1.AnchorStatus{}
+	for _, row := range []struct {
+		name   string
+		anchor store.Anchor
+		want   notesv1.AnchorStatus
+	}{
+		{"gone", store.Anchor{Kind: store.AnchorSymbol, Target: "m a/Gone().", Signature: "func Gone()"}, notesv1.AnchorStatus_ANCHOR_STATUS_DANGLING},
+		{"unrecorded", store.Anchor{Kind: store.AnchorSymbol, Target: "m a/Unrecorded.", Digest: "oldbody"}, notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED},
+		{"unrendered", store.Anchor{Kind: store.AnchorSymbol, Target: "m a/Unrendered().", Signature: "func Unrendered()"}, notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED},
+		{"moved", store.Anchor{Kind: store.AnchorSymbol, Target: "m a/Moved().", Signature: "func Moved()"}, notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES},
+		{"resigned", store.Anchor{Kind: store.AnchorSymbol, Target: "m a/Resigned().", Signature: "func Resigned()"}, notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED},
+		{"file-drifted", store.Anchor{Kind: store.AnchorFile, Target: "a.go", Digest: "stale"}, notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED},
+		{"file-clean", store.Anchor{Kind: store.AnchorFile, Target: "a.go", Digest: store.Digest([]string{"package a", ""})}, notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES},
+	} {
+		writeNote(t, dir, row.name, row.name, row.anchor)
+		want[row.name] = row.want
+	}
+	cfg := config.Config{}
+	cfg.Knowledge.Notes.Shared = "notes"
+	svc := NewService(warmWorkspace{root: root, g: g}, cfg)
+
+	// What verify reports, per note: the Issue code, or none for a clean anchor.
+	issues, err := store.AnchorIssues(t.Context(), dir, knowledge.NewNoteResolver(root, g))
+	require.NoError(t, err)
+	verified := map[string]store.IssueCode{}
+	for _, iss := range issues {
+		verified[iss.Note] = iss.Code
+	}
+	byCode := map[store.IssueCode]notesv1.AnchorStatus{
+		"":                           notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES,
+		store.CodeDanglingAnchor:     notesv1.AnchorStatus_ANCHOR_STATUS_DANGLING,
+		store.CodeDriftedAnchor:      notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED,
+		store.CodeUnverifiableAnchor: notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED,
+	}
+
+	resp, err := svc.ListNotes(t.Context(), connect.NewRequest(&notesv1.ListNotesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetNotes(), len(want))
+	for _, n := range resp.Msg.GetNotes() {
+		require.Len(t, n.GetAnchors(), 1, n.GetName())
+		listed := n.GetAnchors()[0]
+		assert.Equal(t, want[n.GetName()], listed.GetStatus(), n.GetName())
+		assert.Equal(t, byCode[verified[n.GetName()]], listed.GetStatus(), "%s: the service and verify disagree", n.GetName())
+
+		got, err := svc.GetNote(t.Context(), connect.NewRequest(&notesv1.GetNoteRequest{Name: "shared/" + n.GetName()}))
+		require.NoError(t, err)
+		assert.Equal(t, listed.GetStatus(), got.Msg.GetAnchors()[0].GetStatus(), "%s: GetNote grades as ListNotes does", n.GetName())
+	}
 }

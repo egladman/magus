@@ -117,6 +117,6 @@ func TestVerifyHarnessMCPDoesNotInspectHost(t *testing.T) {
 			Docs: "docs/guides/integrations/mcp.md",
 		},
 	}, &result)
-	assert.Equal(t, HarnessVerified, result.MCPStatus)
-	assert.Contains(t, result.MCPReason, "user owns")
+	assert.Equal(t, HarnessVerified, result.MCP.Status)
+	assert.Contains(t, result.MCP.Reason, "user owns")
 }

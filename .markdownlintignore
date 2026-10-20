@@ -22,6 +22,11 @@ CHANGELOG.md
 # `### <group>` heading; changes/README.md holds their format and is linted.
 changes/unreleased/
 
+# A shipped skill body is a Go template that interleaves its short and full forms, not a
+# document. hack/lint/skill-renders-follow-markdown-and-description-budgets.buzz lints its full render
+# instead; proofread judges the short render as agent-compact.
+internal/agent/skills/*/SKILL.md
+
 # The AGENTS.md section template is embedded into a larger AGENTS.md, so it intentionally
 # starts at "## magus" - the first-line-h1 rule does not apply to a fragment.
 internal/agent/agents-section.md

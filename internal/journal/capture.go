@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a
@@ -56,7 +56,7 @@ func InvocationIDFromContext(ctx context.Context) string {
 }
 
 // WithStep tags ctx with the project/target whose subprocesses are about to run, so the exec
-// primitive ([internal/proc/run]) can label the exec events it emits without magus threading
+// primitive ([internal/proc/spawn]) can label the exec events it emits without magus threading
 // project/target through every layer by hand. Set once per target step, around the op body.
 func WithStep(ctx context.Context, project, target string) context.Context {
 	return context.WithValue(ctx, stepKey{}, stepInfo{project: project, target: target})

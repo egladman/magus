@@ -86,13 +86,15 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"entries": 11, "goals": 11, "integration": 11, "waiter_evidence": 11},
-	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
-	// and completion_gates, which a stored row drops unread.
+	Added:   map[string]int{"worktree": 13, "validated": 13, "waivers": 13},
+	// The four boundary renames and completion_gates, names only the JSON document an
+	// older magus kept the plan in carried.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
 	Requires: map[int]string{
 		10: "dead-job-end",
 		11: "claim-declarations",
+		12: "signature-goals",
+		13: "job-generations",
 	},
 }
 
@@ -102,7 +104,7 @@ var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"enter": 11, "goals": 11},
+	Added:   map[string]int{"checkout": 13, "waivers": 13},
 	// goals' spelling frozen in v11. A record sending it is refused as an unknown member.
 	Reserved: []string{"completion_gates"},
 	Requires: JobSchema.Requires,
@@ -113,6 +115,7 @@ var JobResultSchema = SchemaLedger{
 	Name:    "job-result",
 	Type:    reflect.TypeFor[JobResult](),
 	Version: JobResultSchemaVersion,
+	Added:   map[string]int{"observed_generation": 2},
 }
 
 // StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`
@@ -121,7 +124,7 @@ var StoredOutputSchema = SchemaLedger{
 	Name:    "output-record",
 	Type:    reflect.TypeFor[StoredOutput](),
 	Version: StoredOutputSchemaVersion,
-	Added:   map[string]int{"failed_need_target": 1, "failed_need_ref": 1},
+	Added:   map[string]int{"failed_need_target": 1, "failed_need_ref": 1, "lease": 1},
 }
 
 // SchemaLedgers are every ledger the conventions test holds to the contract.

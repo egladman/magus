@@ -1,16 +1,19 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
-	// The duplication thresholds have no valid zero, so they carry their defaults.
-	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	// The duplication and conformance thresholds have no valid zero, so they carry their defaults.
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	require.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
 }
 
@@ -22,7 +25,7 @@ func TestValidate_InvalidConcurrency(t *testing.T) {
 // jsonl withholds every target's output for a report stream only -o jsonl opens, so a
 // magus.yaml asking for it would drop per-target results with nowhere to send them.
 func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
-	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	cfg.Log.Format = "jsonl"
 	require.ErrorContains(t, Validate(cfg), "log.format")
 	cfg.Log.Format = "json"
@@ -43,7 +46,7 @@ func TestValidationError_Error(t *testing.T) {
 // A registry entry that no reference could match, or that names no credential, fails
 // at load: a silently unused credential is a push that later reads as a permissions bug.
 func TestValidate_SpellRegistries(t *testing.T) {
-	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Registries = []SpellRegistry{
 		{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"},
 		{Host: "localhost:5000", Username: "me", Password: "op://dev/registry/token"},
@@ -89,7 +92,7 @@ func TestValidate_SpellRegistries(t *testing.T) {
 // A spell declaration magus could not honor fails at load: an entry the resolver
 // would skip is a remote import that later reads as undeclared.
 func TestValidate_SpellImports(t *testing.T) {
-	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Imports = map[string]SpellImport{
 		"ghcr.io/egladman/magus/spells/cursor": {Tag: "1.4"},
 		"localhost:5000/team/spells/lint":      {Path: "vendor/lint"},
@@ -154,7 +157,7 @@ func TestValidate_SpellImports(t *testing.T) {
 // Each cache tier is written independently. The local tier off with the remote tier
 // explicitly on is the one incoherent pair, refused rather than quietly writing nothing.
 func TestValidate_CacheTierWrites(t *testing.T) {
-	on, off := boolPtr(true), boolPtr(false)
+	on, off := new(true), new(false)
 	for name, tc := range map[string]struct {
 		local, remote         *bool
 		wantLocal, wantRemote bool
@@ -171,7 +174,7 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 			cfg.Cache.Write.Enabled = tc.local
 			cfg.Cache.Remote.Write.Enabled = tc.remote
 			assert.Equal(t, tc.wantLocal, cfg.Cache.WriteEnabled(), "WriteEnabled")
@@ -193,7 +196,7 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 // mcp.http is honored only while the server serves MCP at all; an explicit true beside
 // mcp.enabled false is refused rather than ignored.
 func TestValidate_MCPHTTP(t *testing.T) {
-	on, off := boolPtr(true), boolPtr(false)
+	on, off := new(true), new(false)
 	for name, tc := range map[string]struct {
 		enabled, http *bool
 		wantHTTP      bool
@@ -208,7 +211,7 @@ func TestValidate_MCPHTTP(t *testing.T) {
 		"mcp on explicitly, http on": {enabled: on, http: on, wantHTTP: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 			cfg.MCP.Enabled, cfg.MCP.HTTP = tc.enabled, tc.http
 			assert.Equal(t, tc.wantHTTP, cfg.MCP.HTTPEnabled())
 
@@ -232,4 +235,130 @@ func TestSpellsConfigRegistry(t *testing.T) {
 	assert.Equal(t, SpellRegistry{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}, got)
 	_, ok = s.Registry("docker.io")
 	assert.False(t, ok)
+}
+
+// A knowledge.conformance value magus could not honor fails at load: a check keyed by a
+// metric nothing measures would pass without anyone noticing.
+func TestValidate_Conformance(t *testing.T) {
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
+	require.NoError(t, Validate(valid))
+
+	for name, tc := range map[string]struct {
+		edit func(*ConformanceConfig)
+		want FieldFailure
+	}{
+		"ratchet outside the workspace": {
+			edit: func(c *ConformanceConfig) { c.Ratchet = "../conformance.json" },
+			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "../conformance.json"},
+		},
+		"absolute ratchet": {
+			edit: func(c *ConformanceConfig) { c.Ratchet = "/etc/conformance.json" },
+			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "/etc/conformance.json"},
+		},
+		"empty exclude pattern": {
+			edit: func(c *ConformanceConfig) { c.Exclude = []string{""} },
+			want: FieldFailure{Field: "knowledge.conformance.exclude[0]", Tag: "required"},
+		},
+		"malformed exclude glob": {
+			edit: func(c *ConformanceConfig) { c.Exclude = []string{"vendor/**", "third/[a-"} },
+			want: FieldFailure{Field: "knowledge.conformance.exclude[1]", Tag: "conformance_exclude_glob", Value: "third/[a-"},
+		},
+		"unknown metric": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks["file-line"] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopSource: {Percentile: 95, Anchor: 1}}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-line", Tag: "conformance_metric", Param: strings.Join(types.ConformanceFileLines.Values(), " "), Value: "file-line"},
+		},
+		"unknown population": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines]["tests"] = ConformanceLimitConfig{Percentile: 95, Anchor: 1}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.tests", Tag: "conformance_population", Param: strings.Join(types.ConformancePopSource.Values(), " "), Value: "tests"},
+		},
+		"zero percentile": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Anchor: 2200}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.percentile", Tag: "gt", Param: "0", Value: "0"},
+		},
+		"percentile past 100": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 101, Anchor: 2200}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.percentile", Tag: "lte", Param: "100", Value: "101"},
+		},
+		"zero anchor": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.anchor", Tag: "gte", Param: "1", Value: "0"},
+		},
+		"mode-knobs below a zero anchor": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceModeKnobs][types.ConformancePopSource] = ConformanceLimitConfig{Anchor: -1}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.mode-knobs.source.anchor", Tag: "gte", Param: "0", Value: "-1"},
+		},
+		"export-scope below a zero anchor": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceExportScope] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopMain: {Anchor: -1}}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.export-scope.main.anchor", Tag: "gte", Param: "0", Value: "-1"},
+		},
+		"scope on a metric without scopes": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 2200, Scopes: map[string]int{"cmd": 3000}}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.scopes.cmd", Tag: "conformance_scope_metric", Param: "dep-fanout", Value: "cmd"},
+		},
+		"scope outside the workspace": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"../x": 89}}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.../x", Tag: "conformance_scope_path", Value: "../x"},
+		},
+		"scope with a zero anchor": {
+			edit: func(c *ConformanceConfig) {
+				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 0}}
+			},
+			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.cmd/magus", Tag: "gte", Param: "1", Value: "0"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			cfg.Knowledge.Conformance = conformanceDefaults()
+			tc.edit(&cfg.Knowledge.Conformance)
+			var ve *ValidationError
+			require.ErrorAs(t, Validate(cfg), &ve)
+			require.Len(t, ve.Failures, 1)
+			assert.Equal(t, tc.want, ve.Failures[0])
+		})
+	}
+}
+
+// The scalar knobs are graded by struct tag, so the failure names the yaml path.
+func TestValidate_ConformanceScalars(t *testing.T) {
+	for name, tc := range map[string]struct {
+		edit  func(*ConformanceConfig)
+		field string
+	}{
+		"min_sample":       {func(c *ConformanceConfig) { c.MinSample = 0 }, "min_sample"},
+		"step zero":        {func(c *ConformanceConfig) { c.Step = 0 }, "step"},
+		"step one":         {func(c *ConformanceConfig) { c.Step = 1 }, "step"},
+		"gates.min_cohort": {func(c *ConformanceConfig) { c.Gates.MinCohort = 0 }, "min_cohort"},
+		"gates.min_share":  {func(c *ConformanceConfig) { c.Gates.MinShare = 1.5 }, "min_share"},
+		"gates.bar":        {func(c *ConformanceConfig) { c.Gates.Bar = -0.1 }, "bar"},
+		"gates.max":        {func(c *ConformanceConfig) { c.Gates.MaxFindings = 0 }, "max_findings"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
+			cfg.Knowledge.Conformance = conformanceDefaults()
+			tc.edit(&cfg.Knowledge.Conformance)
+			var ve *ValidationError
+			require.ErrorAs(t, Validate(cfg), &ve)
+			require.Len(t, ve.Failures, 1)
+			assert.Contains(t, ve.Failures[0].Field, "conformance")
+			assert.Contains(t, ve.Failures[0].Field, tc.field)
+		})
+	}
 }

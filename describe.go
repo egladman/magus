@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // describeCancelled reports a Describe walk cut short by ctx, naming how far it got.
@@ -341,7 +342,10 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	var crossOut []crossOutput
 	binaryAnswerTargets := map[types.TargetRef]bool{}
 	driftGateTargets := map[types.TargetRef]bool{}
-	defer func() { m.binaryAnswerTargets, m.driftGateTargets = binaryAnswerTargets, driftGateTargets }()
+	charmReads := map[types.TargetRef][]string{}
+	defer func() {
+		m.binaryAnswerTargets, m.driftGateTargets, m.charmReads = binaryAnswerTargets, driftGateTargets, charmReads
+	}()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -478,6 +482,12 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				}
 				if slices.Contains(n.Charms, types.CharmReadWrite) {
 					branchesOnRW[n.Name] = true
+				}
+				for _, c := range n.Charms {
+					ref := types.TargetRef{Project: p.Path, Target: n.Name}
+					if c = types.NormalizeCharm(c); !slices.Contains(charmReads[ref], c) {
+						charmReads[ref] = append(charmReads[ref], c)
+					}
 				}
 				if !slices.Contains(p.MagusfileTargets, n.Name) {
 					p.MagusfileTargets = append(p.MagusfileTargets, n.Name)
@@ -1214,9 +1224,10 @@ func appendUniq(s []string, v string) []string {
 // feeds the cache), plus directory containment for ownership, and reports each
 // matching declaration individually (FileEntry.Claims) with the target that made
 // it. The classification is pure declaration lookup (no target evaluation, no
-// VCS), so it is cheap enough to run over a whole dirty tree; the one filesystem
-// call per path is the Lstat behind FileEntry.Exists, which is what separates a
-// declared-but-absent path from a declared-and-present one. An absolute path is
+// VCS except for the paths magus itself maintains), so it is cheap enough to run over a
+// whole dirty tree; the one filesystem call per path is the Lstat behind
+// FileEntry.Exists, which is what separates a declared-but-absent path from a
+// declared-and-present one. An absolute path is
 // re-rooted onto the workspace; a path that resolves outside it is classified
 // against nothing, because every glob here is rooted at this workspace.
 // ctx bounds the walk so classifying a large path list stays cancellable.
@@ -1236,12 +1247,12 @@ func (m *Magus) ClassifyFiles(ctx context.Context, paths []string) ([]types.File
 		if ctx.Err() != nil {
 			return nil, describeCancelled(ctx, "files", i, len(paths))
 		}
-		entries = append(entries, m.describeFile(raw, all, owners))
+		entries = append(entries, m.describeFile(ctx, raw, all, owners))
 	}
 	return entries, nil
 }
 
-func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {
+func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*types.Project) types.FileEntry {
 	path, _ := file.NormalizeWorkspacePath(raw, m.ws.Root)
 	path = filepath.ToSlash(path)
 	// NormalizeWorkspacePath hands its input back unchanged when it cannot place the
@@ -1304,7 +1315,26 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		}
 	}
 
+	// Only the path magus writes pays for a VCS read, and any failure to compare (no VCS,
+	// not tracked yet, a torn section) leaves the declared answer standing.
+	magusSectionOnly := false
+	if types.IsMagusMaintained(path) {
+		if res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions); err == nil && res.VCS != nil && res.Source != types.VCSSourceDisabled {
+			committed, rerr := res.VCS.ReadFileAt(ctx, m.ws.Root, "", path)
+			current, cerr := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
+			if rerr == nil && cerr == nil {
+				magusSectionOnly, _ = vcs.ConfinedToGeneratedSection(committed, string(current))
+			}
+		}
+	}
+	const maintainedHint = "magus maintains this outside any target's globs: it invalidates no cache key, but magus wrote it and expects it committed - regenerate it rather than hand-editing, and never ignore it"
 	switch {
+	// First, unlike the unclaimed fallback below: a project may declare .gitattributes,
+	// and then every change to it reads as a hand edit of a source. A change confined
+	// to the section magus writes is not one.
+	case magusSectionOnly:
+		entry.Role = "maintained"
+		entry.Hint = maintainedHint
 	case len(entry.OutputOf) > 0:
 		entry.Role = "output"
 		entry.Hint = "generated: never hand-edit or read its diff; change the source of truth, regenerate (magus run generate), and commit it with the source change"
@@ -1315,7 +1345,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	// stronger claim, and maintained only refines the unclaimed default.
 	case types.IsMagusMaintained(path):
 		entry.Role = "maintained"
-		entry.Hint = "magus maintains this outside any target's globs: it invalidates no cache key, but magus wrote it and expects it committed - regenerate it rather than hand-editing, and never ignore it"
+		entry.Hint = maintainedHint
 	// Only an in-place edit reaches here with a claim: ctx.modifiesExistingFiles is
 	// deliberately neither an output nor a project-wide source, so the role stays
 	// unclaimed, but the default hint below says no project declares the path, and

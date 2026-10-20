@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -193,12 +194,12 @@ func allToolDrivers(opts Options) []spells.Driver {
 
 func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string, tasks *taskRuns) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
-	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
-	// disabledProvider when telemetry is off; a nil Magus (some test paths)
-	// leaves tel nil, which wrap guards against.
+	// shared one here and close over it in wrap. Telemetry() returns observability.Nop
+	// when telemetry is off; a nil Magus (some test paths) leaves tel nil, which wrap
+	// guards against.
 	var tel observability.Provider
 	if opts.Magus != nil {
-		tel = opts.Magus.Telemetry()
+		tel = workspace.ViewAs[telemetrySource](opts.Magus).Telemetry()
 	}
 	if opts.Magus == nil && opts.Unavailable != nil {
 		unavailable := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -465,9 +466,13 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			// INPUT = the serialized tool arguments; OUTPUT = every byte the agent is
 			// sent, the structured copy of the payload included. Attribute by tool +
 			// outcome only to keep metric cardinality bounded.
+			outcome := observability.OutcomeOK
+			if ev.Outcome == trail.OutcomeError {
+				outcome = observability.OutcomeError
+			}
 			tel.RecordMCPCall(ctx, observability.MCPCall{
 				Tool:        toolName,
-				Outcome:     ev.Outcome,
+				Outcome:     outcome,
 				InputBytes:  reqBytes,
 				OutputBytes: respBytes + structuredBytes(result),
 				Duration:    dur.Seconds(),

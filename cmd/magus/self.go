@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // selfCmd is the dispatcher for `magus self <subcommand>`.
@@ -18,7 +20,7 @@ import (
 func selfCmd(ctx context.Context, _ string, args []string) error {
 	if len(args) == 0 {
 		selfCmdUsage()
-		return usagef("magus self: subcommand required (want %s)", selfSubcommands())
+		return exit.Usagef("magus self: subcommand required (want %s)", selfSubcommands())
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -31,7 +33,7 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 		return installShorthandCmd(rest)
 	default:
 		selfCmdUsage()
-		return usagef("magus self: unknown subcommand %q (want %s)", sub, selfSubcommands())
+		return exit.Usagef("magus self: unknown subcommand %q (want %s)", sub, selfSubcommands())
 	}
 }
 

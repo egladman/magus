@@ -21,15 +21,15 @@ import "engine/page" as _;
 // different one in the meta tag.
 final DEVELOPMENT_DESC = "magus in full: why it exists, who it is for, how the affected set, "
     + "the cache and the knowledge graph work, and how to build and test the repository itself.";
-final PROJECTS_DESC = "Every magus project in this repository: its runnable targets, its "
-    + "run-order graph, and how the projects depend on each other.";
+final PROJECTS_DESC = "Every magus project in this repository: its runnable targets and "
+    + "how the projects depend on each other.";
 final CONTRIBUTING_DESC = "How to build, test, and contribute to magus: the performance-evidence "
     + "rule, the docs-site flow, and one-person-project etiquette.";
 
 // projectPageDesc is one project page's description. Same reason as the constants above:
 // two passes, one string.
 fun projectPageDesc(name: str) > str {
-    return "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.";
+    return "Target catalog for the " + name + " project, generated from its magusfile.";
 }
 
 // registerDevPage adds a synthesized /development/ page to docPages, the collection
@@ -172,8 +172,7 @@ fun workspaceDependencies(graph: magus\Graph) > str {
     // No figure here on purpose. A layered placement of THIS graph is unreadable: most
     // projects are roots or wholly independent, so it draws a tall stack of disconnected
     // boxes with a few edges wandering across empty canvas. The table above says the same
-    // thing in less space. The per-project run orders below are chains, which the same
-    // layout renders cleanly - the shape is what decides, not the fact that it is generated.
+    // thing in less space.
     return buf;
 }
 
@@ -182,9 +181,6 @@ fun workspaceDependencies(graph: magus\Graph) > str {
 // a subprocess. Building it here means the page is assembled from the same in-process
 // data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field
 // access on every node.
-//
-// An inline SVG figure draws the run order from each node's declared dependencies, so the
-// arrows are the real ctx.needs edges and not a hand-maintained picture.
 fun projectCatalog(proj: magus\TargetGraphProject) > str {
     // No `?? []` guards below: TargetGraphOutput.BuzzObject normalizes every optional list to
     // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
@@ -230,25 +226,11 @@ fun projectCatalog(proj: magus\TargetGraphProject) > str {
             buf = buf + "### `" + n.name + "`\n\n" + n.doc + "\n\n";
         }
     }
-
-    // Run order. Only emitted when there is at least one edge - a flat list of
-    // unconnected boxes tells a reader nothing.
-    final items: mut [RunOrderItem] = mut [<RunOrderItem>];
-    var edgeCount = 0;
-    foreach (n in nodes) {
-        items.append(RunOrderItem{ name = n.name, deps = n.dependencies });
-        edgeCount = edgeCount + n.dependencies.len();
-    }
-    if (edgeCount > 0) {
-        buf = buf + "## Run order\n"
-            + dependencyFigure("run-order-" + slugifyProject(proj.name),
-                "The order these targets run in", items);
-    }
     return buf;
 }
 
 // renderDevelopment writes the /development/ section BELOW its landing: one themed page
-// per project rendering its target catalog and run-order graph, the Contributing guide,
+// per project rendering its target catalog, the Contributing guide,
 // and a /development/projects/ index linking to the project pages and showing how they
 // depend on each other. Retired /development/projects/<slug> URLs redirect to the
 // flattened locations.
@@ -307,7 +289,7 @@ export fun renderDevelopment(site: Site) > void !> any {
         // The card subtitle carries the project's real shape - which toolchains it
         // binds - so a reader can tell a Go library from the docs site without
         // opening it. Falls back to the generic line for a project with no spells.
-        var desc = "target catalog and run-order graph";
+        var desc = "target catalog";
         final n = proj.nodes;
         if (n.len() > 0) {
             desc = "{n.len()} targets";
@@ -319,7 +301,7 @@ export fun renderDevelopment(site: Site) > void !> any {
     }
 
     // The project-level view, rendered through the markdown pipeline for its table and
-    // inline dependency figure and then spliced into the raw page. renderContentHTML is
+    // then spliced into the raw page. renderContentHTML is
     // skipped for the same reason the page is raw at all: its link rewrite would strip the
     // trailing slash off every project href here.
     final depsMd = workspaceDependencies(site.graph);
@@ -334,11 +316,11 @@ export fun renderDevelopment(site: Site) > void !> any {
     final devHtml = template\render(`<h1 id="projects">Projects</h1>
 <p>magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too. Below is every project in it, drawn from the workspace's own graph rather than written by hand.</p>
 <h2 id="project-graphs">Project graphs</h2>
-<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and inline dependency figures.</p>
+<p>One card per magus project in this repository, each linking to that project's runnable targets - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming and search.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
 {{{depsSection}}}`, {"projectCards": projectCards, "depsSection": depsSection});
     renderDevelopmentPageRaw("Projects", PROJECTS_DESC,
-        devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius run order graph",
+        devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius",
         "development/projects/", "development/projects/_index.md", site);
 }

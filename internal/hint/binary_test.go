@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // keepBinaryName puts the package back the way every other test in the tree expects to
@@ -82,9 +84,9 @@ func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 	keepBinaryName(t)
 	ResolveBinaryNameFrom("./magus")
 
-	served := OnPath([]Next{breadcrumb("query-explain", Explain, "why", "spell:go")})
+	served := OnPath([]types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})
 	require.Len(t, served, 1)
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID:   "query-explain",
 		Run:  "magus explain spell:go",
 		Argv: []string{"magus", "explain", "spell:go"},
@@ -92,5 +94,5 @@ func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 	}, served[0])
 
 	ResolveBinaryNameFrom("magus")
-	assert.Equal(t, "magus explain spell:go", OnPath([]Next{breadcrumb("query-explain", Explain, "why", "spell:go")})[0].Run)
+	assert.Equal(t, "magus explain spell:go", OnPath([]types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})[0].Run)
 }

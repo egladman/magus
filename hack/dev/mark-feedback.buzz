@@ -19,14 +19,14 @@ final VERDICTS = ["should-deny", "should-advise", "wrong-deny", "fine"];
 // plan resolves each label (C3) or id (fb...) against the report's rows and builds the
 // marks to store. A label names a position in this report only; the mark carries the
 // row's id, so it outlives the position.
-export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [FeedbackMark] !> any {
+export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [TrailMark] !> any {
     if (VERDICTS.indexOf(verdict) == null) {
         throw "mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}";
     }
     if (refs.len() == 0) {
         throw "mark-feedback: name at least one row by its label (C3) or id\n{USAGE}";
     }
-    final marks = mut [<FeedbackMark>];
+    final marks = mut [<TrailMark>];
     foreach (ref in refs) {
         var found: show\Row? = null;
         foreach (row in r.rows + r.once) {
@@ -42,7 +42,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [Feedbac
             throw "mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}";
         }
         final row = found!;
-        marks.append(FeedbackMark{
+        marks.append(TrailMark{
             id = row.id, section = row.section, key = row.key, rule = row.rule, verdict = verdict, note = note,
             session = r.session, at = 0, examples = row.examples,
         });
@@ -50,7 +50,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [Feedbac
     return marks;
 }
 
-fun planLine(m: FeedbackMark, r: show\Report) > str {
+fun planLine(m: TrailMark, r: show\Report) > str {
     var label = "";
     foreach (row in r.rows) {
         if (row.id == m.id) {
@@ -90,7 +90,7 @@ export fun main(args: [str]) > void !> any {
 }
 
 fun fixture() > show\Report !> any {
-    return show\fold(show\trailFromJSON(fs\readFile("hack/testdata/feedback-trail.json")), marks: [<FeedbackMark>]);
+    return show\fold(show\trailFromJSON(fs\readFile("hack/testdata/feedback-trail.json")), marks: [<TrailMark>]);
 }
 
 test "a label resolves to the row's stable id, not its position" {

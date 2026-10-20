@@ -1,13 +1,16 @@
 package otlp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"strconv"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/types"
 )
 
 // reg threads the first instrument-creation error through a constructor, so each one reads as
@@ -50,7 +53,6 @@ func (r *reg) f64h(name, desc string) metric.Float64Histogram {
 
 // mcpInstruments is the magus.mcp.tool.* family: how the MCP tools are exercised.
 type mcpInstruments struct {
-	calls      metric.Int64Counter
 	inputSize  metric.Int64Histogram
 	outputSize metric.Int64Histogram
 	duration   metric.Float64Histogram
@@ -59,7 +61,6 @@ type mcpInstruments struct {
 func newMCPInstruments(m metric.Meter) (mcpInstruments, error) {
 	r := reg{m: m}
 	mi := mcpInstruments{
-		calls:      r.i64c("magus.mcp.tool.calls", "Number of MCP tool calls.", "{call}"),
 		inputSize:  r.i64h("magus.mcp.tool.input.size", "Request payload bytes of an MCP tool call.", "By"),
 		outputSize: r.i64h("magus.mcp.tool.output.size", "Response payload bytes of an MCP tool call.", "By"),
 		duration:   r.f64h("magus.mcp.tool.duration", "Wall-clock duration of an MCP tool call, in seconds."),
@@ -69,14 +70,12 @@ func newMCPInstruments(m metric.Meter) (mcpInstruments, error) {
 
 func (p *otelProvider) RecordMCPCall(ctx context.Context, c observability.MCPCall) {
 	tool := metric.WithAttributes(attribute.String("tool", c.Tool))
-	toolOutcome := metric.WithAttributes(
-		attribute.String("tool", c.Tool),
-		attribute.String("outcome", c.Outcome),
-	)
-	p.mcp.calls.Add(ctx, 1, toolOutcome)
 	p.mcp.inputSize.Record(ctx, c.InputBytes, tool)
 	p.mcp.outputSize.Record(ctx, c.OutputBytes, tool)
-	p.mcp.duration.Record(ctx, c.Duration, toolOutcome)
+	p.mcp.duration.Record(ctx, c.Duration, metric.WithAttributes(
+		attribute.String("tool", c.Tool),
+		attribute.String("outcome", string(c.Outcome)),
+	))
 }
 
 // sandboxInstruments is the magus.sandbox.* filesystem family. Network sandboxing is out of
@@ -109,18 +108,15 @@ func (p *otelProvider) RecordSandboxApply(ctx context.Context, secs float64, out
 }
 
 func (p *otelProvider) RecordSandboxRules(ctx context.Context, r observability.SandboxRules) {
-	add := func(access string, n int64) {
+	for access, n := range r.Access {
 		if n == 0 {
-			return
+			continue
 		}
 		p.sandbox.rules.Add(ctx, n, metric.WithAttributes(
-			attribute.String("access", access),
+			attribute.String("access", access.String()),
 			attribute.String("scope", r.Scope),
 		))
 	}
-	add("read", r.Read)
-	add("write", r.Write)
-	add("exec", r.Exec)
 
 	addEnv := func(kind string, n int64) {
 		if n == 0 {
@@ -151,15 +147,12 @@ type buzzInstruments struct {
 	execDuration        metric.Float64Histogram
 	compileDuration     metric.Float64Histogram
 	hostCallDuration    metric.Float64Histogram
-	hostCallCount       metric.Int64Counter
-	sessionPoolReuse    metric.Int64Counter
+	sessionPoolEvents   metric.Int64Counter
 	sessionPoolIdle     metric.Int64UpDownCounter
-	sessionPoolEviction metric.Int64Counter
 	sessionWarmDuration metric.Float64Histogram
 	importDuration      metric.Float64Histogram
 	spellResolve        metric.Float64Histogram
 	spellBuiltinsWarm   metric.Float64Histogram
-	spellBuiltinsCount  metric.Int64Counter
 	jitRuns             metric.Int64Counter
 	vmFaults            metric.Int64Counter
 }
@@ -170,77 +163,72 @@ func newBuzzInstruments(m metric.Meter) (buzzInstruments, error) {
 		execDuration:        r.f64h("magus.buzz.exec.duration", "Wall-clock duration of a Buzz script execution, in seconds."),
 		compileDuration:     r.f64h("magus.buzz.compile.duration", "Wall-clock duration of a Buzz compile phase, in seconds."),
 		hostCallDuration:    r.f64h("magus.buzz.host.call.duration", "Wall-clock duration of a Buzz call into a host callable, in seconds."),
-		hostCallCount:       r.i64c("magus.buzz.host.call.count", "Number of Buzz calls across the native boundary.", "{call}"),
-		sessionPoolReuse:    r.i64c("magus.buzz.session.pool.reuse", "Buzz session-pool acquires, by whether an idle session was reused.", "{acquire}"),
+		sessionPoolEvents:   r.i64c("magus.buzz.session.pool.events", "Buzz session-pool checkouts and releases, by event.", "{event}"),
 		sessionPoolIdle:     r.i64ud("magus.buzz.session.pool.idle", "Number of idle Buzz sessions currently pooled.", "{session}"),
-		sessionPoolEviction: r.i64c("magus.buzz.session.pool.evictions", "Buzz sessions evicted from the pool.", "{session}"),
 		sessionWarmDuration: r.f64h("magus.buzz.session.warm.duration", "Wall-clock duration of warming a Buzz session, in seconds."),
 		importDuration:      r.f64h("magus.buzz.import.duration", "Wall-clock duration of resolving a Buzz import, in seconds."),
 		spellResolve:        r.f64h("magus.buzz.spell.resolve.duration", "Wall-clock duration of resolving a spell, in seconds."),
 		spellBuiltinsWarm:   r.f64h("magus.buzz.spell.builtins.warm", "Wall-clock duration of warming a spell's builtins, in seconds."),
-		spellBuiltinsCount:  r.i64c("magus.buzz.spell.builtins.count", "Number of spell builtin warms.", "{spell}"),
 		jitRuns:             r.i64c("magus.buzz.jit.runs", "Number of JIT-compiled entry executions.", "{entry}"),
 		vmFaults:            r.i64c("magus.buzz.vm.faults", "Number of Buzz VM faults.", "{fault}"),
 	}
 	return bi, r.err
 }
 
-func (p *otelProvider) RecordBuzzExec(ctx context.Context, secs float64, mode, outcome string) {
-	p.buzz.execDuration.Record(ctx, secs, metric.WithAttributes(
-		attribute.String("mode", mode),
-		attribute.String("outcome", outcome),
+func (p *otelProvider) RecordBuzzExec(ctx context.Context, e observability.BuzzExec) {
+	p.buzz.execDuration.Record(ctx, e.Duration, metric.WithAttributes(
+		attribute.String("mode", e.Mode),
+		attribute.String("outcome", string(e.Outcome)),
 	))
 }
 
-func (p *otelProvider) RecordBuzzCompile(ctx context.Context, secs float64, phase, mode string) {
-	p.buzz.compileDuration.Record(ctx, secs, metric.WithAttributes(
-		attribute.String("phase", phase),
-		attribute.String("mode", mode),
+func (p *otelProvider) RecordBuzzCompile(ctx context.Context, c observability.BuzzCompile) {
+	p.buzz.compileDuration.Record(ctx, c.Duration, metric.WithAttributes(
+		attribute.String("phase", c.Phase),
+		attribute.String("mode", c.Mode),
 	))
 }
 
 func (p *otelProvider) RecordBuzzHostCall(ctx context.Context, c observability.BuzzHostCall) {
-	p.buzz.hostCallDuration.Record(ctx, c.Duration, metric.WithAttributes(attribute.String("callable", c.Callable)))
-	p.buzz.hostCallCount.Add(ctx, 1, metric.WithAttributes(
+	p.buzz.hostCallDuration.Record(ctx, c.Duration, metric.WithAttributes(
 		attribute.String("callable", c.Callable),
-		attribute.String("outcome", c.Outcome),
+		attribute.String("outcome", string(c.Outcome)),
 	))
 }
 
-func (p *otelProvider) RecordBuzzSessionReuse(ctx context.Context, outcome string) {
-	p.buzz.sessionPoolReuse.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
-}
-
-func (p *otelProvider) RecordBuzzSessionIdle(ctx context.Context, delta int64) {
-	p.buzz.sessionPoolIdle.Add(ctx, delta)
-}
-
-func (p *otelProvider) RecordBuzzSessionEviction(ctx context.Context, source string) {
-	p.buzz.sessionPoolEviction.Add(ctx, 1, metric.WithAttributes(attribute.String("source", source)))
+// RecordBuzzSessionPool counts ev and moves the idle gauge by what ev did to the idle set: a
+// reuse took one session out of it and a return put one back; a cold checkout and an eviction
+// leave it alone.
+func (p *otelProvider) RecordBuzzSessionPool(ctx context.Context, ev observability.SessionPoolEvent) {
+	p.buzz.sessionPoolEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("event", string(ev))))
+	switch ev {
+	case observability.PoolReused:
+		p.buzz.sessionPoolIdle.Add(ctx, -1)
+	case observability.PoolReturned:
+		p.buzz.sessionPoolIdle.Add(ctx, 1)
+	}
 }
 
 func (p *otelProvider) RecordBuzzSessionWarm(ctx context.Context, secs float64, source string) {
 	p.buzz.sessionWarmDuration.Record(ctx, secs, metric.WithAttributes(attribute.String("source", source)))
 }
 
-func (p *otelProvider) RecordBuzzImport(ctx context.Context, secs float64, kind, outcome string) {
-	p.buzz.importDuration.Record(ctx, secs, metric.WithAttributes(
-		attribute.String("kind", kind),
-		attribute.String("outcome", outcome),
+func (p *otelProvider) RecordBuzzImport(ctx context.Context, i observability.BuzzImport) {
+	p.buzz.importDuration.Record(ctx, i.Duration, metric.WithAttributes(
+		attribute.String("kind", i.Kind),
+		attribute.String("outcome", string(i.Outcome)),
 	))
 }
 
-func (p *otelProvider) RecordBuzzSpellResolve(ctx context.Context, secs float64, spell, builtin string) {
-	p.buzz.spellResolve.Record(ctx, secs, metric.WithAttributes(
-		attribute.String("spell", spell),
-		attribute.String("builtin", builtin),
+func (p *otelProvider) RecordBuzzSpellResolve(ctx context.Context, r observability.BuzzSpellResolve) {
+	p.buzz.spellResolve.Record(ctx, r.Duration, metric.WithAttributes(
+		attribute.String("spell", r.Spell),
+		attribute.String("builtin", strconv.FormatBool(r.Builtin)),
 	))
 }
 
 func (p *otelProvider) RecordBuzzSpellBuiltinsWarm(ctx context.Context, secs float64, spell string) {
-	kv := metric.WithAttributes(attribute.String("spell", spell))
-	p.buzz.spellBuiltinsWarm.Record(ctx, secs, kv)
-	p.buzz.spellBuiltinsCount.Add(ctx, 1, kv)
+	p.buzz.spellBuiltinsWarm.Record(ctx, secs, metric.WithAttributes(attribute.String("spell", spell)))
 }
 
 func (p *otelProvider) RecordBuzzJITRun(ctx context.Context) {
@@ -264,22 +252,19 @@ type agentInstruments struct {
 	attentionDisposition metric.Float64Histogram
 	reviewRemarks        metric.Int64Counter
 	reviewPublishes      metric.Int64Counter
-	// reviewMergedWhileReading and reviewMergedWhileReadingDuration carry no attributes: how long
-	// a reader had been reading is the whole fact, and a review id or repository name is
-	// unbounded.
-	reviewMergedWhileReading         metric.Int64Counter
-	reviewMergedWhileReadingDuration metric.Float64Histogram
+	// reviewMergedWhileReading carries no attributes: how long a reader had been reading is
+	// the whole fact, and a review id or repository name is unbounded.
+	reviewMergedWhileReading metric.Float64Histogram
 }
 
 func newAgentInstruments(m metric.Meter) (agentInstruments, error) {
 	r := reg{m: m}
 	ai := agentInstruments{
-		leaseRegistrations:               r.i64c("magus.lease.registrations", "Lease base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
-		attentionDisposition:             r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
-		reviewRemarks:                    r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
-		reviewPublishes:                  r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
-		reviewMergedWhileReading:         r.i64c("magus.review.merged_while_reading", "Reviews that merged while the reader had marked them as being read.", "{merge}"),
-		reviewMergedWhileReadingDuration: r.f64h("magus.review.merged_while_reading.duration", "Time from the reader marking a review as being read to it merging, in seconds."),
+		leaseRegistrations:       r.i64c("magus.lease.registrations", "Lease base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
+		attentionDisposition:     r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
+		reviewRemarks:            r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
+		reviewPublishes:          r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
+		reviewMergedWhileReading: r.f64h("magus.review.merged_while_reading.duration", "Time from the reader marking a review as being read to it merging, in seconds."),
 	}
 	return ai, r.err
 }
@@ -307,6 +292,47 @@ func (p *otelProvider) RecordReviewPublish(ctx context.Context, verdict string, 
 }
 
 func (p *otelProvider) RecordReviewMergedWhileReading(ctx context.Context, secs float64) {
-	p.agent.reviewMergedWhileReading.Add(ctx, 1)
-	p.agent.reviewMergedWhileReadingDuration.Record(ctx, secs)
+	p.agent.reviewMergedWhileReading.Record(ctx, secs)
+}
+
+// agentCostInstruments is the magus.agent.* family: what an agent session's calls cost in
+// context. thread, model, class, billing, profile and decision are bounded enums or model
+// names; a session id, a command and a path are not here.
+type agentCostInstruments struct {
+	contextTokens metric.Int64Histogram
+	delegable     metric.Int64Counter
+	billing       metric.Int64Counter
+	shadow        metric.Int64Counter
+}
+
+func newAgentCostInstruments(m metric.Meter) (agentCostInstruments, error) {
+	r := reg{m: m}
+	ci := agentCostInstruments{
+		contextTokens: r.i64h("magus.agent.context.tokens", "Context size a caller reported on a tool call, in tokens.", "{token}"),
+		delegable:     r.i64c("magus.agent.delegable.chars", "Result characters of tool calls a subagent could have made in the caller's place.", "{char}"),
+		billing:       r.i64c("magus.agent.billing", "Tool calls, by the billing mode in effect.", "{call}"),
+		shadow:        r.i64c("magus.agent.shadow.verdicts", "Tool calls, by what each guard profile would have decided.", "{call}"),
+	}
+	return ci, r.err
+}
+
+func (p *otelProvider) RecordAgentCall(ctx context.Context, c observability.AgentCall) {
+	if c.ContextTokens > 0 {
+		p.agentCost.contextTokens.Record(ctx, c.ContextTokens, metric.WithAttributes(
+			attribute.String("thread", string(cmp.Or(c.Thread, types.AgentThreadUnknown))),
+			attribute.String("model", cmp.Or(c.ContextModel, "unknown")),
+		))
+	}
+	if c.DelegableClass != "" && c.ResultChars != nil && *c.ResultChars > 0 {
+		p.agentCost.delegable.Add(ctx, int64(*c.ResultChars), metric.WithAttributes(attribute.String("class", string(c.DelegableClass))))
+	}
+	if c.Billing != "" {
+		p.agentCost.billing.Add(ctx, 1, metric.WithAttributes(attribute.String("mode", string(c.Billing))))
+	}
+	for profile, decision := range c.Shadow {
+		p.agentCost.shadow.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("profile", profile.String()),
+			attribute.String("decision", string(cmp.Or(decision, types.GuardAllow))),
+		))
+	}
 }

@@ -1,6 +1,8 @@
 // package-manifests-carry-no-scripts refuses a "scripts" key in any package.json: the
 // manifest says what a package is, and how the workspace builds, tests or lints it lives
 // in the magusfile as spell ops, where the cache and sandbox see it.
+//
+// Tier 1, mechanical: the fix moves the script into a spell op.
 namespace manifests;
 
 import "assert";

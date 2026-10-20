@@ -111,6 +111,89 @@ The failure it prevents is quiet. A cache that becomes load-bearing does not
 announce the change; it works, for months, until someone clones fresh on a
 plane and discovers the build was distributed all along.
 
+### Everything is a file
+
+magus keeps its local state in files a person can read with the tools already
+on the machine. A store is one file of JSON Lines: one entry per line, one
+JSON object per entry. `cat` reads a store, `grep` finds an entry, `diff`
+compares two, `tail` follows one and `wc -l` counts it. None of that needs
+magus running or a parser for its format.
+
+The idea is old, and magus borrows from it selectively. Unix made the line the
+record, so `grep`, `sort`, `cut` and `wc` work on any file that keeps to it.
+git stores an object under a two-character fan-out of its hash and a ref as
+one line naming a commit, updated through a lock file and a rename. Maildir
+keeps one message per file and delivers by renaming from `tmp/` into `new/`,
+so no reader sees half a message and no writer takes a lock. `/proc` exposes
+one value per file. Plan 9 went furthest, with every service a file tree.
+magus takes what fits a store on disk: the layout, the line, the rename. It
+does not take synthetic file servers; the daemon still answers over RPC.
+
+The conventions:
+
+- **Layout and naming.** A store lives under the workspace's `.magus/` or a
+  user directory resolved by `libs/xdg` (`StateDir`, `CacheDir`), never a
+  literal path. A directory names the kind and the
+  file in it is the store (`jobs.jsonl`), so the listing is the index. A
+  content-addressed store of blobs fans out on the first two hex digits of the
+  hash, as git's does (`cas/ab/ab12...`).
+- **JSON Lines.** A store is one append-only `.jsonl` file: one JSON object
+  per entry, one entry per line, each line ending in a newline. A single JSON
+  document, whose entries only a parser can find, is not a store format, and
+  neither is a `name<TAB>value` pair or a file per entry holding a document.
+- **The last line for a key wins.** A change appends a line for the entry's
+  key and a reader keeps the last one it finds. Compaction rewrites the file
+  to one line per key through a rename and never edits a line in place, once
+  the file holds more than twice as many lines as keys, plus 64. A
+  store a person edits by hand, which nothing compacts, refuses a repeated key
+  instead (the conformance ratchet, `hack/policy/conformance.jsonl`).
+- **Atomic write via rename.** A rewrite goes to a temporary file in the same
+  directory and is renamed over the old one (`file.WriteFileAtomic`, which
+  also syncs). A reader sees the old file or the new one, never half of
+  either. An append is one write of one complete line.
+- **Encoding lives on the type.** An entry type owns its encoding in
+  `MarshalJSON` and `UnmarshalJSON`. A reader hands each line to the type and
+  never splits, scans or pattern-matches a line itself. A store a person
+  edits decodes strictly (`internal/json`'s `StrictDecoder`): an unknown
+  field, a duplicate key, a wrong kind or a bad value is an error naming
+  `path:line`. A store only magus writes may skip a field a newer magus added.
+- **An old format is named, never read.** When a store changes shape, the old
+  file is not read as a second format and not skipped in silence: the error
+  names it and says how to move it aside.
+- **Readable with cat, grep and diff.** Text is UTF-8. The one binary
+  exception is a blob holding the bytes a tool produced, stored verbatim.
+
+The failure this prevents is state nobody can inspect when it matters. A
+stuck run, a lease that will not release, or a line that reads wrong is
+debugged at a terminal with whatever is installed, often after the process
+that wrote it is gone. A format only magus can read puts the broken tool
+between you and the evidence of what broke it, and one document holding every
+entry turns one corrupt write into a lost store; a corrupt line costs the
+line.
+
+The mechanism is three helpers and no gate. `file.JSONL` gives a keyed store
+its append, its last-line read, its compaction and its lock;
+`file.WriteFileAtomic` gives every rewrite its rename; and `internal/json`
+gives every line its strict decoder. Nothing refuses a new JSON document, so
+the rule holds in review alone. The stores that do not follow it yet, as
+found on 2026-10-14, are debt or exceptions:
+
+- **Runtime records** are a capped log kept as one rewritten JSON array in the
+  knowledge graph store. The state cannot be rebuilt, so this is debt owed a
+  conversion to appended lines.
+- **Owed regenerations** are one rewritten JSON document in `vcs/owed.go`. The
+  state cannot be rebuilt, so this is debt owed a conversion to appended lines.
+- **Name and value pairs.** The lock, pipe and watchdog records
+  (`internal/file/record`) write one `name<TAB>value` pair per line and want
+  one JSON object per line.
+- **Derived, rebuildable caches** are accelerators, exempt from the rule. The
+  rule covers state that cannot be rebuilt, and a cache that is deleted and
+  recomputed loses nothing.
+- **One file per entry, a JSON document inside.** Cache manifests, run
+  descriptors, knowledge-graph shards, merge-queue verdicts, the service
+  journal and connector records break the one-file and the line rules, and stay
+  an exception.
+
 ### Human-first is the AI integration
 
 magus was built for humans, and agents drive it well anyway, because an
@@ -180,6 +263,85 @@ key, no drift comparison, and no diagnostic. Its uncertainties (no ledger, no
 live lease, a file that will not parse) fail open with at most an
 advisory.
 
+### Human in the loop
+
+magus keeps a person in the loop, the industry's term for the arrangement and
+the plainest account of what the tool is for. An agent proposes and does
+bounded work: it reads, drafts, runs the checks, and edits the paths a job
+hands it. A person decides at named points: what lands, what leaves the
+machine, what spends real money, and what changes the rules the agent works
+under. Where those points sit is the design. magus makes each one explicit,
+gives it a reason, and records it, so a decision is something a person
+made and can look up, not something that happened.
+
+The mechanism is the same shape wherever it appears. The guard's `ask`
+verdict puts a push at a commit no gate covers, or a run of a `human_only`
+target, in front of the person with the cost or the gate state attached, and
+refuses a leased worker outright, because a worker has no one to ask. An
+agent's request for attention stays open until a person disposes of it. A
+model tier, a guard rule's grade and a merge intent change only when a person
+edits the row that holds them, and that row is in version control. The
+[Judgment](#judgment) entries, starting with
+[Agents propose, humans dispose](#agents-propose-humans-dispose) and
+[Manual on purpose](#manual-on-purpose), list the points one by one.
+
+A point exists only where the person's judgment changes the outcome. Asking
+for everything trains the person to confirm everything, which
+[the loop that keeps you able to notice](#the-loop-keeps-you-able-to-notice)
+names as the failure, and [friction](#friction-that-carries-meaning) is the
+test for any new point. This prevents two quiet failures that look
+opposite: the agent that decides because nobody was asked, and the person who
+approves because everybody was. A default that acts without saying so is a
+third: a decision nobody made. [No silent defaults](#no-silent-defaults)
+closes it.
+
+### Built for the expensive era
+
+Model time is subsidized today, the way early ride-hailing was: prices are
+set to win adoption, not to cover cost. The pattern that follows is known, not
+predicted. Once adoption is won, prices rise and each token buys less;
+enterprise contracts already show it. magus is built for that era, not this
+one.
+
+The mechanism is to move what a model would otherwise have to work out (the
+graph, declared outputs, what a change can break, which conventions hold) into
+deterministic, checked answers. A smaller model can then do work that today
+takes a frontier one. A feature that only works with a frontier model is not
+finished. The measure is the model-tier lens: the economy tier's pass rate
+should rise over time. This prevents a tool that looks capable only while
+someone else pays for the reasoning.
+
+### The orchestrator plans; workers do the work
+
+A session that hands out work keeps to planning and coordinating. Reading and
+searching source, editing it, and running checks belong to the workers it
+spawns, at any context size. Integration (cherry-picks, the build of magus,
+regeneration and commits) belongs to the checkout's integrator, the subagent
+spawned `<parent>/integrate <job>` in that checkout; the root coordinates and never builds. Size and cost never decide whether;
+they only tune the advice given to a session that has handed nothing out.
+magus knows a session orchestrates from what it recorded, a job row it forked
+or a spawn bound to one; without that record the guard advises and never
+refuses.
+
+The mechanism is the guard's `orchestrator-groundwork` rule. It refuses a
+proven orchestrator's searches, source reads, diffs, runs, fetches and edits,
+and passes its job verbs, graph reads and integration. A person at the
+keyboard is the [human in the loop](#human-in-the-loop), not an orchestrator,
+and is never judged by it. This prevents the root whose context fills with
+work a worker would have returned as one finding, and which then pays for that
+work on every call after it.
+
+### A copy can be the right answer
+
+Merge duplicates only when they share semantics, policy knobs, and bugs: a bug
+in one is a bug in the other. Otherwise keep them apart, with one line saying
+why. Share small things (a type, a classification) before sharing loops.
+
+Code shared only because it looks alike couples parts that change for
+different reasons. That coupling grows until one change breaks something far
+away. This prevents the abstraction that is cheap to write and costly to
+change, and it is why a deliberate copy carries its reason beside it.
+
 ### Friction that carries meaning
 
 A tool made perfectly smooth stops telling you what it did. Every act collapses
@@ -194,8 +356,7 @@ follows.
   absent" (`cmd/magus/stale_index.go`). A target past its ceiling fails with
   [MGS3011](reference/codes/sandbox/MGS3011.md) and is never a skip. A
   setting magus cannot honor fails the command, as
-  [Misconfiguration is an error](#misconfiguration-is-an-error-never-a-warning)
-  requires.
+  [No silent defaults](#no-silent-defaults) requires.
 - **Time delay.** A pause sits in front of an act that cannot be taken back,
   never inside the loop that verifies. The first Ctrl+C only arms a
   three-second window (`confirmWindow`, `cmd/magus/interrupt.go`). The
@@ -217,14 +378,35 @@ The test for any new resistance is whether it carries information. The
 `push-ungated` catalog entry names the failure it replaced: an advisory that
 fired on every push having read nothing was "a toll rather than a reminder".
 Friction that tells the fast caller and the careless caller the same sentence
-is a toll, and a toll is removed. This principle never slows
+is a toll, and a toll is removed. A finding charged to a change that did not cause
+it is a toll too, so whoever adds or tightens a rule pays its cost
+([Rolling out a stricter rule](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#rolling-out-a-stricter-rule)).
+This principle never slows
 [the loop that verifies](#optimize-the-loop-that-verifies-never-the-loop-that-generates):
 a cache hit stays instant, and the pause belongs to the act that leaves the
 machine.
 
-The mechanisms are the ones named above. The debt is the rest of magus:
-the console and the Go SDK have not been read against this entry, and until
-they are, their smoothness is unexamined rather than chosen.
+The [Go SDK](reference/go-sdk.md) has been read against this entry, and holds
+these rules:
+
+- Every verdict comes back with its reason and its rule: a
+  `types.GuardJudgment` names the rule that decided, a `JobStatus` lists its
+  violations, and a knowledge answer keeps unknown apart from absent.
+- No silent default. A workspace with a magusfile and no linked engine fails
+  with [MGS1104](reference/codes/capability/MGS1104.md), and a library
+  workspace reads no environment unless it is given `WithEnv`.
+- No helper hides a refusal: the SDK never retries, forks, escalates or
+  re-grades on the caller's behalf.
+- Ambient state appears in the signature. The lease rides `ctx` through
+  `types.WithJobLease`, the session is `WithSession`, the environment is
+  `WithEnv`, and stderr is `WithStderr`.
+- A swappable part is a small interface with one option (`WithVCSDriver`,
+  `WithObserver`, `WithCacheBackend`), built only where a second
+  implementation exists.
+- The root package grows only by wrapping code that already exists.
+
+The debt is the rest of magus: the console has not been read against this
+entry, and until it is, its smoothness is unexamined rather than chosen.
 
 ### Worth cloning
 
@@ -313,7 +495,9 @@ when magus automates a decision and when it hands the decision to you.
 
 ### Agents propose, humans dispose
 
-An agent integration can suggest work; it cannot accept it. magus records
+An agent integration can suggest work; it cannot accept it. That is
+[human in the loop](#human-in-the-loop) at the point where a proposal becomes a
+change. magus records
 authorship from the transport that performed the write, so a change carries the
 origin the channel delivered (the OS account, the entry point, the credential
 or host) no matter what the writer reports about itself. Interrupting a person costs attention, and the suggestion
@@ -383,6 +567,29 @@ it can prove, a planted token file that cannot grant more than a mint, a token
 that never mints a wider one, rather than claiming a sandbox it does not have
 ([Tokens and grants](concepts/tokens.md#trust-model)).
 
+### The outer harness stays outside
+
+magus is the outer harness: deterministic guides and sensors around an agent
+host's loop, never the loop itself ([Prior art and terminology](scope.md#prior-art-and-terminology)).
+The host is the inner harness. It decides what reaches the model and what a
+tool call does, and magus never enters that path.
+
+So magus judges and informs; it does not transform. A guard verdict allows,
+advises or denies an action and gives its reason. It never rewrites the
+command, the prompt or the reply on the way through. The text an agent loads
+from magus (skills, MAGUS.md, the AGENTS.md section) is written ahead of time,
+kept in version control and reviewed like code. Compressing it, proofreading
+it or regenerating it happens to those files, never at session start and never
+per request. magus runs no proxy between an agent and its provider and no step
+that edits context in flight.
+
+The reason is ownership. A provider changes how its harness loads context,
+caches it and calls tools on its own schedule, and a layer that rewrote text in
+flight would break quietly when it did: the same trade as
+[The host wiring is yours](#the-host-wiring-is-yours). It would also make the
+text a model saw differ from the text a person reviewed, which undoes the point
+of keeping that text in version control.
+
 ### A refusal carries its reason
 
 A refusal names the mechanism and a next step. Diagnostics are coded and
@@ -398,7 +605,13 @@ workaround runs outside the cache and the sandbox, where magus can no longer
 account for the work. An error that leaves you with no next step is a doctrine
 bug; file it as one.
 
-### Misconfiguration is an error, never a warning
+### No silent defaults
+
+A default that changes what happens without saying so is a bug. Misconfiguration
+is an error, never a warning. Anything a caller must act on is a returned error,
+never a notice or a log line. A fallback says that it fell back. A capability
+that is absent, an engine that is not linked or a file that cannot be read,
+fails loudly and never answers empty.
 
 A setting magus cannot honor fails the command that read it. It is not logged
 and stepped over, not repaired with a default, not carried as a warning nobody
@@ -421,6 +634,11 @@ must obey. A field that reads as a retention window while the code enforces a
 fixed cap, or a flag documented as repeatable that silently keeps the last
 value, is the same defect as the ignored setting. It just fails later, and
 reads as a lie rather than an oversight.
+
+An empty answer is the quietest default. A lookup that returns nothing because
+the engine behind it was never linked, or because a file could not be read,
+tells the caller there is nothing to find, and the caller believes it. Absence
+of the capability is its own error, distinct from absence of a result.
 
 ### Told, never guessed
 
@@ -501,7 +719,8 @@ helpful that nobody using the tool learns anything from it.
 
 ### Manual on purpose
 
-magus could automate each row below, and does not.
+magus could automate each row below, and does not. Each is a place the
+[human in the loop](#human-in-the-loop) stays one.
 
 | stays manual                | because                                                                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -646,9 +865,10 @@ removed, with what decided each and where to check it.
 | denying a recursive grep of a bare identifier, to force `refs`                                                                | measured and partly reversed: the original count (45 such greps, denominator unstated) undercounted the sample: a 2026-09-15 remeasurement over 1,116 transcripts found 699 matching the guard's own shape (about 2,700 individual greps), the same roughly-60%-answered-by-`refs` ratio holding on the larger sample; an advisory still ships for raw text the graph cannot vouch for, but since `a05b4c414` a recursive grep of a DEFINITIVELY-indexed symbol is DENIED outright (`denyRuleSymbolSearch`), not merely advised | `f963a9f1b`, measured with `9519797b3`, remeasured 2026-09-15; denied since `a05b4c414` (`internal/guard/search.go`) |
 | sending every recursive literal grep to `magus refs --text`                                                                   | not built: measured 2026-09-29 over the read/discovery audit's Claude, Codex and Cursor transcripts, 3,498 recursive greps of literal text ran. `refs --text` is the same substring scan with no graph behind it, so a deny would cost a turn and return what grep returns, and a regex search has no equivalent at all. A search the graph answers better is already refused where it can be proven: symbol-search, search-translation and grep-reader                                                                         | the read/discovery audit, 2026-09-29; `internal/guard/search.go`                                                     |
 | wiring Claude Code's Grep and Glob tools to the guard                                                                         | not built: measured 2026-09-29, the same transcripts held 2 Grep or Glob tool calls against thousands of shell searches, so a restatement like Cursor's would judge almost nothing. Cursor keeps its restatement, where those tools are how it searches. Revisit if a host's own search tool becomes the common path                                                                                                                                                                                                            | the read/discovery audit, 2026-09-29; `docs/guides/integrations/agents/cursor-hook.buzz`                             |
-| an `ask` verdict, so a denial could be waved through in the moment                                                            | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                                                                                                                                                                                                                                                                                                                                                                            | `internal/agent/guard.go:25`, still three decisions                                                                  |
+| an `ask` verdict, so a denial could be waved through in the moment                                                            | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting; `ask` returned later for consent to a costly or publishing act only (the push gate asks a session no lease binds), never to clear a denial, and a host that cannot prompt renders it as a deny                                                                                                                                                                            | `internal/agent/guard.go` `guardDecisions`; `gradePushWithoutGate` in `internal/guard/push.go`                       |
 | 47 half-built features found in an audit before the project was shared                                                        | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                                                                                                                                                                                                                                                                                                                                                                             | `4f8cc295a`                                                                                                          |
-| machine-wide memory admission control                                                                                         | deleted; `memory_mb` kept as a slot weight                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `b6abdfe43`                                                                                                          |
+| machine-wide memory admission control                                                                                         | deleted in `b6abdfe43`, then brought back as a declared claim against one broker budget. A step claims its slots and `memory_mb`, and a refusal from another invocation is MGS3009, never queued. A claim is declared or measured from recorded runs, never observed live. `status --wait` reserves its seat for the run it feeds, and a bare run still refuses at once                                                                                                                                                         | `b6abdfe43`, `cc3d21b19` (#129), [Concurrency](concepts/concurrency.md)                                              |
+| a pressure brake that withholds new claims while observed memory is high                                                      | not built, refused 2026-10-16: it would make the verdict depend on what else is running, and the same command on the same machine would stop reaching the same answer. Observed pressure warns and never blocks                                                                                                                                                                                                                                                                                                                 | [Concurrency](concepts/concurrency.md)                                                                               |
 | rotating the activity trail from its write path                                                                               | deleted rather than keep promising bounded retention to a workspace running no daemon                                                                                                                                                                                                                                                                                                                                                                                                                                           | `42a0996c5`                                                                                                          |
 | `magus graph verify`                                                                                                          | folded into `doctor`: no in-tree consumer, absent from the CLI registry, and filed under a graph it never read                                                                                                                                                                                                                                                                                                                                                                                                                  | `3f805e159`                                                                                                          |
 | `magus_tail_log`                                                                                                              | named in public as a duplicate of `magus_output` and shipped for two more weeks as a debt; deleted when the tool catalog became generated from the descriptor                                                                                                                                                                                                                                                                                                                                                                   | `blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md`                                                            |
@@ -682,6 +902,18 @@ removed, with what decided each and where to check it.
 | a conformance check for error as the last result in a multi-result return                                                     | not built: 2046 of 2046 multi-result functions already put error last (100%). Covered by an enabled linter, revive's error-return rule, so the miner records it covered and ships nothing                                                                                                                                                                                                                                                                                                                                       | .golangci.yml revive rules (error-return), verified 2026-09-27; pattern-mining plan                                  |
 | a conformance check for context.Context as a function's first parameter                                                       | not built: no function in this repo takes a context.Context after its first parameter. Covered by an enabled linter, revive's context-as-argument rule, so the miner records it covered and ships nothing                                                                                                                                                                                                                                                                                                                       | .golangci.yml, enabled 2026-09-27                                                                                    |
 | a conformance check for import direction between top-level directories (dep-direction)                                        | not built: replayed against the last 40 merged PRs, 5 new edges departed from an established precedent and only 3 read true (60%, short of the 0.8 floor). Both false positives were already sanctioned elsewhere: `internal/interp/bindings` importing `std` (the plan already treats `std` and `internal/interp` as one layer) and `types/schema.go` importing `internal/json` (already allowed by `.golangci.yml`'s `types-pure-domain` depguard rule)                                                                       | pattern-mining plan, U2 replay, measured on this repository 2026-09-27                                               |
+| a skill as the home of a rule that must hold on every edit                                                                    | not built: `magus-local-development` loaded in 154 of 756 sessions that edited Go (20 percent; 30 percent of roots, 20 percent of subagents), counting host edit tools only, so the figure is a floor. The load rate rose from 4 to 20 to 61 percent across three windows only as job briefs began naming the skill; no hook demands it. A rule every session must follow goes in `AGENTS.md`; see [Where a rule lives](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#where-a-rule-lives)                         | local skill audit, transcripts 2026-09-15 to 2026-10-13                                                              |
+| a host prompt when a worker adds a compat marker                                                                              | not built: a worker has no person to answer it, and prose forbidding compatibility shims since 2026-09-24 did not hold (14 of 34 `compat(until:)` shims landed after it, 6 after 2026-10-08). A worker's marker gets an advisory and one attention row for the root, as a stall does                                                                                                                                                                                                                                            | delete-bias measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)                  |
+| a model that watches workers for stalls, of any size                                                                          | not built: magus never calls a model, and the watcher would cost more than the stalls it caught. Across 1,393 subagent transcripts in the 14 days to 2026-10-13, every model tier hit runs of three or more failed calls at 3.0 to 5.1 per 1,000 calls, and all 570 such runs ended on the worker's next successful call                                                                                                                                                                                                        | subagent transcript measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)          |
+| an agent loop in the Go SDK: reading a model's tool call and choosing what runs next                                          | not built: magus is the substrate around a loop (leases, verdicts, graph answers, the trail, grades), and the loop belongs to the embedder. A loop would make magus a harness, the category its scope says it is not                                                                                                                                                                                                                                                                                                            | [scope](scope.md#where-others-drew-it); [the Go SDK](reference/go-sdk.md#what-the-sdk-leaves-out)                    |
+| a model router: per-call model choice, live switching, escalation                                                             | not built: the tier table is static and declared. A repository may pick a tier at fork time, with its answer and reason on the row; retrospective insight reports what each tier achieved; and a person changes the table, the human in the loop                                                                                                                                                                                                                                                                                | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md); [Human in the loop](#human-in-the-loop)              |
+| the root as the stall watcher                                                                                                 | not built: the root is the most expensive context in a session, so polling workers spends the dearest tokens on the cheapest work. The root receives one attention row for a block only it can clear                                                                                                                                                                                                                                                                                                                            | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
+| a stall message that gives the worker the answer                                                                              | not built: the message names a region (the job's criteria, its write paths, the command that answers the refusal), never the fix. Handing over the answer makes a cheap model a typist for magus, and the text grows into a second skill nobody maintains                                                                                                                                                                                                                                                                       | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
+| per-model stall behavior, or a model name in a Go conditional                                                                 | not built until measured: the tiers showed no gap (Haiku 3.6, Sonnet 3.0, Opus 3.3 and Fable 5.1 runs per 1,000 calls; the Haiku sample was 33 agents), so a per-model ladder waits for two weeks of shadow verdicts and goes only to a tier that stalls at least twice as often. A row states the model and the block count and never suggests another model                                                                                                                                                                   | subagent transcript measurement, 2026-10-13; [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md)          |
+| a denial or a cap on a worker's calls from the stall rule                                                                     | not built: the rule changes wording and files a row, and a block that stops a worker's calls turns a stall into a lockout. The guard's own deny rules are the only denials                                                                                                                                                                                                                                                                                                                                                      | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
+| a heuristic over a model's prose to decide it is stuck                                                                        | not built: the signals are counted facts, a refusal repeated and failed calls in a row, and a sentence that "seems confused" is a guess that cannot be tested                                                                                                                                                                                                                                                                                                                                                                   | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
+| a verb or flag for stalls                                                                                                     | not built: the rule is one entry in the guard profile table, reported by `magus session show` and `magus session hints`; a command-line flag that feeds a model is what [Human-first is the AI integration](#human-first-is-the-ai-integration) rules out                                                                                                                                                                                                                                                                       | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
+| a daemon sweep for idle workers                                                                                               | not built until measured: the host's stop hooks already reach `magus session notify` and the job store's stale-after covers the long tail. Add the sweep only if shadow data shows idle stalls the hooks miss                                                                                                                                                                                                                                                                                                                   | [ADR 0009](decisions/0009-cost-profiles-for-agent-sessions.md), 2026-10-13                                           |
 
 The rows that record a measurement killing an idea somebody wanted are the only
 reason the rest of the list is worth anything. A ledger of

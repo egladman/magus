@@ -32,7 +32,7 @@ const confirmWindow = 3 * time.Second
 // going, and a second SIGINT within [confirmWindow] stops it. Builds are long
 // and Ctrl+C is next to Ctrl+V, so a single fingertip should not discard
 // minutes of work. This is safe precisely because magus puts every child in
-// its own process group (see internal/proc/run): a terminal Ctrl+C reaches
+// its own process group (see internal/proc/spawn): a terminal Ctrl+C reaches
 // magus alone, so ignoring one does not leave the run half-killed behind its
 // back.
 //

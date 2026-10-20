@@ -388,6 +388,43 @@ func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
 	}
 }
 
+// human_only's reason is what the guard quotes to the agent it stops and the person it
+// asks, so a run nobody can explain is refused at load rather than at the prompt.
+func TestParseBuzzProjectOpts_HumanOnlyReason(t *testing.T) {
+	t.Run("a reason is recorded", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("human_only", vm.StrValue("  launches paid model sessions  "))
+		p := applyOpts(t, targetsOpts("agent-bench-run", pol))
+		got := p.TargetPolicies["agent-bench-run"]
+		assert.True(t, got.HumanOnly)
+		assert.Equal(t, "launches paid model sessions", got.HumanOnlyReason)
+	})
+
+	t.Run("an undeclared target is not human-only", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("slots", vm.IntValue(4))
+		p := applyOpts(t, targetsOpts("lint", pol))
+		assert.False(t, p.TargetPolicies["lint"].HumanOnly)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"a bare true is not a reason", vm.BoolValue(true)},
+		{"empty is not a reason", vm.StrValue("")},
+		{"whitespace is not a reason", vm.StrValue("  ")},
+		{"a number is not a reason", vm.IntValue(4)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("human_only", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("agent-bench-run", pol))
+			assert.ErrorContains(t, err, `targets["agent-bench-run"].human_only needs a reason string saying what running this target costs`)
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))

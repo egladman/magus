@@ -110,6 +110,51 @@ knowledge:
     shared: notes
   vcs:
     enabled: true
+  # The anchors are magus's shipped defaults. This repository adds what names its own
+  # layout: libs/gopherbuzz follows upstream Buzz, and cmd/magus is the one binary that
+  # imports every package. Writing checks replaces the defaults whole, so every check is
+  # restated here.
+  conformance:
+    ratchet: hack/policy/conformance.jsonl
+    exclude: ["libs/gopherbuzz/**"]
+    checks:
+      file-lines:
+        source: { percentile: 95, anchor: 2200 }
+        main: { percentile: 95, anchor: 3000 }
+        test: { percentile: 99, anchor: 1900 }
+      func-lines:
+        source: { percentile: 99, anchor: 92 }
+        main: { percentile: 99, anchor: 140 }
+        test: { percentile: 99, anchor: 73 }
+      type-methods:
+        source: { percentile: 95, anchor: 49 }
+        main: { percentile: 95, anchor: 22 }
+        test: { percentile: 95, anchor: 32 }
+      file-symbols:
+        source: { percentile: 95, anchor: 82 }
+      clone-tokens:
+        source: { percentile: 50, anchor: 80 }
+        main: { percentile: 50, anchor: 80 }
+      dep-fanout:
+        source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89 } }
+      export-scope:
+        source: { percentile: 0, anchor: 0 }
+        main: { percentile: 0, anchor: 0 }
+      call-sequence:
+        source: { percentile: 99, anchor: 7 }
+        main: { percentile: 99, anchor: 7 }
+      shared-body:
+        source: { percentile: 90, anchor: 94 }
+      shared-reach:
+        source: { percentile: 95, anchor: 7 }
+      caller-spread:
+        source: { percentile: 95, anchor: 3 }
+      mode-knobs:
+        source: { percentile: 0, anchor: 0 }
+      alias-share:
+        source: { percentile: 95, anchor: 100, min_subject: 5 }
+      name-clash:
+        source: { percentile: 99, anchor: 62, min_subject: 5 }
   # This repository loads its own Claude Code sessions with the adapter it ships, the
   # same way it wires the guard template it ships rather than keeping a private copy. If
   # the recipe breaks for a reader, it broke here first.

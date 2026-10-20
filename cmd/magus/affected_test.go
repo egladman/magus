@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -215,13 +216,13 @@ func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 func TestEmitPlanRendersTheSummaryForATemplate(t *testing.T) {
 	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: "."}}}
 	got := captureStdout(t, func() {
-		require.NoError(t, emitPlan(OutputOptions{Format: outputTemplate, Template: "{{.summary}}"}, out))
+		require.NoError(t, emitPlan(output.Options{Format: outputTemplate, Template: "{{.summary}}"}, out))
 	})
 	assert.NotContains(t, got, "<no value>")
 	assert.Contains(t, got, planSummaryMarkdown(out))
 
 	asJSON := captureStdout(t, func() {
-		require.NoError(t, emitPlan(OutputOptions{Format: outputJSON}, out))
+		require.NoError(t, emitPlan(output.Options{Format: outputJSON}, out))
 	})
 	assert.NotContains(t, asJSON, "summary", "the JSON plan carries the typed inputs, not Markdown")
 }

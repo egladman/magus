@@ -5,8 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -25,7 +26,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/service/console"
 	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
@@ -36,7 +37,7 @@ import (
 func serverCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
-		return usagef("magus server: target required (want start, stop, status, or reload)")
+		return exit.Usagef("magus server: target required (want start, stop, status, or reload)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
@@ -67,7 +68,7 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	case job.NameCheckDrift:
 		return serverCheckDrift(ctx, root, rest)
 	default:
-		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
+		return exit.Usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
 }
 
@@ -120,7 +121,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus server status: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus server status: takes no arguments (got %q)", rest[0])
 	}
 
 	report := buildStatusSnapshot(ctx, resolveServerAddr(socket), false)
@@ -133,7 +134,7 @@ func serverStatus(ctx context.Context, args []string) error {
 			return err
 		}
 		if report.Server == nil {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -145,7 +146,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		slog.ErrorContext(ctx, "no server is running", attr.Notice(""),
 			attr.Why(strings.TrimSpace(report.PoolError+"\n"+fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status))),
 			attr.Next(hint.ServerStart.String()))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	printServerRows(os.Stdout, report.Server, time.Now())
 	printPoolSummary(os.Stdout, report.Pool, "pool")
@@ -176,9 +177,9 @@ const serverReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
-	var sf *gen.ServerStartFlags
+	var sf *flaggen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
-		sf = gen.BindServerStart(fs)
+		sf = flaggen.BindServerStart(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server start [--foreground] [flags]")
 			fmt.Fprintln(os.Stderr, "\nStart the server: MCP and the console over HTTP, the APIs, background jobs and")
@@ -394,7 +395,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -604,9 +605,9 @@ func wantsForeground(args []string) bool {
 // serverStop shuts down the persistent server, or with --pools the live
 // per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
-	var tf *gen.ServerStopFlags
+	var tf *flaggen.ServerStopFlags
 	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
-		tf = gen.BindServerStop(fs)
+		tf = flaggen.BindServerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
 			fmt.Fprintln(os.Stderr, "\nSend a graceful shutdown request to the running server. In-flight RPCs")
@@ -633,7 +634,7 @@ func serverStop(ctx context.Context, args []string) error {
 	}
 	if qerr != nil {
 		slog.ErrorContext(ctx, "no server is running at "+addr, attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err := proc.Shutdown(ctx, addr); err != nil {
 		return fmt.Errorf("server stop: %w", err)
@@ -1092,9 +1093,18 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// in-memory session map is empty by construction: reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
 	store := changeset.NewStore(m.CacheDir())
-	seen := store.LoadSeenComments()
-	drafts := store.LoadDrafts()
-	reading := store.LoadReading()
+	seen, err := store.LoadSeenComments()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
+	drafts, err := store.LoadDrafts()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
+	reading, err := store.LoadReading()
+	if err != nil {
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
+	}
 	if reading.Expired(time.Now()) {
 		// A forgotten tab is not a reader. Ignored from here on, and cleared so the gate below
 		// stops treating it as the reason to ask the forge.
@@ -1191,7 +1201,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		// already dealt with it, and counting it here would count it twice.
 		return nil
 	}
-	if tel := m.Telemetry(); tel != nil {
+	if tel := viewInternals(m).Telemetry(); tel != nil {
 		tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
 		shutdownOneShotTelemetry(ctx, tel)
 	}

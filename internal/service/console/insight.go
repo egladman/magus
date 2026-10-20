@@ -30,11 +30,14 @@ type insightEntry struct {
 	at   time.Time
 }
 
-// Insight assembles the five insight lenses. The four VCS-history lenses (hotspots, affinity,
+// Insight assembles the six insight lenses. The four VCS-history lenses (hotspots, affinity,
 // ownership, trend) come from one bounded git-log scan cached for insightTTL, so a burst of
-// dashboard polls does not re-shell git on every request. The fifth lens, volatility, rides
-// fresh on every call: it is a cheap runtime-history file read that changes on every run, so a
-// TTL-stale copy would mislead the dashboard. The result is one InsightView carrying every lens.
+// dashboard polls does not re-shell git on every request. The fifth lens, volatility, and the
+// sixth, model tiers, ride fresh on every call: each is a cheap runtime-history file read that
+// changes on every run, so a TTL-stale copy would mislead the dashboard. The conformance lens
+// reads the symbol graph rather than history and rides the cached scan, since building the
+// graph is the cost the TTL exists to share. The result is one InsightView carrying every
+// lens.
 func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
 	view, err := s.cachedScan(ctx)
 	if err != nil {
@@ -45,7 +48,22 @@ func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
 		return types.InsightView{}, err
 	}
 	view.Volatility = &report
+	tiers, err := s.modelTiers(ctx)
+	if err != nil {
+		return types.InsightView{}, err
+	}
+	view.ModelTiers = &tiers
 	return view, nil
+}
+
+// modelTiers is the job-history lens, read fresh like volatility: it changes whenever a job
+// ends, so a TTL-stale copy would mislead the dashboard. A service holding no workspace
+// reads no history and answers the empty lens, which carries its definition.
+func (s *Service) modelTiers(ctx context.Context) (types.ModelTierOutput, error) {
+	if s.magus == nil {
+		return types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}, nil
+	}
+	return s.magus.ModelTierLens(ctx)
 }
 
 // cachedScan returns the four VCS-history lenses, reusing a scan within the TTL. Assembly is
@@ -97,7 +115,13 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	if err != nil {
 		return types.InsightView{}, err
 	}
-	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}, nil
+	// A configuration the lens cannot honor fails the read: the dashboard shows the error
+	// rather than a conformance section that looks clean.
+	conformance, err := s.magus.Conformance(ctx)
+	if err != nil {
+		return types.InsightView{}, err
+	}
+	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr, Conformance: &conformance}, nil
 }
 
 // volatility reports per-(project, target) volatility read from the shared runtime-history file

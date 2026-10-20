@@ -44,6 +44,8 @@ Codex is the best covered of the four. SchemaStore carries `.codex/hooks.json`, 
 hook event, input and output, under `codex-rs/hooks/schema/generated` in the `openai/codex` repository. The one gap is
 that the hooks schema's `hooks` object takes `additionalProperties`, so an event name it does not know still validates.
 `internal/agent/harness_test.go` closes that itself, by requiring every event name magus ships to be one the schema names.
+No schema is vendored for `PostToolUse`, `SubagentStart` or `SubagentStop`; what those events carry was read from codex-cli
+0.155.1 on 2026-10-13, and the payloads are the fixtures in `cmd/magus/testdata/script/codex_hooks.txtar`.
 
 Cursor publishes a schema for `.cursor/environment.json` (`https://cursor.com/schemas/environment.schema.json`, draft
 2019-09) and none for `.cursor/hooks.json`. `https://cursor.com/schemas/hooks.schema.json` answers with the docs SPA,

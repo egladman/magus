@@ -20,13 +20,15 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
 	"github.com/egladman/magus/internal/queue/provider"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -54,7 +56,7 @@ func queueCmd(ctx context.Context, root string, args []string) error {
 func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		queueUsage(stderr)
-		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, gate, apply, or reviews)")
+		return exit.Usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, gate, apply, or reviews)")
 	}
 	dir := root
 	if dir == "" {
@@ -85,11 +87,10 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 		queueUsage(stdout)
 		return nil
 	default:
-		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, gate, apply, or reviews)", args[0])
+		return exit.Usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, gate, apply, or reviews)", args[0])
 	}
 	err = verb(ctx, e, args[1:])
-	var misuse errUsage
-	if err == nil || errors.Is(err, flag.ErrHelp) || errors.As(err, &misuse) {
+	if err == nil || errors.Is(err, flag.ErrHelp) || exit.Code(err) == exit.Usage {
 		return err
 	}
 	return fmt.Errorf("magus queue %s: %w", args[0], err)
@@ -201,9 +202,9 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 	variadic := len(operands) > 0 && strings.HasSuffix(operands[len(operands)-1], "...")
 	switch {
 	case len(got) > len(operands) && !variadic:
-		return flags, nil, nil, usagef("magus queue %s: unexpected argument %q", verb, got[len(operands)])
+		return flags, nil, nil, exit.Usagef("magus queue %s: unexpected argument %q", verb, got[len(operands)])
 	case len(got) < len(operands):
-		return flags, nil, nil, usagef("magus queue %s: missing <%s>", verb, operands[len(got)])
+		return flags, nil, nil, exit.Usagef("magus queue %s: missing <%s>", verb, operands[len(got)])
 	}
 	return flags, got, set, nil
 }
@@ -212,7 +213,7 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 func queueRequired(verb string, flags ...[2]string) error {
 	for _, f := range flags {
 		if f[1] == "" {
-			return usagef("magus queue %s: --%s is required", verb, f[0])
+			return exit.Usagef("magus queue %s: --%s is required", verb, f[0])
 		}
 	}
 	return nil
@@ -255,7 +256,7 @@ func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Scr
 func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) {
 	if facts != "" {
 		if targetGiven {
-			return nil, nil, nil, usagef("magus queue %s: --target has no effect with --facts", verb)
+			return nil, nil, nil, exit.Usagef("magus queue %s: --target has no effect with --facts", verb)
 		}
 		cmd, err := queue.ParseCommand("--facts", facts)
 		if err != nil {
@@ -272,19 +273,19 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 }
 
 func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
+	f, _, fs, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, flaggen.BindQueueDescribe)
 	if err != nil {
 		return err
 	}
 	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
-		return usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
+	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
+		return exit.Usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
@@ -309,7 +310,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return queue.WriteCapabilities(e.stdout, f.Base, caps)
 	}
 	if err := caps.Check(); err != nil {
@@ -383,7 +384,7 @@ func writeQueueSetup(w io.Writer, provider, base string, caps types.Capabilities
 }
 
 func queueLs(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, _, err := queueParse(e, "ls", "magus queue ls --provider <provider> --base <branch> [flags]", args, gen.BindQueueLs)
+	f, _, _, err := queueParse(e, "ls", "magus queue ls --provider <provider> --base <branch> [flags]", args, flaggen.BindQueueLs)
 	if err != nil {
 		return err
 	}
@@ -426,7 +427,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 }
 
 func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "plan", "magus queue plan --provider <provider> --out <file> [flags]", args, gen.BindQueuePlan)
+	f, _, fs, err := queueParse(e, "plan", "magus queue plan --provider <provider> --out <file> [flags]", args, flaggen.BindQueuePlan)
 	if err != nil {
 		return err
 	}
@@ -434,7 +435,7 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	if f.Depth < 1 || f.Parallel < 0 {
-		return usagef("magus queue plan: --depth must be at least 1 and --parallel must not be negative")
+		return exit.Usagef("magus queue plan: --depth must be at least 1 and --parallel must not be negative")
 	}
 	in, err := readQueueChanges(e.path(f.Changes), e.stdin)
 	if err != nil {
@@ -449,7 +450,7 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	bf, _, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, gen.FlagQueuePlanTarget), f.Facts, f.Target)
+	bf, _, closeFacts, err := e.openFacts(ctx, "plan", flagGiven(fs, flaggen.FlagQueuePlanTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -473,19 +474,19 @@ func queuePlan(ctx context.Context, e *queueEnv, args []string) error {
 }
 
 func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
-	f, _, fs, err := queueParse(e, "reviews", "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]", args, gen.BindQueueReviews)
+	f, _, fs, err := queueParse(e, "reviews", "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]", args, flaggen.BindQueueReviews)
 	if err != nil {
 		return err
 	}
 	if err := queueRequired("reviews", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}, [2]string{"change", f.Change}); err != nil {
 		return err
 	}
-	opts, err := ResolveOutput(global.output)
+	opts, err := output.Parse(global.output)
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText && opts.Format != FormatJSON && opts.Format != FormatJSONL {
-		return usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
+	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
+		return exit.Usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
@@ -504,7 +505,7 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	defer p.Close()
-	bf, _, closeFacts, err := e.openFacts(ctx, "reviews", flagGiven(fs, gen.FlagQueueReviewsTarget), f.Facts, f.Target)
+	bf, _, closeFacts, err := e.openFacts(ctx, "reviews", flagGiven(fs, flaggen.FlagQueueReviewsTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -515,7 +516,7 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != FormatText {
+	if opts.Format != outputText {
 		return queue.WriteReviews(e.stdout, report)
 	}
 	return queue.WriteReviewLines(e.stdout, report)
@@ -572,18 +573,18 @@ func queueScratch(prefix string) (string, func(), error) {
 // queueValidate takes no --provider: it runs the changes' code, so it never talks to
 // one.
 func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) {
-	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, gen.BindQueueValidate)
+	f, _, fs, err := queueParse(e, "validate", "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json", args, flaggen.BindQueueValidate)
 	if err != nil {
 		return err
 	}
 	if !f.Stdin {
-		return usagef("magus queue validate: --stdin is required; the plan is read from stdin (< plan.json)")
+		return exit.Usagef("magus queue validate: --stdin is required; the plan is read from stdin (< plan.json)")
 	}
 	if err := queueRequired("validate", [2]string{"gate", f.Gate}, [2]string{"verdicts", f.Verdicts}); err != nil {
 		return err
 	}
 	if f.Parallel < 0 {
-		return usagef("magus queue validate: --parallel must not be negative")
+		return exit.Usagef("magus queue validate: --parallel must not be negative")
 	}
 	gate, err := queue.ParseCommand("--gate", f.Gate)
 	if err != nil {
@@ -625,7 +626,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if err != nil {
 		return err
 	}
-	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, gen.FlagQueueValidateTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, flaggen.FlagQueueValidateTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -658,11 +659,11 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), os.Getenv("ACTIONS_RUNTIME_TOKEN")
 	switch {
 	case upstream == "" || token == "":
-		return nil, nil, usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")
+		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")
 	case remote.Insecure:
-		return nil, nil, usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.insecure turns that check off")
+		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.insecure turns that check off")
 	case len(remote.TrustedKeys) == 0:
-		return nil, nil, usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.trusted_keys names none")
+		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.trusted_keys names none")
 	}
 	proxy, err := queue.StartCacheReadProxy(upstream, token, log)
 	if err != nil {
@@ -679,7 +680,7 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 // path validate's gate takes, with the sandbox and grants validate would give it, read
 // by the same openFacts.
 func queueGate(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, gen.BindQueueGate, "command...")
+	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, flaggen.BindQueueGate, "command...")
 	if err != nil {
 		return err
 	}
@@ -705,7 +706,7 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	env, err := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}.Pass(names)
 	if err != nil {
-		return usagef("magus queue gate: --env: %v", err)
+		return exit.Usagef("magus queue gate: --env: %v", err)
 	}
 	scratch, cleanup, err := queueScratch("mergequeue-")
 	if err != nil {
@@ -727,7 +728,7 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, gen.BindQueueApply, "source")
+	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, flaggen.BindQueueApply, "source")
 	if err != nil {
 		return err
 	}
@@ -736,23 +737,23 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	}
 	switch {
 	case f.Interval <= 0:
-		return usagef("magus queue apply: --interval must be positive")
-	case f.Once && flagGiven(fs, gen.FlagQueueApplyInterval):
-		return usagef("magus queue apply: --interval has no effect with --once")
+		return exit.Usagef("magus queue apply: --interval must be positive")
+	case f.Once && flagGiven(fs, flaggen.FlagQueueApplyInterval):
+		return exit.Usagef("magus queue apply: --interval has no effect with --once")
 	}
 	src, err := parseQueueSource(operands[0])
 	if err != nil {
-		return usagef("magus queue apply: %v", err)
+		return exit.Usagef("magus queue apply: %v", err)
 	}
 	switch {
 	case src.run != "" && f.Workflow == "":
-		return usagef("magus queue apply: a run: source needs --workflow, the definition the run must have run")
+		return exit.Usagef("magus queue apply: a run: source needs --workflow, the definition the run must have run")
 	case src.dir != "" && f.Workflow != "":
-		return usagef("magus queue apply: --workflow has no effect on a directory source")
+		return exit.Usagef("magus queue apply: --workflow has no effect on a directory source")
 	}
 	who, err := parseCommitter(f.Committer)
 	if err != nil {
-		return usagef("magus queue apply: --committer: %v", err)
+		return exit.Usagef("magus queue apply: --committer: %v", err)
 	}
 	var regenerate queue.Command
 	if f.Regenerate != "" {
@@ -761,7 +762,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		}
 	}
 	if f.ReproduceRegenerate != "" && f.ReproduceGate == "" {
-		return usagef("magus queue apply: --reproduce-regenerate needs --reproduce-gate")
+		return exit.Usagef("magus queue apply: --reproduce-regenerate needs --reproduce-gate")
 	}
 	// Shown, never run; parsed so a kick-back never shows a line validate would refuse.
 	for _, hook := range [][2]string{{"--reproduce-gate", f.ReproduceGate}, {"--reproduce-regenerate", f.ReproduceRegenerate}} {
@@ -788,7 +789,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	bf, grants, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, gen.FlagQueueApplyTarget), f.Facts, f.Target)
+	bf, grants, closeFacts, err := e.openFacts(ctx, "apply", flagGiven(fs, flaggen.FlagQueueApplyTarget), f.Facts, f.Target)
 	if err != nil {
 		return err
 	}
@@ -851,8 +852,8 @@ func renderRerun(root string, fs *flag.FlagSet, app string) string {
 		words = append(words, "--root", shellWord(root))
 	}
 	words = append(words, "queue", "describe")
-	for _, name := range []string{gen.FlagQueueDescribeProvider, gen.FlagQueueDescribeBase, gen.FlagQueueDescribeStatusContext,
-		gen.FlagQueueDescribeRemote, gen.FlagQueueDescribeVCS} {
+	for _, name := range []string{flaggen.FlagQueueDescribeProvider, flaggen.FlagQueueDescribeBase, flaggen.FlagQueueDescribeStatusContext,
+		flaggen.FlagQueueDescribeRemote, flaggen.FlagQueueDescribeVCS} {
 		if flagGiven(fs, name) {
 			words = append(words, "--"+name, shellWord(fs.Lookup(name).Value.String()))
 		}

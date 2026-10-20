@@ -2,8 +2,6 @@ package magus
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,9 +18,11 @@ import (
 
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -83,8 +83,8 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 //
 // stdio, when the invocation runs in this process, first holds the acquisition back
 // while a magus upstream of it in a shell pipe still needs one of these projects (see
-// ProcessStdio), and publishes the finished lock set for the stage downstream.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer, stdio *ProcessStdio) (*projectHold, error) {
+// pipe.Stdio), and publishes the finished lock set for the stage downstream.
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer, stdio *pipe.Stdio) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -95,9 +95,9 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	// MGS3007. The env var is already in this process; read it here so the third
 	// entry point is covered too, and only when nothing upstream stamped one.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
-		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{withReportWriter(rw)}
+	lopts := []lockerOption{withReportWriter(rw), withOutput(m.noticeWriter()), withCommandLine(m.commandLine)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -118,12 +118,12 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 // awaitUpstream), refuse if an upstream stage has already failed (MGS3030), take every
 // lock, then publish the set for the stage downstream. The
 // spool is non-nil when stdin was held back and is now relayed from it.
-func (l *projectLocker) takeRunLocks(ctx context.Context, paths []string) (func(), *stdinSpool, error) {
+func (l *projectLocker) takeRunLocks(ctx context.Context, paths []string) (func(), *pipe.Spool, error) {
 	sp, ups, err := l.awaitUpstream(ctx, paths)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := l.redUpstream(ups); err != nil {
+	if err := pipe.FailedUpstream(l.pipeDir(), ups); err != nil {
 		return nil, sp, err
 	}
 	unlock, err := l.acquireAll(ctx, paths)
@@ -151,13 +151,13 @@ const upstreamExitGrace = 2 * time.Second
 
 // heldByUpstream reports a refusal whose holder is one of this run's proven upstream
 // stages.
-func (l *projectLocker) heldByUpstream(err error, ups []upstreamStage) bool {
+func (l *projectLocker) heldByUpstream(err error, ups []pipe.Stage) bool {
 	var c *lockContendedError
 	if !errors.As(err, &c) {
 		return false
 	}
 	holder := l.readOwner(c.Project).PID
-	return holder != 0 && slices.ContainsFunc(ups, func(u upstreamStage) bool { return u.pid == holder })
+	return holder != 0 && slices.ContainsFunc(ups, func(u pipe.Stage) bool { return u.PID == holder })
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -263,8 +263,8 @@ type projectLocker struct {
 	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
 	// gate is superseded.
 	gate bool
-	// out is where the lock's decision lines go: os.Stderr in every real run, a buffer
-	// under test so it can read the exact bytes a user sees. The lines are written
+	// out is where the lock's decision lines go: the workspace's WithStderr writer in a
+	// run, a buffer under test so it can read the exact bytes a user sees. The lines are written
 	// straight to the stream, never through the console, which is why -s/--silent
 	// cannot suppress any of them: a decision made without explanation is the failure
 	// they exist to prevent.
@@ -275,8 +275,10 @@ type projectLocker struct {
 	// taken before Run wraps ctx with the writer, so it is threaded in directly.
 	rw *report.Writer
 	// stdio is the invocation's own standard streams, set only when it runs in this
-	// process. See ProcessStdio.
-	stdio *ProcessStdio
+	// process. See pipe.Stdio.
+	stdio *pipe.Stdio
+	// commandLine is what the owner and wait records name as this process's command.
+	commandLine []string
 }
 
 // lockPollEvery paces the two acquires that wait on another process's flock, which has no
@@ -306,8 +308,13 @@ func withReportWriter(w *report.Writer) lockerOption {
 	return func(l *projectLocker) { l.rw = w }
 }
 
-// writingTo redirects the lock's decision lines, for a test that reads them.
-func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
+// withOutput sends the lock's decision lines to w.
+func withOutput(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
+
+// withCommandLine is the command line the locker's records name as this process's.
+func withCommandLine(args []string) lockerOption {
+	return func(l *projectLocker) { l.commandLine = args }
+}
 
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks/<workspace>, mirroring the workspace project tree.
@@ -320,10 +327,10 @@ func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out
 // share nothing, and it presents as a spurious refusal rather than an error.
 func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *projectLocker {
 	l := &projectLocker{
-		dir:     filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)),
+		dir:     workspace.LocksDir(cacheDir, workspaceRoot),
 		root:    resolvedRoot(workspaceRoot),
 		started: time.Now(),
-		out:     os.Stderr,
+		out:     io.Discard,
 	}
 	for _, o := range opts {
 		o(l)
@@ -600,14 +607,6 @@ func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (
 	return releaseAll, nil
 }
 
-// workspaceLockKey identifies a workspace inside a shared lock directory. The absolute
-// root is hashed rather than embedded: it is the identity that matters, a path is not a
-// legal single directory name, and a digest keeps the lock tree shallow.
-func workspaceLockKey(root string) string {
-	sum := sha256.Sum256([]byte(resolvedRoot(root)))
-	return hex.EncodeToString(sum[:8])
-}
-
 // resolvedRoot is a workspace root reduced to the one spelling every comparison uses.
 // Two runs are on the same tree when this agrees, which is a stricter question than
 // whether they name the same project: a sibling worktree of the same repository has the
@@ -675,7 +674,6 @@ const (
 	lockFileName = "lock"
 	ownerSuffix  = ".owner"
 	yieldSuffix  = ".yield"
-	locksDirName = "locks"
 )
 
 // ownerPath is the owner record beside the lock file itself, so it inherits the same
@@ -703,6 +701,7 @@ func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
 //	gate	true
 //	pid	41221
 func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) processRecord {
+	// The working directory is the process's, as the pid is: what the record identifies.
 	dir, _ := os.Getwd()
 	// This invocation's OWN id, never the ancestry's last element. Those look the same for
 	// a run (BeginInvocation appends its id there), and differ for every lock-taker that
@@ -711,7 +710,7 @@ func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) proce
 	// sibling nested run refuse a lock the parent does not hold.
 	return processRecord{
 		PID:     os.Getpid(),
-		Command: strings.Join(os.Args, " "),
+		Command: strings.Join(l.commandLine, " "),
 		Dir:     dir,
 		Started: started,
 		Inv:     journal.InvocationIDFromContext(ctx),
@@ -934,7 +933,7 @@ func (m *Magus) HeldLocks() []types.StatusLock {
 // locks: under a shared cache dir the others are unrelated runs, and their project
 // paths mean nothing here.
 func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
-	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
+	dir := workspace.LocksDir(cacheDir, workspaceRoot)
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		// The owner record is a FILE holding the whole record, so this matches on the name and

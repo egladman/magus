@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny rests on. A
@@ -43,8 +44,21 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	unwired := Evaluate(strict(Dependencies{}), "grep -r HandleRequest internal/")
 	assert.Empty(t, unwired.Deny, "with no index at all a deny would route nowhere")
 	assert.Equal(t, advisoryPrecedent, unwired.Kind)
-	assert.Contains(t, unwired.Brief, "no symbol index exists yet")
-	assert.Contains(t, unwired.Brief, hint.GraphBuild.With("--silent"))
+	assert.Empty(t, unwired.Brief, "a repeat saying the index is still missing changes nothing, so it goes quiet")
+}
+
+// An advisory not held by its own marker is still not repeated word for word to one
+// caller, and the subagents of a session are each their own caller.
+func TestAdviceRepeatedOncePerCaller(t *testing.T) {
+	t.Parallel()
+	g := hint.NewGate(t.TempDir(), "s")
+	rule := string(advisoryEchoOnSuccess)
+	assert.False(t, adviceRepeated(g, "", rule, "drop the echo"))
+	assert.True(t, adviceRepeated(g, "", rule, "drop the echo"))
+	assert.False(t, adviceRepeated(g, "", rule, "drop the other echo"), "new text is a new fact")
+	assert.False(t, adviceRepeated(g, "a1", rule, "drop the echo"), "a subagent is told for itself")
+	assert.False(t, adviceRepeated(g, "", string(advisorySourceRead), "x"), "an enrolled advisory is its gate's to hold")
+	assert.False(t, adviceRepeated(g, "", string(advisorySourceRead), "x"))
 }
 
 // The property nothing may erode: a DENY carries its whole reason on every invocation,
@@ -83,13 +97,13 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 
 	held := heldAdvice{v: v}
 	gate := hint.NewGate(t.TempDir(), "s1")
-	first := Verdict{Decision: "pass"}
+	first := types.GuardJudgment{Decision: "pass"}
 	whys := map[string]string{}
 	held.speak(gate, &first, whys)
-	assert.Equal(t, Verdict{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
+	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
 	assert.Equal(t, v.Why, whys[v.Context], "the rationale is noted for the stored advice")
 
-	again := Verdict{Decision: "pass"}
+	again := types.GuardJudgment{Decision: "pass"}
 	held.speak(gate, &again, whys)
 	assert.Equal(t, "pass", again.Decision, "once per session")
 }

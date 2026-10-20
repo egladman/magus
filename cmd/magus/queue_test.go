@@ -25,12 +25,13 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
-	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
 
 var queueBase = strings.Repeat("b", 40)
@@ -71,14 +72,14 @@ export fun list_artifacts(io: {str: any}) > any {
 type queueFixture struct {
 	*testkit.Workspace
 	root     string
-	vcs      *magusmocks.MockVCSDriver
+	vcs      *typestest.MockVCSDriver
 	provider string
 }
 
 func newQueueFixture(t *testing.T, changes, run string) *queueFixture {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	f := &queueFixture{Workspace: w, root: w.Root(), vcs: magusmocks.NewMockVCSDriver(t)}
+	f := &queueFixture{Workspace: w, root: w.Root(), vcs: typestest.NewMockVCSDriver(t)}
 	opened := queueOpenVCS
 	queueOpenVCS = func(_ context.Context, root, name, remote string) (magustypes.VCSDriver, error) {
 		assert.Equal(t, f.root, root)
@@ -173,8 +174,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"reviews with an operand":  {"reviews", "--provider", "github", "--base", "main", "--change", "7", "extra"},
 	} {
 		_, err := f.run(t, "", args...)
-		var misuse errUsage
-		require.ErrorAs(t, err, &misuse, name)
+		require.Equal(t, exit.Usage, exit.Code(err), name)
 	}
 	// validate runs the changes' code, so it takes no provider at all.
 	_, err := f.run(t, "", "validate", "--provider", "github", "--stdin", "--gate", "true", "--verdicts", "v")
@@ -215,8 +215,7 @@ func TestQueueValidateRemoteCacheReadRefusesWhatItCannotServe(t *testing.T) {
 		globalCfg.Cache.Remote = tc.remote
 		verdicts := filepath.Join(f.root, "verdicts-"+strings.ReplaceAll(name, " ", "-"))
 		_, err := f.run(t, "", "validate", "--stdin", "--gate", "true", "--verdicts", verdicts, "--remote-cache-read")
-		var misuse errUsage
-		require.ErrorAs(t, err, &misuse, name)
+		require.Equal(t, exit.Usage, exit.Code(err), name)
 		assert.ErrorContains(t, err, tc.want, name)
 		assert.NoDirExists(t, verdicts, "%s: refused before anything is written", name)
 	}
@@ -452,8 +451,7 @@ func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
 	withOutput(t, "yaml")
 	f := newQueueFixture(t, "", "")
 	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
-	var misuse errUsage
-	require.ErrorAs(t, err, &misuse)
+	require.Equal(t, exit.Usage, exit.Code(err))
 	assert.ErrorContains(t, err, "-o yaml is not supported")
 }
 
@@ -620,8 +618,7 @@ func TestQueueApplyRequiresItsBaseAndARunsDefinition(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := f.run(t, "", append([]string{"apply"}, tc.args...)...)
-			var misuse errUsage
-			require.ErrorAs(t, err, &misuse)
+			require.Equal(t, exit.Usage, exit.Code(err))
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -888,6 +885,9 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 	// probe must still resolve tools pinned by this checkout's mise.toml.
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", root)
 	t.Setenv("MISE_SAFE", "1")
+	// The version probe runs go under the box's HOME; go's telemetry sidecar would outlive
+	// it and race the TempDir cleanup (see testkit's goEnv).
+	t.Setenv("TEST_TELEMETRY_DIR", filepath.Join(os.DevNull, "telemetry"))
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	const project = "libs/diagnostics"
@@ -897,7 +897,7 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		lines []string
 	}
 	keyAll := func() []keyed {
-		w, err := magus.Open(t.Context(), root)
+		w, err := magus.Open(t.Context(), root, magus.WithEnv(os.Environ()), magus.WithSpawnRule(magus.TierCeiling))
 		require.NoError(t, err)
 		defer func() { _ = w.Close() }()
 		var out []keyed

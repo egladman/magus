@@ -23,12 +23,10 @@ func withBuiltinResolve(ctx context.Context) context.Context {
 	return context.WithValue(ctx, builtinCtxKey{}, true)
 }
 
-// builtinLabel returns "true"/"false" for the resolve "builtin" attribute.
-func builtinLabel(ctx context.Context) string {
-	if v, _ := ctx.Value(builtinCtxKey{}).(bool); v {
-		return "true"
-	}
-	return "false"
+// isBuiltinResolve reports whether ctx was marked by withBuiltinResolve.
+func isBuiltinResolve(ctx context.Context) bool {
+	v, _ := ctx.Value(builtinCtxKey{}).(bool)
+	return v
 }
 
 // providerFrom returns ctx's telemetry provider only when it is enabled, else nil
@@ -69,7 +67,11 @@ func Resolve(ctx context.Context, sess *buzz.Session, opts ...ResolveOption) (sp
 	if p := providerFrom(ctx); p != nil {
 		start := time.Now()
 		d, err := resolveSpell(ctx, sess, o)
-		p.RecordBuzzSpellResolve(ctx, time.Since(start).Seconds(), d.Name, builtinLabel(ctx))
+		p.RecordBuzzSpellResolve(ctx, observability.BuzzSpellResolve{
+			Spell:    d.Name,
+			Builtin:  isBuiltinResolve(ctx),
+			Duration: time.Since(start).Seconds(),
+		})
 		return d, err
 	}
 	return resolveSpell(ctx, sess, o)

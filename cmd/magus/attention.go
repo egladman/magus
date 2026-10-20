@@ -12,11 +12,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -72,7 +72,7 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
+		return exit.Usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
 	}
 
 	dir, err := sessions.Dir(root)
@@ -87,12 +87,12 @@ func attentionList(root string, args []string) error {
 
 	// -q answers the question instead of printing it, before the output format is even
 	// resolved: the caller asked for no output, so the format it would have used cannot
-	// matter. errSilent carries the status without a message, because an empty queue is
+	// matter. exit.Reported carries the status without a message, because an empty queue is
 	// the GOOD state and printing an error for it would train people to ignore the
 	// command that reports a real block.
 	if global.quiet {
 		if len(requests) == 0 {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return nil
 	}
@@ -109,7 +109,7 @@ func attentionList(root string, args []string) error {
 		for _, req := range requests {
 			names = append(names, req.ID)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 	return emitFormatted(opts, attentionListOutput{Requests: requests, Store: dir})
 }
@@ -197,7 +197,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
+		return exit.Usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
 	}
 
 	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
@@ -208,7 +208,7 @@ func attentionDispose(root string, args []string) error {
 	if !isInteractiveTTY() {
 		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
 			attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	dir, err := sessions.Dir(root)
@@ -281,7 +281,7 @@ func disposeError(err error, ref, dir string) error {
 // held reports that the queue already held this block before the call, so a person
 // has been told once. It is false for a new row, for news, for a block that has
 // no row to live in (no source id, no repository), and on error.
-func fileAttention(root string, ev types.Event) (held bool, err error) {
+func fileAttention(ctx context.Context, root string, ev types.Event) (held bool, err error) {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
 		return false, nil
 	}
@@ -307,7 +307,7 @@ func fileAttention(root string, ev types.Event) (held bool, err error) {
 	// Lease and files are not inputs to the id, on purpose; see sessions.RequestID.
 	// They ride the payload so the queue can say whose work is blocked, and which
 	// paths the event named, without the row's identity moving when either changes.
-	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
+	lease, leaseFrom, err := checkoutLease(ctx, root)
 	if err != nil {
 		return false, err
 	}
@@ -354,7 +354,7 @@ func resolveRootOrEmpty(root string) string {
 	if root != "" {
 		return root
 	}
-	resolved, err := magus.FindRoot("")
+	resolved, err := workspace.FindRoot("")
 	if err != nil {
 		return ""
 	}

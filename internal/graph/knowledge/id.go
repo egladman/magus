@@ -380,6 +380,27 @@ const (
 	AttrBodyDigest = "body_digest"
 )
 
+// AttrBodyShape is the lexical shape of a symbol's definition lines (types.BodyShape), and
+// attrBodyTokens the count of tokens it hashed. Two callables with one shape are copies
+// that differ only in names and literal values. Both are absent for a language with no
+// lexer.
+const (
+	AttrBodyShape  = "body_shape"
+	attrBodyTokens = "body_tokens"
+)
+
+// attrBranchIdents is the comma list of identifiers a symbol's body switches on or tests
+// bare (types.BranchIdents). Absent for a decision table and for a language with no lexer.
+const attrBranchIdents = "branch_idents"
+
+// attrImportAlias is the alias a file -references-> namespace edge's file imports the
+// package under, and attrPackageName the package clause on a namespace node. Both are Go
+// only and absent when nothing was written.
+const (
+	attrImportAlias = "import_alias"
+	attrPackageName = "package_name"
+)
+
 // AttrDoc is a symbol's doc comment as its indexer recorded it, signature block dropped.
 // Unlike every other attr it keeps its newlines and tabs, so a reader sees its paragraphs,
 // lists and code blocks.
@@ -393,6 +414,10 @@ const (
 	AttrLines = "lines"
 	AttrBytes = "bytes"
 )
+
+// attrGenerated marks a file node whose source opens with the generated-code header
+// (types.GeneratedSource), from the read that sizes it. It is "true" or absent.
+const attrGenerated = "generated"
 
 // fileSizeAttrs returns attrs with AttrLines and AttrBytes set, allocating when attrs is nil.
 func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {

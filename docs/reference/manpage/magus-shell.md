@@ -1,6 +1,6 @@
 ---
 title: magus shell
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: Read one shell command, or one path an edit is about to write, and report what this workspace would rather you ran.
 tags: [cli, magus shell, guard, conventions, hook, pre-tool-use]
 ---
@@ -113,20 +113,20 @@ not block every tool call.
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
+**--observes-skill-loads**
+: This hook wiring observes the host loading a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
+
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
-**--reports-skills**
-: This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
-
-**--rewrites-input**
-: The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed
-
 **--session** *string*
 : The host's own session id for this invocation
+
+**--tool-rows** *magus agent harness install*
+: The directory, relative to the workspace root, holding the host's tool rows that magus agent harness install writes; without it no tool is known and each call whose input shape names no command, path, search, prompt or skill is unjudged
 
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
@@ -191,5 +191,5 @@ magus shell 'git add -A' -o json
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-queue**(1)](magus-queue.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

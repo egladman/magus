@@ -518,9 +518,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	var pending strings.Builder
 	depth := 0
 
-	// One history file for Repl and Pry both, so a session opened either way
-	// recalls what the other left behind.
-	hist, _ := openHistory(defaultHistoryPath(), 0)
+	hist := openDefaultHistory(opts.Stderr)
 
 	completer := &replCompleter{
 		meta:       metaCommands(drivers),
@@ -749,7 +747,7 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 	fmt.Fprintln(opts.Stdout, banner)
 	fmt.Fprintln(opts.Stdout, "Type .help for pry commands, .continue (or .exit) to resume.")
 
-	hist, _ := openHistory(defaultHistoryPath(), 0)
+	hist := openDefaultHistory(opts.Stderr)
 	debug, _ := sess.(engine.DebugReader)
 
 	drivers := replDrivers(sess)

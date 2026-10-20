@@ -17,7 +17,7 @@ import (
 func declared(t *testing.T, rows ...types.Job) Location {
 	t.Helper()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	s := NewStore(loc)
 	for _, row := range rows {
 		seed(t, s, row)
@@ -104,8 +104,11 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"read_paths": func(u *types.Job) { u.ReadPaths = []string{"/"} },
 		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
 		"model":      func(u *types.Job) { u.Model = "principal" },
+		"breaks":     func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
+		// A holder that raised its own cap could fork itself past it.
+		"max_attempts": func(u *types.Job) { u.MaxAttempts = 9 },
 		"goals": func(u *types.Job) {
 			u.Goals = []types.Goal{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},
@@ -324,7 +327,7 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 			}
 			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
 			t.Setenv(EnvStampedLease, tc.stamped)
-			assert.Equal(t, tc.want, ActingActor(loc.CacheDir))
+			assert.Equal(t, tc.want, ActingActor(loc))
 		})
 	}
 }
@@ -334,7 +337,10 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	t.Setenv(EnvStampedLease, "1")
-	loc := declared(t, workerRow())
+	// A checkout with a revision, so the exec below is refused for its caller and not for
+	// a missing base.
+	loc := tempLocation(t, execRepo(t).Root())
+	seed(t, NewStore(loc), workerRow())
 	loc.Actor = nil
 	s := NewStore(loc)
 
@@ -355,7 +361,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 			_, err := Exit(t.Context(), s, "adj/store", nil, nil)
 			return err
 		},
-		"exec":   func() error { _, err := s.Exec(t.Context(), "adj/store", "abc123"); return err },
+		"exec":   func() error { _, err := s.Exec(t.Context(), "adj/store"); return err },
 		"clear":  func() error { _, err := s.Clear(t.Context()); return err },
 		"delete": func() error { _, err := s.Delete(t.Context(), "adj/store", true); return err },
 	} {
@@ -377,7 +383,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
+	loc := tempLocation(t, t.TempDir())
 	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
 	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
@@ -403,7 +409,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
-	loc := tmpLoc(t, root)
+	loc := tempLocation(t, root)
 	loc.Actor = &Actor{}
 	seed(t, NewStore(loc), types.Job{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
 
@@ -438,6 +444,60 @@ func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
 	assert.Contains(t, err.Error(), "SHRINK write_paths")
 }
 
+// Containment is by glob match, not string equality: a glob narrows to the files it matches.
+func TestBoundWorkerNarrowsAGlobToItsFiles(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "adj/globs", WritePaths: []string{"internal/**/*.go"}, State: types.StateRunning}
+	loc := declared(t, row)
+
+	stored, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+		u.WritePaths = []string{"internal/job/authorize.go", "internal/job/*_test.go"}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/authorize.go", "internal/job/*_test.go"}, stored.WritePaths)
+}
+
+func TestBoundWorkerCannotWidenAGlob(t *testing.T) {
+	t.Parallel()
+
+	for _, wider := range []string{"internal/**", "internal/job/*", "internal/job/*.txt", "."} {
+		t.Run(wider, func(t *testing.T) {
+			t.Parallel()
+
+			row := types.Job{ID: "adj/globs", WritePaths: []string{"internal/job/*.go"}, State: types.StateRunning}
+			loc := declared(t, row)
+
+			_, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+				u.WritePaths = []string{wider}
+			})
+			var refused *RefusedError
+			require.ErrorAs(t, err, &refused, "%q is not within internal/job/*.go", wider)
+			assert.Contains(t, err.Error(), "SHRINK write_paths")
+		})
+	}
+}
+
+func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Job{ID: "adj/store", WritePaths: []string{"internal/job/*.go"}, State: types.StateRunning}
+	loc := declared(t, parent)
+
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/plan", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/job/plan.go"}}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"internal/job/plan.go"}, stored.WritePaths)
+
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/job/plan.go", "internal/sessions/a.go"}}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
+}
+
 // A child may be handed one declaration of a file its parent owns whole: that is a
 // narrower boundary than the parent's, the same admission [subset] makes for a worker
 // shrinking its own row. A child claiming anything beyond what the parent owns is still
@@ -460,6 +520,28 @@ func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
 	assert.Contains(t, err.Error(), "may only be handed paths its parent owns")
+}
+
+// A child breaks at most what its parent may: handing out breaks the parent lacks would mint
+// the authority the parent's own row is refused.
+func TestChildBreaksOnlyWhatItsParentMayBreak(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Job{ID: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag"}, State: types.StateRunning}
+	loc := declared(t, parent)
+
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/a", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag"}}
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--old-flag"}, stored.Breaks)
+
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/b", func(u *types.Job) {
+		*u = types.Job{Parent: "adj/store", WritePaths: []string{"internal/ledger"}, Breaks: []string{"--old-flag", "api.Open"}}
+	})
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused)
+	assert.Contains(t, err.Error(), "may only break what its parent may break")
 }
 
 // A verdict is graded by the store, not only by Wait's door: a holder passes a row below
@@ -522,4 +604,56 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 			assert.Equal(t, want, jobStates(t, loc))
 		})
 	}
+}
+
+// The lease a ctx carries is the claim of the process that asked, so it beats the
+// environment; a ctx stamped with no lease, as the daemon stamps a client that sent none,
+// never falls back to the daemon's own BAGGAGE. Only an unstamped ctx reads BAGGAGE, and
+// the checkout's record outranks every claim.
+func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		unstamped                 bool
+		forwarded, baggage, bound string
+		want                      answer
+	}{
+		"nothing":                              {unstamped: true},
+		"an unstamped ctx reads BAGGAGE":       {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
+		"a stamped absence over BAGGAGE":       {baggage: "fleet/env"},
+		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"an invalid forwarded lease is absent": {forwarded: "not a lease id", baggage: "fleet/env"},
+		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(trail.EnvBaggage, "")
+			if tc.baggage != "" {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.baggage)
+			}
+			cacheDir := t.TempDir()
+			if tc.bound != "" {
+				require.NoError(t, NewStore(placeAt(t, cacheDir)).Bind(Caller{}, tc.bound))
+			}
+
+			ctx := t.Context()
+			if !tc.unstamped {
+				ctx = types.WithJobLease(ctx, tc.forwarded)
+			}
+			lease, from := RunLease(ctx, placeAt(t, cacheDir))
+			assert.Equal(t, tc.want, answer{lease, from})
+		})
+	}
+}
+
+// The footprint cache keys on the build, so a view that writes as another actor must keep
+// the build or it would silently recompute every footprint.
+func TestAsKeepsTheBuildTheFootprintCacheKeysOn(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(Location{StateBase: t.TempDir(), Root: t.TempDir(), Build: testBuild})
+	assert.Equal(t, testBuild, s.footprintCache().build)
+	assert.Equal(t, testBuild, s.As(Actor{Lease: "wave/worker"}).footprintCache().build)
 }

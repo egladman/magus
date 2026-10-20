@@ -1,0 +1,1 @@
+{"enum":"ModelTier","site":"magus/modeltiers","cases":["economy","standard","principal"],"default":1,"bounds":[{"max_context":100000},{},{}],"skills":["full","short","short"],"hosts":{"claude-code":["claude-haiku-5-5","claude-sonnet-5-5","claude-opus-5-5"]}}

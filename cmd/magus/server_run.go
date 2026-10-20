@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -19,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -107,6 +107,9 @@ func serverInfo(sock string) *types.StatusServer {
 // run. Its workspaces share one broker client, which dials only when an adopted run takes
 // a claim, so an idle server never keeps the broker awake.
 func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
+	// The BAGGAGE of whoever started the daemon names nobody it serves. Every run it
+	// adopts restamps its client's lease, and work no client stamped acts under none.
+	ctx = types.WithJobLease(ctx, "")
 	serverStarted = time.Now()
 	knowledge.SetReadCacheLimit(serverReadCacheBytes)
 	n := cfg.Concurrency
@@ -156,7 +159,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 			root := proc.RootFromContext(hctx)
 			if root == "" {
 				cwd := proc.CwdFromContext(hctx)
-				r, rerr := magus.FindRoot(cwd)
+				r, rerr := workspace.FindRoot(cwd)
 				if rerr != nil {
 					return fmt.Errorf("locate workspace root from %s: %w", cwd, rerr)
 				}
@@ -227,7 +230,7 @@ func graphReads(reg *wsRegistry) func(ctx context.Context, root, verb string, re
 		}
 		// Resolved per read rather than kept from the open, so the read honors magus.yaml
 		// as it is now, as the client's own read would.
-		cfg, err := loadWorkspaceCfg(root)
+		cfg, err := loadWorkspaceConfig(root)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
 		}

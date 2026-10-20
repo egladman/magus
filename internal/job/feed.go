@@ -1,7 +1,6 @@
 package job
 
 import (
-	"cmp"
 	"slices"
 	"strings"
 
@@ -31,7 +30,7 @@ type Attribution struct {
 // cooperating: nothing in the write itself says who made it, and the declaration does.
 //
 // THE ATTRIBUTION IS EXACT BECAUSE THE WRITE PATHS ARE DISJOINT, and that is a property the
-// fork already proves rather than one assumed here: [RefuseSharedCheckout] refuses a fork
+// fork already proves rather than one assumed here: [sharedCheckoutProblems] refuses a fork
 // whose write paths would collide, [Store.WriteProof] records what it could prove, and `magus
 // ls jobs` prints every pair that claims common ground. So the usual answer is one job or
 // none.
@@ -258,12 +257,6 @@ func (f FeedFilter) Match(e FeedEvent) bool {
 // the walk entirely.
 func (f FeedFilter) Empty() bool {
 	return len(f.Jobs) == 0 && len(f.Sessions) == 0 && len(f.Paths) == 0
-}
-
-// SortFeed orders events newest first, stably, so events sharing a millisecond keep the
-// order their producer emitted them in rather than shuffling between calls.
-func SortFeed(events []FeedEvent) {
-	slices.SortStableFunc(events, func(a, b FeedEvent) int { return cmp.Compare(b.Ts, a.Ts) })
 }
 
 // Ascending reverses a newest-first trail read. A follower reads forward, and reversing at

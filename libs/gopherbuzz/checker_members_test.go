@@ -34,7 +34,7 @@ func TestCheck_NamespaceDotRejected(t *testing.T) {
 // Embedded mode refuses the dot form as upstream does: its message, at the module
 // name (probe p1 in TestCheck_PositionsMatchUpstream is the upstream run).
 func TestCheck_NamespaceDotRejectedEmbedded(t *testing.T) {
-	errs := checkSrc("import \"fs\";\n\nfun main() > void {\n    fs.writeFile(\"x\", content: \"y\");\n}\n")
+	errs := checkSource("import \"fs\";\n\nfun main() > void {\n    fs.writeFile(\"x\", content: \"y\");\n}\n")
 	require.Len(t, errs, 1, fmtErrors(errs))
 	assert.Equal(t, [2]int{4, 5}, [2]int{errs[0].Line, errs[0].Col})
 	assert.Equal(t, "`fs` is not defined; fs is a module, so its members are reached with a backslash: write fs\\writeFile", errs[0].Msg)
@@ -109,7 +109,7 @@ func TestCheck_UnknownBuiltinMethodRejected(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			errs := checkSrc(tc.src)
+			errs := checkSource(tc.src)
 			require.Len(t, errs, 1, fmtErrors(errs))
 			assert.Equal(t, tc.line, errs[0].Line)
 			assert.Contains(t, errs[0].Msg, tc.want)
@@ -138,7 +138,7 @@ func TestCheck_AnonymousObjectFieldIsNotAMapMethod(t *testing.T) {
 }
 
 func TestCheck_LenAsFunctionRejected(t *testing.T) {
-	errs := checkSrc("final xs = [1, 2];\nfinal n = len(xs);\n")
+	errs := checkSource("final xs = [1, 2];\nfinal n = len(xs);\n")
 	require.Len(t, errs, 1, fmtErrors(errs))
 	assert.Equal(t, 2, errs[0].Line)
 	assert.Equal(t, UndefinedName, errs[0].Code)
@@ -146,7 +146,7 @@ func TestCheck_LenAsFunctionRejected(t *testing.T) {
 }
 
 func TestCheck_ReturnNullFromNonOptionalRejected(t *testing.T) {
-	errs := checkSrc("fun f() > int {\n    return null;\n}\n")
+	errs := checkSource("fun f() > int {\n    return null;\n}\n")
 	require.Len(t, errs, 1, fmtErrors(errs))
 	assert.Equal(t, 2, errs[0].Line)
 	assert.Equal(t, TypeMismatch, errs[0].Code)

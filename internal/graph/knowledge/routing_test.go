@@ -210,6 +210,21 @@ func TestRoutingIgnoresRuntimeShard(t *testing.T) {
 	assert.Equal(t, want, g.Routing(), "routing is identical with and without the runtime shard")
 }
 
+// TestRoutingIgnoresGitHistoryEdges: `authored` and `co_changes` edges vary by commit, so
+// adding them must leave the committed routing table unchanged.
+func TestRoutingIgnoresGitHistoryEdges(t *testing.T) {
+	g := NewGraph()
+	for _, p := range []string{"a.buzz", "b.buzz", "c.buzz"} {
+		g.AddNode(types.KnowledgeNode{ID: fileID(p), Kind: types.KindFile, Label: p})
+	}
+	g.AddEdge(extractedEdge(fileID("a.buzz"), fileID("b.buzz"), types.RelationImports, ""))
+	want := g.Routing()
+
+	g.AddEdge(extractedEdge(fileID("b.buzz"), fileID("c.buzz"), types.RelationCoChanges, ""))
+	g.AddEdge(extractedEdge(fileID("a.buzz"), fileID("c.buzz"), types.RelationCoChanges, ""))
+	assert.Equal(t, want, g.Routing(), "co_changes edges do not count toward counts or degree")
+}
+
 // TestRoutingIgnoresCatalogShape pins anchors against the binary rendering the index. The
 // two catalogs differ the way a binary built from another branch differs: typescript
 // carries three extra install ops that run pnpm. Counting catalog edges, that lifted

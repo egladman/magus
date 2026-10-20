@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,8 +18,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -371,7 +373,9 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	c, err := cache.Open(t.Context(), cacheDir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
-	served := ServedIn(cacheDir, root)
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	served := ServedIn(job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
 	}, RunOptions(w, served)...)
@@ -424,17 +428,21 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 func TestServedInFiltersForTheActingRole(t *testing.T) {
 	testkit.Isolate(t)
 	cacheDir := t.TempDir()
-	next := []hint.Next{
+	next := []types.NextStep{
 		{ID: "run-output", Run: "magus query output out1a2b3c", Argv: []string{"magus", "query", "output", "out1a2b3c"}},
 		{ID: "fabricated-write", Run: "magus run generate:rw .", Argv: []string{"magus", "run", "generate:rw", "."}},
 	}
 
-	served := ServedIn(cacheDir, t.TempDir())(next)
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	loc := job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: t.TempDir()}
+	served := ServedIn(loc)(next)
 	require.Len(t, served, 2, "an unbound reader keeps the lot")
 
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("harness/reviewer\n"), 0o644))
-	served = ServedIn(cacheDir, t.TempDir())(next)
+	require.NoError(t, os.MkdirAll(filepath.Dir(loc.MarkerPath()), 0o755))
+	require.NoError(t, os.WriteFile(loc.MarkerPath(), []byte("harness/reviewer\n"), 0o644))
+	loc.Root = t.TempDir()
+	served = ServedIn(loc)(next)
 	ids := make([]string, len(served))
 	for i, n := range served {
 		ids[i] = n.ID
@@ -642,4 +650,36 @@ func BenchmarkRecord_filtered(b *testing.B) {
 	for range b.N {
 		_ = Record(w, e)
 	}
+}
+
+// TestGraphObserverWritesEachKind pins the record each graph event becomes: a build is
+// graph.build, any other op graph.query, and a failure graph.error naming its op.
+func TestGraphObserverWritesEachKind(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithBlockOnFull())
+	obs := GraphObserver(w)
+	obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Nodes: 3, Edges: 2})
+	obs.Observe(types.GraphEvent{Op: "affected", Nodes: 3, Seeds: 1, ResultCount: 2})
+	obs.Observe(types.GraphEvent{Op: types.GraphOpBuild, Err: errors.New("dependency cycle")})
+	require.NoError(t, w.Close())
+
+	type line struct {
+		Type  string `json:"type"`
+		Op    string `json:"op"`
+		Nodes int    `json:"nodes"`
+		Error string `json:"error"`
+	}
+	var got []line
+	sc := bufio.NewScanner(&buf)
+	for sc.Scan() {
+		var l line
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &l), "unmarshal %q", sc.Bytes())
+		got = append(got, l)
+	}
+	assert.Equal(t, []line{
+		{Type: TypeGraphBuild, Nodes: 3},
+		{Type: TypeGraphQuery, Op: "affected", Nodes: 3},
+		{Type: TypeGraphError, Op: types.GraphOpBuild, Error: "dependency cycle"},
+	}, got)
 }

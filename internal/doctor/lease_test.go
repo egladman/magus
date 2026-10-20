@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
@@ -19,16 +20,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tmpLedger isolates the real user state directory and BAGGAGE, so a test run under a
+// newWorkspaceLedger isolates the real user state directory and BAGGAGE, so a test run under a
 // leased worker grades the row it planted rather than that worker's.
-func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
+func newWorkspaceLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	t.Helper()
 	root = testkit.NewWorkspace(t).Root()
 	cacheDir, store = ledgerIn(t, root)
 	return cacheDir, root, store
 }
 
-// ledgerIn is tmpLedger over a root the caller already has.
+// ledgerIn is newWorkspaceLedger over a root the caller already has.
 func ledgerIn(t *testing.T, root string) (cacheDir string, store *job.Store) {
 	t.Helper()
 	testkit.Isolate(t)
@@ -36,14 +37,19 @@ func ledgerIn(t *testing.T, root string) (cacheDir string, store *job.Store) {
 	// Pinned unbound: these rows are the orchestrator's, and resolving the actor from
 	// the environment would make every write depend on whether this run is leased.
 	actor := job.Actor{}
-	return cacheDir, job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
+	return cacheDir, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
 // host names no session takes a job there.
+// place is the Location the doctor's runner builds for a workspace at root.
+func place(t *testing.T, cacheDir, root string) job.Location {
+	return job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}
+}
+
 func bindCheckout(t *testing.T, cacheDir, id string) {
 	t.Helper()
-	require.NoError(t, job.NewStore(job.Location{CacheDir: cacheDir}).Bind(job.Caller{}, id))
+	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}).Bind(job.Caller{}, id))
 }
 
 // seed writes a row whole, the way a fixture means it: every field this test declared and
@@ -63,9 +69,9 @@ func wireGuardHook(t *testing.T, w *testkit.Workspace) {
 }
 
 func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -75,11 +81,11 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 }
 
 func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -98,40 +104,40 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 // meant a worker bound to one job could be graded against another's write paths by
 // exporting its id.
 func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
-	cacheDir, _, _ := tmpLedger(t)
+	cacheDir, _, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	lease, from := job.ActingLease(cacheDir, trail.LeaseFromEnv())
+	lease, from := job.ActingLease(place(t, cacheDir, ""), trail.LeaseFromEnv())
 	assert.Equal(t, "adj/marker", lease)
 	assert.Equal(t, types.LeaseSourceContested, from)
 
 	// With no marker the environment is the only answer there is, which stays true: a
 	// checkout nobody bound is the unattributed case the guard fails open on.
-	lease, from = job.ActingLease(t.TempDir(), trail.LeaseFromEnv())
+	lease, from = job.ActingLease(place(t, t.TempDir(), ""), trail.LeaseFromEnv())
 	assert.Equal(t, "adj/from-env", lease)
 	assert.Equal(t, types.LeaseSourceEnv, from)
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/live")
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{Status: types.CheckFail, Evidence: types.EvidenceUnknown}, withoutWording(got))
 	require.Contains(t, got.Message, "could not read the job store")
 }
 
 func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
-	cacheDir, root, _ := tmpLedger(t)
+	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/no-such-lease")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -145,11 +151,11 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 }
 
 func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
 	bindCheckout(t, cacheDir, "adj/done")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -160,16 +166,16 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 }
 
 // A row with no state can no longer be written through the store, which stores it as
-// declared; one an older magus wrote is planted as the file it left.
+// declared; one an older magus wrote is planted as the line it left.
 func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/stateless","created":1,"updated":1}]}`), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"id":"adj/stateless","created":1,"updated":1}`+"\n"), 0o644))
 	bindCheckout(t, cacheDir, "adj/stateless")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -180,11 +186,11 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 }
 
 func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
-	cacheDir, root, store := tmpLedger(t)
+	cacheDir, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
 	bindCheckout(t, cacheDir, "adj/live")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, root))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -197,7 +203,7 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 	cacheDir, w := registeredLease(t, "adj/unwired")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, w.Root())
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, w.Root()))
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -211,7 +217,7 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	cacheDir, w := registeredLease(t, "adj/enforcing")
 	wireGuardHook(t, w)
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, w.Root(), "test-host")
+	got := checkBoundLease(harnessProbeCtx(), place(t, cacheDir, w.Root()), "test-host")
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -225,23 +231,25 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 // orchestrator's however the store resolves its actor.
 func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Workspace) {
 	t.Helper()
-	w = testkit.NewWorkspace(t)
+	// A git checkout: exec reads the base from it.
+	repo := testkit.NewRepo(t, nil)
+	w = repo.Workspace
 	cacheDir, store := ledgerIn(t, w.Root())
-	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
-	_, err := store.Exec(context.Background(), id, "abc123")
+	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: repo.Head()})
+	_, err := store.Exec(context.Background(), id)
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, id)
 	return cacheDir, w
 }
 
 func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "root", State: types.StatePass})
 	seed(t, store, types.Job{ID: "root/orphan", Parent: "root", State: types.StateRunning})
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	now := time.Now().Unix()
-	got := checkJobTree(root, config.Jobs{}, now)
+	got := checkJobTree(place(t, "", root), config.Jobs{}, now)
 	assert.Equal(t, types.CheckOK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
 	rows, err := store.List()
 	require.NoError(t, err)
@@ -249,28 +257,28 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 	assert.Equal(t, types.StateNoReturn, orphan.State)
 	assert.NotEmpty(t, orphan.EndReason)
 
-	stale := checkJobTree(root, config.Jobs{StaleAfter: time.Minute}, now+3600)
+	stale := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Minute}, now+3600)
 	require.Equal(t, types.CheckAdvice, stale.Status)
 	assert.Contains(t, strings.Join(stale.Details, "\n"), hint.JobExit.With("live"))
 	assert.Contains(t, stale.Message, "jobs.stale_after")
 }
 
 func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
-	got := checkJobTree(root, config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
+	got := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
 	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
-	_, root, store := tmpLedger(t)
+	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
 	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, WritePaths: []string{"internal/job"}})
 	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
-	got := checkJobTree(root, config.Jobs{}, time.Now().Unix())
+	got := checkJobTree(place(t, "", root), config.Jobs{}, time.Now().Unix())
 	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	assert.Contains(t, got.Message, "waiter is blocked on dep which is fail")
 	assert.NotContains(t, got.Message, "queued", "a dependency still running is a plan in order, not a finding")

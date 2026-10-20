@@ -30,7 +30,7 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, ok := hostmodules.Get(name)
 			require.True(t, ok, "hostmodules.Get(%q): module not registered", name)
-			want, err := emitBuzz(m)
+			want, err := emitBuzz(m, "bindgen")
 			require.NoError(t, err, "emitBuzz(%q)", name)
 			outPath := filepath.Join(genBuzzDir, name+".go")
 			got, err := os.ReadFile(outPath)
@@ -45,6 +45,36 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 // name when the checker receives a differently named generated Buzz object.
 func TestObjectReturnContracts(t *testing.T) {
 	require.NoError(t, checkObjectDecls(hostmodules.All()))
+}
+
+// A Go Impl taking an option struct keeps the Buzz map argument: the trampoline decodes
+// the map strictly before the call, so the rejections the map contract makes stay at
+// the Buzz edge.
+func TestOptionStructArgDecodesTheBuzzMap(t *testing.T) {
+	m, ok := hostmodules.Get("magus")
+	require.True(t, ok)
+	got, err := emitBuzz(m, "bindgen")
+	require.NoError(t, err)
+	src := string(got)
+	assert.Contains(t, src, `opts, err := decodeKnowledgeQueryOptions("magus\\query", ffi.AnyMap(bzArgs, 1))`)
+	assert.Contains(t, src, `opts, err := decodeKnowledgeRefsOptions("magus\\refs", ffi.AnyMap(bzArgs, 1))`)
+	assert.Contains(t, src, `"%s: unknown option %q (want budget, limit, offset)"`)
+	assert.Contains(t, src, `"%s: %s must be a number, got %T"`)
+	assert.Contains(t, src, `"fmt"`)
+}
+
+func TestOptionFieldsRefuseWhatAMapCannotSet(t *testing.T) {
+	_, err := optionFields(reflect.TypeFor[struct{ Limit int }]())
+	require.ErrorContains(t, err, "no json name")
+	_, err = optionFields(reflect.TypeFor[struct {
+		Paths []string `json:"paths"`
+	}]())
+	require.ErrorContains(t, err, "decodes only int, string and bool")
+	type count int
+	_, err = optionFields(reflect.TypeFor[struct {
+		N count `json:"n"`
+	}]())
+	require.ErrorContains(t, err, "named type")
 }
 
 func TestBuzzValueEmitterConvertsInterfaceByDynamicType(t *testing.T) {
@@ -90,14 +120,20 @@ func TestRunBindings(t *testing.T) {
 		assert.Contains(t, err.Error(), "usage:")
 	})
 
+	t.Run("no -pkg", func(t *testing.T) {
+		err := runBindings([]string{"-module", "fs", "-out", filepath.Join(t.TempDir(), "x.go")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "-pkg <package>")
+	})
+
 	t.Run("unknown module", func(t *testing.T) {
-		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go")})
+		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown module")
 	})
 
 	t.Run("unknown lang", func(t *testing.T) {
-		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go")})
+		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown lang")
 	})
@@ -105,11 +141,12 @@ func TestRunBindings(t *testing.T) {
 	t.Run("writes what emitBuzz renders", func(t *testing.T) {
 		m, ok := hostmodules.Get("fs")
 		require.True(t, ok)
-		want, err := emitBuzz(m)
+		want, err := emitBuzz(m, "bindgen")
 		require.NoError(t, err)
+		assert.Contains(t, string(want), "\npackage bindgen\n")
 
 		got := readGenerated(t, runBindings, func(out string) []string {
-			return []string{"-module", "fs", "-lang", "buzz", "-out", out}
+			return []string{"-module", "fs", "-lang", "buzz", "-out", out, "-pkg", "bindgen"}
 		})
 		assert.Equal(t, string(want), got)
 	})

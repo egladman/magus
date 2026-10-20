@@ -10,8 +10,11 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -90,7 +93,9 @@ func (o Options) ReviewAnchors() func(ctx context.Context, rev types.Diff) ([]re
 	notes := o.Config.Knowledge.Notes
 	dirs := review.NoteDirs{Shared: notes.Shared, Private: notes.Private}
 	return func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
-		return review.ChangesetAnchors(ctx, o.Magus.Root(), dirs, o.Magus.KnowledgeGraphWithSymbols, rev)
+		return review.ChangesetAnchors(ctx, o.Magus.Root(), dirs, func(ctx context.Context) (*knowledge.Graph, error) {
+			return workspace.ViewAs[graphReader](o.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+		}, rev)
 	}
 }
 
@@ -119,3 +124,14 @@ func (o Options) httpAddr() netip.AddrPort {
 // cmd/magus/graph.go names as defaultExploreURL; keep the two in sync. internal/server
 // allows it as the bridge's CORS origin.
 const SiteOrigin = "https://eli.gladman.cc"
+
+// graphReader is the knowledge graph workspace.ViewAs adds to an opened *magus.Magus.
+type graphReader interface {
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+}
+
+// telemetrySource is the observability provider workspace.ViewAs adds to an opened
+// *magus.Magus.
+type telemetrySource interface {
+	Telemetry() observability.Provider
+}

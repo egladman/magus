@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // StreamEvent is one fact about a workspace, addressed to a PROGRAM: the record

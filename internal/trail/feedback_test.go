@@ -72,7 +72,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	assert.ElementsMatch(t, []string{main, worktree}, got.Checkouts)
 	require.Len(t, got.Observations, 2)
 	deny := got.Observations[0]
-	assert.Equal(t, types.FeedbackObservation{
+	assert.Equal(t, types.TrailObservation{
 		At:       deny.At, // wall-clock stamp
 		Agent:    "a1",
 		Lease:    "job-1",
@@ -86,7 +86,7 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	}, deny)
 	assert.Equal(t, "deny-grep-reader", got.Observations[1].PreauthorizedBy)
 	require.Len(t, got.Spawns, 1, "a continuation starts no subagent")
-	assert.Equal(t, types.FeedbackSpawn{
+	assert.Equal(t, types.TrailSpawn{
 		At:    got.Spawns[0].At, // wall-clock stamp
 		Child: "worker",
 		Lease: "job-1",

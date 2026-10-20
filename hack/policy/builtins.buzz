@@ -11,6 +11,9 @@ export final BUILTINS: {str: any} = {
     "architecture-unbriefed": "deny",
     // 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable.
     "brief-command": "deny",
+    // 2026-10-13: Claude Code refused 1,068 compound commands from worktree-isolated
+    // workers whose briefs never said to run one plain command per call.
+    "brief-plain-commands": "deny",
     "busy-wait": "deny",
     // Six errors in one session, by an agent with this repository open throughout.
     "buzz-unbriefed": "deny",
@@ -29,6 +32,13 @@ export final BUILTINS: {str: any} = {
     "grep-reader": "deny",
     "interpreter-rewrite": "deny",
     "magus-timeout": "deny",
+    // 2026-10-12: one worker armed 9 watchers on one backgrounded run in 70 seconds, two
+    // pairs byte-identical; 8 expired after it finished, each waking it for a turn.
+    // 2026-10-13: three identical `magus status --watch=15s` background tasks from workers.
+    "monitor-duplicate": "deny",
+    // 2026-10-10: busy-wait's old remedy sent one agent into 11 watchers on one wait.
+    // 2026-10-13: a worker backgrounded about seven sleep timers on its own run.
+    "monitor-pile": "deny",
     "output-pipe": "deny",
     // 2026-09-26: 556 of 841 denies were stderr-only.
     "output-redirect": "deny",
@@ -48,6 +58,9 @@ export final BUILTINS: {str: any} = {
     // held 29 (83%), the misses a read right before an edit and a review of the reader's
     // own diff.
     "read-navigation": {"decision": "deny", "lines": 120},
+    // 2026-10-13: 25% of read-navigation denies were followed by 3 or more sed -n windows
+    // of the same file.
+    "read-paging": "deny",
     "scripted-rewrite": "deny",
     // 2026-09-26, 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389
     // listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target
@@ -57,9 +70,15 @@ export final BUILTINS: {str: any} = {
     "search-translation": "deny",
     "sed-in-place": "deny",
     "sibling-checkout": "deny",
+    // 2026-10-13: 65 calls slept 10 seconds or more and then read a status once, 61
+    // minutes of waiting spread over calls.
+    "sleep-poll": "deny",
     // Across 2,147 session transcripts: zero loads of the multi-agent skill, under every
     // name and variant, while the two skills a hook demands loaded 415 times.
     "spawn-unbriefed": "deny",
+    // 2026-10-13, waiters scout: no spawn in 9 days was a waiter, so the deny costs nothing
+    // here; the host's completion notice already does the job.
+    "spawn-waiter": "deny",
     // One call put 69 files, a whole regenerated docs site plus five untouched source
     // files, into a commit about four collection methods.
     "stage-all": "deny",
@@ -69,6 +88,10 @@ export final BUILTINS: {str: any} = {
     // symbol search through.
     "symbol-search": "deny",
     "throwaway-copy": "deny",
+    // 2026-10-14: every harness now hooks every tool, and this tree wants a call no rule
+    // could read stopped rather than noted. A tool that touches nothing belongs in the
+    // guard's known-tool table, not past this rule.
+    "unjudged-tool": "deny",
     // 2026-09-24: the day MAGUS_NO_WAIT was removed, agents prefixed 462 commands with it,
     // copied from 33 briefs.
     "unknown-env": "deny",
@@ -86,7 +109,22 @@ export final BUILTINS: {str: any} = {
 //   precedent-search (advise): over 1,499 sessions, 42% of new files were preceded by a
 //     hunt for one name, 71% in subagent sessions, where only 12.9% reached for a magus
 //     verb at all.
-//   stdin-closed (advise): 2026-09-29, a grep whose file operands expanded to nothing read
-//     stdin for 3.5 hours.
 //   worker-check-only (deny): 2026-09-29, briefs told six workers they "may also run"
 //     `magus run lint docs`, and two ran it at the same moment from two worktrees.
+//
+// The cost rules and stall take this repository's level, strict, from the magusfile's
+// magus\guard.profile, so none is named above. The evidence for strict, Claude Code
+// transcripts 2026-10-01 to 2026-10-13, 26 root sessions and 569 subagents:
+//   root-context-budget: 9 of 26 roots reached about 960k tokens; the median peak was
+//     615k and a first call started at 79k, so strict's 200k advice is about twice the
+//     baseline. The 350k refusal it carried is gone: a root that forked a row or spawned
+//     on one is refused its groundwork by orchestrator-groundwork at any size, and size
+//     only tunes the advice to a root with no record of handing work out.
+//   root-heavy-command: 105 streaks of 8 or more delegable root calls ran without a
+//     spawn; those classes were 63% of the root's tool-result characters. It now only
+//     advises, and only a root that has handed nothing out.
+//   spawn-above-model-tier: 164 Opus spawns carried a scout, read-only or research
+//     prompt, work a job row would fork at economy.
+//   stall: 3.0 to 5.1 runs of three or more failed calls per 1,000 calls on every model
+//     tier, and about 30% of every tier's refusals repeated one already given, so no tier
+//     gets its own ladder yet.

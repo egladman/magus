@@ -1,0 +1,51 @@
+import "magus";
+import "../../hack/magusfile/drift" as drift;
+import "../../hack/magusfile/index" as index;
+import "../../hack/magusfile/run-golangci" as golangci;
+
+import "magus/spell/go";
+import "../../spells/golang/gomod" as gomod;
+
+magus\project({
+    "spells": [go],
+    // MAGUS.md is declared on index_generate, not here.
+    "targets": {
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+    },
+});
+
+// Regenerates MAGUS.md. Without the rw charm it only checks for drift.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    gomod\replaceWorkspaceModules(ctx, go, "libs/cmdline");
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("MAGUS.md");
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    index\render("libs/cmdline");
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun lint(ctx: magus\Context, args: [str]) > void { go["go-vet"](ctx); }
+// The tree-wide conventions over this module, through .magus/custom-gcl. The root
+// install-linter builds it; this target does not, so a missing binary fails naming it.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    golangci\readLibFiles(ctx);
+    golangci\lintLib("libs/cmdline", ctx.hasCharm("rw"));
+}
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
+// Runs the suite; the root merges coverage.out into its coverage badge.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("coverage.out");
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
+    ctx.needs(format);
+    ctx.needs(lint, build, test);
+}

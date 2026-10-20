@@ -11,9 +11,9 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,7 +61,13 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 	if !ok {
 		return nil
 	}
-	lease, _ := job.ActingLease(cd.CacheDir(), proc.LeaseFromContext(ctx))
+	// Ctx-only, not job.RunLease: the daemon's own environment names nobody's lease, and a
+	// CLI process has frozen its BAGGAGE onto ctx already.
+	// No user state dir leaves the checkout with no record and the store unreadable, which
+	// liveRow below meets as no live row, as it does any unreadable store.
+	stateBase, _ := xdg.StateDir()
+	loc := job.Location{CacheDir: cd.CacheDir(), StateBase: stateBase, Root: ws.Root()}
+	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
 	if lease == "" {
 		return nil
 	}
@@ -70,7 +76,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 		return fmt.Errorf("vcs\\cmd: lease %s is acting and this binary registers no lease-vcs gate, so `%s %s` is refused rather than run unguarded",
 			lease, backend, strings.Join(args, " "))
 	}
-	row, ok := liveRow(job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}, lease)
+	row, ok := liveRow(loc, lease)
 	if !ok {
 		return nil
 	}
@@ -86,7 +92,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 
 // childEnv is the environment a command run through runResult starts with, as far as a
 // variable the child reads is concerned: the sandbox's base environment or this
-// process's, the run's env\set changes, then os\with_env overrides. run.Exec adds only
+// process's, the run's env\set changes, then os\with_env overrides. spawn.Exec adds only
 // magus's own variables past these.
 func childEnv(ctx context.Context) []string {
 	base := os.Environ()

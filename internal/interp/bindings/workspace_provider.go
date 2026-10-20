@@ -17,7 +17,7 @@ import (
 // remote_cache.go does: running a provider means running a Buzz spell, and the
 // magus library must not link the VM to open a workspace. It registers the runner
 // with internal/workspace at init, so the library reaches it through a hook.
-func init() {
+func init() { //nolint:gochecknoinits // internal/workspace cannot link the Buzz VM; the runner registers from the layer that can
 	workspace.RegisterProviderRunner(runWorkspaceProvider)
 }
 

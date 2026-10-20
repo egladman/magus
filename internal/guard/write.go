@@ -15,12 +15,13 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"gopkg.in/yaml.v3"
@@ -140,7 +141,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	if declared == "" {
 		return ""
 	}
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		return ""
 	}
@@ -170,7 +171,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	// declared store under one spelling and an incoming write under the other. Comparing
 	// them literally makes the rule silently pass: a deny that fails open is worse than
 	// no deny, because it looks enforced.
-	rel, err := filepath.Rel(resolveSymlinks(dir), resolveSymlinks(filepath.Clean(abs)))
+	rel, err := filepath.Rel(realPath(dir), realPath(filepath.Clean(abs)))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
@@ -180,24 +181,6 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 		Why: "A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n" +
 			"Read the store with `" + hint.NotesLs.String() + "` and `" + hint.NotesGet.With("<name>") + "`.",
 	}.full()
-}
-
-// resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
-// nothing can be resolved. The file being judged has not been written yet, so the deepest
-// EXISTING ancestor is what can be resolved; the remainder is appended verbatim.
-func resolveSymlinks(path string) string {
-	rest := ""
-	for cur := path; ; {
-		if real, err := filepath.EvalSymlinks(cur); err == nil {
-			return filepath.Join(real, rest)
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return path // nothing along the way exists; compare what we were given
-		}
-		rest = filepath.Join(filepath.Base(cur), rest)
-		cur = parent
-	}
 }
 
 // Where the acting lease's identity comes from. Both spellings name the same thing so a
@@ -213,7 +196,7 @@ const (
 )
 
 // writeGrade is what the job store has to say about one write. Separate from
-// Verdict because the empty Decision means "no opinion", which the wire's "pass"
+// GuardJudgment because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
 // facts, and only the first may be overridden by a later rule.
 type writeGrade struct {
@@ -261,7 +244,10 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 // gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
 // write is graded once more, by declaration, when the acting lease's deny paths name a
 // declaration of that file (see gradeDeniedDeclarations), and a write inside its own paths
-// when another live lease claims one (see gradeClaimedDeclarations).
+// when another live lease claims one (see gradeClaimedDeclarations). A write to a project's
+// magusfile or magus.yaml the lease holds only through a pattern narrows that hold to the
+// declarations it changes (see gradeConfigNarrowing). A write the lease's boundary allowed
+// that adds a compat marker is advised (see gradeCompatMarker).
 func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
@@ -272,10 +258,16 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		return writeGrade{}
 	}
 	// The store's paths are relative to the checkout a lease was taken in, which for a
-	// worker isolated in its own worktree is not the checkout its hooks resolve. A write
-	// outside that checkout has nothing to be graded against, unless it lands in another
-	// magus checkout; see denyOtherCheckout.
+	// worker isolated in its own worktree is not the checkout its hooks resolve, or, for a
+	// write inside it, the checkout the lease's fork made. A write outside that checkout has
+	// nothing to be graded against, unless it lands in another magus checkout; see
+	// denyOtherCheckout.
 	checkout := leaseCheckout(ctx, location, actingLease)
+	if owned := leaseWorktree(ctx, location, actingLease); owned != "" {
+		if _, in := workspaceRelative(owned, writePath); in {
+			checkout = owned
+		}
+	}
 	rel, inside := workspaceRelative(checkout, writePath)
 	if !inside {
 		return denyOtherCheckout(checkout, actingLease, writePath)
@@ -321,7 +313,17 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
 			return claimed
 		}
-		return g
+		if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
+			return narrowed
+		}
+		// Graded whatever g says, so the root's row is filed even when another advisory
+		// takes the verdict.
+		who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
+		compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
+		if g.Decision != "" {
+			return g
+		}
+		return compat
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
@@ -342,7 +344,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		//
 		// Best-effort by construction: a failure here is swallowed, because this whole function
 		// fails open and a store that would not accept a note must not cost somebody a save.
-		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
+		_ = job.NewStore(location.jobs()).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
 		// Held once per session per lease: the second write into the same lease's paths
 		// repeats a fact the writer already has, while a different lease is a new one.
@@ -654,7 +656,7 @@ func gradeEntry(ctx context.Context, deps Dependencies, at location, owner types
 			}.full()}, true
 		}
 	}
-	_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).ConsumeEntry(ctx, owner.ID, rel)
+	_ = job.NewStore(at.jobs()).ConsumeEntry(ctx, owner.ID, rel)
 	return writeGrade{}, true
 }
 
@@ -666,7 +668,7 @@ func holderLastCall(deps Dependencies, at location, owner types.Job) (time.Time,
 		return time.Time{}, false
 	}
 	cacheDir := at.cacheDir
-	if resolveSymlinks(owner.CheckoutRoot) != resolveSymlinks(at.workspace) {
+	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
 	events, err := trail.ReadRecent(cacheDir, holderTrailWindow)
@@ -845,6 +847,23 @@ func leaseCheckout(ctx context.Context, at location, lease string) string {
 	return at.workspace
 }
 
+// leaseWorktree is the standing checkout the acting lease's fork made for it, "" when it
+// has none or is not live. A worker bound by its spawn is taken in the session's
+// checkout, so its row records that checkout while its editor writes land in this one.
+func leaseWorktree(ctx context.Context, at location, lease string) string {
+	if lease == "" {
+		return ""
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return ""
+	}
+	if me, live := liveLease(liveLeases(rows), lease); live && me.Worktree.Standing() {
+		return me.Worktree.Root
+	}
+	return ""
+}
+
 // denyOtherCheckout refuses a lease's write into a magus checkout other than the one its
 // paths are relative to: the same relative path there is not the file the orchestrator
 // handed out. Only a checkout holding a magusfile counts, so a scratch directory, even one
@@ -884,19 +903,37 @@ func findMagusCheckout(dir string) string {
 // the root under one spelling and the write under another. Comparing them literally makes
 // the rule silently pass, and a deny that fails open is worse than no deny, because it
 // looks enforced.
+//
+// A home-relative path resolves against the home directory, never the root, so a
+// workspace-relative glob such as `**/*.md` never matches `~/.claude/plan.md`; one whose
+// home is unknown is placed nowhere, and so outside. A path in a checkout nested under the
+// root, such as a worktree in .claude/worktrees, is that checkout's and outside too, so no
+// glob of the root's leases matches it and denyOtherCheckout is what judges it.
 func workspaceRelative(root, p string) (string, bool) {
 	if root == "" {
 		return "", false
 	}
-	abs := p
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(root, abs)
+	abs, ok := placePath(p, root, userHome())
+	if !ok {
+		return "", false
 	}
-	rel, err := filepath.Rel(resolveSymlinks(root), resolveSymlinks(filepath.Clean(abs)))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, err := filepath.Rel(realPath(root), realPath(abs))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || nestedCheckout(root, abs) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true
+}
+
+// nestedCheckout reports an abs under root that lies in another git checkout inside it: a
+// directory between abs and root holding a .git entry, as a linked worktree's root does.
+func nestedCheckout(root, abs string) bool {
+	top := realPath(root)
+	for d := filepath.Dir(realPath(abs)); d != top && strings.HasPrefix(d, top+string(filepath.Separator)); d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // criteriaLine is the lease's criteria reduced to its first line. Criteria holds what the
@@ -1029,8 +1066,8 @@ var agentSources = []string{
 // outside a branch changes both and a passage added inside one changes neither, and
 // nothing about the file says so. A content change without a SkillVersion bump leaves
 // every install reporting itself up to date while carrying the previous bytes.
-func adviseAgentSourceWrite(path string) advice {
-	rel, ok := workspaceRelativeFile(path)
+func adviseAgentSourceWrite(root, path string) advice {
+	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
 		return advice{}
 	}
@@ -1055,8 +1092,8 @@ func adviseAgentSourceWrite(path string) advice {
 // that output stale, which is the omitted one. The failure is the same shape as every
 // other advisory here (silent), because a stale generated file looks exactly like a file
 // nobody had to touch, right up until CI runs generate as a drift gate.
-func adviseDescriptorWrite(path string) advice {
-	rel, ok := workspaceRelativeFile(path)
+func adviseDescriptorWrite(root, path string) advice {
+	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
 		return advice{}
 	}
@@ -1076,28 +1113,26 @@ func adviseDescriptorWrite(path string) advice {
 	}
 }
 
-// workspaceRelativeFile returns path relative to the working directory, slash-separated,
-// and whether it lands inside it.
+// workspaceRelativeFile returns path relative to the workspace root, slash-separated, and
+// whether it lands strictly inside it. A relative path is the root's, and symlinks resolve on
+// both sides, so a path under /private/var names the file a root under /var holds.
 //
-// The file's sibling to workspaceRelativeDir, which the new-directory rule uses, and it
-// resolves the same way for the same reason: the host sends an absolute path and this
-// workspace is routinely checked out under a dot-directory, so a rule that matched the
-// absolute form would be silently disabled in the layout this repository's own workflow
-// uses.
-func workspaceRelativeFile(path string) (string, bool) {
+// Relative FIRST, then scanned: the host sends an absolute path and this workspace is
+// routinely checked out under a dot-directory, so a rule that matched the absolute form
+// would be silently disabled in the layout this repository's own workflow uses.
+func workspaceRelativeFile(root, path string) (string, bool) {
 	clean := strings.TrimSpace(path)
-	if clean == "" {
+	if clean == "" || root == "" {
 		return "", false
 	}
-	cwd, err := os.Getwd()
+	root, err := filepath.Abs(root)
 	if err != nil {
 		return "", false
 	}
-	abs := clean
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(cwd, abs)
+	if !filepath.IsAbs(clean) {
+		clean = filepath.Join(root, clean)
 	}
-	rel, err := filepath.Rel(cwd, abs)
+	rel, err := filepath.Rel(realPath(root), realPath(clean))
 	if err != nil {
 		return "", false
 	}
@@ -1128,7 +1163,7 @@ func vcsOffSwitchTargets(root string) []string {
 		filepath.Join(root, config.Filename),
 		filepath.Join(root, config.DottedFilename),
 	}
-	if udc, err := config.UserConfigDir(); err == nil {
+	if udc, err := xdg.ConfigDir(); err == nil {
 		targets = append(targets,
 			filepath.Join(udc, "magus", config.Filename),
 			filepath.Join(udc, "magus", config.DottedFilename))
@@ -1155,7 +1190,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // denyVCSOffSwitch is finding 3 of the guard-boundary audit (U8): a leased or
 // agent-attributed write that leaves vcs.enabled: false in a magus.yaml tier this
 // workspace reads. vcs.Resolve (vcs/vcs.go) turns that into VCSSourceDisabled, and the
-// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, guard.go):
+// guard's approval authority is HEAD of whatever VCS resolves (headPolicy, workspace_rules.go):
 // with none resolved there is no HEAD to compare a policy edit against, so from that
 // write on every hack/policy/*.buzz rule stops being checked against an approved copy
 // before it takes effect. That is the guard's own foundational safety, so it is judged
@@ -1182,7 +1217,7 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if actingLease == "" && trail.SpawnFromEnv().ParentSpanID == "" {
 		return writeGrade{}
 	}
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		return writeGrade{}
 	}
@@ -1190,10 +1225,10 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(root, abs)
 	}
-	real := resolveSymlinks(filepath.Clean(abs))
+	real := realPath(filepath.Clean(abs))
 	target := ""
 	for _, candidate := range vcsOffSwitchTargets(root) {
-		if resolveSymlinks(candidate) == real {
+		if realPath(candidate) == real {
 			target = candidate
 			break
 		}

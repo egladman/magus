@@ -351,7 +351,7 @@ var staleGraphFiles = map[string]string{
 func staleGraphDeps(root string) Dependencies {
 	return strict(Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return name == "HandleRequest", true },
-		GraphIDs: graphOf(map[string][]string{
+		GraphIDs: kindLookup(map[string][]string{
 			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
 			types.KindDiagnostic: {"diagnostic:MGS2011"},
 		}),
@@ -444,7 +444,7 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 // has never heard of.
 func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
 	const registered = "grep -rn MGS2011 docs/"
-	withCode := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS2011", "diagnostic:MGS9901"}})
+	withCode := kindLookup(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS2011", "diagnostic:MGS9901"}})
 	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}, Evaluate(strict(Dependencies{GraphIDs: withCode}), registered).Rule)
 	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS9901"}, Evaluate(strict(Dependencies{GraphIDs: withCode}), "grep -rn MGS9901 docs/").Rule)
 
@@ -452,7 +452,7 @@ func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
 		ids, _ := withCode(ctx, kind)
 		return ids, false
 	}
-	without := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901"}})
+	without := kindLookup(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901"}})
 	for name, deps := range map[string]Dependencies{"no graph": {}, "a graph it doubts": {GraphIDs: doubted}, "another tree's": {GraphIDs: without}} {
 		assert.Empty(t, Evaluate(strict(deps), registered).Deny, name)
 	}
@@ -505,7 +505,7 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 	}
 	deps := Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
-		GraphIDs:      graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS3010"}}),
+		GraphIDs:      kindLookup(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS3010"}}),
 		Spells:        spellCatalog,
 		scope:         workspaceScope{root: root},
 		callDir:       root,

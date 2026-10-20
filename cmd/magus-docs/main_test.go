@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 )
@@ -30,4 +31,14 @@ func TestPruneRemovesOnlyStaleModulePages(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(out, "keep 3.md"))
 	assert.NoFileExists(t, filepath.Join(out, "index 3.md"))
 	assert.FileExists(t, filepath.Join(out, "authored.md"))
+}
+
+func TestSourceLinksNameTheFileNotTheLine(t *testing.T) {
+	assert.Equal(t, "[`Callback`]("+docs.RepoBlob+"/std/module.go)", typeMarkdown(std.TypeFunc))
+
+	file := std.MethodSource(std.Method{Impl: std.FsGlob}, repoRoot)
+	if file == "" {
+		t.Skip("built with -trimpath: no absolute path to relativize")
+	}
+	assert.Equal(t, " - [source]("+docs.RepoBlob+"/"+file+")", methodSourceLink(std.Method{Impl: std.FsGlob}))
 }

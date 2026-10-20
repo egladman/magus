@@ -32,6 +32,18 @@ func TestAllChecksAreNamedAndDocumented(t *testing.T) {
 	}
 }
 
+func TestConformanceRatchetIsRegisteredOnce(t *testing.T) {
+	var n int
+	for _, def := range allChecks {
+		if def.Name == "conformance-ratchet" {
+			n++
+			assert.True(t, def.NeedsWorkspace)
+			assert.Equal(t, types.EvidenceMeasured, def.Evidence)
+		}
+	}
+	assert.Equal(t, 1, n)
+}
+
 // TestChecksMirrorsRegistry pins the listing to the suite. The whole reason the registry
 // exists is that `magus doctor --list` and `magus doctor` must describe the same set;
 // a check registered but not listed would advertise a name that never appears in a report.

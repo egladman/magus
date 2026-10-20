@@ -36,6 +36,7 @@ func (h handler) Enabled(ctx context.Context, l slog.Level) bool {
 
 func (h handler) Handle(ctx context.Context, r slog.Record) error {
 	var next, notice string
+	result := false
 	waits, wait := false, time.Duration(0)
 	r.Attrs(func(a slog.Attr) bool {
 		switch a.Key {
@@ -47,6 +48,8 @@ func (h handler) Handle(ctx context.Context, r slog.Record) error {
 			next = a.Value.String()
 		case attr.NoticeKey:
 			notice = a.Value.String()
+		case attr.ResultKey:
+			result = true
 		}
 		return true
 	})
@@ -55,7 +58,7 @@ func (h handler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	if r.Level < slog.LevelWarn || !h.next.Enabled(ctx, r.Level) {
 		switch {
-		case notice == attr.HintLabel, waits && h.next.Enabled(ctx, r.Level):
+		case notice == attr.HintLabel, result, waits && h.next.Enabled(ctx, r.Level):
 		case next != "" && r.Level < slog.LevelWarn:
 			r = commandOnly(r, next)
 		default:

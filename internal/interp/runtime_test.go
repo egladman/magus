@@ -23,7 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/observability/gen/mocks"
+	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -156,7 +156,7 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 
 			src, err := Find(project.Root())
 			require.NoError(t, err)
-			load, err := execBuzzSrc(context.Background(), src, true)
+			load, err := execBuzzSource(context.Background(), src, true)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return
@@ -191,7 +191,7 @@ func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
 		})
 		src, err := Find(root)
 		require.NoError(t, err)
-		load, err := execBuzzSrc(ctx, src, true)
+		load, err := execBuzzSource(ctx, src, true)
 		if err == nil {
 			t.Cleanup(func() { _ = load.Session.Close() })
 		}
@@ -290,7 +290,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	granted := t.TempDir()
 	probe := filepath.Join(granted, "stat")
 
-	base, err := sandbox.FromConfig(root, "", config.SandboxConfig{}, nil)
+	base, err := sandbox.FromConfig(root, "", "", config.SandboxConfig{}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(base.TempDir) })
 	require.Error(t, base.CheckRead(t.Context(), probe), "the grant must be the test's alone to prove")
@@ -304,18 +304,18 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	}}}
 	src, err := Find(root)
 	require.NoError(t, err)
-	load, err := execBuzzSrc(t.Context(), src, false)
+	load, err := execBuzzSource(t.Context(), src, false)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 
 	// TimeCall hands the provider the ctx a target body runs under, so the policy that ctx
 	// carries is captured from each RecordBuzzExec.
 	var policies []*sandbox.Policy
-	rec := mocks.NewMockProvider(t)
+	rec := observabilitytest.NewMockProvider(t)
 	rec.EXPECT().Enabled().Return(true).Maybe()
 	rec.EXPECT().RecordBuzzJITRun(mock.Anything).Maybe()
-	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Run(func(ctx context.Context, _ float64, _, _ string) {
+	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything).
+		Run(func(ctx context.Context, _ observability.BuzzExec) {
 			policies = append(policies, sandbox.PolicyFromContext(ctx))
 		}).
 		Times(2)
@@ -351,7 +351,7 @@ func guardLoad(t *testing.T, ctx context.Context, root string) []string {
 	t.Helper()
 	src, err := Find(root)
 	require.NoError(t, err)
-	load, err := execBuzzSrc(WithGuardRules(ctx), src, true)
+	load, err := execBuzzSource(WithGuardRules(ctx), src, true)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 	return slices.Sorted(maps.Keys(load.Session.Exports()))

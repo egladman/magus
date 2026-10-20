@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/readlog"
@@ -40,7 +41,7 @@ import (
 func mkGlobalWS(t *testing.T, target string) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun " + target + "(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun " + target + "(ctx: magus\\Context, args: [str]) > void {}\n")
 	return w.Root()
 }
 
@@ -49,10 +50,10 @@ func TestBuildGlobalKnowledgeGraph(t *testing.T) {
 	rootA := mkGlobalWS(t, "build")
 	rootB := mkGlobalWS(t, "deploy")
 
-	wsA, err := Inspect(ctx, rootA)
+	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
-	g, err := BuildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
+	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
 	require.NoError(t, err)
 	out := g.Output()
 
@@ -76,13 +77,13 @@ func TestBuildGlobalKnowledgeGraph(t *testing.T) {
 func TestBuildGlobalKnowledgeGraphSkipsUnreachable(t *testing.T) {
 	ctx := context.Background()
 	rootA := mkGlobalWS(t, "build")
-	wsA, err := Inspect(ctx, rootA)
+	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
 	// A registered workspace that does not exist is skipped, not fatal: the global
 	// graph degrades to what it can reach rather than failing the whole query.
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	g, err := BuildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{missing}}}, false, slog.Default())
+	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{missing}}}, false, slog.Default())
 	require.NoError(t, err)
 	assert.Positive(t, g.Output().NodeCount, "current workspace still present despite the missing registered one")
 }
@@ -204,7 +205,7 @@ func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	gaps, ok := SymbolGaps(ctx, nil, root, config.Config{}, log)
+	gaps, ok := workspaceSymbolGaps(ctx, nil, root, config.Config{}, log)
 	assert.Nil(t, gaps)
 	assert.False(t, ok, "a probe that could not run must not read as \"no gaps\"")
 	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
@@ -447,7 +448,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 	writeCommit(t, repo, "café.buzz", "u\n") // non-ASCII path
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
+	entries, _ := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
 	require.NotEmpty(t, entries)
 
 	byPath := map[string]int{}
@@ -472,11 +473,15 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	// Disabled: no scan, nil result, even in a git repo.
 	repo := testkit.NewRepo(t, nil)
 	writeCommit(t, repo, "a.buzz", "x\n")
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default()))
+	entries, couplings := loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 
 	// Enabled but not a git repo: best-effort nil, no error.
 	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default()))
+	entries, couplings = loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 }
 
 // TestBuildKnowledgeGraphChurnIsStableAcrossBuilds pins the property that makes caching the
@@ -492,16 +497,16 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	ctx := context.Background()
 	repo := testkit.NewRepo(t, nil)
 	root := repo.Root()
-	repo.Magusfile("export fun build(args: [str]) > void {}\n")
+	repo.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
 	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
-	ws, err := Inspect(ctx, root)
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 
 	churn := func() map[string]string {
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, slog.Default())
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, slog.Default())
 		require.NoError(t, err)
 		got := map[string]string{}
 		for _, n := range g.Output().Nodes {
@@ -537,30 +542,35 @@ func TestLoadKnowledgeVCSCached(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
-	first := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	first, firstCouplings := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	require.NotEmpty(t, first)
 	require.FileExists(t, path)
-	assert.Equal(t, first, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a hit returns the scan verbatim")
+	hit, hitCouplings := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, first, hit, "a hit returns the scan verbatim")
+	assert.Equal(t, firstCouplings, hitCouplings, "a hit returns the couplings verbatim")
 
 	// A new commit is new history, so the key moves and the walk re-runs.
 	writeCommit(t, repo, "b.buzz", "y\n")
-	moved := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	moved, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	assert.NotEqual(t, first, moved, "a moved HEAD is a different history")
 	assert.Len(t, moved, 2)
 
 	// A widened window is a different history too, even where the result would coincide.
 	widened := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true, MaxCommits: 1}}}
-	assert.Len(t, loadKnowledgeVCSCached(ctx, widened, root, cacheDir, false, slog.Default()), 1, "a narrowed window re-walks")
+	narrowed, _ := loadKnowledgeVCSCached(ctx, widened, root, cacheDir, false, slog.Default())
+	assert.Len(t, narrowed, 1, "a narrowed window re-walks")
 
 	// Garbage on disk degrades to a walk rather than to an empty history. Reading a
 	// corrupt file as "no commits" would be the same silent-zero failure in a new place.
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
-	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a corrupt cache is not an answer")
+	recovered, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, moved, recovered, "a corrupt cache is not an answer")
 
 	// --refresh distrusts the cache even on a matching key, and repairs it on the way out,
 	// so the distrust costs one walk rather than every walk.
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
-	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, true, slog.Default()))
+	refreshed, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, true, slog.Default())
+	assert.Equal(t, moved, refreshed)
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "not json", "a refresh rewrites the cache it bypassed")
@@ -582,13 +592,16 @@ func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 		Cache:     config.Cache{Write: config.CacheWrite{Enabled: &no}},
 		Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
 	}
-	require.NotEmpty(t, loadKnowledgeVCSCached(ctx, ro, root, cacheDir, false, slog.Default()))
+	entries, _ := loadKnowledgeVCSCached(ctx, ro, root, cacheDir, false, slog.Default())
+	require.NotEmpty(t, entries)
 	assert.NoFileExists(t, path, "a read-only cache is never written")
 
 	// Not a git repo: nothing to key on, so nothing is cached.
 	bare, bareCache := t.TempDir(), t.TempDir()
 	rw := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	assert.Nil(t, loadKnowledgeVCSCached(ctx, rw, bare, bareCache, false, slog.Default()))
+	entries, couplings := loadKnowledgeVCSCached(ctx, rw, bare, bareCache, false, slog.Default())
+	assert.Nil(t, entries)
+	assert.Nil(t, couplings)
 	assert.NoFileExists(t, filepath.Join(bareCache, "knowledge", "inputs", "vcs.json"))
 }
 
@@ -602,7 +615,7 @@ func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
+	entries, _ := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
 	require.NotEmpty(t, entries)
 
 	paths := map[string]bool{}
@@ -712,7 +725,7 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
-	want := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	want, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	require.NotEmpty(t, want)
 	require.False(t, want[0].LastModified.IsZero())
 
@@ -723,8 +736,8 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 		hex.EncodeToString(prev.Sum(nil)))
 	require.NoError(t, os.WriteFile(path, []byte(stale), 0o644))
 
-	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
-		"a file in the old shape must miss, not decode as zeros")
+	got, _ := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.Equal(t, want, got, "a file in the old shape must miss, not decode as zeros")
 }
 
 // unreachableRegistry is a host nothing listens on, so a fetch fails at connect. Port 1 is
@@ -736,7 +749,7 @@ const unreachableRegistry = "127.0.0.1:1"
 // it would have if the registry were never mentioned.
 func TestPublishedShardsTreatEveryFailureAsAMiss(t *testing.T) {
 	ref := oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}
-	p := PublishedShards(&oci.Client{HTTP: &http.Client{Timeout: time.Second}}, ref, "application/vnd.magus.test.v1+json", slog.New(slog.DiscardHandler))
+	p := workspacegraph.PublishedShards(&oci.Client{HTTP: &http.Client{Timeout: time.Second}}, ref, "application/vnd.magus.test.v1+json", slog.New(slog.DiscardHandler))
 
 	rc, err := p.GetShard(t.Context(), "fp-anything")
 	assert.Nil(t, rc)
@@ -751,7 +764,7 @@ func TestPublishedShardsTreatEveryFailureAsAMiss(t *testing.T) {
 // TestPublishedShardsRefuseToWrite pins the honest half of the read-only adapter: a
 // registry has no per-blob append, so reporting a successful write would be a lie.
 func TestPublishedShardsRefuseToWrite(t *testing.T) {
-	p := PublishedShards(&oci.Client{}, oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}, "", slog.New(slog.DiscardHandler))
+	p := workspacegraph.PublishedShards(&oci.Client{}, oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}, "", slog.New(slog.DiscardHandler))
 	err := p.PutShard(t.Context(), "fp-anything", bytes.NewReader([]byte("{}")))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "graph push")
@@ -915,9 +928,10 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		Knowledge:   config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
 	}
 	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
+	humanOnly := types.HumanOnlyIndex{Projects: []string{"pkg/a"}}
 	stamps := func() knowledge.Stamps {
 		src := knowledgeSources{
-			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
+			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects, humanOnly: humanOnly,
 			tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler),
 		}
 		return knowledgeStamps(ctx, src, store, knowledge.AllClasses)
@@ -952,6 +966,12 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 			[]knowledge.ShardClass{knowledge.ClassRuntime}},
 		{"a coverage profile", func() { write(filepath.Join(root, ".magus", "coverage.out"), "mode: set\n") },
 			[]knowledge.ShardClass{knowledge.ClassCoverage, knowledge.ClassSession}},
+		// The graph and projects carry no target policy: an evaluation that turned a target
+		// human_only without changing a byte of the tree (an environment variable its
+		// magusfile reads) moves the domain stamp through the record alone.
+		{"a human_only declaration", func() {
+			humanOnly.Targets = []types.HumanOnlyTarget{{TargetRef: types.TargetRef{Project: "pkg/a", Target: "bench"}, Reason: "spends"}}
+		}, []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
 		// No walk sees .git, but the tree scans drop what its rules ignore.
 		{"an ignore rule outside the tree", func() { write(filepath.Join(root, ".git", "info", "exclude"), "docs/\n") },
 			[]knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
@@ -1028,12 +1048,12 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
 	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
 	return root, ws, cfg
@@ -1053,9 +1073,9 @@ func TestSymbolReadIgnoresSessionStoreAppends(t *testing.T) {
 	require.NoError(t, os.WriteFile(events, []byte("{}\n"), 0o644))
 	read := func() {
 		t.Helper()
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 		require.NoError(t, err)
-		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 	}
 	manifest := filepath.Join(root, ".magus", "knowledge", "manifest.json")
 	read()
@@ -1083,14 +1103,14 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 	log := slog.New(slog.DiscardHandler)
 
 	for _, input := range []string{"Foo", "Foo kind=symbol", "kind=symbol", "kind=file", "absentname kind=symbol"} {
-		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 		require.NoError(t, err)
-		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 		require.True(t, g.HasSymbols(), "the fixture's index is ingested")
 		want, err := json.Marshal(g.Query(input, 0))
 		require.NoError(t, err)
 
-		out, ranked, err := QueryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
+		out, ranked, err := queryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
 		require.NoError(t, err)
 		got, err := json.Marshal(out)
 		require.NoError(t, err)
@@ -1105,15 +1125,15 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	ctx := context.Background()
 	w := testkit.NewWorkspace(t)
-	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	w.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
-	ws, err := Inspect(ctx, root)
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	build := func() string {
 		t.Helper()
-		g, err := BuildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
+		g, err := buildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
 		require.NoError(t, err)
 		b, err := json.Marshal(g.Output())
 		require.NoError(t, err)
@@ -1247,7 +1267,7 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 		opens++
 		return nil, errors.New("a fast read must not open the workspace")
 	})
-	stale, ok := RecordedStaleIndexes(ctx, lw, cfg)
+	stale, ok := recordedStaleIndexes(ctx, lw, cfg)
 	require.True(t, ok, "the recorded verdicts hold: sources and index files are as they were")
 	assert.Equal(t, []types.KnowledgeStaleIndex{{Project: "pkg/a", Language: "go", Op: "scip"}}, stale,
 		"the index, with the language that says which of a project's indexes it is")
@@ -1255,12 +1275,12 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 
 	// The judged index was rebuilt: the verdict is no longer evidence.
 	require.NoError(t, os.WriteFile(index, []byte("scip, rebuilt"), 0o644))
-	_, ok = RecordedStaleIndexes(ctx, lw, cfg)
+	_, ok = recordedStaleIndexes(ctx, lw, cfg)
 	assert.False(t, ok, "a changed index file sends the read back to the workspace")
 	require.NoError(t, os.Chtimes(index, settled, settled))
 	require.NoError(t, os.WriteFile(index, []byte("scip"), 0o644))
 	require.NoError(t, os.Chtimes(index, settled, settled))
-	_, ok = RecordedStaleIndexes(ctx, lw, cfg)
+	_, ok = recordedStaleIndexes(ctx, lw, cfg)
 	require.True(t, ok, "restored, the verdict holds again")
 
 	// The sources moved: the domain fast stamp no longer matches, so nothing recorded is
@@ -1273,7 +1293,7 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 		opens++
 		return nil, errors.New("a fast read must not open the workspace")
 	})
-	_, ok = RecordedStaleIndexes(ctx, next, cfg)
+	_, ok = recordedStaleIndexes(ctx, next, cfg)
 	assert.False(t, ok, "changed sources send the read back to the workspace")
 	assert.Equal(t, 0, opens, "RecordedStaleIndexes itself never opens; the caller decides")
 }
@@ -1287,8 +1307,8 @@ type fixtureOccurrence struct {
 	def    bool
 }
 
-// writeIndexOf writes a SCIP index of docs (by project-relative path) to path.
-func writeIndexOf(t *testing.T, root, path, language string, docs map[string][]fixtureOccurrence) {
+// writeSCIPIndex writes a SCIP index of docs (by project-relative path) to path.
+func writeSCIPIndex(t *testing.T, root, path, language string, docs map[string][]fixtureOccurrence) {
 	t.Helper()
 	idx := &scip.Index{}
 	for _, rel := range slices.Sorted(maps.Keys(docs)) {
@@ -1321,11 +1341,12 @@ func writeIndexOf(t *testing.T, root, path, language string, docs map[string][]f
 // leaves the registry's go alone; the Buzz one is buzz, whose op name is under test.
 func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	ctx := t.Context()
-	const goSpell = "zzz-buzz-beside-go-spell"
+	// Neither is the built-in go or buzz spell, which the linked engine registers.
+	const goSpell, buzzSpell = "zzz-buzz-beside-go-spell", "zzz-go-beside-buzz-spell"
 	for _, sp := range []*spellpkg.Spell{
 		spellpkg.NewSpell(goSpell, spellpkg.WithLanguage("go"), spellpkg.WithSources("**/*.go"),
 			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-go"}})),
-		spellpkg.NewSpell("buzz", spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
+		spellpkg.NewSpell(buzzSpell, spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
 			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Op: "scip-buzz", Command: spellpkg.Command{Bin: "scip-buzz"}}),
 			spellpkg.WithOps(map[string]spellpkg.Op{"scip-buzz": {Kind: spellpkg.OpKindSymbolIndex, Command: spellpkg.Command{Bin: "scip-buzz"}}})),
 	} {
@@ -1353,32 +1374,32 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		run       = "scip-buzz buzz . . `hack/ci/run.buzz`/run()."
 		goMain    = "scip-go gomod example.com/m v1 `example.com/m`/Main()."
 	)
-	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, spellpkg.DefaultSymbolIndexOp), "go", map[string][]fixtureOccurrence{
+	writeSCIPIndex(t, root, symbols.IndexPath(cacheDir, root, spellpkg.DefaultSymbolIndexOp), "go", map[string][]fixtureOccurrence{
 		"main.go": {{goMain, 2, true}},
 	})
-	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
+	writeSCIPIndex(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
 		"hack/ci/pull-requests.buzz": {{parsePull, 0, true}},
 		"hack/ci/run.buzz":           {{run, 2, true}, {parsePull, 3, false}},
 	})
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
-	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	reg.RegisterProject(".", WithSpell(goSpell), WithSpell(buzzSpell))
+	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ws.Close() })
 	log := slog.New(slog.DiscardHandler)
-	gaps, ok := SymbolGaps(ctx, ws, root, cfg, log)
+	gaps, ok := workspaceSymbolGaps(ctx, ws, root, cfg, log)
 	require.True(t, ok)
 	assert.Empty(t, gaps, "both indexes are declared and both are built")
 
-	g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+	g, err := buildKnowledgeGraph(ctx, ws, root, cfg, false, log)
 	require.NoError(t, err)
 	domainHasFunction := false
 	for _, n := range g.Output().Nodes {
 		domainHasFunction = domainHasFunction || n.ID == "function:hack/ci/pull-requests.buzz:parsePull"
 	}
 	require.True(t, domainHasFunction, "the committed domain graph keeps @buzz function nodes whatever the cache holds")
-	require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+	require.NoError(t, mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
 
 	parsePullID := ""
 	for _, n := range g.Output().Nodes {
@@ -1406,7 +1427,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	require.NotEmpty(t, goRefs.Defs)
 	assert.Equal(t, "main.go", goRefs.Defs[0].File)
 
-	read, ok := SymbolOccurrences(ctx, ws, root, cfg, log, strings.TrimPrefix(parsePullID, types.KindSymbol+":"))
+	read, ok := workspaceSymbolOccurrences(ctx, ws, root, cfg, log, strings.TrimPrefix(parsePullID, types.KindSymbol+":"))
 	require.True(t, ok)
 	require.Empty(t, read.Unreadable)
 	for _, refused := range []string{"fun", "final"} {
@@ -1427,4 +1448,111 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	assert.Equal(t, []types.EditRefusal{{Path: "hack/ci/pull-requests.buzz",
 		Reason: `already uses "raw" as an identifier, which the symbol index does not record, so a renamed site could bind to it`}},
 		edit.BuzzNameCaptures("raw", captured, noImporters, readFile))
+}
+
+func newCommit(id string, paths ...string) types.CommitChange {
+	c := types.CommitChange{ID: id}
+	for _, p := range paths {
+		c.Files = append(c.Files, types.FileChange{Path: p})
+	}
+	return c
+}
+
+// repeatCommits repeats the same file set as n commits with distinct ids.
+func repeatCommits(tag string, n int, paths ...string) []types.CommitChange {
+	out := make([]types.CommitChange, n)
+	for i := range out {
+		out[i] = newCommit(fmt.Sprintf("%s%d", tag, i), paths...)
+	}
+	return out
+}
+
+func TestAggregateFileCouplingThresholds(t *testing.T) {
+	var changes []types.CommitChange
+	// a and b share two commits: the minimum support, and full confidence.
+	changes = append(changes, repeatCommits("ab", 2, "a.go", "b.go")...)
+	// c and d share one commit: coincidence.
+	changes = append(changes, newCommit("cd", "c.go", "d.go"))
+	// e and f each change 10 times and share 2 of them: confidence 0.2, below the floor.
+	changes = append(changes, repeatCommits("ef", 2, "e.go", "f.go")...)
+	changes = append(changes, repeatCommits("e", 8, "e.go")...)
+	changes = append(changes, repeatCommits("f", 8, "f.go")...)
+	// g and h each change 10 times and share 3 of them: confidence 0.3, exactly the floor.
+	changes = append(changes, repeatCommits("gh", 3, "g.go", "h.go")...)
+	changes = append(changes, repeatCommits("g", 7, "g.go")...)
+	changes = append(changes, repeatCommits("h", 7, "h.go")...)
+
+	assert.Equal(t, []types.KnowledgeCoChange{
+		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
+		{A: "g.go", B: "h.go", Support: 3, Confidence: 0.3},
+	}, aggregateFileCoupling(changes, ""))
+}
+
+func TestAggregateFileCouplingConfidenceUsesTheRarerFile(t *testing.T) {
+	var changes []types.CommitChange
+	changes = append(changes, repeatCommits("ab", 2, "hot.go", "rare.go")...)
+	changes = append(changes, repeatCommits("hot", 18, "hot.go")...)
+
+	assert.Equal(t, []types.KnowledgeCoChange{
+		{A: "hot.go", B: "rare.go", Support: 2, Confidence: 1},
+	}, aggregateFileCoupling(changes, ""), "2 of rare.go's 2 commits, though only 2 of hot.go's 20")
+}
+
+func TestAggregateFileCouplingSkipsBulkCommits(t *testing.T) {
+	var bulk []string
+	for i := range coChangeMaxFiles + 1 {
+		bulk = append(bulk, fmt.Sprintf("gen/f%02d.go", i))
+	}
+	atLimit := bulk[:coChangeMaxFiles]
+
+	// Two bulk commits would give every pair in them support 2.
+	changes := []types.CommitChange{newCommit("b1", bulk...), newCommit("b2", bulk...)}
+	assert.Empty(t, aggregateFileCoupling(changes, ""), "a commit over the limit is mechanical")
+
+	changes = []types.CommitChange{newCommit("l1", atLimit...), newCommit("l2", atLimit...)}
+	assert.NotEmpty(t, aggregateFileCoupling(changes, ""), "a commit at the limit still counts")
+}
+
+func TestAggregateFileCouplingBulkCommitsDoNotDiluteConfidence(t *testing.T) {
+	var bulk []string
+	for i := range coChangeMaxFiles + 1 {
+		bulk = append(bulk, fmt.Sprintf("gen/f%02d.go", i))
+	}
+	bulk = append(bulk, "a.go")
+	changes := repeatCommits("ab", 2, "a.go", "b.go")
+	changes = append(changes, repeatCommits("bulk", 20, bulk...)...)
+
+	assert.Equal(t, []types.KnowledgeCoChange{
+		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
+	}, aggregateFileCoupling(changes, ""))
+}
+
+func TestAggregateFileCouplingStripsPrefix(t *testing.T) {
+	changes := repeatCommits("c", 2, "sub/proj/a.go", "sub/proj/b.go", "other/c.go")
+
+	assert.Equal(t, []types.KnowledgeCoChange{
+		{A: "a.go", B: "b.go", Support: 2, Confidence: 1},
+	}, aggregateFileCoupling(changes, "sub/proj/"), "a path outside the workspace subtree is dropped")
+}
+
+func TestAggregateFileCouplingIgnoresOrderAndDuplicates(t *testing.T) {
+	changes := []types.CommitChange{
+		newCommit("1", "b.go", "a.go", "b.go"),
+		newCommit("2", "c.go", "a.go"),
+		newCommit("3", "a.go", "c.go", "b.go"),
+		newCommit("4", "b.go", "c.go"),
+	}
+	want := aggregateFileCoupling(changes, "")
+	require.Equal(t, []types.KnowledgeCoChange{
+		{A: "a.go", B: "b.go", Support: 2, Confidence: 2.0 / 3},
+		{A: "a.go", B: "c.go", Support: 2, Confidence: 2.0 / 3},
+		{A: "b.go", B: "c.go", Support: 2, Confidence: 2.0 / 3},
+	}, want, "a path listed twice in one commit counts once; pairs have A < B and are sorted")
+
+	slices.Reverse(changes)
+	assert.Equal(t, want, aggregateFileCoupling(changes, ""))
+}
+
+func TestAggregateFileCouplingEmpty(t *testing.T) {
+	assert.Empty(t, aggregateFileCoupling(nil, ""))
 }

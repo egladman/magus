@@ -19,6 +19,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 // hintFloor is the uptake a breadcrumb has to clear to be worth its context. Measured
@@ -73,7 +74,7 @@ func sessionHints(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus session hints: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus session hints: takes no arguments (got %q)", rest[0])
 	}
 
 	root = resolveRootOrEmpty(root)

@@ -12,7 +12,8 @@ const InsightDefinition = "Insight shows where a codebase's attention and risk c
 	"ownership (author concentration and bus factor), and trend (rising vs cooling activity). " +
 	"A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record " +
 	"flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: " +
-	"code symbols nothing else in the workspace names."
+	"code symbols nothing else in the workspace names. A model-tier lens reads job history: what " +
+	"each model tier achieved on each kind of job."
 
 // InsightOptions configures an insight scan. One scan of recent history feeds every
 // lens; Dir scopes it to a subtree, Since bounds it by date, Files switches the
@@ -38,6 +39,11 @@ const (
 	VolatilityDefinition = "Volatility reads run-outcome history, not git: each (project, target) " +
 		"pair's recent pass/fail/volatile record scored by its Wilson lower bound. A pair at or above " +
 		"the configured threshold is flagged volatile - a flakiness signal, the prime stabilization targets."
+	ModelTiersDefinition = "Model tiers reads job history, not git: each (model tier, job kind) pair's " +
+		"recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how " +
+		"many checks, re-forks, rework rounds (a worker sent more work after it handed back) and " +
+		"widenings (write paths added to a taken job) its jobs took, and what they cost. It reports " +
+		"what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
 	UnreferencedDefinition = "Unreferenced lists code symbols the workspace defines and nothing " +
 		"in it names: no call from another symbol, and no file outside the one defining them. It reads " +
 		"the SCIP-backed knowledge graph, not git. This is a measurement, not a verdict - reflection, " +
@@ -53,6 +59,19 @@ const DuplicationDefinition = "Duplication ranks pairs of functions that call th
 	"this workspace DEFINES: logic duplicated entirely in standard-library or dependency calls leaves " +
 	"both functions with empty call sets and is invisible here. A measurement, not a verdict - two " +
 	"functions can share a shape on purpose, so read both before folding them."
+
+// ConformanceDefinition is the lens's contract, stated where a reader of the output meets it.
+const ConformanceDefinition = "Conformance measures how big and how coupled the workspace's code is, one row per " +
+	"metric and population: file lines, function lines, methods per type, top-level declarations per file, " +
+	"workspace imports per package, token count of bodies that share a shape, and exported symbols nothing " +
+	"outside their package uses. Each row gives the live percentiles, the value a check enforces (the " +
+	"committed ratchet value, else the configured anchor) and where that value came from, and the files, " +
+	"symbols or clone groups past it that no known entry accepts. Propose is the live percentile when it has " +
+	"fallen at least the configured step below the enforced value on a large enough sample, and never " +
+	"otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as " +
+	"the code grows. The lens proposes; a person commits the value to the ratchet record the row names, and " +
+	"nothing here edits it. Generated and excluded files belong to no population, and excluded counts the " +
+	"files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
 
 // DuplicationOptions are the thresholds a pair must clear to be reported. Every one is a
 // noise filter, and each has a failure mode in both directions: too low and the list is
@@ -319,7 +338,7 @@ type TrendEntry struct {
 func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 
 // InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,
-// without the knowledge-graph axis. It is what the console serves at GET /api/v1/insight:
+// the model-tier lens and the conformance lens, the one knowledge-graph axis it carries. It is what the console serves at GET /api/v1/insight:
 // the same per-lens outputs the CLI produces. The four git lenses come from one bounded
 // git-log scan (cached by the service); Volatility is a fresh runtime-history file read
 // folded into the same response, so the dashboard reads one endpoint for every lens.
@@ -337,6 +356,13 @@ type InsightView struct {
 	// declares the field non-optional so a magusfile reaches .volatility.targets
 	// without a nil guard.
 	Volatility *VolatilityReport `json:"volatility" yaml:"volatility"`
+	// ModelTiers is a pointer for the reason Volatility is: nil means no job outcome was
+	// ever recorded, an empty list means none of them ran at a tier.
+	ModelTiers *ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
+	// Conformance is a pointer because the console serves it from a server that may hold no
+	// workspace: nil means the lens was not read, and the lens itself answers unknown when
+	// it was read without a symbol index.
+	Conformance *ConformanceOutput `json:"conformance" yaml:"conformance"`
 }
 
 // InsightReport bundles every lens for the combined report (the committable
@@ -360,6 +386,23 @@ type InsightReport struct {
 	Unreferenced UnreferencedOutput `json:"unreferenced" yaml:"unreferenced"`
 	// Duplication is the other knowledge-graph axis, a value for the same reason.
 	Duplication DuplicationOutput `json:"duplication" yaml:"duplication"`
+	// Conformance is the third knowledge-graph axis, a value for the same reason: a workspace
+	// whose index is missing still renders the section, with an unknown answer.
+	Conformance ConformanceOutput `json:"conformance" yaml:"conformance"`
+	// ModelTiers is the job-history axis, a value like the rest: no recorded outcome is an
+	// empty list carrying the definition.
+	ModelTiers ModelTierOutput `json:"model_tiers" yaml:"model_tiers"`
+	// Grouping is the other job-history axis: every shape keeps its row, unknown below the
+	// minimum sample.
+	Grouping GroupingOutput `json:"grouping" yaml:"grouping"`
+}
+
+// ModelTierOutput is the model-tier lens: one row per (tier, job kind) the recorded job
+// outcomes cover, ranked against the current declaration. A tier the declaration no longer
+// names keeps its row at rank -1. It reports; nothing in it changes a tier.
+type ModelTierOutput struct {
+	Definition string            `json:"definition" yaml:"definition"`
+	Rows       []ModelTierRecord `json:"rows"       yaml:"rows"`
 }
 
 // InsightAnalyzer is the optional capability a workspace implements to answer the
@@ -372,9 +415,10 @@ type InsightReport struct {
 // forked a whole magus (a process spawn, a second workspace load, a JSON encode and
 // a Buzz-side parse) to reach methods the calling process already had.
 //
-// Volatility and Unreferenced take no options because they read their whole source
-// workspace-wide: the run-history file and the symbol index have no commit window to
-// narrow, which is the distinction the lens docs draw for a reader too.
+// Volatility, ModelTierLens, GroupingLens, Unreferenced and Conformance take no options
+// because they read their whole source workspace-wide: the history files and the symbol
+// index have no commit window to narrow, which is the distinction the lens docs draw for a
+// reader too.
 type InsightAnalyzer interface {
 	Hotspots(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
 	Affinity(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
@@ -383,4 +427,7 @@ type InsightAnalyzer interface {
 	Volatility(ctx context.Context) (VolatilityReport, error)
 	Unreferenced(ctx context.Context) (UnreferencedOutput, error)
 	Duplication(ctx context.Context) (DuplicationOutput, error)
+	Conformance(ctx context.Context) (ConformanceOutput, error)
+	ModelTierLens(ctx context.Context) (ModelTierOutput, error)
+	GroupingLens(ctx context.Context) (GroupingOutput, error)
 }

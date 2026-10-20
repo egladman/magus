@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/types"
 )
 
 // InstrumentRemoteBackend wraps b so every get/put records a span and the
@@ -21,11 +22,11 @@ import (
 // verification or replay is a hit here and a failure in the tally, and a store the
 // backend reports as already present is a put here and neither an upload nor a failure
 // in the tally.
-func InstrumentRemoteBackend(b cache.RemoteBackend, p Provider) cache.RemoteBackend {
+func InstrumentRemoteBackend(b types.CacheBackend, p Provider) types.CacheBackend {
 	if b == nil || p == nil || !p.Enabled() {
 		return b
 	}
-	base := &instrumentedBackend{RemoteBackend: b, p: p}
+	base := &instrumentedBackend{CacheBackend: b, p: p}
 	if pr, ok := b.(cache.RemotePruner); ok {
 		return &instrumentedPruner{instrumentedBackend: base, pruner: pr}
 	}
@@ -35,7 +36,7 @@ func InstrumentRemoteBackend(b cache.RemoteBackend, p Provider) cache.RemoteBack
 // instrumentedBackend forwards Active and HasArtifact unchanged (cheap probes not worth
 // metering) and instruments GetArtifact/PutArtifact.
 type instrumentedBackend struct {
-	cache.RemoteBackend
+	types.CacheBackend
 	p Provider
 }
 
@@ -45,20 +46,20 @@ type instrumentedBackend struct {
 func (b *instrumentedBackend) GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error) {
 	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.get", Attr{Key: "magus.project", Value: namespace})
 	start := time.Now()
-	rc, err := b.RemoteBackend.GetArtifact(ctx, namespace, key)
-	if errors.Is(err, cache.ErrRemoteMiss) {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
+	rc, err := b.CacheBackend.GetArtifact(ctx, namespace, key)
+	if errors.Is(err, types.ErrCacheMiss) {
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteMiss, Duration: time.Since(start).Seconds()})
 		end(nil)
 		return nil, err
 	}
 	if err != nil {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "error", Duration: time.Since(start).Seconds()})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteError, Duration: time.Since(start).Seconds()})
 		end(err)
 		return nil, err
 	}
 	counted := &countingReadCloser{CountingReader: cache.CountingReader{Reader: rc}, closer: rc}
 	counted.onClose = func(n int64) {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: RemoteHit, Duration: time.Since(start).Seconds(), Bytes: n})
 		end(nil)
 	}
 	return counted, nil
@@ -69,16 +70,16 @@ func (b *instrumentedBackend) PutArtifact(ctx context.Context, namespace, key st
 	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.put", Attr{Key: "magus.project", Value: namespace})
 	cr := &cache.CountingReader{Reader: r}
 	start := time.Now()
-	err := b.RemoteBackend.PutArtifact(ctx, namespace, key, cr)
-	outcome := "stored"
+	err := b.CacheBackend.PutArtifact(ctx, namespace, key, cr)
+	outcome := RemoteStored
 	switch {
-	case errors.Is(err, cache.ErrRemoteExists):
-		outcome = "exists"
+	case errors.Is(err, types.ErrCacheExists):
+		outcome = RemoteExists
 	case err != nil:
-		outcome = "error"
+		outcome = RemoteError
 	}
 	b.p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.N})
-	if outcome == "exists" {
+	if outcome == RemoteExists {
 		end(nil)
 	} else {
 		end(err)

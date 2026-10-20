@@ -7,7 +7,8 @@
 //
 // Claude Code reads extraKnownMarketplaces only after the person trusts the folder, and
 // enabling a plugin from a GitHub marketplace installs it for nobody: each person runs
-// `/plugin install magus --marketplace egladman/magus` once. See
+// `/plugin install magus --marketplace egladman/magus` once; `magus agent harness verify`
+// fails until they have, and `magus doctor` advises on the same gap. See
 // docs/guides/integrations/agents/claude-code.md.
 
 import "magus/spell";

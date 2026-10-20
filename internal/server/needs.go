@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/types"
 )
 

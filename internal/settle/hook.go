@@ -1,7 +1,6 @@
 package settle
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -77,24 +76,19 @@ func generatorProjects(files []types.FileEntry) []string {
 	return slices.Sorted(maps.Keys(set))
 }
 
-// Invocations groups the runs into `<target>:rw <projects...>` invocations,
-// deepest projects first: the generate target of every project in projects that defines
-// one, plus each owed record's own target. An ancestor's generators read what its nested
-// projects generate (the root's knowledge graph indexes docs/ pages), and docs is not
-// declared a dependency of the root, so one run across both could build the root first
-// and index stale pages.
+// Invocations groups the runs into one `<target>:rw <projects...>` invocation per
+// target, sorted by target: the generate target of every project in projects that
+// defines one, plus each owed record's own target. Every project of a target shares one
+// run, so the scheduler orders them by their declared dependencies and runs the rest in
+// parallel. A generator that reads another project's generated output declares that
+// project (depends_on or ctx.needs), or the run may build it first.
 func Invocations(projects []string, owed []vcs.OwedRegeneration, defines func(path, target string) bool) [][]string {
-	type group struct {
-		depth  int
-		target string
-	}
-	groups := map[group]map[string]bool{}
+	groups := map[string]map[string]bool{}
 	add := func(project, target string) {
-		g := group{projectDepth(project), target}
-		if groups[g] == nil {
-			groups[g] = map[string]bool{}
+		if groups[target] == nil {
+			groups[target] = map[string]bool{}
 		}
-		groups[g][project] = true
+		groups[target][project] = true
 	}
 	for _, p := range projects {
 		if defines(p, "generate") {
@@ -106,21 +100,11 @@ func Invocations(projects []string, owed []vcs.OwedRegeneration, defines func(pa
 			add(o.Project, o.Target)
 		}
 	}
-	order := slices.SortedFunc(maps.Keys(groups), func(a, b group) int {
-		return cmp.Or(cmp.Compare(b.depth, a.depth), cmp.Compare(a.target, b.target))
-	})
-	out := make([][]string, 0, len(order))
-	for _, g := range order {
-		out = append(out, append([]string{g.target + ":rw"}, slices.Sorted(maps.Keys(groups[g]))...))
+	out := make([][]string, 0, len(groups))
+	for _, target := range slices.Sorted(maps.Keys(groups)) {
+		out = append(out, append([]string{target + ":rw"}, slices.Sorted(maps.Keys(groups[target]))...))
 	}
 	return out
-}
-
-func projectDepth(path string) int {
-	if path == "." || path == "" {
-		return 0
-	}
-	return strings.Count(path, "/") + 1
 }
 
 // stageRegenerated stages every declared output the invocations rewrote and returns

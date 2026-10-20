@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/risk/golang"
@@ -66,7 +65,7 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 		return string(b), err
 	}
 	change, unclaimed := m.unboundedPaths(res)
-	classifier := m.ChangeClassifier(at, working)
+	classifier := m.changeClassifier(at, working)
 	classifier.Role = func(context.Context, []string) (map[string]string, error) {
 		roles := make(map[string]string, len(entries))
 		for _, e := range entries {
@@ -104,14 +103,24 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 // narrowed to its packages, so the target body's env and flags still apply, and never
 // through the cache, since the narrowed run is less than the target's key describes.
 // The first failure stops the gate.
+//
+// It is judged as Run is, once, as `magus affected ci`, the verb that sizes a gate.
 func (m *Magus) RunGate(ctx context.Context, rep types.RiskReport, opts ...RunOption) error {
+	ctx = applyRunOpts(opts).observed(ctx)
+	lines, err := affectedLine(types.TargetCI, "")
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, applyRunOpts(opts), lines); err != nil {
+		return err
+	}
 	for _, r := range sizedRuns(rep) {
-		runOpts := slices.Clone(opts)
+		o := applyRunOpts(opts)
 		if r.narrowing != nil {
 			n := *r.narrowing
-			runOpts = append(runOpts, func(o *run) { o.narrowing = &n })
+			o.narrowing = &n
 		}
-		if err := m.Run(ctx, r.targets, runOpts...); err != nil {
+		if err := m.runTargets(ctx, r.targets, o); err != nil {
 			return err
 		}
 	}

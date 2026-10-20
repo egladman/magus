@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"

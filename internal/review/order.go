@@ -1,7 +1,9 @@
 package review
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/changeset"
@@ -50,6 +52,9 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 					lines = append(lines, "        "+ThreadRefLine(t))
 				}
 			}
+			for _, sig := range stepSignatures(rev, s) {
+				lines = append(lines, "    signature: "+sig)
+			}
 		}
 	}
 	return append(lines, "", OrderCountLine(order.Count))
@@ -89,6 +94,60 @@ func refList(refs []types.DiffHunkRef) string {
 		names = append(names, r.Key())
 	}
 	return strings.Join(names, ", ")
+}
+
+// stepSignatures is one line per symbol changed in the step's hunks, sorted by id: the
+// declaration as the indexer rendered it, then "was" and the base declaration when the
+// signature changed. A symbol the indexer rendered no declaration for says so under its label,
+// so a missing line never reads as an unchanged one.
+func stepSignatures(rev types.Diff, step types.DiffStep) []string {
+	type changed struct {
+		path string
+		sym  types.DiffSymbol
+	}
+	var found []changed
+	seen := map[string]bool{}
+	for _, sh := range step.Hunks {
+		for _, f := range rev.Files {
+			if f.Path != sh.Ref.Path {
+				continue
+			}
+			for _, h := range f.Hunks {
+				if h.Index != sh.Ref.Index {
+					continue
+				}
+				for _, id := range h.Symbols {
+					key := f.Path + "\x00" + id
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+					for _, sym := range f.Symbols {
+						if sym.ID == id {
+							found = append(found, changed{f.Path, sym})
+						}
+					}
+				}
+			}
+		}
+	}
+	slices.SortStableFunc(found, func(a, b changed) int {
+		return cmp.Or(cmp.Compare(a.sym.ID, b.sym.ID), cmp.Compare(a.path, b.path))
+	})
+	lines := make([]string, 0, len(found))
+	for _, c := range found {
+		sig := strings.Join(strings.Fields(c.sym.Signature), " ")
+		if sig == "" {
+			lines = append(lines, cmp.Or(c.sym.Label, c.sym.Qualified, c.sym.ID)+" (no signature from the indexer)")
+			continue
+		}
+		base := strings.Join(strings.Fields(c.sym.BaseSignature), " ")
+		if base != "" && base != sig {
+			sig += " was " + base
+		}
+		lines = append(lines, sig)
+	}
+	return lines
 }
 
 // hunkRanges names each hunk's lines of the new file, keyed by DiffHunkRef.Key.

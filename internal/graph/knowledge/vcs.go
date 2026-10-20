@@ -31,7 +31,10 @@ const vcsShardName = "@vcs"
 // dominant maintainer legitimately having many is a fact to teach the agent, not a smell,
 // and any single query stays bounded by its neighborhood budget. Nodes and edges are sorted
 // for deterministic output.
-func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool, authorship bool) Shard {
+//
+// couplings become one symmetric `co_changes` edge per pair whose two files both have
+// nodes; they are file history, not authorship, so the authorship switch leaves them on.
+func assembleVCS(entries []types.KnowledgeVCS, couplings []types.KnowledgeCoChange, fileNodePaths map[string]bool, authorship bool) Shard {
 	s := Shard{Name: vcsShardName}
 	authorFiles := map[string][]string{}
 	for _, e := range entries {
@@ -61,6 +64,18 @@ func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool, au
 		}
 	}
 
+	for _, c := range couplings {
+		if !fileNodePaths[c.A] || !fileNodePaths[c.B] {
+			continue
+		}
+		e := extractedEdge(fileID(c.A), fileID(c.B), types.RelationCoChanges, "")
+		e.Attrs = map[string]string{
+			attrCoChangeSupport:    strconv.Itoa(c.Support),
+			attrCoChangeConfidence: strconv.FormatFloat(c.Confidence, 'f', 2, 64),
+		}
+		s.Edges = append(s.Edges, e)
+	}
+
 	slices.SortFunc(s.Nodes, func(a, b types.KnowledgeNode) int { return cmp.Compare(a.ID, b.ID) })
 	slices.SortFunc(s.Edges, func(a, b types.KnowledgeEdge) int {
 		if c := cmp.Compare(a.Source, b.Source); c != 0 {
@@ -78,6 +93,12 @@ const (
 	attrVCSLastModified = "vcs_last_modified"
 	attrVCSLastAuthor   = "vcs_last_author"
 	attrVCSCommits      = "vcs_commits"
+)
+
+// The `co_changes` edge attr keys.
+const (
+	attrCoChangeSupport    = "support"
+	attrCoChangeConfidence = "confidence"
 )
 
 // vcsAttrs renders a file's history metadata as node attrs. An empty commit (a file with

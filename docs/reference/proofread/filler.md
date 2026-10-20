@@ -1,13 +1,13 @@
 ---
 title: "filler"
-description: "A deny rule by default: it refuses throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
-tags: [proofread, rules, filler, advise]
+description: "A rule that is off by default: it reports throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\") once a decisions table turns it on."
+tags: [proofread, rules, filler, off]
 aliases: [reference/prose/filler]
 ---
 
 # filler
 
-A deny rule by default: it refuses throat-clearing ("Note that") and filler adverbs ("simply", "basically").
+A rule that is off by default: it reports throat-clearing ("Note that") and filler adverbs ("simply", "basically") once a decisions table turns it on.
 
 ## What it catches
 
@@ -32,12 +32,15 @@ The code is `PRF4001`. The decision depends on the kind of text judged:
 | `reference`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
-| `agent-instructions` | off     |
+| `agent-brief`        | off     |
+| `agent-compact`      | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
 | `cli-help`           | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
 | `review-reply`       | off     |
 | `agent-reply`        | off     |
 | `stylesheet`         | off     |
@@ -63,7 +66,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "filler", "code": "PRF4001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
+{"rule": "filler", "code": "PRF4001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
@@ -72,4 +75,4 @@ A finding names the rule, its code and the decision that applies, and links here
 
 - [All proofread rules](index.md) - every rule, grouped by what it checks
 - [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests
-- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries
+- [The findings contract](https://github.com/egladman/magus/blob/main/libs/proofread/README.md#findings) - the fields every finding carries

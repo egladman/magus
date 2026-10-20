@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/egladman/magus/internal/handler"
-	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/observability/gen/mocks"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -259,7 +259,7 @@ func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 func TestAttentionHandler_DisposeRecordsTheWait(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	rec := mocks.NewMockProvider(t)
+	rec := observabilitytest.NewMockProvider(t)
 	// raise files no severity, and an absent one must land on the declared "unset" rather
 	// than an empty attribute value or a series of its own.
 	rec.EXPECT().RecordAttentionDisposition(

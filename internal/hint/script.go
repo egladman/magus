@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // A workspace script is served as a breadcrumb when a situation it declares it serves
@@ -153,14 +154,14 @@ var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 
 // MatchScripts returns the breadcrumbs for every script the index under cacheDir lists
 // for situation, in index order and uncapped: the serving site merges them with its
-// own and ServableTo caps what survives.
+// own and FilterServable caps what survives.
 //
 // It errors only on a situation ValidateSituation rejects. A missing, unreadable or
 // foreign-format index serves nothing, as does an entry whose file is gone, whose
 // args name a placeholder facts does not bind, or whose id an earlier entry already
 // took. An entry is a read only when it declares read and its file still matches the
 // stamp; Reads is never set otherwise.
-func MatchScripts(cacheDir, situation string, facts map[string]string) ([]Next, error) {
+func MatchScripts(cacheDir, situation string, facts map[string]string) ([]types.NextStep, error) {
 	if err := ValidateSituation(situation); err != nil {
 		return nil, err
 	}
@@ -171,10 +172,10 @@ func MatchScripts(cacheDir, situation string, facts map[string]string) ([]Next, 
 	if !ok {
 		return nil, nil
 	}
-	var next []Next
+	var next []types.NextStep
 	for _, s := range x.Serves[situation] {
 		n, ok := scriptNext(x.Root, s, facts)
-		if !ok || slices.ContainsFunc(next, func(o Next) bool { return o.ID == n.ID }) {
+		if !ok || slices.ContainsFunc(next, func(o types.NextStep) bool { return o.ID == n.ID }) {
 			continue
 		}
 		next = append(next, n)
@@ -183,17 +184,17 @@ func MatchScripts(cacheDir, situation string, facts map[string]string) ([]Next, 
 }
 
 // scriptNext builds one entry's breadcrumb, and reports false when it cannot be served.
-func scriptNext(root string, s ScriptServe, facts map[string]string) (Next, bool) {
+func scriptNext(root string, s ScriptServe, facts map[string]string) (types.NextStep, bool) {
 	if !filepath.IsLocal(filepath.FromSlash(s.Path)) || filepath.Ext(s.Path) != ".buzz" {
-		return Next{}, false
+		return types.NextStep{}, false
 	}
 	info, err := os.Stat(filepath.Join(root, filepath.FromSlash(s.Path)))
 	if err != nil || !info.Mode().IsRegular() {
-		return Next{}, false
+		return types.NextStep{}, false
 	}
 	args, ok := bindScriptArgs(s.Args, facts)
 	if !ok {
-		return Next{}, false
+		return types.NextStep{}, false
 	}
 	operands := []string{s.Path}
 	if len(args) > 0 {
@@ -206,7 +207,7 @@ func scriptNext(root string, s ScriptServe, facts map[string]string) (Next, bool
 
 // bindScriptArgs fills every placeholder from facts, and reports false when any arg
 // names one facts leaves empty or one outside scriptPlaceholders: a served command
-// never carries a placeholder (see Next).
+// never carries a placeholder (see types.NextStep).
 func bindScriptArgs(args []string, facts map[string]string) ([]string, bool) {
 	bound := make([]string, len(args))
 	ok := true

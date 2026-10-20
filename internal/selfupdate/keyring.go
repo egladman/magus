@@ -7,16 +7,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 //go:embed release-keys.json
 var embeddedKeyring []byte
 
-// ReleaseKeys is the keyring every magus binary trusts: the Ed25519 public keys a
-// release signature may come from. Signing uses exactly one of them; verification
-// accepts any.
+// ReleaseKeys returns the keyring every magus binary trusts: the Ed25519 public keys
+// a release signature may come from. Signing uses exactly one of them; verification
+// accepts any. It parses the embedded file on first use and panics if that file is
+// malformed or has no single active key.
 //
 // A ring rather than a key, because the rotation CONTRIBUTING used to describe was a
 // chain (ship a compatibility release signed by the old key that embeds the new one),
@@ -24,7 +26,7 @@ var embeddedKeyring []byte
 // release jumped to a signature their binary had never been told to trust, and had no
 // in-band way back. A standby key ships long before it signs anything, so by the time
 // it is used the binaries in the field already trust it and there is no hop to skip.
-var ReleaseKeys Keyring
+var ReleaseKeys = sync.OnceValue(mustParseEmbeddedKeyring)
 
 // KeyState is what a key in the ring may do.
 type KeyState string
@@ -73,7 +75,7 @@ type keyringFile struct {
 	} `json:"keys"`
 }
 
-func init() {
+func mustParseEmbeddedKeyring() Keyring {
 	ring, err := parseKeyring(embeddedKeyring)
 	if err != nil {
 		panic("selfupdate: embedded release keyring: " + err.Error())
@@ -81,7 +83,7 @@ func init() {
 	if _, err := ring.Active(); err != nil {
 		panic("selfupdate: embedded release keyring: " + err.Error())
 	}
-	ReleaseKeys = ring
+	return ring
 }
 
 // parseKeyring reads the keyring file format, rejecting anything that would make a

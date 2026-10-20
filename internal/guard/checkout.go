@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // The sibling-checkout rule: a magus command aimed at a DIFFERENT CHECKOUT of the
@@ -50,8 +52,12 @@ func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
 // `--root`. Denying "other repository" here
 // would export a false positive about sibling checkouts to every consumer of
 // this guard to catch a mistake nobody makes.
-func denySiblingCheckout(callDir, command string, d Dialect) string {
-	targets := magusCdTargets(command, d)
+//
+// A checkout owned reports true for is the caller's own to work in: the checkout a fork made
+// for its job or for a job it forked. owned may be nil, and is asked only about a sibling.
+func denySiblingCheckout(callDir, command string, d Dialect, owned func(root string) bool) string {
+	// No call directory is the process's own, which a relative path already resolves from.
+	targets := magusCdTargets(command, d, cmp.Or(callDir, "."), userHome())
 	if len(targets) == 0 {
 		return ""
 	}
@@ -60,8 +66,8 @@ func denySiblingCheckout(callDir, command string, d Dialect) string {
 		return ""
 	}
 	for _, t := range targets {
-		root, common, ok := gitCheckout(resolveFrom(callDir, t))
-		if !ok || common != hereCommon || root == hereRoot {
+		root, common, ok := gitCheckout(t)
+		if !ok || common != hereCommon || root == hereRoot || (owned != nil && owned(root)) {
 			continue
 		}
 		return siblingCheckoutDenial(hereRoot, root)
@@ -74,12 +80,12 @@ func denySiblingCheckout(callDir, command string, d Dialect) string {
 //
 // Only a verb that selects no projects and names no relative path: both resolve against
 // the working directory, which the cd moved and the remedy does not.
-func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.Next) {
+func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.NextStep) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok || len(cmds) != 2 || !isCdInvocation(cmds[0]) || len(cmds[0].Args) != 1 || !isMagusInvocation(cmds[1]) {
 		return "", nil
 	}
-	targets := magusCdTargets(command, d)
+	targets := magusCdTargets(command, d, cmp.Or(callDir, "."), userHome())
 	if len(targets) != 1 {
 		return "", nil
 	}
@@ -87,7 +93,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.N
 	if !ok {
 		return "", nil
 	}
-	abs, err := filepath.Abs(resolveFrom(callDir, targets[0]))
+	abs, err := filepath.Abs(targets[0])
 	if err != nil {
 		return "", nil
 	}
@@ -115,7 +121,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.N
 		return "", nil
 	}
 	return "`" + root + "` is another checkout of this repository, and only its own binary judges it.",
-		[]hint.Next{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
+		[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
 			"that tree's binary, rooted there, keeps its verdicts and its cache about that tree.")}
 }
 

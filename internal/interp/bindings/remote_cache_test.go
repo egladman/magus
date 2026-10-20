@@ -132,7 +132,7 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	entry := []byte{0x1f, 0x8b, 0x00, 0xff, 'g', 'z', 0x00, 0x7f, 0x80}
 
 	rc, err := rs.GetArtifact(ctx, "pkg/a", "deadbeef")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "GetArtifact(miss)")
 	require.Nil(t, rc)
 
 	require.NoError(t, rs.PutArtifact(ctx, "pkg/a", "deadbeef", bytes.NewReader(entry)), "PutArtifact")
@@ -169,11 +169,11 @@ export fun get_artifact(target: any, cb: fun(any)) > bool !> any { throw "store 
 	b := &spellRemoteBackend{drv: drv}
 
 	err = b.PutArtifact(context.Background(), "pkg/a", "deadbeef", strings.NewReader("artifact"))
-	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	require.ErrorIs(t, err, types.ErrCacheExists)
 
 	_, err = b.GetArtifact(context.Background(), "pkg/a", "deadbeef")
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, cache.ErrRemoteMiss, "a throw read as a miss")
+	assert.NotErrorIs(t, err, types.ErrCacheMiss, "a throw read as a miss")
 	assert.ErrorContains(t, err, "store unreachable")
 
 	_, err = b.HasArtifact(context.Background(), "pkg/a", "deadbeef")
@@ -257,7 +257,7 @@ func ghaRoundTrip(t *testing.T, emu *remotetest.GHA) {
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "GetArtifact(miss)")
 	require.Nil(t, rc)
 	has, err := store.HasArtifact(ctx, "pkg/a", "abc123")
 	require.NoError(t, err)
@@ -329,7 +329,7 @@ func TestGHACacheBackendHeldReservationIsAlreadyPresent(t *testing.T) {
 	emu.RefuseCreate = true
 	store, ctx := ghaStore(t, emu)
 	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
-	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	require.ErrorIs(t, err, types.ErrCacheExists)
 	assert.Empty(t, emu.Committed(), "this job uploaded nothing")
 }
 
@@ -340,7 +340,7 @@ func TestGHACacheBackendExistingEntryIsAlreadyPresent(t *testing.T) {
 	store, ctx := ghaStore(t, emu)
 	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("first"))))
 	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("second")))
-	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	require.ErrorIs(t, err, types.ErrCacheExists)
 	assert.Equal(t, map[string][]byte{"magus-abc123": []byte("first")}, emu.Committed())
 }
 
@@ -353,12 +353,12 @@ func TestGHACacheBackendServiceFailureIsAnError(t *testing.T) {
 
 	_, err := store.GetArtifact(ctx, "pkg/a", "abc123")
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, cache.ErrRemoteMiss)
+	assert.NotErrorIs(t, err, types.ErrCacheMiss)
 	assert.ErrorContains(t, err, "GetCacheEntryDownloadURL: status 503")
 
 	err = store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, cache.ErrRemoteExists)
+	assert.NotErrorIs(t, err, types.ErrCacheExists)
 	assert.ErrorContains(t, err, "CreateCacheEntry: status 503")
 
 	_, err = store.HasArtifact(ctx, "pkg/a", "abc123")
@@ -375,7 +375,7 @@ func TestGHACacheBackendIsToldNotGuessed(t *testing.T) {
 	store := ghaBackend(t)
 	require.True(t, store.Active(context.Background()), "a wired provider is active wherever it runs")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "GetArtifact")
 	require.Nil(t, rc)
 }
 
@@ -889,7 +889,7 @@ func TestS3CacheBackendRoundTrip(t *testing.T) {
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff, 'g', 'z'}, 8) // non-UTF-8 proves byte-exact transfer
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "GetArtifact(miss)")
 	require.Nil(t, rc)
 	has, err := store.HasArtifact(ctx, "pkg/a", "abc123")
 	require.NoError(t, err)
@@ -914,6 +914,6 @@ func TestS3CacheBackendInactiveWithoutCreds(t *testing.T) {
 	store := s3Backend(t)
 	require.False(t, store.Active(context.Background()), "Active() = true without credentials, want false")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "GetArtifact")
 	require.Nil(t, rc)
 }

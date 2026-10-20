@@ -24,11 +24,13 @@ import (
 )
 
 // CacheDescription returns the cache header's facts, for [Sink.EmitCache]: which tiers
-// a run can reach ("local", or "<remote> + local") and whether it may write to them
-// ("read-only" or "read+write"). Empty on an Inspect workspace, which has no cache.
-func (m *Magus) CacheDescription() (tier, mode string) {
+// a run can reach ("local", or "<remote> + local"), whether it may write to them
+// ("read-only" or "read+write"), and the directory holding the local tier's entries,
+// shared by every checkout of the repository unless cache.dir moves it. Empty on an
+// Inspect workspace, which has no cache.
+func (m *Magus) CacheDescription() (tier, mode, dir string) {
 	if m.cache == nil {
-		return "", ""
+		return "", "", ""
 	}
 	return m.cache.Description()
 }
@@ -175,6 +177,8 @@ func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
 		if err != nil {
 			return nil, err
 		}
+		// The process environment, never the workspace's (WithEnv): the spell's processes
+		// inherit it, so it locates the caches they write.
 		located := sandbox.CacheDirs(*sb, os.Environ(), home)
 		d := declaredCaches{key: cache.NewSpellCacheKey(name, tools, locks)}
 		for _, c := range sb.Caches {
@@ -337,6 +341,7 @@ func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
 		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
+		Lease: d.Lease,
 	}
 }
 
@@ -482,7 +487,8 @@ func (m *Magus) OutputKeyInputs(ctx context.Context, ref string) ([]string, erro
 // live key against to explain why a run here would MISS. Wraps fs.ErrNotExist when
 // nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace; the
 // context's error when ctx is already done.
-func (m *Magus) LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error) {
+func (w internals) LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error) {
+	m := w.Magus
 	if m.cache == nil {
 		return cache.RecordedRun{}, types.ErrNoCache
 	}
@@ -529,7 +535,8 @@ func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) 
 //
 // Returns types.ErrNoCache on an Inspect workspace: "no versions" and "no store to
 // look in" are different answers.
-func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
+func (w internals) ListArtifacts(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
+	m := w.Magus
 	if m.cache == nil {
 		return nil, types.ErrNoCache
 	}
@@ -538,7 +545,8 @@ func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) (
 
 // GetArtifact writes a cached version to dst, cloning from the store when
 // the filesystem supports reflink.
-func (m *Magus) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+func (w internals) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+	m := w.Magus
 	if m.cache == nil {
 		return types.ErrNoCache
 	}

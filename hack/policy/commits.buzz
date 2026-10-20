@@ -5,7 +5,7 @@
 // anywhere else the subject is one plain lowercase line.
 //
 // The words are not judged here. recordedMessages hands each message to the pull-request-text
-// rule (pull_requests.buzz), which runs libs/conventions/proofread's commit-message kind over
+// rule (pull_requests.buzz), which runs libs/proofread's commit-message kind over
 // it: the imperative, the length cap, the trailing period, a blank line before a body, and the
 // selling words and tone rules every written text meets. This rule keeps what is this
 // repository's own: the lowercase one-line subject, the punctuation it forbids, ASCII, the

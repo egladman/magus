@@ -1,45 +1,31 @@
 # Consuming magus as a Go library
 
-This skill's reader has never run `magus` and does not know its subcommands. They
+{{if .Full}}This skill's reader has never run `magus` and does not know its subcommands. They
 found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
 call it from their own Go program. Ground every answer in the actual exported API,
-never in what the CLI does, which this reader cannot see:
+never in what the CLI does, which this reader cannot see:{{else}}The reader has never run `magus`; they found `github.com/egladman/magus` on
+pkg.go.dev and want to call it from Go. Ground every answer in the exported API,
+never the CLI:{{end}}
 
-- `magus.go`, `run.go`, `knowledge.go`, `describe.go`
+- `magus.go`, `register.go`, `run.go`, `judge.go`, `knowledge.go`, `describe.go`
 - `types/repository.go`, `types/describe.go`
 - `project/impact/impact.go`
 
-## Before anything else: can they even `go get` it?
+## Before anything else: can they `go get` it?
 
-No. `go get github.com/egladman/magus@v0.3.0` fails outright from a clean module{{if .Full}}.
-VERIFIED against the real published module at the latest tag, with no local replace:
+State what is verified, and claim no more. The root `go.mod` requires the nested
+`libs/gopherbuzz` and `libs/diagnostics` modules at `v0.2.0`, and both tags are on
+the origin (`git ls-remote --tags origin` lists `libs/gopherbuzz/v0.2.0` and
+`libs/diagnostics/v0.2.0`){{if .Full}}. Its `replace` directives point at the working
+tree for in-repo builds only; a replace is never transitive, so a consumer resolves the
+tagged versions the requires name. An older root tag may still require them at `v0.0.0`
+and fail as `unknown revision libs/gopherbuzz/v0.0.0`{{end}}.
 
-- `go.mod` requires `github.com/egladman/magus/libs/gopherbuzz` and
-  `.../libs/diagnostics` (nested modules with their own `go.mod`) at `v0.0.0`.
-- Both nested modules carry `v0.1.0` tags (`libs/gopherbuzz/v0.1.0`,
-  `libs/diagnostics/v0.1.0`), but the root still requires them at `v0.0.0`.
-- The root `go.mod` resolves them through LOCAL replace directives
-  (`replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz`).
-  Replace directives are not transitive, so a downstream consumer hits `unknown
-  revision libs/gopherbuzz/v0.0.0`.{{else}}. The root `go.mod` requires the nested
-`libs/gopherbuzz` and `libs/diagnostics` modules at `v0.0.0` through local replace
-directives. Both modules carry `v0.1.0` tags the root does not require, and replaces are
-not transitive.{{end}}
-
-Until the root requires the tagged versions, the only working install is a local
-copy. Clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it).
-Then add matching replace directives to the consumer's `go.mod`:
-
-```go
-require github.com/egladman/magus v0.3.0
-
-replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
-```
-
-Tell the reader this plainly, first. A worked example that compiles for you but fails
-for them with no local checkout is worse than admitting the gap{{if .Full}}. Yours
-compiles inside the module, or through a `replace` on the root{{end}}.
+Say `go get` succeeds only for a version you ran it against, and say how: a scratch
+module, `go get github.com/egladman/magus@<version>`, then `go build ./...`{{if .Full}}. A worked
+example that compiles for you inside the module but fails for them is worse than
+admitting you did not check. `go install .../cmd/magus@<version>` refuses the
+root module at any version, since its `go.mod` carries replace directives{{end}}.
 
 ## Entry points
 
@@ -48,17 +34,31 @@ compiles inside the module, or through a `replace` on the root{{end}}.
 | `magus.Open(ctx, root, opts...)` | `*magus.Magus` | builds one | the caller will `Run` targets or read cached results |
 | `magus.Inspect(ctx, root, opts...)` | `types.WorkspaceRepository` | none | pure introspection: list/describe/classify, never execute |
 
-Both discover the root's projects and evaluate magusfiles the same way. `Open` calls
-the same `load()` as `Inspect`, then also opens the on-disk cache.{{if .Full}} The only
+{{if .Full}}Both discover the root's projects and evaluate magusfiles the same way. `Open` calls
+the same `load()` as `Inspect`, then also opens the on-disk cache. The only
 difference is whether a cache is built, not what is discovered. `Inspect` returning the narrow
 `types.WorkspaceRepository` interface rather than the concrete `*Magus` is
 itself a hint: an introspection-only caller should code against the
 interface, and a caller who later needs `Run` should switch to `Open` and get
-the concrete type, not type-assert their way there.{{else}} A caller who later needs
-`Run` switches to `Open`; it never type-asserts its way there.{{end}}
+the concrete type, not type-assert their way there.{{else}}A caller who later needs
+`Run` switches to `Open`, never type-asserts.{{end}}
 
-`magus.FindRoot(dir)` walks up from `dir` (or cwd) to the workspace root, the same
-walk the CLI does. Call it before either constructor.
+Both require `magus.WithSpawnRule(magus.TierCeiling)` (it has no default), and
+a workspace with a magusfile needs `import _ "github.com/egladman/magus/buzzengine"`.
+`magus.FindRoot(dir)` walks up from `dir` to the workspace root, the same walk the CLI
+does; an empty `dir` is an error, not the working directory.
+
+| Call | What it answers |
+|---|---|
+| `(*Magus).JudgeCommand(ctx, session, dir, cmd)`, `JudgeWrite(..., path)` | the guard's `types.GuardJudgment`: decision, `Rule`, `Reason`, `Next`; a deny is an answer, the error is a judgment that could not be made |
+| `(*Magus).Run(ctx, targets, magus.WithSession(id))` | judges each target first; a deny is a `*types.GuardDeniedError` and nothing runs |
+| `WithEnv`, `WithStderr`, `WithCommandLine` | the process state a workspace reads; without each it reads no environment, discards notices, records an empty command line |
+| `WithVCSDriver`, `WithCacheBackend` (Open), `WithObserver` (Run) | the three swappable parts, one option each |
+| `std.MagusPutJob`, `MagusQuery`, `MagusRefs`, `MagusTrailRead`, ... | the Buzz host modules' Go doors, with typed options (`types.JobPut`, `types.KnowledgeQueryOptions`, ...); `std` is in the Go API lock |
+
+The lease a call acts under rides `ctx` (`types.WithJobLease`). The SDK never retries,
+re-grades or routes around a refusal.{{if .Full}} It has no agent loop: it answers what a loop asks
+and never decides what runs next.{{end}}
 
 ## The interface hierarchy: depend on the narrowest role
 
@@ -71,7 +71,7 @@ both satisfy all of it. Take the narrowest role a function uses{{if .Full}}.
 | Role | Methods | Answers |
 |---|---|---|
 | `WorkspaceReader` | `Root`, `All`, `Get`, `Graph`, `VCSOptions`, `Where` | what projects exist, and the project dependency graph |
-| `TargetExpander` | `ExpandPath`, `ExpandCwd`, `ExpandAffected` | which concrete `path:target` pairs a target pattern names |
+| `TargetExpander` | `ExpandPath`, `ExpandAffected` | which concrete `path:target` pairs a target pattern names |
 | `AffectedComputer` | `Affected`, `AffectedFromPaths` | which projects a VCS changeset touches |
 | `Inspector` | `List*`, `Evaluate*`, `ClassifyFiles`, `TargetGraph`, `Workspace` | see the axis below |
 
@@ -109,7 +109,7 @@ DIFFERENT representations:
   workspace-rooted globs, joined against the project path with magusfile globs
   folded in.
 
-Reading one where the other was meant silently mismatches every glob it feeds. The
+{{if .Full}}Reading one where the other was meant silently mismatches every glob it feeds. {{end}}The
 field comment on `ProjectEntry.Sources` in `types/describe.go` is the one place this
 is documented. Read it before writing code that consumes both.
 
@@ -118,9 +118,9 @@ is documented. Read it before writing code that consumes both.
 Every `Inspector` method takes `ctx` first and returns `error` last, the read-only
 `List*` calls included. A cancelled walk returns an error, never a truncated slice.
 
-- `describeCancelled` in `describe.go` names the walk and how far it got
+{{if .Full}}- `describeCancelled` in `describe.go` names the walk and how far it got
   (`"describe projects: cancelled after 2 of 8: context canceled"`).
-- It wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
+{{end}}- The error wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
   `errors.Is(err, context.DeadlineExceeded)` both hold.{{if .Full}}
 - VERIFIED: cancelling before `ListProjects` on a one-project workspace produces
   exactly that message, and `errors.Is` returns true.{{end}}
@@ -167,50 +167,33 @@ before you add a type{{if .Full}}; guess at the pattern instead and you misname 
   (`ProjectsOutput`, `TargetGraphOutput`).
 - `Report` means rebuilt at the render edge from a plain slice the method returned
   (`FileReport`, `CharmReport`).
-- `ListProjects`/`EvaluateProjects` are the deliberate exceptions. They still return
-  their `*Output` type directly, because they carry a real `Workspace` field a
-  `{definition, count, items}` envelope cannot derive.
+- `ListProjects`/`EvaluateProjects` are the deliberate exceptions: they return their
+  `*Output` type directly{{if .Full}}, because they carry a real `Workspace` field a
+  `{definition, count, items}` envelope cannot derive{{end}}.
 
-**Buzz magusfile evaluation is not reachable from outside this module.**{{if .Full}} VERIFIED
-end to end with a separate module importing `github.com/egladman/magus` (through
-`replace`, as in the install workaround). Its workspace's only project declaration
-was a `magusfile.buzz` with an `export fun build` target:{{end}}
+**Evaluating a magusfile needs the Buzz engine linked.** A program that loads
+magusfiles blank-imports `github.com/egladman/magus/buzzengine`, as `cmd/magus` does.
+Without it, `Open` and `Inspect` fail with `*types.EngineNotLinkedError` (MGS1104) once
+any project has a magusfile, and never return a workspace missing its targets. A
+workspace with no magusfile opens without the engine.{{if .Full}}
 
-- `ListTargets` returns ONLY the hardcoded `ci` anchor, and `ListProjects`
-  reports `resolvedSpells: 0`. A magusfile target never appears as runnable, and no
-  spell is attached.
-- `magus.go`'s `load` gates magusfile evaluation on `interp.Available()`. That is true
-  only when two `internal/` packages are blank-imported, which no other module can
-  do{{if .Full}}. They are `internal/interp/engine/buzz` and `internal/interp/bindings`;
-  only `cmd/magus` links them (`cmd/magus/packs_interp.go`){{end}}.
-- `TargetGraph` still works for such a magusfile. It reads the source statically
-  through the exported `libs/gopherbuzz` parser, not the internal engine. An
-  external caller can SEE the target graph but cannot make magus DISPATCH it.
-- `Run` against such a target does not error. It silently does nothing{{if .Full}}:
-  `forEachSpell` in `magus.go` returns `nil` at once for a project with zero resolved
-  spells{{end}}.
-- Nothing exported queries `interp.Available()`, so a caller cannot detect this gap
-  at runtime. It is known only from having read this.
+`TargetGraph` reads magusfile source statically through the exported `libs/gopherbuzz`
+parser, with or without the engine.{{end}}
 
-The one escape hatch: build the workspace programmatically, not through a magusfile.
-Use the exported `Option`/`ProjectOption`/`BindingOption` wire API (`register.go`:
-`WithSpell`, `WithTarget`, `WithClaim`, ...).
-
-- Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
-  `internal/spell`. That IS reachable this way{{if .Full}}: the exported `register.go` functions
-  live inside this module and call into it on the caller's behalf. The caller never
-  imports `internal/spell`{{end}}.
-- This path gives real spell execution without a magusfile. It does not give
-  arbitrary Buzz-authored targets.
+The other path builds the workspace in Go: the exported `Option`/`ProjectOption`/
+`BindingOption` wire API (`register.go`: `WithSpell`, `WithTarget`, `WithDependsOn`,
+...). A target named with `WithTarget` counts as declared, as an `export fun` does.
+Built-in spells (`go`, `ts`, `rust`, ...) are reachable this way{{if .Full}}: the
+exported `register.go` functions call `internal/spell` on the caller's behalf{{end}}.
 
 ## Testing code that uses the SDK
 
 Test at the narrowest seam the code allows. Move to a real workspace only for what a
 fake cannot tell you.
 
-- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
-  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
-  method the test calls.
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it by
+  embedding the interface in a struct and overriding the one method the test calls. A
+  test that asserts on the call generates its own mock: magus's `types` mocks are internal.
 - Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
   `magus.Inspect`. Inspect opens no cache.
 - Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The
@@ -234,7 +217,8 @@ Asked "does the SDK actually give me X", verify; never infer from naming:
 2. **Is the capability reachable without the CLI?** Trace the call from the exported
    entry point (`Open`/`Inspect`/a method on `*Magus`) down through its imports. The
    capability stops where the trace crosses into an `internal/` package nothing
-   exported re-wraps{{if .Full}}, like the Buzz-evaluation gap above{{end}}.
+   exported re-wraps{{if .Full}}. `go-api-generate` fails on an exported signature that
+   names an `internal/` type, so the locked packages cannot leak one{{end}}.
 3. **Is a boundary deliberate or accidental?** Read the package doc comment first
    (`doc.go` or the top of the main file) before proposing a merge.
    - Deliberate: `spells/doc.go` documents that `spells` and `internal/spell` were
@@ -250,4 +234,4 @@ Asked "does the SDK actually give me X", verify; never infer from naming:
 
 Do not paper over a genuine gap with a workaround the reader did not ask for. If a
 capability is not reachable, say so plainly and name the exact package boundary
-that stops it{{if .Full}}. The three verified gaps above show how specific that must be{{end}}.
+that stops it{{if .Full}}, as specific as the MGS1104 refusal above{{end}}.

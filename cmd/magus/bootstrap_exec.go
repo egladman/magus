@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/workspace"
 )
 
 // bootstrapExecSentinelVar marks a process that already replaced itself with a
 // workspace-local ./magus via maybeBootstrapExec, so a second hop can never chain.
 //
-// Distinct from run.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/run/exec.go): those
+// Distinct from spawn.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/spawn/exec.go): those
 // describe a magus process spawning ANOTHER magus as a child invocation, i.e.
 // recursion depth. This is not that: the exec below replaces THIS process's image
 // with the same argv, stdio and exit code, so it is one invocation continuing under a
@@ -25,7 +25,7 @@ import (
 const bootstrapExecSentinelVar = "MAGUS_BOOTSTRAP_EXEC_DONE"
 
 // bootstrapExecOptOutVar disables maybeBootstrapExec entirely. Documented in
-// internal/config/config.go's EnvVarDocs alongside the rest of the MAGUS_* variables.
+// internal/config/config.go's envOnly alongside the rest of the MAGUS_* variables.
 const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
 
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and
@@ -95,7 +95,7 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 	return resolveBootstrapExecTarget(start, self)
 }
 
-// resolveBootstrapExecTarget finds the workspace root above start with magus.FindRoot,
+// resolveBootstrapExecTarget finds the workspace root above start with workspace.FindRoot,
 // the definition every other entry point uses, and resolves the ./magus beside it.
 //
 // The marker is magus.yaml, not the nearest magusfile.buzz: console/, docs/, libs/* and
@@ -110,7 +110,7 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 // Returns ok=false when no root exists, it has no usable ./magus, or that binary
 // resolves to self.
 func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
-	dir, err := magus.FindRoot(start)
+	dir, err := workspace.FindRoot(start)
 	if err != nil {
 		return "", false
 	}

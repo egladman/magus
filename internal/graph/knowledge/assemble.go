@@ -67,6 +67,11 @@ type Inputs struct {
 	// manifest.Reads), recorded with the shards so the next read's fast domain stamp folds
 	// the same inputs. nil leaves the manifest's record as it was.
 	Reads *readlog.Reads
+	// HumanOnly is what the evaluated workspace declares human_only, recorded on the
+	// manifest (see manifest.HumanOnly) the way Indexes is and assembled into no shard. An
+	// index that lists no project leaves the manifest's record as it was: it is what a
+	// gather with no evaluated workspace to resolve one from leaves it as.
+	HumanOnly types.HumanOnlyIndex
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared
@@ -77,6 +82,9 @@ type Inputs struct {
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs: deterministic per commit, so remote-shareable.
 	VCS []types.KnowledgeVCS
+	// CoChanges are file pairs that changed in the same commits, from the same scan as VCS.
+	// They become `co_changes` edges in the @vcs shard.
+	CoChanges []types.KnowledgeCoChange
 	// DeclaredSpells is the set of spell names some project declares in its magusfile
 	// `spells:` list (the union over projects). It lets the orphan lens tell a genuinely
 	// dead spell (declared here, nothing runs it) from a compiled-in builtin that is
@@ -141,6 +149,12 @@ type Shard struct {
 	// Err is a declaration the assembler refuses to index, such as an unknown marker
 	// family. Build fails on it; like Dropped it is never fingerprinted.
 	Err error
+
+	// Text maps a node id to the prose the lexical index reads for it, such as a doc
+	// section's body. It never rides on a node, so explain, export and loading the graph
+	// never pay for it; the store keeps it in the shard's lexical sidecar. Like Dropped it
+	// is never fingerprinted, so the sidecar carries its own digest.
+	Text map[string]string `json:"-"`
 
 	// canonical marks Nodes and Edges as already deduplicated and sorted the way a merge
 	// into a fresh Graph leaves them, so fingerprinting and writing can skip that merge.
@@ -334,7 +348,7 @@ func assembleDomain(in Inputs) []Shard {
 		}
 		// Git history folds onto the file nodes just built; a path with no file node
 		// (VCS metadata for a file the graph does not model) is dropped, no phantom.
-		if v := assembleVCS(in.VCS, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 {
+		if v := assembleVCS(in.VCS, in.CoChanges, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 || len(v.Edges) > 0 {
 			shards = append(shards, v)
 		}
 		// Notes last among the path-bearing shards: their file nodes are already present,

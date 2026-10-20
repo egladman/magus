@@ -34,7 +34,7 @@ func TestComposeGraph(t *testing.T) {
 	reg.RegisterProject("api", WithDependsOn(".."))
 	reg.RegisterProject("docs", WithDependsOn("api"))
 
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	graph, err := ws.Graph()
 	require.NoError(t, err)

@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -116,11 +115,11 @@ func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	testkit.Isolate(t)
 	repo := testkit.NewRepo(t, nil)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: repo.Root()})
-	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, types.Job, string, []string, string, []string) error { return refusal })
 
-	_, err = VcsCmd(proc.WithLease(WithCwd(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
+	_, err = VcsCmd(types.WithJobLease(WithCwd(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, nil)
 	assert.ErrorIs(t, err, refusal)
 }

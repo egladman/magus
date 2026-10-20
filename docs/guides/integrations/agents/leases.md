@@ -155,17 +155,29 @@ spellings.
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `goals`),
 `checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
-`deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `goals`, `state`,
-and `read_only`. A record naming no `state` is stored `declared`. The
-store adds `schema_version`, the actor that recorded the row, `created`,
-`updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), `entries` (see
+`deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
+`state`, `read_only`, and `max_attempts` (see
+[attempts and generations](#attempts-and-generations)). A record naming no
+`state` is stored `declared`. The store adds `schema_version`, the actor that
+recorded the row, `created`, `updated`, `releases`, `unattributed` (paths this
+job owns that somebody outside it wrote, noticed by the guard), `entries` (see
 [entering a job's path](#entering-a-jobs-path)), `write_proof`, `checkout_root` (where
-`magus job exec` took the job), and `end_reason` (why magus ended it, see
-[jobs magus ends itself](#jobs-magus-ends-itself)), all output-only: a
+`magus job exec` took the job), `end_reason` (why magus ended it, see
+[jobs magus ends itself](#jobs-magus-ends-itself)), and `generation`,
+`attempts`, `prior` and `rejection`, all output-only: a
 timestamp a client sent would be a fact about that client's clock. `updated`
 moves only on the job's own writes; the guard recording an unattributed write,
 and an entry, leave it alone.
+
+`breaks` lists the flags, JSON keys, exported symbols or stored formats the
+root approved this job breaking, one entry each; a blank entry is refused. An
+empty list means the job breaks nothing on its own authority, so a break outside
+it is a finding to report, not a decision for the holder. Like every other
+field of the record, an `apply` that omits it clears it. A text `fork` also
+lists the unreferenced symbols its write paths cover (`deletion_candidates` in
+`-o json`): candidates to finish or delete, never goals. The graph cannot see
+reflection, interface dispatch or a consumer outside the workspace, so confirm
+each before deleting it. Methods, fields and tests are left out.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -231,12 +243,16 @@ that turns it into a verdict. Every uncertainty there fails open with at most an
 advisory (no store, an unreadable one, a writer that took no lease) because this
 is a seatbelt for a harness that opted in and not a sandbox.
 
-**One set of jobs per repository.** The rows live in one JSON file in the
-per-REPOSITORY state directory (`<XDG state>/magus/jobs/<repo>/jobs.json`),
+**One set of jobs per repository.** The rows live in one JSON Lines file in the
+per-REPOSITORY state directory (`<XDG state>/magus/jobs/<repo>/jobs.jsonl`),
 keyed the way session history is keyed: every worktree and every clone of one repository reads one
 set. That is what lets an orchestrator declare a plan in its own checkout and a
-holder take its lease from another. A store an older magus left behind is
-carried forward the first time the new one opens it.
+holder take its lease from another. Each line is one version of one row, and a
+row's last line is the row, so `grep '"id":"wave/a"'` shows a job's history and
+`tail -1` of that its current state. A write appends the lines that changed, and
+once the file would hold more than twice as many lines as rows, plus 64, the
+write rewrites it to one line per row. A `jobs.json` an older magus left in that directory is
+refused with an error naming the `mv` that sets it aside.
 
 **A read-only job carries an abbreviated row**: `read_only` set, and empty write
 and deny paths that then read as deliberate rather than forgotten. It passes
@@ -344,17 +360,58 @@ Two habits follow. Remove a worker's worktree only once its job is done, and
 advance a root row you are still forking under, since an untaken root with no
 live children is as dead as any other untaken job.
 
+### Attempts and generations
+
+A job's `generation` counts changes to what it declares, the way a Kubernetes
+object's `metadata.generation` does: it is `1` when the job is forked and one
+more each time a `fork` or `apply` changes a declared field. A move of `state`,
+a registration, a deadline and anything else the store writes leave it alone.
+Every result, run and grade records the generation it was taken at as
+`observed_generation`, so evidence filed before the spec changed reads as
+prior, never as current. `magus job wait` never passes on it: it says which
+generation the evidence came from and names the check to run again, and
+`magus describe job` labels it `prior evidence`.
+
+`magus job fork <id>` on a job that ended starts its next attempt, and that is
+the only retry there is: keep the id, since a new one loses the history. The
+attempt that ended is folded into `prior`, newest last, three at most: how it
+ended and at which tier, its rework rounds and widenings, the goals and
+violations of its last rejected wait (`rejection`), its unresolved risks, the
+guard's denials of its holder, and the refs of its failed runs. `attempts`
+numbers the live one, and its result, runs and counters start over, so the next
+ending counts its own attempt alone. The next holder reads all of it in
+`magus describe job`; no transcript is kept.
+
+Nothing retries on its own. magus classifies each ended attempt and stops
+there: an attempt the guard denied a path outside the job's boundary needs a
+widening first, and a goal unmet in two attempts running needs a person. Either
+reads `not retryable until <change>: <reason>`. Make the change (`magus job
+apply` to widen, a config edit, a person's call) or do the job locally; never
+fork it again unchanged.
+
+`max_attempts` caps how many times the job may be forked, its first fork
+included, as a Kubernetes Job's `backoffLimit` does. `0` is no cap. It is
+checked only when an ended job is forked again: a fork past it is refused,
+naming the attempts used, and a record raising `max_attempts` in the same fork
+passes.
+
 ## Give the holder its terms
 
 The context a delegated agent receives should come from the row, not from the
 orchestrating model's recollection of it. `magus describe job <job>` renders
-that context and nothing else: the goal and acceptance criteria verbatim, the
+that context and nothing else: the interface first (each symbol goal's name,
+expectation, frozen signature and description), then the goal and acceptance
+criteria verbatim, what the job may break, the release stage (the workspace's
+newest root tag, and below 1.0 that a major floor ships as a minor release;
+nothing when no tag is visible), the deletion candidates, the
 write, deny and read paths, the projects those paths reach, the paths a sibling
 job is holding and who holds them, the affinity the graph knows about, the
 single check that job is allowed to run, and the jobs it depends on. A section
 with nothing in it is dropped, which is the mechanism rather than a nicety: `ci`
 cannot leak into a holder's terms because nothing renders it. Two renders of one
-row are byte-identical, which hand-typed prompts are not.
+row are byte-identical, which hand-typed prompts are not. `magus diff` prints the
+same stage under its API floor, so a major floor reads as the minor release it
+ships as before 1.0.
 
 It REFUSES a job whose check is the gate, or a target that chains to one, and
 says so rather than printing terms nobody may act on.
@@ -551,7 +608,9 @@ Both tiers resolve the acting lease the same way, in this order: an explicit
 spawn attribution or its `magus job exec`), the checkout's record for a caller
 that reports neither id, then the `BAGGAGE` a worker inherited. A process that is
 not a hook, the sandbox's included, knows no caller id and reads only the
-checkout's record and its claim. Every tier but the last is a record; `BAGGAGE`
+checkout's record and its claim. A run [the daemon](../server.md) adopts claims
+the lease its client forwarded, and none when the client sent none: the daemon's
+own `BAGGAGE` names nobody it serves. Every tier but the last is a record; `BAGGAGE`
 is the worker's claim about itself, so it answers only when no record does, and
 a record that disagrees with it wins. The verdict names the tier that answered as
 `lease_from`: `flag`, `agent` (the caller's record, session-only callers
@@ -643,11 +702,11 @@ A goal names a **kind** (what it examines) and an **expect** (what must be true
 of it). Two fields rather than a kind per pair, so `absent` means the same thing
 of a file and of a symbol:
 
-| kind     | expect                                         | proven by                                                                   |
-| -------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `check`  | `passed`                                       | a recorded, PASSING run of that target, captured after the job was declared |
-| `paths`  | `changed`, `present`, `absent`                 | the diff since the checkpoint, or the tree as it is now                     |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced` | the knowledge graph, at the granularity below a file                        |
+| kind     | expect                                                      | proven by                                                                   |
+| -------- | ----------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `check`  | `passed`                                                    | a recorded, PASSING run of that target, captured after the job was declared |
+| `paths`  | `changed`, `present`, `absent`                              | the diff since the checkpoint, or the tree as it is now                     |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`, `signature` | the knowledge graph, at the granularity below a file                        |
 
 Each kind has a natural expectation, so the common goal declares only its kind
 and subject: a check is asked whether it passed, files and symbols whether this
@@ -670,6 +729,39 @@ the callers.
 
 A symbol goal takes the name the graph gives the symbol, and only that symbol
 answers for it: a deleted `Legacy` is absent even while `LegacyAdapter` exists.
+
+### Signature goals
+
+`symbol` + `signature` holds one symbol to a declaration, its `signature`, so a
+job handed an interface cannot change its shape and still pass. Go and Buzz
+compare the parsed shape (kind, name, receiver, parameter types, results), so a
+renamed parameter still holds; every other language compares the text with
+whitespace collapsed. A goal names exactly one symbol, and a job holds one
+signature per symbol.
+
+Leave `signature` out and the fork records the one the symbol index holds. That
+is the stub flow: write the declaration with an empty body, run
+`magus graph build`, then fork the job with a `signature` goal beside a
+`changed` goal on the same name. A signature the fork cannot record is refused,
+never skipped: the graph does not open, the index does not define the symbol
+yet, or it holds no signature for it. A later `magus job apply` of the same
+record keeps the signature the first one recorded.
+
+```json
+{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["AccountStore#Migrate"]}
+```
+
+A goal that changes, removes or reshapes a symbol already defined in one file
+the write paths do not cover adds a claim on its declaration to `write_paths`
+(`db/accounts.go#AccountStore) Migrate`), and `fork` prints each one it added and
+lists them as `derived_claims` in its JSON. A read-only job claims nothing, and
+neither does a file with no diff driver. A row carrying a `signature` goal is
+stamped `requires: ["signature-goals"]`, so a magus too old to grade one leaves
+the row alone.
+
+`magus job wait --integration` grades the `present`, `absent`, `unreferenced`
+and `signature` symbol goals against the integrating checkout's graph, so a
+shape that drifts in the merge fails there. `changed` stays the holder's.
 
 The single `check` is one of these goals, under the id `check`.
 
@@ -711,6 +803,23 @@ alongside the job's terms, and writes nothing. Because it runs the same grading
 orchestrator may ask while the holder is still working, and asking never blocks
 that holder. The goals that read the tree and the graph answer even for a job
 that has filed no result at all.
+
+Below the goals it reports what the diff did beside them, and `wait` returns
+the same fields. None of them is a violation, and none decides `pass`:
+
+| field                          | what it says                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| `lines_added`, `lines_deleted` | the lines on each side of the footprint, when `footprint_known`                        |
+| `undeclared_exports`           | exported Go symbols the diff added that no symbol goal of the job or an ancestor names |
+| `left_unreferenced`            | symbols that lost their last use in the diff and are still defined                     |
+| `symbol_delta_known`           | whether the two lists above were read; false reads as "not measured"                   |
+
+```text
+net lines: +12 -40 (-28)
+exports no goal declares: none
+left defined with no use: 1
+  legacyAccountRow (db/accounts.go:88)
+```
 
 Sequence goals with `depends_on` between them when one has to be cleared before
 another is approached. A failed prerequisite propagates, and the declaration

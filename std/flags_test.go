@@ -14,7 +14,7 @@ import (
 // is where this module's rules came from: each had its own answer to an argument nobody
 // declared, a repeated flag, and a flag given no value.
 func TestFlagsParse(t *testing.T) {
-	switches := []string{"--reports-skills"}
+	switches := []string{"--observes-skill-loads"}
 	valued := []string{"--session"}
 
 	for name, tc := range map[string]struct {
@@ -22,9 +22,9 @@ func TestFlagsParse(t *testing.T) {
 		want types.FlagParse
 	}{
 		"a declared switch records true": {
-			argv: []string{"--reports-skills"},
+			argv: []string{"--observes-skill-loads"},
 			want: types.FlagParse{
-				Values:      map[string]string{"--reports-skills": "true"},
+				Values:      map[string]string{"--observes-skill-loads": "true"},
 				Positionals: []string{},
 				Unknown:     []string{},
 			},
@@ -66,9 +66,9 @@ func TestFlagsParse(t *testing.T) {
 		// The separator ends parsing: a word after it is data even when it is spelled
 		// like a flag this call declares.
 		"the separator makes everything after it positional": {
-			argv: []string{"--reports-skills", "--", "--session", "raw"},
+			argv: []string{"--observes-skill-loads", "--", "--session", "raw"},
 			want: types.FlagParse{
-				Values:      map[string]string{"--reports-skills": "true"},
+				Values:      map[string]string{"--observes-skill-loads": "true"},
 				Positionals: []string{"--session", "raw"},
 				Unknown:     []string{},
 			},

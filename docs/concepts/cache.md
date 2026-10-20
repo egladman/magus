@@ -1,7 +1,7 @@
 ---
 title: Cache model
 order: 7
-description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
+description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files every checkout of the repository shares.
 tags:
   [
     cache,
@@ -39,7 +39,7 @@ it once here and link there for the distributed story.
   emits the result event; the target's `export fun` never executes. The saved work
   _is_ the point.
 - **The cache is a set of files.** The store is a directory of blobs, JSON manifests, and
-  captured logs under `.magus/`. There is no database and no server in the read
+  captured logs, one per repository. There is no database and no server in the read
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
 
@@ -197,9 +197,16 @@ the `Step`. magus writes these lines, in this order, into one hash:
   entry: without this line a compile-only `go::go-build` recorded a pass that the
   real `go-build` target then replayed. Plain target runs hash without it.
 - `charm:` lines: the active [charms](charms.md), sorted by name. A
-  charm-variant run (`lint:rw`) hashes differently from the bare run, because the
+  charm-variant run (`format:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
-  unaffected.
+  unaffected. A write grant (`rw`, `update`) keys only a step that can read it:
+  something in its `ctx.needs` closure branches on it by name
+  (`ctx.hasCharm("rw")`), declares in-place edits (`ctx.modifiesExistingFiles`), or
+  drives an op that patches its argv on it. Every other step, a test run say, hashes
+  as it would without the grant, so a local run under `default_charms: [rw]` and the
+  read-only `ci` gate share one entry. The walk is static, so a body that names the
+  charm through a variable counts as not reading it. A display flag such as `-s`
+  (`--silent`) is no charm and never enters the key.
 - `arg:` lines: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,
   since `-run X` is not `X -run`; a run with different trailing args must not
@@ -241,16 +248,17 @@ the `Step`. magus writes these lines, in this order, into one hash:
   dependent misses transitively.
 - `spellDefVersion`: a fingerprint of the built-in spell definitions, so a magus
   upgrade that changes a spell forces a miss.
-- `binary`: the build of the running magus binary, a digest of its Go build ID, written
+- `catalogs`: a fingerprint of the catalogs compiled into the running magus binary
+  (diagnostic codes, built-in spells, the host module API and the guard rules), written
   only for a target whose body asks that binary for its answer: a `magus\describe`
   call, or a member that forks a nested magus (`magus\run`, `magus\cmd`,
-  `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()` or
-  a `MAGUS.md` rendered by a nested `magus describe` changes when the binary is rebuilt
-  from changed code, and no file in the tree says so. magus finds these targets
+  `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()`
+  changes when a rule does, and no file in the tree says so. magus finds these targets
   statically, following the body into its own helpers and into functions of a Buzz
-  module it imports; a call it cannot follow does not count. Two builds of the same
-  source share the line, so a rebuild alone costs nothing, and every other target
-  writes no line, so its key survives every rebuild.
+  module it imports; a call it cannot follow does not count. The line names what the
+  answer reads, not the build: a binary rebuilt with the same catalogs keeps the key.
+  Rendering code is not a catalog, so a target whose output depends on how magus lays
+  a page out keys that source, or declares `skip_cache`.
 - `tool:` lines: `spell:version` strings, sorted, so a toolchain upgrade
   (a new `go` or `prettier`) invalidates the key even when no source changed.
 
@@ -281,7 +289,7 @@ this list, it cannot move the key:
 <tr><td><code>exec:</code>: <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
 <tr><td><code>dep:</code>: each upstream target's resolved key, this same fold applied one level up</td></tr>
 <tr><td><code>spellDefVersion</code>: the built-in spell definitions</td></tr>
-<tr><td><code>binary</code>, <code>tool:</code>: the magus build, for a target that asks it; toolchain versions</td></tr>
+<tr><td><code>catalogs</code>, <code>tool:</code>: the binary's catalogs, for a target that asks it; toolchain versions</td></tr>
 </table>
 </figure>
 
@@ -297,8 +305,9 @@ hashed line above yields a new key, and thus a new (empty) slot:
   (a scanner database refreshing);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
-- a rebuilt magus binary, for a target that asks it for its answer (`binary`);
-- applying or dropping a charm;
+- a magus binary whose catalogs changed, for a target that asks it for its answer
+  (`catalogs`);
+- applying or dropping a charm the step reads;
 - renaming the project or target.
 
 What does **not** invalidate: a file's mtime alone (content is what's hashed), or
@@ -885,21 +894,41 @@ by construction. Rendering that committed capture IS pure, so
 
 ## On disk: just files
 
-The cache lives at **`.magus/`** in the workspace root (override with
-`MAGUS_CACHE_DIR`, or `cache.dir` in `magus.yaml`). Three directories plus a hash
-memo carry a cache hit; `.magus/` holds more beside them, including the lock
-files, the run journals, the knowledge shards and the symbol index:
+The cache's entries live in one store per repository, shared by every worktree and
+clone of it: **`<user cache>/magus/cache/<repo>-<hash>/`**, where the user cache is
+`$XDG_CACHE_HOME` (`~/.cache` when unset) and the repository is named the way
+magus's other per-repository stores name it, by its default remote, or by its main
+checkout when it has none. A key holds no absolute path, so a target one worktree
+ran replays in another at the same content. When no user cache directory resolves,
+magus fails and asks for `XDG_CACHE_HOME` or `cache.dir` rather than fall back to the
+checkout, because a store that quietly stopped being shared would rebuild every key in
+every worktree. The run header and `magus doctor` name the store:
 
 ```text
-.magus/
+cache: local (read+write) in /home/me/.cache/magus/cache/api-3f2a9c01b7de
+```
+
+Each checkout keeps what is its own in **`.magus/`** in the workspace root: the
+lock files, the run journals, the per-run output records behind each ref, the
+mtime memo, the knowledge shards and the symbol index. golangci-lint's own cache
+stays there too, since it records absolute paths. `cache.dir` in `magus.yaml` (or
+`MAGUS_CACHE_DIR`) puts the entries back in that one directory with everything else.
+
+```text
+<user cache>/magus/cache/<repo>-<hash>/
 ├── cas/         content-addressed blobs, sharded by the first two hex chars
 │   └── ab/ab34...f0      one file per unique output content (deduplicated)
 ├── manifests/   one JSON manifest per cache entry
 │   └── api/<key>.json     project path flattened; file named by cache key
-├── logs/        captured build output, replayed on a hit
-│   └── api/<key>.log
-└── mtimes/      the per-file hash fast-path memo
+└── logs/        captured build output, replayed on a hit
+    └── api/<key>.log
+.magus/
+└── mtimes/      the per-file hash fast-path memo, beside the checkout's other files
 ```
+
+Two checkouts writing the store at once stay safe: a blob, a manifest and a log are
+each written to a temporary file and renamed into place, so a reader sees a whole
+file or none, and of two runs of one key the later whole entry replaces the earlier.
 
 A **manifest** is plain JSON you can read directly. It records the project path, the
 cache key, the target, and one record per output: path, content-address (`blob`),
@@ -936,6 +965,20 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 `magus clean --cache <project>` drops their entries. The whole store is portable:
 `magus config cache export` / `import` move it as a gzip-tar.
 
+Because every checkout shares the store, collection waits out a **15-minute grace**
+before it removes a blob no manifest names. Another process may hold such a blob: it
+has snapshotted its outputs and not yet written their manifest, or it is replaying an
+entry that an eviction just removed. The grace is the blob's file mtime, so there is
+no lock to go stale when a process dies. A write moves the mtime to now, and so does a
+snapshot that finds the blob already stored and a hit in a local tier that may write,
+which touches every blob the entry names. A read-only local tier touches nothing, since
+it writes nothing to the store.
+
+`magus clean --cache` skips the wait for its own deletions. It removes at once the blobs that
+only the manifests it deleted referenced, since no replay of those entries can still
+succeed. Any other unreferenced blob, one a crashed run left behind say, stays until it
+is older than the grace and a later eviction, prune or clean collects it.
+
 ## Connecting to the remote cache
 
 Everything above is local to one machine. A [remote cache](cache/remote.md) shares
@@ -956,7 +999,7 @@ on.
 
 ### Cache tiers
 
-The cache is two tiers: the **local tier** (L1, `.magus/`) and, once a remote backend
+The cache is two tiers: the **local tier** (L1, the store above) and, once a remote backend
 is wired, the **remote tier** (L2). The run header names them, `cache: local
 (read+write)` or `cache: github-actions + local (read+write)`. They follow standard
 two-tier semantics:
@@ -1011,7 +1054,7 @@ in, and never written by a run that may not write the remote tier.
 | **Replay**            | Restoring a manifest's outputs on a hit (reflink then copy) without running the target body.                                      |
 | **Snapshot**          | Recording a miss's outputs into the store and writing its manifest.                                                               |
 | **run.target.result** | The emitted report event for one target run (`{project, target, status, cache_hit, duration_ms}`); fires on both hits and misses. |
-| **`.magus/`**         | The on-disk cache in the workspace root: `cas/` + `manifests/` + `logs/` + the mtime memo.                                        |
+| **`.magus/`**         | Each checkout's own files in the workspace root: journals, output records, the mtime memo.                                        |
 
 ## See also
 

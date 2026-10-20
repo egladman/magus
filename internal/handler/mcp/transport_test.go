@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -262,7 +263,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	useClientStandIn(t)
 	m := fixtureMagus(t)
-	jobs := job.NewStore(job.Location{CacheDir: m.CacheDir(), Root: m.Root()})
+	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
 	for _, row := range []types.Job{
 		{ID: "root/worker", WritePaths: []string{"internal/job"}, State: types.StateRunning},
 		// A row that writes must name what grades it, or the store refuses the put before

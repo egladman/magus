@@ -1,6 +1,6 @@
 ---
 title: magus diff
-generated_from: internal/cli/registry.go
+generated_from: internal/commands/registry.go
 description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether its symbols are public API, and what coverage was observed."
 tags: [cli, magus diff, diff, review, changeset, semver]
 ---
@@ -134,13 +134,13 @@ performance metric, and a performance metric gets gamed rather than met.
 : Record that you have read the changed files at their current content; --impact reports what carries no such record
 
 **--baseline** *graph export --symbols -o json*
-: The base's \`graph export --symbols -o json\`: adds what each changed symbol did to the API and the smallest semver bump that proves
+: The base's graph export --symbols -o json: adds what each changed symbol did to the API and the smallest semver bump that proves
 
 **--conformance-min-cohort** *int*
-: How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)
+: How many declarations a conformance norm needs before a changed symbol is compared against it; defaults to knowledge.conformance.gates.min_cohort
 
 **--conformance-min-share** *string*
-: The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)
+: The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share
 
 **--generated**
 : Include declared target outputs, which are folded away by default
@@ -152,7 +152,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : Print the report instead of opening the interactive viewer
 
 **--patch** *-*
-: Review a patch somebody handed you instead of the working tree; \`-\` reads stdin
+: Review a patch somebody handed you instead of the working tree; - reads stdin
 
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
@@ -238,5 +238,5 @@ magus diff -o json
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-queue**(1)](magus-queue.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

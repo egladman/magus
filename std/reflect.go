@@ -7,28 +7,29 @@ import (
 	"strings"
 )
 
-// MethodSource returns the source file (relative to repoRoot) and line where a
-// method's Impl is defined, for linking generated docs back to the code. Returns
-// ("", 0) when Impl is nil/not a function, or its file resolves outside repoRoot
+// MethodSource returns the source file, relative to repoRoot and slash-separated,
+// where a method's Impl is defined, for linking generated docs back to the code.
+// No line: a link carrying one would change whenever the function moved. Returns
+// "" when Impl is nil or not a function, or its file resolves outside repoRoot
 // (e.g. a -trimpath build, where there's no absolute path to relativize).
-func MethodSource(m Method, repoRoot string) (string, int) {
+func MethodSource(m Method, repoRoot string) string {
 	if m.Impl == nil {
-		return "", 0
+		return ""
 	}
 	rv := reflect.ValueOf(m.Impl)
 	if rv.Kind() != reflect.Func {
-		return "", 0
+		return ""
 	}
 	fn := runtime.FuncForPC(rv.Pointer())
 	if fn == nil {
-		return "", 0
+		return ""
 	}
-	file, line := fn.FileLine(rv.Pointer())
+	file, _ := fn.FileLine(rv.Pointer())
 	rel, err := filepath.Rel(repoRoot, file)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", 0
+		return ""
 	}
-	return filepath.ToSlash(rel), line
+	return filepath.ToSlash(rel)
 }
 
 // implName returns the package-qualified Go name of a method's Impl, e.g.

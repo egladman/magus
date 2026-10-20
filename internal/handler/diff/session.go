@@ -20,9 +20,8 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
@@ -354,7 +353,13 @@ type ReviewOptions struct {
 	// CacheDir is where read receipts live. Empty records none.
 	CacheDir string
 	// Telemetry records the review families; nil records none.
-	Telemetry observability.Provider
+	Telemetry reviewRecorder
+}
+
+// reviewRecorder is the slice of observability.Provider the review routes record into.
+type reviewRecorder interface {
+	RecordReviewPublish(ctx context.Context, verdict string, downgraded bool)
+	RecordReviewRemark(ctx context.Context, author string)
 }
 
 // reviewSource is what the review routes read. The server answers it, never the client: a
@@ -646,7 +651,11 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "resolve":
 		sess = h.Sessions.ResolveComment(h.Root, req.ID, req.On)
 	case "answer":
-		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, req.On)
+		status := types.SuggestionDeclined
+		if req.On {
+			status = types.SuggestionAccepted
+		}
+		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, status)
 	default:
 		handler.Refuse(w, r, rpcerr.Invalid("unknown op "+req.Op+" (one of: cursor, viewed, comment, seen, reading, publish, reply, discard, resolve, answer)"))
 		return

@@ -15,11 +15,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,14 +69,14 @@ func configToken(args []string) error {
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config token: unknown subcommand %q", sub)
+		return exit.Usagef("magus config token: unknown subcommand %q", sub)
 	}
 }
 
 func configTokenGenerate(args []string) error {
 	fs := flag.NewFlagSet("config token generate", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	gf := gen.BindConfigTokenGenerate(fs)
+	gf := flaggen.BindConfigTokenGenerate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config token generate [--force]")
 		fmt.Fprintln(os.Stderr, "")

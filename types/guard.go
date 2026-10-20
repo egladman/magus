@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// AgentRole is where the calling agent stands, computed from the job store rather than
-// declared by anyone.
+// AgentRole is where the calling agent stands, computed from the job store and the
+// caller's spawn record rather than declared by the caller.
 type AgentRole string
 
 const (
@@ -17,17 +17,21 @@ const (
 	AgentRoleRoot AgentRole = "root"
 	// AgentRoleWorker is a session a lease binds in this checkout.
 	AgentRoleWorker AgentRole = "worker"
+	// AgentRoleIntegrator is the worker that integrates this checkout: a subagent spawned
+	// `<parent>/integrate <job>` for the lease that binds it, whose row was taken here. It
+	// builds, regenerates and gates, where any other worker runs only its check.
+	AgentRoleIntegrator AgentRole = "integrator"
 )
 
 // Values lists the roles a caller may name, excluding the zero value.
 func (r AgentRole) Values() []string {
-	return []string{string(AgentRoleRoot), string(AgentRoleWorker)}
+	return []string{string(AgentRoleRoot), string(AgentRoleWorker), string(AgentRoleIntegrator)}
 }
 
 // Valid reports whether r is a declared role or unset.
 func (r AgentRole) Valid() bool {
 	switch r {
-	case "", AgentRoleRoot, AgentRoleWorker:
+	case "", AgentRoleRoot, AgentRoleWorker, AgentRoleIntegrator:
 		return true
 	}
 	return false
@@ -202,11 +206,24 @@ type CommandRequest struct {
 	// Parent is the description the calling subagent was itself spawned with, empty for a
 	// root session or one whose spawn magus never saw finish.
 	Parent string
-	// Role is worker when a lease binds the calling session in this checkout.
+	// Role is worker when a lease binds the calling session in this checkout, and
+	// integrator when that worker integrates it.
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
+	// Thread is which thread of its session the caller is. Role says whether a lease binds
+	// it, which an unleased subagent and a person share; Thread says main or sub. It is
+	// never empty: a caller magus cannot place is AgentThreadUnknown.
+	Thread AgentThread
+	// ThreadFrom is what Thread rests on: the host's report, or magus's inference.
+	ThreadFrom ThreadSource
+	// Orchestration is how surely the caller's session hands its work to workers, empty
+	// when magus recorded no evidence that it does.
+	Orchestration Orchestration
+	// Window is the caller's context window as its host last reported it, nil when the
+	// host reports none.
+	Window *ContextWindow
 	// Checkout is the state of the checkout a push leaves from or, on a line that pushes
 	// nothing, the one its first commit records into (jj describe counts). It is read only
 	// for such a line, since reading it costs processes. Nil otherwise, and when the
@@ -217,6 +234,11 @@ type CommandRequest struct {
 	Dir string
 	// Workspace is the root of the workspace holding Dir, empty when none does.
 	Workspace string
+	// OwnedCheckouts are the roots, cleaned, of the standing checkouts `magus job fork
+	// --checkout` made for jobs the caller may work in: its lease's, one descending from
+	// it, the row a spawn record names before the caller binds, or any for a root. Empty
+	// when the job store cannot be read, which a rule reads as owning none.
+	OwnedCheckouts []string
 }
 
 // GuardBinary is the magus binary answering a guard hook, as magus\guard.binary() reports
@@ -235,13 +257,18 @@ type GuardBinary struct {
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
 // write through its host's edit tools, with the text the host said it writes.
 type WriteRequest struct {
-	// Host, Session, Agent, Parent, Role and Lease are the caller's, as on CommandRequest.
-	Host    string
-	Session string
-	Agent   string
-	Parent  string
-	Role    AgentRole
-	Lease   *Job
+	// Host, Session, Agent, Parent, Role, Lease, Thread, ThreadFrom, Orchestration and
+	// Window are the caller's, as on CommandRequest.
+	Host          string
+	Session       string
+	Agent         string
+	Parent        string
+	Role          AgentRole
+	Lease         *Job
+	Thread        AgentThread
+	ThreadFrom    ThreadSource
+	Orchestration Orchestration
+	Window        *ContextWindow
 	// Path is the file as the host named it.
 	Path string
 	// Workspace is the root of the workspace holding Path, empty when none does.

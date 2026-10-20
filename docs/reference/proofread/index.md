@@ -27,22 +27,24 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Shape
 
-| Rule                                        | Code    | Dimension   | Default        | Catches                                                                                               |
-| ------------------------------------------- | ------- | ----------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| [lead-context](lead-context.md)             | PRF1001 | structure   | deny           | a change description that does not open with a paragraph naming what a reader can now do              |
-| [reply-voice](reply-voice.md)               | PRF1002 | structure   | varies by kind | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
-| [second-person](second-person.md)           | PRF1003 | conventions | off            | we, us, our or ours in a guide, which speaks to the reader as you                                     |
-| [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                |
-| [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
-| [subject-length](subject-length.md)         | PRF1011 | structure   | deny           | a commit subject over 100 bytes                                                                       |
-| [subject-period](subject-period.md)         | PRF1012 | conventions | deny           | a commit subject ending in a period                                                                   |
-| [body-separator](body-separator.md)         | PRF1013 | structure   | deny           | a commit body that starts on the line after the subject                                               |
-| [issue-repro](issue-repro.md)               | PRF1020 | evidence    | off            | a bug report with neither what happened against what was expected, nor steps to reproduce it          |
-| [changelog-heading](changelog-heading.md)   | PRF1030 | conventions | off            | a changelog version heading that is not "## [version] - date" or "## [Unreleased]"                    |
-| [changelog-group](changelog-group.md)       | PRF1031 | conventions | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                |
-| [changelog-entry](changelog-entry.md)       | PRF1032 | stance      | advise         | a changelog entry that names a Go identifier and says little else                                     |
-| [voice-drift](voice-drift.md)               | PRF1040 | stance      | advise         | a text whose style measures outside its author's own range on two or more features of a voice file    |
-| [suppression-unused](suppression-unused.md) | PRF1090 | evidence    | deny           | a suppression comment that gives no reason or that matched no finding                                 |
+| Rule                                        | Code    | Dimension   | Default        | Catches                                                                                                                                                   |
+| ------------------------------------------- | ------- | ----------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [lead-context](lead-context.md)             | PRF1001 | structure   | deny           | a change description that does not open with a paragraph naming what a reader can now do                                                                  |
+| [reply-voice](reply-voice.md)               | PRF1002 | structure   | varies by kind | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label                                                         |
+| [second-person](second-person.md)           | PRF1003 | conventions | off            | we, us, our or ours in a guide, which speaks to the reader as you                                                                                         |
+| [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                                                                    |
+| [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making")                                                     |
+| [subject-length](subject-length.md)         | PRF1011 | structure   | deny           | a commit subject over 100 bytes                                                                                                                           |
+| [subject-period](subject-period.md)         | PRF1012 | conventions | deny           | a commit subject ending in a period                                                                                                                       |
+| [body-separator](body-separator.md)         | PRF1013 | structure   | deny           | a commit body that starts on the line after the subject                                                                                                   |
+| [issue-repro](issue-repro.md)               | PRF1020 | evidence    | off            | a bug report with neither what happened against what was expected, nor steps to reproduce it                                                              |
+| [changelog-heading](changelog-heading.md)   | PRF1030 | conventions | off            | a changelog version heading that is not "## [version] - date" or "## [Unreleased]"                                                                        |
+| [changelog-group](changelog-group.md)       | PRF1031 | conventions | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                                                                    |
+| [changelog-entry](changelog-entry.md)       | PRF1032 | stance      | advise         | a changelog entry that names a Go identifier and says little else                                                                                         |
+| [voice-drift](voice-drift.md)               | PRF1040 | stance      | advise         | a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's |
+| [list-marks](list-marks.md)                 | PRF1060 | conventions | off            | a list item whose initial capital or closing full stop differs from the list's other items                                                                |
+| [list-parallel](list-parallel.md)           | PRF1061 | structure   | off            | a list item that opens with a verb where the others open with a noun phrase, or in another tense                                                          |
+| [suppression-unused](suppression-unused.md) | PRF1090 | evidence    | deny           | a suppression comment that gives no reason or that matched no finding                                                                                     |
 
 ## Tone
 
@@ -84,14 +86,15 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## House style
 
-| Rule                          | Code    | Dimension   | Default     | Catches                                                                  |
-| ----------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------ |
-| [terms](terms.md)             | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                           |
-| [dash](dash.md)               | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                |
-| [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                |
-| [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change       |
-| [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced |
-| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                     |
+| Rule                          | Code    | Dimension   | Default     | Catches                                                                                                      |
+| ----------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| [terms](terms.md)             | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
+| [dash](dash.md)               | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
+| [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
+| [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
+| [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
+| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
+| [date-format](date-format.md) | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
 
 ## Doc comments
 
@@ -99,7 +102,6 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | --------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------------- |
 | [comment-block](comment-block.md)       | PRF6001 | economy     | off (house) | a doc comment over 250 words                                                     |
 | [comment-sentence](comment-sentence.md) | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                             |
-| [name-suffix](name-suffix.md)           | PRF6003 | conventions | off (house) | a function or method name whose last word is Of or For                           |
 | [aside](aside.md)                       | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                             |
 | [history](history.md)                   | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to")       |
 | [docstub](docstub.md)                   | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                       |
@@ -109,33 +111,50 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Agent instructions
 
-| Rule                                  | Code    | Dimension   | Default     | Catches                                                                                    |
-| ------------------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------ |
-| [terse-sentence](terse-sentence.md)   | PRF7001 | economy     | off (house) | a sentence of agent instructions over 25 words                                             |
-| [terse-paragraph](terse-paragraph.md) | PRF7002 | economy     | off (house) | a paragraph or list item of agent instructions over 60 words                               |
-| [bare-rule](bare-rule.md)             | PRF7003 | conventions | off (house) | "rule" in agent instructions with no mechanism named                                       |
-| [template](template.md)               | PRF7004 | structure   | off (house) | an agent-instructions template that does not render, so neither of its forms can be judged |
+| Rule                                                            | Code    | Dimension   | Default     | Catches                                                                                                                                     |
+| --------------------------------------------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [terse-sentence](terse-sentence.md)                             | PRF7001 | economy     | off (house) | a sentence of agent instructions over 25 words                                                                                              |
+| [terse-paragraph](terse-paragraph.md)                           | PRF7002 | economy     | off (house) | a paragraph or list item of agent instructions over 60 words                                                                                |
+| [bare-rule](bare-rule.md)                                       | PRF7003 | conventions | off (house) | "rule" in agent instructions with no mechanism named                                                                                        |
+| [template](template.md)                                         | PRF7004 | structure   | off (house) | a skill template that does not render, so neither of its forms can be judged                                                                |
+| [compact-filler](compact-filler.md)                             | PRF7010 | economy     | off         | articles, linking verbs, "you", "please", "note that" and "instead" outside code, counted with the tokens dropping them saves               |
+| [compact-markup](compact-markup.md)                             | PRF7011 | economy     | off         | a bold or italic marker, or a Markdown table, in compact agent text                                                                         |
+| [compact-costly-abbrev](compact-costly-abbrev.md)               | PRF7012 | economy     | off         | an abbreviation that costs more tokens than the word it replaces: k8s, w/, b/c, e.g., i.e., or dropped vowels                               |
+| [compact-symbol-negation](compact-symbol-negation.md)           | PRF7013 | evidence    | off         | "!" or a Unicode symbol standing in for "not" or a logic operator                                                                           |
+| [compact-line](compact-line.md)                                 | PRF7014 | structure   | off         | a compact line over 21 words that joins clauses with a semicolon or a comma and a conjunction                                               |
+| [compact-duplicate](compact-duplicate.md)                       | PRF7015 | economy     | off         | a compact line that restates an earlier one: half or more of its content words and every negation, condition, scope and order word the same |
+| [skill-description-budget](skill-description-budget.md)         | PRF7020 | economy     | off         | a skill description over 100 words, or a full form's description sharing 75% or more of its content words with the short form's             |
+| [instruction-position](instruction-position.md)                 | PRF7021 | structure   | off         | a full skill form of 1500 words or more whose first "must" or "never" sits past the middle of its body                                      |
+| [skill-set-description-budget](skill-set-description-budget.md) | PRF7022 | economy     | off         | an installed set of skills whose descriptions sum past 2100 words, each skill's short and full form counted                                 |
 
 ## Review replies
 
-| Rule                                          | Code    | Dimension | Default | Catches                                                                                                      |
-| --------------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| [reply-opener](reply-opener.md)               | PRF8001 | stance    | off     | a sentence of a review reply that opens by contradicting ("No,", "As I said")                                |
-| [judgment-as-fact](judgment-as-fact.md)       | PRF8002 | stance    | off     | a recommendation in a review reply stated as a fact, with no reason given                                    |
-| [stacked-hedge](stacked-hedge.md)             | PRF8003 | stance    | advise  | two softeners in one sentence of a review reply, or an apology before its point                              |
-| [long-thread](long-thread.md)                 | PRF8004 | stance    | advise  | a review reply that is its author's fourth or later in a thread                                              |
-| [nonspecific](nonspecific.md)                 | PRF8010 | evidence  | off     | a top-level review comment that judges or asks for a change and names no code, path, line, example or reason |
-| [why-opener](why-opener.md)                   | PRF8011 | stance    | advise  | a review reply sentence that opens "Why did you" or "Why would you"                                          |
-| [bare-imperative](bare-imperative.md)         | PRF8012 | stance    | off     | a short command in a review reply that gives no reason anywhere ("Fix this.")                                |
-| [all-caps](all-caps.md)                       | PRF8013 | stance    | off     | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                                         |
-| [repeated-marks](repeated-marks.md)           | PRF8014 | stance    | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                                  |
-| [bold-label](bold-label.md)                   | PRF8020 | structure | advise  | list items or paragraphs of an agent reply that open with a bold label                                       |
-| [closing-offer](closing-offer.md)             | PRF8021 | stance    | advise  | an agent reply whose last paragraph offers more work or asks leave to go on                                  |
-| [request-recap](request-recap.md)             | PRF8022 | economy   | advise  | an agent reply that opens by restating what the person asked                                                 |
-| [option-list](option-list.md)                 | PRF8023 | structure | off     | an agent reply that lays out labeled options or alternatives                                                 |
-| [unbacked-done](unbacked-done.md)             | PRF8024 | evidence  | advise  | a claim of done, fixed, verified or passing with no command, output ref, file or link beside it              |
-| [short-reply-heading](short-reply-heading.md) | PRF8025 | structure | advise  | a heading in an agent reply under 300 words                                                                  |
-| [agreement-opener](agreement-opener.md)       | PRF8026 | stance    | advise  | an agent reply that opens with praise or agreement ("Great question", "You're right")                        |
+| Rule                                              | Code    | Dimension | Default | Catches                                                                                                      |
+| ------------------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| [reply-opener](reply-opener.md)                   | PRF8001 | stance    | off     | a sentence of a review reply that opens by contradicting ("No,", "As I said")                                |
+| [judgment-as-fact](judgment-as-fact.md)           | PRF8002 | stance    | off     | a recommendation in a review reply stated as a fact, with no reason given                                    |
+| [stacked-hedge](stacked-hedge.md)                 | PRF8003 | stance    | advise  | two softeners in one sentence of a review reply, or an apology before its point                              |
+| [long-thread](long-thread.md)                     | PRF8004 | stance    | advise  | a review reply that is its author's fourth or later in a thread                                              |
+| [nonspecific](nonspecific.md)                     | PRF8010 | evidence  | off     | a top-level review comment that judges or asks for a change and names no code, path, line, example or reason |
+| [why-opener](why-opener.md)                       | PRF8011 | stance    | advise  | a review reply sentence that opens "Why did you" or "Why would you"                                          |
+| [bare-imperative](bare-imperative.md)             | PRF8012 | stance    | off     | a short command in a review reply that gives no reason anywhere ("Fix this.")                                |
+| [all-caps](all-caps.md)                           | PRF8013 | stance    | off     | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                                         |
+| [repeated-marks](repeated-marks.md)               | PRF8014 | stance    | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                                  |
+| [bold-label](bold-label.md)                       | PRF8020 | structure | advise  | list items or paragraphs of an agent reply that open with a bold label                                       |
+| [closing-offer](closing-offer.md)                 | PRF8021 | stance    | advise  | an agent reply whose last paragraph offers more work or asks leave to go on                                  |
+| [request-recap](request-recap.md)                 | PRF8022 | economy   | advise  | an agent reply that opens by restating what the person asked                                                 |
+| [option-list](option-list.md)                     | PRF8023 | structure | off     | an agent reply that lays out labeled options or alternatives                                                 |
+| [unbacked-done](unbacked-done.md)                 | PRF8024 | evidence  | advise  | a claim of done, fixed, verified or passing with no command, output ref, file or link beside it              |
+| [short-reply-heading](short-reply-heading.md)     | PRF8025 | structure | advise  | a heading in an agent reply under 300 words                                                                  |
+| [agreement-opener](agreement-opener.md)           | PRF8026 | stance    | advise  | an agent reply that opens with praise or agreement ("Great question", "You're right")                        |
+| [no-reason](no-reason.md)                         | PRF8030 | evidence  | off     | an inline review comment that asks for a change and gives no reason                                          |
+| [nit-label](nit-label.md)                         | PRF8031 | stance    | off     | an inline review comment labeled nit on a blocking demand, or blocking on an optional one                    |
+| [empty-request-changes](empty-request-changes.md) | PRF8032 | evidence  | off     | a review requesting changes whose body names nothing blocking and points at no inline comment                |
+| [approve-blocker](approve-blocker.md)             | PRF8033 | stance    | off     | an approving review whose body names a blocker ("must fix", "blocking", "before merge")                      |
+| [bare-lgtm](bare-lgtm.md)                         | PRF8034 | evidence  | off     | a review summary that only approves: "LGTM", "ship it", "looks good"                                         |
+| [deferral-no-link](deferral-no-link.md)           | PRF8035 | evidence  | off     | a review reply deferring to later, a follow-up or a TODO, with no issue link or number                       |
+| [decline-no-reason](decline-no-reason.md)         | PRF8036 | stance    | off     | a short review reply declining the change ("won't fix", "No, ...") with no reason                            |
+| [impatience](impatience.md)                       | PRF8037 | stance    | off     | a review reply that reads as impatient: "as I said", "for the last time", "obviously"                        |
 
 ## Messages a program prints
 

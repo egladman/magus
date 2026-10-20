@@ -285,8 +285,18 @@ type Job struct {
 	// the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
 	// holder's own attempts untouched; this is the second fact beside them.
 	WaiterEvidence *JobIntegration `protobuf:"bytes,39,opt,name=waiter_evidence,json=waiterEvidence,proto3" json:"waiter_evidence,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// breaks are the flags, JSON keys, exported symbols or stored formats the root approved this
+	// job breaking; empty means it breaks nothing on its own authority.
+	Breaks []string `protobuf:"bytes,40,rep,name=breaks,proto3" json:"breaks,omitempty"`
+	// model_tier is the tier the store assigned the job and why; unset when the workspace
+	// declared no model tiers. rework_rounds counts continuations sent to the job's worker
+	// after it handed back, and widenings the times write paths were added to the job after
+	// it was taken. All three are store-computed.
+	ModelTier     *JobModelTier `protobuf:"bytes,41,opt,name=model_tier,json=modelTier,proto3" json:"model_tier,omitempty"`
+	ReworkRounds  int32         `protobuf:"varint,42,opt,name=rework_rounds,json=reworkRounds,proto3" json:"rework_rounds,omitempty"`
+	Widenings     int32         `protobuf:"varint,43,opt,name=widenings,proto3" json:"widenings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Job) Reset() {
@@ -592,6 +602,130 @@ func (x *Job) GetWaiterEvidence() *JobIntegration {
 	return nil
 }
 
+func (x *Job) GetBreaks() []string {
+	if x != nil {
+		return x.Breaks
+	}
+	return nil
+}
+
+func (x *Job) GetModelTier() *JobModelTier {
+	if x != nil {
+		return x.ModelTier
+	}
+	return nil
+}
+
+func (x *Job) GetReworkRounds() int32 {
+	if x != nil {
+		return x.ReworkRounds
+	}
+	return 0
+}
+
+func (x *Job) GetWidenings() int32 {
+	if x != nil {
+		return x.Widenings
+	}
+	return 0
+}
+
+// JobModelTier is the model tier recorded on a job when it was assigned. skills is the
+// variant its worker loads (short or full) and source says which declaration chose the tier
+// (row, matrix or default). site is the file:line of that declaration, and model the alias
+// the host spawns; both are empty when the source gave none.
+type JobModelTier struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Rank          int32                  `protobuf:"varint,2,opt,name=rank,proto3" json:"rank,omitempty"`
+	Skills        string                 `protobuf:"bytes,3,opt,name=skills,proto3" json:"skills,omitempty"`
+	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Site          string                 `protobuf:"bytes,6,opt,name=site,proto3" json:"site,omitempty"`
+	Model         string                 `protobuf:"bytes,7,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobModelTier) Reset() {
+	*x = JobModelTier{}
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobModelTier) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobModelTier) ProtoMessage() {}
+
+func (x *JobModelTier) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobModelTier.ProtoReflect.Descriptor instead.
+func (*JobModelTier) Descriptor() ([]byte, []int) {
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *JobModelTier) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *JobModelTier) GetRank() int32 {
+	if x != nil {
+		return x.Rank
+	}
+	return 0
+}
+
+func (x *JobModelTier) GetSkills() string {
+	if x != nil {
+		return x.Skills
+	}
+	return ""
+}
+
+func (x *JobModelTier) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *JobModelTier) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *JobModelTier) GetSite() string {
+	if x != nil {
+		return x.Site
+	}
+	return ""
+}
+
+func (x *JobModelTier) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
 // JobOrigin is who did something to a row, one field per channel, as the activity trail
 // records an action's origin.
 type JobOrigin struct {
@@ -609,7 +743,7 @@ type JobOrigin struct {
 
 func (x *JobOrigin) Reset() {
 	*x = JobOrigin{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +755,7 @@ func (x *JobOrigin) String() string {
 func (*JobOrigin) ProtoMessage() {}
 
 func (x *JobOrigin) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -634,7 +768,7 @@ func (x *JobOrigin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobOrigin.ProtoReflect.Descriptor instead.
 func (*JobOrigin) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{2}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *JobOrigin) GetUser() string {
@@ -704,15 +838,20 @@ type JobAttempt struct {
 	DurationMs int64 `protobuf:"varint,9,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	// revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the
 	// tree also held uncommitted changes then, so revision alone does not name what it read.
-	Revision      string `protobuf:"bytes,10,opt,name=revision,proto3" json:"revision,omitempty"`
-	Dirty         bool   `protobuf:"varint,11,opt,name=dirty,proto3" json:"dirty,omitempty"`
+	Revision string `protobuf:"bytes,10,opt,name=revision,proto3" json:"revision,omitempty"`
+	Dirty    bool   `protobuf:"varint,11,opt,name=dirty,proto3" json:"dirty,omitempty"`
+	// lease is the job lease the run acted under, empty for a run under none.
+	Lease string `protobuf:"bytes,12,opt,name=lease,proto3" json:"lease,omitempty"`
+	// extra_args are the args the run forwarded after `--`, empty when it forwarded none or its
+	// record predates the field.
+	ExtraArgs     []string `protobuf:"bytes,13,rep,name=extra_args,json=extraArgs,proto3" json:"extra_args,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JobAttempt) Reset() {
 	*x = JobAttempt{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +863,7 @@ func (x *JobAttempt) String() string {
 func (*JobAttempt) ProtoMessage() {}
 
 func (x *JobAttempt) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +876,7 @@ func (x *JobAttempt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobAttempt.ProtoReflect.Descriptor instead.
 func (*JobAttempt) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{3}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JobAttempt) GetFound() bool {
@@ -817,6 +956,20 @@ func (x *JobAttempt) GetDirty() bool {
 	return false
 }
 
+func (x *JobAttempt) GetLease() string {
+	if x != nil {
+		return x.Lease
+	}
+	return ""
+}
+
+func (x *JobAttempt) GetExtraArgs() []string {
+	if x != nil {
+		return x.ExtraArgs
+	}
+	return nil
+}
+
 // JobGateAttempt is the newest recorded run of one goal's check.
 type JobGateAttempt struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -828,7 +981,7 @@ type JobGateAttempt struct {
 
 func (x *JobGateAttempt) Reset() {
 	*x = JobGateAttempt{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +993,7 @@ func (x *JobGateAttempt) String() string {
 func (*JobGateAttempt) ProtoMessage() {}
 
 func (x *JobGateAttempt) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +1006,7 @@ func (x *JobGateAttempt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobGateAttempt.ProtoReflect.Descriptor instead.
 func (*JobGateAttempt) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{4}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *JobGateAttempt) GetGateId() string {
@@ -882,7 +1035,7 @@ type JobUnattributedWrite struct {
 
 func (x *JobUnattributedWrite) Reset() {
 	*x = JobUnattributedWrite{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -894,7 +1047,7 @@ func (x *JobUnattributedWrite) String() string {
 func (*JobUnattributedWrite) ProtoMessage() {}
 
 func (x *JobUnattributedWrite) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -907,7 +1060,7 @@ func (x *JobUnattributedWrite) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobUnattributedWrite.ProtoReflect.Descriptor instead.
 func (*JobUnattributedWrite) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{5}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *JobUnattributedWrite) GetPath() string {
@@ -944,7 +1097,7 @@ type JobEntry struct {
 
 func (x *JobEntry) Reset() {
 	*x = JobEntry{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -956,7 +1109,7 @@ func (x *JobEntry) String() string {
 func (*JobEntry) ProtoMessage() {}
 
 func (x *JobEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -969,7 +1122,7 @@ func (x *JobEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEntry.ProtoReflect.Descriptor instead.
 func (*JobEntry) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{6}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *JobEntry) GetPath() string {
@@ -1013,7 +1166,7 @@ type JobIntegration struct {
 
 func (x *JobIntegration) Reset() {
 	*x = JobIntegration{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1025,7 +1178,7 @@ func (x *JobIntegration) String() string {
 func (*JobIntegration) ProtoMessage() {}
 
 func (x *JobIntegration) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,7 +1191,7 @@ func (x *JobIntegration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobIntegration.ProtoReflect.Descriptor instead.
 func (*JobIntegration) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{7}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *JobIntegration) GetCheckout() string {
@@ -1082,7 +1235,7 @@ type JobGateStatus struct {
 
 func (x *JobGateStatus) Reset() {
 	*x = JobGateStatus{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1247,7 @@ func (x *JobGateStatus) String() string {
 func (*JobGateStatus) ProtoMessage() {}
 
 func (x *JobGateStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1260,7 @@ func (x *JobGateStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobGateStatus.ProtoReflect.Descriptor instead.
 func (*JobGateStatus) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{8}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *JobGateStatus) GetId() string {
@@ -1151,7 +1304,7 @@ type JobBlock struct {
 
 func (x *JobBlock) Reset() {
 	*x = JobBlock{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1316,7 @@ func (x *JobBlock) String() string {
 func (*JobBlock) ProtoMessage() {}
 
 func (x *JobBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1329,7 @@ func (x *JobBlock) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobBlock.ProtoReflect.Descriptor instead.
 func (*JobBlock) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{9}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *JobBlock) GetJob() string {
@@ -1211,7 +1364,7 @@ type JobReadOnly struct {
 
 func (x *JobReadOnly) Reset() {
 	*x = JobReadOnly{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[10]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1223,7 +1376,7 @@ func (x *JobReadOnly) String() string {
 func (*JobReadOnly) ProtoMessage() {}
 
 func (x *JobReadOnly) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[10]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1236,7 +1389,7 @@ func (x *JobReadOnly) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobReadOnly.ProtoReflect.Descriptor instead.
 func (*JobReadOnly) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{10}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *JobReadOnly) GetJob() string {
@@ -1267,7 +1420,7 @@ type JobOverlapFootprint struct {
 
 func (x *JobOverlapFootprint) Reset() {
 	*x = JobOverlapFootprint{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[11]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1432,7 @@ func (x *JobOverlapFootprint) String() string {
 func (*JobOverlapFootprint) ProtoMessage() {}
 
 func (x *JobOverlapFootprint) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[11]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1445,7 @@ func (x *JobOverlapFootprint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobOverlapFootprint.ProtoReflect.Descriptor instead.
 func (*JobOverlapFootprint) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{11}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *JobOverlapFootprint) GetVerdict() string {
@@ -1322,22 +1475,24 @@ func (x *JobOverlapFootprint) GetReason() string {
 // the command that runs it, the same way Job.check is - the wire never carries the unrendered
 // form, so a client needs no second parser for it.
 type CompletionGate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
-	Expect        string                 `protobuf:"bytes,4,opt,name=expect,proto3" json:"expect,omitempty"`
-	Check         string                 `protobuf:"bytes,5,opt,name=check,proto3" json:"check,omitempty"`
-	Paths         []string               `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
-	Symbols       []string               `protobuf:"bytes,7,rep,name=symbols,proto3" json:"symbols,omitempty"`
-	DependsOn     []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Kind        string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Expect      string                 `protobuf:"bytes,4,opt,name=expect,proto3" json:"expect,omitempty"`
+	Check       string                 `protobuf:"bytes,5,opt,name=check,proto3" json:"check,omitempty"`
+	Paths       []string               `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
+	Symbols     []string               `protobuf:"bytes,7,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	DependsOn   []string               `protobuf:"bytes,8,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	// The declaration a `signature` goal holds its one symbol to, as the symbol index renders it.
+	Signature     string `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompletionGate) Reset() {
 	*x = CompletionGate{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[12]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1349,7 +1504,7 @@ func (x *CompletionGate) String() string {
 func (*CompletionGate) ProtoMessage() {}
 
 func (x *CompletionGate) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[12]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1362,7 +1517,7 @@ func (x *CompletionGate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletionGate.ProtoReflect.Descriptor instead.
 func (*CompletionGate) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{12}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CompletionGate) GetId() string {
@@ -1421,6 +1576,13 @@ func (x *CompletionGate) GetDependsOn() []string {
 	return nil
 }
 
+func (x *CompletionGate) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left
 // unresolved, the jobs it spawned, and the runs it offered as evidence.
 type JobResult struct {
@@ -1437,7 +1599,7 @@ type JobResult struct {
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[13]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1449,7 +1611,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[13]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1462,7 +1624,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{13}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *JobResult) GetChangedPaths() []string {
@@ -1518,7 +1680,7 @@ type JobGateEvidence struct {
 
 func (x *JobGateEvidence) Reset() {
 	*x = JobGateEvidence{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[14]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1530,7 +1692,7 @@ func (x *JobGateEvidence) String() string {
 func (*JobGateEvidence) ProtoMessage() {}
 
 func (x *JobGateEvidence) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[14]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1543,7 +1705,7 @@ func (x *JobGateEvidence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobGateEvidence.ProtoReflect.Descriptor instead.
 func (*JobGateEvidence) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{14}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *JobGateEvidence) GetGateId() string {
@@ -1577,7 +1739,7 @@ type JobRelease struct {
 
 func (x *JobRelease) Reset() {
 	*x = JobRelease{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1589,7 +1751,7 @@ func (x *JobRelease) String() string {
 func (*JobRelease) ProtoMessage() {}
 
 func (x *JobRelease) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1602,7 +1764,7 @@ func (x *JobRelease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobRelease.ProtoReflect.Descriptor instead.
 func (*JobRelease) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{15}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *JobRelease) GetPath() string {
@@ -1658,7 +1820,7 @@ type JobOverlap struct {
 
 func (x *JobOverlap) Reset() {
 	*x = JobOverlap{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[16]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1670,7 +1832,7 @@ func (x *JobOverlap) String() string {
 func (*JobOverlap) ProtoMessage() {}
 
 func (x *JobOverlap) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[16]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1683,7 +1845,7 @@ func (x *JobOverlap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobOverlap.ProtoReflect.Descriptor instead.
 func (*JobOverlap) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{16}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *JobOverlap) GetJobA() string {
@@ -1747,7 +1909,7 @@ type JobRun struct {
 
 func (x *JobRun) Reset() {
 	*x = JobRun{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1921,7 @@ func (x *JobRun) String() string {
 func (*JobRun) ProtoMessage() {}
 
 func (x *JobRun) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[17]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1934,7 @@ func (x *JobRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobRun.ProtoReflect.Descriptor instead.
 func (*JobRun) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{17}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *JobRun) GetInvocationId() string {
@@ -1836,7 +1998,7 @@ type ResourceSize struct {
 
 func (x *ResourceSize) Reset() {
 	*x = ResourceSize{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[18]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1848,7 +2010,7 @@ func (x *ResourceSize) String() string {
 func (*ResourceSize) ProtoMessage() {}
 
 func (x *ResourceSize) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[18]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1861,7 +2023,7 @@ func (x *ResourceSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSize.ProtoReflect.Descriptor instead.
 func (*ResourceSize) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{18}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResourceSize) GetSizeBytes() int64 {
@@ -1890,7 +2052,7 @@ type RunJobRequest struct {
 
 func (x *RunJobRequest) Reset() {
 	*x = RunJobRequest{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[19]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1902,7 +2064,7 @@ func (x *RunJobRequest) String() string {
 func (*RunJobRequest) ProtoMessage() {}
 
 func (x *RunJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[19]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1915,7 +2077,7 @@ func (x *RunJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunJobRequest.ProtoReflect.Descriptor instead.
 func (*RunJobRequest) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{19}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RunJobRequest) GetName() string {
@@ -1937,7 +2099,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[20]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1949,7 +2111,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[20]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1962,7 +2124,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{20}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListJobsRequest) GetPageSize() int32 {
@@ -1998,7 +2160,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[21]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2010,7 +2172,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[21]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2023,7 +2185,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{21}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -2092,7 +2254,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xab\f\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xc7\r\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2143,7 +2305,20 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12%\n" +
 	"\x0eschema_version\x18& \x01(\x05R\rschemaVersion\x12\x1a\n" +
 	"\brequires\x18% \x03(\tR\brequires\x12K\n" +
-	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\"\xdb\x01\n" +
+	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\x12\x16\n" +
+	"\x06breaks\x18( \x03(\tR\x06breaks\x12?\n" +
+	"\n" +
+	"model_tier\x18) \x01(\v2 .magus.job.v1alpha1.JobModelTierR\tmodelTier\x12#\n" +
+	"\rrework_rounds\x18* \x01(\x05R\freworkRounds\x12\x1c\n" +
+	"\twidenings\x18+ \x01(\x05R\twidenings\"\xa8\x01\n" +
+	"\fJobModelTier\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04rank\x18\x02 \x01(\x05R\x04rank\x12\x16\n" +
+	"\x06skills\x18\x03 \x01(\tR\x06skills\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x12\n" +
+	"\x04site\x18\x06 \x01(\tR\x04site\x12\x14\n" +
+	"\x05model\x18\a \x01(\tR\x05model\"\xdb\x01\n" +
 	"\tJobOrigin\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\tR\x03uid\x12\x1f\n" +
@@ -2154,7 +2329,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05agent\x18\x06 \x01(\tR\x05agent\x12C\n" +
 	"\n" +
 	"credential\x18\a \x01(\v2#.magus.activity.v1alpha1.CredentialR\n" +
-	"credential\"\xa9\x02\n" +
+	"credential\"\xde\x02\n" +
 	"\n" +
 	"JobAttempt\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x10\n" +
@@ -2170,7 +2345,10 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"durationMs\x12\x1a\n" +
 	"\brevision\x18\n" +
 	" \x01(\tR\brevision\x12\x14\n" +
-	"\x05dirty\x18\v \x01(\bR\x05dirty\"c\n" +
+	"\x05dirty\x18\v \x01(\bR\x05dirty\x12\x14\n" +
+	"\x05lease\x18\f \x01(\tR\x05lease\x12\x1d\n" +
+	"\n" +
+	"extra_args\x18\r \x03(\tR\textraArgs\"c\n" +
 	"\x0eJobGateAttempt\x12\x17\n" +
 	"\agate_id\x18\x01 \x01(\tR\x06gateId\x128\n" +
 	"\aattempt\x18\x02 \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\"R\n" +
@@ -2206,7 +2384,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x13JobOverlapFootprint\x12\x18\n" +
 	"\averdict\x18\x01 \x01(\tR\averdict\x12\x16\n" +
 	"\x06shared\x18\x02 \x03(\tR\x06shared\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd3\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xf1\x01\n" +
 	"\x0eCompletionGate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -2216,7 +2394,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05paths\x18\x06 \x03(\tR\x05paths\x12\x18\n" +
 	"\asymbols\x18\a \x03(\tR\asymbols\x12\x1d\n" +
 	"\n" +
-	"depends_on\x18\b \x03(\tR\tdependsOn\"\xaa\x02\n" +
+	"depends_on\x18\b \x03(\tR\tdependsOn\x12\x1c\n" +
+	"\tsignature\x18\t \x01(\tR\tsignature\"\xaa\x02\n" +
 	"\tJobResult\x12#\n" +
 	"\rchanged_paths\x18\x01 \x03(\tR\fchangedPaths\x12)\n" +
 	"\x10unresolved_risks\x18\x02 \x03(\tR\x0funresolvedRisks\x12 \n" +
@@ -2299,73 +2478,75 @@ func file_magus_job_v1alpha1_job_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_job_v1alpha1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_magus_job_v1alpha1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_magus_job_v1alpha1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_magus_job_v1alpha1_job_proto_goTypes = []any{
 	(SubmitState)(0),              // 0: magus.job.v1alpha1.SubmitState
 	(JobHolder)(0),                // 1: magus.job.v1alpha1.JobHolder
 	(*RunJobResponse)(nil),        // 2: magus.job.v1alpha1.RunJobResponse
 	(*Job)(nil),                   // 3: magus.job.v1alpha1.Job
-	(*JobOrigin)(nil),             // 4: magus.job.v1alpha1.JobOrigin
-	(*JobAttempt)(nil),            // 5: magus.job.v1alpha1.JobAttempt
-	(*JobGateAttempt)(nil),        // 6: magus.job.v1alpha1.JobGateAttempt
-	(*JobUnattributedWrite)(nil),  // 7: magus.job.v1alpha1.JobUnattributedWrite
-	(*JobEntry)(nil),              // 8: magus.job.v1alpha1.JobEntry
-	(*JobIntegration)(nil),        // 9: magus.job.v1alpha1.JobIntegration
-	(*JobGateStatus)(nil),         // 10: magus.job.v1alpha1.JobGateStatus
-	(*JobBlock)(nil),              // 11: magus.job.v1alpha1.JobBlock
-	(*JobReadOnly)(nil),           // 12: magus.job.v1alpha1.JobReadOnly
-	(*JobOverlapFootprint)(nil),   // 13: magus.job.v1alpha1.JobOverlapFootprint
-	(*CompletionGate)(nil),        // 14: magus.job.v1alpha1.CompletionGate
-	(*JobResult)(nil),             // 15: magus.job.v1alpha1.JobResult
-	(*JobGateEvidence)(nil),       // 16: magus.job.v1alpha1.JobGateEvidence
-	(*JobRelease)(nil),            // 17: magus.job.v1alpha1.JobRelease
-	(*JobOverlap)(nil),            // 18: magus.job.v1alpha1.JobOverlap
-	(*JobRun)(nil),                // 19: magus.job.v1alpha1.JobRun
-	(*ResourceSize)(nil),          // 20: magus.job.v1alpha1.ResourceSize
-	(*RunJobRequest)(nil),         // 21: magus.job.v1alpha1.RunJobRequest
-	(*ListJobsRequest)(nil),       // 22: magus.job.v1alpha1.ListJobsRequest
-	(*ListJobsResponse)(nil),      // 23: magus.job.v1alpha1.ListJobsResponse
-	(*v1alpha1.Credential)(nil),   // 24: magus.activity.v1alpha1.Credential
-	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 26: google.protobuf.Duration
+	(*JobModelTier)(nil),          // 4: magus.job.v1alpha1.JobModelTier
+	(*JobOrigin)(nil),             // 5: magus.job.v1alpha1.JobOrigin
+	(*JobAttempt)(nil),            // 6: magus.job.v1alpha1.JobAttempt
+	(*JobGateAttempt)(nil),        // 7: magus.job.v1alpha1.JobGateAttempt
+	(*JobUnattributedWrite)(nil),  // 8: magus.job.v1alpha1.JobUnattributedWrite
+	(*JobEntry)(nil),              // 9: magus.job.v1alpha1.JobEntry
+	(*JobIntegration)(nil),        // 10: magus.job.v1alpha1.JobIntegration
+	(*JobGateStatus)(nil),         // 11: magus.job.v1alpha1.JobGateStatus
+	(*JobBlock)(nil),              // 12: magus.job.v1alpha1.JobBlock
+	(*JobReadOnly)(nil),           // 13: magus.job.v1alpha1.JobReadOnly
+	(*JobOverlapFootprint)(nil),   // 14: magus.job.v1alpha1.JobOverlapFootprint
+	(*CompletionGate)(nil),        // 15: magus.job.v1alpha1.CompletionGate
+	(*JobResult)(nil),             // 16: magus.job.v1alpha1.JobResult
+	(*JobGateEvidence)(nil),       // 17: magus.job.v1alpha1.JobGateEvidence
+	(*JobRelease)(nil),            // 18: magus.job.v1alpha1.JobRelease
+	(*JobOverlap)(nil),            // 19: magus.job.v1alpha1.JobOverlap
+	(*JobRun)(nil),                // 20: magus.job.v1alpha1.JobRun
+	(*ResourceSize)(nil),          // 21: magus.job.v1alpha1.ResourceSize
+	(*RunJobRequest)(nil),         // 22: magus.job.v1alpha1.RunJobRequest
+	(*ListJobsRequest)(nil),       // 23: magus.job.v1alpha1.ListJobsRequest
+	(*ListJobsResponse)(nil),      // 24: magus.job.v1alpha1.ListJobsResponse
+	(*v1alpha1.Credential)(nil),   // 25: magus.activity.v1alpha1.Credential
+	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 27: google.protobuf.Duration
 }
 var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	0,  // 0: magus.job.v1alpha1.RunJobResponse.state:type_name -> magus.job.v1alpha1.SubmitState
 	3,  // 1: magus.job.v1alpha1.RunJobResponse.job:type_name -> magus.job.v1alpha1.Job
-	19, // 2: magus.job.v1alpha1.Job.last_run:type_name -> magus.job.v1alpha1.JobRun
-	20, // 3: magus.job.v1alpha1.Job.target:type_name -> magus.job.v1alpha1.ResourceSize
+	20, // 2: magus.job.v1alpha1.Job.last_run:type_name -> magus.job.v1alpha1.JobRun
+	21, // 3: magus.job.v1alpha1.Job.target:type_name -> magus.job.v1alpha1.ResourceSize
 	1,  // 4: magus.job.v1alpha1.Job.holder:type_name -> magus.job.v1alpha1.JobHolder
-	17, // 5: magus.job.v1alpha1.Job.releases:type_name -> magus.job.v1alpha1.JobRelease
-	14, // 6: magus.job.v1alpha1.Job.goals:type_name -> magus.job.v1alpha1.CompletionGate
-	15, // 7: magus.job.v1alpha1.Job.result:type_name -> magus.job.v1alpha1.JobResult
-	4,  // 8: magus.job.v1alpha1.Job.registered_by:type_name -> magus.job.v1alpha1.JobOrigin
-	5,  // 9: magus.job.v1alpha1.Job.attempt:type_name -> magus.job.v1alpha1.JobAttempt
-	6,  // 10: magus.job.v1alpha1.Job.gate_attempts:type_name -> magus.job.v1alpha1.JobGateAttempt
-	7,  // 11: magus.job.v1alpha1.Job.unattributed:type_name -> magus.job.v1alpha1.JobUnattributedWrite
-	8,  // 12: magus.job.v1alpha1.Job.entries:type_name -> magus.job.v1alpha1.JobEntry
-	9,  // 13: magus.job.v1alpha1.Job.integration:type_name -> magus.job.v1alpha1.JobIntegration
-	9,  // 14: magus.job.v1alpha1.Job.waiter_evidence:type_name -> magus.job.v1alpha1.JobIntegration
-	24, // 15: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
-	5,  // 16: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
-	4,  // 17: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
-	10, // 18: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobGateStatus
-	16, // 19: magus.job.v1alpha1.JobResult.gate_evidence:type_name -> magus.job.v1alpha1.JobGateEvidence
-	13, // 20: magus.job.v1alpha1.JobOverlap.footprint:type_name -> magus.job.v1alpha1.JobOverlapFootprint
-	25, // 21: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
-	26, // 22: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
-	3,  // 23: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
-	18, // 24: magus.job.v1alpha1.ListJobsResponse.overlaps:type_name -> magus.job.v1alpha1.JobOverlap
-	11, // 25: magus.job.v1alpha1.ListJobsResponse.blocked:type_name -> magus.job.v1alpha1.JobBlock
-	12, // 26: magus.job.v1alpha1.ListJobsResponse.read_only:type_name -> magus.job.v1alpha1.JobReadOnly
-	22, // 27: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
-	21, // 28: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
-	23, // 29: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
-	2,  // 30: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
-	29, // [29:31] is the sub-list for method output_type
-	27, // [27:29] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	18, // 5: magus.job.v1alpha1.Job.releases:type_name -> magus.job.v1alpha1.JobRelease
+	15, // 6: magus.job.v1alpha1.Job.goals:type_name -> magus.job.v1alpha1.CompletionGate
+	16, // 7: magus.job.v1alpha1.Job.result:type_name -> magus.job.v1alpha1.JobResult
+	5,  // 8: magus.job.v1alpha1.Job.registered_by:type_name -> magus.job.v1alpha1.JobOrigin
+	6,  // 9: magus.job.v1alpha1.Job.attempt:type_name -> magus.job.v1alpha1.JobAttempt
+	7,  // 10: magus.job.v1alpha1.Job.gate_attempts:type_name -> magus.job.v1alpha1.JobGateAttempt
+	8,  // 11: magus.job.v1alpha1.Job.unattributed:type_name -> magus.job.v1alpha1.JobUnattributedWrite
+	9,  // 12: magus.job.v1alpha1.Job.entries:type_name -> magus.job.v1alpha1.JobEntry
+	10, // 13: magus.job.v1alpha1.Job.integration:type_name -> magus.job.v1alpha1.JobIntegration
+	10, // 14: magus.job.v1alpha1.Job.waiter_evidence:type_name -> magus.job.v1alpha1.JobIntegration
+	4,  // 15: magus.job.v1alpha1.Job.model_tier:type_name -> magus.job.v1alpha1.JobModelTier
+	25, // 16: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
+	6,  // 17: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
+	5,  // 18: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
+	11, // 19: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobGateStatus
+	17, // 20: magus.job.v1alpha1.JobResult.gate_evidence:type_name -> magus.job.v1alpha1.JobGateEvidence
+	14, // 21: magus.job.v1alpha1.JobOverlap.footprint:type_name -> magus.job.v1alpha1.JobOverlapFootprint
+	26, // 22: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
+	27, // 23: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
+	3,  // 24: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
+	19, // 25: magus.job.v1alpha1.ListJobsResponse.overlaps:type_name -> magus.job.v1alpha1.JobOverlap
+	12, // 26: magus.job.v1alpha1.ListJobsResponse.blocked:type_name -> magus.job.v1alpha1.JobBlock
+	13, // 27: magus.job.v1alpha1.ListJobsResponse.read_only:type_name -> magus.job.v1alpha1.JobReadOnly
+	23, // 28: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
+	22, // 29: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
+	24, // 30: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
+	2,  // 31: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
+	30, // [30:32] is the sub-list for method output_type
+	28, // [28:30] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_magus_job_v1alpha1_job_proto_init() }
@@ -2379,7 +2560,7 @@ func file_magus_job_v1alpha1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_job_v1alpha1_job_proto_rawDesc), len(file_magus_job_v1alpha1_job_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

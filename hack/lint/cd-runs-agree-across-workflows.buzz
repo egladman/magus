@@ -7,6 +7,8 @@
 //
 // Names, not values: a step may phrase its REASON differently. Job permissions are left
 // to review, since a job may hold more for its other steps.
+//
+// Tier 1, mechanical: the fix copies the missing env names to the step.
 namespace cdruns;
 
 import "assert";

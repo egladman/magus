@@ -28,8 +28,9 @@ import (
 // release it sooner.
 //
 // Callers may set Env, Dir, stdio and SysProcAttr, and append to ExtraFiles: the
-// command sees appended entry i at descriptor 3+LauncherFiles+i, and descriptor 3
-// closed. Args ends with the command's argv, name then args, and a caller may rewrite
+// command sees appended entry i at descriptor 3+LauncherFiles+i. The launcher closes its
+// ruleset descriptor before exec; the command's runtime may subsequently reuse descriptor 3.
+// Args ends with the command's argv, name then args, and a caller may rewrite
 // that name to change the argv[0] the command sees. Replacing ExtraFiles, Path or the
 // rest of Args makes the launcher refuse to run name. A bare name is resolved against
 // PATH now, as exec.Command does.
@@ -100,8 +101,10 @@ func launch(args []string) error {
 	if err := restrictSelf(rulesetFD); err != nil {
 		return err
 	}
+	// syscall.Exec does not perform os/exec descriptor setup. Close the launcher's
+	// ruleset descriptor explicitly so the command never inherits descriptor 3.
 	if err := unix.Close(rulesetFD); err != nil {
-		return fmt.Errorf("sandbox: launcher: close ruleset: %w", err)
+		return fmt.Errorf("sandbox: launcher: close ruleset descriptor: %w", err)
 	}
 	if err := syscall.Exec(path, argv, os.Environ()); err != nil { //nolint:gosec // G702: the command the parent chose and resolved, now under the ruleset
 		return fmt.Errorf("sandbox: launcher: exec %s: %w", path, err)

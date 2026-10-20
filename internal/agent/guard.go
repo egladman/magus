@@ -182,7 +182,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
 // session's PATH that a shell line in the config used to.
 //
-// 21: magus-path.buzz accepts --reports-skills, which a config written for 21 passes
+// 21: magus-path.buzz accepts --observes-skill-loads, which a config written for 21 passes
 // on every judging entry, and magus-command.buzz records a message the person typed. Under that
 // config a 20 copy reports the flag as unsupported and every skill gate stands down.
 //
@@ -205,7 +205,32 @@ var guardInputs = []string{"command", "path", "mcp"}
 // without a word. cursor-hook.buzz answers beforeSubmitPrompt with a
 // continue reply and records the message through `magus shell --message`. Under a config
 // written for 24, a 23 copy prints nothing for beforeSubmitPrompt, which records no message.
-const GuardTemplateVersion = 24
+//
+// 25: cursor-hook.buzz accepts --observes-skill-loads, gates the shell on preToolUse and files
+// each verdict for the event after the call. magus-command.buzz answers PostToolUse and
+// SubagentStop in their own shapes, and magus-rehydrate.buzz answers SubagentStart.
+// proofread-reply.buzz answers one more host's replies. Under a config written for 25, a 24
+// copy reports --observes-skill-loads as unsupported, so a skill load goes unseen; and answers
+// another host's PostToolUse in the PreToolUse shape, which that host discards.
+//
+// 26: magus-command.buzz answers Stop and SubagentStop with a block or a system message, so
+// background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the
+// shell command. Under a config written for 26, a 25 copy leaves those stops unanswered and
+// still prepends its stdin and quiet-output prefix to every Cursor command.
+//
+// 29: every tool reaches magus-command.buzz through one catch-all entry, which forwards the
+// whole event, and magus-command.buzz, cursor-hook.buzz and the plugin glue forward
+// --tool-rows, the directory the host's tool rows are installed in. Under a config written
+// for 29, a 28 copy reports --tool-rows as unsupported, so the guard knows no tool and
+// refuses every call whose input names no command or path.
+//
+// 30: magus-command.buzz, magus-path.buzz and cursor-hook.buzz accept --observes-skill-loads
+// in place of --reports-skills, which a config written for 30 passes on every judging entry.
+// Under that config a 29 copy reports the flag as unsupported and every skill gate stands
+// down.
+// 31: native shell calls may carry cmd and workdir. The shared command glue selects
+// that directory's binary, and the hook names its starting directory for handoff.
+const GuardTemplateVersion = 31
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

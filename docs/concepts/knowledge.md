@@ -84,13 +84,31 @@ nodes, so an agent knows what exists before running anything.
 
 ## Query grammar
 
-`magus query` takes free-text terms (AND) plus field matchers. A matcher is
+`magus query` takes free-text terms plus field matchers. A matcher is
 `field<op>value`, where the operator is `=` (match), `!=` (exclude), or `=~` (regex).
-Terms are scored with the same leaf-anchored fuzzy match that powers `magus where`.
+Matchers filter; free text ranks.
+
+Free text is split into words, so `leafScore` also finds `leaf` and `score`, and each
+word is scored by BM25F over a node's name, signature, path and docs. A match needs
+any one word. One that holds fewer words than the query is a partial match, ranked by
+its score among the rest. A node whose name is the query as typed ranks ahead of one
+whose docs only repeat its words. `-o json` gives every match a `why`: the words it held
+(`matched` of `of`), each word's score per field, and its rank in each ranked list. The
+answer's `ranking` names the weight file's digest, so a result says which weights
+produced it.
+
+When you work in a changed tree, or under a lease, the files you changed and the
+lease's write paths also seed a personalized PageRank. That reranks the matches near
+them, and `ranking.reader` lists the paths it used.
+
+`explain`, `path` and `refs` name a node from the same ranking, and they take only a
+match that holds every word. A name nothing holds whole answers absent; it never
+resolves to a neighbor that shares one word.
 
 | Form               | Meaning                                            |
 | ------------------ | -------------------------------------------------- |
-| `build`            | free text: match node IDs, labels, and docs        |
+| `build`            | free text: ranked over names, paths and docs       |
+| `internal/trail`   | a term holding `/` must appear whole in the match  |
 | `kind=spell`       | only nodes of that kind                            |
 | `project=pkg/foo`  | the project node and its targets                   |
 | `relation=uses`    | seed from nodes touching a `uses` edge             |
@@ -207,6 +225,7 @@ magus refs <name> --definition             # the definition's exact lines, as pa
 magus refs <name> --source                 # the definition's body itself
 magus explain "symbol:<id>"                # the node's `source` is the definition's path:line
 magus explain "file:<path>"                # a file's `lines` and `bytes`
+magus explain <dir>                        # the dir's public API: what files outside it use
 magus query "kind=symbol <name>" -o json   # each match's `.source` is "path:line"
 ```
 
@@ -347,7 +366,10 @@ Edges are directed and carry provenance and a confidence tag: `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `implements`, `imports`,
-`references`, `documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
+`references`, `documents`, `rationale_for`, `owns`, `co_changes`. `co_changes` links
+two files that changed in the same commits, from git history (see
+[Git history](#git-history-vcs)); it is symmetric and stored once, with the
+lesser path as its source. `calls` spans two layers: buzz function to buzz
 function, and code symbol to code symbol from a SCIP index. `implements` runs from an
 implementing type or method to the interface or interface method it satisfies, both
 symbols, from the relationships the indexer records. `rationale_for` points at a
@@ -651,6 +673,17 @@ deliberately does not decode each index to check it parses: that is a full unmar
 lookup to catch a case the graph build already logs, while a never-built index is the case
 that occurs.
 
+A stale index is one built before the sources it covers, and magus says which sources:
+the line under the answer names up to five files modified since the index was built,
+counts the rest, and says that deletions are not listed, since a deleted file leaves
+nothing to compare. The list is a fact of the moment you ask, so only a read that
+evaluates the workspace names files; one answered from the verdict a graph build recorded
+names the projects alone. `magus describe job` uses the list: it grades a job's symbol
+goals against the built graph when none of the changed files falls inside the job's write
+paths, and leaves them ungraded, naming `magus graph build`, when one does or when the
+index names no files. Re-indexing stays whole-project: the list makes the staleness
+precise, it does not make indexing partial.
+
 ## Citations (@links)
 
 A URL written in a code comment is almost always a pointer at documentation, and until it
@@ -691,6 +724,13 @@ is a phantom nothing can retire.
 ## Git history (@vcs)
 
 Opt-in, off by default: enable it to fold each file's git history onto its file node.
+
+It also links files that change together. A pair gets a symmetric `co_changes` edge,
+carrying `support` (shared commits) and `confidence` (support over the commit count of
+the less-changed file), when both files have a node, they share at least two commits,
+and confidence is at least 0.3. A commit touching more than 30 files is skipped as
+mechanical. The edge answers "what else changes with this", so a ranked search that
+walks the graph can reach a file's usual companions.
 
 ```yaml
 # magus.yaml
@@ -787,8 +827,10 @@ magus:                        # magus's, all of it
   anchors:
     - kind: symbol            # survives the code moving file and line; breaks on rename or delete
       target: "m internal/cache/Store#Put()."
+      signature: "func (s *Store) Put(key string, v []byte) error"  # recorded by `magus notes edit`
     - kind: file              # a path, when no single symbol covers it
       target: internal/cache/cache.go
+      digest: 3f9a1c0e7b2d4a68  # recorded by `magus notes edit`
 ---
 
 Nothing in the code says these must be cleared together.
@@ -801,8 +843,8 @@ and the rest are read past in silence rather than reported as malformed notes.
 
 Three consequences worth knowing:
 
-- **magus never rewrites your other frontmatter.** When it records an anchor fingerprint it
-  replaces the `magus:` block and leaves every other key, and their order, exactly as they
+- **magus never rewrites your other frontmatter.** When it records a signature or a
+  fingerprint it replaces the `magus:` block and leaves every other key, and their order, exactly as they
   were.
 - **`id` is what survives a reorganization.** Without it a note is identified by its path,
   so renaming the file in Obsidian (which rewrites your `[[wikilinks]]` and knows nothing
@@ -825,13 +867,22 @@ together").
 
 - **Does it still resolve?** A renamed or deleted subject reports `dangling-anchor`, with
   the coarser anchor it degrades to. Nothing is ever re-pointed at a guess.
-- **Did the content change?** A stored fingerprint of the anchored definition detects the
-  more common and more dangerous case: the code still exists and quietly stopped saying
-  what the note claims. The fingerprint ignores whitespace, so reformatting is free, and
-  reacts to tokens, so a real edit is loud.
+- **Did what it is change?** This is the more common and more dangerous case: the code
+  still exists and quietly stopped saying what the note claims.
+  - A symbol anchor is graded by its signature, as its indexer renders it. A changed
+    signature reports `drifted-anchor`. A body edit or a move to another line or file
+    leaves the signature alone and reads clean: those almost never invalidate prose about
+    what a symbol is.
+  - A symbol note with no recorded signature, or a symbol whose indexer renders none,
+    reports `unverifiable-anchor`. It is neither clean nor drifted, because nothing was
+    compared.
+  - A file anchor is graded by a fingerprint of its content. The fingerprint ignores
+    whitespace, so reformatting is free, and reacts to tokens, so a real edit is loud.
 
-Recording that fingerprint is a deliberate human act: `magus notes edit` stamps it, because
-the person just had the note and its subject in front of them. Verify only ever reports.
+Recording a signature or a fingerprint is a deliberate human act: `magus notes edit` stamps
+it, because the person just had the note and its subject in front of them. Verify only ever
+reports. A note recorded before symbols were graded by signature reads unverifiable until
+someone re-reads it and runs `magus notes edit`.
 
 Retrieval labels, and never reorders. A match whose subject has moved on carries its
 verdict and `outrun_days` so a reader can see "400 days behind its subject" beside the

@@ -94,6 +94,36 @@ final __r = c.describe() + " " + c.tags[0];
 	assert.Equal(t, want, sess.GetGlobal("__r").String(), "round-trip __r")
 }
 
+// TestBytecodeObjectExternMethod round-trips an object declaring an extern method,
+// which has no body to encode, beside a static method declared after it: the def
+// built from the decoded decl must still route the static to the type.
+func TestBytecodeObjectExternMethod(t *testing.T) {
+	src := `
+object Handle {
+    n: int,
+
+    extern fun close() > void;
+
+    static fun make() > Handle {
+        return Handle{ n = 21 };
+    }
+
+    fun twice() > int {
+        return this.n * 2;
+    }
+}
+final __r = Handle.make().twice();
+`
+	ctx := context.Background()
+	sess := newSession(ctx)
+	chunk, err := sess.Compile(src)
+	require.NoError(t, err, "compile")
+	data, err := chunk.Marshal()
+	require.NoError(t, err, "marshal")
+	require.NoError(t, sess.ExecBytecode(ctx, data), "ExecBytecode")
+	assert.Equal(t, int64(42), sess.GetGlobal("__r").AsInt())
+}
+
 // TestBytecodeExportsRoundTrip asserts a SharedGlobals module's exported names
 // survive marshal/unmarshal: ExecChunk repopulates the session's export set from
 // chunk.Exports, so a spell module loaded from bytecode still exposes its mgs_

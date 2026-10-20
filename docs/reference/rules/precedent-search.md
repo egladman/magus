@@ -14,7 +14,7 @@ A hunt for one distinctive name, which refs answers with verified sites.
 
 ## Why
 
-A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits.
+A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. In a workspace with no symbol index yet it advises once and stays quiet after: a repeat saying the index is still missing changes nothing.
 
 ## Default and override
 
@@ -34,6 +34,8 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [precedent-search]: ...
 ```
+
+A workspace that sets this rule to `deny` sees `deny [precedent-search]: ...` instead.
 
 `magus describe rule precedent-search` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

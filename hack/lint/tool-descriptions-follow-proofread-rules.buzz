@@ -1,8 +1,12 @@
 // tool-descriptions-follow-proofread-rules holds the description of every MCP tool
 // (internal/handler/mcp/gen/registry.go) and of every shipped skill (the catalog in
-// internal/agent/catalog.go) to libs/conventions/proofread's tool-description kind, under this
+// internal/agent/catalog.go) to libs/proofread's tool-description kind, under this
 // repository's decisions table (hack/policy/proofread.buzz). A finding the table decides `deny`
 // fails; `advise` is the reader's to weigh.
+//
+// Tier 1, mechanical: a finding the decisions table denies fails everywhere, and the fix
+// is a rewording.
+// Tier 3, judgment: a finding the table advises is the reader's to weigh, and never fails.
 namespace tooldesc;
 
 import "assert";
@@ -14,7 +18,7 @@ import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/policy/proofread" as decisions;
-import "libs/conventions/proofread" as proofread;
+import "libs/proofread/proofread" as proofread;
 
 export final TOOLS = "internal/handler/mcp/gen/registry.go";
 export final SKILLS = "internal/agent/catalog.go";
@@ -23,8 +27,8 @@ final JUDGE = "{proofread\home}/{proofread\command}";
 
 // reads keys lint-rules on both sources and on everything the judge is linked from.
 export fun reads() > [str] {
-    return [TOOLS, SKILLS, "hack/policy/proofread.buzz", "libs/conventions/go.mod", "libs/conventions/go.sum",
-        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz"];
+    return [TOOLS, SKILLS, "hack/policy/proofread.buzz", "libs/proofread/go.mod", "libs/proofread/go.sum",
+        "libs/proofread/**/*.go", "libs/proofread/proofread.buzz"];
 }
 
 // toolLines blanks every line of the registry that is not a tool's own Description: field, so
@@ -77,7 +81,7 @@ export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Findin
 }
 
 fun judged(bin: str, table: str, text: str) > [any] !> any {
-    final run = proc\exec(bin, args: ["tool-description", "-decisions", table],
+    final run = proc\exec(bin, args: ["tool-description", "--stdin", "--decisions", table],
         opts: {"stdin": text, "quiet": true, "allow_failure": true});
     if (run.code != 0) {
         throw "proofread exited {run.code}: " + run.stderr.trim();

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -12,11 +13,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -182,6 +188,81 @@ func TestAdviseRepeatGateIsSilentWithoutARunLog(t *testing.T) {
 	assert.Empty(t, missing)
 }
 
+// gateRepeatRepo is a git workspace on main whose run log holds runs gate invocations and
+// whose session store holds a gate verdict of outcome at HEAD, recorded now.
+func gateRepeatRepo(t *testing.T, runs int, outcome string) (context.Context, *testkit.Repo) {
+	t.Helper()
+	testkit.Isolate(t)
+	repo := testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	cacheDir := filepath.Join(repo.Root(), ".magus")
+	runsDir := filepath.Join(cacheDir, "runs")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	now := time.Now()
+	for i := range runs {
+		writeRun(t, runsDir, "gate-"+strconv.Itoa(i), now.Add(-time.Duration(30-i)*time.Minute), time.Minute, "affected", "ci")
+	}
+	dir, err := sessions.Dir(repo.Root())
+	require.NoError(t, err)
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome,
+	}, sessions.InvocationStart{Workspace: repo.Root()}))
+	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
+}
+
+// From the third gate in the window, a gate over a tree its newest verdict passed and that
+// nothing changed since is refused: it can only pass again, and the advisory that only said
+// so was gated past again and again. A change after the verdict, a red verdict, fewer runs
+// or a command that is not the gate refuse nothing.
+func TestDenyRepeatGate(t *testing.T) {
+	const gate = "./magus affected ci"
+
+	t.Run("a third gate over an unchanged green tree", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		// Dirty before the verdict: the tree the gate passed already held it.
+		repo.Write("a.go", "package a\n\nvar x = 1\n")
+		before := time.Now().Add(-time.Hour)
+		require.NoError(t, os.Chtimes(repo.Path("a.go"), before, before))
+
+		d := denyRepeatGate(ctx, Dependencies{}, "", gate)
+		require.NotEmpty(t, d)
+		assert.Contains(t, d.Say, "`ci` passed on this branch")
+		assert.Contains(t, d.Say, "nothing changed since")
+		assert.Contains(t, d.Why, repo.Head(), "the rationale names the verdict's commit")
+		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
+
+		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryGateRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryGateRepeat)}, judgedAs(raised),
+			"Judge reaches the rule through the role-scoped list")
+	})
+	t.Run("a file written after the verdict", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		repo.Write("b.go", "package a\n")
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(repo.Path("b.go"), after, after))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a commit after the verdict", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		repo.Commit("more", map[string]string{"c.go": "package a\n"})
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(repo.Path("c.go"), after, after))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a red verdict", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomeFail)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("the second gate", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 1, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a command that is not the gate", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus run test ."))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci --plan"))
+	})
+}
+
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 	root := t.TempDir()
 	assert.Empty(t, workspaceRunsDir(""),
@@ -220,7 +301,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Equal(t, "magus workspace: `"+command+"` is the orchestrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
+		assert.Equal(t, "magus workspace: `"+command+"` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
 			"the verdict names what it refused and hands back the check to run instead")
 		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
 		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
@@ -238,6 +319,93 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 		assert.Contains(t, reason.Say, lease.ID, "the denial must name the lease")
 		assert.Contains(t, reason.Say, "declares no check", "the denial must say why: nothing was recorded to run instead")
 		assert.Contains(t, reason.Why, "record a check on this row", "the rationale must name who records one")
+	})
+
+	// A job's check is never the gate, so a row naming it no longer owns it: only the
+	// checkout's integrator gates.
+	t.Run("a row whose check names the gate", func(t *testing.T) {
+		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
+			lease := narrowLease()
+			lease.Validation = validation
+			named, _ := fleetFixture(t, lease)
+			reason := denyLeaseScopedGate(named, Dependencies{}, lease.ID, "./magus affected ci")
+			require.NotEmpty(t, reason, "%q", validation)
+			assert.Contains(t, reason.Say, "a job's check is never the gate", "%q", validation)
+			assert.Contains(t, reason.Why, "<parent>/integrate "+lease.ID, "%q: names the role that gates", validation)
+		}
+	})
+}
+
+// integratorFixture seeds row as taken in the fixture's checkout, unless it names a
+// checkout root of its own, and returns the context pinning that checkout with the
+// dependencies of the subagent a1 spawned as title.
+func integratorFixture(t *testing.T, row types.Job, title string) (context.Context, Dependencies) {
+	t.Helper()
+	ctx, root := fleetFixture(t)
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	row.CheckoutRoot = cmp.Or(row.CheckoutRoot, root)
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	caller := job.Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	facts := hint.NewGate(at.cacheDir, FactsKey(caller.Host, caller.Session))
+	writeSpawnedAgent(facts, caller.Agent, spawnedAgent{Description: title})
+	return ctx, Dependencies{caller: caller, facts: facts}
+}
+
+// TestTheCheckoutsIntegratorBuildsAndRegenerates pins who integrates a checkout: the role
+// and the checkout decide, never the row's check. The integrator under a go-test check
+// builds, regenerates, formats, lints and gates; the same lease held by the root, by a
+// change-role worker, or taken in another checkout is a worker held to its check.
+func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	integrating := []string{
+		"./magus run go-build .",
+		"./magus run generate / -s",
+		"./magus run content-generate docs",
+		"./magus run go::go-fmt .",
+		"./magus run lint .",
+		"./magus affected ci",
+	}
+
+	// The generate targets are left out of the refusals: with no workspace to read, a
+	// `-generate` name stands in for a producer of the write paths and passes any worker.
+	refused := []string{"./magus run go-build .", "./magus run go::go-fmt .", "./magus run lint .", "./magus affected ci"}
+
+	ctx, deps := integratorFixture(t, row, "root/integrate "+row.ID)
+	for _, command := range integrating {
+		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), "the integrator: %s", command)
+	}
+	role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, "root/integrate "+row.ID)
+	assert.Equal(t, types.AgentRoleIntegrator, role, "the command rule hears the role")
+
+	root := deps
+	root.caller.Agent = ""
+	for _, command := range refused {
+		assert.True(t, denyLeaseScopedGate(ctx, root, row.ID, command).refused(), "the root holding the integrator's lease never builds: %s", command)
+	}
+
+	for name, title := range map[string]string{
+		"a change-role worker":                  "root/feat " + row.ID,
+		"an integrate title naming another job": "root/integrate harness/other",
+	} {
+		ctx, deps := integratorFixture(t, row, title)
+		for _, command := range refused {
+			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), "%s: %s", name, command)
+		}
+		role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, title)
+		assert.Equal(t, types.AgentRoleWorker, role, name)
+	}
+
+	t.Run("an integrate title in a checkout the row was not taken in", func(t *testing.T) {
+		isolated := row
+		isolated.CheckoutRoot = t.TempDir()
+		ctx, deps := integratorFixture(t, isolated, "root/integrate "+row.ID)
+		for _, command := range refused {
+			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+		}
 	})
 }
 
@@ -262,15 +430,6 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 		assert.Empty(t, denyLeaseScopedGate(done, Dependencies{}, lease.ID, "./magus affected ci"))
 	})
 
-	t.Run("a row whose validation names the gate", func(t *testing.T) {
-		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
-			lease := narrowLease()
-			lease.Validation = validation
-			owns, _ := fleetFixture(t, lease)
-			assert.Empty(t, denyLeaseScopedGate(owns, Dependencies{}, lease.ID, "./magus affected ci"), "%q", validation)
-		}
-	})
-
 	// denyLeaseGate alone: every other target is worker-check-only's, graded below.
 	t.Run("a command that is not the gate", func(t *testing.T) {
 		assert.Empty(t, denyLeaseGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go-build ."))
@@ -285,8 +444,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 	})
 }
 
-// figuresLease is a figure worker whose one check regenerates diagrams: the row shape the
-// 2026-09-29 incident ran under.
+// figuresLease is a figure worker whose one check regenerates diagrams.
 func figuresLease() types.Job {
 	return types.Job{
 		ID:         "figures/flow",
@@ -298,16 +456,184 @@ func figuresLease() types.Job {
 	}
 }
 
-// figuresWorkspace declares figures-generate as the producer of the row's figure. No other
-// target the cases run declares an output among its write paths.
+// figuresWorkspace declares figures-generate as the producer of every figure, the row's
+// among them, and flow-generate as the producer of the row's page alone. No other target
+// the cases run declares an output among its write paths. The check writes only the row's
+// figure.
 func figuresWorkspace(t *testing.T) Dependencies {
 	t.Helper()
-	ws := mocks.NewMockWorkspaceRepository(t)
-	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
-		Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
-		Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
-	}}, nil).Maybe()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{
+		{
+			Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
+			Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
+		},
+		{
+			Path: "docs/figures/flow.md", Project: "docs", Role: "output",
+			Claims: []types.FileClaim{{Project: "docs", Target: "flow-generate", Role: "output", Glob: "figures/flow.md"}},
+		},
+	}, nil).Maybe()
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"diagrams-generate", "figures-generate", "flow-generate"}, TargetOutputs: map[string][]types.OutputRef{
+		"diagrams-generate": {{Glob: "gen/figures/flow.svg"}},
+		"figures-generate":  {{Glob: "gen/figures/*.svg"}},
+		"flow-generate":     {{Glob: "figures/flow.md"}},
+	}}
+	ws.EXPECT().Get("docs").Return(docs).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// testCheckLease is a worker whose check is the root's composite test target.
+func testCheckLease() types.Job {
+	return types.Job{
+		ID:         "guard/fix",
+		Criteria:   "fix a guard rule",
+		WritePaths: []string{"internal/guard/**"},
+		Check:      &types.LeaseCheck{Target: "test", Project: "."},
+		State:      types.StateRunning,
+		Registered: 1,
+	}
+}
+
+// composingWorkspace is a root whose test target needs format and runs go's go-test and
+// go-vet ops, and needs proofread-build in libs/conventions; go-build in the root declares
+// ./magus. No target declares a write.
+func composingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{
+			{Name: "test", Dependencies: []string{"format"},
+				CrossDependencies: []types.CrossTargetRef{{Project: "libs/conventions", Target: "proofread-build"}},
+				Spells:            []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-test", "go-vet"}}}},
+			{Name: "format", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-fmt"}}}},
+			{Name: "lint", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"golangci-lint"}}}},
+		}},
+		{Path: "libs/conventions", Nodes: []types.TargetGraphNode{{Name: "proofread-build"}}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{checkoutBinary}).Return([]types.FileEntry{{
+		Path: "magus", Project: ".", Role: "output",
+		Claims: []types.FileClaim{{Project: ".", Target: "go-build", Role: "output", Glob: "magus"}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
+	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
+	return Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
+		Spells:  spellCatalog,
+	}
+}
+
+// TestWorkerCheckOnlyLetsASliceOfTheCheckRun pins the iteration a check exists to end in: a
+// run of any target the check composes, through ctx.needs or a spell op, narrowed however
+// its forwarded arguments narrow it, and a dependency install. A worker refused these ran
+// `go test` raw instead. A target the check does not compose is still refused. Under
+// default_charms [rw] each slice passes as well, since none declares a write and no op among
+// them declares rw: refusing them refused every worker's `go::go-vet`. go-fmt declares rw.
+func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+	rw := deps
+	rw.DefaultCharms = []string{"rw"}
+
+	install := ""
+	for _, s := range spellCatalog() {
+		for _, name := range s.Targets() {
+			if op, _ := s.Op(name); op.Kind == spells.OpKindInstall && install == "" {
+				install = s.Name() + "::" + name
+			}
+		}
+	}
+	require.NotEmpty(t, install, "the built-in spells declare an install op")
+
+	for _, tt := range []struct {
+		name, command string
+		deny          bool
+	}{
+		{"the check", "./magus run test .", false},
+		{"a narrowed check", "./magus run test . -- -run TestLease", false},
+		{"the op it runs, narrowed", "./magus run go-test . -- -run TestLease", false},
+		{"the spell-qualified op", "./magus run go::go-test . -- -run 'Lease|Gate'", false},
+		{"another op it runs", "./magus run go::go-vet .", false},
+		{"a target it needs", "./magus run format .", false},
+		{"a target it needs in another project", "./magus run proofread-build libs/conventions", false},
+		{"the install target", "./magus run install .", false},
+		{"the install target on every project", "./magus run install /", false},
+		{"a spell's install op", "./magus run " + install + " docs", false},
+		{"an install that re-resolves", "./magus run install:update .", true},
+		{"a target it does not compose", "./magus run lint .", true},
+		{"an op it does not compose", "./magus run golangci-lint .", true},
+		{"its op on another project", "./magus run go-test docs", true},
+		{"affected of its op", "./magus affected go-test", true},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		underRW := denyWorkerCheckOnly(ctx, rw, row.ID, tt.command)
+		if !tt.deny {
+			assert.Empty(t, reason, tt.name)
+			assert.Empty(t, underRW, "%s, under default rw", tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "run test .`.", tt.name)
+	}
+
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run go-fmt ."), "an op a target it needs runs")
+	assert.True(t, denyWorkerCheckOnly(ctx, rw, row.ID, "./magus run go-fmt .").refused(), "go-fmt honors rw, so default rw rewrites through it")
+}
+
+// A worker never builds ./magus: the orchestrator builds one per base and places it. The
+// refusal says so and names the placement, rather than a check the build has nothing to do
+// with, so an integrating worker whose own changes reach the binary knows who builds it.
+func TestWorkerCheckOnlyNamesThePlacementForTheBinary(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+
+	reason := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build .")
+	require.NotEmpty(t, reason)
+	assert.Equal(t, "magus workspace: `go-build` builds ./magus, the binary judging lease guard/fix's calls; "+workerBuildVerdict+".", reason.Say)
+	assert.Contains(t, reason.Why, onePerBase)
+	assert.Contains(t, reason.Why, strings.Join(placementArgv(row.ID), " "), "the rationale names the placement")
+	assert.Contains(t, reason.Why, "at this branch's commit", "the binary is built at the commit carrying the unit's changes")
+
+	other := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build docs")
+	require.NotEmpty(t, other)
+	assert.NotContains(t, other.Say, "builds ./magus", "only the target declaring ./magus, in its own project, builds it")
+}
+
+// TestWorkerRawTool pins the other half of the slice rule: a bound worker's raw tool that a
+// spell op covers is refused with its check named, where raw-tool alone only advises. The
+// refusal names the narrower run when the check composes the op.
+func TestWorkerRawTool(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+
+	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
+		"Judge reaches the rule: %s", v.Reason)
+
+	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
+	require.NotEmpty(t, reason)
+	assert.Contains(t, reason.Say, "runs go::go-test outside magus; run lease guard/fix's check: `")
+	assert.True(t, strings.HasSuffix(reason.Say, " run test .`."), reason.Say)
+	assert.Contains(t, reason.Why, "run go::go-test .`", "the check composes go-test, so the narrower run is named")
+
+	lint := denyWorkerRawTool(ctx, deps, row.ID, "golangci-lint run ./...")
+	require.NotEmpty(t, lint)
+	assert.Contains(t, lint.Why, "unresolved risks", "an op the check does not compose is named as a risk, not a slice")
+
+	for name, command := range map[string]string{
+		"a tool no spell covers": "jq . x.json",
+		"a magus run":            "./magus run go-test . -- -run TestLease",
+		"a help request":         "go help test",
+	} {
+		assert.Empty(t, denyWorkerRawTool(ctx, deps, row.ID, command), name)
+	}
+	assert.Empty(t, denyWorkerRawTool(ctx, deps, "", "go test ./..."), "an unbound caller keeps raw-tool's advice")
+	integratorCtx, integrator := integratorFixture(t, row, "root/integrate "+row.ID)
+	integrator.Spells = deps.Spells
+	assert.Empty(t, denyWorkerRawTool(integratorCtx, integrator, row.ID, "go test ./..."), "the checkout's integrator keeps raw-tool's advice")
 }
 
 // TestWorkerCheckOnly pins what a bound worker may run and what the refusal hands back: the
@@ -325,7 +651,8 @@ func TestWorkerCheckOnly(t *testing.T) {
 		{"the check", "./magus run diagrams_generate docs", false},
 		{"the check with a charm and forwarded args", "./magus run diagrams-generate:rw docs --server-enabled=false -- --verbose", false},
 		{"the check with a flag value before its project", "magus run diagrams-generate --timeout 5m docs", false},
-		{"a target declaring an output in the write paths", "./magus run figures-generate:rw docs", false},
+		{"a target declaring an output in the write paths", "./magus run figures-generate docs", false},
+		{"that target rewriting only the write paths", "./magus run flow-generate:rw docs", false},
 		{"a run that only reports", "./magus run lint docs --dry-run", false},
 		{"a shard plan", "./magus affected ci --plan", false},
 		{"a read", "./magus describe file docs/figures/flow.md", false},
@@ -348,11 +675,334 @@ func TestWorkerCheckOnly(t *testing.T) {
 		require.NotEmpty(t, reason, tt.name)
 		assert.NotContains(t, reason.Say, "\n", "%s: the verdict is one line", tt.name)
 		assert.Contains(t, reason.Say, "run diagrams_generate docs`.", "%s: the verdict ends in the check's command", tt.name)
-		assert.Contains(t, reason.Why, "The orchestrator runs every other target serially", tt.name)
+		assert.Contains(t, reason.Why, "The checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout, runs every other target serially", tt.name)
 	}
 
 	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
 	assert.Contains(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").Why, "gates once", "the gate keeps its own refusal")
+}
+
+// TestWorkerCheckOnlyHoldsARewriteToTheWritePaths pins the run a worker may make that
+// rewrites files past its lease: a leased `dprint:rw`, a slice of a `format` check,
+// rewrote console/README.md. Under the rw charm a run passes only when every glob its
+// target declares writing, and every glob the steps its chain reaches in the same project
+// declare modifying, lies inside the write paths, so the formatter declares what it
+// rewrites. A needed step's outputs and another project's steps are not counted:
+// `format:rw` passes past markdown-build's binary and libs/md's format, as `go-test .`
+// passes past libs/proofread's proofread-build and format. A target declaring no write
+// passes, since nothing says what it touches. The refusal names the globs and the run
+// without the charm.
+func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
+	ws := formatChainWorkspace(t)
+	opens := 0
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		opens++
+		return ws, nil
+	}}
+
+	lease := func(writePaths ...string) types.Job {
+		return types.Job{
+			ID: "docs/jobs", Criteria: "document jobs", WritePaths: writePaths,
+			Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
+		}
+	}
+	for _, tt := range []struct {
+		name, command string
+		writePaths    []string
+		outside       string // a glob the refusal names; "" for a pass
+	}{
+		{"the check rewriting past one page", "./magus run format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
+		{"a step its chain reaches", "./magus run markdown-format:rw .", []string{"docs/guides/jobs.md"}, "`docs/**/*.md`"},
+		{"a build step run alone", "./magus run markdown-build:rw .", []string{"docs/**"}, "`gen/mdtool`"},
+		{"a pattern one segment deep", "./magus run format:rw .", []string{"docs/*"}, "`docs/**/*.md`"},
+		{"a pattern under the tree", "./magus run format:rw .", []string{"docs/guides/**"}, "`docs/**/*.md`"},
+		{"the tree the glob writes", "./magus run format:rw .", []string{"docs/**"}, ""},
+		{"the directory the glob writes", "./magus run format:rw .", []string{"docs"}, ""},
+		{"the same glob", "./magus run format:rw .", []string{"docs/**/*.md"}, ""},
+		{"the check read-only", "./magus run format .", []string{"docs/guides/jobs.md"}, ""},
+		{"the op read-only", "./magus run dprint .", []string{"docs/guides/jobs.md"}, ""},
+	} {
+		row := lease(tt.writePaths...)
+		ctx, _ := fleetFixture(t, row)
+		opens = 0
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if strings.Contains(tt.command, ":rw") {
+			assert.Equal(t, 1, opens, "%s: one judgment opens the workspace once", tt.name)
+		} else {
+			assert.LessOrEqual(t, opens, 1, "%s: one judgment opens the workspace at most once", tt.name)
+		}
+		if tt.outside == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths; run `", tt.name)
+		_, next, _ := strings.Cut(reason.Say, "; run `")
+		assert.True(t, strings.HasSuffix(next, " .`."), "%s: the next run drops the charm: %s", tt.name, next)
+		assert.NotContains(t, next, ":rw", "%s: the next run drops the charm", tt.name)
+		assert.NotContains(t, next, "--no-default-charms", "%s: no default charm puts rw back", tt.name)
+		assert.Contains(t, reason.Why, tt.outside, tt.name)
+	}
+
+	everywhere := lease("docs/guides/jobs.md")
+	everywhere.Check.Project = "/"
+	ctx, _ := fleetFixture(t, everywhere)
+	reason := denyWorkerCheckOnly(ctx, deps, everywhere.ID, "./magus run format:rw /")
+	require.NotEmpty(t, reason, "a run over every project reads every project's declarations")
+	assert.Contains(t, reason.Why, "`docs/**/*.md`")
+	assert.Contains(t, reason.Say, " run format /`.")
+}
+
+// TestWorkerCheckOnlyRefusesAnOpRewrite: a leased `markdown::dprint:rw .`, an op the
+// format check composes, once passed because an op declares no writes, and its rewrites
+// surfaced only as MGS3001. A spell op run on its own under the
+// rw charm, named or carried by default_charms, is refused, naming the magusfile target
+// that calls it, whose declarations are judged as before. A read-only run passes, and an
+// op nothing calls is sent to the run without the charm. A brief teaching it is refused
+// the same way.
+func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
+	ws := formatChainWorkspace(t)
+	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/**"},
+		Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	for _, tt := range []struct {
+		name, command string
+		defaults      []string
+		next          string // the run the refusal names; "" for a pass
+	}{
+		{"the op under its charm", "./magus run dprint:rw .", nil, "format:rw ."},
+		{"the spell-qualified op", "./magus run markdown::dprint:rw .", nil, "format:rw ."},
+		{"the op with its own arguments", "./magus run dprint:rw . -- --verbose", nil, "format:rw ."},
+		{"the op under default rw", "./magus run dprint .", []string{"rw"}, "format ."},
+		{"the op read-only", "./magus run dprint .", nil, ""},
+		{"the op with the defaults off", "./magus run dprint . --no-default-charms", []string{"rw"}, ""},
+		{"the target calling it", "./magus run format:rw .", nil, ""},
+		{"the target calling it under default rw", "./magus run format .", []string{"rw"}, ""},
+	} {
+		ctx, _ := fleetFixture(t, row)
+		reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect, DefaultCharms: tt.defaults}, row.ID, tt.command)
+		if tt.next == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.True(t, reason.refused(), tt.name)
+		assert.Contains(t, reason.Say, "runs a spell op under the rw charm", tt.name)
+		assert.True(t, strings.HasSuffix(reason.Say, " run "+tt.next+"`."), "%s: %s", tt.name, reason.Say)
+		assert.Contains(t, reason.Why, "`format` calls it", tt.name)
+		assert.Contains(t, reason.Why, "MGS3001", tt.name)
+	}
+
+	narrow := row
+	narrow.WritePaths = []string{"docs/guides/jobs.md"}
+	ctx, _ := fleetFixture(t, narrow)
+	reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect}, narrow.ID, "./magus run format:rw .")
+	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths", "the target calling the op is judged by its declarations")
+
+	uncalled := row
+	uncalled.Check = &types.LeaseCheck{Target: "markdown-lint", Project: "."}
+	ctx, root := fleetFixture(t, uncalled)
+	deps := Dependencies{Inspect: inspect}
+	reason = denyWorkerCheckOnly(ctx, deps, uncalled.ID, "./magus run markdown-lint:rw .")
+	require.True(t, reason.refused(), "an op the check names is held the same way")
+	assert.True(t, strings.HasSuffix(reason.Say, " run markdown-lint .`."), reason.Say)
+	assert.Contains(t, reason.Why, "No magusfile target calls it")
+
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	off, v, found := briefOffCheck(briefRuns("Format with `./magus run dprint:rw .`."), judge)
+	require.True(t, found, "the brief is refused as its worker's run is")
+	assert.Contains(t, briefOffCheckDeny(row, off, v), "a spell op under the rw charm")
+	assert.Contains(t, briefOffCheckWhy(row, v, nil), "Teach `magus run format:rw .` instead.")
+}
+
+// formatChainWorkspace is a root project whose format check needs markdown-format and
+// markdown-build, then libs/md's format, and calls the dprint op.
+func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{
+			{Name: "format", Dependencies: []string{"markdown-format", "markdown-build"}, Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}},
+			{Name: "markdown-format"},
+			{Name: "markdown-build"},
+		}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	root := &types.Project{
+		Path:             ".",
+		MagusfileTargets: []string{"format", "markdown-format", "markdown-build"},
+		TargetChains: map[string][]types.ChainStep{
+			"format": append(types.Needs("markdown-format", "markdown-build"), types.ChainStep{Project: "libs/md", Target: "format"}),
+		},
+		TargetOutputs: map[string][]types.OutputRef{"markdown-build": {{Glob: "gen/mdtool"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"markdown-format": {{Glob: "docs/**/*.md"}}},
+	}
+	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	return ws
+}
+
+// TestWorkerCheckOnlyJudgesTheDefaultCharms: default_charms [rw] make a plain `magus run`
+// write as surely as `:rw` on the target, so the run is held to the write paths unless it
+// passes --no-default-charms.
+func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get("docs").Return(&types.Project{
+		Path:             "docs",
+		MagusfileTargets: []string{"dprint"},
+		TargetUpdates:    map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}},
+	}).Maybe()
+	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		Check: &types.LeaseCheck{Target: "dprint", Project: "docs"}, State: types.StateRunning, Registered: 1,
+	}
+	for _, tt := range []struct {
+		name, command string
+		defaults      []string
+		refused       bool
+	}{
+		{"a plain run under default rw", "./magus run dprint docs", []string{"rw"}, true},
+		{"the charm named", "./magus run dprint:rw docs", nil, true},
+		{"the defaults turned off", "./magus run dprint docs --no-default-charms", []string{"rw"}, false},
+		{"defaults without rw", "./magus run dprint docs", []string{"verbose"}, false},
+		{"no defaults", "./magus run dprint docs", nil, false},
+	} {
+		ctx, _ := fleetFixture(t, row)
+		reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect, DefaultCharms: tt.defaults}, row.ID, tt.command)
+		if !tt.refused {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Why, "`docs/**/*.md`", tt.name)
+		next := " run dprint docs`."
+		if defaultsRewrite(tt.defaults) {
+			next = " run dprint docs --no-default-charms`."
+		}
+		assert.Contains(t, reason.Say, next, "%s: --no-default-charms only when the defaults carry rw", tt.name)
+	}
+}
+
+// TestWorkerCheckOnlyRefusesAnUncheckedRewrite: with a workspace that does not load, nothing
+// says what a run under the rw charm writes. The run is refused, naming the load error and
+// the run without the charm, which passes; a brief teaching it is refused the same way.
+func TestWorkerCheckOnlyRefusesAnUncheckedRewrite(t *testing.T) {
+	row := figuresLease()
+	ctx, root := fleetFixture(t, row)
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, fmt.Errorf("magusfile: line 3: unexpected token")
+	}}
+
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate:rw docs")
+	require.True(t, reason.refused(), "a rewrite the guard cannot check is refused")
+	assert.Contains(t, reason.Say, "the workspace did not load; run `")
+	assert.Contains(t, reason.Say, " run figures-generate docs`.")
+	assert.Contains(t, reason.Why, "unexpected token")
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run figures-generate docs"), "without the charm nothing is written")
+
+	defaults := deps
+	defaults.DefaultCharms = []string{"rw"}
+	reason = denyWorkerCheckOnly(ctx, defaults, row.ID, "./magus run diagrams_generate docs")
+	require.True(t, reason.refused(), "default_charms [rw] rewrite the check too")
+	assert.Contains(t, reason.Say, " docs --no-default-charms`.")
+	assert.Empty(t, denyWorkerCheckOnly(ctx, defaults, row.ID, "./magus run diagrams_generate docs --no-default-charms"))
+
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	off, v, found := briefOffCheck(briefRuns("Regenerate with `./magus run figures-generate:rw docs`."), judge)
+	require.True(t, found, "the brief is refused as its worker's run is")
+	assert.Contains(t, briefOffCheckDeny(row, off, v), "the workspace did not load")
+	assert.Contains(t, briefOffCheckWhy(row, v, nil), "unexpected token")
+}
+
+// TestWorkerCheckOnlyJudgesTheCwdProject: `magus run` with no project runs the project
+// holding the caller's directory, so the rule judges that project, not the root.
+func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
+	row := types.Job{
+		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		Check: &types.LeaseCheck{Target: "format", Project: "docs"}, State: types.StateRunning, Registered: 1,
+	}
+	ctx, root := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	at.dir = filepath.Join(root, "docs")
+	ctx = context.WithValue(ctx, locationKey{}, at)
+
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "format", Spells: []types.TargetSpellUse{{Spell: "dprint", Ops: []string{"dprint"}}}}}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.md"}}}}
+	ws.EXPECT().Where(at.dir).Return(docs, true).Maybe()
+	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format:rw")
+	require.True(t, reason.refused())
+	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths")
+	assert.Contains(t, reason.Why, "`docs/**/*.md`")
+
+	op := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run dprint:rw")
+	require.True(t, op.refused())
+	assert.Contains(t, op.Say, " run format:rw`.", "docs' format calls the op")
+}
+
+// TestReadOnlyKeepsWhatTheRunAsked: the run offered in place of a rewrite drops only the rw
+// charm. It keeps other charms and forwarded arguments, and turns default charms off only
+// when they would put rw back.
+func TestReadOnlyKeepsWhatTheRunAsked(t *testing.T) {
+	for _, tt := range []struct {
+		command  string
+		defaults []string
+		want     string
+	}{
+		{"./magus run dprint:rw docs -- --check", []string{"verbose"}, " run dprint docs -- --check"},
+		{"./magus run dprint:rw,verbose docs", nil, " run dprint:verbose docs"},
+		{"./magus run dprint docs", []string{"rw"}, " run dprint docs --no-default-charms"},
+		{"./magus run go::go-fmt:rw .", nil, " run go::go-fmt ."},
+	} {
+		cmds, ok := ParseCommands(tt.command)
+		require.True(t, ok, tt.command)
+		r, ok := parseTargetRun(cmds[0])
+		require.True(t, ok, tt.command)
+		got := r.readOnly(tt.defaults)
+		assert.True(t, strings.HasSuffix(got, tt.want), "%s: %s", tt.command, got)
+	}
+}
+
+// TestLeaseCoversGlob pins how a glob a target writes is held to the write paths: a
+// declaration matching its text covers a single-segment wildcard, and only a whole tree, or
+// a `<dir>/**/<tail>` holding the glob's prefix and ending it, covers `**`.
+func TestLeaseCoversGlob(t *testing.T) {
+	for _, tt := range []struct {
+		writePaths []string
+		glob       string
+		covered    bool
+	}{
+		{[]string{"docs/gen/figures/flow.svg"}, "docs/gen/figures/flow.svg", true},
+		{[]string{"docs/gen/figures/flow.svg"}, "docs/gen/figures/*.svg", false},
+		{[]string{"docs/gen/figures/*"}, "docs/gen/figures/*.svg", true},
+		{[]string{"docs/gen/figures/*.png"}, "docs/gen/figures/*.svg", false},
+		{[]string{"docs/gen"}, "docs/gen/figures/*.svg", true},
+		{[]string{"docs/*"}, "docs/**", false},
+		{[]string{"docs/**"}, "docs/**", true},
+		{[]string{"docs"}, "docs/**/*.md", true},
+		{[]string{"**"}, "console/**/*.md", true},
+		{[]string{"docs/**"}, "**/*.md", false},
+		{[]string{"docs/**/*.md"}, "docs/guides/**/*.md", true},
+		{[]string{"docs/**/*.md"}, "docs/**/*.md", true},
+		{[]string{"docs/**/*.md"}, "docs/guides/**/*.svg", false},
+		{[]string{"docs/**/*.md"}, "console/**/*.md", false},
+		{[]string{"docs/**/*.md"}, "docs/guides/**", false},
+		{[]string{"docs/**/gen/*.go"}, "docs/api/**/gen/*.go", true},
+	} {
+		assert.Equal(t, tt.covered, leaseCoversGlob(tt.writePaths, tt.glob), "%v covering %s", tt.writePaths, tt.glob)
+	}
 }
 
 // TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.
@@ -368,7 +1018,6 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	})
 	for name, change := range map[string]func(*types.Job){
 		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row that owns the gate": func(j *types.Job) { j.Check = &types.LeaseCheck{Target: "ci", Project: "."} },
 		"a row declaring no check": func(j *types.Job) { j.Check = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -380,7 +1029,9 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	}
 	t.Run("a workspace that cannot load falls back to the producer spelling", func(t *testing.T) {
 		row := figuresLease()
-		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs"))
+		assert.Contains(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate:rw docs").Say, "the workspace did not load",
+			"a rewrite is never let through unchecked")
+		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run generate docs"))
 		assert.Empty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run figures-generate docs"))
 		assert.NotEmpty(t, denyWorkerCheckOnly(ctx, Dependencies{}, row.ID, "./magus run lint docs"))
 	})
@@ -425,11 +1076,10 @@ func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 		"a subagent in the checkout": {},
 	}, got)
 
-	base := hookLocation(ctx, Dependencies{}).cacheDir
-	require.NoError(t, os.WriteFile(job.MarkerPath(base), []byte("not a lease id!\n"), 0o644))
+	require.NoError(t, os.WriteFile(hookLocation(ctx, Dependencies{}).jobs().MarkerPath(), []byte("not a lease id!\n"), 0o644))
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
 	assert.Equal(t, graded{}, graded{v.Lease, v.LeaseFrom}, "a record that does not read binds nobody")
-	assert.Equal(t, "pass", v.Decision)
+	assert.Equal(t, decisionPass, v.Decision)
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -494,6 +1144,36 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
 	}
+}
+
+// A worker making a checkout by hand, in any backend's own verb, is pointed at the fork
+// that makes one.
+func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	ctx, _ := fleetFixture(t, worker)
+	for _, command := range []string{"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x"} {
+		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
+		assert.Contains(t, reason, "--checkout <dir>", "%q", command)
+		assert.Contains(t, reason, "harness", "%q", command)
+	}
+	assert.NotContains(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove ../x"), "--checkout")
+}
+
+// The holder of a job removes the checkout its fork made, and only that one; the
+// worktree-remove rule then judges whether removing it loses work.
+func TestDenyLeaseScopedVCSLetsAHolderRemoveItsOwnCheckout(t *testing.T) {
+	own := filepath.Join(t.TempDir(), "own")
+	worker := narrowLease()
+	worker.Parent = "harness"
+	worker.Worktree = &types.JobWorktree{Root: own}
+	ctx, _ := fleetFixture(t, worker)
+	// Only a fork writes the worktree record, so the store seeds the row without it.
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{worker}})
+
+	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove "+own))
+	assert.NotEmpty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove "+filepath.Join(t.TempDir(), "foreign")),
+		"a checkout the job does not own stays the orchestrator's")
 }
 
 // TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a parentless lease its
@@ -585,11 +1265,182 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "A worker may commit, with any backend, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt, "%q", command)
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
 		"It commits in "+r.main+", and the lease was taken in "+wt+".")
+}
+
+// A cherry-pick and a diff applied and committed land the same change, so lease-vcs gives
+// them one answer: both pass on the worker's own branch, both are refused anywhere else.
+func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+	for _, command := range []string{
+		"git cherry-pick abc123",
+		"git cherry-pick -x abc123..def456",
+		"git cherry-pick --continue",
+		"git diff abc123 def456 | git apply -3 && git commit -C def456",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
+		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
+		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+	}
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git cherry-pick abc123"), "the base branch")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git cherry-pick abc123 && git push"), "`git push` stays with the orchestrator")
+}
+
+// TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout pins every spelling of an init
+// that creates a repository outside the worker's checkout and in no checkout of the job's
+// repository, and the verbs after it on the same line that stay inside the new repository.
+func TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout(t *testing.T) {
+	ctx, _, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	from := Dependencies{callDir: wt}
+	for _, command := range []string{
+		"git init -q " + scratch,
+		"git init -q -b main --template= " + scratch,
+		"git init --initial-branch=main " + scratch + "/new/repo",
+		"git -C " + scratch + " init",
+		"cd " + scratch + " && git init -q",
+		"hg init " + scratch,
+		"sl init " + scratch,
+		"jj git init --colocate " + scratch,
+		"git init -q " + scratch + " && git -C " + scratch + " config user.email t@example.com && git -C " + scratch + " add . && git -C " + scratch + " commit -q --allow-empty -m done",
+		"cd " + scratch + " && git init -q && git config user.name t && git commit -q --allow-empty -m done && git branch topic && git checkout -q topic",
+		"git init -q " + scratch + " && git -C " + wt + " commit -m done",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from, worker.ID, command), "%q", command)
+	}
+}
+
+// TestDenyLeaseScopedVCSRefusesAnInitThatReachesTheCheckout pins each init a worker may not
+// run: in the checkout or another checkout of its repository, through any relocation that
+// lands the files there, in a place the line does not name literally, or with a verb after
+// it that leaves the new repository.
+func TestDenyLeaseScopedVCSRefusesAnInitThatReachesTheCheckout(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	from := Dependencies{callDir: wt}
+	for _, command := range []string{
+		"git init",
+		"git init -q .",
+		"git init " + wt + "/sub",
+		"git init " + r.main + "/sub",
+		"git init " + filepath.Dir(wt),
+		"git -C " + wt + " init",
+		"git -C " + scratch + " -C " + wt + " init",
+		"cd " + wt + " && git init -q",
+		"git init " + filepath.Join(wt, "..", filepath.Base(wt), "sub"),
+		"git init -q " + scratch + " && git -C " + scratch + " init " + wt + "/sub",
+		"GIT_DIR=" + wt + "/.git git init " + scratch,
+		"GIT_DIR=" + r.main + "/.git git init -q " + scratch,
+		"env GIT_DIR=" + r.main + "/.git git init " + scratch,
+		"GIT_WORK_TREE=" + wt + " git init " + scratch,
+		"GIT_COMMON_DIR=" + r.main + "/.git git init " + scratch,
+		"git --git-dir=" + r.main + "/.git init " + scratch,
+		"git --work-tree " + wt + " init " + scratch,
+		"git -c core.worktree=" + wt + " init " + scratch,
+		"git init --separate-git-dir " + wt + "/gitdir " + scratch,
+		"git init --separate-git-dir=gitdir " + scratch,
+		"git init --sep " + scratch + "/g " + scratch,
+		"git init " + scratch + " " + wt,
+		"git init \"$dir\"",
+		"git init " + scratch + "/*",
+		"git init ~/scratch",
+		"bash -c 'git init " + scratch + "'",
+		"if true; then git init " + scratch + "; fi",
+		"hg init",
+		"hg --cwd " + wt + " init " + scratch,
+		"hg -R " + wt + " init " + scratch,
+		"hg init ssh://host/repo",
+		"jj git init",
+		"jj git init --git-repo " + r.main + " " + scratch,
+		"jj git init --config-toml 'x=1' " + scratch,
+		"git init -q " + scratch + " && git -C " + scratch + " push origin HEAD",
+		"git init -q " + scratch + " && git -C " + r.main + " commit -m done",
+		"git init -q " + scratch + " && git -C " + r.main + " reset --hard",
+		"git init -q " + scratch + " && git -C " + scratch + " config core.worktree " + wt,
+		"git init -q " + scratch + " && git -C " + scratch + " -c core.worktree=" + wt + " clean -fdx",
+		"git init -q " + scratch + " && git -C " + scratch + " worktree add " + wt + "/x",
+		"git init -q " + scratch + " && git -C " + scratch + " config --global alias.x status",
+		"git init -q " + scratch + " && git --git-dir=" + r.main + "/.git -C " + scratch + " reset --hard",
+		"git init -q " + scratch + " && cd " + wt + " && git reset --hard",
+		"git init -q " + scratch + " && git stash",
+		"git reset --hard && git init -q " + scratch,
+	} {
+		reason := denyLeaseScopedVCS(ctx, from, worker.ID, command)
+		assert.NotEmpty(t, reason, "%q", command)
+	}
+
+	reason := denyLeaseScopedVCS(ctx, from, worker.ID, "git init -q "+wt+"/sub")
+	assert.Contains(t, reason, "a worker creates a repository only outside its checkout, "+wt)
+	assert.Contains(t, reason, wt+"/sub lies in the lease's checkout")
+	assert.Contains(t, reason, "a worker under orchestrator")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+r.main+"/sub"), "lies in a checkout of the repository the lease works in")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+filepath.Dir(wt)), "holds the lease's checkout")
+}
+
+// TestVCSCmdRefusalLetsAWorkerInitAScratchRepository pins vcs.cmd to the same init
+// allowance, in the shape hack/dev/merge-job-branches.buzz calls it: an init in a fresh
+// temporary directory, after which the scratch-repository rules cover the repository.
+func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	fixture := filepath.Join(scratch, "merge-job-branches-test-1")
+	require.NoError(t, os.Mkdir(fixture, 0o755))
+
+	for name, c := range map[string]struct {
+		backend string
+		args    []string
+		dir     string
+	}{
+		"git init in a fresh directory":          {"git", []string{"init", "-q", "-b", "main"}, fixture},
+		"git init of a directory not made yet":   {"git", []string{"init", "-q", filepath.Join(scratch, "later")}, wt},
+		"git init through -C":                    {"git", []string{"-C", fixture, "init"}, wt},
+		"git init with the git directory beside": {"git", []string{"--git-dir", filepath.Join(fixture, ".git"), "init"}, fixture},
+		"hg init":                                {"hg", []string{"init", fixture}, wt},
+		"sl init":                                {"sl", []string{"init"}, fixture},
+		"jj git init":                            {"jj", []string{"git", "init", fixture}, wt},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil), name)
+	}
+
+	r.git(fixture, "init", "-q")
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"config", "user.name", "t"}, fixture, nil), "config in the new repository")
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, fixture, nil), "commit in the new repository")
+
+	for name, c := range map[string]struct {
+		backend string
+		args    []string
+		dir     string
+		env     []string
+	}{
+		"git init in the checkout":           {"git", []string{"init", "-q"}, wt, nil},
+		"git init in the primary checkout":   {"git", []string{"init", "-q"}, r.main, nil},
+		"git init below the checkout":        {"git", []string{"init", "-q", filepath.Join(wt, "sub")}, fixture, nil},
+		"git init -C the checkout":           {"git", []string{"-C", wt, "init"}, fixture, nil},
+		"git init through --git-dir":         {"git", []string{"--git-dir", filepath.Join(r.main, ".git"), "init"}, fixture, nil},
+		"git init with GIT_DIR on the job":   {"git", []string{"init", "-q"}, fixture, []string{"GIT_DIR=" + filepath.Join(r.main, ".git")}},
+		"git init with GIT_WORK_TREE":        {"git", []string{"init", "-q"}, fixture, []string{"GIT_WORK_TREE=" + wt}},
+		"git init separating the git dir in": {"git", []string{"init", "--separate-git-dir", filepath.Join(wt, "g")}, fixture, nil},
+		"git init with core.worktree inline": {"git", []string{"-c", "core.worktree=" + wt, "init"}, fixture, nil},
+		"hg init in the checkout":            {"hg", []string{"init"}, wt, nil},
+		"hg init relocated by --cwd":         {"hg", []string{"--cwd", wt, "init", fixture}, fixture, nil},
+		"jj git init in the checkout":        {"jj", []string{"git", "init"}, wt, nil},
+		"jj git init of the job's git repo":  {"jj", []string{"git", "init", "--git-repo", r.main, fixture}, fixture, nil},
+	} {
+		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, c.env)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "a worker creates a repository only outside its checkout, "+wt, name)
+	}
+
+	noCheckout := worker
+	noCheckout.CheckoutRoot = ""
+	require.Error(t, vcsCmdRefusal(ctx, noCheckout, "git", []string{"init", "-q"}, fixture, nil), "a lease with no checkout_root cannot show the repository is outside it")
 }
 
 // TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own
@@ -600,7 +1451,9 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git commit -m done"), "is on lease-job, the base branch")
 
 	r.git(wt, "checkout", "-q", "--detach")
-	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"), "has no branch checked out")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"),
+		"has no branch checked out; run `git switch "+worker.ID+"`, or `git switch -c "+worker.ID+"` when no such branch exists.",
+		"a detached HEAD names the line that puts it on the job's branch")
 
 	primary := worker
 	primary.ID = "harness/primary"
@@ -635,7 +1488,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt)
 	}
 }
 
@@ -654,6 +1507,55 @@ func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main, nil))
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch, nil))
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main, nil))
+}
+
+// TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex pins GIT_INDEX_FILE in the
+// shape hack/dev/split-into-branches.buzz runs `--apply`: a scratch index outside the
+// checkout leaves the scratch-repository exemption standing, while an index in the
+// checkout, in its shared git directory, or one that cannot be placed still refuses.
+func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil).Root()
+	outside := filepath.Join(t.TempDir(), "index")
+	readTree := []string{"read-tree", "HEAD"}
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+
+	for name, c := range map[string]struct {
+		args  []string
+		dir   string
+		index string
+	}{
+		"read-tree into an index outside both":     {readTree, scratch, outside},
+		"commit from an index outside both":        {commit, scratch, outside},
+		"an index relative to the scratch repo":    {readTree, scratch, "scratch-index"},
+		"-C into the scratch repo from the worker": {append([]string{"-C", scratch}, readTree...), wt, outside},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, []string{"GIT_INDEX_FILE=" + c.index}), name)
+	}
+
+	for name, c := range map[string]struct {
+		args  []string
+		dir   string
+		index string
+	}{
+		"an index in the checkout":             {readTree, scratch, filepath.Join(wt, "index")},
+		"an index in the shared git directory": {readTree, scratch, filepath.Join(r.main, ".git", "scratch-index")},
+		"an index under the home shorthand":    {readTree, scratch, "~/index"},
+		"an empty index":                       {readTree, scratch, ""},
+		"the worker's own checkout":            {readTree, wt, outside},
+		"the primary checkout":                 {readTree, r.main, outside},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, []string{"GIT_INDEX_FILE=" + c.index}), name)
+	}
+
+	err := vcsCmdRefusal(ctx, worker, "git", commit, scratch, []string{"GIT_INDEX_FILE=" + filepath.Join(wt, "index")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Its environment sets GIT_INDEX_FILE")
+
+	noCheckout := worker
+	noCheckout.CheckoutRoot = ""
+	require.Error(t, vcsCmdRefusal(ctx, noCheckout, "git", readTree, scratch, []string{"GIT_INDEX_FILE=" + outside}),
+		"a lease with no checkout_root cannot show the index is outside it")
 }
 
 // TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
@@ -852,7 +1754,7 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
 	require.NoError(t, os.RemoveAll(gone))
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).List()
 	require.NoError(t, err)
 	b := boundJob(who, at)
 	require.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
@@ -864,9 +1766,9 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	judge := func(input string) outcome {
 		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
 		reason = v.Reason
-		return outcome{v.Decision, v.Rule, v.Lease}
+		return outcome{Decision: v.Decision, Rule: v.Rule, Lease: v.Lease}
 	}
-	refused := outcome{"deny", string(denyRuleLeaseUndeclared), held.ID}
+	refused := outcome{Decision: decisionDeny, Rule: string(denyRuleLeaseUndeclared), Lease: held.ID}
 	edit := map[string]any{"file_path": filepath.Join(root, "internal", "held", "a.go"), "old_string": "a", "new_string": "b"}
 	write := hookJSON(t, map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": root,
 		"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
@@ -881,11 +1783,11 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Contains(t, string(stored), "A caller whose binding ended is refused rather than read as unbound", "the rationale is in the stored verdict")
 	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/"), "with the rule's page")
 	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
-	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
+	assert.Equal(t, outcome{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
 
-	assert.NotEqual(t, "deny", judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
+	assert.NotEqual(t, decisionDeny, judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
 	assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, at), "the exec rebinds over the tombstone")
-	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
+	assert.Equal(t, outcome{Decision: decisionPass, Rule: "", Lease: next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
 }
 
 // A caller whose job ends is unbound from then on: a binding nothing released graded it
@@ -953,7 +1855,7 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 			at := hookLocation(ctx, Dependencies{})
 			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 			bindCaller(t, ctx, who, held.ID)
-			judge := func(command string) Verdict {
+			judge := func(command string) types.GuardJudgment {
 				return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 			}
 
@@ -962,13 +1864,13 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 				by.Agent = ""
 			}
 			v := Judge(ctx, Dependencies{}, Request{Input: tc.call(t, by), Host: by.Host})
-			require.NotEqual(t, "deny", v.Decision, "ending the job: %s", v.Reason)
-			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			require.NotEqual(t, decisionDeny, v.Decision, "ending the job: %s", v.Reason)
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 			tc.ends(t, store, held.ID)
 
 			fork := judge("magus job fork next-job --parent other --read-only")
-			assert.Equal(t, tc.want == stillHeld, fork.Decision == "deny", "a fork outside the job's tree: %s", fork.Reason)
-			assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+			assert.Equal(t, tc.want == stillHeld, fork.Decision == decisionDeny, "a fork outside the job's tree: %s", fork.Reason)
+			assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 			assert.Equal(t, tc.want, boundJob(who, at), "the holder's binding")
 			rows, err := store.List()
 			require.NoError(t, err)
@@ -987,7 +1889,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 	at := hookLocation(ctx, Dependencies{})
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(t, ctx, who, held.ID)
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
 	_, err := store.Delete(t.Context(), held.ID, true)
 	require.NoError(t, err)
 	_, err = store.List()
@@ -995,10 +1897,10 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 
 	b := boundJob(who, at)
 	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
-	judge := func(command string) Verdict {
+	judge := func(command string) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
-	assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("sed -i s/a/b/ x").Rule, "sed in place is work")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("./build.sh").Rule, "work")
 }
@@ -1064,7 +1966,7 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 		"./magus job exec harness/other":                             "take the lease on another job",
 		"magus -s job exec harness/other":                            "take the lease on another job",
 		"magus --root /tmp/x job exec harness/other":                 "take the lease on another job",
-		"magus job exec --base rev1 harness/other":                   "take the lease on another job",
+		"magus job exec -o json harness/other":                       "take the lease on another job",
 		"magus job wait harness/other":                               "verify a job",
 		"magus job fork":                                             "declare a job",
 		"client op=clear":                                            "drop every job",
@@ -1103,7 +2005,7 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command).Say, "enter a job not forked beneath", "%q", command)
 	}
 
-	_, err := job.ParseMerge(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
+	_, err := job.DecodePut(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
 	assert.ErrorContains(t, err, "write_paths does not belong beside it", "an entry carries nothing else for the store to apply")
 }
 
@@ -1176,9 +2078,9 @@ func childFleet(t *testing.T, readOnly bool) (context.Context, types.Job, *job.S
 	other := types.Job{ID: "harness/other", WritePaths: []string{"docs/**"}, State: types.StateRunning}
 	ctx, root := fleetFixture(t, me, scout, other)
 	location, _ := ctx.Value(locationKey{}).(location)
-	unbound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
+	unbound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{}})
 	require.NoError(t, unbound.Bind(job.Caller{}, me.ID))
-	bound := job.NewStore(job.Location{CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
+	bound := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: location.cacheDir, Root: root, Actor: &job.Actor{Lease: me.ID}})
 	return ctx, me, bound
 }
 
@@ -1254,6 +2156,9 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --model opus"))
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
+		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --checkout /w/scout"),
+		"the checkout a child works in grants it nothing")
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \""+me.ID+"/probe\", \"parent\": \""+me.ID+"\", \"read_only\": true, \"check\": {\"target\": \"\", \"script\": \"probe.buzz\"}}\nEOF"),
 		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
@@ -1264,6 +2169,28 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command).Say, "nothing would grade", "%q", command)
 	}
+}
+
+// A line that runs magus under the worker's own BAGGAGE writes the store as that lease,
+// which grades the child against the worker's row, so its writing child is the store's to
+// judge. Another lease's BAGGAGE grades nothing against this one.
+func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.T) {
+	me := narrowLease()
+	ctx, _ := fleetFixture(t, me)
+	t.Setenv(trail.EnvBaggage, "")
+	fork := "magus job fork " + me.ID + "/impl --parent " + me.ID + " --write-paths " + me.WritePaths[0] + " --check 'test .'"
+
+	for _, line := range []string{
+		"export BAGGAGE=" + trail.BaggageLease + "=" + me.ID + "; " + fork,
+		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + fork,
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
+	}
+	other := "export BAGGAGE=" + trail.BaggageLease + "=elsewhere; " + fork
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, other).Say, "nothing would grade")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+me.ID)
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
 }
 
 // TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal
@@ -1443,7 +2370,7 @@ func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
 			tc.command)
 
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
-		require.Equal(t, "deny", onPath.Decision,
+		require.Equal(t, decisionDeny, onPath.Decision,
 			"the file-write rules passed %s, so this row is no longer testing two rule sets against one another", tc.path)
 		normalized = normalized || leaseAge.MatchString(onPath.Reason)
 		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),
@@ -1550,4 +2477,115 @@ func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
 		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 		assert.Empty(t, denyWriteOutsideLease(nowhere, Dependencies{}, "lease-b", "echo x > internal/ledger/store.go"))
 	})
+}
+
+// A remove or move takes a directory whole, so a directory operand is graded by what it
+// holds: wholly inside the lease's write paths it passes, and holding anything outside
+// them, or inside its deny paths, it is refused naming the write paths. That holds for
+// rm and mv as for the version-control verbs.
+func TestDenyWriteOutsideLeaseGradesWhatADirectoryHolds(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	for _, file := range []string{"cmd/magus/a.go", "cmd/magus/sub/b.go", "cmd/magus/gen/g.go", "cmd/other/c.go", "pkg/only/d.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(file)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, file), nil, 0o644))
+	}
+
+	for _, command := range []string{
+		"rm -r cmd/magus/sub",
+		"git rm -r cmd/magus/sub",
+		"hg remove cmd/magus/sub",
+		"mv cmd/magus/a.go cmd/magus/sub",
+		"git mv cmd/magus/sub cmd/magus/moved",
+		"rm -r cmd/magus/missing",
+	} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q is wholly inside", command)
+	}
+	for command, want := range map[string]string{
+		"rm -r cmd/other":                 "cmd/other is outside",
+		"rm notes.txt":                    "notes.txt is outside",
+		"git rm -r cmd":                   "cmd holds cmd/magus/gen, which is outside",
+		"sh -c 'rm -rf cmd'":              "cmd holds cmd/magus/gen, which is outside",
+		"mv cmd/magus/a.go cmd/other":     "cmd/other is outside",
+		"mv -t cmd/other cmd/magus/a.go":  "cmd/other is outside",
+		"git rm -r cmd/magus":             "cmd/magus holds cmd/magus/gen, which is outside",
+		"sl rename cmd/magus/sub pkg/new": "pkg/new is outside",
+		"rm -rf .":                        ". holds ",
+	} {
+		reason := denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command)
+		assert.Contains(t, reason, want, "%q", command)
+		assert.Contains(t, reason, "(cmd/magus)", "%q names the write paths", command)
+	}
+
+	t.Run("a directory leading only to the lease's paths passes", func(t *testing.T) {
+		ctx, root := fleetFixture(t, types.Job{ID: "pkg", WritePaths: []string{"pkg/only/**"}, State: types.StateRunning, Registered: 1})
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "only"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "only", "d.go"), nil, 0o644))
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "pkg", "rm -r pkg"))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "e.go"), nil, 0o644))
+		assert.Contains(t, denyWriteOutsideLease(ctx, Dependencies{}, "pkg", "rm -r pkg"), "holds pkg/e.go,")
+	})
+	t.Run("no lease is never graded", func(t *testing.T) {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "", "rm -rf cmd"))
+	})
+}
+
+// A worker's scratch outside the checkout is its own: a remove or move there, or of a path
+// the shell expands, is never graded against the write paths.
+func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	scratch := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+
+	for _, command := range []string{
+		"rm /tmp/x",
+		"rm -rf " + scratch,
+		"mv " + filepath.Join(scratch, "a") + " " + filepath.Join(scratch, "b"),
+		`rm -f "$TMPDIR/foo"`,
+		`rm -f "$tmp"`,
+		"rm -rf $(mktemp -d)",
+		"rm ~/scratch.txt",
+	} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
+	}
+	assert.Empty(t, denyWriteOutsideLease(ctx, from(filepath.Join(root, "cmd", "magus")), "lease-b", "rm ../../../outside.txt"),
+		"a relative path that resolves outside the checkout")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from(scratch), "lease-b", "rm -r notes"), "a call run outside the checkout")
+	assert.NotEmpty(t, denyWriteOutsideLease(ctx, from(root), "lease-b", "rm notes.txt"), "the same word inside it")
+}
+
+// A worker leased in its own worktree, whose hook resolves the session's checkout, had its
+// own write read relative to the session's checkout, so scope-drift advised it.
+func TestLeaseCoversWriteReadsTheLeasesOwnCheckout(t *testing.T) {
+	wt := t.TempDir()
+	ctx, root := fleetFixture(t, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"x.go"}, CheckoutRoot: wt, Registered: 1})
+	at := hookLocation(ctx, Dependencies{})
+	assert.True(t, leaseCoversWrite(ctx, "w", at, filepath.Join(wt, "x.go")))
+	assert.False(t, leaseCoversWrite(ctx, "w", at, filepath.Join(root, "x.go")), "the session checkout's x.go is not the lease's")
+}
+
+// A relative operand names a path under the directory the call runs in.
+func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	for _, dir := range []string{"cmd/magus/sub", "cmd/other", "internal/ledger"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+	}
+	from := func(dir string) Dependencies { return Dependencies{callDir: filepath.Join(root, dir)} }
+
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "git rm store.go"), "lease-a",
+		"store.go here is internal/ledger/store.go")
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "rm store.go"), "lease-a")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "git rm a.go"))
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r sub"))
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "rm -r ../other"), "cmd/other is outside")
+
+	// A cd earlier on the line moves where a relative word lands.
+	assert.Contains(t, denyWriteOutsideLease(ctx, from("cmd/magus"), "lease-b", "cd ../../internal/ledger && rm store.go"), "lease-a")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd "+t.TempDir()+" && rm store.go"),
+		"store.go after a cd out of the checkout is the scratch directory's")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd ~ && rm store.go"))
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", "cd $SOMEWHERE && rm store.go"),
+		"a cd the line does not determine places nothing")
+	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", `cp x "${OUT}store.go"`),
+		"an expansion places the word nowhere rather than dropping the parameter")
 }

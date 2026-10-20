@@ -2,12 +2,13 @@ package trail
 
 import (
 	"bufio"
+	"cmp"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
@@ -238,6 +239,23 @@ type SessionTrail struct {
 	Leases []string `json:"leases,omitempty"`
 	// Spawns are the subagents this session started, oldest first.
 	Spawns []SessionSpawn `json:"spawns,omitempty"`
+	// Calls are the observations in the same order, with the cost facts each recorded. They
+	// feed the cost summary and stay out of the encoded form, which would otherwise carry
+	// one row per tool call.
+	Calls []SessionCall `json:"-"`
+}
+
+// SessionCall is one guard observation of a call and the cost facts recorded beside it.
+// The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
+// its zero value, except Thread, which reads as types.AgentThreadUnknown.
+//
+// Decision is the hook verdict's (pass, ask, advise or deny), not a rule's
+// types.GuardDecision, which has no pass or ask.
+type SessionCall struct {
+	At       time.Time
+	Decision string
+	Rule     string
+	types.AgentFacts
 }
 
 // SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
@@ -245,7 +263,8 @@ type SessionTrail struct {
 //
 // DeclaredModel is "" both when the caller named no model and when the spawn blob could not
 // be read; a reader who needs to tell those apart reads the trail's own blob (RequestRef,
-// off the underlying trail.Event) rather than this summary.
+// off the underlying trail.Event) rather than this summary. The spawn record's cost facts
+// are the caller's, so none of them is here: nothing in the trail measures the child.
 type SessionSpawn struct {
 	Child         string    `json:"child"`
 	Lease         string    `json:"lease,omitempty"`
@@ -273,12 +292,24 @@ func ForSession(base, session string, limit int) SessionTrail {
 		switch e.Kind {
 		case KindAgentCommand:
 			out.Commands++
+			call := SessionCall{At: time.UnixMilli(e.Ts), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
-				if json.Unmarshal(raw, &resp) == nil && resp.Decision == "deny" {
-					out.Denied++
+				if json.Unmarshal(raw, &resp) == nil {
+					call.Decision, call.Rule = resp.Decision, resp.Rule
+					if resp.Decision == "deny" {
+						out.Denied++
+					}
 				}
 			}
+			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+				var req agentCommandRequest
+				if json.Unmarshal(raw, &req) == nil {
+					call.AgentFacts = req.AgentFacts
+					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
+				}
+			}
+			out.Calls = append(out.Calls, call)
 		case KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue

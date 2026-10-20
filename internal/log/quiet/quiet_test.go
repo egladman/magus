@@ -142,6 +142,13 @@ func TestWrapBelowLevel(t *testing.T) {
 			want: "level=INFO msg=\"pass --force to replace it\" notice=hint\n",
 		},
 		{
+			name: "keeps a result",
+			log: func(l *slog.Logger) {
+				l.InfoContext(context.Background(), "ref  out1a2b3c4d5e6f", attr.Notice(""), attr.Result())
+			},
+			want: "level=INFO msg=\"ref  out1a2b3c4d5e6f\" notice=\"\" result=true\n",
+		},
+		{
 			name: "drops a warning's next with the warning",
 			log: func(l *slog.Logger) {
 				l.WarnContext(context.Background(), "index stale", attr.Next("magus graph build"))

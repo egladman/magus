@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	"github.com/egladman/magus/internal/queue/types/gen/queuetest"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -27,7 +27,7 @@ import (
 type run struct {
 	t       *testing.T
 	srv     *httptest.Server
-	lister  *mocks.MockArtifactLister
+	lister  *queuetest.MockArtifactLister
 	mu      sync.Mutex
 	zips    map[string][]byte
 	failZip map[string]bool
@@ -43,7 +43,7 @@ const (
 var trusted = types.RunOrigin{Repo: "acme/widgets", HeadRepo: "acme/widgets", HeadBranch: "main", Event: "push", BranchEvent: true, Definition: workflow}
 
 func newRun(t *testing.T) *run {
-	r := &run{t: t, lister: mocks.NewMockArtifactLister(t), zips: map[string][]byte{}, failZip: map[string]bool{}}
+	r := &run{t: t, lister: queuetest.NewMockArtifactLister(t), zips: map[string][]byte{}, failZip: map[string]bool{}}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -69,7 +69,7 @@ func (r *run) artifact(name string, files map[string][]byte) types.Artifact {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	p := fmt.Sprintf("/artifacts/%d.zip", len(r.zips))
-	r.zips[p] = zipOf(r.t, files)
+	r.zips[p] = buildZip(r.t, files)
 	return types.Artifact{Name: name, URL: r.srv.URL + p}
 }
 
@@ -84,7 +84,7 @@ func (r *run) follower() *ArtifactFollower {
 		Follow: true, Interval: 1, Client: r.srv.Client()}
 }
 
-func zipOf(t *testing.T, files map[string][]byte) []byte {
+func buildZip(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -140,12 +140,12 @@ func TestArtifactFollowerUnpacksArtifactsAcrossPollsAndIsDoneOnceTheRunCompletes
 
 	batch, err = f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.False(t, batch.Done)
 
 	batch, err = f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"2"}, idsOf(batch.Verdicts), "each verdict once")
+	assert.Equal(t, []string{"2"}, changeIDs(batch.Verdicts), "each verdict once")
 	assert.True(t, batch.Done)
 	assert.Len(t, r.fetched, 3, "each artifact is downloaded once")
 }
@@ -162,7 +162,7 @@ func TestArtifactFollowerIsDoneOnlyAfterAListingThatSaidTheRunCompleted(t *testi
 	r.lists(true, one)
 	batch, err := f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.False(t, batch.Done)
 
 	batch, err = f.Poll(ctx)
@@ -190,7 +190,7 @@ func TestArtifactFollowerWithoutFollowReadsOneListingOfARunInProgress(t *testing
 	assert.True(t, ok)
 	batch, err := f.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.True(t, batch.Done, "a run still going is complete as far as one pass reads")
 }
 
@@ -211,7 +211,7 @@ func TestArtifactFollowerStopsWhenTheListingFails(t *testing.T) {
 
 // An empty Path would unpack artifacts into the working directory.
 func TestArtifactFollowerRefusesAMissingRequiredField(t *testing.T) {
-	lister := mocks.NewMockArtifactLister(t)
+	lister := queuetest.NewMockArtifactLister(t)
 	for name, f := range map[string]*ArtifactFollower{
 		"lister":     {Source: "1", Path: t.TempDir(), Branch: "main", Definition: workflow},
 		"source":     {Lister: lister, Path: t.TempDir(), Branch: "main", Definition: workflow},
@@ -281,7 +281,7 @@ func TestAnArtifactThatFailsIsRejectedForItsChangeAlone(t *testing.T) {
 	r.lists(false, failing, escaping, dots, four)
 	batch, err := f.Poll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"4"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"4"}, changeIDs(batch.Verdicts))
 	reasons := map[string]string{}
 	for _, rej := range batch.Rejected {
 		reasons[rej.Change] = rej.Reason
@@ -319,7 +319,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 	var seen []string
 	storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		seen = append(seen, req.Header.Get("Authorization")+"|"+req.Header.Get("Private-Token"))
-		_, _ = w.Write(zipOf(t, verdictFiles(t, "1")))
+		_, _ = w.Write(buildZip(t, verdictFiles(t, "1")))
 	}))
 	t.Cleanup(storage.Close)
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -334,7 +334,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 		http.Redirect(w, req, strings.Replace(storage.URL, "127.0.0.1", "localhost", 1)+"/blob", http.StatusFound)
 	}))
 	t.Cleanup(api.Close)
-	lister := mocks.NewMockArtifactLister(t)
+	lister := queuetest.NewMockArtifactLister(t)
 	lister.EXPECT().ListArtifacts(mock.Anything, "r").Return(types.ArtifactListing{Run: trusted, Complete: true,
 		Headers: map[string]string{"Authorization": "Bearer tok", "Private-Token": "tok"},
 		Artifacts: []types.Artifact{{Name: VerdictArtifactPrefix + "1", URL: api.URL + "/zip"},
@@ -343,7 +343,7 @@ func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *te
 	f.Client.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true // the storage server's own certificate
 	batch, err := f.Poll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, idsOf(batch.Verdicts))
+	assert.Equal(t, []string{"1"}, changeIDs(batch.Verdicts))
 	assert.Equal(t, []string{"|"}, seen)
 	require.Len(t, batch.Rejected, 1)
 	assert.Contains(t, batch.Rejected[0].Reason, "which is not https")

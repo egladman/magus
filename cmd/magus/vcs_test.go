@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -290,7 +291,7 @@ func TestVCSAddUntrackedNeedsAReason(t *testing.T) {
 
 	require.Error(t, err, "a bare --untracked swept in every undeclared file with nothing recorded")
 	assert.Contains(t, err.Error(), `magus vcs add --untracked --reason "<why>"`)
-	assert.IsType(t, errUsage{}, err, "a missing required flag is misuse, which the CLI exits 2 for")
+	assert.Equal(t, exit.Usage, exit.Code(err), "a missing required flag is misuse, which the CLI exits 2 for")
 }
 
 // TestVCSAddReportsTheReason covers the keeping half: the reason reaches the terminal
@@ -308,6 +309,24 @@ func TestVCSAddReportsTheReason(t *testing.T) {
 	// A non-git backend, because the review line used to be the string "git diff --cached
 	// --stat" no matter which of the four you were in.
 	assert.Contains(t, out, "review before committing: hg diff --stat")
+}
+
+// TestVCSAddHoldsAnotherLeasesPaths: a whole-tree `vcs add` swept a sibling lease's
+// uncommitted sources out of a shared checkout into the caller's commit (2026-10-14).
+func TestVCSAddHoldsAnotherLeasesPaths(t *testing.T) {
+	root := t.TempDir()
+	rows := []types.Job{
+		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"api/**"}},
+		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"web/**"}},
+		{ID: "elsewhere", State: types.StateRunning, CheckoutRoot: t.TempDir(), WritePaths: []string{"docs/**"}},
+		{ID: "ended", State: types.StatePass, CheckoutRoot: root, WritePaths: []string{"cli/**"}},
+	}
+	paths := []string{"api/a.go", "web/b.ts", "docs/c.md", "cli/d.go", "README.md"}
+
+	assert.Equal(t, map[string]string{"web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "mine", paths),
+		"only a live lease writing in this checkout holds a path back from its sibling")
+	assert.Equal(t, map[string]string{"api/a.go": "mine", "web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "", paths),
+		"a caller with no lease stages no lease's work")
 }
 
 // TestCheckpointLineCarriesThePreservedHandle covers the promise --preserve makes in its
@@ -335,4 +354,23 @@ func TestSettleLoadFailureNamesTheBootstrapForAStaleBinary(t *testing.T) {
 
 	plain := settleLoadFailure(errors.New("magusfile: syntax error"))
 	assert.Equal(t, "the workspace did not load, so nothing regenerated: magusfile: syntax error", plain.Error())
+}
+
+// TestJobsWriting pins who settling by claims asks about a path: every job writing it, a
+// whole-file or glob writer included so it can refuse the settle, but only a path some job
+// claims by declaration is asked about at all.
+func TestJobsWriting(t *testing.T) {
+	rows := []types.Job{
+		{ID: "a", WritePaths: []string{"a.go#A"}},
+		{ID: "glob", WritePaths: []string{"**/*.go"}},
+		{ID: "other", WritePaths: []string{"b.go#B", "docs/**"}},
+	}
+	writers, claimed := jobsWriting(rows, "a.go")
+	assert.True(t, claimed)
+	require.Len(t, writers, 2)
+	assert.Equal(t, []string{"a", "glob"}, []string{writers[0].ID, writers[1].ID})
+
+	writers, claimed = jobsWriting(rows, "c.go")
+	assert.False(t, claimed, "only the glob writes c.go, and it claims no declaration")
+	assert.Len(t, writers, 1)
 }

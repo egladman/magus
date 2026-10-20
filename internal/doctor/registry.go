@@ -84,7 +84,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "cache-writable",
-		Doc:            "the cache directory exists and this user can write it",
+		Doc:            "the cache directory and the entry store every checkout shares exist, and this user can write them",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkCacheWritable() },
@@ -118,6 +118,20 @@ var allChecks = []checkDef{
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            (*runner).checkRetryDeclarations,
+	},
+	{
+		Name:           "model-tier-fit",
+		Doc:            "a model tier's recorded pass rate on a kind of job, and the line that routed those jobs to it",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkModelTierFit,
+	},
+	{
+		Name:           "conformance-ratchet",
+		Doc:            "committed conformance thresholds the code now measures tighter than, and known entries that no longer violate",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkConformanceRatchet,
 	},
 	{
 		Name:           "unexplained-hotspots",
@@ -237,6 +251,13 @@ var allChecks = []checkDef{
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkOwedRegeneration() },
+	},
+	{
+		Name:           "deferred-settle",
+		Doc:            "whether git operations ran under magus.settle=defer whose regeneration `magus vcs resolve` has not yet run",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkDeferredSettle() },
 	},
 	{
 		Name:           "guard-binary",

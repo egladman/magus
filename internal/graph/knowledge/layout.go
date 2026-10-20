@@ -27,10 +27,9 @@ type LayoutChange struct {
 	// Generated holds the workspace-relative paths that are generated output. A generated file
 	// is neither counted nor able to make a directory old.
 	Generated map[string]bool
-	// MinCohort and MinShare are the silence gates, as in [ConformanceChange]. Zero takes the
-	// defaults, 5 and 0.8.
-	MinCohort int
-	MinShare  float64
+	// Gates are knowledge.conformance.gates as this run applies them, taken as given like
+	// [ConformanceChange]'s.
+	Gates types.ConformanceGates
 }
 
 // layoutLanguage is what the lens knows about one language: the name a finding uses for it and
@@ -81,13 +80,14 @@ func (d dirShape) digit() bool { return strings.IndexFunc(d.base(), unicode.IsDi
 // language under the same parent that the change did not create.
 //
 // Each finding is a [types.Check] with Status advice and Evidence measured: counts of files the
-// graph holds, never a rule. At most conformanceMaxFindings are returned across the change,
+// graph holds, never a rule. At most Gates.MaxFindings are returned across the change,
 // ordered by directory and check so two runs over one graph agree byte for byte.
 func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 	if len(c.Added) == 0 {
 		return nil
 	}
-	cohort, share := cmp.Or(c.MinCohort, conformanceMinCohort), cmp.Or(c.MinShare, conformanceMinShare)
+	gates := c.Gates
+	cohort, share := gates.MinCohort, gates.MinShare
 	skip := func(file string) bool {
 		if c.Generated[file] {
 			return true
@@ -204,7 +204,7 @@ func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 		return nil
 	}
 	out := map[string][]types.Check{}
-	for _, f := range found[:min(len(found), conformanceMaxFindings)] {
+	for _, f := range found[:min(len(found), gates.MaxFindings)] {
 		out[f.dir] = append(out[f.dir], f.check)
 	}
 	return out

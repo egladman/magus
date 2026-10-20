@@ -48,20 +48,33 @@ func observerFrom(ctx context.Context) TargetObserver {
 // unchanged, so this adds no cost and no behaviour change to callers that do not
 // opt in.
 type PoolObserver interface {
-	// SessionAcquire fires when the pool checks out a session to run a target.
-	// reused is true when an idle warm session was taken; false when none was idle
-	// and the pool must warm a fresh one (a cold start, reported next by
-	// SessionWarm). idle is the idle-session count remaining right after checkout.
-	SessionAcquire(ctx context.Context, reused bool, idle int)
+	// SessionAcquire fires when the pool checks out a session to run a target, saying
+	// how; idle is the idle-session count remaining right after checkout.
+	SessionAcquire(ctx context.Context, kind SessionAcquireKind, idle int)
 	// SessionWarm fires when the pool warms a fresh session, reporting how long
 	// construction took and its error (nil on success). Always preceded by a
-	// SessionAcquire with reused=false.
+	// SessionAcquire with SessionCold.
 	SessionWarm(ctx context.Context, elapsed time.Duration, err error)
-	// SessionRelease fires when a finished session returns to the pool. evicted is
-	// true when the pool was full or closed and the session was closed instead of
-	// retained; idle is the idle-session count right after the release.
-	SessionRelease(ctx context.Context, evicted bool, idle int)
+	// SessionRelease fires when a finished session returns to the pool, saying what the
+	// pool did with it; idle is the idle-session count right after the release.
+	SessionRelease(ctx context.Context, kind SessionReleaseKind, idle int)
 }
+
+// SessionAcquireKind says how the pool checked out a session.
+type SessionAcquireKind int
+
+const (
+	SessionReused SessionAcquireKind = iota // an idle warm session was taken
+	SessionCold                             // none was idle; SessionWarm reports the fresh one next
+)
+
+// SessionReleaseKind says what the pool did with a finished session.
+type SessionReleaseKind int
+
+const (
+	SessionRetained SessionReleaseKind = iota // kept idle for the next checkout
+	SessionEvicted                            // closed, because the pool was full or closed
+)
 
 type poolObserverKey struct{}
 

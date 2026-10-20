@@ -1,83 +1,93 @@
-# Reviewing Buzz code
+{{if .Full}}# Reviewing Buzz code{{else}}# Reviewing Buzz{{end}}
 
-{{skill "buzz-lang"}} teaches how to WRITE Buzz. This skill REVIEWS it (a magusfile, a spell,
-or a standalone `.buzz` script) through three lenses run in parallel{{if .Full}},
-the same fan-out-and-merge shape go-review-ultra uses for Go{{end}}.
+{{if .Full}}{{skill "buzz-lang"}} teaches how to WRITE Buzz. This skill REVIEWS it (a magusfile, a spell,
+or a standalone `.buzz` script) through three lenses run in parallel,
+the same fan-out-and-merge shape go-review-ultra uses for Go.
 
 It covers the LANGUAGE: is the code idiomatic, is it correct, does it run where the
 author thinks it runs. Magusfile/target/spell CONTRACTS (caching, `ctx.needs`, wards,
-op kinds, charms, command vs service) belong to {{skill "buzz-lang"}}{{if .Full}} and it already covers them; restating them here would only
-drift out of sync with it{{end}}.
+op kinds, charms, command vs service) belong to {{skill "buzz-lang"}} and it already covers them; restating them here would only
+drift out of sync with it.{{else}}{{skill "buzz-lang"}} teaches WRITING Buzz. This skill REVIEWS it (magusfile, spell, or standalone `.buzz` script) through three lenses run in parallel.
+Covers LANGUAGE: idiomatic? correct? runs where author thinks?
+Magusfile/target/spell CONTRACTS (caching, `ctx.needs`, wards, op kinds, charms, command vs service): {{skill "buzz-lang"}}.{{end}}
 
 ## Authority labels
 
-Every finding in every lens carries one of three labels. "This is wrong" means a
-different thing in Buzz depending on the authority behind it{{if .Full}}, and a reader cannot act on an unlabeled finding, only argue about it{{end}}.
-
+{{if .Full}}Every finding in every lens carries one of three labels. "This is wrong" means a
+different thing in Buzz depending on the authority behind it, and a reader cannot act on an unlabeled finding, only argue about it.
+{{else}}Every finding in every lens carries one of three labels; "wrong" means different things depending on authority.{{end}}
 - `UPSTREAM`: true of Buzz itself, wherever it runs.
-- `GOPHERBUZZ`: true only of gopherbuzz, the implementation magus embeds; upstream
-  Buzz may lack the construct or resolve it differently.
-- `PORTABILITY`: runs fine here under gopherbuzz, but does not parse or behave the
-  same against upstream Buzz.
+{{if .Full}}- `GOPHERBUZZ`: true only of gopherbuzz, the implementation magus embeds; upstream
+  Buzz may lack the construct or resolve it differently.{{else}}- `GOPHERBUZZ`: true only of gopherbuzz, implementation magus embeds; upstream Buzz may lack construct or resolve it differently.{{end}}
+{{if .Full}}- `PORTABILITY`: runs fine here under gopherbuzz, but does not parse or behave the
+  same against upstream Buzz.{{else}}- `PORTABILITY`: runs fine here under gopherbuzz, but does not parse or behave same against upstream Buzz.{{end}}
 
-Label every finding from the correctness and conformance lenses. Never invent a
-fourth category, and never leave one unlabeled because the answer felt obvious.
+{{if .Full}}Label every finding from the correctness and conformance lenses. Never invent a
+fourth category, and never leave one unlabeled because the answer felt obvious.{{else}}Label every finding from correctness and conformance lenses.
+Never invent fourth category; never leave one unlabeled because answer felt obvious.{{end}}
 
-## Establish the mode before applying anything
-
-{{if .Full}}This is the single most important step in the whole skill: getting it wrong
+{{if .Full}}## Establish the mode before applying anything{{else}}## Establish mode before applying anything{{end}}
+{{if .Full}}
+This is the single most important step in the whole skill: getting it wrong
 produces confident, fluent false positives, because the "violation" did
-compile and run.{{else}}Getting this wrong produces confident false positives.{{end}} Buzz parses in one of two modes, and most of what the correctness and
+compile and run. Buzz parses in one of two modes, and most of what the correctness and
 conformance lenses check applies to only one:
-
-- **Strict** (upstream parity), `{{cmd "buzz"}} <file>`'s default:
+{{end}}
+{{if .Full}}- **Strict** (upstream parity), `{{cmd "buzz"}} <file>`'s default:
   - rejects top-level control flow outside a function
     (`if`/`while`/`for`/`foreach`/`do-until`/`try`/`throw`/`return`/`break`/`continue`/
     a bare block);
   - requires every call argument after the first to be labeled (`name: value`)
-    unless it is a bare identifier.
-- **Embedded** (relaxed): neither restriction applies. `{{cmd "buzz"}} --embedded` opts a
+    unless it is a bare identifier.{{else}}Wrong mode -> confident false positives.
+Buzz parses in one of two modes; most correctness and conformance checks apply to only one:
+- Strict (upstream parity), `{{cmd "buzz"}} <file>`'s default:
+  - rejects top-level control flow outside function (`if`/`while`/`for`/`foreach`/`do-until`/`try`/`throw`/`return`/`break`/`continue`/ bare block);
+  - requires every call argument after first labeled (`name: value`) unless bare identifier.{{end}}
+{{if .Full}}- **Embedded** (relaxed): neither restriction applies. `{{cmd "buzz"}} --embedded` opts a
   script in. A magusfile and a spell are embedded UNCONDITIONALLY, with no
-  opt-out{{if .Full}}; every code path that loads one passes the embedded option before
-  the author's own code runs, so there is no author-visible switch to get wrong{{end}}.
+  opt-out; every code path that loads one passes the embedded option before
+  the author's own code runs, so there is no author-visible switch to get wrong.{{else}}- Embedded (relaxed): neither restriction applies. `{{cmd "buzz"}} --embedded` opts script in. Magusfile and spell embedded UNCONDITIONALLY, no opt-out.{{end}}
 
-So **a magusfile or a spell file is always embedded.** A top-level `if`, a top-level
+{{if .Full}}So **a magusfile or a spell file is always embedded.** A top-level `if`, a top-level
 `foreach`, an unlabeled second argument: all fine and idiomatic there. Applying
-strict mode to a magusfile is not a strict reading; it is a wrong one.
+strict mode to a magusfile is not a strict reading; it is a wrong one.{{else}}-> magusfile or spell file always embedded: top-level `if`, top-level `foreach`, unlabeled second argument all fine and idiomatic there.
+Strict mode applied to magusfile: not strict reading; wrong one.{{end}}{{if .Full}}
 
-Judge a standalone script by how it is invoked{{if .Full}}, not by
-guessing from its shape{{end}}:
+Judge a standalone script by how it is invoked, not by
+guessing from its shape:{{end}}
 
-- Run by a bare `{{cmd "buzz"}} <file>` (no `--embedded`): strict mode applies, and a
-  top-level `if` is a genuine defect.
-- Strict mode does not apply when it runs by `{{cmd "buzz"}} --embedded <file>`, from
+{{if .Full}}- Run by a bare `{{cmd "buzz"}} <file>` (no `--embedded`): strict mode applies, and a
+  top-level `if` is a genuine defect.{{else}}Standalone script: judge by invocation:
+- Bare `{{cmd "buzz"}} <file>` (no `--embedded`): strict applies; top-level `if` is genuine defect.{{end}}
+{{if .Full}}- Strict mode does not apply when it runs by `{{cmd "buzz"}} --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
-  the mode.
-- Unclear: check the CI workflow or wrapper that calls it before flagging a
-  strict-mode violation{{if .Full}}. A script that happens to have no
+  the mode.{{else}}- Strict does not apply when run by `{{cmd "buzz"}} --embedded <file>`, from inside another Buzz program (`magus\cmd("buzz", ...)`), or header comment names mode.{{end}}
+{{if .Full}}- Unclear: check the CI workflow or wrapper that calls it before flagging a
+  strict-mode violation. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid
   embedded Buzz, so its contents alone never prove which mode the author
-  wrote it for; only the invocation does{{else}}. Its contents alone never prove the mode{{end}}.
+  wrote it for; only the invocation does.{{else}}- Unclear: check CI workflow or wrapper calling it before flagging strict-mode violation; contents alone never prove mode.{{end}}
 
-Once you know the mode, PROVE the file parses under it; do not read for it. `magus
+{{if .Full}}Once you know the mode, PROVE the file parses under it; do not read for it. `magus
 buzz --check <file>` checks strict, `--check --embedded` the other. It runs nothing,
 takes several paths, and reports every diagnostic instead of stopping at the
-first{{if .Full}}, so a strict-mode finding either reproduces as a
+first, so a strict-mode finding either reproduces as a
 diagnostic naming the line or was never there. A file whose job is a side effect
 cannot be checked any other way, since running it exercises one path and says
-nothing about the rest{{end}}.
+nothing about the rest.{{else}}Once mode known, PROVE file parses under it; do not read for it.
+`{{cmd "buzz"}} --check <file>` checks strict, `--check --embedded` other. Runs nothing, takes several paths, reports every diagnostic, not stopping at first.{{end}}
 
-A conformance-suite fixture exists to exercise one upstream-vs-gopherbuzz difference
+{{if .Full}}A conformance-suite fixture exists to exercise one upstream-vs-gopherbuzz difference
 (generics, `match`, a bare `as` cast, `::<T>`, ...). Using that construct is the
-fixture doing its job, not a defect.
+fixture doing its job, not a defect.{{else}}Conformance-suite fixture exists to exercise one upstream-vs-gopherbuzz difference (generics, `match`, bare `as` cast, `::<T>`, ...); using that construct is fixture doing its job, not defect.{{end}}
 
 ## Lens: idiom and style
-
-{{if .Full}}What reads as Buzz house style versus what merely parses.{{end}}
-
-- **Namespace access on an imported module is a backslash, not a dot.** Write
+{{if .Full}}
+What reads as Buzz house style versus what merely parses.
+{{end}}
+{{if .Full}}- **Namespace access on an imported module is a backslash, not a dot.** Write
   `fs\readFile(...)`, not `fs.readFile(...)`. Authority: PORTABILITY (see the
-  conformance lens for the parse-level reason), and readability.{{if .Full}} `path\join(a, b)`
+  conformance lens for the parse-level reason), and readability. `path\join(a, b)`
   and `record.join(a, b)` parse to visually identical postfix chains; only the token
   tells "call into an imported module" from "call a method on this value". A stray
   dot reads as a value method call to anyone who has not memorized which names are
@@ -87,10 +97,8 @@ fixture doing its job, not a defect.
   dot correctly. `path.endsWith(".buzz")` where `path` is a local `str` is
   ordinary member access, not a namespace-access mistake, even though `path`
   is also an importable module name. Only flag the dot when the receiver is
-  the actual imported module identifier itself.{{else}} A stray dot reads as a
-  method call on a value. Flag it only when the receiver is the imported module
-  itself, not a local that shares its name (`path`, `env`, `os`).{{end}}
-- **A flat import (`import "x" as _`) is a finding.** The `_` alias binds no name and
+  the actual imported module identifier itself.{{else}}- Namespace access on imported module: backslash, not dot. `fs\readFile(...)`, not `fs.readFile(...)`. Authority: PORTABILITY (conformance lens has parse-level reason), plus readability: stray dot reads as method call on value. Flag only when receiver is imported module itself, not local sharing its name (`path`, `env`, `os`).{{end}}
+{{if .Full}}- **A flat import (`import "x" as _`) is a finding.** The `_` alias binds no name and
   merges every export of `x` into the importing scope.
   - A call site then reads `escapeAttr(s)`, and nothing in the file says where
     it came from. The reader greps each candidate module, per call site.
@@ -100,17 +108,20 @@ fixture doing its job, not a defect.
     `text\escapeAttr(s)`). Where an unprefixed name is genuinely wanted, the
     selective form `import escapeAttr, slugify from "lib/text";` states exactly what
     enters the scope.
-  {{if .Full}}Note the flat and selective forms are BOTH excluded from
+  Note the flat and selective forms are BOTH excluded from
   unused-import tracking (BZZ3001): a flat import has no bound name to mark
   unused, so an `as _` that has stopped being needed is never reported.
   Weigh the finding by blast radius, not by count: a leaf module flat-importing
   one helper is a nit, while a tree where every file flat-imports every other is
-  a single structural finding, not one per line.{{end}}
-- **`export fun test(...)` is not a naming smell.** `test` is a contextual soft
+  a single structural finding, not one per line.{{else}}- Flat import (`import "x" as _`) is finding: `_` alias binds no name, merges every export of `x` into importing scope.
+  - Call site then reads `escapeAttr(s)`; nothing in file says origin; reader greps each candidate module, per call site.
+  - Module boundary unenforceable: new export in flat-imported module can silently shadow or collide with name in every importer.
+  - Prefer named import with namespaced calls (`import "lib/text" as text;`, then `text\escapeAttr(s)`). Where unprefixed name genuinely wanted, selective form `import escapeAttr, slugify from "lib/text";` states exactly what enters scope.{{end}}
+{{if .Full}}- **`export fun test(...)` is not a naming smell.** `test` is a contextual soft
   keyword, not a reserved one, so magus's canonical test-target name stays usable.
   Authority: GOPHERBUZZ: the one deliberate place gopherbuzz's reserved-word list is
-  a superset of upstream's. Do not flag it or suggest renaming it.
-- **A name-shaped parse error may be a reserved word, not a deeper bug.** gopherbuzz
+  a superset of upstream's. Do not flag it or suggest renaming it.{{else}}- `export fun test(...)` is not naming smell: `test` is contextual soft keyword, not reserved -> magus's canonical test-target name stays usable. Authority: GOPHERBUZZ: only deliberate place gopherbuzz reserved-word list is superset of upstream's. Do not flag or suggest renaming.{{end}}
+{{if .Full}}- **A name-shaped parse error may be a reserved word, not a deeper bug.** gopherbuzz
   rejects a reserved word as the name of a variable, parameter, function, or enum
   case. The words: `out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`,
   `typeof`, `type`, `protocol`, `static`, `extern`, `double`, `any`, `Function`,
@@ -118,21 +129,23 @@ fixture doing its job, not a defect.
   - Authority: GOPHERBUZZ. It is gopherbuzz's own enforced list, kept for strict
     parity with upstream's reservations, and not guaranteed identical to upstream's.
   - They stay fine in non-binding position (a map key, a member name, a type name).
-    Only binding a NAME to one fails.
-- **Object literal vs map literal is a common slip from JSON-familiar authors.**
+    Only binding a NAME to one fails.{{else}}- Name-shaped parse error may be reserved word, not deeper bug. gopherbuzz rejects reserved word as name of variable, parameter, function, or enum case. Words: `out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`, `protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`, `void`.
+  - Authority: GOPHERBUZZ: gopherbuzz's own enforced list, kept for strict parity with upstream reservations; not guaranteed identical to upstream's.
+  - Fine in non-binding position (map key, member name, type name); only binding NAME to one fails.{{end}}
+{{if .Full}}- **Object literal vs map literal is a common slip from JSON-familiar authors.**
   `Point{ x = 1 }` (object literal, `=`) and `{"key": value}` (map literal, `:`) look
   alike and are not interchangeable. Flag a literal that mixes the two forms, or
-  uses `:` where an object literal was clearly meant. Authority: UPSTREAM.
-- **A magusfile carrying logic that wants a test is a finding.**{{if .Full}} A
+  uses `:` where an object literal was clearly meant. Authority: UPSTREAM.{{else}}- Object literal vs map literal: common slip from JSON-familiar authors. `Point{ x = 1 }` (object literal, `=`) and `{"key": value}` (map literal, `:`) look alike, not interchangeable. Flag literal mixing two forms, or `:` where object literal clearly meant. Authority: UPSTREAM.{{end}}
+{{if .Full}}- **A magusfile carrying logic that wants a test is a finding.** A
   magusfile is declarative configuration; a test of it tests your
-  configuration, not your logic.{{end}} The fix moves that logic into a spell or a sibling
-  module; see {{skill "buzz-lang"}}'s "Test what you write".
+  configuration, not your logic. The fix moves that logic into a spell or a sibling
+  module; see {{skill "buzz-lang"}}'s "Test what you write".{{else}}- Magusfile carrying logic that wants test: finding. Fix: move logic into spell or sibling module; see {{skill "buzz-lang"}} "Test what you write".{{end}}
 
 ## Lens: skeptic and correctness
-
-{{if .Full}}Bugs and silent failures, not style. Read every function assuming it has one.{{end}}
-
-- **A `magus\Context.needs`-adjacent branch on a diagnostic code that names no real
+{{if .Full}}
+Bugs and silent failures, not style. Read every function assuming it has one.
+{{end}}
+{{if .Full}}- **A `magus\Context.needs`-adjacent branch on a diagnostic code that names no real
   code.** The idiom for handling a magus failure in Buzz: catch, then branch on
   `e["code"]`, not `e["message"]`.
   - A transposed code (`"MSG3003"` for `"{{mgs "MGS3003"}}"`) or a stale one silently
@@ -140,7 +153,7 @@ fixture doing its job, not a defect.
     dead code. A code cited only in a comment rots the same way, slower.
   - Authority: GOPHERBUZZ/MAGUS, not upstream. `MGSxxxx` and `BZZxxxx` are magus's
     and gopherbuzz's own diagnostic codes, not a Buzz language concept.
-  {{if .Full}}CHECK: any string matching `MGS[0-9]{4}` or `BZZ[0-9]{4}` in a `.buzz`
+  CHECK: any string matching `MGS[0-9]{4}` or `BZZ[0-9]{4}` in a `.buzz`
   file, in code or in a comment, against the documented set: `docs/reference/codes/`
   (organized by family: auth, charms, knowledge, magusfile, outputref, race,
   sandbox, services; one page per `MGSxxxx` code) for magus's own codes, and
@@ -157,104 +170,107 @@ fixture doing its job, not a defect.
   parameter, and an enum case an older magus release lacks fails to LOAD;
   worse than a string that silently never matches. A closed set like a sign
   algorithm name is what `Arg.Enum` is for; a diagnostic code is not that
-  shape.{{else}}- Check each `MGS[0-9]{4}` or `BZZ[0-9]{4}` against `docs/reference/codes/`
-    and `libs/gopherbuzz/docs/codes/`. A code with no page in either tree is the
-    finding. Do not propose typing codes as an enum: the set is open.{{end}}
-- **A force-unwrap (`!`) on a value the type says can be null.** Buzz's nil deref:
+  shape.{{else}}- `magus\Context.needs`-adjacent branch on diagnostic code naming no real code. Idiom for handling magus failure in Buzz: catch, then branch on `e["code"]`, not `e["message"]`.
+  - Transposed code (`"MSG3003"` for `"MGS3003"`) or stale one silently never matches; `catch` block still reads as live error handling while dead code. Code cited only in comment rots same way, slower.
+  - Authority: GOPHERBUZZ/MAGUS, not upstream. `MGSxxxx`, `BZZxxxx`: magus's and gopherbuzz's own diagnostic codes, not Buzz language concept.
+  - Check each `MGS[0-9]{4}` or `BZZ[0-9]{4}` against `docs/reference/codes/` and `libs/gopherbuzz/docs/codes/`; code with no page in either tree is finding. Do not propose typing codes as enum: set is open.{{end}}
+{{if .Full}}- **A force-unwrap (`!`) on a value the type says can be null.** Buzz's nil deref:
   `maybeUser!.name` panics at runtime the moment `maybeUser` is null. Prefer
-  `?.`/`??` unless the caller proved non-null a line above. Authority: UPSTREAM.
-- **A `catch` that discards `e` without inspecting `code` or `message`, where the
+  `?.`/`??` unless the caller proved non-null a line above. Authority: UPSTREAM.{{else}}- Force-unwrap (`!`) on value type says can be null: Buzz's nil deref; `maybeUser!.name` panics at runtime the moment `maybeUser` is null. Prefer `?.`/`??` unless caller proved non-null line above. Authority: UPSTREAM.{{end}}
+{{if .Full}}- **A `catch` that discards `e` without inspecting `code` or `message`, where the
   failure can mean more than one thing.** Swallowing every error the same way is
-  how a gate stops being a gate{{if .Full}}: the failure go-review-skeptic flags for a Go
-  `default` case that silently no-ops{{end}}. Authority: UPSTREAM.
-- **A compound assignment (`x op= v`) whose target has a side effect**, e.g.
+  how a gate stops being a gate: the failure go-review-skeptic flags for a Go
+  `default` case that silently no-ops. Authority: UPSTREAM.{{else}}- `catch` discarding `e` without inspecting `code` or `message`, where failure can mean more than one thing: swallowing every error same way is how gate stops being gate. Authority: UPSTREAM.{{end}}
+{{if .Full}}- **A compound assignment (`x op= v`) whose target has a side effect**, e.g.
   `f().count += 1`. Authority: GOPHERBUZZ. Upstream evaluates the target ONCE;
-  gopherbuzz evaluates it TWICE, so any side effect in `f()` happens twice{{if .Full}} (a
-  mutation, a log line, a counter){{end}}. This is a real bug under gopherbuzz, not only a
-  portability note. Flag it whenever the target is not a bare variable.
-- **A `match` treated as exhaustive, or an `obj{...}`/protocol annotation treated as
+  gopherbuzz evaluates it TWICE, so any side effect in `f()` happens twice (a
+  mutation, a log line, a counter). This is a real bug under gopherbuzz, not only a
+  portability note. Flag it whenever the target is not a bare variable.{{else}}- Compound assignment (`x op= v`) whose target has side effect, like `f().count += 1`. Authority: GOPHERBUZZ. Upstream evaluates target ONCE; gopherbuzz TWICE -> any side effect in `f()` happens twice. Real bug under gopherbuzz, not only portability note. Flag whenever target is not bare variable.{{end}}
+{{if .Full}}- **A `match` treated as exhaustive, or an `obj{...}`/protocol annotation treated as
   enforced.** Authority: GOPHERBUZZ. gopherbuzz's checker enforces neither match
   exhaustiveness, protocol conformance, nor `obj{...}` shape annotations. Check by
-  hand that a `match` covers every case its type admits{{if .Full}}, as go-review-skeptic checks a Go type switch for a missing `default`{{end}}. A
-  clean compile proves nothing here.
-- **"It compiled" as proof the code is valid upstream Buzz, or "it failed" as proof
+  hand that a `match` covers every case its type admits, as go-review-skeptic checks a Go type switch for a missing `default`. A
+  clean compile proves nothing here.{{else}}- `match` treated as exhaustive, or `obj{...}`/protocol annotation treated as enforced. Authority: GOPHERBUZZ. gopherbuzz checker enforces neither match exhaustiveness, protocol conformance, nor `obj{...}` shape annotations. Check by hand that `match` covers every case its type admits; clean compile proves nothing here.{{end}}
+{{if .Full}}- **"It compiled" as proof the code is valid upstream Buzz, or "it failed" as proof
   it is not.** Authority: GOPHERBUZZ. gopherbuzz implements a SUBSET of upstream, so
-  passing today does not mean upstream would accept it{{if .Full}}. Several of upstream's own
-  compile-error fixtures compile clean under gopherbuzz{{end}}. A clean compile is
-  evidence, not verification, in either direction.
+  passing today does not mean upstream would accept it. Several of upstream's own
+  compile-error fixtures compile clean under gopherbuzz. A clean compile is
+  evidence, not verification, in either direction.{{else}}- "It compiled" as proof code is valid upstream Buzz, or "it failed" as proof it is not. Authority: GOPHERBUZZ. gopherbuzz implements SUBSET of upstream -> passing today does not mean upstream accepts. Clean compile: evidence, not verification, either direction.{{end}}
 
 ## Lens: upstream conformance
-
-{{if .Full}}Named divergences between gopherbuzz and upstream Buzz. Each is a real,
+{{if .Full}}
+Named divergences between gopherbuzz and upstream Buzz. Each is a real,
 observed behavior difference, not a hypothetical; use them to judge whether
 code an author believes is "just Buzz" survives contact with
 upstream, and to stop a gopherbuzz-only behavior from being taught as if it
-were the language.{{end}}
-
-- **Namespace access: `\` is the only form upstream recognizes for an imported
-  module.** Authority: PORTABILITY.{{if .Full}} Upstream's parser gives backslash a dedicated
+were the language.
+{{end}}
+{{if .Full}}- **Namespace access: `\` is the only form upstream recognizes for an imported
+  module.** Authority: PORTABILITY. Upstream's parser gives backslash a dedicated
   production for resolving a name against an import; the bare dot is only the
-  general postfix member operator on VALUES.{{end}} gopherbuzz accepts both for a module
+  general postfix member operator on VALUES. gopherbuzz accepts both for a module
   reference, a superset, not a mirror. `fs\readFile(...)` parses in both;
-  `fs.readFile(...)` parses only here.
-- **A string is indexed by BYTES; `utf8Len()` is the rune count.** Authority:
+  `fs.readFile(...)` parses only here.{{else}}- Namespace access: `\` only form upstream recognizes for imported module. Authority: PORTABILITY. gopherbuzz accepts both for module reference: superset, not mirror. `fs\readFile(...)` parses in both; `fs.readFile(...)` only here.{{end}}
+{{if .Full}}- **A string is indexed by BYTES; `utf8Len()` is the rune count.** Authority:
   UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach` all work in bytes,
   matching upstream's builtins; `utf8Len()` is the only codepoint-counting member.
   An accented e is two bytes in UTF-8, so `len()` counts it as 2.
-  {{if .Full}}This is worth knowing because gopherbuzz USED to index runes, and
+  This is worth knowing because gopherbuzz USED to index runes, and
   code written against that reads plausibly either way. A loop slicing with
   `sub()` and bounding with `len()` was consistent under both models, so it does
   not announce the change; what moves is any index arithmetic that assumed one
   character was one position. Reach for `utf8Len()` only when the question is
   genuinely "how many characters", which is rarer than it looks; a byte count
-  is what a digest, an encoding, or a wire format wants.{{end}}
-- **A bare `as` cast coerces in gopherbuzz; upstream checks it statically.**
+  is what a digest, an encoding, or a wire format wants.{{else}}- String indexed by BYTES; `utf8Len()` is rune count. Authority: UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()`, `foreach` all work in bytes, matching upstream builtins; `utf8Len()` only codepoint-counting member. Accented e: two bytes in UTF-8 -> `len()` counts 2.{{end}}
+{{if .Full}}- **A bare `as` cast coerces in gopherbuzz; upstream checks it statically.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold. `as?` is the real type test in both; prefer it
-  when the intent is "test", not "coerce and hope".
-- **Compound assignment double-evaluates its target in gopherbuzz; upstream
+  when the intent is "test", not "coerce and hope".{{else}}- Bare `as` cast coerces in gopherbuzz; upstream checks statically. Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream rejects cast that cannot hold. `as?`: real type test in both; prefer when intent is "test", not "coerce and hope".{{end}}
+{{if .Full}}- **Compound assignment double-evaluates its target in gopherbuzz; upstream
   evaluates it once.** Authority: GOPHERBUZZ. The correctness lens flags it as a bug
-  when the target has a side effect{{if .Full}}; here it explains why upstream does not
-  misbehave the same way{{end}}.
-- **A declared `!>` error set enforces PRESENCE but not TYPE.** Authority:
+  when the target has a side effect; here it explains why upstream does not
+  misbehave the same way.{{else}}- Compound assignment double-evaluates target in gopherbuzz; upstream once. Authority: GOPHERBUZZ. Correctness lens flags it as bug when target has side effect.{{end}}
+{{if .Full}}- **A declared `!>` error set enforces PRESENCE but not TYPE.** Authority:
   GOPHERBUZZ. Upstream treats `!> ErrType` as a real error set. gopherbuzz checks only
   that a raising call is propagated or caught, never what it raises.
   - Calling a `!> str` function from one declaring no raise is BZZ1006, "call may
-    raise but is neither declared with !> nor caught". It is a real and common gate{{if .Full}}: it is what a script invoked by `{{cmd "buzz"}}`
+    raise but is neither declared with !> nor caught". It is a real and common gate: it is what a script invoked by `{{cmd "buzz"}}`
     trips on when it calls something like `fs\listDir` without declaring
-    `!>`{{end}}.
-  - A function declaring `!> int` may throw a `str` and nothing objects{{if .Full}}, so the named type is documentation while the arrow
-    itself is checked{{end}}.
+    `!>`.
+  - A function declaring `!> int` may throw a `str` and nothing objects, so the named type is documentation while the arrow
+    itself is checked.
   - So never treat a missing `!>` as proof a call cannot raise, and never trust the
-    NAMED type. Both were measured against gopherbuzz{{if .Full}}; this bullet
+    NAMED type. Both were measured against gopherbuzz; this bullet
     previously said the whole annotation was "parsed and thrown away, nothing
-    enforces it", which sent reviewers straight past every BZZ1006-class defect{{end}}.
-- **An anonymous object field shadows a same-named builtin method.** Authority:
+    enforces it", which sent reviewers straight past every BZZ1006-class defect.{{else}}- Declared `!>` error set enforces PRESENCE but not TYPE. Authority: GOPHERBUZZ. Upstream treats `!> ErrType` as real error set; gopherbuzz checks only that raising call is propagated or caught, never what it raises.
+  - Calling `!> str` function from one declaring no raise: BZZ1006, "call may raise but is neither declared with !> nor caught"; real, common gate.
+  - Function declaring `!> int` may throw `str`; nothing objects.
+  - -> never treat missing `!>` as proof call cannot raise; never trust NAMED type. Both measured against gopherbuzz.{{end}}
+{{if .Full}}- **An anonymous object field shadows a same-named builtin method.** Authority:
   GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was built with one, not
   the builtin `.map()`. A field named after a common builtin (`map`, `len`, ...)
-  deserves a second look.
-- **A malformed `{...}` in a backtick-interpolated string is a parse error upstream;
+  deserves a second look.{{else}}- Anonymous object field shadows same-named builtin method. Authority: GOPHERBUZZ. `rec.map` reads FIELD `map` if object built with one, not builtin `.map()`. Field named after common builtin (`map`, `len`, ...) deserves second look.{{end}}
+{{if .Full}}- **A malformed `{...}` in a backtick-interpolated string is a parse error upstream;
   gopherbuzz leaves it as literal text.** Authority: GOPHERBUZZ. A placeholder typo
   fails loudly upstream and silently here (it renders the literal braces). Review a
-  backtick string's interpolations as carefully as code.
-- **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
+  backtick string's interpolations as carefully as code.{{else}}- Malformed `{...}` in backtick-interpolated string: parse error upstream; gopherbuzz leaves literal text. Authority: GOPHERBUZZ. Placeholder typo fails loudly upstream, silently here (renders literal braces). Review backtick string interpolations as carefully as code.{{end}}
+{{if .Full}}- **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
   Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and ignored: it serves
   the static checker, not the VM. Code that branches on a generic type argument at
-  runtime cannot work here.
-- **`pat.replace` replaces only the first match; `pat.replaceAll` replaces every
+  runtime cannot work here.{{else}}- Generics erased at runtime in gopherbuzz; upstream reifies. Authority: GOPHERBUZZ. `::<T>` type argument parsed, ignored: serves static checker, not VM. Code branching on generic type argument at runtime cannot work here.{{end}}
+{{if .Full}}- **`pat.replace` replaces only the first match; `pat.replaceAll` replaces every
   match.** Authority: UPSTREAM, mirrored faithfully. Do not flag it or propose
-  "fixing" `.replace`: that would be the divergence.
-- **`str.replace` replaces every occurrence, matching upstream.** Authority:
-  UPSTREAM.{{if .Full}} An earlier gopherbuzz replaced only the first occurrence; that bug is
-  fixed.{{end}} Never teach or flag the old first-only behavior as current.
-- **`test "..." {}` is genuine upstream syntax**, present in upstream's own test
+  "fixing" `.replace`: that would be the divergence.{{else}}- `pat.replace` replaces only first match; `pat.replaceAll` every match. Authority: UPSTREAM, mirrored faithfully. Do not flag or propose "fixing" `.replace`: that would be divergence.{{end}}
+{{if .Full}}- **`str.replace` replaces every occurrence, matching upstream.** Authority:
+  UPSTREAM. An earlier gopherbuzz replaced only the first occurrence; that bug is
+  fixed. Never teach or flag the old first-only behavior as current.{{else}}- `str.replace` replaces every occurrence, matching upstream. Authority: UPSTREAM. Never teach or flag old first-only behavior as current.{{end}}
+{{if .Full}}- **`test "..." {}` is genuine upstream syntax**, present in upstream's own test
   suite. Authority: UPSTREAM. Contrast `test` staying bindable as a name (the idiom
-  lens), which IS gopherbuzz-only.
-- **`assert`, `suite`, `testing`, and `assertcore` have no upstream counterpart.**
+  lens), which IS gopherbuzz-only.{{else}}- `test "..." {}` is genuine upstream syntax, in upstream's own test suite. Authority: UPSTREAM. Contrast `test` staying bindable as name (idiom lens): gopherbuzz-only.{{end}}
+{{if .Full}}- **`assert`, `suite`, `testing`, and `assertcore` have no upstream counterpart.**
   Authority: PORTABILITY. They are gopherbuzz's own test modules, not a
-  reimplementation of an upstream module{{if .Full}}. Code leaning on their exact API has no
-  upstream equivalent, by design{{end}}.
-{{if .Full}}
+  reimplementation of an upstream module. Code leaning on their exact API has no
+  upstream equivalent, by design.{{else}}- `assert`, `suite`, `testing`, `assertcore`: no upstream counterpart. Authority: PORTABILITY. gopherbuzz's own test modules, not reimplementation of upstream module.{{end}}{{if .Full}}
 
 ### If you are reviewing gopherbuzz's own implementation
 
@@ -269,12 +285,13 @@ newly-passing file is not added to the list, so the list can only be as stale
 as the last test run.
 {{end}}
 
-## Running the three lenses
+{{if .Full}}## Running the three lenses{{else}}## Running three lenses{{end}}
 
-Spawn three `Agent` tool calls **in a single message** (parallel), `subagent_type:
+{{if .Full}}Spawn three `Agent` tool calls **in a single message** (parallel), `subagent_type:
 general-purpose`. A subagent cannot invoke the Skill tool, so it needs the section
 text, not the skill's name.
-
+{{else}}Spawn three `Agent` tool calls in single message (parallel), `subagent_type: general-purpose`.
+Subagent cannot invoke Skill tool -> needs section text, not skill name.{{end}}
 Prompt template per subagent:
 
 ```text
@@ -287,26 +304,26 @@ Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```
 
-For a whole workspace, name the entry points to walk (`magusfile.buzz`,
-`spells/**/spell.buzz`); never leave scope open-ended{{if .Full}}; an unscoped subagent re-derives the workspace layout three
-times instead of once{{end}}.
+{{if .Full}}For a whole workspace, name the entry points to walk (`magusfile.buzz`,
+`spells/**/spell.buzz`); never leave scope open-ended; an unscoped subagent re-derives the workspace layout three
+times instead of once.{{else}}Whole workspace: name entry points to walk (`magusfile.buzz`, `spells/**/spell.buzz`); never leave scope open-ended.{{end}}
 
-## Merging the findings
+{{if .Full}}## Merging the findings{{else}}## Merging findings{{end}}
 
-- **Group by lens.** Keep the three sections separate: collapsing them loses which
-  authority backed which finding.
-- **Dedupe by `file:line` within a section only.** One line flagged by two lenses for
-  different reasons stays two findings: two lenses agreeing{{if .Full}}. The common case is idiom's readability and conformance's portability on the same
-  namespace-access mistake{{end}}.
-- **Combined severity table** at the end, drawn from all three sections. A
+{{if .Full}}- **Group by lens.** Keep the three sections separate: collapsing them loses which
+  authority backed which finding.{{else}}- Group by lens: three sections separate; collapsing loses which authority backed which finding.{{end}}
+{{if .Full}}- **Dedupe by `file:line` within a section only.** One line flagged by two lenses for
+  different reasons stays two findings: two lenses agreeing. The common case is idiom's readability and conformance's portability on the same
+  namespace-access mistake.{{else}}- Dedupe by `file:line` within section only. One line flagged by two lenses for different reasons stays two findings: two lenses agreeing.{{end}}
+{{if .Full}}- **Combined severity table** at the end, drawn from all three sections. A
   correctness finding with a real side effect (compound-assignment
-  double-evaluation, a swallowed error that matters) outranks an idiom note.
-- **Top 1-3 to action first**, opinionated, across all three lenses.
+  double-evaluation, a swallowed error that matters) outranks an idiom note.{{else}}- Combined severity table at end, from all three sections. Correctness finding with real side effect (compound-assignment double-evaluation, swallowed error that matters) outranks idiom note.{{end}}
+{{if .Full}}- **Top 1-3 to action first**, opinionated, across all three lenses.{{else}}- Top 1-3 to action first, opinionated, across all three lenses.{{end}}
 
-## What this skill does not do
+{{if .Full}}## What this skill does not do{{else}}## Not this skill{{end}}
 
-- Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what makes
-  an op a service). Use {{skill "buzz-lang"}}.
-- Write code or apply fixes. The output is a merged findings report.
-- Teach Buzz syntax from scratch. Point a reader to {{skill "buzz-lang"}} when a finding
-  needs "how do I write it correctly", not "here is what's wrong".
+{{if .Full}}- Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what makes
+  an op a service). Use {{skill "buzz-lang"}}.{{else}}- Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what makes op service): {{skill "buzz-lang"}}.{{end}}
+{{if .Full}}- Write code or apply fixes. The output is a merged findings report.{{else}}- Writing code or applying fixes; output is merged findings report.{{end}}
+{{if .Full}}- Teach Buzz syntax from scratch. Point a reader to {{skill "buzz-lang"}} when a finding
+  needs "how do I write it correctly", not "here is what's wrong".{{else}}- Teaching Buzz syntax from scratch. Point reader to {{skill "buzz-lang"}} when finding needs "how do I write it correctly", not "here is what's wrong".{{end}}

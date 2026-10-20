@@ -22,19 +22,13 @@ import (
 const (
 	instTargetDuration = "magus.target.duration"
 	instCacheDuration  = "magus.cache.duration"
+	instCacheReads     = "magus.cache.reads"
 	instPoolWait       = "magus.pool.wait.duration"
 	instGraphQuery     = "magus.graph.query.duration"
-	instRemoteHits     = "magus.cache.remote.hits"
-	instRemoteMisses   = "magus.cache.remote.misses"
-	instRemoteErrors   = "magus.cache.remote.errors"
+	instRemoteOps      = "magus.cache.remote.ops"
 	instRemoteDuration = "magus.cache.remote.duration"
 	instRemoteIOSize   = "magus.cache.remote.io.size"
 
-	instCacheHits   = "magus.cache.hits"
-	instCacheMisses = "magus.cache.misses"
-	instTargetRuns  = "magus.target.runs"
-
-	instMCPCalls    = "magus.mcp.tool.calls"
 	instMCPInput    = "magus.mcp.tool.input.size"
 	instMCPOutput   = "magus.mcp.tool.output.size"
 	instMCPDuration = "magus.mcp.tool.duration"
@@ -45,24 +39,24 @@ const (
 	instSandboxChecks     = "magus.sandbox.checks"
 	instSandboxEnvDropped = "magus.sandbox.env.dropped"
 
-	instBuzzExec          = "magus.buzz.exec.duration"
-	instBuzzCompile       = "magus.buzz.compile.duration"
-	instBuzzHostCallDur   = "magus.buzz.host.call.duration"
-	instBuzzHostCallCount = "magus.buzz.host.call.count"
-	instBuzzSessionReuse  = "magus.buzz.session.pool.reuse"
-	instBuzzSessionIdle   = "magus.buzz.session.pool.idle"
-	instBuzzSessionEvict  = "magus.buzz.session.pool.evictions"
-	instBuzzSessionWarm   = "magus.buzz.session.warm.duration"
-	instBuzzImport        = "magus.buzz.import.duration"
-	instBuzzSpellResolve  = "magus.buzz.spell.resolve.duration"
-	instBuzzJITRuns       = "magus.buzz.jit.runs"
-	instBuzzVMFaults      = "magus.buzz.vm.faults"
+	instBuzzExec         = "magus.buzz.exec.duration"
+	instBuzzCompile      = "magus.buzz.compile.duration"
+	instBuzzHostCallDur  = "magus.buzz.host.call.duration"
+	instBuzzSessionPool  = "magus.buzz.session.pool.events"
+	instBuzzSessionIdle  = "magus.buzz.session.pool.idle"
+	instBuzzSessionWarm  = "magus.buzz.session.warm.duration"
+	instBuzzImport       = "magus.buzz.import.duration"
+	instBuzzSpellResolve = "magus.buzz.spell.resolve.duration"
+	instBuzzJITRuns      = "magus.buzz.jit.runs"
+	instBuzzVMFaults     = "magus.buzz.vm.faults"
 
 	// Attribute keys read off metric data points during grouped aggregation.
 	attrProject  = "magus.project"
 	attrSpell    = "magus.spell"
 	attrTarget   = "magus.target"
 	attrOutcome  = "outcome"
+	attrResult   = "result"
+	attrEvent    = "event"
 	attrCacheHit = "cache.hit"
 	attrTool     = "tool"
 	attrAccess   = "access"
@@ -97,12 +91,11 @@ func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot 
 				snap.PoolWait = rollLatency(m.Data)
 			case instGraphQuery:
 				snap.GraphQuery = rollLatency(m.Data)
-			case instRemoteHits:
-				snap.Remote.Hits = sumCounter(m.Data)
-			case instRemoteMisses:
-				snap.Remote.Misses = sumCounter(m.Data)
-			case instRemoteErrors:
-				snap.Remote.Errors = sumCounter(m.Data)
+			case instRemoteOps:
+				byOutcome := sumByAttr(m.Data, attrOutcome)
+				snap.Remote.Hits = byOutcome["hit"]
+				snap.Remote.Misses = byOutcome["miss"]
+				snap.Remote.Errors = byOutcome["error"]
 			case instRemoteDuration:
 				lat := rollLatency(m.Data)
 				snap.Remote.DurationP50Seconds = lat.P50Seconds
@@ -139,6 +132,15 @@ func readAttr(set attribute.Set, key string) string {
 		return v.String()
 	}
 	return ""
+}
+
+// sumByAttr totals an Int64 Sum's data points by the value each carries for key.
+func sumByAttr(agg metricdata.Aggregation, key string) map[string]int64 {
+	out := map[string]int64{}
+	forEachInt64DP(agg, func(set attribute.Set, v int64) {
+		out[readAttr(set, key)] += v
+	})
+	return out
 }
 
 // forEachInt64DP invokes fn for every data point of a monotonic or up/down Int64 Sum. A
@@ -231,9 +233,9 @@ func targetStats(rm metricdata.ResourceMetrics) []*metricsv1.TargetStat {
 }
 
 // mcpToolStats rolls the magus.mcp.tool.* instruments into one MCPToolStat per tool, ordered by
-// tool name. Returns nil when no MCP instrument recorded anything.
+// tool name. Calls and errors are the duration histogram's counts, by outcome. Returns nil when
+// no MCP instrument recorded anything.
 func mcpToolStats(rm metricdata.ResourceMetrics) []*metricsv1.MCPToolStat {
-	callsAgg, _ := findMetric(rm, instMCPCalls)
 	inputAgg, _ := findMetric(rm, instMCPInput)
 	outputAgg, _ := findMetric(rm, instMCPOutput)
 	durAgg, _ := findMetric(rm, instMCPDuration)
@@ -241,14 +243,16 @@ func mcpToolStats(rm metricdata.ResourceMetrics) []*metricsv1.MCPToolStat {
 	callsByTool := map[string]int64{}
 	errsByTool := map[string]int64{}
 	tools := map[string]struct{}{}
-	forEachInt64DP(callsAgg, func(set attribute.Set, v int64) {
-		tool := readAttr(set, attrTool)
-		callsByTool[tool] += v
-		if readAttr(set, attrOutcome) == "error" {
-			errsByTool[tool] += v
+	if h, ok := durAgg.(metricdata.Histogram[float64]); ok {
+		for _, dp := range h.DataPoints {
+			tool := readAttr(dp.Attributes, attrTool)
+			callsByTool[tool] += int64(dp.Count)
+			if readAttr(dp.Attributes, attrOutcome) == "error" {
+				errsByTool[tool] += int64(dp.Count)
+			}
+			tools[tool] = struct{}{}
 		}
-		tools[tool] = struct{}{}
-	})
+	}
 
 	inputByTool := latencyByAttr(inputAgg, attrTool)
 	outputByTool := latencyByAttr(outputAgg, attrTool)
@@ -308,19 +312,15 @@ func buzzStats(rm metricdata.ResourceMetrics) *metricsv1.Buzz {
 	}
 	if agg, ok := findMetric(rm, instBuzzHostCallDur); ok {
 		lat := rollLatency(agg)
-		b.HostCallP50Seconds, b.HostCallP95Seconds = lat.P50Seconds, lat.P95Seconds
+		b.HostCallCount, b.HostCallP50Seconds, b.HostCallP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
-	if agg, ok := findMetric(rm, instBuzzHostCallCount); ok {
-		b.HostCallCount = sumCounter(agg)
-	}
-	if agg, ok := findMetric(rm, instBuzzSessionReuse); ok {
-		b.SessionPoolReuse = sumCounter(agg)
+	if agg, ok := findMetric(rm, instBuzzSessionPool); ok {
+		byEvent := sumByAttr(agg, attrEvent)
+		b.SessionPoolReuse = byEvent["reused"]
+		b.SessionPoolEvictions = byEvent["evicted"]
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionIdle); ok {
 		b.SessionPoolIdle = sumCounter(agg)
-	}
-	if agg, ok := findMetric(rm, instBuzzSessionEvict); ok {
-		b.SessionPoolEvictions = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionWarm); ok {
 		lat := rollLatency(agg)
@@ -422,19 +422,19 @@ type counterTotals struct {
 	targetRuns  int64
 }
 
-// counters reads the cumulative cache-hit, cache-miss, and target-run counters from a
-// collection. Absent instruments read as zero.
+// counters reads the cumulative cache hits and misses (magus.cache.reads by result) and target
+// runs (the magus.target.duration count) from a collection. Absent instruments read as zero.
 func counters(rm metricdata.ResourceMetrics) counterTotals {
 	var t counterTotals
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			switch m.Name {
-			case instCacheHits:
-				t.cacheHits = sumCounter(m.Data)
-			case instCacheMisses:
-				t.cacheMisses = sumCounter(m.Data)
-			case instTargetRuns:
-				t.targetRuns = sumCounter(m.Data)
+			case instCacheReads:
+				byResult := sumByAttr(m.Data, attrResult)
+				t.cacheHits = byResult["hit"]
+				t.cacheMisses = byResult["miss"]
+			case instTargetDuration:
+				t.targetRuns = rollLatency(m.Data).Count
 			}
 		}
 	}

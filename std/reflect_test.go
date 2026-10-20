@@ -57,31 +57,26 @@ func makeClosure() func() { return func() {} }
 
 func genericFunc[T any]() {}
 
-// TestMethodSource resolves an Impl back to the file and line it is defined at,
-// which is what links a generated doc page to the code.
+// TestMethodSource resolves an Impl back to the file it is defined in, which is
+// what links a generated doc page to the code.
 func TestMethodSource(t *testing.T) {
 	// go test's cwd is this package dir, regardless of -trimpath.
 	repoRoot, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	file, line := MethodSource(Method{Impl: FsGlob}, repoRoot)
+	for _, impl := range []any{nil, 42} {
+		assert.Emptyf(t, MethodSource(Method{Impl: impl}, repoRoot), "MethodSource(Impl=%v)", impl)
+	}
+
+	file := MethodSource(Method{Impl: FsGlob}, repoRoot)
 	if file == "" {
 		t.Skip("built with -trimpath: no absolute path to relativize")
 	}
 	assert.Equal(t, "std/fs.go", file)
-	assert.Positive(t, line)
 
 	// A file outside repoRoot relativizes to a "..' path and is reported as unknown
 	// rather than as a path escaping the tree.
-	outside, outsideLine := MethodSource(Method{Impl: FsGlob}, t.TempDir())
-	assert.Empty(t, outside)
-	assert.Zero(t, outsideLine)
-
-	for _, impl := range []any{nil, 42} {
-		f, l := MethodSource(Method{Impl: impl}, repoRoot)
-		assert.Emptyf(t, f, "MethodSource(Impl=%v)", impl)
-		assert.Zerof(t, l, "MethodSource(Impl=%v)", impl)
-	}
+	assert.Empty(t, MethodSource(Method{Impl: FsGlob}, t.TempDir()))
 }
 
 func TestFieldFuncName(t *testing.T) {

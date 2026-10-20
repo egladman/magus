@@ -2,11 +2,15 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -147,6 +151,37 @@ func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) 
 	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
 }
 
+// ModelTierLens is the job-history lens: what each model tier achieved on each kind of job,
+// from the outcomes the job store recorded in the history file. It reports; a person
+// changes a tier by editing the declaration or matrix the doctor check names.
+//
+// Not named ModelTiers, which is the accessor for the workspace's declaration. A workspace
+// with no recorded outcome gets no rows and the definition, not an error.
+func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTierOutput, error) {
+	out := types.ModelTierOutput{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
+	if m.cfg.HistoryPath == "" {
+		return out, nil
+	}
+	var hist forecast.History
+	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+		return types.ModelTierOutput{}, err
+	}
+	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers(ctx))
+	return out, nil
+}
+
+// GroupingLens is the other job-history lens: what each grouping shape cost, over every
+// recorded outcome. A workspace with no history file has no outcome, so every shape is unknown.
+func (m *Magus) GroupingLens(ctx context.Context) (types.GroupingOutput, error) {
+	var hist forecast.History
+	if m.cfg.HistoryPath != "" {
+		if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+			return types.GroupingOutput{}, err
+		}
+	}
+	return job.GroupingRecords(hist.Jobs, nil), nil
+}
+
 // Unreferenced is the knowledge-graph lens: code symbols this workspace defines that
 // nothing in it names. Like Volatility it takes no window (it reads the graph, not a
 // commit scan), so it is workspace-wide.
@@ -156,7 +191,7 @@ func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) 
 // unreferenced code would render as a clean report; without the verdict, the lens would
 // be most reassuring exactly where it knows least.
 func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, error) {
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.UnreferencedOutput{}, err
 	}
@@ -179,7 +214,7 @@ func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, err
 // coverage verdict as Unreferenced: a workspace half of whose projects were never indexed
 // shows half its duplication, and the answer says so rather than reading as clean.
 func (m *Magus) Duplication(ctx context.Context) (types.DuplicationOutput, error) {
-	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.DuplicationOutput{}, err
 	}
@@ -236,6 +271,67 @@ func duplicationHistory(group types.DuplicationGroup, scan []project.ScannedComm
 		}
 	}
 	return h
+}
+
+// Conformance is the code-shape lens: how large and how coupled the workspace's code is, one row
+// per metric and population, judged against the value knowledge.conformance enforces (the
+// committed ratchet record, else the configured anchor). Like Duplication it reads the symbol
+// graph under the coverage verdict, so a half-indexed workspace answers unknown instead of
+// passing; unlike it, a configuration it cannot honor is an error, a ratchet record that is
+// missing, malformed or looser than its anchor included.
+//
+// It proposes and never sets: a row's Propose is the tighter value a person may commit, and
+// nothing here reads a live percentile back as a limit or writes the record.
+func (m *Magus) Conformance(ctx context.Context) (types.ConformanceOutput, error) {
+	opts, err := m.ConformanceOptions()
+	if err != nil {
+		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
+	}
+	if err := opts.Validate(); err != nil {
+		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
+	}
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return types.ConformanceOutput{}, err
+	}
+	if opts.Generated, err = m.declaredOutputs(ctx, g); err != nil {
+		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
+	}
+	out := g.Conformance(opts)
+	out.Definition = types.ConformanceDefinition
+	if out.Answer.Verdict == types.VerdictUnknown {
+		return out, nil
+	}
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, reason, gaps)
+	return out, nil
+}
+
+// declaredOutputs is the set of workspace files g holds that a target declares as an output,
+// which no conformance population counts.
+func (m *Magus) declaredOutputs(ctx context.Context, g *knowledge.Graph) (map[string]bool, error) {
+	var files []string
+	for _, n := range g.Nodes() {
+		if n.Kind == types.KindFile {
+			files = append(files, n.Source)
+		}
+	}
+	slices.Sort(files)
+	entries, err := m.ClassifyFiles(ctx, slices.Compact(files))
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			out[e.Path] = true
+		}
+	}
+	return out, nil
 }
 
 // Trend is the rising/cooling lens: each project's churn in the recent vs earlier

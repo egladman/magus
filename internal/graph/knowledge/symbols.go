@@ -122,12 +122,14 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 	// A file several symbols define is sized by each of them from one read, so the first
 	// record that carries a size is as good as any.
 	sizes := map[string][2]int{}
+	generated := map[string]bool{}
 	for _, sym := range syms {
 		if sym.SourceLines == 0 && sym.SourceBytes == 0 {
 			continue
 		}
 		if path, _, ok := strings.Cut(sym.Source, ":"); ok {
 			sizes[path] = [2]int{sym.SourceLines, sym.SourceBytes}
+			generated[path] = sym.SourceGenerated
 		}
 	}
 	noteFile := func(path, language string) {
@@ -141,6 +143,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 		if size, ok := sizes[path]; ok {
 			attrs = fileSizeAttrs(attrs, size[0], size[1])
+		}
+		if generated[path] {
+			attrs[attrGenerated] = "true"
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
@@ -183,6 +188,16 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.BodyDigest != "" {
 			attrs[AttrBodyDigest] = sym.BodyDigest
 		}
+		if sym.BodyShape != "" {
+			attrs[AttrBodyShape] = sym.BodyShape
+			attrs[attrBodyTokens] = strconv.Itoa(sym.BodyTokens)
+		}
+		if len(sym.BranchIdents) > 0 {
+			attrs[attrBranchIdents] = strings.Join(sym.BranchIdents, ",")
+		}
+		if sym.PackageName != "" {
+			attrs[attrPackageName] = sym.PackageName
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,
@@ -196,7 +211,11 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 		for _, ref := range sym.Refs {
 			noteFile(ref.Path, sym.Language)
-			s.Edges = append(s.Edges, extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref)))
+			e := extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref))
+			if ref.Alias != "" {
+				e.Attrs = map[string]string{attrImportAlias: ref.Alias}
+			}
+			s.Edges = append(s.Edges, e)
 		}
 		for _, c := range sym.Calls {
 			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, callProvenance(c)))
@@ -280,7 +299,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 				nsLang[sym.Key] = l
 			}
 			for _, def := range sym.Defs {
-				if IsTestPath(def) {
+				if types.IsTestPath(def) {
 					continue
 				}
 				if fileNS[def] == nil {
@@ -318,7 +337,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 		for _, sym := range syms {
 			if sym.Key != "" && sym.Namespace == sym.Key {
 				for _, ref := range sym.Refs {
-					if IsTestPath(ref.Path) {
+					if types.IsTestPath(ref.Path) {
 						continue
 					}
 					for from := range fileNS[ref.Path] {
@@ -326,7 +345,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 					}
 				}
 			}
-			if sym.Namespace == "" || IsTestPath(sym.Source) {
+			if sym.Namespace == "" || types.IsTestPath(sym.Source) {
 				continue
 			}
 			for _, c := range sym.Calls {
@@ -374,39 +393,11 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 func testRefCount(refs []types.KnowledgeSymbolRef) int {
 	n := 0
 	for _, ref := range refs {
-		if IsTestPath(ref.Path) {
+		if types.IsTestPath(ref.Path) {
 			n++
 		}
 	}
 	return n
-}
-
-// testSuffixes and testPrefixes are the naming conventions that mark a file as a test in
-// the languages a SCIP indexer covers. By NAME, because the graph is language-agnostic and
-// a name is the one thing every language's convention agrees can carry it.
-var (
-	testSuffixes = []string{"_test.go", ".test.ts", ".test.tsx", ".test.js", ".spec.ts", ".spec.tsx", ".spec.js", "_test.py"}
-	testPrefixes = []string{"test_"}
-)
-
-// IsTestPath reports whether a path (or a symbol Source, "<path>:<line>") is a test file.
-// It recognizes Go (_test.go), TypeScript and JavaScript (.test and .spec), and Python
-// (test_*.py, *_test.py) by file name alone, which is what the symbol indexes cover. One
-// predicate for the lenses and the reading order, so they cannot drift apart.
-func IsTestPath(source string) bool {
-	path, _, _ := strings.Cut(source, ":")
-	base := path[strings.LastIndex(path, "/")+1:]
-	for _, s := range testSuffixes {
-		if strings.HasSuffix(base, s) {
-			return true
-		}
-	}
-	for _, p := range testPrefixes {
-		if strings.HasPrefix(base, p) && strings.HasSuffix(base, ".py") {
-			return true
-		}
-	}
-	return false
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the

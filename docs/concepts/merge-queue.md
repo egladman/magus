@@ -57,7 +57,10 @@ you want it to land with:
 gh pr merge 482 --auto --squash
 ```
 
-or "Enable auto-merge" on the pull request's page. Nothing else changes for the author:
+or "Enable auto-merge" on the pull request's page. Merge intent is the author's to give
+and the queue never supplies it, which is the
+[human in the loop](../doctrine.md#human-in-the-loop) at the last step: the queue
+validates and lands what a person asked to land. Nothing else changes for the author:
 push fixes as usual, and a push to a queued pull request has it validated again. Once
 the queue's `merge-queue` status is main's required check, auto-merge cannot fire on its
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
@@ -688,6 +691,36 @@ the classifier's line and each region's location with its kind, as in
 A red kick-back's report adds that line, and a conflict's report or wait reason names why
 each file stayed conflicted: the location that did not settle, or the classifier's line.
 
+### Files two jobs claimed apart
+
+`merge_low_risk` also opts a file into one more settle, outside the queue: integrating
+the branches of [jobs](../guides/jobs.md) with `magus vcs resolve --against <branch>`.
+Two jobs that claim different declarations of one file (`a.go#A` and `a.go#B`) can
+still edit adjacent lines. Git then conflicts, and neither kind above settles it. The
+file settles when every one of these holds:
+
+- a project's `merge_low_risk` covers it, and a diff driver places its declarations;
+- each side of the merge carries the work of a job that writes the file (the revision
+  its checkout has checked out, or a branch named after the job);
+- every such job is recorded `pass` by `magus job wait`;
+- each job writes the file by declaration claims only, and no claim of one side names
+  a declaration a claim of the other side names.
+
+Then each side's edits apply where that side made them. Where the two sides' edits touch,
+each edit must sit in a declaration its own job claims. Import lines in the file's
+preamble merge as a set, and two insertions at one base line keep ours, then theirs, as
+kind 2 does. Anything else that overlaps stays a conflict.
+
+A file a job claims gets one line from `vcs resolve`: either
+`vcs resolve: settled a.go by job claims: a.go#A (job a) against a.go#B (job b); every job passed`,
+or `vcs resolve: a.go not settled by job claims:` and the condition that failed. Either
+way, a file no condition settles stays as git left it. `hack/dev/merge-job-branches.buzz`
+lists each settle under the layer it merged, and runs every merged job's checks once
+one file settled this way, `--verify` or not.
+
+The settle reads the merge base from the VCS. Git reports one. Mercurial, Sapling and
+jj do not, so on those a claimed file says so and stays conflicted.
+
 ## What a review covers
 
 Approval is checked at the commit a review of the head covers: the head itself, or,
@@ -1175,7 +1208,8 @@ interface, and no Go API outside the module is promised. Its contract lives in
 standard library and magus's `types`: the documents (`Changes`, `Plan`, `Verdict`), the
 codes, `Provider`, `ArtifactLister`, `Gate`, `BuildFacts`, `VerdictSource`, and the
 version control each step gets. Its generated testify mocks are in
-`internal/queue/types/gen/mocks`; magus's `types/gen/mocks.MockVCSDriver` stands in for
+`internal/queue/types/gen/queuetest`; magus's `typestest.MockVCSDriver`, from
+`internal/gen/typestest`, stands in for
 the version control. The root package, `queue`, holds the three steps (`Planner`,
 `Validator`, `Applier`, each built with its required dependencies by its constructor and
 run with `Run`), the pure decisions they share (stack detection, partitioning, approval

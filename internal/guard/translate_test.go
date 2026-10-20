@@ -128,7 +128,7 @@ func writeTree(t *testing.T, files map[string]string) string {
 	return w.Root()
 }
 
-func graphOf(ids map[string][]string) func(context.Context, string) ([]string, bool) {
+func kindLookup(ids map[string][]string) func(context.Context, string) ([]string, bool) {
 	return func(_ context.Context, kind string) ([]string, bool) { return ids[kind], true }
 }
 
@@ -153,7 +153,7 @@ func TestSearchTranslationDiagnosticsFollowTheGraph(t *testing.T) {
 	const command = `grep -rn 'MGS99[0-9][0-9]' docs/`
 	const query = `query kind=diagnostic 'id=~^diagnostic:MGS99[0-9][0-9]$' -o name`
 
-	graph := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901", "diagnostic:MGS9902"}})
+	graph := kindLookup(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901", "diagnostic:MGS9902"}})
 	v := Evaluate(strict(Dependencies{GraphIDs: graph}), command)
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: query}, v.Rule)
 	assert.Contains(t, v.Deny+"\n", "\n  diagnostic:MGS9902\n")
@@ -182,13 +182,13 @@ func TestSearchTranslationHeadings(t *testing.T) {
 		"docs/fenced.md": "# Top\n\n```sh\n# a shell comment\n```\n",
 		"docs/notes.txt": "# not markdown\n",
 	})
-	graph := graphOf(map[string][]string{"docsection": {
+	graph := kindLookup(map[string][]string{"docsection": {
 		"docsection:docs/a.md#alpha", "docsection:docs/a.md#beta",
 		"docsection:docs/b.md#gamma", "docsection:docs/fenced.md#top",
 	}})
 	deps := Dependencies{GraphIDs: graph, scope: workspaceScope{root: root}}
 	stale := Dependencies{GraphIDs: func(context.Context, string) ([]string, bool) { return nil, false }, scope: workspaceScope{root: root}}
-	missing := Dependencies{GraphIDs: graphOf(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}}), scope: workspaceScope{root: root}}
+	missing := Dependencies{GraphIDs: kindLookup(map[string][]string{"docsection": {"docsection:docs/a.md#alpha"}}), scope: workspaceScope{root: root}}
 
 	for _, tt := range []struct {
 		command string
@@ -230,7 +230,7 @@ func TestSearchTranslationHeadings(t *testing.T) {
 	assert.Contains(t, v.Deny+"\n", "Its answer (2 results):\n  docsection:docs/a.md#alpha\n  docsection:docs/a.md#beta\n")
 
 	// A directory walk proves over every Markdown file grep would read.
-	full := Dependencies{GraphIDs: graphOf(map[string][]string{"docsection": {
+	full := Dependencies{GraphIDs: kindLookup(map[string][]string{"docsection": {
 		"docsection:docs/a.md#alpha", "docsection:docs/a.md#beta", "docsection:docs/b.md#gamma",
 	}}), scope: workspaceScope{root: root}}
 	walkRoot := writeTree(t, map[string]string{"docs/a.md": "# Alpha\n## Beta\n", "docs/b.md": "# Gamma\n"})
@@ -249,7 +249,7 @@ func TestSearchTranslationTargets(t *testing.T) {
 			"export fun build(ctx: magus\\Context) > void {\n    go[\"go-build\"](ctx);\n}\n",
 		"docs/magusfile.buzz": "import \"magus\";\nexport fun render(ctx: magus\\Context) > void {}\n",
 	})
-	deps := Dependencies{GraphIDs: graphOf(map[string][]string{"target": {
+	deps := Dependencies{GraphIDs: kindLookup(map[string][]string{"target": {
 		"target:.:lint", "target:.:lint-build", "target:.:build", "target:docs:render",
 	}}), scope: workspaceScope{root: root}}
 
@@ -390,12 +390,12 @@ func TestFindTranslation(t *testing.T) {
 		"internal/store/sub/deep.go":   "package sub\n",
 		"docs/a.md":                    "# A\n",
 	})
-	graph := graphOf(map[string][]string{"file": {
+	graph := kindLookup(map[string][]string{"file": {
 		"file:internal/store/store.go", "file:internal/store/store_test.go", "file:internal/store/sub/deep.go",
 	}})
 	deps := Dependencies{GraphIDs: graph, scope: workspaceScope{root: root}}
 	stale := Dependencies{GraphIDs: func(context.Context, string) ([]string, bool) { return nil, false }, scope: workspaceScope{root: root}}
-	partial := Dependencies{GraphIDs: graphOf(map[string][]string{"file": {"file:internal/store/store.go"}}), scope: workspaceScope{root: root}}
+	partial := Dependencies{GraphIDs: kindLookup(map[string][]string{"file": {"file:internal/store/store.go"}}), scope: workspaceScope{root: root}}
 
 	for _, tt := range []struct {
 		command string

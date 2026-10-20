@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 deny [policy-unloaded]: ...
 ```
 
+A workspace that sets this rule to `advise` sees `advise [policy-unloaded]: ...` instead.
+
 `magus describe rule policy-unloaded` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

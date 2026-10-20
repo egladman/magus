@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // The served-next journal: one line per breadcrumb actually put in front of a
@@ -72,12 +73,9 @@ func ServedNextPath(cacheDir string) string {
 //
 // No ctx, unlike trail.Append: the argv here is magus-minted from templates, so
 // there is nothing in it to redact.
-func AppendServedNext(cacheDir string, next []Next) {
+func AppendServedNext(cacheDir string, next []types.NextStep) {
 	journal := ServedNextPath(cacheDir)
 	if journal == "" || len(next) == 0 {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(journal), 0o755); err != nil {
 		return
 	}
 	at := time.Now().UnixMilli()
@@ -98,18 +96,7 @@ func AppendServedNext(cacheDir string, next []Next) {
 	// A bounded wait rather than a drop: a lost line is a command magus served and then
 	// refuses, and the holder is only ever appending a few hundred bytes.
 	_ = file.WithLock(context.Background(), journal+".lock", servedNextLockWait, func() error {
-		f, err := os.OpenFile(journal, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		for _, line := range lines {
-			// One line per Write, so a short write cannot leave half of the NEXT entry
-			// behind the tail of this one.
-			if _, err := f.Write(append(line, '\n')); err != nil {
-				break
-			}
-		}
-		if err := f.Close(); err != nil {
+		if err := file.AppendLines(journal, lines, 0o644, file.WithoutSync()); err != nil {
 			return err
 		}
 		rotateServedNext(journal)

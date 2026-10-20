@@ -157,6 +157,17 @@ Two layers run together:
 - [MGS3033](MGS3033.md): a buzz tool transform request was invalid or its script failed.
 - [MGS3034](MGS3034.md): a client MCP script was invalid, timed out, or failed.
 - [MGS3035](MGS3035.md): a tool runs but its version probe fails, so no cache key could tell its builds apart.
+- [MGS3036](MGS3036.md): a job forked with a write path that holds a project's magusfile or `magus.yaml` whole.
+- [MGS3037](MGS3037.md): a job record field fails its shape.
+- [MGS3038](MGS3038.md): a job goal no evidence could grade.
+- [MGS3039](MGS3039.md): a job writes with no check or goal, or declares no write paths and is not read-only.
+- [MGS3040](MGS3040.md): a job check its worker cannot run to a passing record.
+- [MGS3041](MGS3041.md): a job checkpoint this checkout cannot start from.
+- [MGS3042](MGS3042.md): a job fork past `jobs.max_depth` or `jobs.max_live`.
+- [MGS3043](MGS3043.md): a job write path that claims more than the workspace's breadth thresholds allow (waivable).
+- [MGS3044](MGS3044.md): a regenerated output outside a job's write paths (waivable).
+- [MGS3045](MGS3045.md): a ci gate over a job's write paths that nothing runs (waivable).
+- [MGS3046](MGS3046.md): a job holds a workspace load file in a checkout another live job is working in.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

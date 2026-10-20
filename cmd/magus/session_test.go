@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,6 +193,44 @@ func TestSessionsJSONExposesTheModelAndHostVersionPair(t *testing.T) {
 	assert.Contains(t, out, `"agent": {`)
 	assert.Contains(t, out, `"model": "claude-opus-5-5"`)
 	assert.Contains(t, out, `"host_version": "2.1.280"`)
+}
+
+// `session -o json` carries what each target claimed and cost, so sizing can be learned
+// from the store; a replay claims nothing and says so.
+func TestSessionsJSONCarriesEachTargetsClaimAndCost(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+
+	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"build"})
+	require.Len(t, handlers, 1)
+	emitJournalEvent(t, handlers[0], journal.Event{
+		Kind: journal.KindResult, Inv: "invClaim", Target: "build", Status: journal.StatusPass,
+		StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingMeasured,
+		WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
+	})
+	emitJournalEvent(t, handlers[0], journal.Event{
+		Kind: journal.KindResult, Inv: "invClaim", Target: "lint", Status: journal.StatusCached, Sizing: journal.SizingNone,
+	})
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"-o", "json"}))
+	})
+
+	for _, field := range []string{
+		`"started_ms": 1700000000000`,
+		`"slots": 2`,
+		`"memory_mb": 512`,
+		`"sizing": "measured"`,
+		`"waited_ms": 40`,
+		`"max_rss_bytes": 3145728`,
+		`"cpu_ms": 900`,
+		`"sizing": "none"`,
+	} {
+		assert.Contains(t, out, field)
+	}
+	assert.Equal(t, 1, strings.Count(out, `"slots"`), "the replay claims no slots, so it carries none")
 }
 
 func TestSessionsRejectsPositionalArguments(t *testing.T) {
@@ -628,7 +667,7 @@ func TestSessionShowJoinsThisCheckoutsTrail(t *testing.T) {
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 
 	_, err = loadStream(t, root,

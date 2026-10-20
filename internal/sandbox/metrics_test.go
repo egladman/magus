@@ -82,9 +82,54 @@ func TestRecordEnvDroppedLogsMGS2003(t *testing.T) {
 	assert.Contains(t, got, "MGS2003")
 	assert.Contains(t, got, "cmd=go")
 	assert.Contains(t, got, "stripped_count=3")
+	assert.Contains(t, got, "--log-level=debug")
+	assert.NotContains(t, got, "A_KEY")
+	assert.NotContains(t, got, "B_TOKEN")
+	assert.NotContains(t, got, "C_TOKEN")
 
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), nil, "go") }), "sandbox off")
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), &Policy{}, "go") }), "nothing dropped")
+}
+
+func TestRecordEnvDroppedDebugLogsNamesWithoutValues(t *testing.T) {
+	t.Setenv("B_TOKEN", "secret-value-must-not-be-logged")
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	p := &Policy{EnvDropped: []string{"A_KEY", "B_TOKEN"}, withheld: &withheldReads{}}
+	RecordEnvDropped(context.Background(), p, "go")
+	RecordEnvDropped(context.Background(), p, "git")
+	got := buf.String()
+	assert.Contains(t, got, "level=DEBUG")
+	assert.Contains(t, got, "MGS2003")
+	assert.Contains(t, got, "cmd=go")
+	assert.Contains(t, got, `stripped_names="[A_KEY B_TOKEN]"`)
+	assert.NotContains(t, got, "secret-value-must-not-be-logged")
+	assert.Equal(t, 1, strings.Count(got, "stripped_names="))
+	assert.NotContains(t, got, "cmd=git")
+}
+
+func TestRecordEnvDroppedReportsOncePerTargetAndSetButCountsEveryExec(t *testing.T) {
+	rec := NewMockMetricsRecorder(t)
+	rec.EXPECT().RecordSandboxEnvDropped(mock.Anything, ".", int64(2)).Times(3)
+	rec.EXPECT().RecordSandboxEnvDropped(mock.Anything, "other", int64(2)).Once()
+	rec.EXPECT().RecordSandboxEnvDropped(mock.Anything, ".", int64(1)).Once()
+	ctx := WithMetrics(context.Background(), rec)
+	p := &Policy{EnvDropped: []string{"A_KEY", "B_TOKEN"}, withheld: &withheldReads{}}
+	got := logged(t, func() {
+		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), p, "go")
+		otherPolicy := *p
+		otherPolicy.EnvDropped = []string{"B_TOKEN", "A_KEY"}
+		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), &otherPolicy, "git")
+		RecordEnvDropped(journal.WithStep(ctx, "other", "test"), p, "go")
+		RecordEnvDropped(journal.WithStep(ctx, ".", "lint"), p, "go")
+		otherPolicy.EnvDropped = []string{"C_TOKEN"}
+		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), &otherPolicy, "go")
+	})
+	assert.Equal(t, 4, strings.Count(got, "[MGS2003]"))
+	assert.NotContains(t, got, "cmd=git")
 }
 
 // RecordEnvWithheld logs MGS2013 naming the variable and the target, never a value, and

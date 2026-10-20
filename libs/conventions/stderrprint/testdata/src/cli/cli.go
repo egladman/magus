@@ -45,6 +45,9 @@ func command(args []string) {
 	printConsoleLine(os.Stderr, "job-1") // want `hands os.Stderr to printConsoleLine`
 	printConsoleLine(os.Stdout, "job-1")
 	printJobHelp(os.Stderr)
+	_ = WithStderr(os.Stderr)
+	_ = NewLogger(os.Stderr)
+	_ = Withdraw(os.Stderr) // want `hands os.Stderr to Withdraw`
 	_ = newDisplay(os.Stderr)
 	tty.Probe(os.Stderr)
 	_ = flag.NewFlagSet("x", flag.ContinueOnError).Output()
@@ -62,3 +65,9 @@ func printConsoleLine(w io.Writer, id string) { fmt.Fprintln(w, "console:", id) 
 func printJobHelp(w io.Writer) { fmt.Fprintln(w, "Usage: magus job") }
 
 func newDisplay(w io.Writer) io.Writer { return w }
+
+func WithStderr(w io.Writer) func() { return func() { _ = w } }
+
+func NewLogger(w io.Writer) io.Writer { return w }
+
+func Withdraw(w io.Writer) io.Writer { return w }

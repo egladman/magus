@@ -6,7 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/spells/gen/mocks"
+	"github.com/egladman/magus/spells/gen/spellstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ func opTarget(name string) any {
 // An op the spell does not declare is a nil result with no error, and stays a
 // no-op: a provider implements only the verbs its host supports.
 func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
-	drv := mocks.NewMockDriver(t)
+	drv := spellstest.NewMockDriver(t)
 	for _, op := range []string{"group_start", "group_end", "annotate"} {
 		drv.EXPECT().Invoke(mock.Anything, opTarget(op)).Return(spells.InvokeResponse{}, nil).Once()
 	}
@@ -37,7 +37,7 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 // build, and the adapter is the only layer that can tell the two apart.
 func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	boom := errors.New("handler raised")
-	drv := mocks.NewMockDriver(t)
+	drv := spellstest.NewMockDriver(t)
 	drv.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{}, boom).Times(3)
 	a := &spellAnnotator{drv: drv}
 
@@ -55,7 +55,7 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 // every shape but a complete {run, commit} record reads as "no green run",
 // including the raised error, which the annotate ops above must NOT swallow.
 func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
-	drv := mocks.NewMockDriver(t)
+	drv := spellstest.NewMockDriver(t)
 	drv.EXPECT().Invoke(mock.Anything, opTarget("last_green_run")).Return(spells.InvokeResponse{Data: map[string]any{
 		"run":    "https://example/run/7",
 		"commit": "green0123456789",
@@ -78,7 +78,7 @@ func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
 	}
 	for name, row := range declines {
 		t.Run(name, func(t *testing.T) {
-			d := mocks.NewMockDriver(t)
+			d := spellstest.NewMockDriver(t)
 			d.EXPECT().Invoke(mock.Anything, opTarget("last_green_run")).Return(row.resp, row.err).Once()
 			got, ok := (&spellAnnotator{drv: d}).LastGreenRun()
 			assert.False(t, ok)

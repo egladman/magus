@@ -11,21 +11,29 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
 func (r *runner) checkJobTree() types.Check {
-	return checkJobTree(r.ws.Root(), r.opts.cfg.Jobs, time.Now().Unix())
+	return checkJobTree(r.jobPlace(), r.opts.cfg.Jobs, time.Now().Unix())
+}
+
+// jobPlace places the workspace's job store and checkout record. A user state dir that
+// will not resolve is left empty, which the store reports as an error.
+func (r *runner) jobPlace() job.Location {
+	stateBase, _ := xdg.StateDir()
+	return job.Location{CacheDir: r.cacheDir(), StateBase: stateBase, Root: r.ws.Root()}
 }
 
 // checkJobTree reports live jobs nobody may be waiting on, including a job blocked on a
 // dependency that ended without passing. Reading the store has already ended every row
 // magus could prove dead (see job.Store.List), so what is left is work somebody took and
 // went quiet on, and the finding names the exit command a person runs for it.
-func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
+func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 	const name = "job-tree"
 
-	rows, err := job.NewStore(job.Location{Root: root}).List()
+	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Evidence: types.EvidenceUnknown,
 			Message: fmt.Sprintf("could not read the job store: %v", err)}
@@ -60,7 +68,7 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
 }
 
 func (r *runner) checkBoundLease() types.Check {
-	return checkBoundLease(r.runCtx(), r.cacheDir(), r.ws.Root(), workspaceHarnesses(r.ws)...)
+	return checkBoundLease(r.runCtx(), r.jobPlace(), workspaceHarnesses(r.ws)...)
 }
 
 // checkBoundLease grades the lease this checkout is bound to: an unknown id, a
@@ -74,11 +82,11 @@ func (r *runner) checkBoundLease() types.Check {
 //
 // Named for the subject (the bound lease), not "binding": that word rhymes with
 // guard-wiring / checkpoint-wiring and suggests a wiring check, which this is not.
-func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.Check {
+func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) types.Check {
 	const name = "bound-lease"
 
 	claimed := trail.LeaseFromEnv()
-	id, from := job.ActingLease(cacheDir, claimed)
+	id, from := job.ActingLease(loc, claimed)
 	if id == "" {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no lease bound; the guard advises only"}
 	}
@@ -95,7 +103,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 		}
 	}
 
-	rows, err := job.NewStore(job.Location{Root: root}).List()
+	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
 	if err != nil {
 		return types.Check{
 			Name:     name,
@@ -146,7 +154,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 		}
 	}
 
-	if len(guardHookConfigs(ctx, root, wired...)) == 0 {
+	if len(guardHookConfigs(ctx, loc.Root, wired...)) == 0 {
 		return types.Check{
 			Name:    name,
 			Status:  types.CheckAdvice,

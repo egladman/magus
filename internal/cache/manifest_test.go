@@ -244,7 +244,7 @@ func FuzzReadManifest(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data string) {
 		dir := t.TempDir()
-		c := &Cache{dir: dir}
+		c := &Cache{dir: dir, store: dir}
 
 		path := filepath.Join(dir, "manifests", flattenPath("proj"), "hash.json")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -289,7 +289,7 @@ func syntheticManifest(n int) *Manifest {
 // BenchmarkManifestRead measures readManifest: one os.ReadFile + json.Unmarshal.
 func BenchmarkManifestRead(b *testing.B) {
 	dir := b.TempDir()
-	c := &Cache{dir: dir}
+	c := &Cache{dir: dir, store: dir}
 	m := syntheticManifest(20)
 
 	data, err := json.MarshalIndent(m, "", "  ")
@@ -316,7 +316,7 @@ func BenchmarkManifestRead(b *testing.B) {
 // typical manifest.
 func BenchmarkManifestWrite(b *testing.B) {
 	dir := b.TempDir()
-	c := &Cache{dir: dir}
+	c := &Cache{dir: dir, store: dir}
 	m := syntheticManifest(20)
 
 	b.ResetTimer()

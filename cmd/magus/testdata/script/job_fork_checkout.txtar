@@ -1,0 +1,94 @@
+# `magus job fork --checkout <dir>` makes the job's own checkout at the forker's revision
+# and records it on the job. The job is taken there and nowhere else, and once it ends
+# magus removes the checkout when it holds no work.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork scout --read-only --criteria 'read the pricing code' --checkout $WORK/scout
+stdout '^checkout .*scout: made for job scout at '
+stdout 'placed no magus: the forking checkout runs magus from PATH'
+exists $WORK/scout/magusfile.buzz
+
+exec magus describe job scout
+stdout '^checkout .*scout: made for job scout'
+
+! exec magus job exec scout
+stderr 'owns the checkout .*scout, which its fork made for it'
+
+! exec magus job fork scout --read-only --criteria 'again' --checkout $WORK/elsewhere
+stderr 'already owns the checkout .*scout'
+! exists $WORK/elsewhere
+
+exec magus job exit scout
+stdout '^ended scout, recorded no_return'
+stdout '^checkout .*scout: removed once job scout ended'
+! exists $WORK/scout
+
+# A checkout changed only in the tool rows the wired harness's install writes is magus's own
+# work: it is restored, and the checkout goes.
+exec magus job fork rows --read-only --criteria 'install the tool rows' --checkout $WORK/rows
+cp $WORK/runs-rewritten $WORK/rows/host/tools/runs
+cp $WORK/runs-rewritten $WORK/rows/host/tools/models
+exec magus job exit rows
+stdout '^checkout .*rows: removed once job rows ended'
+! exists $WORK/rows
+
+# Any other change beside them keeps it, and the rows are still restored.
+exec magus job fork held-rows --read-only --criteria 'install the tool rows and edit a note' --checkout $WORK/held
+cp $WORK/runs-rewritten $WORK/held/host/tools/runs
+cp $WORK/runs-rewritten $WORK/held/notes.md
+exec magus job exit held-rows
+stdout '^checkout .*held: kept after job held-rows ended: 1 path\(s\) in it hold uncommitted work \(notes\.md\)'
+exists $WORK/held/notes.md
+grep 'Shell' $WORK/held/host/tools/runs
+
+-- runs-rewritten --
+rewritten
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/notes.md --
+notes
+-- shop/host/tools/runs --
+Shell
+-- shop/host/tools/models --
+-- shop/host/tools/tiers --
+-- shop/host/tools/version --
+1
+-- shop/spells/rows-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "rows-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "host/hooks.json"};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [".agents/skills"], "form": "both"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [];
+}
+
+export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
+    return {"dir": "host/tools", "rows": [{"name": "Shell", "capability": "runs"}]};
+}
+-- shop/magusfile.buzz --
+import "magus";
+import "spells/rows-host" as rowshost;
+magus\harness.provider(rowshost);
+
+// test has nothing to check; the job here only reads.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

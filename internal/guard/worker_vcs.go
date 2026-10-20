@@ -1,10 +1,14 @@
 package guard
 
 import (
+	"fmt"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // workerVCSOp names the version-control operation a worker lease may not run, short of a
@@ -12,6 +16,9 @@ import (
 // what it may run rather than vcsMutation's list of what nobody may: a verb neither list
 // names, a config alias included, is refused instead of slipping through.
 func workerVCSOp(c hint.Invocation) string {
+	if fastForward(c) {
+		return ""
+	}
 	if op := vcsMutation(c); op != "" {
 		return op
 	}
@@ -33,18 +40,96 @@ func workerVCSOp(c hint.Invocation) string {
 	return c.Name + " " + sub
 }
 
-// workerGitVerbs read the repository, or touch only the worker's own index and branch.
+// fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed
+// ./magus was built ahead of its checkout: it moves the branch the checkout is on forward to
+// a commit named by its id, and git refuses it when the branch has diverged or a change
+// nobody committed is in the way, so it rewrites and loses nothing. A branch name is refused,
+// since following one is how a worker drifts onto commits nobody handed it, and so is a git
+// option ahead of the verb, which can point the merge at another checkout.
+func fastForward(c hint.Invocation) bool {
+	if c.Name != "git" || len(c.Args) != 3 || c.Args[0] != "merge" {
+		return false
+	}
+	flag, commit := c.Args[1], c.Args[2]
+	if flag != "--ff-only" {
+		flag, commit = commit, flag
+	}
+	return flag == "--ff-only" && commitID(commit)
+}
+
+// commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
+// build's commit.
+func commitID(s string) bool {
+	if len(s) < 7 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// addsCheckout reports a call that makes a second checkout of the repository by hand: `git
+// worktree add`, `hg share` or `jj workspace add`. Sapling has no such verb.
+func addsCheckout(c hint.Invocation) bool {
+	sub, rest := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		return sub == "worktree" && firstWordIs(rest, "add")
+	case "hg":
+		return sub == "share"
+	case "jj":
+		return sub == "workspace" && firstWordIs(rest, "add")
+	}
+	return false
+}
+
+// removesOwnCheckout reports whether each worktree removal on command names the checkout
+// row's fork made for it, which its holder may remove; the worktree-remove rule still
+// judges whether that loses work.
+func removesOwnCheckout(command, cwd string, row types.Job) bool {
+	if !row.Worktree.Standing() {
+		return false
+	}
+	calls, ok := locateCalls(command, DialectBash, cwd, isWorktreeRemove, false)
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, c := range calls {
+		s, why := locateRemoval(c)
+		if why != "" || !samePath(s.target, row.Worktree.Root) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the
+// refused call as the reader typed it.
+func checkoutAddDenial(what string, row types.Job, role string) string {
+	return fmt.Sprintf("magus workspace: %s makes a checkout by hand, and lease %s is %s: `%s` makes a job's checkout, and removes it once the job ends",
+		what, row.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))
+}
+
+// workerGitVerbs read the repository, or touch only the worker's own index and branch. rm
+// and mv touch the tree too, and lease-write grades each path they name.
 var workerGitVerbs = []string{
 	"add", "annotate", "blame", "cat-file", "check-attr", "check-ignore", "check-ref-format",
 	"cherry", "commit", "count-objects", "describe", "diff", "diff-files", "diff-index",
 	"diff-tree", "for-each-ref", "grep", "help", "log", "ls-files", "ls-remote", "ls-tree",
-	"merge-base", "name-rev", "range-diff", "restore", "rev-list", "rev-parse", "shortlog",
-	"show", "show-branch", "show-ref", "stash", "status", "var", "verify-commit",
+	"merge-base", "mv", "name-rev", "range-diff", "restore", "rev-list", "rev-parse", "rm",
+	"shortlog", "show", "show-branch", "show-ref", "stash", "status", "var", "verify-commit",
 	"verify-tag", "version", "whatchanged",
 }
 
 func workerMayRunGit(sub string, rest []string) bool {
 	switch sub {
+	case "rm", "mv":
+		if anyFlag(rest, "", "--pathspec-from-file") || !namesOnlyPaths(operands(rest, "")) {
+			return false
+		}
 	case "branch":
 		return !anyFlag(rest, "dDfmMcCu", "--delete", "--force", "--move", "--copy",
 			"--set-upstream-to", "--unset-upstream", "--edit-description")
@@ -99,13 +184,17 @@ func fetchesIntoLocalRef(rest []string) bool {
 
 var workerHgVerbs = []string{
 	"add", "annotate", "blame", "branch", "branches", "cat", "ci", "commit", "diff", "files",
-	"grep", "heads", "help", "id", "identify", "in", "incoming", "log", "manifest", "out",
-	"outgoing", "parents", "paths", "root", "show", "smartlog", "ssl", "st", "status", "sum",
-	"summary", "tip", "version", "whereami",
+	"grep", "heads", "help", "id", "identify", "in", "incoming", "log", "manifest", "mv", "out",
+	"outgoing", "parents", "paths", "remove", "rename", "rm", "root", "show", "smartlog", "ssl",
+	"st", "status", "sum", "summary", "tip", "version", "whereami",
 }
 
 func workerMayRunHg(sub string, rest []string) bool {
 	switch sub {
+	case "remove", "rm", "rename", "mv":
+		if anyFlag(rest, "IX", "--include", "--exclude") || !namesOnlyPaths(operands(rest, "IX")) {
+			return false
+		}
 	case "bookmark", "bookmarks", "book":
 		return !anyFlag(rest, "dfm", "--delete", "--force", "--rename")
 	case "update", "up", "goto", "co", "checkout":
@@ -141,6 +230,22 @@ func workerMayRunJJ(sub string, rest []string) bool {
 		return hasPositional(rest)
 	}
 	return slices.Contains(workerJJVerbs, sub)
+}
+
+// namesOnlyPaths reports operands that are each a path the line spells out. lease-write
+// grades the words, so a pathspec the VCS expands (`.`, a glob, git's `:` magic, an hg
+// `glob:` pattern) or one climbing out with `..` would remove files no word names.
+func namesOnlyPaths(ops []string) bool {
+	if len(ops) == 0 {
+		return false
+	}
+	for _, op := range ops {
+		clean := path.Clean(filepath.ToSlash(op))
+		if clean == "." || clean == "/" || clean == ".." || strings.HasPrefix(clean, "../") || strings.ContainsAny(op, "*?[:") {
+			return false
+		}
+	}
+	return true
 }
 
 // anyFlag is hasFlag over several flags: any letter of shorts, or any of longs.

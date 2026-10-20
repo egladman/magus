@@ -159,8 +159,8 @@ tells the others. You run that line if you want to; magus never does. The mark i
 and the merge queue ignores it.
 
 If the review merges while the mark is set, magus reports `review.merged` and clears the mark.
-Two opt-in telemetry metrics, `magus.review.merged_while_reading` and its `.duration`,
-count how often that happens and what it cost. See [Review](../concepts/review.md#saying-you-are-reading).
+The opt-in telemetry metric `magus.review.merged_while_reading.duration` counts how often
+that happens and what it cost. See [Review](../concepts/review.md#saying-you-are-reading).
 
 ## One thread at a time
 

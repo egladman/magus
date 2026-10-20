@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/stretchr/testify/assert"
@@ -98,4 +100,54 @@ func TestSettleQuietlyReplaysAFailureWithNoStep(t *testing.T) {
 	seen := terminal(t, func() { err = run(context.Background(), []string{"generate:rw", "."}) })
 	require.EqualError(t, err, "already reported")
 	assert.Equal(t, "magus: no project here serves generate\n", seen)
+}
+
+// TestSettleQuietlyKeepsABusyRunsHeaderOff: a run refused over another magus's lock
+// started nothing, its error names the holder, and Waiting may retry it, so the lines it
+// printed before the refusal stay off the terminal.
+func TestSettleQuietlyKeepsABusyRunsHeaderOff(t *testing.T) {
+	run := Quietly(func(ctx context.Context, inv []string) error {
+		fmt.Fprintln(os.Stderr, "projects: docs, .")
+		return contended{}
+	}, observe)
+	var err error
+	seen := terminal(t, func() { err = run(context.Background(), []string{"generate:rw", "."}) })
+	assert.True(t, Busy(err))
+	assert.Empty(t, seen)
+}
+
+// TestSettleQuietlyLeavesTheCallersPipeToItsOwner: a run that starts a process which
+// outlives it, the broker a settle hook's regeneration spawns, must not carry the hook's
+// own stdout and stderr with it. When the caller pipes the hook (`git cherry-pick X |
+// tail`), the reader sees EOF once the hook exits, not once that process does.
+func TestSettleQuietlyLeavesTheCallersPipeToItsOwner(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer r.Close()
+	saved := [3]int{-1, -1, -1}
+	for _, std := range []int{1, 2} {
+		saved[std], err = unix.FcntlInt(uintptr(std), unix.F_DUPFD_CLOEXEC, 0)
+		require.NoError(t, err)
+		require.NoError(t, unix.Dup2(int(w.Fd()), std))
+	}
+	require.NoError(t, w.Close())
+
+	log, err := os.Create(t.TempDir() + "/broker.log")
+	require.NoError(t, err)
+	defer log.Close()
+	survivor := exec.Command("sleep", "60")
+	survivor.Stdout, survivor.Stderr = log, log
+	run := Quietly(func(ctx context.Context, inv []string) error { return survivor.Start() }, observe)
+	runErr := run(context.Background(), []string{"generate:rw", "."})
+	require.NoError(t, restore(saved))
+	require.NoError(t, runErr)
+	t.Cleanup(func() {
+		_ = survivor.Process.Kill()
+		_ = survivor.Wait()
+	})
+
+	require.NoError(t, r.SetReadDeadline(time.Now().Add(5*time.Second)))
+	seen, err := io.ReadAll(r)
+	require.NoError(t, err, "a process the run started still holds the caller's pipe")
+	assert.Empty(t, seen)
 }

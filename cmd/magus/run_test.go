@@ -12,7 +12,10 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -64,12 +67,6 @@ func (w *resolveWS) ExpandPath(t types.Target) ([]types.Target, error) {
 		}
 	}
 	return nil, types.ErrUnknownProject
-}
-
-// ExpandCwd must never be reached by resolveTargets anymore: resolution keys on the
-// explicit cwd via Where, not on the server's os.Getwd. Panic to prove the fix holds.
-func (w *resolveWS) ExpandCwd(types.Target) ([]types.Target, bool, error) {
-	panic("resolveTargets must not call ExpandCwd (it reads os.Getwd); use the explicit cwd")
 }
 
 func (w *resolveWS) Get(string) *types.Project { panic("not used") }
@@ -396,7 +393,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -450,7 +447,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 `)
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -589,7 +586,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 			_, err := decodeSavedPlan([]byte(tt.input))
 			require.ErrorIs(t, err, types.SavedPlanRefused)
 			assert.ErrorContains(t, err, tt.want)
-			assert.Equal(t, exitUsage, mapExitCode(err))
+			assert.Equal(t, exit.Usage, mapExitCode(err))
 		})
 	}
 }
@@ -668,7 +665,7 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 		"GITHUB_STEP_SUMMARY": out.Summary,
 	}
 	for _, m := range found {
-		opts, err := ResolveOutput(m[1])
+		opts, err := output.Parse(m[1])
 		require.NoError(t, err)
 		var b strings.Builder
 		require.NoError(t, writeFormatted(&b, opts, out))
@@ -690,6 +687,9 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	// resolvable when ComputeTargetKey probes them.
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", absRoot)
 	t.Setenv("MISE_SAFE", "1")
+	// The version probe runs go under the moved HOME; go's telemetry sidecar would outlive
+	// it and race the TempDir cleanup (see testkit's goEnv).
+	t.Setenv("TEST_TELEMETRY_DIR", filepath.Join(os.DevNull, "telemetry"))
 	var workflow struct {
 		Jobs map[string]struct {
 			Steps []struct {
@@ -729,7 +729,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	ctx := context.Background()
-	w, err := magus.Open(ctx, root)
+	w, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
 
@@ -788,5 +788,48 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 			project, target, gate, shard) {
 			assert.Equal(t, shardKeys[i].key, gateKeys[i].key)
 		}
+	}
+}
+
+func TestResultRefsLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		events  []journal.Event
+		wantOut string
+	}{
+		{"no results prints nothing", nil, ""},
+		{
+			"one result prints its ref",
+			[]journal.Event{{Kind: journal.KindResult, Ref: "out1a2b3c4d5e6f"}},
+			"ref  out1a2b3c4d5e6f",
+		},
+		{
+			"several results print one line",
+			[]journal.Event{
+				{Kind: journal.KindResult, Ref: "out111111111111"},
+				{Kind: journal.KindResult, Ref: "out222222222222"},
+				{Kind: journal.KindResult, Ref: "out111111111111"},
+			},
+			"refs  out111111111111 out222222222222",
+		},
+		{
+			"events that are not results or carry no ref are skipped",
+			[]journal.Event{
+				{Kind: journal.KindOutput, Ref: "out333333333333"},
+				{Kind: journal.KindResult},
+			},
+			"",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			refs := &resultRefs{}
+			ctx := journal.WithLogger(context.Background(), journal.NewLogger(refs))
+			for _, e := range tc.events {
+				journal.Emit(ctx, e)
+			}
+
+			assert.Equal(t, tc.wantOut, refLine(refs.list()))
+		})
 	}
 }

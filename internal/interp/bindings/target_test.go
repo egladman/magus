@@ -653,7 +653,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	secretObj := buildSecret(ctx, nil)
 	// Called with the run ctx rather than through callSecret, which uses
 	// context.Background(): the audit event needs the step and the journal logger, and
-	// in production both ride the ctx the VM hands a host call (the same ctx run.Exec
+	// in production both ride the ctx the VM hands a host call (the same ctx spawn.Exec
 	// reads its step from).
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()

@@ -29,7 +29,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/docs"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
@@ -82,9 +82,9 @@ var spellMeta = map[string]spellInfo{
 	},
 	"markdown": {
 		dir: "markdown", language: "Markdown",
-		description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose.",
-		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
-		tags:        []string{"markdown", "docs", "prettier", "lint"},
+		description: "Markdown docs spell: markdownlint and dprint for linting and formatting prose.",
+		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `dprint` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
+		tags:        []string{"markdown", "docs", "lint"},
 	},
 	"podman": {
 		dir: "podman", language: "OCI containers",
@@ -101,7 +101,7 @@ var spellMeta = map[string]spellInfo{
 	"buf": {
 		dir: "buf", language: "Protobuf",
 		description: "Buf spell: protobuf build, lint, format, and code generation.",
-		intro:       "The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares `gen/**` as its outputs so magus caches generated code correctly.",
+		intro:       "The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares no outputs of its own: the target that runs `buf-generate` declares where buf writes.",
 		tags:        []string{"protobuf", "buf", "codegen", "lint"},
 	},
 	"cosign": {
@@ -118,11 +118,7 @@ var spellMeta = map[string]spellInfo{
 	},
 }
 
-// repoRoot is the module root, resolved once so the args table's source links
-// resolve line numbers from the working tree. spellOptsSource is the file whose
-// spellOptsFromBuzz parses each op options-map key.
-var repoRoot = docs.RepoRoot()
-
+// spellOptsSource is the file whose spellOptsFromBuzz parses each op options-map key.
 const spellOptsSource = "internal/interp/bindings/spell_object.go"
 
 // spellsDir is the path to the repo's spells/ directory, relative to the caller's
@@ -333,16 +329,14 @@ func renderSpell(d spells.Descriptor) string {
 // index identical, mirroring the real contract in
 // internal/interp/bindings.spellOptsFromBuzz.
 func writeArgsSection(b *strings.Builder, invoker string) {
-	// src links a key to the line in spell_object.go where it is parsed, mirroring
-	// the source links on the module docs' method signatures.
-	src := func(key string) string {
-		return fmt.Sprintf("[source](%s)", docs.SourceURL(repoRoot, spellOptsSource, `MapGet("`+key+`")`))
-	}
+	// src links each key to spell_object.go, where it is parsed. The file and not the line:
+	// a line anchor would rewrite these committed docs whenever the parse moved.
+	src := fmt.Sprintf("[source](%s)", docs.SourceURL(spellOptsSource))
 	fmt.Fprintf(b, "## Passing arguments to ops\n\n")
 	fmt.Fprintf(b, "Every op is invoked as `%s[\"<op>\"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:\n\n", invoker)
 	b.WriteString(md.Table([]string{"Key", "Type", "Description", "Source"}, nil, [][]string{
-		{md.Code("args"), md.Code("[str]"), fmt.Sprintf("Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. To keep the passthrough too, append the target's own `args` parameter: `{\"args\": [\"-race\", \"./...\"] + args}`.", invoker), src("args")},
-		{md.Code("stdin"), md.Code("str"), "Data written to the command's standard input.", src("stdin")},
+		{md.Code("args"), md.Code("[str]"), fmt.Sprintf("Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. To keep the passthrough too, append the target's own `args` parameter: `{\"args\": [\"-race\", \"./...\"] + args}`.", invoker), src},
+		{md.Code("stdin"), md.Code("str"), "Data written to the command's standard input.", src},
 	}))
 	fmt.Fprintln(b)
 	fmt.Fprintf(b, "Working directory and environment are NOT options: they ride the context, as `%s[\"<op>\"](ctx.withCwd(\"sub\"))` and `%s[\"<op>\"](ctx.withEnv({\"CGO_ENABLED\": \"0\"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.\n\n", invoker, invoker)

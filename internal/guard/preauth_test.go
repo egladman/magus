@@ -11,12 +11,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -159,7 +162,7 @@ var nextIDRe = regexp.MustCompile(`breadcrumb\("([a-z-]+)"`)
 func servedNextTemplates(t *testing.T) map[string]string {
 	t.Helper()
 	rendered := map[string]string{}
-	add := func(next []hint.Next) {
+	add := func(next []types.NextStep) {
 		for _, n := range next {
 			rendered[n.ID] = n.Run
 		}
@@ -185,7 +188,7 @@ func servedNextTemplates(t *testing.T) map[string]string {
 	}))
 	add(hint.NextForAffected("ci", []string{"docs"}))
 	add(hint.NextForFailure(".", "test", "out84fea3b6ae30"))
-	add([]hint.Next{hint.NextForDenial("grd84fea3b6ae30ab")})
+	add([]types.NextStep{hint.NextForDenial("grd84fea3b6ae30ab")})
 
 	declared, err := os.ReadFile("../../internal/hint/next.go")
 	require.NoError(t, err)
@@ -275,7 +278,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 // seedRemedyJob files row in the job store the fixtures are judged against.
 func seedRemedyJob(t *testing.T, at location, row types.Job) {
 	t.Helper()
-	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 }
 
@@ -320,6 +323,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	ctx, root := fleetFixture(t, worker, reviewer)
 	templates := servedNextTemplates(t)
 	readScript, writeScript := scriptNexts(t, root)
+	loaded := loadingWorkspace(t)
 
 	grade := func(t *testing.T, id, run, role, lease string) {
 		t.Helper()
@@ -338,7 +342,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				return denial{}
 			},
 		} {
-			if reason := rule(ctx, Dependencies{}, lease, run).full(); reason != "" {
+			if reason := rule(ctx, loaded, lease, run).full(); reason != "" {
 				t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
 					"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
 					id, run, role, reason)
@@ -357,9 +361,9 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		for id, run := range templates {
 			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
 		}
+		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
 		t.Run(role.name+"/scripts", func(t *testing.T) {
-			kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
-			served := hint.ServableTo(kind, writePaths, []hint.Next{readScript, writeScript})
+			served := hint.FilterServable(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
 			if kind == hint.RoleReviewer {
 				assert.NotContains(t, served, writeScript, "a write script is never served to a reviewer")
@@ -394,9 +398,31 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	}
 }
 
+// loadingWorkspace is a root whose generate target writes cmd/magus/gen, inside the
+// narrow worker's write paths. It loads, so a write template is judged on the
+// workspace's declarations rather than refused as a run nothing could check.
+func loadingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	const output = "cmd/magus/gen/*.go"
+	root := &types.Project{
+		Path: ".", MagusfileTargets: []string{"generate"},
+		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: output}}},
+	}
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return([]types.FileEntry{{
+		Path: "cmd/magus/gen/flags.go", Project: ".", Role: "output",
+		Claims: []types.FileClaim{{Project: ".", Target: "generate", Role: "output", Glob: output}},
+	}}, nil).Maybe()
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().Get(".").Return(root).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
+	ws.EXPECT().Where(mock.Anything).Return(root, true).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
 // scriptNexts serves one read and one write script out of an index written under root,
 // through the same lookup the serving sites use.
-func scriptNexts(t *testing.T, root string) (read, write hint.Next) {
+func scriptNexts(t *testing.T, root string) (read, write types.NextStep) {
 	t.Helper()
 	entry := func(rel, effect string, args ...string) hint.ScriptServe {
 		abs := filepath.Join(root, filepath.FromSlash(rel))

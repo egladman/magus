@@ -10,7 +10,8 @@
 // Rules, each keyed on facts the guard hands over (parsed programs, titles, paths), never
 // on prose:
 //   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
-//   ci-batch-poll (advise once per session): one pull request's CI read piecemeal.
+//   ci-batch-poll (deny): CI status summaries instead of failure artifacts.
+//   ci-log-read (advise once per session): prefer artifacts, leaving raw job diagnostics available.
 //   queue-poll (advise once per session): the merge queue's state read through GitHub.
 //   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
 //   pr-watch (deny): a pull request's own state (merged, auto-merge, mergeability) read
@@ -18,7 +19,7 @@
 //   auto-merge (deny): `gh pr merge --auto`, or a `gh api` call naming the
 //     enablePullRequestAutoMerge mutation. A person enables auto-merge; disabling it and
 //     reading it stay open.
-//   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
+//   worker-runs-gate (deny): the gate run by a subagent that is not the checkout's integrator.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
 //   push-authority (deny): a push or `gh pr create` by any caller but the main session, and
@@ -29,12 +30,13 @@
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
 //   worker-builds-magus (deny): a caller holding a worker lease compiling magus (`go run`,
 //     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
-//     project), the bootstrap included. The main session builds ./magus once per base commit and
-//     hack/dev/bootstrap-worktree.buzz places it; the main session and a person build freely.
+//     project), the bootstrap included. The checkout's integrator builds ./magus once per base
+//     commit and hack/dev/bootstrap-worktree.buzz places it; the integrator and a person build.
 //   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
-//     line that names the command only to forbid it ("never ...") is not graded.
-//   worker-bootstrap (deny): the bootstrap run by any caller but the main session, which
-//     places ./magus instead; foreign-binary lets the placement script through.
+//     line that names the command only to forbid it ("never ...") is not graded, and an
+//     integrate spawn's brief is not either.
+//   worker-bootstrap (deny): the bootstrap run by any subagent but the checkout's integrator;
+//     a worker is placed ./magus instead, and foreign-binary lets the placement script through.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
 //   stale-write (deny): a magus verb that writes state other checkouts or magus versions
@@ -50,7 +52,7 @@
 //     branch, one lowercase imperative line anywhere else.
 //   pull-request-text (deny, named): a pull request title, description or review reply,
 //     posted by any forge command its table lists, with a finding proofread in
-//     libs/conventions/proofread decides deny under hack/policy/proofread.buzz, a description past
+//     libs/proofread decides deny under hack/policy/proofread.buzz, a description past
 //     the word budget its diff earns after the lead, or a title the pr-title check would
 //     fail. Advise findings, prose outside the lead, bullets and headed sections, and an
 //     area the diff touches that the description never names are advised once per pull
@@ -62,12 +64,14 @@
 //     capture. The compiled rule only advises a filter of those files.
 //   host-terminals (deny): creating or reading a directory named terminals. A host
 //     session folder is not a run; magus status reads the lock.
+//   host-cursor-rules (deny, write): a .mdc file written under a .cursor/rules directory.
+//     This repository delivers Cursor guidance through hooks and skills.
 //   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread
 //     sets under $XDG_CACHE_HOME/proofread/calibration/sealed, however it spells the path.
 //     The labels beside them stay open.
 //
-// Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
-// six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
+// Each rule lives beside its tests in the file named for what it guards: gh.buzz (the
+// GitHub calls), cadence.buzz (the gate and the push), branches.buzz (push-authority and
 // branch-name), binaries.buzz (foreign-binary and
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
@@ -108,8 +112,9 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease }, disk: binaries\onDisk(),
-        worker: req.role == "worker" or req.parent != "" or req.agent != "");
+    final integrator = req.role == "integrator";
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts }, disk: binaries\onDisk(),
+        worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
     if (denial != "") {
         return magus\guard.deny(denial);
     }

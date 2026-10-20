@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	magus "github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/eventstream"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,9 +29,9 @@ import (
 // magusfile is mid-edit or outright broken. A subscriber that only comes up when
 // the workspace is healthy is useless at exactly the moment someone wants it.
 func eventsCmd(ctx context.Context, root string, args []string) error {
-	var ef *gen.EventsFlags
+	var ef *flaggen.EventsFlags
 	rest, err := cmdParse("events", args, func(fs *flag.FlagSet) {
-		ef = gen.BindEvents(fs)
+		ef = flaggen.BindEvents(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus events [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -60,7 +61,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
+		return exit.Usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
 	}
 
 	// The stream IS the format: one event per line, forever, so there is no document to
@@ -72,7 +73,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		return usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
+		return exit.Usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
 	}
 
 	filter, err := parseStreamFilter(ef.Type)
@@ -91,17 +92,17 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 	if abs, err := filepath.Abs(workspace); err == nil {
 		workspace = abs
 	}
-	cacheDir, err := magus.ResolveCacheDir(workspace)
+	cacheDir, err := magus.ResolveCacheDir(workspace, cliOptions()...)
 	if err != nil {
 		return err
 	}
 
-	dst, cleanup, err := outputDst()
+	destination, cleanup, err := outputDestination(os.Stdout)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	w := eventstream.NewWriter(dst, filter)
+	w := eventstream.NewWriter(destination, filter)
 	defer func() { _ = w.Close() }()
 
 	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)

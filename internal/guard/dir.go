@@ -29,8 +29,8 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // into an existing mechanism over adding one, but nothing LOADS it at the moment
 // the decision is made. Measured: a directory was added for a helper with two
 // callers that belonged in an existing one, with the skill installed and never read.
-func adviseNewSourceDir(path string) advice {
-	if dir := newSourceDir(path); dir != "" {
+func adviseNewSourceDir(root, path string) advice {
+	if dir := newSourceDir(root, path); dir != "" {
 		return newSourceDirAdvice(dir)
 	}
 	return advice{}
@@ -38,8 +38,8 @@ func adviseNewSourceDir(path string) advice {
 
 // newSourceDir is the workspace-relative directory a write to path would create, or ""
 // when it creates none. architecture-unbriefed gates the same act this advises on.
-func newSourceDir(path string) string {
-	dir, ok := workspaceRelativeDir(path)
+func newSourceDir(root, path string) string {
+	dir, ok := workspaceRelativeDir(root, path)
 	if !ok {
 		return ""
 	}
@@ -58,7 +58,7 @@ func newSourceDir(path string) string {
 	// The write's own file is NOT excused. This runs before the write, so on creation
 	// it does not exist yet; if it does exist, this is an edit to a directory that
 	// already had it.
-	if entries, err := os.ReadDir(filepath.FromSlash(dir)); err == nil {
+	if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir))); err == nil {
 		if len(entries) > 0 {
 			return ""
 		}
@@ -69,37 +69,17 @@ func newSourceDir(path string) string {
 }
 
 // workspaceRelativeDir returns the slash-separated directory of path relative to the
-// working directory, and whether it is inside it and not the root itself.
-//
-// Relative FIRST, then scanned. The host sends an absolute path, and this workspace
-// is routinely checked out under a dot-directory (.claude/worktrees/<name>), so
-// scanning the absolute form finds `.claude`, calls it hidden, and silently disables
-// the rule in the layout the repo's own workflow uses. That is how this shipped inert
-// with a green suite: every test passed a relative path.
-func workspaceRelativeDir(path string) (string, bool) {
+// workspace root, and whether it is inside it and not the root itself, which is not a
+// boundary anyone is choosing. It resolves as workspaceRelativeFile does, which says why.
+func workspaceRelativeDir(root, path string) (string, bool) {
 	clean := strings.TrimSpace(path)
 	if clean == "" {
 		return "", false
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false
+	if !filepath.IsAbs(clean) {
+		clean = filepath.Join(root, clean)
 	}
-	abs := clean
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(cwd, abs)
-	}
-	rel, err := filepath.Rel(cwd, filepath.Dir(abs))
-	if err != nil {
-		return "", false
-	}
-	rel = filepath.ToSlash(rel)
-	// The workspace root is not a boundary anyone is choosing, and anything above it
-	// is not this workspace's business.
-	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", false
-	}
-	return rel, true
+	return workspaceRelativeFile(root, filepath.Dir(clean))
 }
 
 func newSourceDirAdvice(dir string) advice {

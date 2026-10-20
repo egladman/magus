@@ -1,0 +1,87 @@
+# A bound worker's runs, judged by the real `magus shell` under a BAGGAGE lease claim.
+#
+# The worker's check is `test .`, which needs format and runs go's go-test op. A narrower
+# run of anything the check composes passes, and so does the install every fresh checkout
+# needs; a target the check does not compose is refused naming the check. A raw tool a
+# spell op covers is refused too, naming the same check: before, the refusal of a target
+# sent workers to the raw tool, which only advised.
+
+[!exec:git] skip 'the workspace is a git checkout'
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+cp $WORK/magusfile.buzz magusfile.buzz
+exec magus job fork wave/guard --check 'test .' --write-paths src/pkg/code.go
+env BAGGAGE=magus.lease=wave/guard
+
+# --- passes: the check, a slice of it, an install ------------------------------------
+
+stdin check.txt
+exec magus shell
+! stdout '^deny'
+
+stdin slice.txt
+exec magus shell
+! stdout '^deny'
+
+stdin needed.txt
+exec magus shell
+! stdout '^deny'
+
+stdin install.txt
+exec magus shell
+! stdout '^deny'
+
+# --- refusals: each names the check -------------------------------------------------
+
+stdin lint.txt
+! exec magus shell
+stdout 'deny \[lease-gate\]: magus workspace: `lint` is not lease wave/guard''s check; run `magus run test \.`\.'
+
+stdin raw.txt
+! exec magus shell
+stdout 'deny \[worker-check-only\]: magus workspace: `go test ./src/pkg` runs go::go-test outside magus; run lease wave/guard''s check: `magus run test \.`\.'
+
+# --- the same raw tool with no lease only advises --------------------------------------
+
+env BAGGAGE=
+stdin raw.txt
+exec magus shell
+! stdout '^deny'
+
+-- magusfile.buzz --
+import "magus";
+import "magus/spell/go";
+
+magus\project({"spells": [go]});
+
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-fmt"](ctx);
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-vet"](ctx);
+}
+
+export fun install(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-mod-download"](ctx);
+}
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
+    go["go-test"](ctx);
+}
+-- src/pkg/code.go --
+package pkg
+-- check.txt --
+magus run test .
+-- slice.txt --
+magus run go-test . -- -run TestCode
+-- needed.txt --
+magus run go-fmt .
+-- install.txt --
+magus run install .
+-- lint.txt --
+magus run lint .
+-- raw.txt --
+go test ./src/pkg

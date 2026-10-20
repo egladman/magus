@@ -1,6 +1,6 @@
 // Package cache implements magus's content-addressed build cache.
 // Layout: cas/ (blobs) + manifests/ + logs/. The store is local; an optional
-// pluggable [RemoteBackend] (see remote.go) lets a miss restore from, and a build
+// pluggable [types.CacheBackend] (see remote.go) lets a miss restore from, and a build
 // publish to, a shared store.
 package cache
 
@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,16 +31,24 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
 // Cache is an on-disk content-addressed build cache handle.
 type Cache struct {
+	// dir holds what one checkout keeps: its output store, run journals, mtime memo,
+	// in-flight records and live build logs.
 	dir string
+	// store holds the content-addressed entries (cas/, manifests/, logs/), which name no
+	// checkout and so may be shared by every checkout of a repository. dir unless
+	// WithStoreDir names another.
+	store string
 	// inflight records running targets on disk so a killed run can be reported by the
 	// next one; nil when the cache has no directory to write into.
 	inflight *inflight
@@ -55,7 +64,7 @@ type Cache struct {
 	tiers          []tier
 	localWrite     bool
 	remoteWrite    *bool // nil = follow localWrite; set = declared, and required when true
-	backend        RemoteBackend
+	backend        types.CacheBackend
 	remoteDown     *remoteUnavailable // a wired backend that did not start; see WithRemoteUnavailable
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
@@ -197,6 +206,9 @@ type Step struct {
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
+	// UnreadCharms are the active charms this step cannot read, so they stay in its label
+	// and out of its key: a run with one shares an entry with a run without it.
+	UnreadCharms []string
 	// ExtraArgs are the args after `--`, forwarded to the target. They change what
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
@@ -209,12 +221,11 @@ type Step struct {
 	// go-build target's entry.
 	Spell           string
 	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
-	// BinaryBuild identifies the running binary's build (proc.BinaryBuild), set only for a
+	// Catalogs fingerprints the catalogs compiled into the running binary, set only for a
 	// step whose body asks that binary for its answer (a magus\describe call, a nested
-	// magus). Such an answer moves when the binary is rebuilt from changed code, with no
-	// file in the tree to key on. Empty writes no key line, so every other step keeps its
-	// key across rebuilds.
-	BinaryBuild  string
+	// magus). Such an answer moves when a catalog does, with no file in the tree to key
+	// on, and not when the binary is merely rebuilt. Empty writes no key line.
+	Catalogs     string
 	ToolVersions []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
@@ -309,14 +320,43 @@ type Result struct {
 	// printed none; today only [HintUnchangedFailure]. It rides the result the way Ref
 	// does so a consumer counting a hint's uptake never has to match on its wording.
 	HintID string
+	// Claim is the admission the step ran under. A replay runs nothing, so it carries
+	// none, even when a remote hit took a machine claim before it found the entry.
+	Claim stepClaim
+	// MaxRSSBytes and CPUMs are what the processes the step ran cost; see
+	// types.WithExecCost. Zero on a replay.
+	MaxRSSBytes int64
+	CPUMs       int64
+}
+
+// sizing names where c's memory came from, as a journal result spells it.
+func (c stepClaim) sizing() string {
+	switch {
+	case c.MemoryMB == 0:
+		return journal.SizingNone
+	case c.Sizing.Measured():
+		return journal.SizingMeasured
+	default:
+		return journal.SizingDeclared
+	}
+}
+
+// stepClaim is the admission a step was granted before it ran.
+type stepClaim struct {
+	// Started is when the step held every seat it needed and began.
+	Started time.Time
+	// Waited is how long it queued for its machine claim and its local slots.
+	Waited time.Duration
+	Slots  int
+	// MemoryMB and Sizing are the machine claim's memory, zero for a step admitted
+	// beneath an ancestor's claim, which takes none of its own.
+	MemoryMB int
+	Sizing   types.MemorySizing
 }
 
 type runCtx struct {
 	step    *Step
 	limiter *Limiter
-	onHit   func(*Result)
-	onMiss  func(*Result)
-	onError func(error)
 	// auditReplay judges the paths a hit just wrote; see AuditReplay.
 	auditReplay func(ctx context.Context, s Step, written []string) error
 	// localHit is the step's key when it was admitted as a local hit; see replayLocal.
@@ -333,6 +373,15 @@ type runCtx struct {
 	maxFailures int
 	// runTarget runs a step's BeforeKey targets; see WithTargetRunner.
 	runTarget func(context.Context, types.TargetRef) error
+	// claim is the admission RunAll granted this step; see grantedClaim.
+	claim stepClaim
+}
+
+// grantedClaim hands Run the admission RunAll took for the step, so a miss reports it.
+// An option rather than a context value, because a nested step runs under its parent's
+// context and would otherwise report the parent's claim as its own.
+func grantedClaim(claim stepClaim) RunOption {
+	return func(rc *runCtx) { rc.claim = claim }
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -369,6 +418,11 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	for _, o := range opts {
 		o(c)
+	}
+	if c.store == "" {
+		c.store = dir
+	} else if err := os.MkdirAll(c.store, 0o755); err != nil {
+		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", c.store, err)
 	}
 	// After the options, so its warnings reach the logger the caller chose.
 	c.mtimes = newMtimeStore(dir, c.log)
@@ -708,6 +762,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 
 	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
+	result.Claim = rc.claim
 	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
 }
 
@@ -733,7 +788,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	}
 	// A hit in the local store is a use, whether it was already there or just promoted,
 	// so it is the last thing eviction reaches.
-	if e.root == c.dir && c.local.writes() {
+	if e.root == c.store && c.local.writes() {
 		c.markUsed(s.ProjectPath, hash)
 	}
 	if e.promoted {
@@ -773,7 +828,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 		}
 	}
 	if ref == "" {
-		ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil, true)
+		ref = c.recordOutput(ctx, s, hash, logData, result, nil, true)
 	} else {
 		// recordOutput is skipped, so nothing reaches the journal otherwise; a cache hit
 		// is still a target OUTCOME, and a fully-cached run would show no results.
@@ -787,6 +842,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 			Status:     journal.StatusCached,
 			Ref:        ref,
 			DurationMs: result.Duration.Milliseconds(),
+			Sizing:     journal.SizingNone,
 		})
 	}
 	attrs := append(netAttrs(netRec),
@@ -802,9 +858,6 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	}
 	c.log.InfoContext(ctx, "cache.hit", attrs...)
 	result.Ref = ref
-	if rc.onHit != nil {
-		rc.onHit(&result)
-	}
 	rc.fireResults(rc.step, &result, nil)
 	return result, true
 }
@@ -830,8 +883,10 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 
 	lp := c.logPath(s.ProjectPath, hash)
+	ctx = types.WithExecCost(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
+	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
 
 	// fail is every way this step can end badly after fn was invoked: the run itself, a
 	// source the run mutated, a snapshot that would not write. All three record the same
@@ -843,7 +898,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	fail := func(err error) (Result, error) {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, err, false)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result, err, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -863,9 +918,6 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 				slog.String("log", lp),
 			)...,
 		)
-		if rc.onError != nil {
-			rc.onError(err)
-		}
 		rc.fireResults(rc.step, &result, err)
 		return result, ReportedError{Err: err}
 	}
@@ -922,7 +974,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
-	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil, false)
+	ref := c.recordOutput(ctx, s, hash, rawOutput, result, nil, false)
 	result.Ref = ref
 
 	// Stored AFTER recordOutput, never before: the remote entry ships this run's output
@@ -951,9 +1003,6 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			slog.String("ref", ref),
 		)...,
 	)
-	if rc.onMiss != nil {
-		rc.onMiss(&result)
-	}
 	rc.fireResults(rc.step, &result, nil)
 	return result, nil
 }
@@ -1013,6 +1062,16 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	return HintUnchangedFailure
 }
 
+// actingLease is the job lease a run recorded here acts under, resolved as the sandbox
+// resolves it: the checkout's binding outranks the claim, which a worker can rewrite from
+// its own shell.
+func (c *Cache) actingLease(ctx context.Context) string {
+	// No user state dir means no checkout record, so the claim answers, as the sandbox's does.
+	stateBase, _ := xdg.StateDir()
+	lease, _ := job.RunLease(ctx, job.Location{CacheDir: c.dir, StateBase: stateBase})
+	return lease
+}
+
 // recordOutput persists a step's captured output events under a per-execution
 // reference id and returns that ref for the result log event. It builds the target's
 // `result` record (status/duration/error), persists the output events plus that
@@ -1021,8 +1080,9 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
 // nil means the step passed; non-nil means it failed. cacheHit is a separate axis and
 // must come from the caller: by this point a hit and a fresh pass look identical.
-func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, dur time.Duration, runErr error, cacheHit bool) string {
+func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, r Result, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
+	dur := r.Duration
 	inv := journal.InvocationIDFromContext(ctx)
 	target := reproTarget(s)
 
@@ -1042,6 +1102,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		ExtraArgs:   s.ExtraArgs,
 		VCSName:     s.VCSName,
 		Platform:    c.platform,
+		Lease:       c.actingLease(ctx),
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
@@ -1088,6 +1149,11 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
 		Level: "info", Status: journal.StatusPass, DurationMs: dur.Milliseconds(), Inv: inv, Ref: ref,
 		CacheKey: hash,
+		Slots:    r.Claim.Slots, MemoryMB: r.Claim.MemoryMB, Sizing: r.Claim.sizing(),
+		WaitedMs: r.Claim.Waited.Milliseconds(), MaxRSSBytes: r.MaxRSSBytes, CPUMs: r.CPUMs,
+	}
+	if !r.Claim.Started.IsZero() {
+		result.StartedMs = r.Claim.Started.UnixMilli()
 	}
 	if cacheHit {
 		result.Status = journal.StatusCached
@@ -1132,7 +1198,8 @@ func stepSlots(s Step, lim *Limiter) int {
 
 // claimMachine takes the machine-wide half of a step's admission: the concurrency slot
 // and the declared memory arbitrated across every magus on the host. It returns ctx
-// marked as holding the claim, plus the release that hands it back.
+// marked as holding the claim, plus the release that hands it back. A process group
+// spawn.Exec starts under that ctx rides the claim and ends with it.
 //
 // Only a step that will execute takes it. A step whose entry is in the local store
 // ([Cache.localHitKey]) replays under its local slot alone: replay spends none of the
@@ -1166,7 +1233,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	if held.machineClaim {
 		return ctx, func() {}, nil
 	}
-	release, err := c.machine.acquire(ctx, types.MachineClaim{
+	id, release, err := c.machine.claim(ctx, types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
@@ -1176,6 +1243,9 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		return ctx, nil, err
 	}
 	held.machineClaim = true
+	if id != "" {
+		ctx = withStepGroups(ctx, c.machine.admit, id)
+	}
 	return held.on(ctx), release, nil
 }
 
@@ -1380,14 +1450,14 @@ func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *Limiter, fn f
 
 // runSeated runs a step's body holding what admission seated it with: the limiter it
 // draws from, its slots, and a jobserver that holds make, cargo and any other client of
-// the GNU make protocol to those slots (run.SeatJobserver says when there is none).
+// the GNU make protocol to those slots (spawn.SeatJobserver says when there is none).
 //
 // Inside Cache.Run's callback, so a replayed step opens no pipe, and the pool closes the
 // moment the body returns: whatever tokens a child still holds die with it.
 func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Context) error) error {
 	ctx = ContextWithLimiter(ctx, lim)
 	ctx = WithSlotsHeld(ctx, slots)
-	ctx, closeJobserver, err := runPkg.SeatJobserver(ctx, slots)
+	ctx, closeJobserver, err := spawn.SeatJobserver(ctx, slots)
 	if err != nil {
 		return err
 	}
@@ -1539,9 +1609,12 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				}
 			}
 
+			// The wait a step reports starts here: its upstreams are done, and what follows
+			// is queueing for seats.
+			queued := time.Now()
 			// admitAndRun takes the local slot beneath whatever machine seat machineCtx
 			// carries and runs the step there.
-			admitAndRun := func(machineCtx context.Context, runOpts []RunOption) (Result, error) {
+			admitAndRun := func(machineCtx context.Context, claim stepClaim, runOpts []RunOption) (Result, error) {
 				// A slot-acquire failure is usually this batch's own cancellation, which
 				// fail swallows regardless. A deadlocked pool is the exception: nothing
 				// upstream failed and the batch was not cancelled, so it is an independent
@@ -1552,6 +1625,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					return Result{}, admitErr
 				}
 				defer release()
+				claim.Slots, claim.Started = slots, time.Now()
+				claim.Waited = claim.Started.Sub(queued)
 				if slog.Default().Enabled(gctx, levelTrace) {
 					slog.LogAttrs(gctx, levelTrace, "schedule.run",
 						slog.String("project", s.ProjectPath), slog.String("target", s.Target),
@@ -1572,17 +1647,21 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				ran = true
 				return c.Run(stepCtx, s, func(ctx context.Context) error {
 					return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
-				}, runOpts...)
+				}, slices.Concat(runOpts, []RunOption{grantedClaim(claim)})...)
 			}
 
 			var r Result
 			var err error
 			key := c.localHitKey(gctx, &s)
 			if key != "" {
-				r, err = admitAndRun(gctx, slices.Concat(opts, []RunOption{replayLocal(key)}))
+				r, err = admitAndRun(gctx, stepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key)}))
 			}
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false
+				var claim stepClaim
+				if !admissionFrom(gctx).machineClaim {
+					claim.MemoryMB, claim.Sizing = s.MemoryMB, s.MemorySizing
+				}
 				// The machine budget comes before the slot, so a step queues for it holding
 				// nothing a peer needs in order to finish; claimMachine carries the
 				// interleaving that ordering answers.
@@ -1607,7 +1686,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				if err := gctx.Err(); err != nil {
 					return fail(err)
 				}
-				r, err = admitAndRun(machineCtx, opts)
+				r, err = admitAndRun(machineCtx, claim, opts)
 			}
 			// Write key before complete; the complete→waitForUpstreams happens-before edge
 			// ensures dependents see the key when they unblock.
@@ -1636,18 +1715,36 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 }
 
 // Delete removes cached manifests for the given project paths (all if none given).
-// Orphaned blobs are collected after manifests are deleted.
+// The blobs only those manifests held are collected at once; other unreferenced blobs
+// wait out blobGrace, since another checkout sharing the store may hold them.
 func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	manifestsDir := filepath.Join(c.dir, "manifests")
-	logsDir := filepath.Join(c.dir, "logs")
+	manifestsDir := filepath.Join(c.store, "manifests")
+	// The entries' logs and, in a checkout whose store is shared, the live logs its runs wrote.
+	logsDirs := slices.Compact([]string{filepath.Join(c.store, "logs"), filepath.Join(c.dir, "logs")})
 	outputsDir := filepath.Join(c.dir, "outputs")
+
+	released := map[string]struct{}{}
+	held := []string{manifestsDir}
+	if len(projectPaths) > 0 {
+		held = nil
+		for _, path := range projectPaths {
+			held = append(held, filepath.Join(manifestsDir, flattenPath(path)))
+		}
+	}
+	for _, dir := range held {
+		blobs, err := c.manifestBlobs(ctx, dir)
+		if err != nil {
+			return err
+		}
+		maps.Copy(released, blobs)
+	}
 
 	if len(projectPaths) == 0 {
 		// Clean everything.
-		for _, sub := range []string{manifestsDir, logsDir, outputsDir} {
+		for _, sub := range slices.Concat([]string{manifestsDir, outputsDir}, logsDirs) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -1673,7 +1770,7 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 				return err
 			}
 			flat := flattenPath(path)
-			for _, sub := range []string{manifestsDir, logsDir} {
+			for _, sub := range append([]string{manifestsDir}, logsDirs...) {
 				if err := os.RemoveAll(filepath.Join(sub, flat)); err != nil {
 					return fmt.Errorf("magus/cache: clean remove %s: %w", path, err)
 				}
@@ -1685,7 +1782,7 @@ func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 			}
 		}
 	}
-	return c.gcBlobs(ctx)
+	return c.gcBlobs(ctx, released)
 }
 
 // safePathIn joins name (a tar entry's slash-separated path) onto a store root and
@@ -1744,54 +1841,31 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 
-	err := filepath.WalkDir(c.dir, func(path string, d os.DirEntry, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(c.dir, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if d.IsDir() {
-			if rel == "." {
-				return nil
+	// One archive, laid out as one cache dir: a shared store's entries first, then this
+	// checkout's own files, whose live logs would collide with the entries' logs.
+	walk := func(root string) error {
+		return filepath.WalkDir(root, func(path string, d os.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
 			}
-			if rel == spellCachesDir {
-				return filepath.SkipDir
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			return tw.WriteHeader(&tar.Header{
-				Typeflag: tar.TypeDir,
-				Name:     rel + "/",
-				Mode:     0o755,
-			})
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     rel,
-			Size:     info.Size(),
-			Mode:     0o644,
-			ModTime:  info.ModTime(),
-		}); err != nil {
-			return err
-		}
-		return func() error {
-			f, err := os.Open(path)
+			rel, err := filepath.Rel(root, path)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
-			_, err = io.Copy(tw, f)
-			return err
-		}()
-	})
+			rel = filepath.ToSlash(rel)
+			if root != c.store && d.IsDir() && storeOwned(rel) {
+				return filepath.SkipDir
+			}
+			return exportEntry(tw, path, rel, d)
+		})
+	}
+	err := walk(c.store)
+	if err == nil && c.dir != c.store {
+		err = walk(c.dir)
+	}
 	if err != nil {
 		return fmt.Errorf("magus/cache: export walk: %w", err)
 	}
@@ -1802,6 +1876,51 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("magus/cache: export gzip close: %w", err)
 	}
 	return nil
+}
+
+// storeOwned reports whether rel, slash-separated and relative to a cache dir, lies in
+// the part a shared store holds: cas/, manifests/ or logs/.
+func storeOwned(rel string) bool {
+	top, _, _ := strings.Cut(rel, "/")
+	return top == "cas" || top == "manifests" || top == "logs"
+}
+
+// exportEntry writes path, rel within its cache dir, to tw. The cache dir itself and a
+// spell's caches write nothing.
+func exportEntry(tw *tar.Writer, path, rel string, d os.DirEntry) error {
+	if d.IsDir() {
+		if rel == "." {
+			return nil
+		}
+		if rel == spellCachesDir {
+			return filepath.SkipDir
+		}
+		return tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeDir,
+			Name:     rel + "/",
+			Mode:     0o755,
+		})
+	}
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     rel,
+		Size:     info.Size(),
+		Mode:     0o644,
+		ModTime:  info.ModTime(),
+	}); err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(tw, f)
+	return err
 }
 
 // Import extracts a gzip-compressed tar archive produced by Export into the cache directory.
@@ -1831,7 +1950,11 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			return fmt.Errorf("magus/cache: import tar: %w", err)
 		}
 
-		clean, err := safePathIn(c.dir, hdr.Name)
+		root := c.dir
+		if storeOwned(path.Clean(hdr.Name)) {
+			root = c.store
+		}
+		clean, err := safePathIn(root, hdr.Name)
 		if err != nil {
 			return err
 		}
@@ -1860,7 +1983,7 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			// explicit operator action (the operator vouches for the archive by running
 			// it), and replay-side path containment bounds where any imported manifest
 			// can write. The size cap is per member, as the archive is the operator's.
-			rel, err := filepath.Rel(c.dir, clean)
+			rel, err := filepath.Rel(root, clean)
 			if err != nil {
 				return fmt.Errorf("magus/cache: import rel %q: %w", clean, err)
 			}
@@ -1878,27 +2001,52 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
-// Evict removes LRU entries down to the size cap, then collects unreferenced CAS
-// blobs.
-func (c *Cache) Evict(ctx context.Context) error {
-	c.evictOldest(ctx, c.sizeCap())
-	return c.gcBlobs(ctx)
+// gcBlobs removes CAS blobs not referenced by any surviving manifest and not written or
+// claimed within blobGrace. A blob in released skips the grace: an explicit clean
+// deleted the entries holding it, and a replay of them has lost its entry anyway.
+func (c *Cache) gcBlobs(ctx context.Context, released map[string]struct{}) error {
+	referenced, err := c.manifestBlobs(ctx, filepath.Join(c.store, "manifests"))
+	if err != nil {
+		return err
+	}
+	if err := filepath.WalkDir(filepath.Join(c.store, "cas"), func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		blob := filepath.Base(p)
+		if _, ok := referenced[blob]; ok {
+			return nil
+		}
+		if _, ok := released[blob]; !ok {
+			// Statted now rather than from the walk's entry: a claim landing between the two
+			// is the case the grace exists for.
+			if info, err := os.Lstat(p); err != nil || time.Since(info.ModTime()) < blobGrace {
+				return nil //nolint:nilerr // a blob gone since the walk listed it needs no removal
+			}
+		}
+		_ = os.Remove(p) // p is always under c.store; symlink escapes are not a concern for a local cache
+		return nil
+	}); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("magus/cache: gc walk cas: %w", err)
+	}
+	return nil
 }
 
-// gcBlobs removes CAS blobs not referenced by any surviving manifest.
-func (c *Cache) gcBlobs(ctx context.Context) error {
-	casDir := filepath.Join(c.dir, "cas")
-	manifestsDir := filepath.Join(c.dir, "manifests")
-
+// manifestBlobs returns the blobs the manifests under dir reference. A missing dir holds
+// none; an unreadable or corrupt manifest is warned about and skipped.
+func (c *Cache) manifestBlobs(ctx context.Context, dir string) (map[string]struct{}, error) {
 	referenced := map[string]struct{}{}
-	if err := filepath.WalkDir(manifestsDir, func(p string, d os.DirEntry, err error) error {
+	if err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".json") {
 			return err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		data, err := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
+		data, err := os.ReadFile(p) // p is always under c.store; symlink escapes are not a concern for a local cache
 		if err != nil {
 			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("gc: read %s: %v", p, err)))
 			return nil
@@ -1915,25 +2063,9 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		}
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("magus/cache: gc walk manifests: %w", err)
+		return nil, fmt.Errorf("magus/cache: gc walk manifests: %w", err)
 	}
-
-	if err := filepath.WalkDir(casDir, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		blob := filepath.Base(p)
-		if _, ok := referenced[blob]; !ok {
-			_ = os.Remove(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
-		}
-		return nil
-	}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("magus/cache: gc walk cas: %w", err)
-	}
-	return nil
+	return referenced, nil
 }
 
 func (c *Cache) logPath(projectPath, hash string) string {
@@ -2002,9 +2134,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStdout)
 		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
-	captureCtx := runPkg.WithOutputWriters(ctx, stdoutTap, stderrTap)
+	captureCtx := spawn.WithOutputWriters(ctx, stdoutTap, stderrTap)
 	// Tag the step so subprocesses run under fn emit exec events labeled with this
-	// project/target (the run primitive reads this from ctx; see internal/proc/run).
+	// project/target (the run primitive reads this from ctx; see internal/proc/spawn).
 	captureCtx = journal.WithStep(captureCtx, projectPath, target)
 	// So an error raised below can name the log a reader should open. Nothing in the
 	// engine can construct this path: it is the store's own layout.

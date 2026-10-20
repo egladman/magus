@@ -108,6 +108,7 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 		}
 		fmt.Fprintf(&b, "%d %s this\n", out.BlastRadius, reach)
 	}
+	writePublicAPI(&b, out)
 
 	groups := relationGroups(out)
 	if len(groups) > 0 {
@@ -126,6 +127,31 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 		}
 	}
 	return b.String()
+}
+
+// writePublicAPI prints a dir's public API, one row per symbol (label, signature on one
+// line, how many files outside the dir use it), or the gap that left it unlisted.
+func writePublicAPI(b *strings.Builder, out types.KnowledgeExplainOutput) {
+	if out.PublicAPIGap != "" {
+		fmt.Fprintf(b, "\npublic API unknown: %s\n", out.PublicAPIGap)
+		return
+	}
+	if len(out.PublicAPI) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\npublic API (%d)\n", len(out.PublicAPI))
+	w := 0
+	for _, s := range out.PublicAPI {
+		w = max(w, len(s.Label))
+	}
+	w = min(w, 18)
+	for _, s := range out.PublicAPI {
+		row := fmt.Sprintf("  %-*s  ", w, s.Label)
+		if sig := strings.Join(strings.Fields(s.Signature), " "); sig != "" {
+			row += sig + "  "
+		}
+		fmt.Fprintf(b, "%sused by %d\n", row, s.UsedBy)
+	}
 }
 
 // packageDocs is one docs URL per version a package node pins across the workspace:

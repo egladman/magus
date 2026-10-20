@@ -111,7 +111,7 @@ func TestRankOwnBuild(t *testing.T) {
 				assert.Contains(t, v.Context+"\n"+v.Why, tt.says)
 			case tt.deny:
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
-				assert.Contains(t, v.Deny+hint.Render(v.Next, func(hint.Next) string { return "" }), tt.says,
+				assert.Contains(t, v.Deny+hint.Render(v.Next, func(types.NextStep) string { return "" }), tt.says,
 					"the verdict or the one command served with it")
 			default:
 				assert.Empty(t, v.Deny)
@@ -143,7 +143,7 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 	for _, command := range []string{"go run ./cmd/magus", "go vet ./...", "go test ./..."} {
 		v := judgeOwnBuild(fresh, command)
 		require.Len(t, v.Next, 1, command)
-		assert.Equal(t, hint.Next{
+		assert.Equal(t, types.NextStep{
 			ID:   hint.DenyRemedyPrefix + string(denyRuleRawTool),
 			Run:  ward.BootstrapCommand,
 			Argv: bootstrapArgv(),
@@ -211,6 +211,10 @@ func TestRankOwnBuildDeniesEverythingElseWhileTheWorkspaceCannotLoad(t *testing.
 		"go generate -run bindings ./std",
 		"go generate ../other",
 		"go generate /tmp/elsewhere",
+		"go generate net/http",
+		"go generate github.com/example/pkg",
+		"go generate ...",
+		"go generate ./std/../../other",
 		"go run ./cmd/magus-utils diffdemo",
 		"go run ./cmd/magus-utils cut",
 		"go run ./cmd/magus-utils release-index",

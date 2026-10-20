@@ -427,7 +427,6 @@ ParseTarget(s)          → Target{Name:"test", Charms:[...]}
 Magus.ExpandPath(t)     → []Target (one concrete entry per matched project)
       │                   magus.go
       │
-      │   (alternative: ExpandCwd resolves for the project under cwd)
       │   (alternative: ExpandAffected uses VCS diff to select projects,
       │                 and populates Target.Files)
       ▼
@@ -435,7 +434,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
                           ride along on the context (WithCharms)
 ```
 
-Key invariant: targets passed to `Run` should be concrete (each Path resolves to exactly one project). `ExpandPath`, `ExpandCwd`, and `ExpandAffected` enforce this.
+Key invariant: targets passed to `Run` should be concrete (each Path resolves to exactly one project). `ExpandPath` and `ExpandAffected` enforce this.
 
 ## Glossary
 

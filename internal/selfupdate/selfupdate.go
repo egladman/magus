@@ -35,7 +35,7 @@ import (
 	"net/netip"
 	"net/url"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,7 +65,7 @@ const (
 // Options configures an update operation. Keys is required; verification fails
 // closed when it is empty.
 type Options struct {
-	// Keys is the ring a signature may come from, normally ReleaseKeys. After the
+	// Keys is the ring a signature may come from, normally ReleaseKeys(). After the
 	// signed index has been read it is narrowed by Keyring.Without(idx.Revoked), so a
 	// key the publisher revoked cannot verify anything fetched afterwards.
 	Keys         Keyring
@@ -78,7 +78,7 @@ type Options struct {
 // a signature must check this first.
 func checkKeys(ring Keyring) error {
 	if len(ring) == 0 {
-		return errors.New("no release key configured: pass selfupdate.ReleaseKeys via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
+		return errors.New("no release key configured: pass selfupdate.ReleaseKeys() via Options.Keys (or, if every key was revoked, download the release manually from the release site)")
 	}
 	for _, key := range ring {
 		if len(key.Pub) != ed25519.PublicKeySize {
@@ -510,7 +510,8 @@ func ExtractBinary(tarGz []byte) (io.Reader, error) {
 	return nil, fmt.Errorf("archive does not contain %q", binaryName)
 }
 
-// FetchLimited fetches url with retry and enforces a byte limit.
+// FetchLimited fetches url with retry and enforces a byte limit. A refused request (4xx
+// other than 408 and 429) and an over-limit body are not retried.
 func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options) ([]byte, error) {
 	var data []byte
 	err := retry.Do(ctx, func() error {
@@ -524,19 +525,33 @@ func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("HTTP %s fetching %s", resp.Status, url)
+			return statusError(resp, url)
 		}
 		b, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 		if err != nil {
 			return fmt.Errorf("read response: %w", err)
 		}
 		if int64(len(b)) > maxBytes {
-			return fmt.Errorf("response from %s exceeded %d bytes", url, maxBytes)
+			return types.NonRetryable(
+				fmt.Errorf("response from %s exceeded %d bytes", url, maxBytes),
+				types.RetryAfterPerson, "a larger body will not shrink on a second fetch")
 		}
 		data = b
 		return nil
 	}, retry.WithDelay(2*time.Second), retry.WithMaxDelay(30*time.Second))
 	return data, err
+}
+
+// statusError is the error for a non-200 response. A 4xx other than 408 and 429 says the
+// request itself is wrong (a missing release is a 404), so fetching it again cannot help;
+// a 5xx, 408 or 429 may clear and stays retryable.
+func statusError(resp *http.Response, url string) error {
+	err := fmt.Errorf("HTTP %s fetching %s", resp.Status, url)
+	code := resp.StatusCode
+	if code >= 400 && code < 500 && code != http.StatusRequestTimeout && code != http.StatusTooManyRequests {
+		return types.NonRetryable(err, types.RetryAfterPerson, "the server refused the request itself")
+	}
+	return err
 }
 
 // compareParsed is Compare's logic plus the ok bit Compare itself drops: callers

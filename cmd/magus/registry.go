@@ -56,25 +56,25 @@ func newEntry(root string, now time.Time) *wsEntry {
 
 // openWorkspace opens root the way every registry workspace is opened.
 func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
-	cfg, err := loadWorkspaceCfg(root)
+	cfg, err := loadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
 	// Warm server workspaces record OTel metrics so the /dashboard can read live
 	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
-	// provider (WithProvider), so counts survive eviction and the bridge Magus reads
+	// provider (workspace.WithTelemetryProvider), so counts survive eviction and the bridge Magus reads
 	// them; only if none was supplied do we build a per-workspace collector.
 	metricsOpt := magus.WithMetricsCollection()
 	if tel != nil {
-		metricsOpt = magus.WithProvider(tel)
+		metricsOpt = workspace.WithTelemetryProvider(tel)
 	}
-	opts := []magus.Option{
-		magus.WithLoadedConfig(cfg),
+	opts := append(cliOptions(),
+		workspace.WithLoadedConfig(cfg),
 		// The version lets a load failure that looks like a stale server say so.
 		magus.WithVersion(version),
 		workspace.WithLimiter(lim),
 		metricsOpt,
-	}
+	)
 	// Every workspace the server opens shares ONE broker client, so the server holds one
 	// broker connection however many workspaces it serves. A workspace whose own broker
 	// setting is off gets none, since Open refuses a client it would not use. A registry
@@ -108,7 +108,7 @@ func (r *wsRegistry) load(e *wsEntry) {
 	})
 }
 
-func loadWorkspaceCfg(root string) (config.Config, error) {
+func loadWorkspaceConfig(root string) (config.Config, error) {
 	path := filepath.Join(root, "magus.yaml")
 	cfg, err := config.LoadFile(path, false)
 	if err != nil {
@@ -119,6 +119,9 @@ func loadWorkspaceCfg(root string) (config.Config, error) {
 		}
 		// Missing file is fine; use env-var defaults.
 		cfg = config.Defaults()
+		if cfg.HistoryPath, err = config.DefaultHistoryPath(); err != nil {
+			return config.Config{}, err
+		}
 	}
 	if err := configgen.ApplyEnv(&cfg, os.Getenv); err != nil {
 		return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
@@ -466,7 +469,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	}
 	root := proc.RootFromContext(ctx)
 	if root == "" {
-		resolved, ferr := magus.FindRoot(proc.CwdFromContext(ctx))
+		resolved, ferr := workspace.FindRoot(proc.CwdFromContext(ctx))
 		if ferr != nil {
 			return
 		}

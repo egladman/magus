@@ -93,6 +93,9 @@ type checker struct {
 	loopDepth int
 	scopes    []map[string]scopeEntry
 	retTyp    types.Type
+	// retWant is the expected type for a returned value: retTyp, or the
+	// anonObjectType of an `obj{ ... }` return annotation that retTyp erases.
+	retWant types.Type
 	// retOptional records that the enclosing function's return annotation ended in
 	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
 	retOptional bool
@@ -850,7 +853,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	if v.TypeAnnot != "" {
 		annot = c.resolveAnnot(v.TypeAnnot)
 	}
-	inferred := c.inferExpected(v.Value, annot)
+	inferred := c.inferExpected(v.Value, c.expectAnnot(v.TypeAnnot, annot))
 	declTyp := inferred
 	if v.TypeAnnot != "" {
 		annotTyp := annot
@@ -940,7 +943,7 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 	// The declared return type is the expected type for the returned expression, so
 	// a value that needs a hint can resolve against it -- `fun f() > Locale { return
 	// .it; }` has nothing else to say which enum `.it` names.
-	ret := c.inferExpected(v.Value, c.retTyp)
+	ret := c.inferExpected(v.Value, c.retWant)
 	// Skip return type check for fiber functions (fib<V,R> annotations or *> syntax):
 	// the declared return type in these cases represents the fiber value type, not
 	// the checked function return type.
@@ -1092,11 +1095,12 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		return
 	}
 
-	savedRet := c.retTyp
+	savedRet, savedRetWant := c.retTyp, c.retWant
 	savedRetOpt := c.retOptional
 	savedYield := c.yieldTyp
 	savedRaise := c.raiseDeclared
 	c.retTyp = ft.Ret
+	c.retWant = c.expectAnnot(fd.RetAnnot, ft.Ret)
 	c.retOptional = strings.HasSuffix(fd.RetAnnot, "?")
 	if fd.YieldAnnot != "" {
 		c.yieldTyp = c.resolveAnnot(fd.YieldAnnot)
@@ -1140,7 +1144,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.checkFunReturns(fd)
 	c.popScope()
 	c.fnScopeBase = savedFnBase
-	c.retTyp = savedRet
+	c.retTyp, c.retWant = savedRet, savedRetWant
 	c.retOptional = savedRetOpt
 	c.yieldTyp = savedYield
 	c.raiseDeclared = savedRaise
@@ -1191,11 +1195,12 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		if m.IsExtern {
 			continue
 		}
-		savedRet := c.retTyp
+		savedRet, savedRetWant := c.retTyp, c.retWant
 		savedRetOpt := c.retOptional
 		savedRaise := c.raiseDeclared
 		savedYield := c.yieldTyp
 		c.retTyp = ft.Ret
+		c.retWant = c.expectAnnot(m.RetAnnot, ft.Ret)
 		c.retOptional = strings.HasSuffix(m.RetAnnot, "?")
 		c.raiseDeclared = m.ErrAnnot != ""
 		// A method's *> annotation was never recorded here, unlike a free function's
@@ -1234,7 +1239,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		c.checkUnreachable(m.Body)
 		c.popScope()
 		c.fnScopeBase = savedFnBase
-		c.retTyp = savedRet
+		c.retTyp, c.retWant = savedRet, savedRetWant
 		c.retOptional = savedRetOpt
 		c.raiseDeclared = savedRaise
 		c.yieldTyp = savedYield
@@ -1291,6 +1296,119 @@ func expectedEnum(want types.Type) *types.EnumType {
 		return expectedEnum(t.Elem)
 	}
 	return nil
+}
+
+// anonObjectType is the shape an `obj{ ... }` annotation expects of the value
+// written in its position. types.ParseAnnot erases that annotation to Unknown, so
+// this type never becomes a variable's or a function's type: it lives only on the
+// expected stack, where an anonymous literal's fields resolve and check against it
+// the way upstream's TypeChecker.populateAnonymousObject does.
+type anonObjectType struct {
+	annot  string
+	names  []string
+	fields map[string]types.Type
+}
+
+func (a *anonObjectType) TypeName() string { return a.annot }
+
+// expectAnnot is the expected type for a value under annot: t, or the
+// anonObjectType of an `obj{ name: T, ... }` annotation. A tuple shape
+// (`obj{ :str, :int }`) names no fields and stays t.
+func (c *checker) expectAnnot(annot string, t types.Type) types.Type {
+	body, ok := strings.CutPrefix(strings.TrimPrefix(annot, "mut "), "obj{")
+	if !ok {
+		return t
+	}
+	body, ok = strings.CutSuffix(body, "}")
+	if !ok {
+		return t
+	}
+	at := &anonObjectType{annot: annot, fields: map[string]types.Type{}}
+	for _, member := range splitTopLevel(body) {
+		name, fieldAnnot, found := strings.Cut(member, ":")
+		if !found || name == "" {
+			return t
+		}
+		at.names = append(at.names, name)
+		at.fields[name] = c.expectAnnot(fieldAnnot, c.resolveAnnot(fieldAnnot))
+	}
+	return at
+}
+
+// splitTopLevel splits an annotation body at the commas outside any nested type.
+// A `>` closes only a `<` it matches: a function type's return arrow
+// (`fun()>str`) opens nothing.
+func splitTopLevel(s string) []string {
+	var parts []string
+	depth, angle, start := 0, 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '<':
+			angle++
+		case '>':
+			if angle > 0 {
+				angle--
+			}
+		case ',':
+			if depth == 0 && angle == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	if start < len(s) {
+		parts = append(parts, s[start:])
+	}
+	return parts
+}
+
+// inferAnonObject checks an anonymous `.{ ... }` literal against the obj{}
+// annotation it fills: each field value resolves against its declared type and
+// must be compatible with it, and the literal must name exactly the declared
+// fields. Upstream rejects each mismatch as E66 at a return and E4 at a
+// declaration. Once checked, the literal is Unknown, the type its annotation
+// checks as everywhere else.
+func (c *checker) inferAnonObject(v *ast.MapExpr, at *anonObjectType) types.Type {
+	seen := map[string]bool{}
+	for i, k := range v.Keys {
+		name, isField := k.(*ast.StringLit)
+		if !isField {
+			c.infer(v.Values[i])
+			continue
+		}
+		seen[name.Val] = true
+		want, declared := at.fields[name.Val]
+		if !declared {
+			c.errorfc(ast.NodePos(k), TypeMismatch, "anonymous object %s has no field %q", at.annot, name.Val)
+			c.infer(v.Values[i])
+			continue
+		}
+		got := c.inferExpected(v.Values[i], want)
+		if !anonFieldCompat(got, want) {
+			c.errorfc(ast.NodePos(v.Values[i]), TypeMismatch, "wrong property type: field %s of %s is %s, got %s", name.Val, at.annot, want.TypeName(), got.TypeName())
+		}
+	}
+	for _, name := range at.names {
+		if !seen[name] {
+			c.errorfc(v.Pos, TypeMismatch, "anonymous object %s is missing field %q", at.annot, name)
+		}
+	}
+	return types.Unknown
+}
+
+// anonFieldCompat is types.Compat for a field of an obj{} annotation. A nested
+// obj{} is checked by its own literal, and an unresolved generic parameter has
+// erased type arguments, so neither is compared here.
+func anonFieldCompat(got, want types.Type) bool {
+	switch want.(type) {
+	case *anonObjectType, *types.NamedType:
+		return true
+	}
+	return types.Compat(got, want)
 }
 
 func (c *checker) infer(n ast.Node) types.Type {
@@ -2222,11 +2340,12 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 		yield = c.resolveAnnot(v.YieldAnnot)
 	}
 
-	savedRet := c.retTyp
+	savedRet, savedRetWant := c.retTyp, c.retWant
 	savedYield := c.yieldTyp
 	savedRaise := c.raiseDeclared
 	savedRetOpt := c.retOptional
 	c.retTyp = ret
+	c.retWant = c.expectAnnot(v.RetAnnot, ret)
 	c.yieldTyp = yield
 	c.raiseDeclared = v.ErrAnnot != ""
 	c.retOptional = strings.HasSuffix(v.RetAnnot, "?")
@@ -2241,7 +2360,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	}
 	c.popScope()
 	c.fnScopeBase = savedFnBase
-	c.retTyp = savedRet
+	c.retTyp, c.retWant = savedRet, savedRetWant
 	c.yieldTyp = savedYield
 	c.raiseDeclared = savedRaise
 	c.retOptional = savedRetOpt
@@ -2250,6 +2369,9 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
+	if at, ok := c.wantType().(*anonObjectType); ok && v.Anon && !v.Tuple {
+		return c.inferAnonObject(v, at)
+	}
 	// An anonymous object literal `.{ field = expr }` parses to a map keyed by
 	// the field names, so when the expected type is an object, each value is
 	// inferred against that field's type. Without this a `.{ kind = .two }`

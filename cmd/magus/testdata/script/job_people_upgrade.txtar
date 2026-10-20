@@ -47,7 +47,7 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait-api.out
 exec magus job wait upgrade/web
-exec magus ls jobs
+exec magus ls jobs --all
 cmp stdout $WORK/ls-done.out
 
 -- shop/.gitignore --
@@ -87,7 +87,9 @@ left-pad 1.3
 {"schema_version": 2, "changed_paths": ["web/deps.txt"], "validation": {"command": "magus run test web", "output_ref": "out<hex>"}, "unresolved_risks": []}
 -- apply.out --
 created upgrade/api, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created upgrade/web, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 -- holders.out --
 upgrade/api  ~/src/ana
 upgrade/web  ~/src/ben
@@ -98,8 +100,8 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
 -- ls-done.out --
-JOB          HOLDER  STATE  MODEL  PATHS  PROOF     CHECK
-upgrade/api  ana     pass   -      1      alone     magus run test api
-upgrade/web  ben     pass   -      1      disjoint  magus run test web
+JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
+upgrade/api  ana     pass   standard  1      alone     magus run test api
+upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

@@ -1,7 +1,9 @@
 // Package types holds the merge queue's contract: the documents a queue run reads and
 // writes, what a provider, a CI system, a build tool and a gate answer, and the version
 // control each step of a run gets. It imports only the standard library and magus's own
-// types, so a provider or a test can build on it without the steps that act on it.
+// types, so a provider or a test can build on it without the steps that act on it. It stays
+// apart from internal/queue because internal/config and internal/job import it, and
+// internal/queue imports both: folded in, it would close two import cycles.
 package types
 
 import (

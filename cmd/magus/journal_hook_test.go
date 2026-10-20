@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -179,11 +180,12 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
 	root := t.TempDir()
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Dir(job.MarkerPath(cacheDir)), 0o755))
-	require.NoError(t, os.WriteFile(job.MarkerPath(cacheDir), []byte("fleet/bound\n"), 0o644))
+	marker := job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}.MarkerPath()
+	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
+	require.NoError(t, os.WriteFile(marker, []byte("fleet/bound\n"), 0o644))
 
 	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"ci"})
 	require.Len(t, handlers, 1)
@@ -211,7 +213,7 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/server-env")
 	root := t.TempDir()
 
-	ctx := proc.WithLease(context.Background(), "fleet/client")
+	ctx := types.WithJobLease(context.Background(), "fleet/client")
 	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"ci", "api"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
@@ -228,29 +230,38 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	assert.Equal(t, "fleet/client", summaries[0].Targets[0].Lease)
 }
 
-// The other half of the precedence: a plain CLI run carries no forwarded lease, and the
-// environment channel must still be read. A context-only implementation would leave every
-// unadopted run unattributed, which is the same bug with the cases swapped.
-func TestWithInvocationJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *testing.T) {
-	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
-	root := t.TempDir()
+// The other half of the precedence: a ctx no entry point stamped reads the environment
+// channel, while one stamped with no lease, as the server stamps a client that forwarded
+// none or an id that fails the rule ("the wire lied"), records none rather than lending
+// the server's own.
+func TestWithInvocationJournalReadsTheEnvironmentOnlyWhenNothingStampedALease(t *testing.T) {
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		want string
+	}{
+		"unstamped":         {ctx: context.Background(), want: "fleet/local"},
+		"stamped with none": {ctx: types.WithJobLease(context.Background(), "")},
+		"the wire lied":     {ctx: types.WithJobLease(context.Background(), "not a lease id")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			testkit.Isolate(t)
+			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
+			root := t.TempDir()
 
-	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
-	// context carries none and the local environment is what remains.
-	ctx := proc.WithLease(context.Background(), "not a lease id")
-	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"build"})
-	require.Len(t, handlers, 1)
-	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+			handlers := withInvocationJournal(tc.ctx, nil, root, "run", []string{"build"})
+			require.Len(t, handlers, 1)
+			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
+			dir, err := sessions.Dir(root)
+			require.NoError(t, err)
+			fold, err := sessions.ReadAll(dir)
+			require.NoError(t, err)
 
-	summaries := sessions.Summarize(fold)
-	require.Len(t, summaries, 1)
-	assert.Equal(t, "fleet/local", summaries[0].Lease)
+			summaries := sessions.Summarize(fold)
+			require.Len(t, summaries, 1)
+			assert.Equal(t, tc.want, summaries[0].Lease)
+		})
+	}
 }
 
 // A lease that fails the id rule is dropped rather than stamped, which is what keeps the trail's

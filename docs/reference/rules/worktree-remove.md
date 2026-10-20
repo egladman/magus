@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 deny [worktree-remove]: ...
 ```
 
+A workspace that sets this rule to `advise` sees `advise [worktree-remove]: ...` instead.
+
 `magus describe rule worktree-remove` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

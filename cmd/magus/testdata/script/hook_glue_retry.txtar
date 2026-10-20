@@ -1,0 +1,90 @@
+# The shipped hook glue asks magus again with fewer flags ONLY when the binary refused a
+# flag it predates. Any other failure with an empty stdout (the host's timeout killing the
+# judgment, a crash) is answered once: each retry is a second full judgment, and on a
+# loaded machine that second judgment is what pushes the hook past the host's timeout.
+
+[windows] skip 'the stand-in binaries are POSIX sh scripts'
+
+chmod 0755 $WORK/flag-magus
+chmod 0755 $WORK/killed-magus
+env REJECT_FLAG=--transport
+env CURSOR_HOOK_STATE_DIR=$WORK/cursor-state
+
+# --- a refused flag is asked again, newest flags dropped first -----------------
+
+env __MAGUS_BIN=$WORK/flag-magus
+env TMPDIR=$WORK/n-flag
+
+env GLUE_LOG=$WORK/command-flag.log
+stdin command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
+stdout 'FAKE-VERDICT'
+grep -count=3 '^shell ' $WORK/command-flag.log
+grep -count=2 '^shell .*--transport' $WORK/command-flag.log
+
+env GLUE_LOG=$WORK/path-flag.log
+stdin write.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name testscript
+stdout 'FAKE-VERDICT'
+grep -count=2 '^shell ' $WORK/path-flag.log
+
+env GLUE_LOG=$WORK/cursor-flag.log
+stdin cursor-shell.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout 'FAKE-VERDICT'
+grep -count=2 '^shell ' $WORK/cursor-flag.log
+
+# --- any other failure is answered once ----------------------------------------
+
+env __MAGUS_BIN=$WORK/killed-magus
+env TMPDIR=$WORK/n-killed
+
+env GLUE_LOG=$WORK/command-killed.log
+stdin command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript
+stdout 'magus guard is NOT running'
+stdout 'signal: killed'
+grep -count=1 '^shell ' $WORK/command-killed.log
+
+env GLUE_LOG=$WORK/path-killed.log
+stdin write.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name testscript
+! stdout .
+grep -count=1 '^shell ' $WORK/path-killed.log
+
+env GLUE_LOG=$WORK/cursor-killed.log
+stdin cursor-shell.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stderr 'signal: killed'
+grep -count=1 '^shell ' $WORK/cursor-killed.log
+
+-- flag-magus --
+#!/bin/sh
+# Stands in for a binary that predates $REJECT_FLAG: it refuses that flag the way Go's flag
+# parser does, and judges any call without it.
+echo "$*" >> "$GLUE_LOG"
+cat > /dev/null
+[ "$1" = version ] && { echo 'magus v0.0.1-flag'; exit 0; }
+for arg in "$@"; do
+  if [ "$arg" = "$REJECT_FLAG" ]; then
+    echo "flag provided but not defined: ${arg#-}" >&2
+    exit 2
+  fi
+done
+echo '{"schema_version":2,"decision":"deny","reason":"FAKE-VERDICT","rule":"fake"}'
+exit 2
+-- killed-magus --
+#!/bin/sh
+# Stands in for a judgment the host's timeout killed: nothing on stdout, a non-zero exit,
+# and no flag refused.
+echo "$*" >> "$GLUE_LOG"
+cat > /dev/null
+[ "$1" = version ] && { echo 'magus v0.0.1-killed'; exit 0; }
+echo 'signal: killed' >&2
+exit 137
+-- command.json --
+{"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls", "timeout": 30000}}
+-- write.json --
+{"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "README.md", "content": "x\n"}}
+-- cursor-shell.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c9", "session_id": "c9", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "cwd": ""}

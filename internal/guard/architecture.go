@@ -74,16 +74,16 @@ func recordMessageTopics(facts hint.Gate, message string) bool {
 // facts holds the session's topic mark and skills the calling agent's own loads, so a
 // subagent working in an architecture conversation is briefed by its own load and never
 // by its parent's.
-func denyArchitectureWithoutSkill(facts, skills hint.Gate, reportsSkills bool, workspace, newDir string) string {
+func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bool, workspace, newDir string) string {
 	const carries = "The knowledge graph answers imports, cycles, layering and coupling from the workspace's own edges; reading files does not."
 	if newDir != "" {
-		return denyUntilSkillLoaded(skills, reportsSkills, workspace, architectureSkill,
+		return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
 			"creating the new directory `"+newDir+"`", carries)
 	}
 	if !facts.AlreadyFired(topicArchitecture) {
 		return ""
 	}
-	return denyUntilSkillLoaded(skills, reportsSkills, workspace, architectureSkill,
+	return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
 		"acting on an architecture question", carries)
 }
 

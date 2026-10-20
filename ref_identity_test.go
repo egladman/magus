@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -34,9 +35,9 @@ func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	opts := []Option{WithWorkspaceRegistry(reg)}
+	opts := []Option{WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling)}
 	if len(defaultCharms) > 0 {
-		opts = append(opts, WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+		opts = append(opts, workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	}
 	m, err := Open(context.Background(), root, opts...)
 	require.NoError(t, err, "Open")
@@ -94,9 +95,10 @@ func TestIdentifyRef_ShortenedPrefixMatches(t *testing.T) {
 // workspace's configured default charms and a ref minted bare (as CI's
 // --no-default-charms run would mint it) must BOTH resolve once the workspace has
 // default_charms configured, since a pasted CI ref is exactly the case this method
-// exists for.
+// exists for. The default is cd rather than rw: a write grant keys only a step that reads
+// it, and this fixture's build does not.
 func TestIdentifyRef_CharmVariants(t *testing.T) {
-	defaultCharms := []string{"rw"}
+	defaultCharms := []string{types.CharmCD}
 	m := newIdentityWorkspace(t, defaultCharms...)
 	ctx := context.Background()
 
@@ -109,12 +111,24 @@ func TestIdentifyRef_CharmVariants(t *testing.T) {
 	matchesDefault, err := m.IdentifyRef(ctx, cache.PortableRef(keyDefault))
 	require.NoError(t, err, "IdentifyRef (default-charm ref)")
 	require.Len(t, matchesDefault, 1, "IdentifyRef: expected exactly one match for the default-charm ref")
-	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}}, matchesDefault[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: defaultCharms}, matchesDefault[0])
 
 	matchesBare, err := m.IdentifyRef(ctx, cache.PortableRef(keyBare))
 	require.NoError(t, err, "IdentifyRef (bare ref)")
 	require.Len(t, matchesBare, 1, "IdentifyRef: expected exactly one match for the bare (CI) ref")
 	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matchesBare[0])
+}
+
+// TestIdentifyRef_UnreadWriteGrantMatchesOnce: under default_charms: [rw] a target that
+// never reads rw mints one key with and without it, and that key names the target once.
+func TestIdentifyRef_UnreadWriteGrantMatchesOnce(t *testing.T) {
+	m := newIdentityWorkspace(t, types.CharmReadWrite)
+	key, _, err := m.ComputeTargetKey(t.Context(), ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey")
+
+	matches, err := m.IdentifyRef(t.Context(), cache.PortableRef(key))
+	require.NoError(t, err, "IdentifyRef")
+	assert.Len(t, matches, 1)
 }
 
 // TestIdentifyRef_InvalidRefShape guards the input-validation path: a string that
@@ -144,7 +158,7 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "inspect")
 	require.NoError(t, m.load(context.Background()), "load")
 
@@ -182,7 +196,7 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -290,7 +304,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		reg.RegisterProject(projPath, WithSpell(spellName))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}), WithSpawnRule(TierCeiling))
 	require.NoError(b, err, "Open")
 	b.Cleanup(func() { _ = m.Close() })
 	return m

@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
-	run "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"log/slog"
 	"maps"
 	"os"
@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // project cannot link the Buzz VM; the ensure hook and import check register from the layer that can
 	// Lazy-register so fast subcommands (help, version) skip the registration loop entirely.
 	project.DefaultSpellRegistry().SetEnsureHook(ensureSpellsRegistered)
 	// Validate magus/spell/<handle> imports at magusfile load (did-you-mean for typos).
@@ -122,7 +122,7 @@ const maxProbeOutput = 4 << 10
 // is privileged: the argv comes from the Tool entry rather than being baked into a
 // per-tool closure.
 //
-// It forks through run.Exec, like every other spell-declared command, rather than
+// It forks through spawn.Exec, like every other spell-declared command, rather than
 // exec.Command directly. A spell's `probe` argv is authored input, so it must meet
 // the sandbox's exec check; and the fork wants the process group and wait delay that
 // let a probe which hangs be reaped with its children.
@@ -130,7 +130,7 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 	if probe.Bin == "" {
 		return "", nil
 	}
-	res, err := run.Exec(ctx, probe.Bin, probe.Args, run.ExecOptions{Dir: dir, Capture: true, Quiet: true})
+	res, err := spawn.Exec(ctx, probe.Bin, probe.Args, spawn.ExecOptions{Dir: dir, Capture: true, Quiet: true})
 	if err != nil {
 		// The exit status alone says nothing; the tool's own words usually name the cause
 		// (pnpm: `Command "tsc" not found`). pnpm reports on stdout, so stdout is the
@@ -383,7 +383,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	probeOp := spells.Op{Command: probe, Capture: true}
 	probeOp.Command.Capture = true
 
-	notReady := func(res run.ExecResult, cause error) error {
+	notReady := func(res spawn.ExecResult, cause error) error {
 		msg := strings.TrimSpace(res.Stderr)
 		if msg == "" {
 			msg = strings.TrimSpace(res.Stdout)
@@ -833,10 +833,20 @@ func checkSpellImports(handles []string) error {
 		if isRegisteredSpell(h) {
 			continue
 		}
-		return errors.New(unknownSpellMessage(h))
+		return unknownSpellError{name: h}
 	}
 	return nil
 }
+
+// unknownSpellError refuses an import naming a spell this build does not ship. The guard
+// reads the name through UnknownSpell, with errors.As, to tell a ./magus built on the other
+// side of a spell's addition or removal from a misspelled import.
+type unknownSpellError struct{ name string }
+
+func (e unknownSpellError) Error() string { return unknownSpellMessage(e.name) }
+
+// UnknownSpell is the handle the import named.
+func (e unknownSpellError) UnknownSpell() string { return e.name }
 
 // isRegisteredSpell reports whether name is a handle reachable as
 // `import "magus/spell/<name>"`: a compiled built-in or a host-registered spell.

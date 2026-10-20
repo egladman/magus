@@ -1,12 +1,16 @@
 package guard
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,4 +156,362 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 		again := adviseSharedCheckoutSpawn(ctx, gate, at).Say
 		assert.NotEqual(t, note, again, "the full text is spent once; a brief line is what repeats")
 	})
+}
+
+// A spawn_agent call reaches the guard as the payload a Codex PreToolUse writes: the
+// prompt is `message` (or text `items`), and there is no `prompt` key.
+func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
+	t.Parallel()
+
+	const envelope = `{"session_id":"019e4c21-7d5a-7c11-9a0e-3f5b1c2d4e60","turn_id":"019e4c21-8a10-7a52-b6a1-0d2e9c1f7b33",` +
+		`"transcript_path":"/Users/dev/.codex/sessions/2026/10/13/rollout-2026-10-13T09-14-02-019e4c21.jsonl","cwd":"/Users/dev/repo",` +
+		`"hook_event_name":"PreToolUse","model":"gpt-5.5","permission_mode":"default","tool_name":"spawn_agent",` +
+		`"tool_input":%s,"tool_use_id":"call_Qx8aTz1uJm"}`
+
+	for name, tc := range map[string]struct {
+		input string
+		want  hookRequest
+	}{
+		"v1 message": {
+			`{"message":"Read internal/guard/spawn.go and report the exported names.","agent_type":"explorer","model":"gpt-5.5","reasoning_effort":"low","fork_context":false}`,
+			hookRequest{
+				Value: "Read internal/guard/spawn.go and report the exported names.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "explorer", DeclaredModel: "gpt-5.5", Spawn: spawnFields{AgentType: "explorer"},
+			},
+		},
+		"v1 items": {
+			`{"items":[{"type":"text","text":"Run the tests."},{"type":"skill","name":"magus-run","path":"/skills/magus-run/SKILL.md"},{"type":"text","text":"Report failures."}],"agent_type":"worker"}`,
+			hookRequest{
+				Value: "Run the tests.\nReport failures.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "worker", Spawn: spawnFields{AgentType: "worker"},
+			},
+		},
+		"v2 task_name": {
+			`{"task_name":"audit_guard","message":"Audit internal/guard.","agent_type":"explorer","fork_turns":"none"}`,
+			hookRequest{
+				Value: "Audit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "explorer", Spawn: spawnFields{AgentType: "explorer", Name: "audit_guard"},
+			},
+		},
+		"v2 named only": {
+			`{"task_name":"audit_guard","message":"Audit internal/guard."}`,
+			hookRequest{
+				Value: "Audit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "audit_guard", Spawn: spawnFields{Name: "audit_guard"},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, ok := decodeTestEnvelope(t, fmt.Sprintf(envelope, tc.input))
+			require.True(t, ok)
+			tc.want.Cwd = "/Users/dev/repo"
+			tc.want.Who = hookAttribution{
+				Session:    "019e4c21-7d5a-7c11-9a0e-3f5b1c2d4e60",
+				Transcript: "/Users/dev/.codex/sessions/2026/10/13/rollout-2026-10-13T09-14-02-019e4c21.jsonl",
+				Event:      "PreToolUse",
+			}
+			assert.Equal(t, tc.want, req)
+		})
+	}
+
+	t.Run("a bare message is not a spawn", func(t *testing.T) {
+		req, ok := decodeTestEnvelope(t, fmt.Sprintf(envelope, `{"message":"hello"}`))
+		require.True(t, ok)
+		assert.False(t, req.IsSpawn)
+		assert.True(t, req.NothingToJudge)
+	})
+}
+
+// send_input, send_message and followup_task name their addressee `target`.
+func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		toolInput, message string
+	}{
+		"send_input":    {`{"target":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","message":"Also check the tests.","interrupt":false}`, "Also check the tests."},
+		"followup_task": {`{"target":"/root/audit_guard","message":"Now the hook path."}`, "Now the hook path."},
+		"items":         {`{"target":"/root/audit_guard","items":[{"type":"text","text":"Now the hook path."}]}`, "Now the hook path."},
+		"to":            {`{"to":"brisk-heron","message":"Carry on."}`, "Carry on."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, ok := decodeTestEnvelope(t, `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":`+tc.toolInput+`}`)
+			require.True(t, ok)
+			assert.True(t, req.IsContinue)
+			assert.False(t, req.IsSpawn)
+			assert.Equal(t, tc.message, req.Value)
+			assert.NotEmpty(t, req.Target)
+		})
+	}
+
+	t.Run("a target with no message is not a continuation", func(t *testing.T) {
+		req, ok := decodeTestEnvelope(t, `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"close_agent","tool_input":{"target":"/root/audit_guard"}}`)
+		require.True(t, ok)
+		assert.False(t, req.IsContinue)
+		assert.True(t, req.NothingToJudge)
+	})
+}
+
+// Cursor loads a skill by reading its SKILL.md, so the read is the load, and a write to
+// the same path is not.
+func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
+	t.Parallel()
+
+	const skillPath = "/Users/dev/repo/.cursor/skills/magus-multi-agent/SKILL.md"
+	decode := func(t *testing.T, toolInput string) hookRequest {
+		t.Helper()
+		req, ok := decodeTestEnvelope(t, `{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":`+toolInput+`}`)
+		require.True(t, ok)
+		return req
+	}
+
+	t.Run("a read of a SKILL.md", func(t *testing.T) {
+		req := decode(t, `{"file_path":"`+skillPath+`"}`)
+		wantReq := req
+		wantReq.LoadedSkill, wantReq.Value = "magus-multi-agent", skillPath
+		assert.Equal(t, wantReq, req)
+	})
+	t.Run("a bounded read", func(t *testing.T) {
+		assert.Equal(t, "magus-run", decode(t, `{"file_path":"/Users/dev/.agents/skills/magus-run/SKILL.md","offset":1,"limit":40}`).LoadedSkill)
+	})
+	t.Run("a relative path", func(t *testing.T) {
+		assert.Equal(t, "magus-run", decode(t, `{"file_path":"skills/magus-run/SKILL.md"}`).LoadedSkill)
+	})
+	for name, toolInput := range map[string]string{
+		"a write":            `{"file_path":"` + skillPath + `","content":"x"}`,
+		"an edit":            `{"file_path":"` + skillPath + `","old_string":"a","new_string":"b"}`,
+		"a file not named":   `{"file_path":"/Users/dev/repo/.cursor/skills/magus-run/notes.md"}`,
+		"outside skills":     `{"file_path":"/Users/dev/repo/docs/magus-run/SKILL.md"}`,
+		"an invalid name":    `{"file_path":"/Users/dev/repo/skills/Magus Run/SKILL.md"}`,
+		"a nested directory": `{"file_path":"/Users/dev/repo/skills/a/b/SKILL.md"}`,
+	} {
+		t.Run(name+" loads nothing", func(t *testing.T) {
+			assert.Empty(t, decode(t, toolInput).LoadedSkill)
+		})
+	}
+
+	t.Run("it records the load for the session", func(t *testing.T) {
+		g := hint.NewGate(t.TempDir(), "c1")
+		req := decode(t, `{"file_path":"`+skillPath+`"}`)
+		require.True(t, recordSkillLoad(g, req.LoadedSkill))
+		assert.True(t, skillLoaded(g, multiAgentSkill))
+	})
+}
+
+// A skill read is a read too: the load is recorded and the read meets the read rules, where
+// it used to pass before any of them ran.
+func TestSkillReadIsRecordedAndJudged(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	skill := filepath.Join(root, ".cursor", "skills", "magus-run", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	require.NoError(t, os.WriteFile(skill, []byte("# magus-run\n"), 0o644))
+	read := hookJSON(t, map[string]any{"conversation_id": "c1", "session_id": "c1", "cwd": root, "hook_event_name": "preToolUse",
+		"tool_name": "Read", "tool_input": map[string]any{"file_path": skill}})
+	var judged []types.CommandRequest
+	deps := Dependencies{CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		judged = append(judged, req)
+		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+	}}
+	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ObservesSkillLoads: true})
+	assert.Equal(t, "pass", v.Decision)
+	assert.True(t, skillLoaded(hint.NewGate(cacheDir, hookAttribution{Host: "cursor", Session: "c1"}.skillsKey()), agent.MustSkill("magus-run")))
+	require.Len(t, judged, 1, "the read reaches the command rules")
+	assert.Equal(t, "cat "+skill, judged[0].Command)
+}
+
+func TestAScheduledPromptIsNoSpawn(t *testing.T) {
+	t.Parallel()
+	for _, input := range []map[string]any{
+		{"delaySeconds": float64(270), "prompt": "check the run", "reason": "waiting on CI"},
+		{"cron": "*/5 * * * *", "prompt": "check the run", "recurring": true},
+	} {
+		req, ok := decodeTestEnvelope(t, hookJSON(t, map[string]any{"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "ScheduleWakeup", "tool_input": input}))
+		require.True(t, ok)
+		assert.False(t, req.IsSpawn, "%v", input)
+		assert.True(t, req.NothingToJudge, "%v", input)
+	}
+}
+
+// A host whose spawn answers with a name and whose child's calls carry an id: the child's
+// start joins the id to the spawn before it, so the child is graded under the spawn's job.
+func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+	ctx, root := fleetFixture(t, row)
+	target := filepath.Join(root, "internal", "guard", "guard.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
+	codex := func(env map[string]any) types.GuardJudgment {
+		env["session_id"], env["cwd"] = "codex-s", root
+		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "codex"})
+	}
+
+	spawn := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "spawn_agent",
+		"tool_input": map[string]any{"message": "gAAAAencrypted", "task_name": "worker", "agent_type": "default", "description": "orchestrator/impl guard-facts"}})
+	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+	codex(map[string]any{"hook_event_name": "SubagentStart", "agent_id": "019e-child"})
+
+	write := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "agent_id": "019e-child",
+		"tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + target + "\n@@\n-package guard\n+package guard // x\n*** End Patch\n"}})
+	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
+}
+
+// A foreground spawn returns only after its child stopped, and the host sends no start for
+// it, so the spawn's registration is all that can bind the child's first call.
+func TestAForegroundChildsFirstCallJoinsItToItsSpawn(t *testing.T) {
+	f := newForegroundFleet(t, "guard-facts")
+	f.spawn(t, "guard-facts")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=guard-facts")
+	write := f.write(t, "a1b2c3", "guard-facts")
+	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
+}
+
+// One message can start several foreground workers, and each declares the job it works as.
+// The worker that calls second is bound to its own job, not to the oldest spawn waiting.
+func TestParallelForegroundChildrenEachJoinTheirOwnSpawn(t *testing.T) {
+	f := newForegroundFleet(t, "job-a", "job-b")
+	f.spawn(t, "job-a")
+	f.spawn(t, "job-b")
+
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-b")
+	assert.Equal(t, "job-b", f.write(t, "agent-b", "job-b").Lease)
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=job-a")
+	assert.Equal(t, "job-a", f.write(t, "agent-a", "job-a").Lease)
+}
+
+// A subagent no waiting spawn names is advised and runs unbound, never refused: it may be no
+// worker at all, and spawns wait up to pendingSpawnWindow. Only two spawns of the job it
+// declares refuse it, since either could be its own.
+func TestAForegroundChildThatCannotBePlacedIsAdvisedNotRefused(t *testing.T) {
+	for name, tc := range map[string]struct {
+		claim    string
+		spawns   []string
+		decision string
+		contains string
+	}{
+		"declaring no lease":              {"", []string{"job-a", "job-b"}, "advise", "none of the 2 waiting spawn(s) names this caller"},
+		"declaring a job no spawn names":  {"job-c", []string{"job-a", "job-b"}, "advise", "runs under no lease"},
+		"declaring a job two spawns name": {"job-a", []string{"job-a", "job-a"}, "deny", "2 waiting spawns name job job-a"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newForegroundFleet(t, "job-a", "job-b", "job-c")
+			for _, id := range tc.spawns {
+				f.spawn(t, id)
+			}
+			if tc.claim == "" {
+				t.Setenv(trail.EnvBaggage, "")
+			} else {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			}
+			// A read-only command, which no lease or path rule has an opinion on.
+			list := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "agent-x",
+				"agent_type": "general-purpose", "tool_input": map[string]any{"command": "ls"}})
+			require.Equal(t, tc.decision, list.Decision, list.Reason)
+			assert.Contains(t, list.Reason+list.Context, tc.contains)
+		})
+	}
+}
+
+// Claude Code files each child's spawn title beside the session transcript before the
+// child's first call, and the hook process carries no worker's BAGGAGE. The title alone
+// binds each parallel foreground worker to its own spawn, and a subagent whose title no
+// waiting spawn carries passes unbound.
+func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
+	f := newForegroundFleet(t, "job-a", "job-b", "job-c")
+	f.spawn(t, "job-a")
+	f.spawn(t, "job-b")
+	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	transcript := filepath.Join(t.TempDir(), "claude-s.jsonl")
+	file := func(agentID, title string) {
+		dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		body := `{"agentType":"general-purpose","description":"` + title + `","toolUseId":"toolu_1"}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-"+agentID+".meta.json"), []byte(body), 0o644))
+	}
+	write := func(agentID, job string) types.GuardJudgment {
+		return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID,
+			"agent_type": "general-purpose", "transcript_path": transcript,
+			"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
+	}
+
+	file("agent-b", "orchestrator/impl job-b")
+	assert.Equal(t, "job-b", write("agent-b", "job-b").Lease, "the second spawn's child, calling first")
+	file("agent-a", "orchestrator/impl job-a")
+	assert.Equal(t, "job-a", write("agent-a", "job-a").Lease)
+
+	f.spawn(t, "job-c")
+	t.Setenv(trail.EnvBaggage, "sentry-environment=production")
+	file("scout", "explore the cache layer")
+	scout := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "scout",
+		"agent_type": "Explore", "transcript_path": transcript, "tool_input": map[string]any{"command": "ls"}})
+	assert.Equal(t, "pass", scout.Decision, scout.Reason+scout.Context)
+	assert.Empty(t, scout.Lease, "a subagent no waiting spawn names joins none")
+	file("agent-c", "orchestrator/impl job-c")
+	assert.Equal(t, "job-c", write("agent-c", "job-c").Lease, "the scout left job-c's spawn waiting for its own child")
+}
+
+func TestHostSpawnTitleReadsOnlyAPlainChildID(t *testing.T) {
+	transcript := filepath.Join(t.TempDir(), "s.jsonl")
+	dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-a1.meta.json"), []byte(`{"description":"root/review r1"}`), 0o644))
+
+	title, ok := hostSpawnTitle(transcript, "a1")
+	require.True(t, ok)
+	assert.Equal(t, "root/review r1", title)
+	nested, ok := hostSpawnTitle(filepath.Join(dir, "agent-parent.jsonl"), "a1")
+	require.True(t, ok, "a nested child's call naming its parent's transcript")
+	assert.Equal(t, "root/review r1", nested)
+	for _, child := range []string{"", "..", "../a1", "missing"} {
+		_, ok := hostSpawnTitle(transcript, child)
+		assert.False(t, ok, child)
+	}
+	_, ok = hostSpawnTitle("", "a1")
+	assert.False(t, ok, "a host that names no transcript files no title")
+}
+
+// foregroundFleet is a session whose orchestrator spawns foreground workers, one job row each.
+type foregroundFleet struct {
+	ctx  context.Context
+	root string
+}
+
+func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
+	t.Helper()
+	rows := make([]types.Job, len(jobs))
+	for i, id := range jobs {
+		rows[i] = types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{"internal/" + id + "/**"}}
+	}
+	ctx, root := fleetFixture(t, rows...)
+	f := foregroundFleet{ctx: ctx, root: root}
+	for _, id := range jobs {
+		require.NoError(t, os.MkdirAll(filepath.Dir(f.target(id)), 0o755))
+		require.NoError(t, os.WriteFile(f.target(id), []byte("package x\n"), 0o644))
+	}
+	return f
+}
+
+func (f foregroundFleet) target(job string) string {
+	return filepath.Join(f.root, "internal", job, "x.go")
+}
+
+func (f foregroundFleet) call(t *testing.T, env map[string]any) types.GuardJudgment {
+	t.Helper()
+	env["session_id"], env["cwd"] = "claude-s", f.root
+	return Judge(f.ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
+}
+
+func (f foregroundFleet) spawn(t *testing.T, job string) {
+	t.Helper()
+	t.Setenv(trail.EnvBaggage, "")
+	spawn := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"prompt": "implement it", "subagent_type": "general-purpose", "run_in_background": false, "description": "orchestrator/impl " + job}})
+	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+}
+
+func (f foregroundFleet) write(t *testing.T, agentID, job string) types.GuardJudgment {
+	t.Helper()
+	return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID, "agent_type": "general-purpose",
+		"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
 }

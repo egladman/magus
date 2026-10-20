@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -73,7 +75,7 @@ func blockedEvent(message string) types.Event {
 }
 
 func fileBlock(root string, ev types.Event) error {
-	_, err := fileAttention(root, ev)
+	_, err := fileAttention(context.Background(), root, ev)
 	return err
 }
 
@@ -151,7 +153,7 @@ func TestFileAttentionKeepsTheIDWhenTheFilesChange(t *testing.T) {
 
 	again := blockedEvent("needs a decision")
 	again.Where.Files = []types.FileRef{{Value: "some/other.go"}}
-	held, err := fileAttention(root, again)
+	held, err := fileAttention(t.Context(), root, again)
 	require.NoError(t, err)
 	assert.True(t, held)
 	assert.Equal(t, ids, openRequestIDs(t, root))
@@ -230,7 +232,7 @@ func TestFileAttentionStoresTheLease(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := attentionTestRoot(t)
 			if tc.bound != "" {
-				cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+				cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 				require.NoError(t, err)
 				bindCheckout(t, cacheDir, tc.bound)
 			}
@@ -402,7 +404,7 @@ func TestFileAttentionRefusesAnEventWithNoSourceID(t *testing.T) {
 	ev := blockedEvent("needs a decision")
 	ev.Source.ID = ""
 	logged := captureWarnings(t, func() {
-		held, err := fileAttention(root, ev)
+		held, err := fileAttention(t.Context(), root, ev)
 		require.NoError(t, err, "a missing source.id must not fail the notification")
 		assert.False(t, held, "no row holds it, so the notification must still fire")
 	})
@@ -417,7 +419,7 @@ func TestFileAttentionSkipsWhenThereIsNoRepository(t *testing.T) {
 	// An empty root with no discoverable workspace: notify still notifies, and the
 	// request has nowhere durable to live rather than landing in a store keyed on "".
 	t.Chdir(t.TempDir())
-	held, err := fileAttention("", blockedEvent("needs a decision"))
+	held, err := fileAttention(t.Context(), "", blockedEvent("needs a decision"))
 	require.NoError(t, err)
 	assert.False(t, held)
 }
@@ -426,11 +428,14 @@ func TestNotifyOpensARequestThatAttentionLists(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	root := attentionTestRoot(t)
 
-	var out bytes.Buffer
-	require.NoError(t, notifyCmd(context.Background(), root,
-		strings.NewReader(`{"outcome":"permission","source":{"kind":"agent","sub":"claude","id":"sess-9"},"message":"needs approval to push"}`),
-		&out, []string{"-o", "name"}))
-	assert.Equal(t, "permission\n", out.String())
+	var err error
+	out := captureStdout(t, func() {
+		err = notifyCmd(context.Background(), root,
+			strings.NewReader(`{"outcome":"permission","source":{"kind":"agent","sub":"claude","id":"sess-9"},"message":"needs approval to push"}`),
+			io.Discard, []string{"-o", "name"})
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "permission\n", out)
 
 	global = globalFlags{}
 	listed := captureStdout(t, func() {
@@ -498,9 +503,9 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 	global.quiet = true
 	out := captureStdout(t, func() {
 		err := sessionCmd(context.Background(), root, []string{"attention"})
-		var silent errSilent
+		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
-		assert.Equal(t, 1, silent.exitCode, "nothing is open")
+		assert.Equal(t, 1, silent.ExitCode(), "nothing is open")
 	})
 	assert.Empty(t, out, "-q prints nothing")
 
@@ -570,9 +575,9 @@ func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 		err = sessionCmd(context.Background(), root, []string{"dispose", id})
 	})
 
-	var silent errSilent
+	var silent reportedExit
 	require.ErrorAs(t, err, &silent, "the flags are fine and the caller is not who this is for, the same 2 --ack uses")
-	assert.Equal(t, 2, silent.exitCode)
+	assert.Equal(t, 2, silent.ExitCode())
 	assert.Contains(t, errText, "interactive terminal")
 	assert.Len(t, openRequestIDs(t, root), 1, "a refused dispose closes nothing")
 }

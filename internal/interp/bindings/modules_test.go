@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -98,7 +98,7 @@ func TestRegisterModulesWithModules(t *testing.T) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 
-	modules := bindinggen.Modules.With("json", ffi.Registration{
+	modules := bindgen.Modules.With("json", ffi.Registration{
 		Register: func(context.Context, *buzz.Session) vm.Value {
 			m := vm.NewMap()
 			m.MapSet("mocked", vm.StrValue("json"))
@@ -276,7 +276,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := ffi.ValueToAny(ffi.ObjectSlice(core, bindinggen.ObjectModuleEntry)).([]any)
+	got, ok := ffi.ValueToAny(ffi.ObjectSlice(core, bindgen.ObjectModuleEntry)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -1677,15 +1677,15 @@ func TestMirrorFieldsMatchEncoder(t *testing.T) {
 		object  string
 		encoded vm.Value
 	}{
-		{"Tag", bindinggen.ObjectVCSTag(types.VCSTag{})},
-		{"Affected", bindinggen.ObjectAffectedResult(types.AffectedResult{})},
-		{"Graph", bindinggen.ObjectGraphView(types.GraphView{})},
-		{"Projects", bindinggen.ObjectProjectsOutput(types.ProjectsOutput{})},
-		{"ProjectEntry", bindinggen.ObjectProjectEntry(types.ProjectEntry{})},
-		{"Module", bindinggen.ObjectModuleEntry(types.ModuleEntry{})},
-		{"ModuleFieldEntry", bindinggen.ObjectModuleFieldEntry(types.ModuleFieldEntry{})},
-		{"ModuleMethodEntry", bindinggen.ObjectModuleMethodEntry(types.ModuleMethodEntry{})},
-		{"ExecResult", bindinggen.ObjectExecResult(types.ExecResult{})},
+		{"Tag", bindgen.ObjectVCSTag(types.VCSTag{})},
+		{"Affected", bindgen.ObjectAffectedResult(types.AffectedResult{})},
+		{"Graph", bindgen.ObjectGraphView(types.GraphView{})},
+		{"Projects", bindgen.ObjectProjectsOutput(types.ProjectsOutput{})},
+		{"ProjectEntry", bindgen.ObjectProjectEntry(types.ProjectEntry{})},
+		{"Module", bindgen.ObjectModuleEntry(types.ModuleEntry{})},
+		{"ModuleFieldEntry", bindgen.ObjectModuleFieldEntry(types.ModuleFieldEntry{})},
+		{"ModuleMethodEntry", bindgen.ObjectModuleMethodEntry(types.ModuleMethodEntry{})},
+		{"ExecResult", bindgen.ObjectExecResult(types.ExecResult{})},
 	} {
 		t.Run(tc.object, func(t *testing.T) {
 			t.Parallel()
@@ -1725,7 +1725,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 func TestEveryEncodedTypeIsMirrored(t *testing.T) {
 	t.Parallel()
 	encoded := map[string]bool{}
-	for _, bt := range bindinggen.RuntimeBoundaryTypes {
+	for _, bt := range bindgen.RuntimeBoundaryTypes {
 		encoded[reflect.TypeOf(bt.Zero).Name()] = true
 	}
 	owners := []any{

@@ -14,7 +14,7 @@ A bound worker running a magus target in the background.
 
 ## Why
 
-A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not own the gate. A run that only reports (--plan, --dry-run, --graph, --help) passes. A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check.
+A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not integrate the checkout. A run that only reports (--plan, --dry-run, --graph, --help) passes. A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check.
 
 ## Default and override
 
@@ -34,6 +34,8 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 deny [worker-background-run]: ...
 ```
+
+A workspace that sets this rule to `advise` sees `advise [worker-background-run]: ...` instead.
 
 `magus describe rule worker-background-run` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -31,6 +31,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [new-file]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [new-file]: ...` instead.
+
 `magus describe rule new-file` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

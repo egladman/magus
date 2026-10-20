@@ -1,0 +1,43 @@
+Invented lists, written with the rule; no labeling round has read them.
+A list item that opens with another word class, or another verb tense, than the list's other items. Each case is a whole list.
+-- hit/reference whole --
+- Run the build.
+- Open the page.
+- Save the key.
+- The cache for each run.
+-- hit/changelog whole --
+- Adds a flag for the cache.
+- Keeps the key stable.
+- Sorts the inputs before hashing.
+- Fixed the race on the lock.
+-- hit/reference whole --
+- A cache for each run.
+- The key of each target.
+- Fast builds on every push.
+- Run the build.
+-- hit/reference whole --
+- A cache for each run.
+- The key of each target.
+- Fast builds on every push.
+- Don't run the build.
+-- hit/reference whole --
+- Re-run the build.
+- Re-open the page.
+- Save the key.
+- The cache for each run.
+-- pass/reference whole --
+- Run the build.
+- Open the page.
+- Save the key.
+-- pass/changelog whole --
+- Adds a flag for the cache.
+- Keeps the key stable.
+- Sorts the inputs before hashing.
+-- pass/reference whole --
+- Run the build.
+- The cache for each run.
+-- pass/reference whole --
+- Run the build.
+- The cache for each run.
+- Fast builds on every push.
+- Open the page.

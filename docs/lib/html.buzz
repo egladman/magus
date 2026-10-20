@@ -39,7 +39,7 @@ export fun cleanTarget(oldPath: str) > str {
     while (i < segs.len()) {
         var p = segs[i];
         final isLast = (i == segs.len() - 1);
-        if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
+        if (isLast and p.endsWith(".html")) { p = p.sub(0, len: p.len() - 5); }
         if (isLast and (p == "index" or p == "README")) {
             // landing basename -> its directory
         } else {
@@ -60,13 +60,13 @@ export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
     var path = h;
     var frag = "";
     final hash = h.indexOf("#");
-    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
+    if (hash != null) { path = h.sub(0, len: hash); frag = h.sub(hash); }
     if (path == "") { return h; }
-    final oldTarget = resolvePath(oldDir, path);
+    final oldTarget = resolvePath(fromDir: oldDir, link: path);
     if (path.endsWith(".html")) {
-        return relativePath(newDir, cleanTarget(oldTarget)) + frag;
+        return relativePath(fromDir: newDir, toUrl: cleanTarget(oldTarget)) + frag;
     }
-    return relativePath(newDir, oldTarget) + frag;
+    return relativePath(fromDir: newDir, toUrl: oldTarget) + frag;
 }
 
 // tagRunnable swaps the <pre> after a "<!-- magus-run -->" / "<!-- magus-run-recorder -->"
@@ -74,18 +74,18 @@ export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
 // marker. Every magus-authored doc marker shares the "magus-" prefix (and mirrors to a
 // "data-magus-" attribute) so generated hooks are obviously ours.
 export fun tagRunnable(html: str) > str {
-    final recTagged = tagRunnableMarker(html, "<!-- magus-run-recorder -->", "<pre data-magus-run=\"true\" data-magus-recorder=\"true\">");
-    return tagRunnableMarker(recTagged, "<!-- magus-run -->", "<pre data-magus-run=\"true\">");
+    final recTagged = tagRunnableMarker(html: html, marker: "<!-- magus-run-recorder -->", openTag: "<pre data-magus-run=\"true\" data-magus-recorder=\"true\">");
+    return tagRunnableMarker(html: recTagged, marker: "<!-- magus-run -->", openTag: "<pre data-magus-run=\"true\">");
 }
 
 // tagRunnableMarker replaces the <pre> following each marker with openTag; a marker
 // not immediately before a fence is just dropped.
 export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(marker);
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx + marker.len());
         var i = 0;
         while (i < rest.len()) {
@@ -93,61 +93,64 @@ export fun tagRunnableMarker(html: str, marker: str, openTag: str) > str {
             if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
             i = i + 1;
         }
-        if (rest.sub(i, 5) == "<pre>") {
-            buf = buf + rest.sub(0, i) + openTag;
+        if (rest.sub(i, len: 5) == "<pre>") {
+            parts.append(rest.sub(0, len: i) + openTag);
             rest = rest.sub(i + 5);
         } else {
-            buf = buf + rest.sub(0, i);
+            parts.append(rest.sub(0, len: i));
             rest = rest.sub(i);
         }
         idx = rest.indexOf(marker);
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // externalLinks adds rel/target/data-external to every http(s) anchor that lacks them.
 export fun externalLinks(html: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf("<a href=\"http");
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx);
         final closeIdx = rest.indexOf(">");
-        if (closeIdx == null) { return buf + rest; }
-        var tag = rest.sub(0, closeIdx + 1);
-        var attrs = "";
-        if (tag.indexOf("rel=") == null) { attrs = attrs + " rel=\"noopener noreferrer\""; }
-        if (tag.indexOf("target=") == null) { attrs = attrs + " target=\"_blank\""; }
-        if (tag.indexOf("data-external") == null) { attrs = attrs + " data-external"; }
-        if (attrs != "") { tag = tag.sub(0, tag.len() - 1) + attrs + ">"; }
-        buf = buf + tag;
+        if (closeIdx == null) { return parts.join("") + rest; }
+        var tag = rest.sub(0, len: closeIdx + 1);
+        final attrs: mut [str] = mut [<str>];
+        if (tag.indexOf("rel=") == null) { attrs.append(" rel=\"noopener noreferrer\""); }
+        if (tag.indexOf("target=") == null) { attrs.append(" target=\"_blank\""); }
+        if (tag.indexOf("data-external") == null) { attrs.append(" data-external"); }
+        if (attrs.len() > 0) { tag = tag.sub(0, len: tag.len() - 1) + attrs.join("") + ">"; }
+        parts.append(tag);
         rest = rest.sub(closeIdx + 1);
         idx = rest.indexOf("<a href=\"http");
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // lazyImages adds loading="lazy" decoding="async" to every <img> without a loading
 // or fetchpriority attribute (author markup wins, so the hero stays eager).
 export fun lazyImages(html: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf("<img ");
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx);
         final closeIdx = rest.indexOf(">");
-        if (closeIdx == null) { return buf + rest; }
-        var tag = rest.sub(0, closeIdx + 1);
+        if (closeIdx == null) { return parts.join("") + rest; }
+        var tag = rest.sub(0, len: closeIdx + 1);
         if (tag.indexOf("loading=") == null and tag.indexOf("fetchpriority=") == null) {
             tag = "<img loading=\"lazy\" decoding=\"async\" " + tag.sub(5);
         }
-        buf = buf + tag;
+        parts.append(tag);
         rest = rest.sub(closeIdx + 1);
         idx = rest.indexOf("<img ");
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 
@@ -157,60 +160,63 @@ export fun lazyImages(html: str) > str {
 export fun wrapTables(html: str) > str {
     final open = "<table>";
     final close = "</table>";
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(open);
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx);
         final end = rest.indexOf(close);
-        if (end == null) { return buf + rest; }
-        final block = rest.sub(0, end + close.len());
-        buf = buf + el("figure", attr("class", "table-scroll"), block);
+        if (end == null) { return parts.join("") + rest; }
+        final block = rest.sub(0, len: end + close.len());
+        parts.append(el(tag: "figure", attrs: attr(name: "class", value: "table-scroll"), body: block));
         rest = rest.sub(end + close.len());
         idx = rest.indexOf(open);
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // rewriteLinks applies rewriteHref to every href="..." in a rendered fragment.
 export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf("href=\"");
     while (idx != null) {
-        buf = buf + rest.sub(0, idx + 6);
+        parts.append(rest.sub(0, len: idx + 6));
         rest = rest.sub(idx + 6);
         final end = rest.indexOf("\"");
         if (end == null) {
-            buf = buf + rest;
+            parts.append(rest);
             rest = "";
             idx = null;
         } else {
-            buf = buf + rewriteHref(rest.sub(0, end), oldDir, newDir) + "\"";
+            parts.append(rewriteHref(h: rest.sub(0, len: end), oldDir: oldDir, newDir: newDir) + "\"");
             rest = rest.sub(end + 1);
             idx = rest.indexOf("href=\"");
         }
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // oldFlatDirectory is a docs page's pre-move directory (its source subdir).
 export fun oldFlatDirectory(rel: str) > str {
     final parts = rel.split("/");
     if (parts.len() <= 1) { return ""; }
-    return parts.sub(0, parts.len() - 1).join("/");
+    return parts.sub(0, len: parts.len() - 1).join("/");
 }
 
 // cleanBody reduces a raw markdown body to compact prose for the search index:
 // drop fenced blocks, strip a few inline markers, collapse whitespace.
 export fun cleanBody(md: str) > str {
-    var buf = "";
+    final pieces: mut [str] = mut [<str>];
     var inside = false;
     foreach (p in md.split("```")) {
-        if (inside == false) { buf = buf + " " + p; }
+        if (inside == false) { pieces.append(" " + p); }
         inside = (inside == false);
     }
+    var buf = pieces.join("");
     // split().join() replaces every occurrence in one pass; the equivalent
     // while(indexOf) replace() loop copies the whole (multi-KB) page once per
     // occurrence, and every copy is a distinct string the VM interns forever
@@ -240,14 +246,14 @@ export fun redirectScript(rel: str) > str {
 // only content, so default-src 'none' plus that one script hash suffices).
 export fun aliasStub(rel: str, csp: str) > str {
     return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
-        + voidEl("meta", attr("charset", "utf-8")) + "\n"
-        + voidEl("meta", attr("http-equiv", "Content-Security-Policy") + attr("content", csp)) + "\n"
-        + voidEl("meta", attr("http-equiv", "refresh") + attr("content", "0; url=" + rel)) + "\n"
-        + voidEl("link", attr("rel", "canonical") + attr("href", rel)) + "\n"
-        + el("title", "", "Redirecting") + "\n"
-        + el("script", "", redirectScript(rel)) + "\n"
+        + voidEl(tag: "meta", attrs: attr(name: "charset", value: "utf-8")) + "\n"
+        + voidEl(tag: "meta", attrs: attr(name: "http-equiv", value: "Content-Security-Policy") + attr(name: "content", value: csp)) + "\n"
+        + voidEl(tag: "meta", attrs: attr(name: "http-equiv", value: "refresh") + attr(name: "content", value: "0; url=" + rel)) + "\n"
+        + voidEl(tag: "link", attrs: attr(name: "rel", value: "canonical") + attr(name: "href", value: rel)) + "\n"
+        + el(tag: "title", attrs: "", body: "Redirecting") + "\n"
+        + el(tag: "script", attrs: "", body: redirectScript(rel)) + "\n"
         + "</head>\n<body>\n"
-        + el("p", "", "This page moved. " + el("a", attr("href", rel), "Continue to its new location") + ".") + "\n"
+        + el(tag: "p", attrs: "", body: "This page moved. " + el(tag: "a", attrs: attr(name: "href", value: rel), body: "Continue to its new location") + ".") + "\n"
         + "</body>\n</html>\n";
 }
 
@@ -262,38 +268,39 @@ export fun aliasStub(rel: str, csp: str) > str {
 // by hand ("(since v0.4.0)" in a table cell, "changed in v0.4.0" in a heading) and no two looked
 // alike.
 export fun tagVersionNote(html: str) > str {
-    return versionNoteMarker(versionNoteMarker(html, "<!-- magus-since:", "New in"),
-        "<!-- magus-changed:", "Changed in");
+    return versionNoteMarker(html: versionNoteMarker(html: html, open: "<!-- magus-since:", verb: "New in"),
+        open: "<!-- magus-changed:", verb: "Changed in");
 }
 
 fun versionNoteMarker(html: str, open: str, verb: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(open);
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx + open.len());
         final closeMarker = rest.indexOf("-->");
-        if (closeMarker == null) { return buf + open + rest; }
-        final version = rest.sub(0, closeMarker).trim();
+        if (closeMarker == null) { return parts.join("") + open + rest; }
+        final version = rest.sub(0, len: closeMarker).trim();
         rest = rest.sub(closeMarker + 3);
-        buf = buf + el("p", attr("class", "since-badge"), verb + " " + version);
+        parts.append(el(tag: "p", attrs: attr(name: "class", value: "since-badge"), body: verb + " " + version));
         idx = rest.indexOf(open);
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 export fun tagCodeTitle(html: str) > str {
     final open = "<!-- magus-code-title:";
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(open);
     while (idx != null) {
-        buf = buf + rest.sub(0, idx);
+        parts.append(rest.sub(0, len: idx));
         rest = rest.sub(idx + open.len());
         final closeMarker = rest.indexOf("-->");
-        if (closeMarker == null) { return buf + open + rest; }
-        final title = rest.sub(0, closeMarker).trim();
+        if (closeMarker == null) { return parts.join("") + open + rest; }
+        final title = rest.sub(0, len: closeMarker).trim();
         rest = rest.sub(closeMarker + 3);
         var i = 0;
         while (i < rest.len()) {
@@ -301,37 +308,38 @@ export fun tagCodeTitle(html: str) > str {
             if (b != 32 and b != 9 and b != 10 and b != 13) { i = i; break; }
             i = i + 1;
         }
-        if (rest.sub(i, 4) == "<pre") {
+        if (rest.sub(i, len: 4) == "<pre") {
             final endPre = rest.indexOf("</pre>");
             if (endPre != null) {
-                final preBlock = rest.sub(i, endPre + 6 - i);
-                buf = buf + rest.sub(0, i)
-                    + el("figure", attr("class", "code-block-titled"), el("figcaption", "", title) + preBlock);
+                final preBlock = rest.sub(i, len: endPre + 6 - i);
+                parts.append(rest.sub(0, len: i)
+                    + el(tag: "figure", attrs: attr(name: "class", value: "code-block-titled"), body: el(tag: "figcaption", attrs: "", body: title) + preBlock));
                 rest = rest.sub(endPre + 6);
                 idx = rest.indexOf(open);
                 continue;
             }
         }
-        buf = buf + rest.sub(0, i);
+        parts.append(rest.sub(0, len: i));
         rest = rest.sub(i);
         idx = rest.indexOf(open);
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // tagAdmonition turns GitHub-alert blockquotes ("<blockquote>\n<p>[!TYPE]\n...") into
 // <div class="admonition admonition-<type>"> callouts. Unknown types pass through.
 export fun tagAdmonition(html: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     while (true) {
         final open = rest.indexOf("<blockquote>\n<p>[!");
-        if (open == null) { return buf + rest; }
-        buf = buf + rest.sub(0, open);
+        if (open == null) { return parts.join("") + rest; }
+        parts.append(rest.sub(0, len: open));
         rest = rest.sub(open);
         final tagEnd = rest.indexOf("]");
-        if (tagEnd == null) { return buf + rest; }
-        final typ = rest.sub(18, tagEnd - 18);   // 18 = len("<blockquote>\n<p>[!")
+        if (tagEnd == null) { return parts.join("") + rest; }
+        final typ = rest.sub(18, len: tagEnd - 18);   // 18 = len("<blockquote>\n<p>[!")
         var kind = "";
         if (typ == "NOTE") { kind = "note"; }
         if (typ == "TIP") { kind = "tip"; }
@@ -339,19 +347,19 @@ export fun tagAdmonition(html: str) > str {
         if (typ == "WARNING") { kind = "warning"; }
         if (typ == "CAUTION") { kind = "caution"; }
         if (kind == "") {
-            buf = buf + rest.sub(0, 12);   // 12 = len("<blockquote>")
+            parts.append(rest.sub(0, len: 12));   // 12 = len("<blockquote>")
             rest = rest.sub(12);
         } else {
             final closeBq = rest.indexOf("</blockquote>");
-            if (closeBq == null) { return buf + rest; }
-            var inner = rest.sub(12, closeBq - 12);
+            if (closeBq == null) { return parts.join("") + rest; }
+            var inner = rest.sub(12, len: closeBq - 12);
             final prefix = "\n<p>[!" + typ + "]\n";   // strip the marker paragraph
             if (inner.startsWith(prefix)) {
                 inner = "\n<p>" + inner.sub(prefix.len());
             }
-            final label = typ.sub(0, 1) + typ.sub(1).lower();
-            buf = buf + el("div", attr("class", "admonition admonition-" + kind),
-                el("p", attr("class", "admonition-title"), label) + inner);
+            final label = typ.sub(0, len: 1) + typ.sub(1).lower();
+            parts.append(el(tag: "div", attrs: attr(name: "class", value: "admonition admonition-" + kind),
+                body: el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: label) + inner));
             rest = rest.sub(closeBq + 13);   // 13 = len("</blockquote>")
         }
     }
@@ -364,122 +372,123 @@ export fun tagAdmonition(html: str) > str {
 // common in the glossary) still shows a stale ".md". Only ".md" immediately before </a>
 // is touched, so bare path-named links are hit and other link text left alone.
 export fun stripMdFromLinkText(html: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(".md</a>");
     while (idx != null) {
-        buf = buf + rest.sub(0, idx) + "</a>";
+        parts.append(rest.sub(0, len: idx) + "</a>");
         rest = rest.sub(idx + 7); // past ".md</a>"
         idx = rest.indexOf(".md</a>");
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // renderContentHTML is the one post-processing pipeline every page runs: rewrite links
 // (href AND path-named link text), then the ordered content transforms. One choke point
 // so no transform gets applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
-    return wrapTables(externalLinks(lazyImages(tagCodeTitle(tagVersionNote(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir)))))))));
+    return wrapTables(html: externalLinks(html: lazyImages(html: tagCodeTitle(html: tagVersionNote(html: tagAdmonition(html: tagRunnable(html: stripMdFromLinkText(html: rewriteLinks(html: rawHtml, oldDir: oldDir, newDir: newDir)))))))));
 }
 
 test "stripMdFromLinkText drops a trailing .md from link text only" {
-    assert\equal(stripMdFromLinkText("<a href=\"workspace/\">workspace.md</a>"),
-        "<a href=\"workspace/\">workspace</a>", "path-named link text cleaned");
-    assert\equal(stripMdFromLinkText("<a href=\"x/\">Targets</a>"),
-        "<a href=\"x/\">Targets</a>", "non-.md link text untouched");
-    assert\equal(stripMdFromLinkText("edit README.md by hand"),
-        "edit README.md by hand", "prose .md that is not link text is untouched");
+    assert\equal(got: stripMdFromLinkText(html: "<a href=\"workspace/\">workspace.md</a>"),
+        want: "<a href=\"workspace/\">workspace</a>", message: "path-named link text cleaned");
+    assert\equal(got: stripMdFromLinkText(html: "<a href=\"x/\">Targets</a>"),
+        want: "<a href=\"x/\">Targets</a>", message: "non-.md link text untouched");
+    assert\equal(got: stripMdFromLinkText(html: "edit README.md by hand"),
+        want: "edit README.md by hand", message: "prose .md that is not link text is untouched");
 }
 
 
 test "wrapTables wraps each table in a scroll figure" {
-    assert\equal(wrapTables("<table><tr><td>a</td></tr></table>"),
-        "<figure class=\"table-scroll\"><table><tr><td>a</td></tr></table></figure>", "single table wrapped");
-    assert\equal(wrapTables("<table>1</table><p>x</p><table>2</table>"),
-        "<figure class=\"table-scroll\"><table>1</table></figure><p>x</p><figure class=\"table-scroll\"><table>2</table></figure>",
-        "each table wrapped, prose between untouched");
-    assert\equal(wrapTables("<p>no table</p>"), "<p>no table</p>", "no table, unchanged");
+    assert\equal(got: wrapTables(html: "<table><tr><td>a</td></tr></table>"),
+        want: "<figure class=\"table-scroll\"><table><tr><td>a</td></tr></table></figure>", message: "single table wrapped");
+    assert\equal(got: wrapTables(html: "<table>1</table><p>x</p><table>2</table>"),
+        want: "<figure class=\"table-scroll\"><table>1</table></figure><p>x</p><figure class=\"table-scroll\"><table>2</table></figure>",
+        message: "each table wrapped, prose between untouched");
+    assert\equal(got: wrapTables(html: "<p>no table</p>"), want: "<p>no table</p>", message: "no table, unchanged");
 }
 
 test "rewriteLinks rewrites in-content hrefs" {
-    assert\equal(rewriteLinks("<a href=\"other.html\">x</a>", "docs", "docs/page"),
-        "<a href=\"../other/\">x</a>", "internal link resolved and re-relativized");
-    assert\equal(rewriteLinks("<a href=\"https://x\">y</a>", "d", "d"),
-        "<a href=\"https://x\">y</a>", "external link untouched");
+    assert\equal(got: rewriteLinks(html: "<a href=\"other.html\">x</a>", oldDir: "docs", newDir: "docs/page"),
+        want: "<a href=\"../other/\">x</a>", message: "internal link resolved and re-relativized");
+    assert\equal(got: rewriteLinks(html: "<a href=\"https://x\">y</a>", oldDir: "d", newDir: "d"),
+        want: "<a href=\"https://x\">y</a>", message: "external link untouched");
 }
 
 test "oldFlatDirectory returns the parent directory" {
-    assert\equal(oldFlatDirectory("docs/guide/page.md"), "docs/guide", "nested page");
-    assert\equal(oldFlatDirectory("top.md"), "", "top-level has no parent");
+    assert\equal(got: oldFlatDirectory(rel: "docs/guide/page.md"), want: "docs/guide", message: "nested page");
+    assert\equal(got: oldFlatDirectory(rel: "top.md"), want: "", message: "top-level has no parent");
 }
 
 test "cleanBody strips fences and markers for the search index" {
-    assert\equal(cleanBody("# Hi\n`x`"), "Hi x", "drops #, `, collapses");
-    assert\equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
+    assert\equal(got: cleanBody(md: "# Hi\n`x`"), want: "Hi x", message: "drops #, `, collapses");
+    assert\equal(got: cleanBody(md: "a ```fenced``` c"), want: "a c", message: "drops fenced content");
 }
 
 test "aliasStub is a redirect page to rel, carrying the caller's CSP" {
-    final stub = aliasStub("/new/", "default-src 'none'; script-src 'sha256-x'");
-    assert\equal(stub.sub(0, 15), "<!DOCTYPE html>", "html stub");
-    assert\equal(stub.indexOf("Content-Security-Policy") != null, true, "csp meta present");
-    assert\equal(stub.indexOf("script-src &#39;sha256-x&#39;") != null, false, "csp attribute is not double-escaped");
-    assert\equal(stub.indexOf("script-src 'sha256-x'") != null, true, "csp content passed through verbatim (single quotes unescaped)");
+    final stub = aliasStub(rel: "/new/", csp: "default-src 'none'; script-src 'sha256-x'");
+    assert\equal(got: stub.sub(0, len: 15), want: "<!DOCTYPE html>", message: "html stub");
+    assert\equal(got: stub.indexOf("Content-Security-Policy") != null, want: true, message: "csp meta present");
+    assert\equal(got: stub.indexOf("script-src &#39;sha256-x&#39;") != null, want: false, message: "csp attribute is not double-escaped");
+    assert\equal(got: stub.indexOf("script-src 'sha256-x'") != null, want: true, message: "csp content passed through verbatim (single quotes unescaped)");
 }
 
 test "redirectScript matches the literal text aliasStub embeds" {
-    assert\equal(redirectScript("../x/"), "location.replace(\"../x/\");", "exact redirect script body");
-    assert\equal(aliasStub("../x/", "").indexOf(redirectScript("../x/")) != null, true, "aliasStub embeds redirectScript's exact text");
+    assert\equal(got: redirectScript(rel: "../x/"), want: "location.replace(\"../x/\");", message: "exact redirect script body");
+    assert\equal(got: aliasStub(rel: "../x/", csp: "").indexOf(redirectScript(rel: "../x/")) != null, want: true, message: "aliasStub embeds redirectScript's exact text");
 }
 
 test "tagAdmonition builds a callout div" {
-    assert\equal(tagAdmonition("<blockquote>\n<p>[!NOTE]\nbody</p>\n</blockquote>"),
-        "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
-        "note callout");
-    assert\equal(tagAdmonition("<blockquote>\n<p>hi</p>\n</blockquote>"),
-        "<blockquote>\n<p>hi</p>\n</blockquote>", "no marker, unchanged");
+    assert\equal(got: tagAdmonition(html: "<blockquote>\n<p>[!NOTE]\nbody</p>\n</blockquote>"),
+        want: "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
+        message: "note callout");
+    assert\equal(got: tagAdmonition(html: "<blockquote>\n<p>hi</p>\n</blockquote>"),
+        want: "<blockquote>\n<p>hi</p>\n</blockquote>", message: "no marker, unchanged");
 }
 
 test "tagRunnable tags a fenced block after a run marker" {
-    assert\equal(tagRunnable("<!-- magus-run -->\n<pre>code</pre>"),
-        "\n<pre data-magus-run=\"true\">code</pre>", "marker dropped, pre tagged");
-    assert\equal(tagRunnable("<!-- magus-run-recorder -->\n<pre>code</pre>"),
-        "\n<pre data-magus-run=\"true\" data-magus-recorder=\"true\">code</pre>", "recorder marker tags pre with both attrs");
-    assert\equal(tagRunnable("<!-- magus-run --> text"), " text", "marker not before a fence is dropped");
-    assert\equal(tagRunnable("<pre>plain</pre>"), "<pre>plain</pre>", "no marker, unchanged");
+    assert\equal(got: tagRunnable(html: "<!-- magus-run -->\n<pre>code</pre>"),
+        want: "\n<pre data-magus-run=\"true\">code</pre>", message: "marker dropped, pre tagged");
+    assert\equal(got: tagRunnable(html: "<!-- magus-run-recorder -->\n<pre>code</pre>"),
+        want: "\n<pre data-magus-run=\"true\" data-magus-recorder=\"true\">code</pre>", message: "recorder marker tags pre with both attrs");
+    assert\equal(got: tagRunnable(html: "<!-- magus-run --> text"), want: " text", message: "marker not before a fence is dropped");
+    assert\equal(got: tagRunnable(html: "<pre>plain</pre>"), want: "<pre>plain</pre>", message: "no marker, unchanged");
 }
 
 test "externalLinks marks http anchors" {
-    assert\equal(externalLinks("<a href=\"https://x.com\">y</a>"),
-        "<a href=\"https://x.com\" rel=\"noopener noreferrer\" target=\"_blank\" data-external>y</a>", "adds all three");
-    assert\equal(externalLinks("<a href=\"/docs/\">y</a>"), "<a href=\"/docs/\">y</a>", "internal link untouched");
+    assert\equal(got: externalLinks(html: "<a href=\"https://x.com\">y</a>"),
+        want: "<a href=\"https://x.com\" rel=\"noopener noreferrer\" target=\"_blank\" data-external>y</a>", message: "adds all three");
+    assert\equal(got: externalLinks(html: "<a href=\"/docs/\">y</a>"), want: "<a href=\"/docs/\">y</a>", message: "internal link untouched");
 }
 
 test "lazyImages adds lazy loading to bare img tags" {
-    assert\equal(lazyImages("<img src=\"a.png\">"),
-        "<img loading=\"lazy\" decoding=\"async\" src=\"a.png\">", "adds loading + decoding");
-    assert\equal(lazyImages("<img loading=\"high\" src=\"hero.png\">"),
-        "<img loading=\"high\" src=\"hero.png\">", "author loading wins");
+    assert\equal(got: lazyImages(html: "<img src=\"a.png\">"),
+        want: "<img loading=\"lazy\" decoding=\"async\" src=\"a.png\">", message: "adds loading + decoding");
+    assert\equal(got: lazyImages(html: "<img loading=\"high\" src=\"hero.png\">"),
+        want: "<img loading=\"high\" src=\"hero.png\">", message: "author loading wins");
 }
 
 test "resolvePath normalizes .. and . against a base dir" {
-    assert\equal(resolvePath("a/b", "../c"), "a/c", "up one, then into c");
-    assert\equal(resolvePath("a/b/c", "../../x"), "a/x", "up two");
-    assert\equal(resolvePath("docs", "img.png"), "docs/img.png", "plain descent");
+    assert\equal(got: resolvePath(fromDir: "a/b", link: "../c"), want: "a/c", message: "up one, then into c");
+    assert\equal(got: resolvePath(fromDir: "a/b/c", link: "../../x"), want: "a/x", message: "up two");
+    assert\equal(got: resolvePath(fromDir: "docs", link: "img.png"), want: "docs/img.png", message: "plain descent");
 }
 
 test "cleanTarget maps old flat paths to clean URLs" {
-    assert\equal(cleanTarget("manpage/magus-ls.html"), "manpage/magus-ls/", "drops .html, de-collided manpage dir");
-    assert\equal(cleanTarget("codes/race/index.html"), "codes/race/", "drops index landing");
-    assert\equal(cleanTarget("install.html"), "install/", "top-level page");
-    assert\equal(cleanTarget("index.html"), "", "home page");
+    assert\equal(got: cleanTarget(oldPath: "manpage/magus-ls.html"), want: "manpage/magus-ls/", message: "drops .html, de-collided manpage dir");
+    assert\equal(got: cleanTarget(oldPath: "codes/race/index.html"), want: "codes/race/", message: "drops index landing");
+    assert\equal(got: cleanTarget(oldPath: "install.html"), want: "install/", message: "top-level page");
+    assert\equal(got: cleanTarget(oldPath: "index.html"), want: "", message: "home page");
 }
 
 test "rewriteHref passes through external and fragment links" {
-    assert\equal(rewriteHref("https://example.com", "docs", "docs/page"), "https://example.com", "external");
-    assert\equal(rewriteHref("#section", "docs", "docs/page"), "#section", "pure fragment");
+    assert\equal(got: rewriteHref(h: "https://example.com", oldDir: "docs", newDir: "docs/page"), want: "https://example.com", message: "external");
+    assert\equal(got: rewriteHref(h: "#section", oldDir: "docs", newDir: "docs/page"), want: "#section", message: "pure fragment");
 }
 
 test "rewriteHref re-relativizes an internal page link" {
-    assert\equal(rewriteHref("sibling.html", "docs/guide", "docs/guide/page"), "../sibling/",
-        "sibling .html resolves, cleans, and re-relativizes");
+    assert\equal(got: rewriteHref(h: "sibling.html", oldDir: "docs/guide", newDir: "docs/guide/page"), want: "../sibling/",
+        message: "sibling .html resolves, cleans, and re-relativizes");
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/types"
 )
@@ -126,11 +127,11 @@ func TestPipeStageWithoutAPipe(t *testing.T) {
 
 // TestAdoptedRunGetsNoProcessStdio: the server's stdin is nobody's pipe.
 func TestAdoptedRunGetsNoProcessStdio(t *testing.T) {
-	if got := processStdioOption(context.Background()); len(got) != 1 {
-		t.Fatalf("local run: %d options, want 1", len(got))
+	if _, ok := pipe.StdioFrom(processStdioContext(context.Background())); !ok {
+		t.Fatalf("local run: no streams on its context")
 	}
 	adopted := context.WithValue(context.Background(), magusCtxKey{}, (*magus.Magus)(nil))
-	if got := processStdioOption(adopted); len(got) != 0 {
-		t.Fatalf("adopted run: %d options, want none", len(got))
+	if _, ok := pipe.StdioFrom(processStdioContext(adopted)); ok {
+		t.Fatalf("adopted run: the process's streams are on its context")
 	}
 }

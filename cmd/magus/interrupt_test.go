@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -293,7 +294,7 @@ func TestWithInterruptPrefersASpecificCode(t *testing.T) {
 	assert.Equal(t, 1, withInterrupt(1, nil, none), "an ordinary failure is untouched")
 	assert.Equal(t, 130, withInterrupt(0, nil, intr), "SIGINT reports 128+2")
 	assert.Equal(t, 143, withInterrupt(0, nil, term), "SIGTERM reports 128+15")
-	assert.Equal(t, exitUsage, withInterrupt(exitUsage, nil, term),
+	assert.Equal(t, exit.Usage, withInterrupt(exit.Usage, nil, term),
 		"a usage error keeps its own code rather than being flattened to 143")
 
 	// A command that RETURNS the cancellation instead of swallowing it (awaitInvocation

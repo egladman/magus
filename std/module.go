@@ -8,6 +8,8 @@ package std
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 )
 
@@ -15,7 +17,7 @@ import (
 // itself generated, from the WASM field below plus each module's Name and Path. It
 // lives beside the trampolines rather than here because it names them.
 //
-//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen
+//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen -pkg bindgen
 
 // Callback is the host-side handle for a VM-side function value passed as
 // an argument. The generated bindings layer wraps a buzz.Session + function value.
@@ -334,64 +336,61 @@ func (m Module) ImportPath() string {
 	return m.Name
 }
 
-var (
-	mu      sync.Mutex
-	modules = map[string]Module{}
-)
-
-// Register adds m to the global module registry. Called from each module's
-// init() so magus-utils bindings and the runtime registration paths can look up modules
-// by name without an import loop.
+// portable lists the modules every build carries, the wasm playground included.
+// The ones that need a process, the filesystem or the network are in
+// nativeModules, which the wasm build leaves empty.
 //
-// std/encoding's nine leaf packages do NOT call this: std/encoding imports std
-// for the Module vocabulary, so std registering them back here would import
-// std/encoding in turn and cycle. They are collected explicitly instead (see
-// std/encoding/register.go) and unioned with this registry one layer above std,
-// in internal/hostmodules, the only place that imports both.
-func Register(m Module) {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, exists := modules[m.Name]; exists {
-		panic(fmt.Sprintf("host: duplicate module registration: %q", m.Name))
+// std/encoding's nine leaf packages are not listed: they import std for the Module
+// vocabulary, so std naming them would cycle. std/encoding/register.go collects
+// them and internal/hostmodules unions both sets, the only place that imports both.
+var portable = []Module{
+	Charm, Crypto, Diff, Env, Flags, Fmt, Log, Markdown, Math, Merge,
+	Path, Platform, Semver, Sort, Strings, Template, Time, UUID,
+}
+
+// registry indexes portable and nativeModules by name on first use. A duplicate
+// name or a descriptor that disagrees with its Impl panics there, so a malformed
+// module surfaces in the first test that reads the registry, not in a magusfile
+// that imports it.
+var registry = sync.OnceValue(func() map[string]Module {
+	return indexModules(append(slices.Clone(portable), nativeModules...))
+})
+
+func indexModules(mods []Module) map[string]Module {
+	idx := make(map[string]Module, len(mods))
+	for _, m := range mods {
+		if _, exists := idx[m.Name]; exists {
+			panic(fmt.Sprintf("host: duplicate module registration: %q", m.Name))
+		}
+		if err := validateModule(m); err != nil {
+			panic(fmt.Sprintf("host: module %q: %s", m.Name, err))
+		}
+		idx[m.Name] = m
 	}
-	if err := validateModule(m); err != nil {
-		panic(fmt.Sprintf("host: module %q: %s", m.Name, err))
-	}
-	modules[m.Name] = m
+	return idx
 }
 
 // ValidateModule checks m's Fields and Methods against their declared Impls,
-// the same check Register runs before storing a module. std/encoding's leaf
-// packages call it directly (see std/encoding/register.go) because they
-// cannot call Register itself without cycling back through std (see
-// Register's doc for why), but a malformed descriptor should still fail fast
-// at the same place in the program's life as every other module's, not
-// silently reach codegen as bad data.
+// the same check the registry runs on each module it lists. std/encoding's leaf
+// packages call it directly (see std/encoding/register.go) because std cannot
+// list them without cycling back through std/encoding.
 func ValidateModule(m Module) error {
 	return validateModule(m)
 }
 
 // Get returns the Module registered under name, or false if unknown.
 func Get(name string) (Module, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	m, ok := modules[name]
+	m, ok := registry()[name]
 	return m, ok
 }
 
-// All returns a snapshot of every registered Module, in unspecified order.
+// All returns every registered Module, in unspecified order.
 func All() []Module {
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]Module, 0, len(modules))
-	for _, m := range modules {
-		out = append(out, m)
-	}
-	return out
+	return slices.Collect(maps.Values(registry()))
 }
 
 // validateModule (and its validateField/validateMethod helpers) reflect over
-// each Impl's signature to catch declaration/Impl mismatches at init.
+// each Impl's signature to catch declaration/Impl mismatches when the registry first builds.
 //
 // It runs in EVERY build now, including wasm. It used to be native-only, stubbed out
 // by a validate_wasm.go no-op, because TinyGo's wasm reflect omits

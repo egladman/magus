@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// cannedBackend is a minimal cache.RemoteBackend whose get/put behaviour the test
+// cannedBackend is a minimal types.CacheBackend whose get/put behaviour the test
 // controls directly, so assertions don't depend on a real transport.
 type cannedBackend struct {
 	data   []byte // artifact returned on get; nil = miss
@@ -31,7 +32,7 @@ func (f *cannedBackend) GetArtifact(context.Context, string, string) (io.ReadClo
 		return nil, f.getErr
 	}
 	if f.data == nil {
-		return nil, cache.ErrRemoteMiss
+		return nil, types.ErrCacheMiss
 	}
 	return io.NopCloser(bytes.NewReader(f.data)), nil
 }
@@ -81,7 +82,7 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	b := InstrumentRemoteBackend(&cannedBackend{data: nil}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
-	require.ErrorIs(t, err, cache.ErrRemoteMiss, "a miss passes through as the sentinel")
+	require.ErrorIs(t, err, types.ErrCacheMiss, "a miss passes through as the sentinel")
 	assert.Nil(t, rc)
 	require.Len(t, rec.remoteOps, 1)
 	assert.Equal(t, RemoteOp{Method: "get", Outcome: "miss", Duration: rec.remoteOps[0].Duration}, rec.remoteOps[0])
@@ -91,12 +92,12 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 func TestInstrumentRemoteBackend_PutExists(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := InstrumentRemoteBackend(&cannedBackend{putErr: cache.ErrRemoteExists}, rec)
+	b := InstrumentRemoteBackend(&cannedBackend{putErr: types.ErrCacheExists}, rec)
 
 	err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world")))
-	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	require.ErrorIs(t, err, types.ErrCacheExists)
 	require.Len(t, rec.remoteOps, 1)
-	assert.Equal(t, "exists", rec.remoteOps[0].Outcome)
+	assert.Equal(t, RemoteExists, rec.remoteOps[0].Outcome)
 }
 
 // HasArtifact reaches the wrapped backend, so backfill works with telemetry on.
@@ -116,7 +117,7 @@ func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 	_, err := b.GetArtifact(context.Background(), "p", "h")
 	assert.Error(t, err)
 	require.Len(t, rec.remoteOps, 1)
-	assert.Equal(t, "error", rec.remoteOps[0].Outcome)
+	assert.Equal(t, RemoteError, rec.remoteOps[0].Outcome)
 }
 
 func TestInstrumentRemoteBackend_Put(t *testing.T) {
@@ -146,7 +147,7 @@ func (*disabledRec) Enabled() bool { return false }
 func TestInstrumentRemoteBackend_DisabledPassthrough(t *testing.T) {
 	t.Parallel()
 	fb := &cannedBackend{}
-	assert.Equal(t, cache.RemoteBackend(fb), InstrumentRemoteBackend(fb, &disabledRec{}), "disabled provider should return the backend unwrapped")
+	assert.Equal(t, types.CacheBackend(fb), InstrumentRemoteBackend(fb, &disabledRec{}), "disabled provider should return the backend unwrapped")
 }
 
 // TestInstrumentRemoteBackend_PrunePreserved verifies the optional RemotePruner

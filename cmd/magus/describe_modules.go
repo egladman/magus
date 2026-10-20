@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,7 +58,7 @@ func describeModules(ctx context.Context, args []string) error {
 			msg += fmt.Sprintf("; did you mean %q?", sug)
 		}
 		slog.ErrorContext(ctx, msg, attr.Notice(""), attr.Component("magus describe module"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	switch opts.Format {
@@ -68,7 +69,7 @@ func describeModules(ctx context.Context, args []string) error {
 		for _, m := range out {
 			names = append(names, m.Name)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	// text / wide

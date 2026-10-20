@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-// recordShowcase needs a pseudo-terminal, which internal/proc/run drives only on
+// recordShowcase needs a pseudo-terminal, which internal/proc/spawn drives only on
 // darwin and linux.
 func recordShowcase(string) error {
 	return fmt.Errorf("recording the showcase needs a pseudo-terminal, which %s does not provide here", runtime.GOOS)

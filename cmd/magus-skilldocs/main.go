@@ -67,11 +67,11 @@ func run(outDir string) error {
 	full := make([]agent.AgentSkill, 0, len(defs))
 	short := make([]agent.AgentSkill, 0, len(defs))
 	for _, def := range defs {
-		f, err := cat.Render(def, agent.VariantFull)
+		f, err := cat.Render(def, types.SkillVariantFull)
 		if err != nil {
 			return err
 		}
-		s, err := cat.Render(def, agent.VariantShort)
+		s, err := cat.Render(def, types.SkillVariantShort)
 		if err != nil {
 			return err
 		}
@@ -313,7 +313,7 @@ func firstSentence(s string) string {
 // alone; both of its forms report the same one, which is why they go
 // stale together and why an edit to a different skill leaves this page alone.
 func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSkill) {
-	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), agent.VariantFull))
+	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), types.SkillVariantFull))
 
 	b.WriteString("## What an installed copy carries\n\n")
 	b.WriteString("`magus agent install` writes this frontmatter above the body. " +

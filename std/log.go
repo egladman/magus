@@ -10,9 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module log -lang buzz -out ../internal/interp/bindings/gen/log.go
-
-func init() { Register(Log) }
+//go:generate go run ../cmd/magus-utils bindings -module log -lang buzz -out ../internal/interp/bindings/gen/log.go -pkg bindgen
 
 // logLevelTrace mirrors config.LevelTrace (slog.LevelDebug-4). Duplicated here
 // for the same reason internal/cache does: config imports this package's tree, so

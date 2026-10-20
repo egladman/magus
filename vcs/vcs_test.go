@@ -52,6 +52,43 @@ func TestResolveExplicitOverridesAutodetect(t *testing.T) {
 	assert.Equal(t, types.VCSSourceExplicit, res.Source)
 }
 
+// namedDriver is a built-in driver under another name: a VCS no built-in knows.
+type namedDriver struct {
+	types.VCSDriver
+	name string
+}
+
+func (d namedDriver) Name() string { return d.name }
+
+// TestResolveUsesTheGivenDriver: a driver the caller supplies is chosen explicitly, over
+// the directory's own markers and MAGUS_VCS_NAME alike.
+func TestResolveUsesTheGivenDriver(t *testing.T) {
+	t.Setenv("MAGUS_VCS_NAME", "jj")
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".hg"), 0o755))
+	driver := namedDriver{VCSDriver: gitVCS{}, name: "fossil"}
+
+	res, err := Resolve(context.Background(), root, "", types.VCSOptions{Driver: driver})
+	require.NoError(t, err)
+	assert.Equal(t, "fossil", res.Name)
+	assert.Equal(t, types.VCSSourceExplicit, res.Source)
+	assert.Equal(t, driver, res.VCS)
+
+	res, err = Resolve(context.Background(), root, "", types.VCSOptions{Driver: driver, Name: "fossil"})
+	require.NoError(t, err, "a Name that agrees with the driver is no conflict")
+	assert.Equal(t, "fossil", res.Name)
+}
+
+// TestResolveRefusesADriverBesideAnotherName: a driver and a VCS name that disagree are
+// a misconfiguration, never a silent pick of one.
+func TestResolveRefusesADriverBesideAnotherName(t *testing.T) {
+	driver := namedDriver{VCSDriver: gitVCS{}, name: "fossil"}
+	_, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{Driver: driver, Name: "git"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"fossil"`)
+	assert.Contains(t, err.Error(), `"git"`)
+}
+
 func TestResolveExplicitUnknown(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "fossil")
 	_, err := Resolve(context.Background(), t.TempDir(), "origin/main", types.VCSOptions{})
@@ -757,10 +794,17 @@ func writeRepoFile(t *testing.T, dir, name, body string) {
 }
 
 // eachBackend runs fn against every backend whose binary is installed.
+//
+// The caller and every backend run in parallel, since hg and sl spawn slow processes and
+// each fn works in its own t.TempDir. So neither fn nor its caller may use t.Setenv or
+// t.Chdir, and the caller may not touch anything fn reads after eachBackend returns:
+// the subtests have not started by then.
 func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 	t.Helper()
+	t.Parallel()
 	for _, b := range parityBackends() {
 		t.Run(b.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := exec.LookPath(b.bin); err != nil {
 				t.Skipf("%s not available", b.bin)
 			}
@@ -1985,7 +2029,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapTreeReporter:          {"git": true},
 	types.CapTreeMerger:            {"git": true},
 	types.CapGeneratedPathReporter: {"git": true},
-	types.CapCheckoutProvisioner:   {"git": true},
+	types.CapCheckoutProvisioner:   {"git": true, "hg": true, "jj": true},
 	types.CapCheckoutLister:        {"git": true},
 	types.CapCheckoutReporter:      {"git": true},
 	types.CapRevisionFetcher:       {"git": true},
@@ -2074,6 +2118,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
 		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
 		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
+		{types.CapCheckoutProvisioner, "StrandedRevisions", func(d types.VCSDriver, dir string) error { return errOf(d.StrandedRevisions(ctx, dir, "-x")) }},
 		{types.CapCheckoutLister, "OtherCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.OtherCheckouts(dir)) }},
 		{types.CapCheckoutReporter, "RegisteredCheckouts", func(d types.VCSDriver, dir string) error { return errOf(d.RegisteredCheckouts(ctx, dir)) }},
 		{types.CapCheckoutReporter, "UnpublishedRevisions", func(d types.VCSDriver, dir string) error {

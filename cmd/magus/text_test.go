@@ -54,7 +54,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -92,7 +92,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	root := w.Root()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -369,7 +369,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	root := w.Root()
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	if err != nil {
 		b.Fatal(err)
 	}

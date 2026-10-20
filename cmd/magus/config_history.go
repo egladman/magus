@@ -11,12 +11,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
 func configHistoryUsage() {
@@ -43,7 +44,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 	case "dedup":
 		return runHistoryDedup(ctx, rest)
 	default:
-		return usagef("magus config history: unknown subcommand %q (choose: import, passed, dedup)", sub)
+		return exit.Usagef("magus config history: unknown subcommand %q (choose: import, passed, dedup)", sub)
 	}
 }
 
@@ -59,7 +60,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history passed", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	hf := gen.BindConfigHistoryPassed(fs, gen.ConfigHistoryPassedDefaults{
+	hf := flaggen.BindConfigHistoryPassed(fs, flaggen.ConfigHistoryPassedDefaults{
 		History: cfg.HistoryPath,
 		Status:  string(forecast.RunPassed),
 	})
@@ -88,7 +89,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	}
 	st := forecast.RunStatus(hf.Status)
 	if st != forecast.RunPassed && st != forecast.RunFailed {
-		return usagef("magus config history passed: --status must be %q or %q, got %q",
+		return exit.Usagef("magus config history passed: --status must be %q or %q, got %q",
 			forecast.RunPassed, forecast.RunFailed, hf.Status)
 	}
 	// Skipped, not failed. A workspace that turned the run log off wired this step in
@@ -124,9 +125,9 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	imf := gen.BindConfigHistoryImport(fs, gen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
+	imf := flaggen.BindConfigHistoryImport(fs, flaggen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.json>...")
+		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.jsonl>...")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Merge runtime-history JSON files into the history (created if absent). For each")
 		fmt.Fprintln(os.Stderr, "(project, target) the freshest entry wins, so the per-shard histories one sharded")

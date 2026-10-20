@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "bm25f": {
+    "k1": 1.2,
+    "fields": {
+      "name": {"weight": 5, "b": 0.75},
+      "signature": {"weight": 3, "b": 0.75},
+      "path": {"weight": 2, "b": 0.75},
+      "doc": {"weight": 1, "b": 0.75},
+      "body": {"weight": 1, "b": 0.75}
+    }
+  },
+  "kind_prior": {},
+  "ppr": {
+    "restart": 0.15,
+    "iterations": 20,
+    "tolerance": 1e-6,
+    "max_nodes": 5000,
+    "edges": {
+      "references": 1,
+      "calls": 1,
+      "imports": 0.5,
+      "implements": 1,
+      "contains": 0.3,
+      "co_changes": 0.5,
+      "documents": 0.5
+    }
+  },
+  "fusion": {
+    "k": 60,
+    "lists": {}
+  },
+  "context": {
+    "floor": 0,
+    "task_limit": 8
+  }
+}

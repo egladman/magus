@@ -6,12 +6,14 @@ package magus
 // conventions.go.
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	gotypes "go/types"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/config"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -711,7 +713,7 @@ func shipsWithMagus(slash string) bool {
 	return !strings.HasPrefix(slash, "docs/") || strings.HasPrefix(slash, "docs/guides/integrations/agents/")
 }
 
-// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVarDocs complete for what ships, and
+// TestEveryReadMagusEnvVarIsRegistered holds config.EnvVars complete for what ships, and
 // keeps this repository's own tooling clear of MGS1046. A name shipped code reads and
 // nobody registered is one doctor calls unknown and a near miss of it is not caught; a
 // tooling name a typo away from a registered one would stop every magus command in the
@@ -791,8 +793,8 @@ func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
 	}
 	slices.Sort(missing)
 	assert.Empty(t, missing,
-		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVarDocs;\n"+
-			"register each with its doc, or rename it off the prefix:\n%s",
+		"these MAGUS_* names are read or exported by shipped code but missing from config.EnvVars;\n"+
+			"give each a config field or an envOnly entry, or rename it off the prefix:\n%s",
 		strings.Join(missing, "\n"))
 
 	var refused []string
@@ -865,40 +867,24 @@ var storeMechanicsAllowed = map[string]string{
 	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
 	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
 	"lock.go:lockIsHeld":                                     "probes a project lock without holding it",
-	"pipe.go:GatePipe":                                       "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"internal/pipe/pipe.go:Gate":                             "a project lock waits unbounded with a heartbeat: its holder is a build",
 	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 
-// storeMechanicsSkipDirs are trees the rule does not govern. libs/ holds modules of their
-// own, which cannot import internal/file.
+// storeMechanicsSkipDirs are trees the rule does not govern. libs/ and any directory
+// with its own go.mod (hack/embed) hold modules of their own, which ship apart from magus.
 var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 
 // TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one
 // implementation. A temp file renamed into place and an flock-guarded read-modify-write
 // each had several copies that differed in fsync, file mode, temp cleanup and whether the
-// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, Doc) is the one
+// wait honored ctx; internal/file (WriteFileAtomic, ReplaceFile, WithLock, JSONL) is the one
 // copy. The scan is per function and textual, so a copy split across two functions slips
 // past it; what it catches is the shape every copy so far has had.
 func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	t.Parallel()
 
-	var files []string
-	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		slashed := filepath.ToSlash(path)
-		if d.IsDir() {
-			if storeMechanicsSkipDirs[d.Name()] || slashed == "libs" || slashed == "internal/file" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	files, err := storeGoFiles(".")
 	require.NoError(t, err)
 
 	found := make([][]string, len(files))
@@ -923,30 +909,20 @@ func TestStoreMechanicsLiveInInternalFile(t *testing.T) {
 	}
 	require.NoError(t, g.Wait())
 
-	seen := map[string]bool{}
-	var violations []string
-	for _, sites := range found {
-		for _, site := range sites {
-			seen[site] = true
-			if _, ok := storeMechanicsAllowed[site]; !ok {
-				violations = append(violations, site)
-			}
+	var sites []allowlistSite
+	for _, fileSites := range found {
+		for _, site := range fileSites {
+			sites = append(sites, allowlistSite{key: site, label: site})
 		}
 	}
-	var stale []string
-	for site := range storeMechanicsAllowed {
-		if !seen[site] {
-			stale = append(stale, site)
-		}
-	}
-	sort.Strings(violations)
-	sort.Strings(stale)
+	slices.SortFunc(sites, func(a, b allowlistSite) int { return strings.Compare(a.label, b.label) })
+	violations, stale := allowlistVerdict(sites, storeMechanicsAllowed)
 
 	assert.Empty(t, violations,
 		"these functions write a file by temp and rename, or take an flock, themselves.\n"+
 			"Use internal/file: WriteFileAtomic or ReplaceFile to replace a file, WithLock to\n"+
-			"hold a lock, Doc.Update for a locked read-modify-write. A site that truly cannot\n"+
-			"(it streams while hashing, publishes a directory, waits unbounded) goes in\n"+
+			"hold a lock. A site that truly cannot (it streams while hashing, publishes a\n"+
+			"directory, waits unbounded) goes in\n"+
 			"storeMechanicsAllowed with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
 	assert.Empty(t, stale,
 		"storeMechanicsAllowed names sites that no longer hand-roll these mechanics; delete\n"+
@@ -979,4 +955,204 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 	f, err := parser.ParseFile(token.NewFileSet(), "p.go", src, parser.SkipObjectResolution)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"p.go:handRolled", "p.go:store.locks"}, storeMechanicsSites("p.go", f))
+}
+
+// appendAllowed maps "<path>:<func>" to why that function opens a file for append itself
+// instead of calling file.AppendLines: none of them is a JSON Lines store. It only shrinks:
+// TestStoresAreJSONLines fails on an entry whose site is gone.
+var appendAllowed = map[string]string{
+	"cmd/magus/log_other.go:redirectStdio":                  "a log: the process's stderr, held open as an fd",
+	"cmd/magus/log_windows.go:redirectStdio":                "a log: the process's stderr, held open as an fd",
+	"cmd/magus/output.go:outputDestination":                 "--tee mirrors a stream into a file held open for the command",
+	"cmd/magus/output.go:lazyFile.Write":                    "--tee mirrors a stream into a file held open for the command",
+	"cmd/magus/server.go:spawnDetached":                     "a log: the daemon's stdio, handed to the child",
+	"internal/guard/unfinished.go:judgmentMark.recordLapse": "a one-byte tally read back by its size after the write",
+	"internal/hint/marker.go:Gate.Count":                    "a one-byte tally read back by its offset after the write",
+	"internal/guard/drift.go:scopeDrift.record":             "plain lines of project paths, not JSON Lines",
+	"internal/interp/pry_history.go:history.appendLocked":   "plain lines of REPL input, not JSON Lines",
+	"std/fs.go:FsAppendFile":                                "Buzz's fs.append_file, a user API that appends what the script hands it",
+}
+
+// TestStoresAreJSONLines holds every append to a file to internal/file.
+//
+// Tier 1, mechanical: the fix is a call to file.AppendLines or file.AppendLinesNoSync, which
+// every hand-rolled append so far could make with its behavior unchanged. A store is JSON
+// Lines (docs/doctrine.md, "Everything is a file"), and an append is how one grows, so the
+// one copy of the append decides the line framing, the single write per batch that keeps a
+// reader from meeting half a line, and the sync.
+func TestStoresAreJSONLines(t *testing.T) {
+	t.Parallel()
+
+	sites, err := appendSites(".")
+	require.NoError(t, err)
+
+	found := make([]allowlistSite, 0, len(sites))
+	for _, s := range sites {
+		found = append(found, allowlistSite{key: s.key(), label: s.String()})
+	}
+	violations, stale := allowlistVerdict(found, appendAllowed)
+
+	assert.Empty(t, violations,
+		"these functions open a file with O_APPEND themselves. Append through internal/file:\n"+
+			"file.AppendLines, or file.AppendLinesNoSync where a sync per append costs more than\n"+
+			"a lost tail. A site that is not a store (a log, a user API) goes in appendAllowed\n"+
+			"with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
+	assert.Empty(t, stale,
+		"appendAllowed names sites that no longer open a file for append; delete their\n"+
+			"entries so the list only shrinks:\n%s", strings.Join(stale, "\n"))
+}
+
+// TestStoresAreJSONLinesMatcher plants a hand-rolled append in a temp tree, because a tree
+// scan that finds nothing is equally consistent with a matcher that matches nothing.
+func TestStoresAreJSONLinesMatcher(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	planted := `package store
+
+import osx "os"
+
+type journal struct{ path string }
+
+func (j *journal) add(line []byte) error {
+	f, err := osx.OpenFile(j.path, osx.O_CREATE|osx.O_WRONLY|osx.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(append(line, '\n'))
+	return err
+}
+`
+	for rel, src := range map[string]string{
+		"store/store.go":         planted,
+		"store/store_test.go":    strings.ReplaceAll(planted, "package store", "package store_test"),
+		"store/gen/journal.go":   planted,
+		"internal/file/jsonl.go": strings.ReplaceAll(planted, "package store", "package file"),
+		"libs/x/store.go":        planted,
+	} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
+	}
+
+	sites, err := appendSites(root)
+	require.NoError(t, err)
+	got := make([]string, 0, len(sites))
+	for _, s := range sites {
+		got = append(got, s.String())
+	}
+	assert.Equal(t, []string{"store/store.go:8 in journal.add"}, got)
+}
+
+// appendSite is one O_APPEND in the function fn.
+type appendSite struct {
+	path string
+	line int
+	fn   string
+}
+
+// key is what appendAllowed names: the function, so an entry survives its lines moving.
+func (s appendSite) key() string { return s.path + ":" + s.fn }
+
+func (s appendSite) String() string { return fmt.Sprintf("%s:%d in %s", s.path, s.line, s.fn) }
+
+// appendSites returns every O_APPEND in a non-test Go file under root, sorted, outside
+// internal/file and the trees TestStoreMechanicsLiveInInternalFile skips too.
+func appendSites(root string) ([]appendSite, error) {
+	files, err := storeGoFiles(root)
+	if err != nil {
+		return nil, err
+	}
+	var sites []appendSite
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if !strings.Contains(string(src), "O_APPEND") {
+			continue
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil, err
+		}
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			name := fn.Name.Name
+			if fn.Recv != nil && len(fn.Recv.List) == 1 {
+				name = strings.TrimPrefix(gotypes.ExprString(fn.Recv.List[0].Type), "*") + "." + name
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "O_APPEND" {
+					sites = append(sites, appendSite{path: filepath.ToSlash(rel), line: fset.Position(sel.Pos()).Line, fn: name})
+				}
+				return true
+			})
+		}
+	}
+	slices.SortFunc(sites, func(a, b appendSite) int {
+		return cmp.Or(strings.Compare(a.path, b.path), a.line-b.line)
+	})
+	return sites, nil
+}
+
+// storeGoFiles lists the non-test Go files under root that the store rules govern: it
+// skips storeMechanicsSkipDirs, libs/ and internal/file.
+func storeGoFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		slashed := filepath.ToSlash(rel)
+		if d.IsDir() {
+			if storeMechanicsSkipDirs[d.Name()] || slashed == "libs" || slashed == "internal/file" {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
+}
+
+// allowlistSite is one finding of a store rule: key is what the allowlist names, label what
+// a violation prints.
+type allowlistSite struct{ key, label string }
+
+// allowlistVerdict grades found against allowed: violations are the labels of sites whose
+// key is not allowed, stale the sorted allowed keys no site matched.
+func allowlistVerdict(found []allowlistSite, allowed map[string]string) (violations, stale []string) {
+	seen := map[string]bool{}
+	for _, s := range found {
+		seen[s.key] = true
+		if _, ok := allowed[s.key]; !ok {
+			violations = append(violations, s.label)
+		}
+	}
+	for key := range allowed {
+		if !seen[key] {
+			stale = append(stale, key)
+		}
+	}
+	sort.Strings(stale)
+	return violations, stale
 }

@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [instruction-write]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [instruction-write]: ...` instead.
+
 `magus describe rule instruction-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

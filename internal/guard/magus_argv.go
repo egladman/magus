@@ -3,10 +3,12 @@ package guard
 import (
 	"flag"
 	"io"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -21,7 +23,7 @@ import (
 var magusGlobalFlags = sync.OnceValue(func() *flag.FlagSet {
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	gen.BindFlags(fs, &config.Config{})
+	flaggen.BindFlags(fs, &config.Config{})
 	for _, name := range []string{"root", "C", "config", "c", "output", "o", "tee"} {
 		fs.String(name, "", "")
 	}
@@ -74,21 +76,35 @@ func magusSubcommandWords(args []string) []string {
 	return words
 }
 
-// magusFlag reports whether a magus argv carries the flag name, read the way Go's flag
-// package reads it: one or two dashes, the whole name, and an optional `=value`. Go flags
-// do not cluster, so `-cache-dir` is never `-h`.
-func magusFlag(args []string, name string) bool {
+// magusFlag reports whether a magus argv sets any of the flags names, read the way Go's flag
+// package reads it: one or two dashes, the whole name, an optional `=value`, and the last
+// occurrence winning. A global boolean given a value strconv.ParseBool reads as false is
+// unset, so `-s=false` is not silent. Any other flag with a value is set: the guard cannot
+// tell a subcommand's boolean from its `--timeout=0`. Go flags do not cluster, so
+// `-cache-dir` is never `-h`.
+func magusFlag(args []string, names ...string) bool {
+	set := false
 	for _, a := range args {
 		if a == "--" {
-			return false
+			break
 		}
 		trimmed := strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
 		if trimmed == a {
 			continue
 		}
-		if trimmed == name || strings.HasPrefix(trimmed, name+"=") {
-			return true
+		name, value, joined := strings.Cut(trimmed, "=")
+		if !slices.Contains(names, name) {
+			continue
 		}
+		set = !joined || !unsetsBool(name, value)
 	}
-	return false
+	return set
+}
+
+func unsetsBool(name, value string) bool {
+	if takesValue, known := MagusFlagTakesValue(name); !known || takesValue {
+		return false
+	}
+	b, err := strconv.ParseBool(value)
+	return err == nil && !b
 }

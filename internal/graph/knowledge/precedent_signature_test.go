@@ -68,7 +68,7 @@ func TestPrecedentsNameAParameterByItsType(t *testing.T) {
 	}
 	read := f.fn("hack/lib", "buzz", "read", "fun read(file: str) > str")
 
-	rows := f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/gen/f0.go": true}})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance(), Generated: map[string]bool{"internal/gen/f0.go": true}})
 
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentParamNameByType, Scope: goScope, Key: types.PrecedentKey{Type: "ctx", Name: "ctx"},
@@ -96,7 +96,7 @@ func TestPrecedentsOrderAParameterPair(t *testing.T) {
 	}
 	f.fn("internal/a", "go", "lone", "func lone(dir, base string) error")
 
-	rows := f.g.Precedents(PrecedentOptions{})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentParamOrder, Scope: goScope, Key: types.PrecedentKey{Order: []string{"root", "dir"}},
@@ -121,7 +121,7 @@ func TestPrecedentsPlaceTheContextFirstAndTheErrorLast(t *testing.T) {
 	f.fn("internal/a", "go", "pure", "func pure(name string) string")
 	lint := f.fn("hack/lib", "buzz", "lint", `fun lint(ctx: magus\Context) > void !> any`)
 
-	rows := f.g.Precedents(PrecedentOptions{})
+	rows := f.g.Precedents(PrecedentOptions{Conformance: testConformance()})
 
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentCtxFirst, Scope: goScope,

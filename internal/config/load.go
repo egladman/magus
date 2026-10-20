@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/xdg"
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/ward"
@@ -29,80 +30,26 @@ const (
 	DottedFilename = ".magus.yaml"
 )
 
-// DefaultHistoryPath returns $XDG_STATE_HOME/magus/history/v1.json (or ~/.local/state equivalent).
-// The path is outside .magus/ so it is never swept into a build-cache GHA step.
-func DefaultHistoryPath() string {
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "magus", "history", "v1.json")
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "state", "magus", "history", "v1.json")
-	}
-	// Last resort: relative path (unusual but keeps the binary functional).
-	return filepath.Join(".magus", "history", "v1.json")
-}
-
-// UserConfigDir returns the base directory for magus's user-global config,
-// honoring XDG_CONFIG_HOME on every platform. os.UserConfigDir consults
-// XDG_CONFIG_HOME only on Linux (macOS returns ~/Library/Application Support),
-// but magus documents its config home as $XDG_CONFIG_HOME/magus everywhere, so
-// check that first and fall back to the OS default when it is unset.
-func UserConfigDir() (string, error) {
-	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
-		return x, nil
-	}
-	return os.UserConfigDir()
-}
-
-// UserStateDir returns the base directory for magus's user-global STATE:
-// runtime secrets (the MCP token store) and history. State is deliberately
-// separate from config: config may be shared, synced, or committed to a
-// dotfiles repo, and secrets must never ride along with it. It honors
-// XDG_STATE_HOME on every platform, falling back to %LocalAppData% on Windows
-// and ~/.local/state elsewhere (the XDG Base Directory default).
-func UserStateDir() (string, error) {
-	if x := os.Getenv("XDG_STATE_HOME"); x != "" && filepath.IsAbs(x) {
-		return x, nil
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return lad, nil
-		}
-	}
-	home, err := os.UserHomeDir()
+// DefaultHistoryPath returns <xdg.StateDir>/magus/history/history.jsonl. The path is
+// outside .magus/ so it is never swept into a build-cache GHA step.
+func DefaultHistoryPath() (string, error) {
+	base, err := xdg.StateDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("config: resolve the default history_path, set XDG_STATE_HOME to a writable absolute path or history_path: %w", err)
 	}
-	return filepath.Join(home, ".local", "state"), nil
+	return filepath.Join(base, "magus", "history", "history.jsonl"), nil
 }
 
-// UserCacheDir returns the base directory for magus's user-global CACHE:
-// data magus fetched and can fetch again. The distinction from state is what
-// deleting it costs: losing state loses history nothing can rebuild, losing
-// cache costs a download.
-//
-// Separate from the workspace's .magus/ deliberately. That directory is
-// documented as safe to delete, it is per-worktree (this repo runs dozens), and a
-// signed remote snapshot is the one thing in it that no local command could
-// regenerate; `magus clean --cache` on a disconnected machine would leave a hole
-// only a human carrying a file could fill.
-//
-// It honors XDG_CACHE_HOME on every platform, falling back to %LocalAppData% on
-// Windows and ~/.cache elsewhere (the XDG Base Directory default).
-func UserCacheDir() (string, error) {
-	if x := os.Getenv("XDG_CACHE_HOME"); x != "" && filepath.IsAbs(x) {
-		return x, nil
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return lad, nil
-		}
-	}
-	home, err := os.UserHomeDir()
+// withDefaultHistoryPath is [Defaults] with history_path resolved, the base every
+// loader merges files onto. Defaults leaves it empty because resolving it can fail.
+func withDefaultHistoryPath() (Config, error) {
+	cfg := Defaults()
+	path, err := DefaultHistoryPath()
 	if err != nil {
-		return "", err
+		return Config{}, err
 	}
-	return filepath.Join(home, ".cache"), nil
+	cfg.HistoryPath = path
+	return cfg, nil
 }
 
 // Load merges defaults → user-global → workspace → cwd. The MAGUS_* tier is NOT
@@ -118,7 +65,10 @@ func Load(explicitPath string) (Config, error) {
 // up the directory tree, saving redundant stat calls on cold starts where the
 // caller has already located the root.
 func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
-	cfg := Defaults()
+	cfg, err := withDefaultHistoryPath()
+	if err != nil {
+		return Config{}, err
+	}
 
 	if explicitPath != "" {
 		loaded, err := loadFileInto(cfg, explicitPath)
@@ -134,7 +84,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 	}
 
 	// Tier 2: user-global ($XDG_CONFIG_HOME/magus/)
-	if udc, err := UserConfigDir(); err == nil {
+	if udc, err := xdg.ConfigDir(); err == nil {
 		loaded, err := loadDirInto(cfg, filepath.Join(udc, "magus"))
 		if err != nil {
 			return Config{}, err
@@ -213,9 +163,13 @@ func warnIfConcurrencyHigh(concurrency, numCPU int) {
 // merged value would impose one repository's policy on repositories that never adopted it.
 func LoadWorkspaceOnly(root string) (Config, error) {
 	if root == "" {
-		return Defaults(), nil
+		return withDefaultHistoryPath()
 	}
-	return loadDirInto(Defaults(), root)
+	cfg, err := withDefaultHistoryPath()
+	if err != nil {
+		return Config{}, err
+	}
+	return loadDirInto(cfg, root)
 }
 
 // loadDirInto looks for magus.yaml or .magus.yaml in dir and, if found,
@@ -594,7 +548,7 @@ func yamlKey(f reflect.StructField) string {
 	return name
 }
 
-// LoadFile parses the config file at path on top of Defaults() and returns the
+// LoadFile parses the config file at path on top of the defaults and returns the
 // merged Config. A YAML syntax error and an unknown key are rejected either way;
 // strict additionally runs [Validate] on the result and returns its
 // *ValidationError. A caller holding a partial or foreign file passes false to
@@ -604,7 +558,11 @@ func LoadFile(path string, strict bool) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	merged := mergeOverlay(Defaults(), overlay, data)
+	base, err := withDefaultHistoryPath()
+	if err != nil {
+		return Config{}, err
+	}
+	merged := mergeOverlay(base, overlay, data)
 	if strict {
 		if err := Validate(merged); err != nil {
 			return Config{}, err

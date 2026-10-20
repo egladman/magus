@@ -531,6 +531,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `did you mean "typescript"`)
 	assert.Contains(t, err.Error(), "magusfile.buzz", "error must name the offending file")
+	var unknown interface{ UnknownSpell() string }
+	require.ErrorAs(t, err, &unknown, "the guard reads the handle off the load error")
+	assert.Equal(t, "javascript", unknown.UnknownSpell())
 }
 
 // TestSpellImportCaughtWithTopLevelControlFlow is the regression guard for the

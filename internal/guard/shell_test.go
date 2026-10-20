@@ -9,11 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -1943,7 +1944,7 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
 		require.Len(t, v.Next, 1, tc.command)
 		// Argv and Why are the remedy's stage-split form and its prose, which this test does not pin.
-		assert.Equal(t, hint.Next{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
+		assert.Equal(t, types.NextStep{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
 		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
 		assert.Equal(t, "magus runs chained with `&&` or `;` run one at a time; pipe them instead.", v.Lead, tc.command)
 		assert.Contains(t, v.Why, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
@@ -2088,16 +2089,29 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`until ./magus query output ref; do sleep 30; done`,
 		// A counted for loop that only sleeps is the same wait with a bound.
 		`for i in $(seq 1 60); do sleep 10; done`,
+		// Whatever the condition tests and whatever else each pass runs, a while or until
+		// loop that sleeps is a poll; so is a counted loop that sleeps until a test breaks out.
+		`until [ -s /tmp/tasks/b1.output ]; do sleep 5; done; cat /tmp/tasks/b1.output`,
+		`while [ ! -s /tmp/tasks/b1.output ]; do echo waiting; sleep 5; done`,
+		`until grep -q PASS /tmp/tasks/b1.output; do date; sleep 5; done`,
+		`while true; do ./magus run lint .; sleep 60; done`,
+		`while :; do if [ -s out.txt ]; then break; fi; sleep 2; done`,
+		`f=/tmp/tasks/b1.output; for i in $(seq 1 110); do grep -q summary: "$f" && break; sleep 5; done`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+		assert.Contains(t, v.Deny, "announces when it ends", cmd)
+		assert.Contains(t, v.Deny, "wait for the task's completion notice", cmd)
+		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.Contains(t, v.Deny, hint.Status.With("--watch")+"` is for a person", cmd)
 	}
-	// A loop that works each pass, or a for loop over a list, is not waiting.
+	// A loop that works each pass without sleeping, or a for loop over a list that never
+	// breaks out, is not waiting.
 	for _, cmd := range []string{
 		`for f in a b; do gofmt -l $f; done`,
 		`for i in 1 2 3; do ./magus run build .; sleep 1; done`,
+		`while read -r f; do gofmt -l "$f"; done < list.txt`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, cmd)
 	}
@@ -2105,7 +2119,9 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 
 // TestBusyWaitOnAForeignProcessSaysWhatItProves pins the probe split: a loop over a pid,
 // the process table or magus's own pool and job rows waits on something nothing will
-// announce to the caller, so its deny drops that claim and names the held tool slot.
+// announce to the caller, so its deny drops that claim and names the record magus keeps of
+// that work. It never sends the reader to a host's watcher, which runs the same loop: that
+// remedy once built a pile of eleven.
 func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 	for _, cmd := range []string{
 		`while kill -0 4242 2>/dev/null; do sleep 30; done`,
@@ -2113,14 +2129,18 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		`while pgrep -f go-build >/dev/null; do sleep 5; done`,
 		`until ./magus status -o json | jq -e '.idle'; do sleep 20; done`,
 		`until ./magus describe job worker-a -o name; do sleep 60; done`,
+		`while kill -0 4242 2>/dev/null; do echo still running; sleep 30; done`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "holds your tool slot for the whole wait on a process you did not start", cmd)
-		assert.NotContains(t, v.Deny, "you are told when it finishes", cmd)
+		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
+		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.Contains(t, v.Deny, hint.Status.With("--watch=15s"), cmd)
+		assert.NotContains(t, v.Deny, "monitor", cmd)
+		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
 	}
 	own := Evaluate(strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
-	assert.Contains(t, own.Deny, "you are told when it finishes", "a probe of the caller's own output keeps the claim")
+	assert.Contains(t, own.Deny, "announces when it ends", "a probe of the caller's own output keeps the claim")
 }
 
 // TestOutputPipeServesOnlyAnExactRemedy pins which pipes carry a next: the tail of a run,
@@ -2218,12 +2238,10 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 
 func TestShellRulesAdviseByDefault(t *testing.T) {
 	for rule, command := range map[denyRuleName]string{
-		denyRuleBusyWait:        `until grep -q "^summary:" out.log; do sleep 25; done`,
 		denyRuleChainedRun:      "magus run generate . && magus run lint .",
 		denyRuleExitStatusEcho:  `./check.sh; echo $?`,
 		denyRuleOutputPipe:      "magus ls jobs | wc -l",
 		denyRuleOutputRedirect:  "magus run lint . > /tmp/x.txt",
-		denyRuleProcessPoll:     "pgrep -fl magus",
 		denyRuleRawTool:         "go test ./...",
 		denyRuleScriptedRewrite: `perl -pi -e 's/a/b/' f.go`,
 		denyRuleSedInPlace:      sedInPlace,
@@ -2392,7 +2410,7 @@ func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
 }
 
 // The rule is about polling, not about loops or about sleep. A loop that does real work
-// each pass, and a bare sleep, both stay allowed.
+// each pass without sleeping, and a bare sleep, both stay allowed.
 func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 	for _, cmd := range []string{
 		`for f in *.go; do echo "$f"; done`,
@@ -2402,8 +2420,6 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		// The case the first, pattern-based version of this rule got wrong: a quoted
 		// string that runs no loop at all. It is why the rule reads the AST.
 		`echo 'until grep -q x f; do sleep 1; done'`,
-		// A loop that sleeps AND does work each pass is working, not polling.
-		`while true; do ./magus run lint .; sleep 60; done`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
@@ -2512,10 +2528,10 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 	for _, inv := range credentialInvocations {
 		spelled := strings.Join(inv.words, " ")
-		cmds := cli.All
-		var found *cli.Command
+		cmds := commands.Root.Children
+		var found *cmdline.Command
 		for _, w := range inv.words {
-			i := slices.IndexFunc(cmds, func(c cli.Command) bool { return c.Name == w })
+			i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == w })
 			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
 				found = nil
 				break
@@ -2526,7 +2542,7 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 		if found == nil || inv.flag == "" {
 			continue
 		}
-		assert.True(t, slices.ContainsFunc(found.Flags, func(f cli.Flag) bool { return f.Name == inv.flag }),
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f cmdline.Flag) bool { return f.Name == inv.flag }),
 			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
 }
@@ -2629,7 +2645,7 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 // and in a checkout where a lease is held, claiming none is refused rather than ungraded.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	edit := func(rel string) Verdict {
+	edit := func(rel string) types.GuardJudgment {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
@@ -2643,7 +2659,7 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
 
-	store := job.NewStore(job.Location{CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
 	_, err := store.Update(t.Context(), "lease-c", func(cur *types.Job) {
 		*cur = types.Job{ID: "lease-c", WritePaths: []string{"web/**"}, State: types.StateRunning, CheckoutRoot: root}
 	})
@@ -2658,13 +2674,13 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	edit := func(rel string, dryRun bool) Verdict {
+	edit := func(rel string, dryRun bool) types.GuardJudgment {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	// The two calls may straddle a second, and a lease-write reason says how long ago the
 	// owner was updated.
 	age := regexp.MustCompile(`updated \d+s ago`)
-	withoutAge := func(v Verdict) Verdict {
+	withoutAge := func(v types.GuardJudgment) types.GuardJudgment {
 		v.Reason = age.ReplaceAllString(v.Reason, "updated <age> ago")
 		return v
 	}

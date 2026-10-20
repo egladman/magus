@@ -14,15 +14,16 @@ import (
 	"time"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,7 +47,7 @@ func brokerCmd(ctx context.Context, args []string) error {
 		return brokerUnits(ctx, args[1:])
 	default:
 		brokerUsage()
-		return usagef("magus broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
+		return exit.Usagef("magus broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
 	}
 }
 
@@ -94,19 +95,19 @@ func brokerUsage() {
 // start race, so it exits 0. A socket a supervisor hands over is served instead of
 // binding one.
 func brokerServe(ctx context.Context, args []string) error {
-	var f *gen.BrokerFlags
+	var f *flaggen.BrokerFlags
 	rest, err := cmdParse("broker", args, func(fs *flag.FlagSet) {
-		f = gen.BindBroker(fs)
+		f = flaggen.BindBroker(fs)
 		fs.Usage = brokerUsage
 	})
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus broker: unexpected argument %q (want status, stop or units, or flags only to run one)", rest[0])
+		return exit.Usagef("magus broker: unexpected argument %q (want status, stop or units, or flags only to run one)", rest[0])
 	}
 	if f.IdleExit < 0 {
-		return usagef("magus broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
+		return exit.Usagef("magus broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
 	}
 	if f.Log != "" {
 		if err := redirectStdio(f.Log); err != nil {
@@ -214,7 +215,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus broker status: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus broker status: takes no arguments (got %q)", rest[0])
 	}
 	st, qerr := queryBroker(ctx)
 	opts, err := outputOptionsOrDefault()
@@ -223,7 +224,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 	}
 	if opts.Format != outputText {
 		if qerr != nil {
-			return errSilent{exitCode: 1}
+			return exit.Reported(exit.Failure)
 		}
 		return emitFormatted(opts, st)
 	}
@@ -233,16 +234,16 @@ func brokerStatus(ctx context.Context, args []string) error {
 			why = "runs here never ask one"
 		}
 		slog.ErrorContext(ctx, fmt.Sprintf("no broker is running (broker: %s); %s", globalCfg.Broker, why), attr.Notice(""))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	printBrokerRows(os.Stdout, st, globalCfg.Broker, time.Now())
 	return nil
 }
 
 func brokerStop(ctx context.Context, args []string) error {
-	var f *gen.BrokerStopFlags
+	var f *flaggen.BrokerStopFlags
 	if _, err := cmdParse("broker stop", args, func(fs *flag.FlagSet) {
-		f = gen.BindBrokerStop(fs)
+		f = flaggen.BindBrokerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker stop [--services]")
 			fmt.Fprintln(os.Stderr, "")
@@ -258,7 +259,7 @@ func brokerStop(ctx context.Context, args []string) error {
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
 		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	defer func() { _ = c.Close() }()
 	if f.Services {
@@ -313,7 +314,7 @@ func serverLogPath() string { return stateLogPath("server.log") }
 func crashReportDir() string { return stateLogPath("crashes") }
 
 func stateLogPath(name string) string {
-	dir, err := config.UserStateDir()
+	dir, err := xdg.StateDir()
 	if err != nil {
 		dir = os.TempDir()
 	}
@@ -324,7 +325,7 @@ func stateLogPath(name string) string {
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
 	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"broker", "--" + gen.FlagBrokerLog, logPath}, logPath)
+	pid, err = spawnDetached([]string{"broker", "--" + flaggen.FlagBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 
@@ -370,7 +371,7 @@ func noticeBroker(ctx context.Context, pid int) {
 		return
 	}
 	attrs := []slog.Attr{attr.Notice(""), attr.Component("magus")}
-	if global.output == string(FormatJSONL) {
+	if global.output == string(outputJSONL) {
 		attrs = append(attrs,
 			slog.Int("pid", pid),
 			slog.String("log", brokerLogPath()),
@@ -445,7 +446,7 @@ func brokerUnits(ctx context.Context, args []string) error {
 	case 1:
 		supervisor = rest[0]
 	default:
-		return usagef("magus broker units: takes at most one supervisor (got %q)", rest)
+		return exit.Usagef("magus broker units: takes at most one supervisor (got %q)", rest)
 	}
 	facts, err := gatherUnitFacts()
 	if err != nil {
@@ -453,7 +454,7 @@ func brokerUnits(ctx context.Context, args []string) error {
 	}
 	units, err := broker.RenderUnits(supervisor, facts)
 	if err != nil {
-		return usagef("magus broker units: %v", err)
+		return exit.Usagef("magus broker units: %v", err)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -492,7 +493,7 @@ func gatherUnitFacts() (broker.UnitFacts, error) {
 	if err != nil {
 		return broker.UnitFacts{}, err
 	}
-	configDir, err := config.UserConfigDir()
+	configDir, err := xdg.ConfigDir()
 	if err != nil {
 		return broker.UnitFacts{}, err
 	}

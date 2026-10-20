@@ -1,6 +1,8 @@
 // published-magus-is-built-first-and-verified-by-digest: ci.yaml builds magus once and
 // later jobs install that binary. The upload must precede any cache extraction that
 // could overwrite it, and every consumer must verify the digest its publisher recorded.
+//
+// Tier 1, mechanical: the fix is a step order or a digest check.
 namespace publishedmagus;
 
 import "assert";

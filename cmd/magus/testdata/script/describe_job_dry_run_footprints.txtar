@@ -1,0 +1,78 @@
+# describe job and job wait cache the regions a job's diff placed beside the job store,
+# and under --dry-run they read that cache and write nothing to it. Each dry run is
+# followed by the same command without it, which does write, so a dry run that never
+# reached the cache cannot pass for one that wrote nothing.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'run.go'
+
+exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
+cp edited.go run.go
+exec sh -c 'ref=$(magus run lint . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json"'
+
+exec magus describe job wave/a --dry-run
+stdout '^job: wave/a$'
+exec find $XDG_STATE_HOME -name footprints
+! stdout .
+
+stdin result.json
+! exec magus job wait wave/a --stdin --dry-run
+stdout 'outside\.go'
+exec find $XDG_STATE_HOME -name footprints
+! stdout .
+
+stdin result.json
+! exec magus job wait wave/a --stdin
+stdout 'outside\.go'
+exec find $XDG_STATE_HOME -name footprints
+stdout footprints
+
+exec find $XDG_STATE_HOME -name footprints -prune -exec rm -rf {} +
+exec find $XDG_STATE_HOME -name footprints
+! stdout .
+exec magus describe job wave/a
+exec find $XDG_STATE_HOME -name footprints
+stdout footprints
+
+-- .gitignore --
+.magus/
+home/
+-- .gitattributes --
+*.go diff=golang
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({
+    "name": "site",
+    "targets": {
+        "lint": {"timeout": "5m"},
+    },
+});
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("**/*.go");
+    proc\exec("sh", ["-c", "test -s run.go"]);
+}
+-- run.go --
+package run
+
+func A(ctx int) {
+	a()
+}
+-- edited.go --
+package run
+
+func A(ctx int) {
+	b()
+}
+-- result.in.json --
+{"schema_version": 2, "job": "wave/a", "changed_paths": ["run.go", "outside.go"], "validation": {"command": "magus run lint .", "output_ref": "out<hex>"}, "unresolved_risks": []}

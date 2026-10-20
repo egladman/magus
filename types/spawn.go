@@ -64,7 +64,7 @@ type SpawnRequest struct {
 	// Session is the host's session id for the CALLER, empty when it reported none.
 	Session string
 	// Model is the model string the caller named, raw. Empty means it named none and the
-	// host picks; magus maps no model to a tier.
+	// host picks.
 	Model string
 	// AgentType is the subagent type the caller asked for.
 	AgentType string
@@ -86,11 +86,21 @@ type SpawnRequest struct {
 	// Parent is the description the CALLING agent was itself spawned with, empty when the
 	// caller is a root session or its spawn was never recorded.
 	Parent string
-	// Role is worker when a lease binds the calling session in this checkout.
+	// Role is worker when a lease binds the calling session in this checkout, and
+	// integrator when that worker integrates it.
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
+	// ModelTier is the model tier recorded on the live row a spawn's `<parent>/<role> <job>`
+	// title names. Nil on a continue, when the title names no live row, or when the row was
+	// written with no model tiers declared.
+	ModelTier *JobModelTier
+	// Thread, ThreadFrom, Orchestration and Window are the CALLER's, as on CommandRequest.
+	Thread        AgentThread
+	ThreadFrom    ThreadSource
+	Orchestration Orchestration
+	Window        *ContextWindow
 	// Target is the agent a continue addresses, nil on a spawn.
 	Target *SpawnTarget
 }

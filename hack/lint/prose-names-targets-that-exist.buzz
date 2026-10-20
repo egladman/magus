@@ -4,6 +4,8 @@
 // The docs adapter records a command naming a real project that lacks the target as
 // unknown_targets on the doc node; this rule reads that through magus\query. A command
 // naming no project, or a project this workspace does not have, is an illustration.
+//
+// Tier 1, mechanical: the fix names a target the project defines.
 namespace prosetargets;
 
 import "assert";

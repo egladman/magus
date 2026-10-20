@@ -39,7 +39,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun abandon() > str !> any {
-    magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result"});
+    magus\job.put("optional-exit", opts: {"criteria": "exercise omitted result", "read_only": true});
     final row = magus\job.exit("optional-exit");
     return row.state;
 }
@@ -61,6 +61,71 @@ export fun waitOnNoReturn() > void !> any {
 	require.ErrorContains(t, err, "has filed no result")
 }
 
+// The Go doors take typed options, so the map contract a Buzz caller writes against is
+// decoded at the binding: an unknown key or a value of the wrong type still raises there,
+// and a put's mistakes come back joined in one raise.
+func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
+	testkit.Isolate(t)
+	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	ctx := types.WithWorkspace(t.Context(), workspace)
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	require.NoError(t, sess.Exec(ctx, `
+import "magus";
+
+export fun queryTypo() > void !> any { magus\query("kind=target", opts: {"limt": 5}); }
+export fun queryText() > void !> any { magus\query("kind=target", opts: {"budget": "10"}); }
+export fun refsTypo() > void !> any { magus\refs("Foo", opts: {"ofset": 1}); }
+export fun trailTypo() > void !> any { magus\trail.read({"sinse": "6h"}); }
+export fun trailNumber() > void !> any { magus\trail.read({"session": 3}); }
+export fun putMistakes() > void !> any { magus\job.put("w", opts: {"passsed": true, "state": "passed"}); }
+`))
+	for name, want := range map[string][]string{
+		"queryTypo":   {`magus\query: unknown option "limt" (want budget, limit, offset)`},
+		"queryText":   {`magus\query: budget must be a number, got string`},
+		"refsTypo":    {`magus\refs: unknown option "ofset" (want limit, offset)`},
+		"trailTypo":   {`trail.read: unknown option "sinse"`},
+		"trailNumber": {`trail.read: opts.session is int64, want a string`},
+		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
+	} {
+		fn, ok := sess.Exports()[name]
+		require.True(t, ok, "exported Buzz entrypoint %s is missing", name)
+		_, err := sess.CallValue(ctx, fn, nil)
+		for _, w := range want {
+			require.ErrorContains(t, err, w, name)
+		}
+	}
+}
+
+func TestDecodeJobResultUsesTheVersionedStrictDecoder(t *testing.T) {
+	t.Parallel()
+
+	result, err := decodeJobResult(map[string]any{
+		"schema_version": types.JobResultSchemaVersion,
+		"changed_paths":  []any{"internal/job/lifecycle.go"},
+		"validation": map[string]any{
+			"command":    "magus run test .",
+			"output_ref": "out123",
+		},
+		"unresolved_risks": []any{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, types.JobResultSchemaVersion, result.Version)
+	assert.Equal(t, "out123", result.Validation.OutputRef)
+
+	_, err = decodeJobResult(map[string]any{
+		"schema_version":   types.JobResultSchemaVersion,
+		"changed_paths":    []any{},
+		"validation":       map[string]any{},
+		"unresolved_risks": []any{},
+		"claimed_pass":     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
+}
+
 // magus\job.put is a door that writes a checkpoint, so it resolves one in the repository
 // before writing it: a made-up revision raises, a real abbreviated one is stored in full.
 func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
@@ -78,7 +143,7 @@ func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun put(id: str, checkpoint: str) > str !> any {
-    final row = magus\job.put(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint});
+    final row = magus\job.put(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint, "read_only": true});
     return row.checkpoint;
 }
 `))

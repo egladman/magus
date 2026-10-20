@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/docs"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"

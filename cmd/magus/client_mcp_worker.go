@@ -7,13 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,7 +33,7 @@ func runClientWorker(ctx context.Context, in io.Reader, out, errOut io.Writer) i
 // drop the workspace's sandbox mode. Output of the magus runs a script starts
 // goes to errOut: out carries the one response line.
 func clientWorkspace(ctx context.Context, errOut io.Writer) (context.Context, error) {
-	root, err := magus.FindRoot(".")
+	root, err := workspace.FindRoot(".")
 	if err != nil {
 		return ctx, err
 	}
@@ -59,13 +58,13 @@ func clientWorkspace(ctx context.Context, errOut io.Writer) (context.Context, er
 	if err != nil {
 		return ctx, err
 	}
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, viewInternals(m))
 	sandboxed, err := m.ApplySandbox(ctx)
 	if err != nil {
 		return ctx, err
 	}
-	ctx = run.WithOutputWriters(sandboxed, errOut, errOut)
+	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
 	ctx = trail.ContextWithBase(ctx, m.CacheDir())
-	ctx = proc.WithLease(ctx, trail.LeaseFromEnv())
+	ctx = types.WithJobLease(ctx, trail.LeaseFromEnv())
 	return trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), nil
 }

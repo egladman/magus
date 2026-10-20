@@ -20,7 +20,7 @@ import (
 // never seen each other: the server's warm graph hands the same *Graph to
 // concurrent HTTP/MCP requests once assembly finishes. The lazy indices below are
 // the one place a "read" still writes, so they coalesce concurrent first-builds
-// under a mutex rather than racing (see ensureAdj, searchIdx).
+// under a mutex rather than racing (see ensureAdj, ensureSearchIndex).
 type Graph struct {
 	nodes map[string]types.KnowledgeNode // by node ID
 	edges map[edgeKey]types.KnowledgeEdge

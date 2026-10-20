@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,7 +83,7 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 				s.emit(t.Context(), e)
 				require.NoError(t, s.Close())
 
-				if format != FormatJSONL {
+				if format != output.JSONL {
 					assert.Empty(t, stdout.String(), "stdout is the caller's result")
 					assert.NotEmpty(t, stderr.String(), "rendered nothing")
 					assert.NotContains(t, stderr.String(), unrenderedEvent)
@@ -121,7 +122,7 @@ func (f *recordingEncoder) close() error                    { f.closed = true; r
 // Adding a format is adding an encoder to the registry: nothing else learns its name,
 // and every event a sink carries reaches it.
 func TestAFormatIsOneEncoder(t *testing.T) {
-	const unreleased Format = "unreleased"
+	const unreleased output.Format = "unreleased"
 	enc := &recordingEncoder{}
 	encoders[unreleased] = func(sinkEnv) encoder { return enc }
 	t.Cleanup(func() { delete(encoders, unreleased) })
@@ -131,7 +132,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 	ctx := t.Context()
 	s.EmitScope(ctx, "api", "magusfile", []string{"api"})
 	s.EmitCharms(ctx, "rw")
-	s.EmitCache(ctx, "local", "read+write")
+	s.EmitCache(ctx, "local", "read+write", "")
 	s.EmitBase(ctx, "git diff vs main")
 	s.EmitNotice(ctx, slog.LevelWarn, types.AffectedSetUncomputable, "full build")
 	s.EmitDiagnostic(ctx, "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
@@ -163,11 +164,11 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 func TestNewSinkRefusesMisconfiguration(t *testing.T) {
 	_, err := NewSink("bogus", io.Discard, io.Discard)
 	assert.ErrorContains(t, err, `"bogus"`)
-	_, err = NewSink(FormatJSONL, nil, io.Discard)
+	_, err = NewSink(output.JSONL, nil, io.Discard)
 	assert.Error(t, err)
-	_, err = NewSink(FormatText, io.Discard, nil)
+	_, err = NewSink(output.Text, io.Discard, nil)
 	assert.Error(t, err)
-	_, err = NewSink(FormatJSONL, io.Discard, io.Discard, WithSinkFilter([]string{"+"}))
+	_, err = NewSink(output.JSONL, io.Discard, io.Discard, WithSinkFilter([]string{"+"}))
 	assert.Error(t, err)
 }
 
@@ -183,7 +184,7 @@ func TestTextSinkPrintsAnUnrenderedEvent(t *testing.T) {
 func TestTextSinkProse(t *testing.T) {
 	render := func(e any) string {
 		var out bytes.Buffer
-		s, err := NewSink(FormatText, io.Discard, &out)
+		s, err := NewSink(output.Text, io.Discard, &out)
 		require.NoError(t, err)
 		s.emit(t.Context(), e)
 		return out.String()
@@ -197,6 +198,7 @@ func TestTextSinkProse(t *testing.T) {
 		{report.RunCharms{Charms: "rw"}, "charms: rw\n"},
 		{report.RunCharms{}, "charms: (none)\n"},
 		{report.RunCache{Tier: "gha + local", Mode: "read-only"}, "cache: gha + local (read-only)\n"},
+		{report.RunCache{Tier: "local", Mode: "read+write", Dir: "/c/magus/cache/repo-1"}, "cache: local (read+write) in /c/magus/cache/repo-1\n"},
 		{report.RunCache{}, ""},
 		{report.RunBase{Base: "git diff vs main"}, "base: git diff vs main\n"},
 		{report.RunBase{}, ""},
@@ -229,7 +231,7 @@ func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {
 	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
 	interactive.SetHintsEnabled(true)
 	var out bytes.Buffer
-	s, err := NewSink(FormatText, io.Discard, &out, WithSinkLevel(slog.LevelError))
+	s, err := NewSink(output.Text, io.Discard, &out, WithSinkLevel(slog.LevelError))
 	require.NoError(t, err)
 	ctx := t.Context()
 	s.EmitScope(ctx, "api", "", nil)
@@ -253,7 +255,7 @@ func TestTextSinkRendersANoticeAsAHint(t *testing.T) {
 	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
 	interactive.SetHintsEnabled(true)
 	var buf bytes.Buffer
-	s, err := NewSink(FormatText, io.Discard, &buf)
+	s, err := NewSink(output.Text, io.Discard, &buf)
 	require.NoError(t, err)
 	s.EmitNotice(t.Context(), slog.LevelWarn, "MGS1028", "notice-one")
 	assert.Equal(t, "hint: [MGS1028] notice-one\n", buf.String())
@@ -268,7 +270,7 @@ func TestTextSinkRendersANoticeAsAHint(t *testing.T) {
 // never as prose.
 func TestJSONLSinkRecordsHeaders(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	s, err := NewSink(FormatJSONL, &stdout, &stderr)
+	s, err := NewSink(output.JSONL, &stdout, &stderr)
 	require.NoError(t, err)
 	s.EmitScope(t.Context(), "api", "magusfile", []string{"api"})
 	s.EmitBase(t.Context(), "git diff vs main")
@@ -288,7 +290,7 @@ func TestJSONLSinkRecordsHeaders(t *testing.T) {
 // from two goroutines at once.
 func TestJSONLSinkOverOneWriter(t *testing.T) {
 	var both bytes.Buffer
-	s, err := NewSink(FormatJSONL, &both, &both)
+	s, err := NewSink(output.JSONL, &both, &both)
 	require.NoError(t, err)
 	s.EmitScope(t.Context(), "api", "", nil)
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "same stream")
@@ -302,7 +304,7 @@ func TestJSONLSinkOverOneWriter(t *testing.T) {
 // consumer asked to filter.
 func TestJSONLSinkFilter(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	s, err := NewSink(FormatJSONL, &stdout, &stderr, WithSinkFilter([]string{report.TypeShardTotal}))
+	s, err := NewSink(output.JSONL, &stdout, &stderr, WithSinkFilter([]string{report.TypeShardTotal}))
 	require.NoError(t, err)
 	s.EmitScope(t.Context(), "api", "", nil)
 	s.EmitShardTotal(t.Context(), "2", 4, 1500*time.Millisecond)
@@ -320,7 +322,7 @@ func TestTextSinkWithRecords(t *testing.T) {
 	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
 	interactive.SetHintsEnabled(true)
 	var stdout, stderr, records bytes.Buffer
-	s, err := NewSink(FormatText, &stdout, &stderr, WithSinkRecords(&records))
+	s, err := NewSink(output.Text, &stdout, &stderr, WithSinkRecords(&records))
 	require.NoError(t, err)
 	s.EmitScope(t.Context(), "api", "pipe", []string{"api"})
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "tee notice")
@@ -336,7 +338,7 @@ func TestTextSinkWithRecords(t *testing.T) {
 	assert.NotNil(t, o.report, "the engine's own records reach the record stream")
 	assert.Nil(t, o.lockReport, "lock decisions print as prose")
 
-	_, err = NewSink(FormatJSONL, io.Discard, io.Discard, WithSinkRecords(io.Discard))
+	_, err = NewSink(output.JSONL, io.Discard, io.Discard, WithSinkRecords(io.Discard))
 	assert.ErrorContains(t, err, "already writes records")
 }
 
@@ -345,7 +347,7 @@ func TestTextSinkWithRecords(t *testing.T) {
 func TestSinkRecordsValues(t *testing.T) {
 	returns := types.Returns{"web": []string{"a", "b"}, "api": "1.2.3"}
 	var records, stderr bytes.Buffer
-	s, err := NewSink(FormatText, io.Discard, &stderr, WithSinkRecords(&records))
+	s, err := NewSink(output.Text, io.Discard, &stderr, WithSinkRecords(&records))
 	require.NoError(t, err)
 	s.RecordValues("describe", returns)
 	require.NoError(t, s.Close())
@@ -354,7 +356,7 @@ func TestSinkRecordsValues(t *testing.T) {
 `, records.String())
 	assert.Empty(t, stderr.String())
 
-	text, err := NewSink(FormatText, io.Discard, &stderr)
+	text, err := NewSink(output.Text, io.Discard, &stderr)
 	require.NoError(t, err)
 	text.RecordValues("describe", returns)
 	assert.Empty(t, stderr.String())
@@ -377,7 +379,7 @@ func (g *gatedWriter) Write(p []byte) (int, error) {
 // run.target.result could be one of them.
 func TestJSONLSinkNeverDropsARecord(t *testing.T) {
 	dst := &gatedWriter{open: make(chan struct{})}
-	s, err := NewSink(FormatJSONL, dst, io.Discard)
+	s, err := NewSink(output.JSONL, dst, io.Discard)
 	require.NoError(t, err)
 	const n = 10_000
 	done := make(chan struct{})
@@ -406,7 +408,7 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var text bytes.Buffer
-	ts, err := NewSink(FormatText, io.Discard, &text)
+	ts, err := NewSink(output.Text, io.Discard, &text)
 	require.NoError(t, err)
 	checkOutputOverlap(t.Context(), steps, ts)
 	checkMissingDependencies(t.Context(), []*types.Project{consumer}, nil, written, ".", ts)
@@ -414,7 +416,7 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	assert.Contains(t, text.String(), "["+string(types.MissingDependencyDetected)+"] potential undeclared dependency")
 
 	var buf bytes.Buffer
-	js, err := NewSink(FormatJSONL, &buf, io.Discard)
+	js, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
 	checkOutputOverlap(t.Context(), steps, js)
 	checkMissingDependencies(t.Context(), []*types.Project{consumer}, nil, written, ".", js)

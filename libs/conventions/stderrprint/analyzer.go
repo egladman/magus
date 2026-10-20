@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
@@ -38,7 +39,8 @@ type Options struct {
 
 	// CalleePackages are import path prefixes whose functions write wherever
 	// they are told. Handing os.Stderr to one is a write, unless the callee is
-	// help.
+	// help, an option such as WithStderr, or a constructor such as NewLogger,
+	// which keep the stream for the display to write through.
 	CalleePackages []string `json:"callee-packages"`
 
 	// Display names the callees that are the display itself, which is handed
@@ -272,10 +274,11 @@ func (w walker) writesStderr(call *ast.CallExpr) bool {
 }
 
 // handsStderr names the callee when call passes it os.Stderr and the callee belongs to
-// [Options.CalleePackages] without being help or the display; otherwise it is "".
+// [Options.CalleePackages] without being help, the display, an option or a constructor;
+// otherwise it is "".
 func (w walker) handsStderr(call *ast.CallExpr) string {
 	fn, ok := typeutil.Callee(w.pass.TypesInfo, call).(*types.Func)
-	if !ok || fn.Pkg() == nil || w.isUsageName(fn.Name()) || w.help[fn] {
+	if !ok || fn.Pkg() == nil || w.isUsageName(fn.Name()) || w.help[fn] || storesStream(fn.Name()) {
 		return ""
 	}
 	path := fn.Pkg().Path()
@@ -289,6 +292,18 @@ func (w walker) handsStderr(call *ast.CallExpr) string {
 		return fn.Name()
 	}
 	return ""
+}
+
+// storesStream reports whether a callee named name is an option (WithStderr) or a
+// constructor (NewLogger): handing it os.Stderr gives it the stream to write through
+// later, and the write is what the analyzer reports.
+func storesStream(name string) bool {
+	for _, prefix := range []string{"With", "New"} {
+		if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" && unicode.IsUpper(rune(rest[0])) {
+			return true
+		}
+	}
+	return false
 }
 
 func (w walker) isStderr(e ast.Expr) bool {

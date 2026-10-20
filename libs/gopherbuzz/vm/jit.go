@@ -7,17 +7,19 @@ import (
 
 // JIT toggle (see jit_amd64.go). ON by default; disable with BUZZ_JIT=0 (or
 // "false"/"off") or SetJIT(false). No effect where no backend is compiled in.
-var jitFlag atomic.Bool
+var jitFlag = newJITFlag()
 
-func init() {
+func newJITFlag() *atomic.Bool {
+	var on atomic.Bool
 	switch os.Getenv("BUZZ_JIT") {
 	case "0", "false", "off":
-		jitFlag.Store(false)
+		on.Store(false)
 	case "1", "true", "on":
-		jitFlag.Store(true) // opt in even on arches whose backend defaults off
+		on.Store(true) // opt in even on arches whose backend defaults off
 	default:
-		jitFlag.Store(jitArchDefault)
+		on.Store(jitArchDefault)
 	}
+	return &on
 }
 
 // SetJIT enables or disables the baseline JIT at runtime.

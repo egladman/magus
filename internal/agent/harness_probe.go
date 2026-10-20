@@ -282,16 +282,15 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd := exec.CommandContext(probeCtx, "sh", "-c", command)
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
-	env := append(os.Environ(),
-		// What the host exports to every hook: the root the session started in. Its wired
-		// commands find the checkout's own build through it, so a probe without it grades
-		// a different interpreter than the one a session runs.
-		"CLAUDE_PROJECT_DIR="+root,
+	env := append(withoutLeaseClaim(os.Environ()),
 		"HOME="+scratch,
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
 		"TMPDIR="+scratch,
 	)
+	if strings.Contains(command, "CLAUDE_PROJECT_DIR") {
+		env = append(env, "CLAUDE_PROJECT_DIR="+root)
+	}
 	if supportsHostResponseOverride(command) {
 		// HOST_ADVISE_BRANCH='' is not "suppress the advisory": it is "do not append
 		// the branch this template would otherwise splice into HOST_RESPONSE",
@@ -335,9 +334,46 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	}
 	decision := strings.TrimSpace(stdout.String())
 	if len(wantDecisions) > 0 && !slices.Contains(wantDecisions, decision) {
-		return HarnessUncovered, fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
+		reason := fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
+		if runErr != nil {
+			reason += "; " + runErr.Error()
+		}
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			const limit = 1024
+			if len(detail) > limit {
+				detail = "..." + detail[len(detail)-limit:]
+			}
+			reason += "; stderr: " + detail
+		}
+		return HarnessUncovered, reason
 	}
 	return HarnessVerified, ""
+}
+
+// withoutLeaseClaim drops the magus.lease member from BAGGAGE. A verify run from inside a
+// leased worker would otherwise judge the synthetic AGENTS.md write as that worker's, and
+// the lease's write boundary denies it where the probe expects an advisory. The other
+// members belong to other tools and stay.
+func withoutLeaseClaim(environ []string) []string {
+	const prefix = "BAGGAGE="
+	kept := make([]string, 0, len(environ))
+	for _, entry := range environ {
+		value, isBaggage := strings.CutPrefix(entry, prefix)
+		if !isBaggage {
+			kept = append(kept, entry)
+			continue
+		}
+		var members []string
+		for member := range strings.SplitSeq(value, ",") {
+			if !strings.HasPrefix(strings.TrimSpace(member), "magus.lease=") {
+				members = append(members, member)
+			}
+		}
+		if len(members) > 0 {
+			kept = append(kept, prefix+strings.Join(members, ","))
+		}
+	}
+	return kept
 }
 
 func firstLineContaining(text, substr string) (string, bool) {

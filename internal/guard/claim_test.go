@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -68,7 +70,10 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 		{name: "every edit of a sequence is placed", lease: "own-b", fields: writeFields{Edits: []textEdit{
 			{OldText: "b()", NewText: "b2()"}, {OldText: "a()", NewText: "a2()"},
 		}}, denied: true},
-		{name: "a whole-file write keeps the path verdict", lease: "own-b", fields: writeFields{Content: "package run\n"}},
+		{name: "a whole-file write inside its own claim", lease: "own-b", fields: writeFields{Content: strings.Replace(claimedGo, "b()", "b2()", 1)}},
+		{name: "a whole-file write changing another job's declaration", lease: "own-b", fields: writeFields{Content: strings.Replace(claimedGo, "a()", "a2()", 1)}, denied: true},
+		{name: "a whole-file write deleting another job's declaration", lease: "own-b", fields: writeFields{Content: "package run\n"}, denied: true},
+		{name: "a whole-file write leaving the file as it is", lease: "own-b", fields: writeFields{Content: claimedGo}},
 		{name: "an edit that does not apply keeps the path verdict", lease: "own-b", fields: edit("absent()", "x()")},
 		{name: "an ambiguous edit keeps the path verdict", lease: "own-b", fields: edit("()", "(x)")},
 		{name: "a writer holding the whole file", lease: "own-file", fields: edit("a()", "a2()")},
@@ -93,7 +98,7 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	ctx, root := claimFixture(t)
 	run := filepath.Join(root, "run.go")
-	judge := func(toolInput map[string]any) Verdict {
+	judge := func(toolInput map[string]any) types.GuardJudgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "own-b", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": root,
 			"tool_input": toolInput,
@@ -111,8 +116,60 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	assert.Equal(t, "deny", multi.Decision, "every edit of a list is placed")
 
 	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "old_string": "b()", "new_string": "b2()"}).Decision)
-	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
-		"a whole-file write carries no edit to place, and the writer's claim covers the file")
+	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "content": strings.Replace(claimedGo, "b()", "b2()", 1)}).Decision,
+		"a whole-file write that changes only the writer's declaration is placed like an edit and passes")
+	assert.Equal(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
+		"a whole-file write that drops another job's declaration is placed like an edit and denied")
+}
+
+const claimedMagusfile = `import "magus";
+
+magus\project({
+    "name": "demo",
+    "targets": {
+        "test": {"timeout": "5m"},
+    },
+});
+`
+
+// A lease holding every Buzz file by a pattern narrows its hold on the magusfile to the keys
+// its first write changes, releasing the rest with its digest; from then on its claims are
+// graded like any other, in both directions.
+func TestConfigHoldNarrowsOnFirstWrite(t *testing.T) {
+	ctx, root := fleetFixture(t, claimLease("cfg", "**/*.buzz"), claimLease("keys", "magusfile.buzz#project.name"))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.buzz diff=buzz\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(claimedMagusfile), 0o644))
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	timeout := writeFields{OldText: `"5m"`, NewText: `"6m"`}
+	name := writeFields{OldText: `"demo"`, NewText: `"demo2"`}
+	row := func(id string) types.Job {
+		rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
+		require.NoError(t, err)
+		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })]
+	}
+
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, timeout).Decision,
+		"before the holder writes, its pattern claims no key another lease could collide with")
+
+	got := gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, timeout)
+	require.Equal(t, "advise", got.Decision, got.Reason)
+	assert.Contains(t, got.Context, `lease cfg now holds magusfile.buzz by "magusfile.buzz#project.targets.test"`)
+	cfg := row("cfg")
+	assert.Equal(t, []string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, cfg.WritePaths)
+	require.Len(t, cfg.Releases, 1)
+	assert.Equal(t, "magusfile.buzz", cfg.Releases[0].Path)
+	assert.True(t, strings.HasPrefix(cfg.Releases[0].Digest, "sha256:"), cfg.Releases[0].Digest)
+
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, timeout).Decision, "a key it claims narrows nothing more")
+	assert.Equal(t, "deny", gradeLeasedEdit(ctx, Dependencies{}, "cfg", magusfile, name).Decision, "a key another lease claims")
+	assert.Equal(t, "deny", gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, timeout).Decision, "the holder's new claim is graded")
+	assert.Empty(t, gradeLeasedEdit(ctx, Dependencies{}, "keys", magusfile, name).Decision)
+	assert.Len(t, row("cfg").WritePaths, 2, "a denied write narrows nothing")
 }
 
 func TestApplyEdits(t *testing.T) {

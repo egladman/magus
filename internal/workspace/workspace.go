@@ -16,6 +16,8 @@
 package workspace
 
 import (
+	"io"
+
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -49,6 +51,24 @@ type Load struct {
 	// SkipWorkspaceProviders opens the workspace without running its wired workspace
 	// providers, so it holds only the magusfile-declared projects.
 	SkipWorkspaceProviders bool
+	// Env is the environment the workspace reads, KEY=VALUE pairs; nil reads none.
+	Env []string
+	// Stderr receives the workspace's notices and, under -o jsonl, its records; nil
+	// discards them.
+	Stderr io.Writer
+	// CommandLine is what the workspace records as this process's command line; nil
+	// records an empty one.
+	CommandLine []string
+	// VCSDriver, when VCSDriverGiven, is the VCS to drive in place of a built-in one.
+	VCSDriver      types.VCSDriver
+	VCSDriverGiven bool
+	// SpawnRule decides whether a job may spawn one at a given model tier. Required: a
+	// workspace has no default rule.
+	SpawnRule func(parent, child types.ModelTier) error
+	// CacheBackend, when CacheBackendGiven, is the store behind the remote cache tier in
+	// place of one a magusfile wires.
+	CacheBackend      types.CacheBackend
+	CacheBackendGiven bool
 }
 
 // Option configures Open or Inspect.

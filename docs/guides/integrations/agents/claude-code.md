@@ -25,7 +25,7 @@ event.
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
-| reply check      | `Stop`, advice for the next turn; the spell declares it       |
+| reply check      | opt-in: `Stop`, advice for the next turn; you wire it         |
 | your messages    | `UserPromptSubmit`, recorded and never answered               |
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
@@ -91,30 +91,43 @@ magus describe harness claude-code
 magus agent harness verify --id claude-code
 ```
 
-The spell installs entries for commands, file edits, Magus MCP tool calls, reads
-(recorded and judged), subagent spawns, and the person's messages (recorded, never
-answered). Each is one `magus buzz` command that
-runs a shipped script, which talks to `magus shell`: file edits run
-`magus-path.buzz`, reads also run `magus-observe.buzz`, and every other entry runs
-`magus-command.buzz`. The Bash entry, as `magus describe harness claude-code` prints it, in the place it lands in
-`.claude/settings.json`:
+The spell wires every tool call to the guard through one `PreToolUse` entry, records
+reads, finished spawns and stops, and records the person's messages without answering
+them. Each entry is one `magus buzz` command that runs a shipped script, which talks
+to `magus shell`: reads are also recorded by `magus-observe.buzz`, and every other
+entry runs `magus-command.buzz`. The catch-all entry, as `magus describe harness
+claude-code` prints it, in the place it lands in `.claude/settings.json`:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads --foreground-default-ms 120000 --foreground-max-ms 600000 --tool-rows .claude/magus/tools"
         }]
       }
     ]
   }
 }
 ```
+
+The glue forwards the whole event, and magus judges the call by its tool and the shape
+of its input: a command line, a file read or write, a search, a spawn, a skill load,
+an MCP call. The spell's tool rows say what each Claude Code tool does where the shape
+cannot; `magus agent harness install` writes them to `.claude/magus/tools`, one file per
+capability with one tool name per line, and the catch-all entry names that directory with
+`--tool-rows`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
+passes before any rule loads; a tool whose input has none of those shapes and that no row
+lists is named by the unjudged-tool rule rather than run unseen. See
+[Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
+
+The catch-all replaced the per-tool entries, among them the `Edit|Write|NotebookEdit`
+entry that ran `magus-path.buzz`. A `.claude/settings.json` merged before that still
+carries them, and `magus describe harness claude-code` lists each as one to retire.
 
 This repository's own `.claude/settings.json` holds exactly what the spell prints,
 merged with the command `magus describe harness` prints beside it. The scripts are
@@ -222,15 +235,21 @@ command that changes state, and the magus MCP tools that write: `client`, which 
 script, and `diff` with an `op` other than `state` or `thread`. The tools that only read
 (`status`, `config`, `console`, `buzz`, `diff` with no `op`, `op=state` or `op=thread`)
 still answer. Reads, `git status`, `magus affected --explain` and the fix still run, and
-so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.
-The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
+so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`,
+and the lines that get a tree left mid-pick back to one a binary can be built from
+(`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or
+`--continue`, and `git worktree add`). While a magusfile import names a file that is not
+there, putting that file back also runs, with an advisory that says why: `git mv` onto
+it, `git restore` or `git checkout --` of it, or a write to it; the bootstrap the denial
+prints runs for that failure too. The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
 verdict:` ref. The workspace needs only to show a guard rule in its magusfile for this,
 so a fresh worktree is covered before any policy has loaded in its cache.
 
-The fix depends on who is asking. The main session or a person rebuilds with `./magus
-run go-build .`, or bootstraps with the command the denial prints where the checkout has
-no binary. A worker holding a lease never builds one: there is one binary per base, and
-the main session builds it and places a copy in the worker's checkout with
+The fix depends on who is asking. The checkout's integrator (a job whose check is the
+gate) or a person rebuilds with `./magus run go-build .`, or bootstraps with the command
+the denial prints where the checkout has no binary. An orchestrating main session never
+builds, and a worker holding a lease never builds one: there is one binary per base, and
+the integrator builds it and a copy is placed in the worker's checkout with
 `hack/dev/bootstrap-worktree.buzz`, so the denial tells the worker to ask for that. A
 worktree session with no `./magus` is an error, where it used to run open on whatever
 PATH held; `SessionStart` says so once per session, naming one command, whenever the
@@ -252,50 +271,28 @@ harness` prints and run `magus agent harness verify`. See
 
 ## MCP tool calls
 
-Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
-`mcp__<server>__<tool>`. The shipped spell includes a Magus-MCP matcher,
-so `magus describe harness claude-code` prints this entry alongside the shell-command
-and file-write entries:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "mcp__magus__.*",
-        "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Same script, same command string, same reply shape. An MCP call carries no
-`tool_input.command`, only a tool name and a params object, and that absence is what
-the glue reads: with nothing at `HOST_EVENT_PATH` to select, it forwards the event
-whole instead of extracting one field, so the entry says nothing the event does not
-already say. `magus session hook` already parses that whole envelope;
-today it recognizes the tool name and params only well enough to say there is
-nothing here it can judge, so this wiring passes every MCP call rather than
-denying or advising on one, which is the honest state to ship rather than
-silence. The next rule the guard grows reaches the model the moment it
-ships, with no new host wiring, because the transport is already here.
+Claude Code's `PreToolUse` also fires for a tool served over MCP, named
+`mcp__<server>__<tool>`, and the catch-all entry receives it like any other call. A
+call to one of magus's own tools (`mcp__magus__*`) is judged as the CLI verb it
+stands for, so a rule that holds on one channel holds on the other. A call to
+another server's tool carries a params object magus cannot read, so the unjudged-tool
+rule names it: it advises by default, and a workspace that wants every call judged
+sets it to deny.
 
 ## Recording and judging what was read
 
-Two `PreToolUse` entries match `Read`. The first runs
-[`magus-observe.buzz`](guard-templates.md#magus-observebuzz). It judges
+One `PreToolUse` entry matches `Read` alone. It runs
+[`magus-observe.buzz`](guard-templates.md#magus-observebuzz), which judges
 nothing and prints nothing: it records the path on the activity trail so a later
 `magus session show` can say what a session looked at, not only what it changed.
 
-The second runs `magus-command.buzz`, which restates the read as the shell line
-it stands for: `cat <file>`, or `sed -n <first>,<last>p <file>` over the call's
-offset and limit, a limit over 300 counting as whole. The read rules then judge
-it as they judge that `cat`: a whole read of a Go, Buzz or Markdown file over
-120 lines is refused with the file's map, and a bounded read inside one indexed
-declaration is advised toward `magus refs`.
+The catch-all entry judges the same read. magus restates it as the shell line it
+stands for: `cat <file>`, or `sed -n <first>,<last>p <file>` over the call's offset
+and limit, a limit over 300 counting as whole. The read rules then judge it as they
+judge that `cat`, whichever tool performs it: a whole read of a Go, Buzz or Markdown
+file over 120 lines is refused with the file's map, a bounded read inside one indexed
+declaration is advised toward `magus refs`, and a third window paged through one file
+is refused whether the windows came from `sed -n` or from `Read`.
 
 ```json
 {
@@ -307,16 +304,6 @@ declaration is advised toward `magus refs`.
           {
             "type": "command",
             "command": "./magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
             "timeout": 10
           }
         ]
@@ -335,21 +322,12 @@ than enforcement. The judging entry is enforcement, and Codex carries it too.
 When Claude Code hands work to a subagent it does so through a tool call, and
 that call fires `PreToolUse` like any other, carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`, the callee's declared
-`subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
-descriptor includes a matcher for it, so `magus describe harness claude-code`
-prints this entry alongside the entries above:
+`subagent_type`, and, when the caller named one, `tool_input.model`. The catch-all
+entry receives it before it runs, and two more entries see it finish:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Agent|Task|SendMessage",
-        "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --reports-skills", "timeout": 10 }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Agent|Task",
@@ -368,6 +346,16 @@ prints this entry alongside the entries above:
   }
 }
 ```
+
+The tools that wait reach the catch-all entry too: `Monitor`, `TaskOutput`,
+`ScheduleWakeup` and `CronCreate`. A `Monitor` runs its `command` in
+the background and wakes the agent on each line it prints, so the command is judged
+as the shell line it is (busy-wait and process-poll apply), and the waiter rules
+count the watchers each agent holds: a second live one on the same subject, or one
+on work the agent backgrounded itself, is a duplicate, and five live at once are a
+pile (see [the guard](guard.md#what-magus-advises-by-default)). `ScheduleWakeup`
+and `CronCreate` carry a `prompt` beside a delay or a cron expression, which magus
+reads as a prompt queued for the same session rather than a spawn.
 
 `SendMessage` is the continuation of a subagent that already exists: a
 `tool_input` carrying `to` and `message`. It reaches the same verdict path as a
@@ -388,16 +376,17 @@ cache-write tokens as the agent's context size, which a later `SendMessage` to i
 hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
 `target.contextTokens`.
 
-Same script as the MCP-call entry and for the same reason: a spawn's payload is a
-prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
-`tool_input.command` to select and the event goes whole. The one capability written
-on this entry, and on every other entry that judges, is the flag after `--`, which
-`magus buzz` forwards to the script as its own argv: `--reports-skills` says
-that THIS config also matches the host's `Skill` tool, so a rule that requires a
-skill before a spawn, a write or a command has loads to read. A load counts for the
+A spawn's payload is a prompt, a `subagent_type`, and an optional `model`, not one
+string, and the event goes whole as every call's does. The one capability written on
+every entry that judges is the flag after `--`, which `magus buzz` forwards to the
+script as its own argv: `--observes-skill-loads` says that THIS config matches the host's
+`Skill` tool too, which the catch-all does, so a rule that requires a skill before a
+spawn, a write or a command has loads to read. A load counts for the
 agent that made it: a subagent loads a skill itself, and its parent's load does not
 count for it. A config without that matcher omits the flag and those rules stand
-down rather than denying forever. The script parses that tail against the flags it
+down rather than denying forever. The catch-all entry also declares the Bash tool's
+foreground limits, which the script forwards only for a shell command line. The script
+parses that tail against the flags it
 supports; an argument it does not know is named on stderr, which Claude Code shows
 as a hook error, and the call is judged without it rather than blocked.
 `magus session hook` reads
@@ -409,9 +398,9 @@ declared model stored as a payload blob you fetch by ref: `magus session show
 <id>` renders each spawn's model claim, wording an absent one as "none
 declared" rather than leaving it blank.
 
-The matcher covers both names Claude Code has used for the spawn tool across
-releases (`Task` historically, `Agent` currently); a release that emits neither
-records nothing here; nothing else in the contract depends on the spelling.
+The `PostToolUse` matcher covers both names Claude Code has used for the spawn tool
+across releases (`Task` historically, `Agent` currently); a finished spawn under any
+other name records no child id.
 
 It records; it does not judge. A lease prompt is prose, so the command rules
 never run against it and the verdict is always a pass: a prompt that mentions a
@@ -485,18 +474,17 @@ record by hand, which is the form to reach for when you are the one stopping.
 
 ## Judging the reply a turn ends with
 
-The spell declares a second `Stop` entry for
-[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz), so
-`magus describe harness claude-code` prints it beside the checkpoint and the merge
-command writes it. It runs the `proofread` binary over the turn's last message and
-hands up to five findings back to the agent as `additionalContext`. It needs no
-magus workspace, only `proofread` on `PATH`, in `__PROOFREAD_BIN`, or named with
-`-- --proofread PATH`; `__PROOFREAD_DECISIONS` or `-- --decisions FILE` sets your own
-decisions. The entry carries no path of your own on purpose, since the spell ships to
-every workspace: set the two variables in the settings `env` object instead, which a
-merge never overwrites. It never blocks the stop and prints nothing when proofread is
-missing or the agent is already continuing. [Check writing in a commit hook](../../proofread.md)
-covers the setup.
+The spell does not wire this. The reply check judges your agent's replies against the
+rules in `proofread`, which is a choice about how your agent writes and not part of the
+guard, so a merge never writes it and never removes one you add. To turn it on, download
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add a second `Stop`
+entry to `.claude/settings.json` by hand. The script runs the `proofread` binary over the
+turn's last message and hands up to five findings back to the agent as
+`additionalContext`. It needs no magus workspace, only `proofread` on `PATH`, in
+`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
+`-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
+nothing when proofread is missing or the agent is already continuing.
+[Check writing in a commit hook](../../proofread.md) covers the setup.
 
 ```json
 {
@@ -617,8 +605,13 @@ magus\harness.provider(claudeMod);
 `magus describe harness claude-code-mod` then prints the two settings it keeps in
 `.claude/settings.json`, `extraKnownMarketplaces.magus` and
 `enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
-reads the marketplace only once the person trusts the folder, and each person still
-runs the install line above once.
+reads the marketplace only once the person trusts the folder. The settings do not
+install the mod: each person runs the install line above once, and until they do
+the mod never appears. `magus agent harness verify claude-code-mod` and
+`magus doctor` read what Claude Code recorded in `installed_plugins.json` under
+`CLAUDE_CONFIG_DIR` (`~/.claude` by default). Verify fails naming the install
+line while the workspace enables the mod and the person has not installed it;
+doctor advises on that gap so CI is not red for a personal install. A workspace that does not enable the mod is not checked.
 
 ## Coverage and limits
 
@@ -629,27 +622,10 @@ MCP-call wiring is transport-complete but rule-empty today: the wiring passes
 every call because nothing yet judges an MCP tool name, not because the
 channel cannot carry a verdict.
 
-**Shell commands run with stdin at end-of-file.** An agent's command inherits a
-stdin nobody writes to, so a stray reader (grep with no file operand, `read`, a
-prompt, ssh, a pager) waits forever, and Claude Code backgrounds a timed-out
-command rather than killing it. On a pass or an advise, the reply hands the
-command back as `updatedInput`, prefixed `exec </dev/null;`, with every other
-`tool_input` field kept, since `updatedInput` replaces the whole input. It sets no
-`permissionDecision`, so the rewritten call still meets your permission rules. A
-heredoc, a pipe or a `<` still feed their command. A denied or asked call is never
-rewritten, a command that already starts with the prefix is left alone, the
-session is told once, and the activity trail records `stdin_closed` on the
-verdict.
-
-A worktree-isolated subagent meets one side effect: Claude Code's isolation check
-judges the rewritten line, and refuses the prefix on a line it already finds
-borderline (runtime-computed values beside a redirect) as "exec inside a construct
-too complex to verify". Split such a line, as that refusal says. A
-`{ <command>` ... `} </dev/null` group avoids the word but was refused far more
-often, even around `stat` or `git status`.
+**The guard rewrites no command.** Claude Code hands a shell command `/dev/null` for its stdin, even when its own stdin is an open pipe (re-probed 2026-10-13 on 2.1.295), so a stray reader (grep with no file operand, `read`, a prompt, ssh, a pager) reads end-of-file instead of waiting. A reply carries no `updatedInput`, and the call runs exactly as Claude Code sent it, under your own permission rules.
 
 This harness wires six events: `PreToolUse`, `PostToolUse` (a finished spawn's child
-id), `SessionStart`, `Stop` (the checkpoint and the reply check), `SubagentStop` (a
+id), `SessionStart`, `Stop` (the checkpoint), `SubagentStop` (a
 subagent's context size) and `UserPromptSubmit`. The Bash entry alone carries
 `--foreground-default-ms` and `--foreground-max-ms`, Claude Code's Bash timeout limits
 (`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`): the glue reads the call's

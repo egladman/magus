@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/hint"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -37,6 +38,6 @@ func registerCommandRule(ctx context.Context, sess *buzz.Session, obs buzz.Direc
 // buzzCommandRule adapts the registered Buzz function to the guard's rule type.
 func buzzCommandRule(sess *buzz.Session, rule vm.Value) workspace.CommandRule {
 	return func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error) {
-		return callFunctionRule(ctx, sess, rule, "command", bindinggen.ObjectCommandRequest(req), facts)
+		return callFunctionRule(ctx, sess, rule, "command", bindgen.ObjectCommandRequest(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
 	}
 }

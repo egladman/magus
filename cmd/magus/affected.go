@@ -19,7 +19,7 @@ import (
 	"syscall"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/graph/url"
@@ -29,6 +29,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -40,7 +42,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
 		affectedMissingTargetUsage()
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		affectedUsage()
@@ -89,9 +91,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Split on "--" before flag parsing so passthrough args aren't consumed by flag.
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
-	var af *gen.AffectedFlags
+	var af *flaggen.AffectedFlags
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
-		af = gen.BindAffected(fs)
+		af = flaggen.BindAffected(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -114,7 +116,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	if af.Step && !isInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	if af.Step {
 		ctx = withStepGate(ctx)
@@ -165,26 +167,26 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		sink, closeSink, err := openRunSink(ctx, m, opts)
+		sink, closeSink, err := openSink(ctx, opts)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = closeSink() }()
+		// The graph traversal is recorded on the same sink: the run's, and every read before it.
+		ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 		streamCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
-		streamOpts := []magus.StreamOption{magus.WithStreamSink(sink)}
+		runOpts := []magus.RunOption{magus.WithSink(sink)}
 		if globalCfg.DryRun {
-			streamOpts = append(streamOpts, magus.WithStreamDryRun())
-		}
-		if af.Null {
-			streamOpts = append(streamOpts, magus.WithStreamNull())
+			runOpts = append(runOpts, magus.WithDryRun())
 		}
 		if len(extraArgs) > 0 {
-			streamOpts = append(streamOpts, magus.WithStreamExtraArgs(extraArgs))
+			runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 		}
-		return m.Stream(streamCtx, os.Stdin, target, func(err error) {
+		streamAffected(streamCtx, m, os.Stdin, target, af.Null, func(err error) {
 			slog.ErrorContext(streamCtx, "affected --stdin", attr.Error(err))
-		}, streamOpts...)
+		}, runOpts...)
+		return nil
 	}
 
 	if target == "ls" {
@@ -224,11 +226,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(ctx, m, opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = closeSink() }()
+	// The graph traversal is recorded on the same sink: the run's, and every read before it.
+	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
@@ -267,8 +271,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		charms = magus.CharmsForCI(charms)
 	}
 	sink.EmitCharms(ctx, strings.Join(charms, ","))
-	tier, mode := m.CacheDescription()
-	sink.EmitCache(ctx, tier, mode)
+	tier, mode, dir := m.CacheDescription()
+	sink.EmitCache(ctx, tier, mode, dir)
 	if len(targets) == 0 {
 		slog.With(attr.Component("affected")).InfoContext(ctx, "no projects affected", slog.String("target", target))
 		return nil
@@ -322,7 +326,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
-	runOpts = append(runOpts, processStdioOption(ctx)...)
+	ctx = processStdioContext(ctx)
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
@@ -353,7 +357,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// `magus session` would show a repository where only `magus run` ever happened,
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
-	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
@@ -375,7 +379,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
 	if reportedRunErr(err) {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
 		return err
@@ -700,9 +704,9 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
-	var pf *gen.AffectedPlanFlags
+	var pf *flaggen.AffectedPlanFlags
 	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
-		pf = gen.BindAffectedPlan(fs, gen.AffectedPlanDefaults{
+		pf = flaggen.BindAffectedPlan(fs, flaggen.AffectedPlanDefaults{
 			MaxShards:         globalCfg.CI.MaxShards,
 			MaxParallelBudget: globalCfg.CI.RunnerPoolBudget,
 		})
@@ -858,15 +862,15 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 // command, so -o selects the encoding. Marshaling here directly would ignore it and
 // print JSON for `-o yaml`, in both flag positions.
 //
-// FormatText maps to JSON rather than to a prose rendering, because the plan has
+// outputText maps to JSON rather than to a prose rendering, because the plan has
 // no prose rendering to fall back on: the default output IS the machine-readable
 // document, and a workflow that pipes `--plan` without -o must keep getting it.
-func emitPlan(opts OutputOptions, out planOutput) error {
+func emitPlan(opts output.Options, out planOutput) error {
 	switch opts.Format {
 	case outputText, outputJSON:
-		return emitFormatted(OutputOptions{Format: outputJSON}, out)
+		return emitFormatted(output.Options{Format: outputJSON}, out)
 	case outputName:
-		return emitItemNames(out.Matrix, func(s planShard) string { return s.Shard })
+		return emitItemNames(os.Stdout, out.Matrix, func(s planShard) string { return s.Shard })
 	default:
 		if opts.Format == outputTemplate {
 			out.Summary = planSummaryMarkdown(out)
@@ -1068,9 +1072,9 @@ const undeclaredSeedHintCap = 5
 func affectedImpact(ctx context.Context, root string, args []string) error {
 	// --impact routed us here (hasModeFlag); bind it so the flag parser accepts it,
 	// then parse --base like the other forensic modes. No positional target is read.
-	var imf *gen.AffectedImpactFlags
+	var imf *flaggen.AffectedImpactFlags
 	if _, err := cmdParse("affected --impact", args, func(fs *flag.FlagSet) {
-		imf = gen.BindAffectedImpact(fs)
+		imf = flaggen.BindAffectedImpact(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --impact [--base <ref>]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1127,7 +1131,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 		for _, p := range out.AffectedProjects {
 			names = append(names, p.Path)
 		}
-		return emitNames(names)
+		return emitNames(os.Stdout, names)
 	}
 
 	return printImpactText(out)
@@ -1400,9 +1404,9 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		// empty file is the point: `-o name` piped into xargs should see nothing rather
 		// than a blank line.
 		if !out.Affected {
-			return emitNames(nil)
+			return emitNames(os.Stdout, nil)
 		}
-		return emitNames([]string{out.Project})
+		return emitNames(os.Stdout, []string{out.Project})
 	}
 
 	// text and wide

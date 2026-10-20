@@ -10,10 +10,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -40,7 +42,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
-		return usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
+		return exit.Usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
 	}
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
@@ -63,7 +65,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, token, mcp, or console)", sub)
+		return exit.Usagef("magus config: unknown subcommand %q (want view, set, history, cache, token, mcp, or console)", sub)
 	}
 }
 
@@ -90,7 +92,7 @@ func runConfigView(cfg config.Config, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cfg)
 	case outputName:
-		return emitNames(config.KnownKeys())
+		return emitNames(os.Stdout, config.KnownKeys())
 	}
 
 	// text / wide: human-readable layout.
@@ -133,7 +135,7 @@ func intOrDef(n int, def string) string {
 func runConfigSet(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	sf := gen.BindConfigSet(fs)
+	sf := flaggen.BindConfigSet(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -159,7 +161,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return usagef("magus config set: requires one argument in key=<key>,value=<value> form")
+		return exit.Usagef("magus config set: requires one argument in key=<key>,value=<value> form")
 	}
 	key, value, err := parseConfigSetArg(fs.Arg(0))
 	if err != nil {
@@ -168,7 +170,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 
 	var cfgPath string
 	if sf.Global {
-		dir, err := config.UserConfigDir()
+		dir, err := xdg.ConfigDir()
 		if err != nil {
 			return fmt.Errorf("config set --global: cannot determine config directory: %w", err)
 		}

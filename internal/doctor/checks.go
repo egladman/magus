@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -392,7 +393,7 @@ func configFilePaths(root string) []string {
 			paths = append(paths, p)
 		}
 	}
-	if udc, err := config.UserConfigDir(); err == nil {
+	if udc, err := xdg.ConfigDir(); err == nil {
 		add(filepath.Join(udc, "magus"))
 	}
 	if root != "" {
@@ -416,15 +417,7 @@ func firstExistingConfig(dir string) string {
 
 // cacheDir resolves the workspace's cache directory, honoring an absolute or
 // root-relative cache.dir override.
-func (r *runner) cacheDir() string {
-	if d := r.opts.cfg.Cache.Dir; d != "" {
-		if filepath.IsAbs(d) {
-			return filepath.Clean(d)
-		}
-		return filepath.Join(r.root, d)
-	}
-	return filepath.Join(r.root, ".magus")
-}
+func (r *runner) cacheDir() string { return config.CacheDir(r.root, r.opts.cfg) }
 
 // checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
 // doctor` gives the whole picture rather than only the target you happened to run.
@@ -497,28 +490,36 @@ func (r *runner) checkCacheYield(projects []*types.Project) types.Check {
 	}
 }
 
+// checkCacheWritable checks the cache dir and, when it is elsewhere, the store of entries
+// every checkout of the repository shares, and names both: a hit in one worktree replays
+// what another stored, which nothing else on screen says.
 func (r *runner) checkCacheWritable() types.Check {
+	const name = "cache-writable"
 	cacheDir := r.cacheDir()
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return types.Check{
-			Name:    "cache-writable",
-			Status:  types.CheckFail,
-			Message: fmt.Sprintf("cannot create cache dir: %v", err),
-			Details: []string{cacheDir},
-		}
-	}
-	tmp, err := os.CreateTemp(cacheDir, ".magus-doctor-*")
+	store, err := config.StoreDir(r.root, r.opts.cfg)
 	if err != nil {
-		return types.Check{
-			Name:    "cache-writable",
-			Status:  types.CheckFail,
-			Message: fmt.Sprintf("cache dir not writable: %v", err),
-			Details: []string{cacheDir},
-		}
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
-	_ = tmp.Close()
-	_ = os.Remove(tmp.Name())
-	return types.Check{Name: "cache-writable", Status: types.CheckOK, Message: cacheDir}
+	dirs := []string{cacheDir}
+	if store != cacheDir {
+		dirs = append(dirs, store)
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("cannot create cache dir: %v", err), Details: []string{dir}}
+		}
+		tmp, err := os.CreateTemp(dir, ".magus-doctor-*")
+		if err != nil {
+			return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("cache dir not writable: %v", err), Details: []string{dir}}
+		}
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}
+	if store == cacheDir {
+		return types.Check{Name: name, Status: types.CheckOK, Message: cacheDir}
+	}
+	return types.Check{Name: name, Status: types.CheckOK,
+		Message: fmt.Sprintf("%s; entries in %s, shared by every checkout of this repository", cacheDir, store)}
 }
 
 func (r *runner) checkVCSBaseRef() types.Check {
@@ -2352,12 +2353,21 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: "could not load harness descriptors", Details: []string{err.Error()}}
 	}
-	var wired, problems []string
+	var wired, problems, advice []string
 	for _, id := range ids {
 		verification, err := agent.VerifyHarness(ctx, root, id)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
+		}
+		// A per-person plugin install cannot be fixed in the tree or on a CI runner:
+		// advise, and leave `magus agent harness verify` as the hard check a person
+		// runs at their keyboard. Tool rows and hook wiring stay Fail.
+		if verification.Plugin.Failing() {
+			advice = append(advice, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
+		}
+		if verification.Tool.Failing() {
+			problems = append(problems, fmt.Sprintf("%s tool rows are %s: %s", id, verification.Tool.Status, verification.Tool.Reason))
 		}
 		if verification.Status == agent.HarnessSkillsOnly {
 			// Wires no guard at all by design; nothing here is a problem to report,
@@ -2379,7 +2389,19 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Name:    name,
 			Status:  types.CheckFail,
 			Message: "harness wiring is incomplete",
-			Details: problems,
+			Details: append(append([]string{}, problems...), advice...),
+		}
+	}
+	if len(advice) > 0 {
+		msg := fmt.Sprintf("%d personal plugin install(s) still open", len(advice))
+		if len(wired) > 0 {
+			msg = fmt.Sprintf("guard verified through %d harness config path(s); %s", len(wired), msg)
+		}
+		return types.Check{
+			Name:    name,
+			Status:  types.CheckAdvice,
+			Message: msg,
+			Details: append(append([]string{}, wired...), advice...),
 		}
 	}
 	if len(wired) == 0 {

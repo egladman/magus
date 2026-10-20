@@ -189,12 +189,10 @@ func verifyHarnessMCP(d HarnessDescriptor, result *HarnessVerification) {
 		return
 	}
 	if err := validateHarnessMCP(m); err != nil {
-		result.MCPStatus = HarnessInvalid
-		result.MCPReason = err.Error()
+		result.MCP = HarnessCheck{Status: HarnessInvalid, Reason: err.Error()}
 		return
 	}
 	// User-owned: Magus does not inspect host MCP client files. Status is
 	// "verified" only for the spell's guidance declaration, not host wiring.
-	result.MCPStatus = HarnessVerified
-	result.MCPReason = "setup guidance declared; user owns host MCP client config (Magus does not write or inspect it)"
+	result.MCP = HarnessCheck{Status: HarnessVerified, Reason: "setup guidance declared; user owns host MCP client config (Magus does not write or inspect it)"}
 }

@@ -35,6 +35,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [split-run]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [split-run]: ...` instead.
+
 `magus describe rule split-run` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

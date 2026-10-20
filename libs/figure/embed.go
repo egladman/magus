@@ -44,7 +44,6 @@ type Figure struct {
 	Eyebrow     string        `json:"eyebrow"`
 	Desc        string        `json:"desc"`
 	Direction   Direction     `json:"direction"`
-	Generated   bool          `json:"generated"`
 	UnscopedWhy string        `json:"unscopedWhy"`
 	GraphEdges  bool          `json:"graphEdges"`
 	Boxes       []Box         `json:"boxes"`
@@ -303,7 +302,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
     return figure\Figure{
         id = f.id, title = f.title, eyebrow = f.eyebrow, desc = f.desc,
         direction = direction(f.direction, at: "{at}direction"),
-        generated = f.generated, unscopedWhy = f.unscopedWhy, graphEdges = f.graphEdges,
+        unscopedWhy = f.unscopedWhy, graphEdges = f.graphEdges,
         boxes = boxes, scopes = f.scopes, exclusions = f.exclusions, hiddenEdges = f.hiddenEdges,
         edgeMarks = marks, flows = flows, zones = zones, alignments = alignments, legends = legends,
     };
@@ -311,7 +310,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
 `
 
 // Draw lays fig out with figure\draw and paints it with Theme.page, the palette that
-// follows a page's CSS variables. anchorHref is figure's link template, {path} and {line}.
+// follows a page's CSS variables. anchorHref is figure's link template, with {path}.
 //
 // sess must resolve "magus/figure" and "magus", which the module imports for its record types.
 // Draw executes its entry program in sess, so a caller gives it a session of its own. A
@@ -360,7 +359,6 @@ func (f Figure) value() vm.Value {
 		{"eyebrow", vm.StrValue(f.Eyebrow)},
 		{"desc", vm.StrValue(f.Desc)},
 		{"direction", vm.StrValue(string(f.Direction))},
-		{"generated", vm.BoolValue(f.Generated)},
 		{"unscopedWhy", vm.StrValue(f.UnscopedWhy)},
 		{"graphEdges", vm.BoolValue(f.GraphEdges)},
 		{"boxes", list(f.Boxes, Box.value)},

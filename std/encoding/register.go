@@ -5,25 +5,24 @@
 // (resolvePath, checkRead, checkWrite, optStringDefault, ...): every helper a
 // text codec needs is local to its own file, so splitting them into their
 // own leaf packages hides real behavior behind a real package boundary
-// instead of just renaming a file. See magus-local-development's survey for
-// the modules that do NOT have this property (fs, http, crypto, env, path,
-// os, vcs, archive): their shared helpers ARE the sandbox enforcement layer,
-// so pulling any one of them out would force exporting resolvePath/checkRead/
-// checkWrite onto the public API, the wrong direction to move right after
-// fixing bypasses of exactly those checks.
+// instead of just renaming a file. The modules that do NOT have this property
+// (fs, http, crypto, env, path, os, vcs, archive) keep their shared helpers in
+// std: those helpers ARE the sandbox enforcement layer, so pulling any one of
+// them out would force exporting resolvePath/checkRead/checkWrite onto the
+// public API, the wrong direction to move right after fixing bypasses of
+// exactly those checks.
 //
 // This package's Module values reach std's own registry vocabulary (the
 // std.Module type) by importing std, which is the only direction that works:
 // std/encoding needs the descriptor types, but std cannot import std/encoding
 // back to collect these nine, or the two packages would cycle. So unlike the
-// 24 modules still living flat in std, these nine do not self-register via an
-// init() side effect into std's package-level map. Each leaf's register.go
-// exposes a plain Modules() function (see e.g. std/encoding/json/register.go),
-// this file aggregates all nine explicitly, and the union with std's own
-// All()/Get() is computed one layer further up, in internal/hostmodules, the
-// first package in the import graph that imports both std and std/encoding.
-// That is also why this package exports only Modules()/Get(): nothing here
-// needs std.Register or the internal registry map at all.
+// modules living flat in std, which std lists in its own registry, these nine
+// are not named there. Each leaf's register.go exposes a plain Modules()
+// function (see e.g. std/encoding/json/register.go), this file aggregates all
+// nine explicitly, and the union with std's own All()/Get() is computed one
+// layer further up, in internal/hostmodules, the first package in the import
+// graph that imports both std and std/encoding. That is also why this package
+// exports only Modules()/Get(): nothing here needs std's registry at all.
 package encoding
 
 import (
@@ -42,9 +41,8 @@ import (
 )
 
 // leafSets lists every std/encoding leaf's contribution, one entry per
-// directory. Adding a tenth leaf package means adding one line here (the
-// SAME kind of single, auditable edit std/module.go's own Register calls are
-// for the 24 modules that self-register).
+// directory. Adding a tenth leaf package means adding one line here, the same
+// kind of single, auditable edit as std/module.go's portable list.
 //
 // TestModulesMatchDirectories (in register_test.go) fails if a leaf directory
 // exists here without a matching entry, or an entry here without a matching
@@ -63,14 +61,13 @@ var leafSets = []func() []std.Module{
 }
 
 // Modules returns every module std/encoding contributes to magus's host
-// module set. Each is validated exactly as std.Register validates a module
-// registering the ordinary way (see std.ValidateModule's doc for why this
-// package cannot call Register itself).
+// module set. Each is validated exactly as std's own registry validates the
+// modules it lists (see std.ValidateModule's doc for why this package cannot
+// use that registry).
 //
-// A duplicate Name across leaves panics for the same reason std.Register's
+// A duplicate Name across leaves panics for the same reason std's registry
 // does: two modules answering to the same bare import name is a program
-// error, not a runtime one. This runs at package init time, before anything
-// can call it with bad data in hand.
+// error, not a runtime one.
 func Modules() []std.Module {
 	seen := map[string]bool{}
 	var out []std.Module

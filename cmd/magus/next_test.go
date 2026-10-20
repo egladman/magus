@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var nextFixture = []hint.Next{
+var nextFixture = []types.NextStep{
 	{ID: "query-explain", Run: "magus explain spell:go", Argv: []string{"magus", "explain", "spell:go"}, Why: "explain names a node's edges."},
 	{ID: "query-path", Run: "magus path spell:go spell:gomod", Argv: []string{"magus", "path", "spell:go", "spell:gomod"}, Why: "path prints the chain."},
 }
@@ -112,8 +112,8 @@ func TestServedJournalsEveryEntry(t *testing.T) {
 // A worker keeps a write inside its own write paths and loses the rest; a reviewer is served
 // no write at all. The regeneration is the one template that writes today.
 func TestServedFiltersWritesByRole(t *testing.T) {
-	regen := hint.Next{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
-	full := append(append([]hint.Next{}, nextFixture...), regen)
+	regen := types.NextStep{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
+	full := append(append([]types.NextStep{}, nextFixture...), regen)
 
 	for _, tc := range []struct {
 		name       string
@@ -167,7 +167,7 @@ func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
 // protecting against, so the walk descends into the embedded result.
 func TestJSONLStaysAmbiguousForAQueryCarryingNext(t *testing.T) {
 	var buf bytes.Buffer
-	err := writeJSONL(&buf, queryWithNext{Next: nextFixture})
+	err := renderJSONL(&buf, queryWithNext{Next: nextFixture})
 
 	require.Error(t, err)
 	for _, key := range []string{"matches", "nodes", "links", "next"} {
@@ -187,10 +187,10 @@ type NextStreamable struct {
 func TestJSONLFindsAPrimaryInsideAnEmbeddedResultNext(t *testing.T) {
 	v := struct {
 		NextStreamable
-		Next []hint.Next `json:"next,omitempty"`
+		Next []types.NextStep `json:"next,omitempty"`
 	}{NextStreamable: NextStreamable{Rows: []string{"a", "b"}}, Next: nextFixture}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeJSONL(&buf, v))
+	require.NoError(t, renderJSONL(&buf, v))
 	assert.Equal(t, []string{`"a"`, `"b"`}, strings.Fields(strings.TrimSpace(buf.String())))
 }

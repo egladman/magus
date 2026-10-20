@@ -20,7 +20,7 @@ func (c *Cache) LastEntry(projectPath string) (*Manifest, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return m, c.logPath(projectPath, hash), nil
+	return m, c.entryLogPath(projectPath, hash), nil
 }
 
 // LastEntryForTarget returns the manifest and log-file path of the most recently
@@ -31,7 +31,7 @@ func (c *Cache) LastEntryForTarget(projectPath, target string) (*Manifest, strin
 	if err != nil {
 		return nil, "", err
 	}
-	return m, c.logPath(projectPath, hash), nil
+	return m, c.entryLogPath(projectPath, hash), nil
 }
 
 // RecordedRun identifies the most recent cache entry recorded for one target in one
@@ -102,7 +102,7 @@ func (c *Cache) LastRecordedRun(projectPath, target string) (RecordedRun, error)
 // valid, the permissive-on-absence convention that keeps entries written before that field
 // usable, so the body can hand back "".
 func (c *Cache) lastEntry(projectPath, target string) (*Manifest, string, error) {
-	manifestsDir := filepath.Join(c.dir, "manifests", flattenPath(projectPath))
+	manifestsDir := filepath.Join(c.store, "manifests", flattenPath(projectPath))
 	entries, err := os.ReadDir(manifestsDir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, "", fmt.Errorf("no cache entries for %q: %w", projectPath, fs.ErrNotExist)

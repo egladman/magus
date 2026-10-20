@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/config"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -31,7 +32,7 @@ var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
 // session store does, so a mark made in one worktree is read in every other one and in
 // later sessions.
 func FeedbackMarksDir(root string) (string, error) {
-	base, err := config.UserStateDir()
+	base, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("feedback: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
@@ -48,7 +49,7 @@ func FeedbackMarksDir(root string) (string, error) {
 //
 // Unlike the trail's producers it returns its error, because a person who asked to record
 // a verdict must learn that it was not recorded.
-func AppendFeedbackMark(dir string, m types.FeedbackMark, now time.Time) (types.FeedbackMark, error) {
+func AppendFeedbackMark(dir string, m types.TrailMark, now time.Time) (types.TrailMark, error) {
 	if !feedbackID.MatchString(m.ID) {
 		return m, fmt.Errorf("feedback mark id %q is not a row id (fb and 12 hex digits)", m.ID)
 	}
@@ -69,25 +70,16 @@ func AppendFeedbackMark(dir string, m types.FeedbackMark, now time.Time) (types.
 	if err != nil {
 		return m, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := file.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, file.WithoutSync()); err != nil {
 		return m, fmt.Errorf("feedback: %w", err)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, marksFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return m, fmt.Errorf("feedback: %w", err)
-	}
-	// One short line per append, so concurrent writers do not interleave.
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		_ = f.Close()
-		return m, fmt.Errorf("feedback: %w", err)
-	}
-	return m, f.Close()
+	return m, nil
 }
 
 // ReadFeedbackMarks returns every mark in the store at dir, oldest first. A store nobody
 // has written to holds no marks. A line that does not decode is an error naming it, since
 // a silently dropped verdict reads as one the person never gave.
-func ReadFeedbackMarks(dir string) ([]types.FeedbackMark, error) {
+func ReadFeedbackMarks(dir string) ([]types.TrailMark, error) {
 	path := filepath.Join(dir, marksFile)
 	f, err := os.Open(path)
 	if err != nil {
@@ -97,14 +89,14 @@ func ReadFeedbackMarks(dir string) ([]types.FeedbackMark, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var out []types.FeedbackMark
+	var out []types.TrailMark
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for n := 1; sc.Scan(); n++ {
 		if len(sc.Bytes()) == 0 {
 			continue
 		}
-		var m types.FeedbackMark
+		var m types.TrailMark
 		if err := json.Unmarshal(sc.Bytes(), &m); err != nil {
 			return nil, fmt.Errorf("feedback: %s:%d: %w", path, n, err)
 		}

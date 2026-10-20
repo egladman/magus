@@ -18,8 +18,9 @@ var importLine = regexp.MustCompile(`(?m)^import\s+"([^"]+)"`)
 // top-level control flow and positional arguments are legal.
 //
 // It compiles rather than evaluates, so it needs the DECLARATIONS only: the
-// session carries Buzz's own stdlib for `import "std"` plus, from decls, the
-// declarations of every magus module src imports, and no host bindings at all.
+// session carries Buzz's own stdlib for `import "std"`, the Buzz-implemented
+// modules (magus/modeltiers and the rest) as the engine registers them, and, from
+// decls, the declarations of every magus module src imports. No host bindings.
 // decls is keyed by the bare module name (encoding/json -> json) and the result
 // is registered under the IMPORT PATH src spells, the same split resolveImport
 // makes. It is a parameter because the declarations live in internal/spell, whose
@@ -29,6 +30,9 @@ func compileExample(src string, decls func(module string) (string, bool)) error 
 	defer func() { _ = sess.Close() }()
 
 	buzzstd.Register(sess)
+	for _, sm := range AllSource() {
+		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
+	}
 	for _, m := range importLine.FindAllStringSubmatch(src, -1) {
 		importPath := m[1]
 		if d, ok := decls(importPath[strings.LastIndex(importPath, "/")+1:]); ok {

@@ -24,12 +24,12 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
-	interp "github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/proc"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sandbox"
@@ -47,7 +47,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// RunOption configures a [Magus.Run], [Magus.RunCI], or [Magus.RunAffected] invocation.
+// RunOption configures a [Magus.Run], [Magus.RunCI], [Magus.RunAffected] or [Magus.RunGate]
+// invocation.
 type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.
@@ -67,7 +68,8 @@ type run struct {
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	narrowing         *project.OpNarrowing
-	stdio             *ProcessStdio
+	session           string // the host session the guard judges the run for; see WithSession
+	observer          types.Observer
 }
 
 // out is the sink the run reports through.
@@ -125,6 +127,24 @@ func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
 // about the run changes, and every non-gate invocation queues as before.
 func WithGate() RunOption { return func(o *run) { o.Gate = true } }
 
+// WithSession names the agent host session the run is made for, so the guard judges it
+// against what that session did before: its fire-once advice, its spawn records, the lease
+// it acts under. Without it the run is judged as a caller no host named.
+func WithSession(session string) RunOption { return func(o *run) { o.session = session } }
+
+// WithObserver reports every dependency-graph build and query the run makes to o, the
+// affected-set computation of RunAffected included. The observer rides the run alone: two
+// runs on one workspace each report to their own.
+func WithObserver(o types.Observer) RunOption { return func(r *run) { r.observer = o } }
+
+// observed returns ctx carrying the run's observer, when it has one.
+func (o run) observed(ctx context.Context) context.Context {
+	if o.observer == nil {
+		return ctx
+	}
+	return types.ContextWithGraphObserver(ctx, o.observer)
+}
+
 func applyRunOpts(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
@@ -136,11 +156,31 @@ func applyRunOpts(opts []RunOption) run {
 // Run executes targets against their projects. Independent pairs run concurrently
 // up to the limiter budget. "ci" is an ordinary magusfile target (compose its
 // pipeline with magus.needs); magus no longer hardcodes a CI chain.
+//
+// Before anything runs, the guard judges each target as `magus run <target> <project>`,
+// with ` -- <args>` for WithExtraArgs, the line the CLI would be judged by. A deny returns
+// a *types.GuardDeniedError and runs nothing; a judgment that cannot be made returns its
+// error. A ctx the CLI marked with guard.WithHostJudged is not judged again.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
+	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
+	lines, err := runLines(targets, o.ExtraArgs)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
+	return m.runTargets(ctx, targets, o)
+}
+
+// runTargets is Run without the guard's judgment, for a run magus makes on its own behalf
+// inside a call that was already judged.
+func (m *Magus) runTargets(ctx context.Context, targets []types.Target, o run) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
+	return m.redactError(m.runResolved(ctx, targets, o))
 }
 
 // undeclaredScopeEvent builds the run's scope event when any selected project was
@@ -260,8 +300,19 @@ func CharmsForCI(charms []string) []string {
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
+//
+// It is judged as Run is, each target as `magus run <target> <project>`: `magus run ci`
+// is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
+	lines, err := runLines(targets, o.ExtraArgs)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and update so a ci run verifies the pinned upstream state rather than refreshing
 	// it against whatever the registry or the feed serves today.
@@ -353,8 +404,19 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 }
 
 // RunAffected computes the VCS-diff target set and runs target on it.
+//
+// It is judged as Run is, once, as `magus affected <target>`, with ` --base <ref>` for
+// WithBaseRef.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	ctx = o.observed(ctx)
+	lines, err := affectedLine(target, o.BaseRef)
+	if err != nil {
+		return err
+	}
+	if err := m.judgeRun(ctx, o, lines); err != nil {
+		return err
+	}
 	targets, source, fellBack, err := m.ExpandAffected(ctx, target, o.BaseRef)
 	if err != nil {
 		return err
@@ -426,7 +488,7 @@ func (m *Magus) targetProjects(targets []types.Target) []*types.Project {
 // TargetHandler runs one target on one resolved project. It is the single executor
 // seam the run pipeline schedules: the same handler serves both a real run and a dry
 // run: types.WithTrace(ctx) switches it, so under a tracing context the effect
-// boundary (proc/run.Exec, fs, net) records each op's intent and skips it instead of
+// boundary (proc/spawn.Exec, fs, net) records each op's intent and skips it instead of
 // executing. One path, two modes: no separate dry-run executor, just a tracing
 // context over this one contract. (The in-browser evaluator in internal/dry is a
 // different thing: it takes raw source, never a resolved *Project, so it sits before
@@ -637,8 +699,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
-		step.BinaryBuild = proc.BinaryBuild()
+		step.Catalogs = answerCatalogs()
 	}
+	step.UnreadCharms = m.unreadWriteGrants(p, target)
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
@@ -684,9 +747,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// take one slot each and a full claim each, so a single invocation queued behind
 	// memory its own siblings held.
 	//
-	// The declarations as written. A run re-sizes them from its measured peaks once it
+	// The declarations as written. A run re-sizes them from its measured runs once it
 	// knows its own shape (executeStages).
-	m.claimMemory(&step, p, target, nil)
+	m.sizeClaim(&step, p, target, nil)
 	// A step that only runs installs dispatches each spell's install, and each keys
 	// itself (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
@@ -896,6 +959,70 @@ func alwaysRuns(p *types.Project, target string) bool {
 	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(findInstallOps(p, target)) > 0
 }
 
+// unreadWriteGrants returns the write-granting charms (rw, update) that target's step on p
+// cannot read, which its key leaves out: a run under default_charms: [rw] and a ci run,
+// which strips rw, then share one entry. A step reads one when anything in its ctx.needs
+// closure declares in-place edits, branches on the charm by name, or drives an op that
+// patches its argv on the charm or computes its argv in the VM. An op whose spell does
+// not resolve counts as reading every charm. Declared outputs do not count: whether a
+// hit may restore them is VerifyOutputs, set from the same by-name read.
+//
+// Static, so it under-reports the way the drift gate's own detection does: a body that
+// names the charm through a variable, or reaches it through a helper the walk cannot
+// follow, is not seen.
+func (m *Magus) unreadWriteGrants(p *types.Project, target string) []string {
+	grants := []string{types.CharmReadWrite, types.CharmUpdate}
+	read := map[string]bool{}
+	_ = types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
+		for _, c := range grants {
+			if !read[c] && m.readsCharm(v.Project, v.Target, c) {
+				read[c] = true
+			}
+		}
+		return nil
+	})
+	return slices.DeleteFunc(grants, func(c string) bool { return read[c] })
+}
+
+// readsCharm reports whether target's own body or ops on p can behave differently under
+// charm; see unreadWriteGrants for what counts.
+func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
+	if len(p.TargetUpdates[target]) > 0 {
+		return true
+	}
+	if slices.Contains(m.charmReads[types.TargetRef{Project: p.Path, Target: target}], charm) {
+		return true
+	}
+	opReads := func(op spells.Op) bool {
+		if op.Bin == "" {
+			return true
+		}
+		for name := range op.Charms {
+			if types.NormalizeCharm(name) == charm {
+				return true
+			}
+		}
+		return false
+	}
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			return true
+		}
+		for _, name := range use.Ops {
+			if op, ok := p.ResolvedSpells[i].Op(name); !ok || opReads(op) {
+				return true
+			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok && opReads(op) {
+			return true
+		}
+	}
+	return false
+}
+
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
 // buildStep: resolved tool versions and the active charm set (sorted and deduped, so
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
@@ -1030,9 +1157,10 @@ func anyRetryOnVolatile(projects []*types.Project, target string) bool {
 	return false
 }
 
-// toolVersionMode resolves the cache tool-version policy from MAGUS_CACHE_TOOL_VERSION.
-func toolVersionMode() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("MAGUS_CACHE_TOOL_VERSION"))) {
+// toolVersionMode resolves the cache tool-version policy from v, the value of
+// MAGUS_CACHE_TOOL_VERSION.
+func toolVersionMode(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "off":
 		return "off"
 	case "workspace":
@@ -1203,7 +1331,7 @@ type toolProbe struct {
 }
 
 func (m *Magus) newToolProber() *toolProber {
-	return &toolProber{m: m, mode: toolVersionMode(), memo: map[string]*toolProbe{}}
+	return &toolProber{m: m, mode: toolVersionMode(m.env("MAGUS_CACHE_TOOL_VERSION")), memo: map[string]*toolProbe{}}
 }
 
 func (tp *toolProber) dir(p *types.Project) string {
@@ -1619,11 +1747,6 @@ func observationsForTarget(p *types.Project, target string, probed map[string]st
 	return out
 }
 
-// executeOnProjects runs handler for every project for a single target.
-func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler TargetHandler) error {
-	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
-}
-
 // executeStages schedules every (project,target) pair via dependency-ordered RunAll.
 //
 // The named return is for the stall watchdog: once armed it can abort from any of the
@@ -1794,7 +1917,14 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// no lock and starts before one is taken.
 	prober := m.newToolProber()
 	m.prewarmInstallProbes(ctx, prober, stages)
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, opts.stdio)
+	var stdio *pipe.Stdio
+	if s, ok := pipe.StdioFrom(ctx); ok {
+		stdio = &s
+	}
+	// The streams are this invocation's own: a run a target starts in this process reads
+	// none of them, so it neither waits on this pipe's upstream nor publishes to its reader.
+	ctx = pipe.WithStdio(ctx, pipe.Stdio{})
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, stdio)
 	if err != nil {
 		return err
 	}
@@ -1882,17 +2012,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
 	// Joined here rather than beside the volatility runtime below: every step's claim is
 	// sized from it, and the probes above already overlapped most of the decode.
-	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
+	sizeClaims := newClaimSizer(m.measuredRuns(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
 	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
 		step := m.buildStep(p, target)
-		if sizeMemory != nil {
-			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
-				step.MemorySizing = sizing
-				slog.With(attr.Component("magus")).DebugContext(ctx, "memory claim sized from measured peaks",
+		if sizeClaims != nil {
+			if sizing := m.sizeClaim(&step, p, target, sizeClaims); sizing.Measured() || sizing.Slots.Measured() {
+				slog.With(attr.Component("magus")).DebugContext(ctx, "claim sized from measured runs",
 					slog.String("project", p.Path), slog.String("target", target),
-					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
+					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()),
+					slog.Int("slots", step.Slots), slog.String("slot_sizing", sizing.Slots.String()))
 			}
 		}
 		var toolVersions []string
@@ -2023,7 +2153,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// invocation id itself (internal/journal imports it for redaction, so that would be
 	// a cycle), so the id is threaded from here, where both are already in scope.
 	ctx = secret.ContextWithInvocationID(ctx, journal.InvocationIDFromContext(ctx))
-	ctx = types.WithWorkspace(ctx, m)
+	ctx = types.WithWorkspace(ctx, m.internals())
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run
 	// build .` selects only the root, so a nested project reached through a dependency
@@ -2112,7 +2242,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	cacheOpts = append(cacheOpts, observability.TargetRunOptions(ctx, m.tel, spellsOf)...)
 	if opts.report != nil {
-		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.CacheDir(), m.ws.Root))...)
+		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.jobPlace()))...)
 	}
 	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	// runTarget opens the descendant audit around a step's body, which a hit never runs.
@@ -2490,6 +2620,12 @@ func checkOutputOverlap(ctx context.Context, steps []cache.Step, out *Sink) {
 // it, or nil when volatility is disabled. The file is shared by every workspace on the
 // host and runs to megabytes, so decoding it costs as much as the lock, probe and VCS
 // work it overlaps.
+//
+// A history that cannot be read is said once, as an error, by the first wait: the run
+// goes on, but it sizes every claim from declarations alone and records nothing, and a
+// store an older magus left beside it would otherwise stay unread with no word of why.
+// It does not fail the run, because an older magus on the same host recreates that file
+// as fast as it is moved aside.
 func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, error) {
 	if !m.cfg.Volatility.Enabled {
 		return nil
@@ -2501,15 +2637,20 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 		defer close(done)
 		err = h.Load(ctx, m.cfg.HistoryPath)
 	}()
-	return func() (*forecast.History, error) {
+	return sync.OnceValues(func() (*forecast.History, error) {
 		<-done
+		if err != nil {
+			slog.With(attr.Component("magus")).ErrorContext(ctx,
+				"run history is unreadable, so this run sizes claims from declarations and records no history",
+				attr.Error(err))
+		}
 		return &h, err
-	}
+	})
 }
 
-// peakIndex waits for the history and snapshots its measured peaks. nil, when history
+// measuredRuns waits for the history and snapshots its measured runs. nil, when history
 // is disabled or unreadable, leaves every claim at its declaration.
-func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.PeakIndex {
+func (m *Magus) measuredRuns(history func() (*forecast.History, error)) *forecast.MeasuredRuns {
 	if history == nil {
 		return nil
 	}
@@ -2517,12 +2658,12 @@ func (m *Magus) peakIndex(history func() (*forecast.History, error)) *forecast.P
 	if err != nil {
 		return nil
 	}
-	x := h.PeakIndex()
+	x := h.MeasuredRuns()
 	return &x
 }
 
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when
-// history cannot be loaded.
+// history cannot be loaded, which the history's wait has already said.
 func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history func() (*forecast.History, error)) *volatility.Runtime {
 	h, err := history()
 	if err != nil {
@@ -2598,11 +2739,12 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	eligible := p.TargetPolicies[name].RetryOnVolatile
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
-	// Collect the peak resident memory of every process this target runs, so the
-	// outcome recorded below carries a memory figure alongside its duration. The
+	// Collect the peak resident memory and CPU time of every process this target
+	// runs, so the outcome recorded below carries them alongside its duration. The
 	// collector is installed here rather than higher up because the unit that
 	// has to fit on one runner is the target, not the invocation.
-	ctx = types.WithPeakRSS(ctx)
+	step := ctx
+	ctx = types.WithExecCost(ctx)
 	resp, err := s.Invoke(types.WithEvalMemo(ctx), req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
@@ -2616,7 +2758,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	decision := volatility.Decision{}
 
 	if err != nil {
-		decision = rt.Decide(p.Path, volatileTarget, affected, eligible)
+		decision = rt.Decide(p.Path, volatileTarget, affected, eligible, err)
 		if decision.Retry {
 			resp2, err2 := s.Invoke(types.WithEvalMemo(ctx), req)
 			if err2 == nil {
@@ -2638,7 +2780,11 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// Reported only when a process actually reported one: an unmeasured target
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
-	peakRSS := types.PeakRSS(ctx)
+	peakRSS, cpuMs := types.PeakRSS(ctx), types.CPUMs(ctx)
+	// The cache step's own collector, which its session record reads, sees these
+	// processes only through this hand-over: the collector above hides them from it.
+	types.RecordPeakRSS(step, peakRSS)
+	types.RecordCPUMs(step, cpuMs)
 	// The same shape executeStages sizes claims by, read from the same run options.
 	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
@@ -2648,6 +2794,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		At:             time.Now(),
 		Attempts:       attempts,
 		MaxRSSBytes:    peakRSS,
+		CPUMs:          cpuMs,
+		Slots:          cache.SlotsHeld(ctx),
 		Charms:         shape.Charms,
 		ArgsHash:       shape.ArgsHash,
 	})
@@ -2679,6 +2827,19 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 				Project:         p.Path,
 				Target:          volatileTarget,
 				Status:          status,
+				Attempts:        attempts,
+				RetryReason:     string(decision.Reason),
+				VolatilityScore: rt.Score(p.Path, volatileTarget),
+			})
+		}
+	} else if decision.Reason == volatility.ReasonNonRetryable {
+		// retry_on_volatile was on and stood down, which the report says rather than leave
+		// a failure that reads as one nobody tried again.
+		if rw := report.WriterFromContext(ctx); rw != nil {
+			_ = report.Record(rw, report.VolatilityCall{
+				Project:         p.Path,
+				Target:          volatileTarget,
+				Status:          "not_retried",
 				Attempts:        attempts,
 				RetryReason:     string(decision.Reason),
 				VolatilityScore: rt.Score(p.Path, volatileTarget),
@@ -3051,7 +3212,7 @@ func attributeRun(ctx context.Context) context.Context {
 	// (internal/cache/machine_gate.go, lock.go): stamping first silences them and leaves
 	// the run blind to the very ancestor this identity exists to recognize.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
-		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
 	id := journal.NewInvocationID()
 	return types.AppendInvocationAncestor(journal.WithInvocationID(ctx, id), os.Getpid(), id)

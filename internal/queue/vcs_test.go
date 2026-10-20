@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/internal/queue/types/gen/mocks"
+	"github.com/egladman/magus/internal/queue/types/gen/queuetest"
 	magustypes "github.com/egladman/magus/types"
-	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
 
 // base is the plan's base commit.
@@ -36,8 +36,8 @@ func oid(parts ...string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// candidateOf is the candidate [doubles.builds] makes of head onto onto.
-func candidateOf(onto, head string) string { return oid("candidate", onto, head) }
+// candidateID is the candidate [doubles.builds] makes of head onto onto.
+func candidateID(onto, head string) string { return oid("candidate", onto, head) }
 
 // change builds a change on main affecting units.
 func change(id string, units ...string) types.Change {
@@ -71,8 +71,8 @@ func ids(groups [][]types.Change) [][]string {
 	return out
 }
 
-// idsOf names the changes vs decide, in order.
-func idsOf(vs []types.Verdict) []string {
+// changeIDs names the changes vs decide, in order.
+func changeIDs(vs []types.Verdict) []string {
 	var out []string
 	for _, v := range vs {
 		out = append(out, v.Change.ID)
@@ -99,20 +99,20 @@ func (d *draw) n(k int) int {
 
 // doubles are the mocks one step under test talks to.
 type doubles struct {
-	vcs      *magusmocks.MockVCSDriver
-	provider *mocks.MockProvider
-	facts    *mocks.MockBuildFacts
-	gate     *mocks.MockGate
-	src      *mocks.MockVerdictSource
+	vcs      *typestest.MockVCSDriver
+	provider *queuetest.MockProvider
+	facts    *queuetest.MockBuildFacts
+	gate     *queuetest.MockGate
+	src      *queuetest.MockVerdictSource
 }
 
 func newDoubles(t *testing.T) doubles {
 	return doubles{
-		vcs:      magusmocks.NewMockVCSDriver(t),
-		provider: mocks.NewMockProvider(t),
-		facts:    mocks.NewMockBuildFacts(t),
-		gate:     mocks.NewMockGate(t),
-		src:      mocks.NewMockVerdictSource(t),
+		vcs:      typestest.NewMockVCSDriver(t),
+		provider: queuetest.NewMockProvider(t),
+		facts:    queuetest.NewMockBuildFacts(t),
+		gate:     queuetest.NewMockGate(t),
+		src:      queuetest.NewMockVerdictSource(t),
 	}
 }
 
@@ -159,7 +159,7 @@ func (d doubles) noCheckouts() {
 }
 
 // building is how the version control answers the calls building a candidate makes, for
-// any change onto any commit: the candidate of head onto onto is candidateOf(onto, head),
+// any change onto any commit: the candidate of head onto onto is candidateID(onto, head),
 // and it touches touched.
 type building struct {
 	touched   []string
@@ -212,7 +212,7 @@ func (d doubles) builds(b building) *checkouts {
 		RunAndReturn(func(_ context.Context, dir string, _ magustypes.CheckoutCommit) (string, error) {
 			co.mu.Lock()
 			defer co.mu.Unlock()
-			return candidateOf(co.onto[dir], co.head[dir]), nil
+			return candidateID(co.onto[dir], co.head[dir]), nil
 		}).Maybe()
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, mock.Anything, mock.Anything).Return(b.touched, nil).Maybe()
 	d.vcs.EXPECT().RemoveCheckout(mock.Anything, clone.Root, mock.Anything).
@@ -246,7 +246,7 @@ func (tr *trail) entries() []string {
 }
 
 // marks records every mark the provider is asked to show, failing the entries fail
-// names. Set before [applierFor], it answers every mark ahead of that catch-all.
+// names. Set before [newApplier], it answers every mark ahead of that catch-all.
 func (d doubles) marks(fail map[string]error) *trail {
 	tr := &trail{}
 	d.provider.EXPECT().Mark(mock.Anything, mock.Anything, mock.Anything).

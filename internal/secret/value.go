@@ -11,7 +11,7 @@ import (
 //
 // This is the second of the three mechanisms this package needs, and it exists because
 // the first one cannot be finished. Redact-at-write intercepts BYTES on their way out
-// (the capture tap, journal.Emit, the proc/run exec buffer, the slog handler) and that
+// (the capture tap, journal.Emit, the proc/spawn exec buffer, the slog handler) and that
 // is correct for captured subprocess output, which really is bytes. It is structurally
 // unable to cover VALUES: a formatting boundary compares against what fmt renders while
 // the handler emits what its ENCODER produces, and those differ. The case that settled

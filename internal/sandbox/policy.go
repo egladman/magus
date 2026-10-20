@@ -71,9 +71,8 @@ type Policy struct {
 	lease *leaseBoundary
 	// scoped memoizes Scoped by its arguments.
 	scoped *scopedPolicies
-	// withheld is which withheld reads MGS2013 has already reported, shared by every
-	// policy Scoped derives and every value copy, so a variable is reported once per
-	// target rather than once per spell set.
+	// Environment notices share a reporting set across scoped policies and value copies,
+	// so changing a step's spell set does not repeat MGS2003 or MGS2013.
 	withheld *withheldReads
 }
 

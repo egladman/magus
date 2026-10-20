@@ -1,0 +1,14 @@
+name: Setup SCIP indexers
+description: Verify every Mise-pinned SCIP indexer Magus declares.
+
+runs:
+  using: composite
+  steps:
+    # Every indexer is pinned in mise.toml; this catches a runner whose environment did
+    # not activate the same toolchain Magus will use for target execution.
+    - name: Install and verify SCIP indexers
+      shell: bash
+      run: |
+        scip-go --version
+        scip-buzz --version
+        scip-typescript --version

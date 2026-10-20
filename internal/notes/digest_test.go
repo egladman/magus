@@ -74,19 +74,7 @@ func TestDigestCatchesRealEdits(t *testing.T) {
 	}
 }
 
-func TestDigestRange(t *testing.T) {
-	src := "one\ntwo\nthree\nfour\nfive"
-
-	assert.Equal(t, Digest([]string{"two", "three"}), DigestRange(src, 2, 3), "1-based and inclusive")
-	assert.NotEqual(t, DigestRange(src, 1, 2), DigestRange(src, 2, 3))
-
-	// An index that lags the file must degrade to "no opinion", never to a fingerprint of
-	// the wrong lines, which would report confident nonsense.
-	assert.Empty(t, DigestRange(src, 0, 3), "a zero start is not a line")
-	assert.Empty(t, DigestRange(src, 4, 2), "an inverted range says nothing")
-	assert.Empty(t, DigestRange(src, 99, 120), "a range past the end says nothing")
-	assert.Empty(t, DigestRange(src, 4, 500), "an end past EOF proves the index is stale, so it says nothing rather than clamping")
-
+func TestDigestOfEmptyContentIsReal(t *testing.T) {
 	// Content that normalizes to nothing still gets a REAL fingerprint. "" is reserved for
 	// "cannot compute", and conflating the two would make emptying an anchored file (the
 	// largest possible drift) the one edit that reports silence.

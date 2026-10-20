@@ -3,7 +3,7 @@ package spell
 import (
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
@@ -239,7 +239,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"buf": {
 		Name:               "buf",
 		Needs:              []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
-		Provides:           []string{"gen/**"},
 		Language:           "protobuf",
 		LanguageExtensions: []string{".proto"},
 		Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{
@@ -339,12 +338,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Tools: map[string]spells.Tool{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 				Supported: spells.VersionBounds{Min: "1.21"}, Lifecycle: "go"},
-			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			// Observe only, no Probe: a version probe keys every target in the project,
-			// so the database date `-version` prints reached targets that never run the
-			// scanner. See spells/golang/spell.buzz.
-			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
-			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+			// so the database date `-version` prints, or a linter upgrade, reached targets
+			// that never run the tool. See spells/golang/spell.buzz.
+			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}},
+			"govulncheck":   {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+			"scip-go":       {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -414,13 +413,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "markdown",
 		Needs: []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml", "dprint.json"},
 		Ops: map[string]spells.Op{
-			"dprint": {Command: spells.Command{Bin: "dprint", Args: []string{"check"}, Charms: map[string]spells.Charm{
+			"dprint": {Command: spells.Command{Bin: "dprint", Args: []string{"check", "--config-discovery=ignore-descendants"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "fmt"}}},
 			}}},
 			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
-			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
-			}}},
 			// "fix", not "rw": this op takes no paths, so under the workspace default
 			// charm every caller rewrote its whole tree. See the spell source.
 			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{

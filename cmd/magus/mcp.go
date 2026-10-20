@@ -22,6 +22,8 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/server"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,7 +63,7 @@ func mcpCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus mcp: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus mcp: takes no arguments (got %q)", rest[0])
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -156,18 +158,18 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 // that will not resolve leaves the base empty, and every writer already treats an empty
 // base as "drop the record, best-effort".
 func publishServerTrailBase() {
-	root, err := magus.FindRoot("")
+	root, err := workspace.FindRoot("")
 	if err != nil {
 		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	loc, err := jobPlace(root)
 	if err != nil {
-		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
+		slog.Warn("cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
-	serverTrailBase = base
-	serverJobStore = job.NewStore(job.Location{CacheDir: base, Root: root})
+	serverTrailBase = loc.CacheDir
+	serverJobStore = job.NewStore(loc)
 }
 
 // startBridge opens the server's own workspace, keeps its graph and symbol indexes
@@ -198,14 +200,14 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	// collector so the endpoint is still non-empty; one-shot CLI runs leave metrics off.
 	opts := []magus.Option{magus.WithMetricsCollection()}
 	if tel != nil {
-		opts[0] = magus.WithProvider(tel)
+		opts[0] = workspace.WithTelemetryProvider(tel)
 	}
 	if serverRegistry != nil && serverRegistry.broker != nil && globalCfg.Broker.Resolved() != types.BrokerOff {
 		opts = append(opts, magus.WithBroker(serverRegistry.broker))
 	}
 	m, err := loadMagus(ctx, "", opts...)
 	if err != nil {
-		root, rerr := magus.FindRoot("")
+		root, rerr := workspace.FindRoot("")
 		if !mcpOn || rerr != nil || serverRegistry == nil {
 			slog.Warn("workspace unavailable; no MCP, console or watch for it", attr.Error(err))
 			return
@@ -368,7 +370,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 	// Capture the server's own socket now (set by startServer) so the health handlers
 	// query this server, not whatever a per-request discovery scan happens to find.
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
-	m.SetServer(server.New(internalmcp.Options{
+	srv := server.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,
@@ -392,9 +394,9 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 			services:       bridgeServices,
 			knowledgeGraph: m.KnowledgeGraphHealthy,
 		}),
-	}, bridgeServerOptions()...))
+	}, bridgeServerOptions()...)
 	go func() {
-		err := m.Serve(ctx)
+		err := srv.Serve(ctx)
 		if err != nil && ctx.Err() == nil {
 			// Serve exiting due to ctx cancellation is normal shutdown.
 			// Any other error means MCP is gone while the server is still up —

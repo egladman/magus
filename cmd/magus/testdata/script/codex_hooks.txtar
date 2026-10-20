@@ -1,0 +1,110 @@
+# The Codex hooks that carry a subagent, run against the payloads codex 0.155.1 sends.
+#
+# A v2 model names the spawn tool collaborationspawn_agent and encrypts the spawn's
+# message, so nothing the parent wrote can carry a brief to the child: SubagentStart's
+# additionalContext is the only channel. The spawn answers with a task_name path, not an
+# agent id, and the child's own tool calls carry agent_id.
+#
+# The templates run from their real files (__MAGUS_TEMPLATES), as a host wires them: a plain
+# `magus buzz -s <file> -- --agent-name codex`.
+
+[windows] skip 'the fixtures stand in a POSIX sh script for a stale magus'
+
+env HOST_NAME=codex
+
+# --- SubagentStart: the child's brief --------------------------------------------------
+
+# The reply names the event the host ran the hook for, and the brief rides as its context.
+cd $WORK/brief-ws
+env HOME=$WORK/brief-home
+env XDG_STATE_HOME=$WORK/brief-home/state
+stdin $WORK/subagent-start.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json --rules AGENTS.md
+stdout '^\{"hookSpecificOutput":\{"hookEventName":"SubagentStart","additionalContext":"magus brief: '
+stdout 'standing rules: AGENTS.md; re-read it, the summary above is not it\\n"\}\}$'
+! stderr .
+
+# SessionStart(compact) keeps its own event name through the same wiring.
+stdin $WORK/session-start-compact.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json --rules AGENTS.md
+stdout '^\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":"magus brief: '
+! stderr .
+
+# Any other event is answered as SessionStart, the event the entry was written for.
+stdin $WORK/subagent-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json --rules AGENTS.md
+stdout '"hookEventName":"SessionStart"'
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+
+# --- the spawn, the finished spawn and the finished child ------------------------------
+
+# A v2 spawn has no prompt to judge and an encrypted message: it passes silently.
+stdin $WORK/spawn-v2-pre.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# The response is a JSON string, not an object, and names the child by task_name.
+stdin $WORK/spawn-v2-post.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# A v1 spawn answers with the agent id.
+stdin $WORK/spawn-v1-post.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# SubagentStop judges nothing and prints nothing.
+stdin $WORK/subagent-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# --- a notice in the dialect of the event ----------------------------------------------
+
+# With no magus to ask, the notice has to parse as the event's own reply. PreToolUse's
+# envelope on a post-call event is one the host marks failed.
+env __MAGUS_BIN=$WORK/nonexistent-magus
+stdin $WORK/spawn-v2-post.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"hookEventName":"PostToolUse"'
+stdout 'magus guard is NOT running'
+! stdout 'PreToolUse'
+
+# SubagentStop's reply carries no hookSpecificOutput, so the notice goes to the person.
+stdin $WORK/subagent-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'hookSpecificOutput'
+stderr 'magus guard is NOT running'
+
+# A pre-call spawn keeps the PreToolUse envelope.
+stdin $WORK/spawn-v2-pre.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"hookEventName":"PreToolUse"'
+env __MAGUS_BIN=
+
+-- brief-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the brief this checkout hands a subagent matters here",
+});
+-- brief-ws/AGENTS.md --
+The instruction file the rehydrate wrapper's rules line points back at.
+-- subagent-start.json --
+{"session_id": "01a13545-6423-72c2-9c0d-c3eeb9d8a38f", "turn_id": "01a13545-7631-7f30-bd8a-d6af12ece2a5", "transcript_path": "/tmp/rollout-parent.jsonl", "hook_event_name": "SubagentStart", "model": "gpt-5.6-terra", "permission_mode": "default", "agent_id": "01a13545-760f-7713-ba17-f20f39c0b26a", "agent_type": "default"}
+-- session-start-compact.json --
+{"session_id": "01a13545-6423-72c2-9c0d-c3eeb9d8a38f", "transcript_path": "/tmp/rollout-parent.jsonl", "hook_event_name": "SessionStart", "model": "gpt-5.6-terra", "permission_mode": "default", "source": "compact"}
+-- spawn-v2-pre.json --
+{"session_id": "01a13545-aaaa-72c2-9c0d-c3eeb9d8a38f", "turn_id": "01a13545-645f-7863-b6e3-ddabbe635ccb", "hook_event_name": "PreToolUse", "permission_mode": "default", "tool_name": "collaborationspawn_agent", "tool_input": {"task_name": "probe_child", "fork_turns": "none", "message": "gAAAAABqziZD-c5_172kwzVaLg1FHQRw624YEGPoD37mm5OI2_nkLJlJqTG3--VnQNkzafEQm18ilewyx_99TK5C_2sOTzpUg4626XbWK0y28K4b-oOrIRj2NDFrFHybN4fG_6ad60rshOl5eK2AkWRK5lnN8JFseHo5O0UcaTlg8iM_zFeYG4U="}, "tool_use_id": "call_6204e623e38847ae9bb042b991b2b6c5"}
+-- spawn-v2-post.json --
+{"session_id": "01a13545-6423-72c2-9c0d-c3eeb9d8a38f", "turn_id": "01a13545-645f-7863-b6e3-ddabbe635ccb", "hook_event_name": "PostToolUse", "permission_mode": "default", "tool_name": "collaborationspawn_agent", "tool_input": {"task_name": "probe_child", "fork_turns": "none", "message": "gAAAAABqziZD-c5_172kwzVaLg1FHQRw624YEGPoD37mm5OI2_nkLJlJqTG3--VnQNkzafEQm18ilewyx_99TK5C_2sOTzpUg4626XbWK0y28K4b-oOrIRj2NDFrFHybN4fG_6ad60rshOl5eK2AkWRK5lnN8JFseHo5O0UcaTlg8iM_zFeYG4U="}, "tool_response": "{\"task_name\":\"/root/probe_child\"}", "tool_use_id": "call_6204e623e38847ae9bb042b991b2b6c5"}
+-- spawn-v1-post.json --
+{"session_id": "01a13546-0000-7000-8000-000000000001", "hook_event_name": "PostToolUse", "permission_mode": "default", "tool_name": "spawn_agent", "tool_input": {"message": "Say hello", "agent_type": "default"}, "tool_response": "{\"agent_id\":\"01a13546-0000-7000-8000-000000000002\",\"nickname\":\"Ada\"}", "tool_use_id": "call_1"}
+-- subagent-stop.json --
+{"session_id": "01a13545-6423-72c2-9c0d-c3eeb9d8a38f", "turn_id": "01a13545-7631-7f30-bd8a-d6af12ece2a5", "agent_transcript_path": "/tmp/rollout-child.jsonl", "hook_event_name": "SubagentStop", "permission_mode": "default", "stop_hook_active": false, "agent_id": "01a13545-760f-7713-ba17-f20f39c0b26a", "agent_type": "default", "last_assistant_message": "done"}

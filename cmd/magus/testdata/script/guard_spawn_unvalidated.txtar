@@ -1,0 +1,36 @@
+# A spawn titled for a forked row passes, since the fork validated and stamped it; the same
+# row as an older ledger wrote it, with no `validated` stamp, is refused with the commands
+# that read its problems and validate it again.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q
+exec magus init -local -vcs git
+cp $WORK/lint.buzz magusfile.buzz
+exec git add -A
+exec git commit -q -m 'start'
+
+exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .'
+stdin spawn.json
+exec magus shell
+! stdout 'spawn-unvalidated'
+
+exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed -e "s/,\"validated\":[0-9]*//" "$f" > "$f.tmp" && mv "$f.tmp" "$f"'
+stdin spawn.json
+! exec magus shell
+stdout 'deny \[spawn-unvalidated\]'
+stdout 'job wave/lint carries no `validated` stamp'
+stdout 'magus job fork wave/lint --dry-run'
+stdout 'magus job apply -f <record>'
+
+-- lint.buzz --
+import "magus";
+
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+-- spawn.json --
+{"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": {"description": "orch/impl wave/lint", "prompt": "Carry the job to its done-when."}}
+-- code.go --
+package pkg

@@ -12,7 +12,7 @@ import (
 // runs projects a breadcrumb set onto (id, run) pairs. The Why is prose and moves;
 // the id is what a measurement counts and the run is what a reader pastes, so those
 // two are what the assertions pin.
-func runs(next []Next) [][2]string {
+func runs(next []types.NextStep) [][2]string {
 	out := make([][2]string, len(next))
 	for i, n := range next {
 		out[i] = [2]string{n.ID, n.Run}
@@ -163,18 +163,18 @@ func TestNextForFailureWithoutARef(t *testing.T) {
 func TestNextCapsAtThree(t *testing.T) {
 	assert.Equal(t, 3, nextCap, "three, one line each: a longer list is a wall nobody reads")
 
-	long := []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
-	assert.Equal(t, []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}}, capNext(long))
+	long := []types.NextStep{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	assert.Equal(t, []types.NextStep{{ID: "a"}, {ID: "b"}, {ID: "c"}}, capNext(long))
 
-	for _, build := range []func() []Next{
-		func() []Next {
+	for _, build := range []func() []types.NextStep{
+		func() []types.NextStep {
 			return NextForQuery(types.KnowledgeQueryOutput{Matches: []types.KnowledgeMatch{
 				{ID: "symbol:A", Kind: types.KindSymbol, Label: "A"},
 				{ID: "symbol:B", Kind: types.KindSymbol, Label: "B"},
 				{ID: "symbol:C", Kind: types.KindSymbol, Label: "C"},
 			}})
 		},
-		func() []Next {
+		func() []types.NextStep {
 			return NextForExplain(types.KnowledgeExplainOutput{
 				Node: types.KnowledgeNode{ID: "symbol:A", Kind: types.KindSymbol, Label: "A", Source: "a.go:1"},
 				Out:  []types.KnowledgeEdgeRef{{Other: "spell:go"}},
@@ -223,8 +223,8 @@ func TestRoleForGradesTheActingRow(t *testing.T) {
 
 // Every template, graded per role. A reviewer is handed no write at all; a worker
 // keeps the regeneration of its own project and loses everybody else's.
-func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
-	all := []Next{
+func TestFilterServableDropsWritesOutsideTheWritePaths(t *testing.T) {
+	all := []types.NextStep{
 		breadcrumb("query-explain", Explain, "why", "spell:go"),
 		breadcrumb("file-impact", Affected, "why", "--impact"),
 		breadcrumb("file-regenerate", Run, "why", "generate:rw", "docs"),
@@ -243,7 +243,7 @@ func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
 		{"reviewer owning the path anyway", RoleReviewer, []string{"docs/**"}, []string{"query-explain", "file-impact"}},
 	} {
 		var ids []string
-		for _, n := range ServableTo(tc.role, tc.paths, all) {
+		for _, n := range FilterServable(tc.role, tc.paths, all) {
 			ids = append(ids, n.ID)
 		}
 		assert.Equal(t, tc.want, ids, tc.name)
@@ -255,7 +255,7 @@ func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
 func TestNextForDenyRemedyServesTheArgvItWasGiven(t *testing.T) {
 	argv := []string{"./magus", "ls", "jobs", "-o", "template={{len .jobs}}"}
 	n := NextForDenyRemedy("output-pipe", argv, "why")
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID: "deny-output-pipe", Run: `./magus ls jobs -o "template={{len .jobs}}"`,
 		Argv: argv, Why: "why",
 	}, n)
@@ -271,7 +271,7 @@ func TestNextForDenyRemedyPipelineGradesEveryStage(t *testing.T) {
 		{"./magus", "run", "test", "internal/hint"},
 	}
 	n := NextForDenyRemedyPipeline("chained-run", stages, "why")
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID:   "deny-chained-run",
 		Run:  "./magus run generate:rw docs | ./magus run test internal/hint",
 		Argv: []string{"./magus", "run", "generate:rw", "docs", PipeSep, "./magus", "run", "test", "internal/hint"},
@@ -279,20 +279,20 @@ func TestNextForDenyRemedyPipelineGradesEveryStage(t *testing.T) {
 	}, n)
 	assert.Equal(t, stages, pipelineStages(n.Argv))
 
-	assert.Equal(t, []Next{n}, ServableTo(RoleWorker, []string{"docs/**", "internal/hint/**"}, []Next{n}))
-	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []Next{n}), "the second stage writes outside")
-	assert.Nil(t, ServableTo(RoleReviewer, []string{"docs/**", "internal/hint/**"}, []Next{n}))
-	assert.Equal(t, []Next{n}, ServableTo(RoleUnbound, nil, []Next{n}))
+	assert.Equal(t, []types.NextStep{n}, FilterServable(RoleWorker, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
+	assert.Nil(t, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{n}), "the second stage writes outside")
+	assert.Nil(t, FilterServable(RoleReviewer, []string{"docs/**", "internal/hint/**"}, []types.NextStep{n}))
+	assert.Equal(t, []types.NextStep{n}, FilterServable(RoleUnbound, nil, []types.NextStep{n}))
 }
 
-// TestServableToGradesVcsAddByItsPaths extends the worker's write-path rule to the one
+// TestFilterServableGradesVcsAddByItsPaths extends the worker's write-path rule to the one
 // write whose operands are paths: staging inside the write paths is the worker's own.
-func TestServableToGradesVcsAddByItsPaths(t *testing.T) {
+func TestFilterServableGradesVcsAddByItsPaths(t *testing.T) {
 	inside := NextForDenyRemedy("stage-all", VCSAdd.Argv("internal/hint/next.go"), "why")
 	whole := NextForDenyRemedy("stage-all", VCSAdd.Argv(), "why")
-	assert.Equal(t, []Next{inside}, ServableTo(RoleWorker, []string{"internal/hint/**"}, []Next{inside, whole}))
-	assert.Nil(t, ServableTo(RoleWorker, []string{"docs/**"}, []Next{inside}))
-	assert.Nil(t, ServableTo(RoleReviewer, []string{"internal/hint/**"}, []Next{inside}))
+	assert.Equal(t, []types.NextStep{inside}, FilterServable(RoleWorker, []string{"internal/hint/**"}, []types.NextStep{inside, whole}))
+	assert.Nil(t, FilterServable(RoleWorker, []string{"docs/**"}, []types.NextStep{inside}))
+	assert.Nil(t, FilterServable(RoleReviewer, []string{"internal/hint/**"}, []types.NextStep{inside}))
 }
 
 // A bare `magus run` writes wherever the workspace declares default charms, so the
@@ -352,7 +352,7 @@ func TestEveryDeclaredCommandIsClassified(t *testing.T) {
 // A breadcrumb renders twice: quoted for a shell, raw for an exec.
 func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
 	n := breadcrumb("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID:   "query-doc-sections",
 		Run:  `magus query kind=docsection "id=docs/a b.md"`,
 		Argv: []string{"magus", "query", "kind=docsection", "id=docs/a b.md"},
@@ -363,7 +363,7 @@ func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
 // Both doors print one layout, so a reader who meets a breadcrumb over MCP and on a
 // terminal meets the same two lines. A silenced Why leaves the command standing.
 func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
-	next := []Next{
+	next := []types.NextStep{
 		{Run: "magus explain spell:go", Why: "explain names a node's edges."},
 		{Run: "magus path spell:go spell:gomod"},
 	}
@@ -371,12 +371,12 @@ func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
 		"  magus explain spell:go\n"+
 		"      explain names a node's edges.\n"+
 		"  magus path spell:go spell:gomod\n",
-		Render(next, func(n Next) string { return n.Why }))
+		Render(next, func(n types.NextStep) string { return n.Why }))
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
 		"  magus path spell:go spell:gomod\n",
-		Render(next, func(Next) string { return "" }))
-	assert.Empty(t, Render(nil, func(n Next) string { return n.Why }))
+		Render(next, func(types.NextStep) string { return "" }))
+	assert.Empty(t, Render(nil, func(n types.NextStep) string { return n.Why }))
 }
 
 // TestNextForSlotWait pins that the re-run replaces any profile the caller passed, in
@@ -391,7 +391,7 @@ func TestNextForSlotWait(t *testing.T) {
 	})
 	argv := []string{"./magus", "--concurrency-profile", "aggressive", "run", "test", ".",
 		"--", "-run", "Test A", "--concurrency-profile=x"}
-	assert.Equal(t, Next{
+	assert.Equal(t, types.NextStep{
 		ID:   "concurrency-profile",
 		Run:  `./magus --concurrency-profile aggressive run test . -- -run "Test A" --concurrency-profile=x`,
 		Argv: argv,

@@ -114,16 +114,16 @@ type FFIProvider interface {
 }
 
 // ffiProvider is the installed FFI backend, or nil when none is registered (the
-// platform has no provider). Set at init() by the default purego backend, or by
-// an embedder via RegisterFFIProvider. Single-threaded by the same ownership
-// model as the rest of the package; not guarded by a lock.
-var ffiProvider FFIProvider
+// platform has no provider). It starts as the default purego backend where one
+// exists (see defaultFFIProvider), and an embedder replaces it via
+// RegisterFFIProvider. Single-threaded by the same ownership model as the rest of
+// the package; not guarded by a lock.
+var ffiProvider = defaultFFIProvider()
 
 // RegisterFFIProvider installs p as the FFI backend used by zdef(). It is
 // intended for embedders adding FFI on a platform the default purego backend
 // does not support; call it once during setup, before running Buzz code. A nil p
-// is ignored. The default backend registers itself at init() on supported
-// platforms, so calling this overrides that default if both are present.
+// is ignored. Calling this overrides the default backend on platforms that have one.
 func RegisterFFIProvider(p FFIProvider) {
 	if p != nil {
 		ffiProvider = p
@@ -137,13 +137,6 @@ func GetFFIProvider() FFIProvider { return ffiProvider }
 // SetFFIProvider sets the FFI provider unconditionally (unlike RegisterFFIProvider,
 // it accepts nil). Intended for tests that need to temporarily replace or clear it.
 func SetFFIProvider(p FFIProvider) { ffiProvider = p }
-
-// callbackMaker builds a C-callable function pointer that re-enters Buzz, or is
-// nil on platforms with no purego backend. Set by ffi_purego.go's init(); see
-// MakeCallback. Kept as a function value (not a method on FFIProvider) because it
-// is a leaf capability of the default backend, not something an embedder must
-// reimplement to get zdef() working.
-var callbackMaker func(ctx context.Context, fn Value, ret CType, params []CType) (uintptr, error)
 
 // MakeCallback wraps a Buzz function as a C function pointer (returned as its
 // machine address) so it can be passed where C expects a callback — e.g. the
@@ -172,10 +165,7 @@ func MakeCallback(ctx context.Context, fn Value, retName string, paramNames []st
 		}
 		params[i] = ct
 	}
-	if callbackMaker == nil {
-		return 0, fmt.Errorf("buzz: ffi: callbacks are not supported on this platform (no FFI provider registered)")
-	}
-	return callbackMaker(ctx, fn, ret, params)
+	return makeCallback(ctx, fn, ret, params)
 }
 
 // callbackCType resolves a C type name for a callback signature, rejecting

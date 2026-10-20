@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
@@ -143,11 +143,11 @@ type serverProbe struct {
 const serverProbeTimeout = 500 * time.Millisecond
 
 func runVersion(ctx context.Context, args []string) error {
-	var vf *gen.VersionFlags
+	var vf *flaggen.VersionFlags
 	// version is dispatched straight from main, so without cmdParse the global
 	// display flags are never bound and -o is silently inert in either position.
 	if _, err := cmdParse("version", args, func(fs *flag.FlagSet) {
-		vf = gen.BindVersion(fs)
+		vf = flaggen.BindVersion(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus version [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -181,7 +181,7 @@ func runVersion(ctx context.Context, args []string) error {
 	case outputName:
 		// The scriptable scalar: `magus version -o name` is what a CI step compares
 		// against a pin, so it is the bare version with nothing to strip.
-		return emitNames([]string{out.Version})
+		return emitNames(os.Stdout, []string{out.Version})
 	}
 
 	fmt.Printf("magus %s (%s) built %s\n", out.Version, out.Commit, out.BuildDate)

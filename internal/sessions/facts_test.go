@@ -112,6 +112,36 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	}, summaries[0].Targets)
 }
 
+func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci"})
+	require.NotNil(t, h)
+	emitFact(t, h, journal.Event{
+		Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass,
+		StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingDeclared,
+		WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
+	})
+	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached, Sizing: journal.SizingNone})
+
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+
+	assert.Equal(t, []TargetResult{
+		{
+			Target: "build", Project: "api", Outcome: OutcomePass,
+			StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingDeclared,
+			WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
+		},
+		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true, Sizing: journal.SizingNone},
+	}, summaries[0].Targets)
+}
+
 // Everything that is not a target result must leave no trace, or the session store
 // becomes a second copy of the execution journal.
 // recordTap keeps the last record it handled.

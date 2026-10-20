@@ -1327,7 +1327,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagStr:
 				st.strBytes = []byte(vm.asStr(iter).V)
 			case tagEnumDef:
-				st.enumDef = vm.asEnumDef(iter)
+				st.enumCases = vm.enumCases(iter)
 			case tagMap:
 				st.mapObj = vm.asMap(iter)
 			case tagRange:
@@ -1355,12 +1355,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				} else {
 					done = true
 				}
-			} else if state.enumDef != nil {
-				if state.idx < len(state.enumDef.Cases) {
+			} else if state.enumCases != nil {
+				if state.idx < len(state.enumCases) {
 					if wantKey {
 						vm.push(IntValue(int64(state.idx)))
 					}
-					vm.push(vm.enumCase(state.enumDef, state.idx))
+					vm.push(state.enumCases[state.idx])
 					state.idx++
 				} else {
 					done = true
@@ -2023,10 +2023,9 @@ func (vm *VM) enumFromValue(enum Value, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null, fmt.Errorf("buzz: enum %s takes exactly one value, got %d", vm.asEnumDef(enum).Name, len(args))
 	}
-	def := vm.asEnumDef(enum)
-	for i, cv := range def.Values {
+	for i, cv := range vm.asEnumDef(enum).Values {
 		if valuesEqual(cv, args[0]) {
-			return vm.enumCase(def, i), nil
+			return vm.enumCase(enum, i), nil
 		}
 	}
 	return Null, nil
@@ -2345,11 +2344,18 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount, staticFieldCount
 		StaticFields: statics,
 		Env:          env,
 	}
-	// Emitted closures align by index with decl.Methods (see compileObjectDecl),
-	// so route each into the instance vtable or the statics table accordingly.
+	// Emitted closures align by index with decl.Methods minus its extern methods,
+	// which emit nothing (see compileObjectDecl), so route each into the instance
+	// vtable or the statics table accordingly.
+	declared := make([]*ast.FunDecl, 0, len(decl.Methods))
+	for _, m := range decl.Methods {
+		if !m.IsExtern {
+			declared = append(declared, m)
+		}
+	}
 	for i, m := range methods {
 		entry := methodEntry{Name: m.name, Fn: m.fun}
-		if i < len(decl.Methods) && decl.Methods[i].IsStatic {
+		if i < len(declared) && declared[i].IsStatic {
 			def.Statics = append(def.Statics, entry)
 		} else {
 			def.Methods = append(def.Methods, entry)
@@ -2468,7 +2474,7 @@ func (vm *VM) sameTypeDef(v Value, f *frame, keyConst int32) bool {
 		ed, ev := vm.asEnumDef(def), vm.asEnumVal(v)
 		for i, name := range ed.Cases {
 			if name == ev.Case {
-				return vm.asEnumVal(vm.enumCase(ed, i)) == ev
+				return vm.asEnumVal(vm.enumCase(def, i)) == ev
 			}
 		}
 		return false
@@ -2680,9 +2686,6 @@ func (vm *VM) ClearStepHook() {
 // site costs nothing when unset. Set/cleared only between runs, never
 // concurrently with Exec.
 func (vm *VM) SetFaultHook(cb func(FaultKind)) { vm.faultHook = cb }
-
-// ClearFaultHook removes any installed fault hook.
-func (vm *VM) ClearFaultHook() { vm.faultHook = nil }
 
 // DebugFrames returns the active call stack, innermost first.
 func (vm *VM) DebugFrames() []DebugFrame {

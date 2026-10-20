@@ -31,6 +31,8 @@ A verdict names its rule in brackets, which is how you got here:
 advise [unleased-write]: ...
 ```
 
+A workspace that sets this rule to `deny` sees `deny [unleased-write]: ...` instead.
+
 `magus describe rule unleased-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 

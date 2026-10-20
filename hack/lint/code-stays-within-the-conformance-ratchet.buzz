@@ -1,0 +1,317 @@
+// Tier 2, measured shape: an ENFORCED metric fails only what the record does not list, and
+// `magus run format .` deletes what no longer violates and follows a renamed or moved item whose recorded shape names exactly one candidate.
+// Tier 3, judgment: every other metric is advice.
+namespace conformanceratchet;
+
+import "assert";
+import "std";
+import "magus";
+import "magus/lint";
+
+// ENFORCED are the conformance metrics this repository fails on. The rest stay advice,
+// printed and never failing: most of what they flag is a size or a shape chosen on purpose.
+export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout"];
+
+// RATCHET is the committed record knowledge.conformance.ratchet names in magus.yaml.
+final RATCHET = "hack/policy/conformance.jsonl";
+
+// reads keys lint-rules on every Go source the lens measures, the ratchet and the policy
+// beside it: a tree glob stops at a nested project, so each project holding Go is named.
+export fun reads() > [str] {
+    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
+        "libs/cmdline/**/*.go", RATCHET, "magus.yaml"];
+}
+
+// check fails each violation of an ENFORCED metric, each known entry of one that no longer
+// violates, and an index the lens could not vouch for, and prints the rest as advice.
+export fun check(files: [Path]) > [Finding] !> any {
+    final report = magus\conformance();
+    foreach (line in advice(report)) {
+        std\print(line);
+    }
+    return judge(report);
+}
+
+// indexFix is what makes an index current. An indexer that is not installed is fixed by
+// installing it, which a rebuild cannot do; status says so in the index's detail.
+export fun indexFix(op: str, detail: str) > str {
+    if (detail.indexOf("is not installed") != null) {
+        return "Install {op}, then rerun lint: {detail}.";
+    }
+    return "Rebuild it with `magus graph build`, then rerun lint.";
+}
+
+// judge is check's verdict over a magus\conformance report.
+export fun judge(report: {str: any}) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final indexes: [any] = report["indexes"] ?? [<any>];
+    foreach (idx in indexes) {
+        final freshness: str = idx["freshness"] ?? "";
+        if (freshness != "up-to-date") {
+            final project: str = idx["project"]["path"] ?? ".";
+            final lang: str = idx["language"] ?? "";
+            found.append(Finding{ path = project,
+                message = "the {lang} symbol index of {project} is {freshness}, so its conformance cannot be judged",
+                fix = indexFix(idx["op"] ?? "", detail: idx["detail"] ?? "") });
+        }
+    }
+    final answer: {str: any} = report["answer"] ?? {<str: any>};
+    if (answer["verdict"] == "unknown") {
+        final reason: str = answer["reason"] ?? "no reason given";
+        found.append(Finding{ path = ".", message = "magus\\conformance answered unknown ({reason}), so nothing was judged",
+            fix = "Rebuild the index with `magus graph build`, then rerun lint." });
+    }
+    if (found.len() > 0) {
+        return found;
+    }
+
+    final why = uncarried(report);
+    final rows: [any] = report["rows"] ?? [<any>];
+    foreach (row in rows) {
+        final key: {str: any} = row["key"];
+        final metric: str = key["metric"];
+        if (ENFORCED.indexOf(metric) == null) {
+            continue;
+        }
+        final label = keyLabel(key);
+        final value = std\toInt(row["value"]);
+        final origin: str = row["source"] ?? "";
+        final violations: [any] = row["violations"] ?? [<any>];
+        foreach (v in violations) {
+            final at = position(v["source"] ?? "");
+            final id: str = v["id"] ?? "";
+            final measure = std\toInt(v["measure"]);
+            found.append(Finding{ path = at.path, line = at.line,
+                message = "{label}: {id} measures {measure}, past the {origin} ceiling of {value}" + because(why, metric: metric, items: [id]),
+                fix = "Bring it under {value}, or add it to a known entry in " + RATCHET + " with a reason a reviewer can check." });
+        }
+    }
+    final stale: [any] = report["stale"] ?? [<any>];
+    foreach (k in stale) {
+        final metric: str = k["metric"] ?? "";
+        if (ENFORCED.indexOf(metric) == null) {
+            continue;
+        }
+        found.append(Finding{ path = RATCHET,
+            message = "a {metric} known entry names {staleNames(k)}, which no longer violates" + because(why, metric: metric, items: names(k["items"])),
+            fix = "Run `magus run format .`: it deletes what no longer violates." });
+    }
+    return found;
+}
+
+// uncarried is why a known item matching no sample was not followed to a new ID, keyed by
+// its metric and the old ID, and by its metric and each candidate: a carry needs exactly
+// one unlisted item sharing the recorded shape, claimed by no other known item.
+fun uncarried(report: {str: any}) > {str: str} {
+    final why = mut {<str: str>};
+    final pairs: [any] = report["ambiguous"] ?? [<any>];
+    foreach (p in pairs) {
+        final metric: str = p["metric"] ?? "";
+        final old: str = p["from"] ?? "";
+        final to = names(p["to"]);
+        final reason = "not carried from {old}: its recorded shape matches {to.join(", ")}, and a rename or a move is followed only to one item no other known item claims";
+        why["{metric} {old}"] = reason;
+        foreach (id in to) {
+            why["{metric} {id}"] = reason;
+        }
+    }
+    return why;
+}
+
+// because is the reasons of why that name items of metric, as a clause to append, or "".
+fun because(why: {str: str}, metric: str, items: [str]) > str {
+    final reasons = mut [<str>];
+    foreach (item in items) {
+        if (why["{metric} {item}"] -> reason) {
+            if (reasons.indexOf(reason) == null) {
+                reasons.append(reason);
+            }
+        }
+    }
+    if (reasons.len() == 0) {
+        return "";
+    }
+    return " (" + reasons.join("; ") + ")";
+}
+
+fun names(items: any) > [str] {
+    final list: [any] = items ?? [<any>];
+    final strs = mut [<str>];
+    foreach (item in list) {
+        strs.append("{item}");
+    }
+    return strs;
+}
+
+// staleNames joins a stale known entry's items.
+fun staleNames(entry: any) > str {
+    return names(entry["items"]).join(", ");
+}
+
+// advice is a line per violation, and per stale known entry, of a metric ENFORCED leaves
+// out. A stale entry of such a metric never fails: shrinking a long function must not cost
+// more than the advice its length earned.
+// A carried item passes under its new ID, and its line names the re-key format makes.
+fun advice(report: {str: any}) > [str] {
+    final lines = mut [<str>];
+    final carried: [any] = report["carried"] ?? [<any>];
+    foreach (c in carried) {
+        final metric: str = c["metric"] ?? "";
+        final old: str = c["from"] ?? "";
+        lines.append("advice: a {metric} known entry names {old}, judged as {names(c["to"]).join(", ")}, its rename or move; `magus run format .` re-keys it in " + RATCHET);
+    }
+    final stale: [any] = report["stale"] ?? [<any>];
+    foreach (k in stale) {
+        final metric: str = k["metric"] ?? "";
+        if (ENFORCED.indexOf(metric) == null) {
+            lines.append("advice: a {metric} known entry in " + RATCHET + " names {staleNames(k)}, which no longer violates");
+        }
+    }
+    final rows: [any] = report["rows"] ?? [<any>];
+    foreach (row in rows) {
+        final key: {str: any} = row["key"];
+        final metric: str = key["metric"] ?? "";
+        if (ENFORCED.indexOf(metric) != null) {
+            continue;
+        }
+        final label = keyLabel(key);
+        final value = std\toInt(row["value"]);
+        final violations: [any] = row["violations"] ?? [<any>];
+        foreach (v in violations) {
+            final source: str = v["source"] ?? "";
+            final id: str = v["id"] ?? "";
+            final measure = std\toInt(v["measure"]);
+            lines.append("advice: {label}: {id} measures {measure} at {source}, past {value}");
+        }
+    }
+    return lines;
+}
+
+// keyLabel names a row's metric, population and scope as a person reads them.
+fun keyLabel(key: {str: any}) > str {
+    final metric: str = key["metric"] ?? "";
+    final population: str = key["population"] ?? "";
+    final scope: str = key["scope"] ?? "";
+    if (scope != "") {
+        return "{metric} {population} {scope}";
+    }
+    return "{metric} {population}";
+}
+
+// Position is an item's source split into a file and a line, 0 when the lens named none.
+object Position {
+    path: str,
+    line: int,
+}
+
+fun position(source: str) > Position {
+    final colon = source.indexOf(":");
+    if (colon == null) {
+        return Position{ path = source, line = 0 };
+    }
+    return Position{ path = source.sub(0, len: colon!),
+        line = std\parseInt(source.sub(colon! + 1, len: source.len() - colon! - 1)) ?? 0 };
+}
+
+fun fresh() > {str: any} {
+    return {"project": {"path": "."}, "language": "go", "freshness": "up-to-date"};
+}
+
+fun violation(id: str, source: str, measure: double) > {str: any} {
+    return {"id": id, "source": source, "measure": measure};
+}
+
+fun conformanceRow(metric: str, violations: [any]) > {str: any} {
+    return {"key": {"metric": metric, "population": "source"}, "value": 938.0, "source": "ratchet",
+        "violations": violations};
+}
+
+fun report(indexes: [any], rows: [any], stale: [any]) > {str: any} {
+    return {"indexes": indexes, "answer": {"verdict": "found"}, "rows": rows, "stale": stale};
+}
+
+test "a violation of an enforced metric fails at its line and an advice metric does not" {
+    final rows: [any] = [
+        conformanceRow("file-lines", violations: [violation("file:vcs/git.go", source: "vcs/git.go:1", measure: 4174.0)]),
+        conformanceRow("type-methods", violations: [violation("symbol:x/Store#", source: "internal/job/store.go:40", measure: 71.0)]),
+    ];
+    final r = report([fresh()], rows: rows, stale: [<any>]);
+    final got = judge(r);
+    assert\equal(got.len(), want: 1, message: "type-methods is not enforced");
+    assert\equal(got[0].path, want: "vcs/git.go", message: "file");
+    assert\equal(got[0].line, want: 1, message: "line");
+    assert\equal(got[0].message.indexOf("past the ratchet ceiling of 938") != null, want: true, message: got[0].message);
+    final printed = advice(r);
+    assert\equal(printed.len(), want: 1, message: "type-methods is printed as advice");
+}
+
+test "a known entry that no longer violates fails at the ratchet" {
+    final entry: {str: any} = {"metric": "clone-tokens", "items": ["vcs/hg.go#hgVCS.Bisect"], "reason": "driver twins"};
+    final got = judge(report([fresh()], rows: [<any>], stale: [entry]));
+    assert\equal(got.len(), want: 1, message: "the stale entry");
+    assert\equal(got[0].path, want: RATCHET, message: "points at the ratchet");
+    assert\equal(got[0].message.indexOf("vcs/hg.go#hgVCS.Bisect") != null, want: true, message: got[0].message);
+    assert\equal(got[0].fix, want: "Run `magus run format .`: it deletes what no longer violates.", message: "format prunes");
+}
+
+test "a stale entry of an advice metric is printed, never failed" {
+    final entry: {str: any} = {"metric": "type-methods", "items": ["internal/job/store.go#Store"], "reason": "split pending"};
+    final r = report([fresh()], rows: [<any>], stale: [entry]);
+    assert\equal(judge(r).len(), want: 0, message: "type-methods is advice");
+    final printed = advice(r);
+    assert\equal(printed.len(), want: 1, message: "one advice line");
+    assert\equal(printed[0].indexOf("internal/job/store.go#Store") != null, want: true, message: printed[0]);
+}
+
+test "a stale index or an unknown answer fails instead of passing on what it lacks" {
+    final stale: {str: any} = {"project": {"path": "libs/x"}, "language": "go", "freshness": "out-of-date"};
+    final behind = judge(report([fresh(), stale], rows: [<any>], stale: [<any>]));
+    assert\equal(behind.len(), want: 1, message: "the stale index");
+    assert\equal(behind[0].path, want: "libs/x", message: "names the project");
+    final answer: {str: any} = {"verdict": "unknown", "reason": "no-index"};
+    final indexes: [any] = [fresh()];
+    final unknown = judge({"indexes": indexes, "answer": answer});
+    assert\equal(unknown.len(), want: 1, message: "an unknown answer");
+}
+
+test "a missing indexer is fixed by installing it, not by a rebuild" {
+    final missing: {str: any} = {"project": {"path": "docs"}, "op": "scip-buzz", "language": "buzz",
+        "freshness": "not-indexed", "detail": "the buzz SCIP indexer (scip-buzz) is not installed"};
+    final got = judge(report([fresh(), missing], rows: [<any>], stale: [<any>]));
+    assert\equal(got.len(), want: 1, message: "the missing indexer");
+    assert\equal(got[0].fix, want: "Install scip-buzz, then rerun lint: the buzz SCIP indexer (scip-buzz) is not installed.",
+        message: "names the install");
+    assert\equal(indexFix("scip", detail: ""), want: "Rebuild it with `magus graph build`, then rerun lint.",
+        message: "a stale index rebuilds");
+}
+
+test "a scoped key names its scope" {
+    assert\equal(keyLabel({"metric": "dep-fanout", "population": "source", "scope": "cmd/magus"}),
+        want: "dep-fanout source cmd/magus", message: "scope");
+    assert\equal(keyLabel({"metric": "file-lines", "population": "test"}), want: "file-lines test", message: "no scope");
+}
+
+test "a carried item passes and is printed as advice" {
+    final carried: [any] = [{"metric": "func-lines", "from": "a.go#Long", "to": ["a.go#Renamed"]}];
+    final r = report([fresh()], rows: [<any>], stale: [<any>]).cloneMutable();
+    r["carried"] = carried;
+    assert\equal(judge(r).len(), want: 0, message: "the lens judged it known");
+    final printed = advice(r);
+    assert\equal(printed.len(), want: 1, message: "one advice line");
+    assert\equal(printed[0].indexOf("judged as a.go#Renamed") != null, want: true, message: printed[0]);
+}
+
+test "an item not carried says why at its violation and at the stale entry" {
+    final ambiguous: [any] = [{"metric": "func-lines", "from": "a.go#Long", "to": ["a.go#Renamed", "b.go#Twin"]}];
+    final rows: [any] = [conformanceRow("func-lines", violations: [violation("a.go#Renamed", source: "a.go:1", measure: 60.0)])];
+    final entry: {str: any} = {"metric": "func-lines", "items": ["a.go#Long"], "reason": "long on purpose"};
+    final r = report([fresh()], rows: rows, stale: [entry]).cloneMutable();
+    r["ambiguous"] = ambiguous;
+    final got = judge(r);
+    assert\equal(got.len(), want: 2, message: "the violation and the stale entry");
+    foreach (f in got) {
+        assert\equal(f.message.indexOf("not carried from a.go#Long: its recorded shape matches a.go#Renamed, b.go#Twin") != null,
+            want: true, message: f.message);
+    }
+}

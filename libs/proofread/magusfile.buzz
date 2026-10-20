@@ -1,0 +1,99 @@
+// The magus module never imports this. libs/conventions does, for diagmsg, and the guard,
+// the lint rules and the docs run the binary proofread-build links.
+
+import "magus";
+import "fs";
+import "../../hack/magusfile/advisories" as advisories;
+import "../../hack/magusfile/index" as index;
+import "./proofread" as proofread;
+
+import "magus/spell/go";
+// Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.
+import "magus/spell/markdown";
+
+// go.mod requires the published diagnostics with no replace directive, so
+// `go install .../cmd/proofread@<tag>` accepts the module. That is why generate does not
+// call gomod\replaceWorkspaceModules: a diagnostics change reaches this module only
+// through a release and a version bump.
+magus\project({
+    "spells": [go],
+    // MAGUS.md is declared on index_generate, not here.
+    "targets": {
+        "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+        "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
+    },
+});
+
+export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("MAGUS.md");
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    index\render("libs/proofread");
+}
+
+// Trains the word-class tagger's model on UD English EWT, fetched by a pinned digest, and
+// writes the test split its accuracy test reads. Not part of generate: it needs the network.
+// `proofread train` links the whole binary, so every Go file it builds from is an input.
+export fun wordclass_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("*.go", "cmd/proofread/*.go", "internal/**/*.go", "go.mod", "go.sum");
+    ctx.writesFiles("internal/wordclass/gen/model.gz", "internal/wordclass/testdata/en_ewt-ud-test.conllu.gz");
+    go["go-run"](ctx, {"args": ["./" + proofread\command, "train",
+                                "-model", "internal/wordclass/gen/model.gz",
+                                "-testdata", "internal/wordclass/testdata/en_ewt-ud-test.conllu.gz"]});
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    // readsFiles replaces the project baseline, so the next two lines must name every
+    // input. The markdown glob mirrors dprint.json `includes`; keep the two in step.
+    ctx.readsFiles("dprint.json");
+    ctx.modifiesExistingFiles("**/*.md", "**/*.go", "go.mod", "go.sum");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void { go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {"args": ["./..."]}); }
+// Links proofread, so the pull request guard and the writing checks never wait on the compiler.
+// The guard denies a pull request until this has run, and again once the sources move on.
+export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
+    // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
+    // change to it must relink: a replayed digest from the old code would deny every call.
+    ctx.readsFiles("**/*.go", "internal/wordclass/gen/model.gz", "internal/calibrate/cases/*.txtar", "go.mod", "go.sum",
+                   "proofread.buzz");
+    // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
+    ctx.writesFiles("gen/proofread", "gen/proofread.inputs");
+    go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./" + proofread\command]});
+    fs\writeFile(proofread\inputsFile, content: proofread\inputs(".") + "\n");
+}
+// Runs the suite; the root merges coverage.out into its coverage badge.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    // readsFiles replaces the project baseline, so it names the fixtures the tests read
+    // as well as the sources.
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "testdata/**/*", "internal/wordclass/gen/model.gz",
+                   "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar");
+    ctx.writesFiles("coverage.out");
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."] + args});
+}
+
+// Fails on a vulnerable symbol this module calls.
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    final inheritedFatal = advisories\inheritedFatal(args);
+    advisories\govulncheck(ctx, go: go, inheritedFatal: inheritedFatal);
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
+    ctx.needs(format);
+    ctx.needs(lint, build, test, security);
+}

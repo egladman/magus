@@ -3,33 +3,36 @@
 /* eslint-disable */
 
 // Package magus.insight.v1alpha1 is the versioned wire contract for magus insight: where a
-// codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
+// codebase's attention and risk concentrate. Six lenses ride one message - four read VCS
 // history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
-// server caches, and volatility reads run-outcome history instead. They travel together
-// because the dashboard renders them as one board; splitting them into five RPCs would cost
-// five round trips for one paint and would let the four git lenses disagree about the window
-// they were scanned over.
+// server caches, volatility reads run-outcome history instead, and model_tiers reads the
+// outcomes of finished jobs. They travel together because the dashboard renders them as one
+// board; splitting them into six RPCs would cost six round trips for one paint and would let
+// the four git lenses disagree about the window they were scanned over.
 //
 // It is a sibling of the other console tool-page contracts (magus.status.v1alpha1, magus.activity.v1alpha1,
 // magus.metrics.v1alpha1). It mirrors types.InsightView, which the CLI also renders; the mapping to
 // this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
 // gates this file.
 //
-// It deliberately does NOT carry the knowledge-graph axis (types.InsightReport's graph_stats):
-// the console read never touches the knowledge graph, and folding it in here would make every
-// dashboard poll pay for a graph load.
+// It carries one knowledge-graph lens, conformance, and no other (types.InsightReport's graph_stats,
+// unreferenced and duplication stay out): conformance is the one that proposes a value for a
+// person to commit, so the dashboard shows it beside the history it is judged against. The
+// server computes it with the cached scan, so a burst of polls pays for one graph load.
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Answer } from "../../graph/v1alpha1/graph_pb";
+import { file_magus_graph_v1alpha1_graph } from "../../graph/v1alpha1/graph_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file magus/insight/v1alpha1/insight.proto.
  */
 export const file_magus_insight_v1alpha1_insight: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiqgIKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90Iu4BCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSFAoMYmxhc3RfcmFkaXVzGAcgASgFEhMKC2R1cmF0aW9uX21zGAggASgDEg0KBWNodXJuGAkgASgFEg8KB2F1dGhvcnMYCiABKAUSNAoQbGFzdF9jb21taXRfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgGEAdSCWV4Y2x1c2l2ZSKlAQoLRmlsZUhvdHNwb3QSDAoEcGF0aBgBIAEoCRIPCgdjb21taXRzGAIgASgFEhIKCmNvbXBsZXhpdHkYAyABKAUSDQoFc2NvcmUYBCABKAUSDwoHYXV0aG9ycxgFIAEoBRI0ChBsYXN0X2NvbW1pdF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVtb3ZlcxgHIAEoBSJ1Cg5BZmZpbml0eU91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoFcGFpcnMYBCADKAsyIC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvQ2hhbmdlIl8KCENvQ2hhbmdlEgkKAWEYASABKAkSDgoGYV9uYW1lGAIgASgJEgkKAWIYAyABKAkSDgoGYl9uYW1lGAQgASgJEg0KBWNvdW50GAUgASgFEg4KBmhpZGRlbhgGIAEoCCJ6Cg9Pd25lcnNoaXBPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEjMKCHByb2plY3RzGAQgAygLMiEubWFndXMuaW5zaWdodC52MWFscGhhMS5Pd25lcnNoaXAizAEKCU93bmVyc2hpcBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHY29tbWl0cxgDIAEoBRIPCgdhdXRob3JzGAQgASgFEg8KB3ByaW1hcnkYBSABKAkSFQoNcHJpbWFyeV9zaGFyZRgGIAEoBRIUCgxidXNfZmFjdG9yXzEYByABKAgSDQoFc3RhbGUYCCABKAgSNAoQbGFzdF9jb21taXRfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicgoLVHJlbmRPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEi8KCHByb2plY3RzGAQgAygLMh0ubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZCJTCgVUcmVuZBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGcmVjZW50GAMgASgFEg8KB2VhcmxpZXIYBCABKAUSDQoFZGVsdGEYBSABKAUiYAoQVm9sYXRpbGl0eVJlcG9ydBIRCgl0aHJlc2hvbGQYASABKAESOQoHdGFyZ2V0cxgCIAMoCzIoLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuVm9sYXRpbGl0eVRhcmdldCLNAQoQVm9sYXRpbGl0eVRhcmdldBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzY29yZRgDIAEoARIQCgh2b2xhdGlsZRgEIAEoCBIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSFgoOdm9sYXRpbGVfY291bnQYByABKAUSDwoHc2FtcGxlcxgIIAEoBRIyCg5sYXN0X3Bhc3NfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAyagoOSW5zaWdodFNlcnZpY2USWAoKR2V0SW5zaWdodBIpLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuR2V0SW5zaWdodFJlcXVlc3QaHy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkluc2lnaHRC8wEKGmNvbS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExQgxJbnNpZ2h0UHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvaW5zaWdodC92MWFscGhhMTtpbnNpZ2h0djFhbHBoYTGiAgNNSViqAhZNYWd1cy5JbnNpZ2h0LlYxYWxwaGExygIWTWFndXNcSW5zaWdodFxWMWFscGhhMeICIk1hZ3VzXEluc2lnaHRcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6SW5zaWdodDo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiqAMKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0EjwKC21vZGVsX3RpZXJzGAYgASgLMicubWFndXMuaW5zaWdodC52MWFscGhhMS5Nb2RlbFRpZXJPdXRwdXQSPgoLY29uZm9ybWFuY2UYByABKAsyKS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1hbmNlT3V0cHV0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90Iu4BCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSFAoMYmxhc3RfcmFkaXVzGAcgASgFEhMKC2R1cmF0aW9uX21zGAggASgDEg0KBWNodXJuGAkgASgFEg8KB2F1dGhvcnMYCiABKAUSNAoQbGFzdF9jb21taXRfdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgGEAdSCWV4Y2x1c2l2ZSKlAQoLRmlsZUhvdHNwb3QSDAoEcGF0aBgBIAEoCRIPCgdjb21taXRzGAIgASgFEhIKCmNvbXBsZXhpdHkYAyABKAUSDQoFc2NvcmUYBCABKAUSDwoHYXV0aG9ycxgFIAEoBRI0ChBsYXN0X2NvbW1pdF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVtb3ZlcxgHIAEoBSJ1Cg5BZmZpbml0eU91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoFcGFpcnMYBCADKAsyIC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvQ2hhbmdlIl8KCENvQ2hhbmdlEgkKAWEYASABKAkSDgoGYV9uYW1lGAIgASgJEgkKAWIYAyABKAkSDgoGYl9uYW1lGAQgASgJEg0KBWNvdW50GAUgASgFEg4KBmhpZGRlbhgGIAEoCCJ6Cg9Pd25lcnNoaXBPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEjMKCHByb2plY3RzGAQgAygLMiEubWFndXMuaW5zaWdodC52MWFscGhhMS5Pd25lcnNoaXAizAEKCU93bmVyc2hpcBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHY29tbWl0cxgDIAEoBRIPCgdhdXRob3JzGAQgASgFEg8KB3ByaW1hcnkYBSABKAkSFQoNcHJpbWFyeV9zaGFyZRgGIAEoBRIUCgxidXNfZmFjdG9yXzEYByABKAgSDQoFc3RhbGUYCCABKAgSNAoQbGFzdF9jb21taXRfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicgoLVHJlbmRPdXRwdXQSEgoKZGVmaW5pdGlvbhgBIAEoCRIPCgdjb21taXRzGAIgASgFEg0KBXNpbmNlGAMgASgJEi8KCHByb2plY3RzGAQgAygLMh0ubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZCJTCgVUcmVuZBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGcmVjZW50GAMgASgFEg8KB2VhcmxpZXIYBCABKAUSDQoFZGVsdGEYBSABKAUiYAoQVm9sYXRpbGl0eVJlcG9ydBIRCgl0aHJlc2hvbGQYASABKAESOQoHdGFyZ2V0cxgCIAMoCzIoLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuVm9sYXRpbGl0eVRhcmdldCLNAQoQVm9sYXRpbGl0eVRhcmdldBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzY29yZRgDIAEoARIQCgh2b2xhdGlsZRgEIAEoCBIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSFgoOdm9sYXRpbGVfY291bnQYByABKAUSDwoHc2FtcGxlcxgIIAEoBRIyCg5sYXN0X3Bhc3NfdGltZRgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoPTW9kZWxUaWVyT3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSNQoEcm93cxgCIAMoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuTW9kZWxUaWVyUmVjb3JkIqwDCg9Nb2RlbFRpZXJSZWNvcmQSDAoEcmFuaxgBIAEoBRISCgptb2RlbF90aWVyGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEam9icxgEIAEoBRIMCgRwYXNzGAUgASgFEgwKBGZhaWwYBiABKAUSEQoJbm9fcmV0dXJuGAcgASgFEhIKCnBhc3NfbG93ZXIYCCABKAESFgoOY2hlY2tzX3Blcl9qb2IYCSABKAESFAoMZm9ya3NfcGVyX2lkGAogASgBEhYKDnJld29ya19wZXJfam9iGAsgASgBEhkKEXdpZGVuaW5nc19wZXJfam9iGAwgASgBEhoKDW1lYW5fY29zdF91c2QYDSABKAFIAIgBARIaCg1tZWRpYW5fdG9rZW5zGA4gASgDSAGIAQESFgoOZmlyc3RfYXR0ZW1wdHMYDyABKAUSEgoKZmlyc3RfcGFzcxgQIAEoBRIYChBmaXJzdF9wYXNzX2xvd2VyGBEgASgBEhUKDW5vdF9yZXRyeWFibGUYEiABKAVCEAoOX21lYW5fY29zdF91c2RCEAoOX21lZGlhbl90b2tlbnMi1gEKEUNvbmZvcm1hbmNlT3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSNAoEcm93cxgCIAMoCzImLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29uZm9ybWFuY2VSb3cSNwoFc3RhbGUYAyADKAsyKC5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1hbmNlS25vd24SEAoIZXhjbHVkZWQYBCABKAUSLAoGYW5zd2VyGAUgASgLMhwubWFndXMuZ3JhcGgudjFhbHBoYTEuQW5zd2VyIkMKDkNvbmZvcm1hbmNlS2V5Eg4KBm1ldHJpYxgBIAEoCRISCgpwb3B1bGF0aW9uGAIgASgJEg0KBXNjb3BlGAMgASgJIp4CCg5Db25mb3JtYW5jZVJvdxIzCgNrZXkYASABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1hbmNlS2V5EgkKAW4YAiABKAUSCwoDcDUwGAMgASgFEgsKA3A5MBgEIAEoBRILCgNwOTUYBSABKAUSCwoDcDk5GAYgASgFEgwKBGxpdmUYByABKAUSDQoFdmFsdWUYCCABKAUSDgoGYW5jaG9yGAkgASgFEg8KB3Byb3Bvc2UYCiABKAUSDQoFa25vd24YCyABKAUSDgoGc291cmNlGAwgASgJEjsKCnZpb2xhdGlvbnMYDSADKAsyJy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkNvbmZvcm1hbmNlSXRlbSI+Cg9Db25mb3JtYW5jZUl0ZW0SCgoCaWQYASABKAkSDgoGc291cmNlGAIgASgJEg8KB21lYXN1cmUYAyABKAUiQQoQQ29uZm9ybWFuY2VLbm93bhIOCgZtZXRyaWMYASABKAkSDQoFaXRlbXMYAiADKAkSDgoGcmVhc29uGAMgASgJMmoKDkluc2lnaHRTZXJ2aWNlElgKCkdldEluc2lnaHQSKS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkdldEluc2lnaHRSZXF1ZXN0Gh8ubWFndXMuaW5zaWdodC52MWFscGhhMS5JbnNpZ2h0QvMBChpjb20ubWFndXMuaW5zaWdodC52MWFscGhhMUIMSW5zaWdodFByb3RvUAFaTWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2luc2lnaHQvdjFhbHBoYTE7aW5zaWdodHYxYWxwaGExogIDTUlYqgIWTWFndXMuSW5zaWdodC5WMWFscGhhMcoCFk1hZ3VzXEluc2lnaHRcVjFhbHBoYTHiAiJNYWd1c1xJbnNpZ2h0XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIYTWFndXM6Okluc2lnaHQ6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_magus_graph_v1alpha1_graph]);
 
 /**
  * @generated from message magus.insight.v1alpha1.GetInsightRequest
@@ -45,9 +48,12 @@ export const GetInsightRequestSchema: GenMessage<GetInsightRequest> = /*@__PURE_
   messageDesc(file_magus_insight_v1alpha1_insight, 0);
 
 /**
- * Insight bundles the five lenses. volatility is absent (not an empty report) when the
+ * Insight bundles the six lenses. volatility is absent (not an empty report) when the
  * workspace has no run-outcome history to score - the distinction matters to a reader, which
- * renders "no runs recorded yet" rather than "no volatile targets".
+ * renders "no runs recorded yet" rather than "no volatile targets". model_tiers is absent
+ * for the same reason when no job outcome was ever recorded. conformance is absent when the
+ * server holds no workspace to read; a workspace without a symbol index sends it with an
+ * unknown answer.
  *
  * @generated from message magus.insight.v1alpha1.Insight
  */
@@ -76,6 +82,16 @@ export type Insight = Message<"magus.insight.v1alpha1.Insight"> & {
    * @generated from field: magus.insight.v1alpha1.VolatilityReport volatility = 5;
    */
   volatility?: VolatilityReport;
+
+  /**
+   * @generated from field: magus.insight.v1alpha1.ModelTierOutput model_tiers = 6;
+   */
+  modelTiers?: ModelTierOutput;
+
+  /**
+   * @generated from field: magus.insight.v1alpha1.ConformanceOutput conformance = 7;
+   */
+  conformance?: ConformanceOutput;
 };
 
 /**
@@ -614,6 +630,367 @@ export type VolatilityTarget = Message<"magus.insight.v1alpha1.VolatilityTarget"
  */
 export const VolatilityTargetSchema: GenMessage<VolatilityTarget> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 12);
+
+/**
+ * ModelTierOutput is the job-history lens: what each model tier achieved on each kind of
+ * job. It reads the outcomes the job store recorded, not git, and it reports only: changing
+ * a tier is a person editing the declaration or matrix the doctor check names.
+ *
+ * @generated from message magus.insight.v1alpha1.ModelTierOutput
+ */
+export type ModelTierOutput = Message<"magus.insight.v1alpha1.ModelTierOutput"> & {
+  /**
+   * @generated from field: string definition = 1;
+   */
+  definition: string;
+
+  /**
+   * @generated from field: repeated magus.insight.v1alpha1.ModelTierRecord rows = 2;
+   */
+  rows: ModelTierRecord[];
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ModelTierOutput.
+ * Use `create(ModelTierOutputSchema)` to create a new message.
+ */
+export const ModelTierOutputSchema: GenMessage<ModelTierOutput> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 13);
+
+/**
+ * ModelTierRecord is the recorded outcome of the jobs that ran at one tier and job kind.
+ * rank is the tier's place in the current declaration, -1 for one it no longer names.
+ * pass_lower is the Wilson lower bound of the pass rate; the per-job fields are means, so a
+ * reader sets pass rate beside the work a pass cost: checks run, re-forks of one id, rework
+ * rounds (a worker sent more work after handing back) and widenings (write paths added to a
+ * taken job).
+ *
+ * @generated from message magus.insight.v1alpha1.ModelTierRecord
+ */
+export type ModelTierRecord = Message<"magus.insight.v1alpha1.ModelTierRecord"> & {
+  /**
+   * @generated from field: int32 rank = 1;
+   */
+  rank: number;
+
+  /**
+   * @generated from field: string model_tier = 2;
+   */
+  modelTier: string;
+
+  /**
+   * check, symbol, paths, script or prose
+   *
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: int32 jobs = 4;
+   */
+  jobs: number;
+
+  /**
+   * @generated from field: int32 pass = 5;
+   */
+  pass: number;
+
+  /**
+   * @generated from field: int32 fail = 6;
+   */
+  fail: number;
+
+  /**
+   * @generated from field: int32 no_return = 7;
+   */
+  noReturn: number;
+
+  /**
+   * @generated from field: double pass_lower = 8;
+   */
+  passLower: number;
+
+  /**
+   * @generated from field: double checks_per_job = 9;
+   */
+  checksPerJob: number;
+
+  /**
+   * @generated from field: double forks_per_id = 10;
+   */
+  forksPerId: number;
+
+  /**
+   * @generated from field: double rework_per_job = 11;
+   */
+  reworkPerJob: number;
+
+  /**
+   * @generated from field: double widenings_per_job = 12;
+   */
+  wideningsPerJob: number;
+
+  /**
+   * mean_cost_usd and median_tokens are absent, unknown, unless every counted outcome
+   * carries the figure; zero is a measured zero.
+   *
+   * @generated from field: optional double mean_cost_usd = 13;
+   */
+  meanCostUsd?: number;
+
+  /**
+   * @generated from field: optional int64 median_tokens = 14;
+   */
+  medianTokens?: bigint;
+
+  /**
+   * first_attempts counts the endings of a job's first attempt and first_pass those that
+   * passed; first_pass_lower is their Wilson lower bound, as pass_lower is for every ending.
+   * not_retryable counts the endings classified as needing a change before another attempt.
+   *
+   * @generated from field: int32 first_attempts = 15;
+   */
+  firstAttempts: number;
+
+  /**
+   * @generated from field: int32 first_pass = 16;
+   */
+  firstPass: number;
+
+  /**
+   * @generated from field: double first_pass_lower = 17;
+   */
+  firstPassLower: number;
+
+  /**
+   * @generated from field: int32 not_retryable = 18;
+   */
+  notRetryable: number;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ModelTierRecord.
+ * Use `create(ModelTierRecordSchema)` to create a new message.
+ */
+export const ModelTierRecordSchema: GenMessage<ModelTierRecord> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 14);
+
+/**
+ * ConformanceOutput is the code-shape lens: one row per metric and population, judged against the
+ * value a check enforces. It reads the symbol graph, not git. It reports and proposes; a
+ * person commits a proposed value to the ratchet record, and nothing here sets one. answer is
+ * unknown, never a pass, when a symbol index is missing. excluded counts the files the
+ * configured exclusions hid, so a widened exclusion stays visible.
+ *
+ * @generated from message magus.insight.v1alpha1.ConformanceOutput
+ */
+export type ConformanceOutput = Message<"magus.insight.v1alpha1.ConformanceOutput"> & {
+  /**
+   * @generated from field: string definition = 1;
+   */
+  definition: string;
+
+  /**
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceRow rows = 2;
+   */
+  rows: ConformanceRow[];
+
+  /**
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceKnown stale = 3;
+   */
+  stale: ConformanceKnown[];
+
+  /**
+   * @generated from field: int32 excluded = 4;
+   */
+  excluded: number;
+
+  /**
+   * @generated from field: magus.graph.v1alpha1.Answer answer = 5;
+   */
+  answer?: Answer;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ConformanceOutput.
+ * Use `create(ConformanceOutputSchema)` to create a new message.
+ */
+export const ConformanceOutputSchema: GenMessage<ConformanceOutput> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 15);
+
+/**
+ * ConformanceKey names one threshold: metric (file-lines, func-lines, type-methods, file-symbols,
+ * dep-fanout, clone-tokens or export-scope), population (source, main or test) and, for
+ * dep-fanout, the layer or package directory it covers.
+ *
+ * @generated from message magus.insight.v1alpha1.ConformanceKey
+ */
+export type ConformanceKey = Message<"magus.insight.v1alpha1.ConformanceKey"> & {
+  /**
+   * @generated from field: string metric = 1;
+   */
+  metric: string;
+
+  /**
+   * @generated from field: string population = 2;
+   */
+  population: string;
+
+  /**
+   * @generated from field: string scope = 3;
+   */
+  scope: string;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ConformanceKey.
+ * Use `create(ConformanceKeySchema)` to create a new message.
+ */
+export const ConformanceKeySchema: GenMessage<ConformanceKey> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 16);
+
+/**
+ * ConformanceRow is one key's distribution and verdict. live is the configured percentile today;
+ * value and source (ratchet or anchor) are what a check enforces, and anchor is the shipped
+ * bound no committed value may exceed. propose is zero, or a tighter value to commit; it is
+ * never looser than value. known counts the accepted items past value, and violations are the
+ * rest.
+ *
+ * @generated from message magus.insight.v1alpha1.ConformanceRow
+ */
+export type ConformanceRow = Message<"magus.insight.v1alpha1.ConformanceRow"> & {
+  /**
+   * @generated from field: magus.insight.v1alpha1.ConformanceKey key = 1;
+   */
+  key?: ConformanceKey;
+
+  /**
+   * @generated from field: int32 n = 2;
+   */
+  n: number;
+
+  /**
+   * @generated from field: int32 p50 = 3;
+   */
+  p50: number;
+
+  /**
+   * @generated from field: int32 p90 = 4;
+   */
+  p90: number;
+
+  /**
+   * @generated from field: int32 p95 = 5;
+   */
+  p95: number;
+
+  /**
+   * @generated from field: int32 p99 = 6;
+   */
+  p99: number;
+
+  /**
+   * @generated from field: int32 live = 7;
+   */
+  live: number;
+
+  /**
+   * @generated from field: int32 value = 8;
+   */
+  value: number;
+
+  /**
+   * @generated from field: int32 anchor = 9;
+   */
+  anchor: number;
+
+  /**
+   * @generated from field: int32 propose = 10;
+   */
+  propose: number;
+
+  /**
+   * @generated from field: int32 known = 11;
+   */
+  known: number;
+
+  /**
+   * @generated from field: string source = 12;
+   */
+  source: string;
+
+  /**
+   * @generated from field: repeated magus.insight.v1alpha1.ConformanceItem violations = 13;
+   */
+  violations: ConformanceItem[];
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ConformanceRow.
+ * Use `create(ConformanceRowSchema)` to create a new message.
+ */
+export const ConformanceRowSchema: GenMessage<ConformanceRow> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 17);
+
+/**
+ * ConformanceItem is one file, symbol, package or clone group past its row's value and not known.
+ * source is its path:line.
+ *
+ * @generated from message magus.insight.v1alpha1.ConformanceItem
+ */
+export type ConformanceItem = Message<"magus.insight.v1alpha1.ConformanceItem"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string source = 2;
+   */
+  source: string;
+
+  /**
+   * @generated from field: int32 measure = 3;
+   */
+  measure: number;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ConformanceItem.
+ * Use `create(ConformanceItemSchema)` to create a new message.
+ */
+export const ConformanceItemSchema: GenMessage<ConformanceItem> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 18);
+
+/**
+ * ConformanceKnown is a list of items already past a metric's value and accepted for a reason.
+ * In ConformanceOutput.stale it names the entries that no longer violate and should be deleted.
+ *
+ * @generated from message magus.insight.v1alpha1.ConformanceKnown
+ */
+export type ConformanceKnown = Message<"magus.insight.v1alpha1.ConformanceKnown"> & {
+  /**
+   * @generated from field: string metric = 1;
+   */
+  metric: string;
+
+  /**
+   * @generated from field: repeated string items = 2;
+   */
+  items: string[];
+
+  /**
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message magus.insight.v1alpha1.ConformanceKnown.
+ * Use `create(ConformanceKnownSchema)` to create a new message.
+ */
+export const ConformanceKnownSchema: GenMessage<ConformanceKnown> = /*@__PURE__*/
+  messageDesc(file_magus_insight_v1alpha1_insight, 19);
 
 /**
  * InsightService serves the assembled lenses to the console dashboard. One read-only unary

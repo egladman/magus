@@ -1,12 +1,14 @@
 package job
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,6 +197,67 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 
+// A member added to types.Job alone becomes one apply silently drops. The list pins that,
+// so the field's author decides whether the store computes it or a declaration carries it.
+func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
+	t.Parallel()
+
+	assert.ElementsMatch(t, []string{
+		"holder", "releases", "unattributed", "entries", "write_proof", "validated", "reported_base",
+		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
+		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
+		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "generation", "attempts",
+		"prior", "rejection",
+	}, storeStamped)
+}
+
+// The edit loop hands `magus describe job -o json` back to apply. The store's members ride
+// along and are ignored; fork's decoder still refuses them (see
+// TestDecodeDeclarationRefusesTheStoresOwnFields), and a misspelled member is an error here.
+func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
+	t.Parallel()
+
+	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job"],"state":"declared",`+
+		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
+		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
+		`"holder":{},"releases":[],"result":null,"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobSchemaVersion)
+	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"internal/job"}, rows[0].WritePaths)
+	assert.Empty(t, rows[0].State, "the status a described row prints is the store's, and apply never writes one")
+
+	typo := strings.Replace(stored, `"write_paths"`, `"write_pathz"`, 1)
+	_, err = DecodeDeclarations(strings.NewReader(typo))
+	require.ErrorContains(t, err, "write_pathz")
+
+	_, err = DecodeDeclaration(strings.NewReader(stored))
+	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
+}
+
+// A stored row prints its check twice, as the record and as the rendered line, and a
+// declaration naming both is refused; the line is the store's rendering, so it goes.
+func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
+	t.Parallel()
+
+	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],`+
+		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].Check)
+	assert.Equal(t, "go-test", rows[0].Check.Target)
+	assert.Empty(t, rows[0].Validation)
+
+	line := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	rows, err = DecodeDeclarations(strings.NewReader(line))
+	require.NoError(t, err)
+	assert.Equal(t, "magus run go-test .", rows[0].Validation, "a line alone is the declaration's own check")
+
+	_, err = DecodeDeclaration(strings.NewReader(stored))
+	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")
+}
+
 // An empty stdin is the shape of a pipeline that produced nothing, and reading it as an
 // empty record would record a row that erases the one it names.
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
@@ -203,6 +266,25 @@ func TestDecodeRefusesAnEmptyInput(t *testing.T) {
 	_, err := DecodeDeclaration(strings.NewReader("  \n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
+}
+
+// Input that is no record at all is the record's defect; input that cannot be read is not.
+func TestReadInputTypesTheRecordsDefect(t *testing.T) {
+	t.Parallel()
+
+	for name, in := range map[string]string{"blank": "  \n", "oversized": strings.Repeat("x", maxInputBytes+1)} {
+		_, err := readInput(strings.NewReader(in), "job")
+		var invalid *invalidInput
+		require.ErrorAs(t, err, &invalid, name)
+	}
+
+	_, err := readInput(iotest.ErrReader(errors.New("pipe closed")), "job")
+	require.ErrorContains(t, err, "job: read the job: pipe closed")
+	var invalid *invalidInput
+	assert.NotErrorAs(t, err, &invalid)
+
+	_, err = DecodeResult(strings.NewReader(""))
+	require.EqualError(t, err, "job: the result is empty")
 }
 
 // A declaration REPLACES: an omitted field is cleared, which is what a person typing the
@@ -272,31 +354,48 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 	assert.Equal(t, types.ExpectChanged, row.Goals[1].Expect)
 }
 
+func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
+	t.Parallel()
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag","api.Open"]`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
+
+	_, err = DecodeDeclaration(declaration(`"id":"adj/store"`, `"breaks":["--old-flag",""]`))
+	assert.ErrorContains(t, err, "breaks[1] is blank")
+}
+
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
-// row the other would have recorded. ParseMerge is the MCP tool's decoder and
+// row the other would have recorded. DecodePut is magus\job.put's decoder and
 // types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
 // spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyNames):
-// that compat is its own and was never mirrored into ParseMerge, so it is excluded from
+// that compat is its own and was never mirrored into DecodePut, so it is excluded from
 // this comparison rather than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
-	// The envelope and the key, which ParseMerge takes as arguments, and decode.go's own
-	// legacy compat.
+	// The envelope and the key, which a put names outside its map, decode.go's own legacy
+	// compat, and checkout, which only a fork makes.
 	skipped := func(field string) bool {
-		return field == "schema_version" || field == "requires" || field == "id" || legacy[field]
+		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || legacy[field]
 	}
+	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
+	require.ErrorContains(t, err, "which only a fork makes")
 	for _, field := range jsonFields(types.Declaration{}) {
 		if skipped(field) {
 			continue
 		}
 		var value any = "declared"
 		switch field {
-		case "write_paths", "deny_paths", "read_paths", "depends_on":
+		case "write_paths", "deny_paths", "read_paths", "depends_on", "breaks":
 			value = []any{"internal/job"}
 		case "read_only":
 			value = true
+		case "max_attempts":
+			value = float64(3)
 		case "timeout":
 			value = "30m"
 		case "check":
@@ -308,8 +407,12 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 				"id":    "unit",
 				"check": map[string]any{"target": "test", "project": "internal/job"},
 			}}
+		case "waivers":
+			value = []any{map[string]any{
+				"code": string(types.WritePathTooBroad), "subject": "internal/**", "reason": "the root regenerates it",
+			}}
 		}
-		_, err := ParseMerge(map[string]any{field: value})
+		_, err = DecodePut(map[string]any{field: value})
 		require.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
@@ -319,4 +422,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, current, mergeFields, "the two doors name one current vocabulary")
+	// validation is the rendered spelling of check, which JobPut carries typed.
+	assert.ElementsMatch(t, append(jsonFields(types.JobPut{}), "validation"), mergeFields,
+		"a JobPut field is named by the key its map spells it with")
 }

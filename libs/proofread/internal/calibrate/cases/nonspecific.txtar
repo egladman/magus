@@ -1,0 +1,92 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A review reply that judges code or asks for a change and names nothing to act on.
+-- hit/review-reply --
+This is confusing.
+Please fix this.
+This is wrong. It is also redundant.
+-- pass/review-reply --
+This is confusing: `cacheKey` reads twice.
+Passing cacheKey here is wrong.
+This is redundant with internal/cache/key.go.
+This is unclear, see line 42.
+This is unclear, e.g. what happens on a miss.
+This is redundant because the caller already sorts.
+Thanks, looks good.
+Does the caller hold the lock here?
+-- pass/review-inline was=fp:round2:d0020 --
+It's redundant.
+-- pass/review-inline was=fp:round2:d0150 --
+not needed, remove
+-- pass/review-inline was=fp:round2:d0167 --
+I find this unnecessary.
+-- pass/review-inline was=fp:round2:d0216 --
+It is pointless.
+-- pass/review-inline was=fp:round2:d0228 --
+This is incorrect.
+-- pass/review-inline was=fp:round2:d0504 --
+It looks hacky...
+-- pass/review-inline was=fp:round2:d0534 --
+Drop this, it's redundant
+-- pass/review-inline was=fp:round2:d0679 --
+Do not change this
+-- pass/review-reply --
+that test is pretty useless honestly
+The provider detection logic is fragile and relies on URL string matching.
+This is incorrect and inappropriate for usage instructions in the package registry.
+The indentation is inconsistent.
+yeah. the naming is bad, but I didn't want to break this interface for now.
+I can change it in this change or a follow up.
+Using an OR condition on the log stream could mask issues where the expected message appears in the wrong stream.
+[nitpick] The spacing alignment is inconsistent with other boolean fields in the struct.
+Removed the redundant assertion.
+This logic is a bit confusing.
+We shouldn't need to update this file.
+Either make the method synchronous or remove this unnecessary await.
+remove the client changes and any other unnecessary changes from this branch.
+The documentation is correct here but inconsistent with the mock implementation.
+This avoids unnecessary recompilation and improves performance.
+The YAML structure for the 'name' key is incorrect.
+Removed the unnecessary test case.
+[nitpick] The special case for reusing a single modulus across all keys is implicit and could be confusing.
+Removed unnecessary curly braces.
+let's remove redundant docstrings.
+[nitpick] The spacing in the comment alignment is inconsistent.
+I've reviewed the code and there are no unnecessary newline changes or removed commas in the latest revision.
+what is the use of this part, it seems unrelated and unnecessary
+You're right - removed the redundant installation step.
+The step names 'Install Sdks' have inconsistent capitalization compared to standard naming conventions.
+[nitpick] The import statement formatting is inconsistent.
+Removed the redundant assertion wrapper and simplified the test to call the decompiler directly.
+The extra check for file existence after validating the index may be redundant.
+remove this file it's not needed
+please fix this comment
+ok, strange that we have two correlation IDs but that's a topic for another time.
+Inconsistent data format for routing form responses
+-- pass/review-reply --
+@agent the unit tests are failing now, fix it
+look at the failed jobs and fix it
+'make dist' is failing, please fix it
+the build keeps timing out. Try again to fix it.
+-- hit/review-reply --
+@agent something went wrong, please try again
+It failed again, fix it
+-- pass/review-reply whole --
+> This looks wrong to me.
+
+Moved the retry behind a backoff.
+-- pass/review-reply whole --
+> Each handler opens a pool of its own.
+
+Please fix this.
+-- pass/review-reply whole --
+<!-- This is an auto-generated reply by an automated reviewer -->
+Something went wrong, please try again.
+-- pass/review-reply --
+Oops, my bad.
+I got that wrong, sorry.
+Thanks, will fix it.
+Good catch, it was redundant.
+You said 'it is wrong here' and I agree.
+-- hit/review-reply --
+Thanks, but this is wrong.
+Sorry, this is confusing.

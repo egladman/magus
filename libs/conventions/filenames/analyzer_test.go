@@ -11,7 +11,9 @@ import (
 
 // TestAnalyzer builds the vocabulary from a module on disk and checks the
 // testdata against it. gate is known only from gate_linux.go, so suffixes are
-// stripped on both sides; app/gen is skipped by directory.
+// stripped on both sides; app/gen is skipped by directory. The pushgate package
+// holds pushgate.go and its external test, which carry the package's own name
+// and pass where the same names in app fire.
 func TestAnalyzer(t *testing.T) {
 	testdata := analysistest.TestData()
 	sourcetest.Module(t, "example.com/m", "push/push.go", "gate/gate_linux.go", "time/time.go", "gen/gen.go")
@@ -23,7 +25,7 @@ func TestAnalyzer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	analysistest.Run(t, testdata, analyzer, "app", "app/gen")
+	analysistest.Run(t, testdata, analyzer, "app", "app/gen", "pushgate")
 }
 
 // TestNewChecksSkipDirs fails at construction on a skip entry naming no

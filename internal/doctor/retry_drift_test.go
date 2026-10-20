@@ -1,8 +1,6 @@
 package doctor
 
 import (
-	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,9 +18,7 @@ func retryHistoryWith(t *testing.T, project, key string, outcomes []forecast.Out
 		Version:  forecast.HistoryVersion,
 		Projects: map[string]map[string]forecast.Stats{project: {key: {Samples: len(outcomes), RecentOutcomes: outcomes}}},
 	}
-	path := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, h.Save(context.Background(), path))
-	return path
+	return writeHistory(t, h)
 }
 
 func failedRetries(n int) []forecast.Outcome {

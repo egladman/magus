@@ -27,6 +27,7 @@ export final TEMPLATE_PAGES = {
     "opencode-plugin.ts": "opencode.md",
     "magus-session-load-claude-code.buzz": "session-load.md",
     "magus-session-load-codex.buzz": "session-load.md",
+    "magus-session-load-cursor.buzz": "session-load.md",
     "magus-session-load-opencode.buzz": "session-load.md",
 };
 

@@ -4,20 +4,21 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/libs/cmdline"
 )
 
 // This file teaches the browser terminal the REAL magus CLI, read from
 // the same command registry the binary, the man pages and the shell completions
 // are generated from.
 //
-// It is a read of a declaration, not a second copy of one. internal/cli is
-// pure data (it imports flag and time and nothing else), so it compiles to
-// js/wasm unchanged, and the console gets every subcommand and flag magus
-// actually has without listing any of them here.
+// It is a read of a declaration, not a second copy of one. internal/commands is
+// data over libs/cmdline, which imports only the standard library, so it compiles to
+// js/wasm unchanged and the console gets every subcommand and flag magus actually
+// has without listing any of them here.
 //
 // What the console still CANNOT do is run them. A browser has no processes, no
-// filesystem and no git, which is why internal/proc/run/run_wasm.go and friends
+// filesystem and no git, which is why internal/proc/spawn/run_wasm.go and friends
 // exist. So the registry buys three things that need no execution: completing a
 // subcommand, completing its flags, and explaining what one does. Everything
 // else stays the playground's own in-memory evaluation.
@@ -34,8 +35,8 @@ var playgroundVerbs = []string{"help", "ls", "targets", "graph", "run", "eval", 
 
 // cliCommands returns every real magus subcommand name, sorted.
 func cliCommands() []string {
-	out := make([]string, 0, len(cli.All))
-	for _, c := range cli.All {
+	out := make([]string, 0, len(commands.Root.Children))
+	for _, c := range commands.Root.Children {
 		out = append(out, c.Name)
 	}
 	sort.Strings(out)
@@ -68,13 +69,13 @@ func completableCommands() []string {
 }
 
 // cliCommand finds a registry command by name.
-func cliCommand(name string) (cli.Command, bool) {
-	for _, c := range cli.All {
+func cliCommand(name string) (cmdline.Command, bool) {
+	for _, c := range commands.Root.Children {
 		if c.Name == name {
 			return c, true
 		}
 	}
-	return cli.Command{}, false
+	return cmdline.Command{}, false
 }
 
 // cliFlagNames returns the flag spellings a subcommand declares, each with its

@@ -41,7 +41,9 @@ func TestExcludedModules(t *testing.T) {
 		"net", "proc", "term", // same three categories, added later
 		"lcov", // reads a coverage file from disk
 		"pipe", // reads and writes the process's own stdio
-	}, got, "only the process/filesystem/network modules should be excluded")
+		// A Buzz module dry.PlaygroundSourceModules does not list.
+		"modeltiers",
+	}, got, "only the process/filesystem/network modules and unvetted Buzz modules should be excluded")
 
 	// magus is available here (it is in the set), so it must never be reported as
 	// excluded: the point of sourcing the set from real registration.

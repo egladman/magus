@@ -62,20 +62,18 @@ const (
 type Anchor struct {
 	Kind   AnchorKind `json:"kind" yaml:"kind"`
 	Target string     `json:"target" yaml:"target"`
-	// Digest fingerprints the anchored content as of the last review, so a CHANGE is
+	// Digest fingerprints a file anchor's content as of the last review, so a CHANGE is
 	// detectable and not merely a deletion. Existence checks catch a rename or a delete;
-	// this catches the far more common case where the code still exists and quietly
-	// stopped meaning what the note says. Empty when the kind has no content to hash,
-	// and empty until the note has been verified once.
+	// this catches the far more common case where the file still exists and quietly
+	// stopped meaning what the note says. Empty for every other kind, and empty until the
+	// note has been verified once.
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
-	// DeclDigest fingerprints only the anchored subject's DECLARATION; see DigestDecl. It
-	// grades what Digest detects: when both moved, what the subject IS changed, and the note
-	// is very likely wrong; when only Digest moved, the body was edited under an unchanged
-	// signature, which is the case that almost never invalidates prose.
-	//
-	// Empty for a kind with no declaration to speak of (a whole file, a project, a target),
-	// and empty on a note stamped before grading existed. Both are ungraded, never a verdict.
-	DeclDigest string `json:"decl_digest,omitempty" yaml:"decl_digest,omitempty"`
+	// Signature is a symbol anchor's declaration as its indexer rendered it at the last
+	// review. A symbol note drifts exactly when this changes: a body edit or a move leaves it
+	// alone, and those almost never invalidate prose about what the symbol IS. Empty for
+	// every other kind. A symbol anchor without one reads unverifiable until a person
+	// re-records it.
+	Signature string `json:"signature,omitempty" yaml:"signature,omitempty"`
 	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY:
 	// resolution always runs against the working tree. A pinned revision never breaks,
 	// which is precisely why it must never be the anchor: it would go on pointing at
@@ -197,17 +195,11 @@ const (
 	// CodeDanglingAnchor: an anchor names an entity the graph no longer has.
 	CodeDanglingAnchor IssueCode = "dangling-anchor"
 	// CodeDriftedAnchor: the anchored entity still exists, and what it IS changed since a
-	// person last reviewed the note against it: its declaration moved, or the note predates
-	// grading and only the whole-content fingerprint is known.
+	// person last reviewed the note against it: a symbol's signature, or a file's content.
 	CodeDriftedAnchor IssueCode = "drifted-anchor"
-	// CodeAnchorBodyChanged: the anchored entity's content changed UNDER AN UNCHANGED
-	// declaration. Reported separately from drift because it is a different bet: measured
-	// across 1,496 repositories, an edit that leaves the signature alone is 39-105x less
-	// likely to be accompanied by a prose update than one that changes it. Worth surfacing,
-	// not worth interrupting for, and never worth gating on.
-	CodeAnchorBodyChanged IssueCode = "anchor-body-changed"
-	// CodeUnverifiableAnchor: the anchored entity exists, and its fingerprint could not be
-	// computed, so whether the note still holds is UNKNOWN rather than wrong.
+	// CodeUnverifiableAnchor: the anchored entity exists, and its fingerprint was never
+	// recorded or could not be computed, so whether the note still holds is UNKNOWN rather
+	// than wrong.
 	CodeUnverifiableAnchor IssueCode = "unverifiable-anchor"
 )
 

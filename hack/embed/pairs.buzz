@@ -1,0 +1,651 @@
+import "std";
+import "fs";
+import "magus";
+import "encoding/json";
+import "sources";
+import "holdout";
+
+// Every ref is a span, path:a-b: lines a..b, 1-based and inclusive, of the blob
+// sources.jsonl pins for path. A pair is holdout when either span sits in a holdout
+// file, or comes from an eval-fold figure.
+export object Pair {
+    source: str,
+    query: str,
+    doc: str,
+    holdout: bool,
+}
+
+object Miner {
+    c: sources\Snapshot,
+    pairs: mut [Pair],
+    seen: mut {str: bool},
+
+    fun add(source: str, query: str, doc: str, held: bool) > void !> any {
+        if (query == "" or doc == "" or query == doc) {
+            return;
+        }
+        final key = "{source}\t{query}\t{doc}";
+        if (this.seen[key] != null) {
+            return;
+        }
+        this.seen[key] = true;
+        final h = held or this.c.isHoldout(refPath(query)) or this.c.isHoldout(refPath(doc));
+        this.pairs.append(Pair{source = source, query = query, doc = doc, holdout = h});
+    }
+}
+
+// refPath is the file a path:a-b span reads.
+export fun refPath(ref: str) > str {
+    final colon = lastIndex(ref, sep: ":");
+    return if (colon < 0) ref else ref.sub(0, len: colon);
+}
+
+fun lastIndex(s: str, sep: str) > int {
+    var at = -1;
+    var i = 0;
+    while (i < s.len()) {
+        if (s.sub(i, len: 1) == sep) {
+            at = i;
+        }
+        i = i + 1;
+    }
+    return at;
+}
+
+fun span(path: str, a: int, b: int) > str {
+    return "{path}:{a}-{b}";
+}
+
+fun words(text: str) > int {
+    var n = 0;
+    foreach (w in text.replace("\n", with: " ").split(" ")) {
+        if (w != "") {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+fun defEnd(c: sources\Snapshot, s: magus\KnowledgeNode) > int !> any {
+    final end = std\parseInt(s.attrs["def_end_line"] ?? "") ?? 0;
+    final line = sources\spanLine(s.source);
+    if (end >= line) {
+        return end;
+    }
+    return sources\blockEnd(c, path: sources\spanPath(s.source), line: line);
+}
+
+final goDeclKinds = {"Function": true, "Method": true, "Struct": true, "Interface": true, "Type": true, "TypeAlias": true};
+
+// The CodeSearchNet protocol: a doc comment against its declaration with the doc
+// stripped. Tests pair by name below instead, and generated code says nothing a
+// person wrote.
+fun goDocDecl(m: Miner) > void !> any {
+    foreach (s in m.c.symbols) {
+        if (s.attrs["language"] != "go" or goDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
+            continue;
+        }
+        final path = sources\spanPath(s.source);
+        if (!m.c.has(path) or m.c.isGenerated(path) or path.endsWith("_test.go") or words(s.attrs["doc"] ?? "") < 3) {
+            continue;
+        }
+        final line = sources\spanLine(s.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
+        if (top == 0) {
+            continue;
+        }
+        m.add("go-doc-decl", query: span(path, a: top, b: line - 1), doc: span(path, a: line, b: defEnd(m.c, s: s)), held: false);
+    }
+}
+
+final buzzDeclKinds = {"Function": true, "Object": true, "Enum": true};
+
+// Buzz decls come from the SCIP index where it reaches and from the graph's function
+// nodes where it does not (libs/figure, gopherbuzz std); both carry the doc.
+fun buzzDocDecl(m: Miner) > void !> any {
+    final ends: mut {str: int} = mut {};
+    final docs: mut {str: str} = mut {};
+    foreach (s in m.c.symbols) {
+        if (s.attrs["language"] == "buzz" and buzzDeclKinds[s.attrs["symbol_kind"] ?? ""] != null) {
+            ends[s.source] = defEnd(m.c, s: s);
+            docs[s.source] = s.attrs["doc"] ?? "";
+        }
+    }
+    foreach (n in sources\nodes("function")) {
+        if (ends[n.source] == null) {
+            final path = sources\spanPath(n.source);
+            if (m.c.has(path)) {
+                ends[n.source] = sources\blockEnd(m.c, path: path, line: sources\spanLine(n.source));
+            }
+        }
+        if ((docs[n.source] ?? "") == "") {
+            docs[n.source] = n.doc;
+        }
+    }
+    final spans = ends.keys().cloneMutable();
+    spans.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (src in spans) {
+        final path = sources\spanPath(src);
+        if (!m.c.has(path) or m.c.isGenerated(path) or words(docs[src] ?? "") < 3) {
+            continue;
+        }
+        final line = sources\spanLine(src);
+        final top = sources\commentAbove(m.c, path: path, line: line);
+        if (top == 0) {
+            continue;
+        }
+        m.add("buzz-doc-decl", query: span(path, a: top, b: line - 1), doc: span(path, a: line, b: ends[src] ?? line), held: false);
+    }
+}
+
+fun capitalize(s: str) > str {
+    if (s == "") {
+        return s;
+    }
+    return s.sub(0, len: 1).upper() + s.sub(1, len: s.len() - 1);
+}
+
+// documentedBy maps each node of kind to the doc page an extracted `documents` edge
+// names; an inferred edge only says a page mentions the node.
+fun documentedBy(kind: str) > {str: str} !> any {
+    final probe: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": 1, "budget": 1});
+    final q: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 8 + 1000});
+    final pages: mut {str: str} = mut {};
+    foreach (e in q.links) {
+        if (e.relation == "documents" and e.confidence == "extracted" and e.source.startsWith("doc:") and e.target.startsWith("{kind}:")) {
+            final page = e.source.sub(4, len: e.source.len() - 4);
+            if ((pages[e.target] ?? page) >= page) {
+                pages[e.target] = page;
+            }
+        }
+    }
+    return pages;
+}
+
+// A host method's section on its module's reference page (generated from the
+// descriptor's doc and Buzz signature) against the Go function std/ implements it in.
+fun hostModules(m: Miner) > void !> any {
+    final pages = documentedBy("module");
+    final impls: mut {str: str} = mut {};
+    foreach (s in m.c.symbols) {
+        final path = sources\spanPath(s.source);
+        if (path.startsWith("std/") and !path.endsWith("_test.go") and s.attrs["symbol_kind"] == "Function" and impls[s.label] == null) {
+            impls[s.label] = span(path, a: sources\spanLine(s.source), b: defEnd(m.c, s: s));
+        }
+    }
+    foreach (meth in sources\nodes("method")) {
+        final name = sources\buzzName(meth.attrs["buzz"] ?? "");
+        final module = meth.id.sub(7, len: (meth.id.indexOf(".") ?? 7) - 7);
+        if (name == "") {
+            continue;
+        }
+        final section = sources\sectionSpan(m.c, path: pages["module:{module}"] ?? "", label: name, level: 3);
+        final impl = impls[capitalize(module) + capitalize(name)] ?? "";
+        m.add("host-module", query: section, doc: impl, held: false);
+    }
+}
+
+fun provenanceLines(provenance: str) > [int] {
+    final found: mut [int] = mut [];
+    final at = provenance.indexOf("lines=");
+    if (at -> i) {
+        final rest = provenance.sub(i + 6, len: provenance.len() - i - 6).split(" ")[0];
+        foreach (part in rest.split(",")) {
+            if (std\parseInt(part) -> n) {
+                found.append(n);
+            }
+        }
+    }
+    return found;
+}
+
+// enclosing is the span of the smallest function or method in path around line,
+// capped at maxLines; past the cap, or outside any, a window around line.
+fun enclosing(c: sources\Snapshot, path: str, line: int, maxLines: int) > str !> any {
+    var best = "";
+    var bestLen = maxLines + 1;
+    foreach (s in c.symbolsByFile[path] ?? []) {
+        final kind = s.attrs["symbol_kind"] ?? "";
+        if (kind != "Function" and kind != "Method") {
+            continue;
+        }
+        final a = sources\spanLine(s.source);
+        final b = std\parseInt(s.attrs["def_end_line"] ?? "") ?? 0;
+        if (a <= line and line <= b and b - a < bestLen) {
+            best = span(path, a: a, b: b);
+            bestLen = b - a;
+        }
+    }
+    if (best != "") {
+        return best;
+    }
+    return window(c, path: path, line: line, before: 3, after: 3);
+}
+
+fun window(c: sources\Snapshot, path: str, line: int, before: int, after: int) > str !> any {
+    final n = c.lines(path).len();
+    final a = if (line - before < 1) 1 else line - before;
+    final b = if (line + after > n) n else line + after;
+    return span(path, a: a, b: b);
+}
+
+fun refsByTarget(c: sources\Snapshot) > {str: [magus\KnowledgeEdge]} {
+    final by: mut {str: mut [magus\KnowledgeEdge]} = mut {};
+    foreach (e in c.refLinks) {
+        if (by[e.target] == null) {
+            by[e.target] = mut [];
+        }
+        by[e.target]!.append(e);
+    }
+    final frozen: mut {str: [magus\KnowledgeEdge]} = mut {};
+    foreach (k, v in by) {
+        frozen[k] = v;
+    }
+    return frozen;
+}
+
+// Each BZZ page's title and lead against the tests that trigger the code (named after
+// its constant, or citing the code in their doc) and the Go sites that emit it.
+fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
+    final tests: mut [magus\KnowledgeNode] = mut [];
+    foreach (s in m.c.symbols) {
+        final path = sources\spanPath(s.source);
+        if (path.startsWith("libs/gopherbuzz/") and path.endsWith("_test.go") and s.label.startsWith("Test") and s.attrs["symbol_kind"] == "Function") {
+            tests.append(s);
+        }
+    }
+    foreach (k in m.c.symbolsByFile["libs/gopherbuzz/diagnostics.go"] ?? []) {
+        if (k.attrs["symbol_kind"] != "Constant") {
+            continue;
+        }
+        var code = "";
+        foreach (q in sources\quoted(k.attrs["signature"] ?? "")) {
+            if (q.startsWith("BZZ")) {
+                code = q;
+            }
+        }
+        final page = "libs/gopherbuzz/docs/codes/{code}.md";
+        if (code == "" or !m.c.has(page)) {
+            continue;
+        }
+        final hs = sources\headings(m.c, path: page);
+        if (hs.len() == 0) {
+            continue;
+        }
+        final lead = span(page, a: hs[0].line, b: sources\sectionEnd(m.c, path: page, hs: hs, h: hs[0], lead: true));
+        foreach (t in tests) {
+            if (t.label.indexOf(k.label) != null or (t.attrs["doc"] ?? "").indexOf(code) != null) {
+                final path = sources\spanPath(t.source);
+                m.add("bzz-diagnostic", query: lead, doc: span(path, a: sources\spanLine(t.source), b: defEnd(m.c, s: t)), held: false);
+            }
+        }
+        foreach (e in refs[k.id] ?? []) {
+            final path = e.source.sub(5, len: e.source.len() - 5);
+            if (!m.c.has(path) or path.endsWith("_test.go") or path == "libs/gopherbuzz/diagnostics.go") {
+                continue;
+            }
+            foreach (l in provenanceLines(e.provenance)) {
+                m.add("bzz-diagnostic", query: lead, doc: enclosing(m.c, path: path, line: l, maxLines: 60), held: false);
+            }
+        }
+    }
+}
+
+fun indentOf(line: str) > int {
+    var n = 0;
+    while (n < line.len() and (line.sub(n, len: 1) == " " or line.sub(n, len: 1) == "\t")) {
+        n = n + 1;
+    }
+    return n;
+}
+
+// Every `case "name":` of the list, map and str dispatch switches against its body.
+fun builtins(m: Miner) > void !> any {
+    final path = "libs/gopherbuzz/vm/operators.go";
+    final dispatch = {"listMethod": true, "mapMethod": true, "strMethod": true};
+    foreach (s in m.c.symbolsByFile[path] ?? []) {
+        if (dispatch[s.label] == null or s.attrs["symbol_kind"] != "Function") {
+            continue;
+        }
+        final a = sources\spanLine(s.source);
+        final b = defEnd(m.c, s: s);
+        for (var n = a; n <= b; n = n + 1) {
+            final head = m.c.line(path, n: n);
+            if (!head.trim().startsWith("case \"")) {
+                continue;
+            }
+            var end = n + 1;
+            while (end <= b and (m.c.line(path, n: end).trim() == "" or indentOf(m.c.line(path, n: end)) > indentOf(head))) {
+                end = end + 1;
+            }
+            if (end - 1 > n) {
+                m.add("buzz-builtin", query: span(path, a: n, b: n), doc: span(path, a: n + 1, b: end - 1), held: false);
+            }
+        }
+    }
+}
+
+// Fixtures that exist to pin upstream-only constructs (match, explicit generics) stay
+// in the sources but never pair: a table taught them would rank syntax gopherbuzz rejects.
+fun upstreamOnly(c: sources\Snapshot, path: str) > bool !> any {
+    if (fs\basename(path).indexOf("match") != null) {
+        return true;
+    }
+    foreach (l in c.lines(path)) {
+        if (l.indexOf("::<") != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun gopherbuzzTests(m: Miner) > void !> any {
+    foreach (s in m.c.symbols) {
+        final path = sources\spanPath(s.source);
+        if (!path.startsWith("libs/gopherbuzz/") or !path.endsWith("_test.go") or !s.label.startsWith("Test") or s.attrs["symbol_kind"] != "Function") {
+            continue;
+        }
+        final line = sources\spanLine(s.source);
+        final end = defEnd(m.c, s: s);
+        if (end - 1 > line) {
+            m.add("gopherbuzz-test", query: span(path, a: line, b: line), doc: span(path, a: line + 1, b: end - 1), held: false);
+        }
+    }
+    foreach (f in m.c.files) {
+        final fixture = f.path.startsWith("libs/gopherbuzz/testdata/") or f.path.startsWith("libs/gopherbuzz/std/testdata/");
+        if (!fixture or f.language != "buzz" or upstreamOnly(m.c, path: f.path)) {
+            continue;
+        }
+        final ls = m.c.lines(f.path);
+        var k = 0;
+        while (k < ls.len() and ls[k].trim().startsWith("//")) {
+            k = k + 1;
+        }
+        final said: mut [str] = mut [];
+        for (var i = 0; i < k; i = i + 1) {
+            said.append(ls[i].trim().replace("//", with: ""));
+        }
+        if (k > 0 and k < ls.len() and words(said.join(" ")) >= 3) {
+            m.add("gopherbuzz-test", query: span(f.path, a: 1, b: k), doc: span(f.path, a: k + 1, b: ls.len()), held: false);
+        }
+    }
+}
+
+fun camel(label: str) > str {
+    final parts = label.split("-");
+    var s = parts[0];
+    var i = 1;
+    while (i < parts.len()) {
+        s = s + capitalize(parts[i]);
+        i = i + 1;
+    }
+    return s;
+}
+
+// A spell op's section on its spell's concept page against the spell function that
+// defines it and the example magusfile that calls it.
+fun spellOps(m: Miner) > void !> any {
+    final pages = documentedBy("spell");
+    final defs: mut {str: str} = mut {};
+    foreach (s in m.c.symbols) {
+        final path = sources\spanPath(s.source);
+        if (s.attrs["language"] == "buzz" and s.attrs["symbol_kind"] == "Function" and path.startsWith("spells/") and !path.startsWith("spells/examples/")) {
+            final key = "{fs\dirname(path)}/{s.label}";
+            if (defs[key] == null) {
+                defs[key] = span(path, a: sources\spanLine(s.source), b: defEnd(m.c, s: s));
+            }
+        }
+    }
+    foreach (op in sources\nodes("op")) {
+        final parts = op.id.split(":");
+        if (parts.len() < 3) {
+            continue;
+        }
+        final spell = parts[1];
+        final section = sources\sectionSpan(m.c, path: pages["spell:{spell}"] ?? "", label: op.label, level: 0);
+        foreach (k, v in defs) {
+            if (k.endsWith("/{camel(op.label)}") and (k.indexOf("/{spell}/") != null or k.startsWith("spells/{spell}"))) {
+                m.add("spell-op", query: section, doc: v, held: false);
+            }
+        }
+        final example = "spells/examples/{spell}/{op.label}.buzz";
+        if (m.c.has(example)) {
+            m.add("spell-op", query: section, doc: span(example, a: 1, b: m.c.lines(example).len()), held: false);
+        }
+    }
+}
+
+// A Buzz definition against up to three of its reference sites, one per file first,
+// in path and line order.
+fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
+    foreach (s in m.c.symbols) {
+        if (s.attrs["language"] != "buzz" or buzzDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
+            continue;
+        }
+        final path = sources\spanPath(s.source);
+        if (!m.c.has(path) or m.c.isGenerated(path)) {
+            continue;
+        }
+        final a = sources\spanLine(s.source);
+        final b = defEnd(m.c, s: s);
+        final firsts: mut [str] = mut [];
+        final rest: mut [str] = mut [];
+        foreach (e in refs[s.id] ?? []) {
+            final site = e.source.sub(5, len: e.source.len() - 5);
+            if (!m.c.has(site) or m.c.isGenerated(site)) {
+                continue;
+            }
+            var first = true;
+            foreach (l in provenanceLines(e.provenance)) {
+                if (site == path and l >= a and l <= b) {
+                    continue;
+                }
+                final w = window(m.c, path: site, line: l, before: 3, after: 3);
+                if (first) {
+                    firsts.append(w);
+                    first = false;
+                } else {
+                    rest.append(w);
+                }
+            }
+        }
+        var taken = 0;
+        foreach (w in firsts + rest) {
+            if (taken == 3) {
+                break;
+            }
+            m.add("buzz-scip-ref", query: w, doc: span(path, a: a, b: b), held: false);
+            taken = taken + 1;
+        }
+    }
+}
+
+fun figureApi(m: Miner) > void !> any {
+    final path = "libs/figure/figure.buzz";
+    final page = "docs/reference/buzz/figure.md";
+    foreach (n in sources\nodes("function")) {
+        if (!n.id.startsWith("function:{path}:") or n.attrs["exported"] != "true" or !m.c.has(path)) {
+            continue;
+        }
+        final line = sources\spanLine(n.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
+        final decl = span(path, a: if (top == 0) line else top, b: sources\blockEnd(m.c, path: path, line: line));
+        m.add("figure-api", query: sources\sectionSpan(m.c, path: page, label: n.label, level: 3), doc: decl, held: false);
+    }
+}
+
+fun between(s: str, open: str, close: str) > str {
+    final at = s.indexOf(open);
+    if (at -> i) {
+        final rest = s.sub(i + open.len(), len: s.len() - i - open.len());
+        final end = rest.indexOf(close) ?? rest.len();
+        return rest.sub(0, len: end);
+    }
+    return "";
+}
+
+fun unescape(s: str) > str {
+    return s.replace("&lt;", with: "<").replace("&gt;", with: ">").replace("&quot;", with: "\"").replace("&#39;", with: "'").replace("&amp;", with: "&");
+}
+
+fun attrValues(svg: str, attr: str) > [str] {
+    final found: mut [str] = mut [];
+    final parts = svg.split(" {attr}=\"");
+    var i = 1;
+    while (i < parts.len()) {
+        found.append(unescape(parts[i].sub(0, len: parts[i].indexOf("\"") ?? 0)));
+        i = i + 1;
+    }
+    return sources\uniqueSorted(found);
+}
+
+// figures reads each drawn figure's claim off its light SVG: the title, the desc, the
+// dirs its boxes anchor (kept only when the graph holds that dir) and the docs
+// sections a <!--diagram:ID--> marker embeds it in.
+export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
+    final dirs: mut {str: bool} = mut {};
+    foreach (d in sources\nodes("dir")) {
+        dirs[d.id.sub(4, len: d.id.len() - 4)] = true;
+    }
+    final markers: mut {str: mut [str]} = mut {};
+    foreach (f in c.files) {
+        if (f.language != "markdown" or !f.path.startsWith("docs/")) {
+            continue;
+        }
+        final hs = sources\headings(c, path: f.path);
+        foreach (i, l in c.lines(f.path)) {
+            final id = between(l, open: "<!--diagram:", close: "-->");
+            if (id == "") {
+                continue;
+            }
+            var owner: sources\Heading? = null;
+            foreach (h in hs) {
+                if (h.line <= i + 1) {
+                    owner = h;
+                }
+            }
+            if (owner -> h) {
+                if (markers[id] == null) {
+                    markers[id] = mut [];
+                }
+                markers[id]!.append(span(f.path, a: h.line, b: sources\sectionEnd(c, path: f.path, hs: hs, h: h, lead: true)));
+            }
+        }
+    }
+    final found: mut [{str: any}] = mut [];
+    foreach (p in sources\figureSvgs(c.root)) {
+        final base = fs\basename(p);
+        final id = sources\figureId(p);
+        final svg = fs\readFile(p);
+        final anchors: mut [str] = mut [];
+        foreach (a in attrValues(svg, attr: "data-anchor")) {
+            if (dirs[a] != null) {
+                anchors.append(a);
+            }
+        }
+        final externals: mut [str] = mut [];
+        foreach (n in attrValues(svg, attr: "data-node")) {
+            if (n.startsWith("external:")) {
+                externals.append(n.sub(9, len: n.len() - 9));
+            }
+        }
+        var builder = "";
+        final script = "docs/site/diagrams/{id}.buzz";
+        foreach (s in c.symbolsByFile[script] ?? []) {
+            if (builder == "" and s.attrs["symbol_kind"] == "Function" and (s.attrs["signature"] ?? "").indexOf("> figure\\Figure") != null) {
+                builder = span(script, a: sources\spanLine(s.source), b: defEnd(c, s: s));
+            }
+        }
+        found.append({
+            "id": id,
+            "builder": builder,
+            "svg": "docs/assets/gen/{base}",
+            "title": unescape(between(svg, open: "<title id=\"{id}-title\">", close: "</title>")),
+            "desc": unescape(between(svg, open: "<desc id=\"{id}-desc\">", close: "</desc>")),
+            "nodes": anchors,
+            "externals": externals,
+            "sections": sources\uniqueSorted(markers[id] ?? []),
+            "fold": holdout\figureFold(id),
+        });
+    }
+    return found;
+}
+
+// A figure's builder function (its title, desc and the dirs it draws) against each
+// docs section that embeds it and each drawn dir's Go package doc.
+fun figurePairs(m: Miner, figs: [{str: any}]) > void !> any {
+    final packageDocs: mut {str: str} = mut {};
+    foreach (s in m.c.symbols) {
+        if (s.attrs["language"] != "go" or s.attrs["symbol_kind"] != "Package") {
+            continue;
+        }
+        final path = sources\spanPath(s.source);
+        final dir = fs\dirname(path);
+        if (packageDocs[dir] != null or !m.c.has(path) or path.endsWith("_test.go")) {
+            continue;
+        }
+        final line = sources\spanLine(s.source);
+        final top = sources\commentAbove(m.c, path: path, line: line);
+        if (top > 0) {
+            packageDocs[dir] = span(path, a: top, b: line - 1);
+        }
+    }
+    foreach (f in figs) {
+        final id: str = f["id"];
+        final builder: str = f["builder"];
+        if (builder == "") {
+            continue;
+        }
+        final held = holdout\figureFold(id) == 0;
+        final sections: [str] = f["sections"];
+        foreach (s in sections) {
+            m.add("figure", query: builder, doc: s, held: held);
+        }
+        final nodes: [str] = f["nodes"];
+        foreach (d in nodes) {
+            m.add("figure", query: builder, doc: packageDocs[d] ?? "", held: held);
+        }
+    }
+}
+
+// write mines every pair source into target, sorted by source, query and doc, and
+// returns the count per source and split.
+export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: int} !> any {
+    final m = mut Miner{c = c, pairs = mut [], seen = mut {}};
+    final refs = refsByTarget(c);
+    goDocDecl(m);
+    buzzDocDecl(m);
+    hostModules(m);
+    bzzDiagnostics(m, refs: refs);
+    builtins(m);
+    gopherbuzzTests(m);
+    spellOps(m);
+    buzzScipRefs(m, refs: refs);
+    figureApi(m);
+    figurePairs(m, figs: figs);
+    final sorted = m.pairs.cloneMutable();
+    sorted.sort(fun (a: Pair, b: Pair) > bool {
+        if (a.source != b.source) {
+            return a.source < b.source;
+        }
+        if (a.query != b.query) {
+            return a.query < b.query;
+        }
+        return a.doc < b.doc;
+    });
+    final lines: mut [str] = mut [];
+    final counts: mut {str: int} = mut {};
+    foreach (p in sorted) {
+        final split = sources\splitOf(p.holdout);
+        lines.append(json\stringify({"source": p.source, "query_ref": p.query, "doc_ref": p.doc, "split": split}));
+        final key = "{p.source}/{split}";
+        counts[key] = (counts[key] ?? 0) + 1;
+    }
+    fs\writeFile(target, content: lines.join("\n") + "\n");
+    return counts;
+}
+
+test "refPath reads a span's path" {
+    std\assert(refPath("a/b.go:3-9") == "a/b.go", message: "span");
+    std\assert(refPath("docs/x:y.md:1-2") == "docs/x:y.md", message: "colon in path");
+}

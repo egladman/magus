@@ -13,7 +13,7 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-func snapshotOf(base string, at int64) Snapshot {
+func fetchedSnapshot(base string, at int64) Snapshot {
 	return Snapshot{
 		Fetched: magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
 		Changes: types.Changes{Schema: types.SchemaChanges, Base: base, Changes: []types.Change{
@@ -29,13 +29,13 @@ func TestSnapshotRoundTripsPerBaseAndTheNewestWins(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "nothing was ever fetched")
 
-	require.NoError(t, WriteSnapshot(root, snapshotOf("main", 200)))
-	require.NoError(t, WriteSnapshot(root, snapshotOf("release/1.x", 100)))
+	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
+	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("release/1.x", 100)))
 
 	got, ok, err := ReadSnapshot(root, "release/1.x")
 	require.NoError(t, err)
 	require.True(t, ok, "a base with a separator keys a file of its own")
-	want := snapshotOf("release/1.x", 100)
+	want := fetchedSnapshot("release/1.x", 100)
 	want.Schema = SchemaSnapshot
 	assert.Equal(t, want, got)
 
@@ -67,7 +67,7 @@ func TestSnapshotRecordPlan(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "no snapshot was made for the plan")
 
-	require.NoError(t, WriteSnapshot(root, snapshotOf("main", 200)))
+	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	require.NoError(t, RecordPlan(root, plan))
 	got, _, err := ReadSnapshot(root, "main")
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestSnapshotJoinInflight(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, list, got, "never fetched joins nothing")
 
-	require.NoError(t, WriteSnapshot(root, snapshotOf("main", 200)))
+	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
 	assert.Equal(t, magustypes.JobList{

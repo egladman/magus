@@ -2309,8 +2309,11 @@ fun symbolRepo() > Repo !> any {
     var regions = [<Region>];
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
         gitIn(root, args: ["init", "-q", "-b", "main"]);
+        // Repository config, not `-c`: a leased worker's guard refuses inline config,
+        // which could move the work tree.
+        gitIn(root, args: ["config", "core.hooksPath", "/dev/null"]);
         gitIn(root, args: ["add", "."]);
-        gitIn(root, args: ["-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"]);
+        gitIn(root, args: ["commit", "-qm", "base"]);
         writeTree(root, files: doc.q("head").mapValue());
         texts = readTexts(root, mergeBase: "main", paths: paths);
         regions = settledRegions(root, base: "main", texts: texts);

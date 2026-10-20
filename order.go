@@ -13,7 +13,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/cache"
-	interp "github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"

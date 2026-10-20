@@ -3,6 +3,8 @@ package dependency
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -19,16 +21,6 @@ func workspace(entries ...[]string) *types.Workspace {
 		projects[e[0]] = &types.Project{Path: e[0], DependsOn: e[1:]}
 	}
 	return &types.Workspace{Root: "/repo", Projects: projects}
-}
-
-// indexOf returns the position of s in xs, or -1.
-func indexOf(xs []string, s string) int {
-	for i, x := range xs {
-		if x == s {
-			return i
-		}
-	}
-	return -1
 }
 
 // buildChain builds the diamond-free chain app -> lib -> core and returns the
@@ -67,8 +59,8 @@ func TestBuild_TopoSortDepsBeforeDependents(t *testing.T) {
 
 	// Kahn order starts from the in-degree-zero root (app depends on lib depends
 	// on core), so a project sorts ahead of the dependencies it points at.
-	assert.Less(t, indexOf(order, "app"), indexOf(order, "lib"), "app before lib")
-	assert.Less(t, indexOf(order, "lib"), indexOf(order, "core"), "lib before core")
+	assert.Less(t, slices.Index(order, "app"), slices.Index(order, "lib"), "app before lib")
+	assert.Less(t, slices.Index(order, "lib"), slices.Index(order, "core"), "lib before core")
 }
 
 func TestBuild_ReverseClosure(t *testing.T) {
@@ -98,7 +90,7 @@ func TestBuild_BlastRadius(t *testing.T) {
 	g := buildChain(t)
 	br := g.BlastRadius()
 	// Every node is present.
-	assert.ElementsMatch(t, []string{"app", "lib", "core"}, keysOf(br))
+	assert.ElementsMatch(t, []string{"app", "lib", "core"}, slices.Collect(maps.Keys(br)))
 	// core sits deepest, so a change to it has the widest blast radius.
 	assert.Greater(t, br["core"], br["app"])
 	assert.GreaterOrEqual(t, br["core"], br["lib"])
@@ -149,14 +141,6 @@ func TestBuild_EmptyWorkspace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, g.Nodes())
 	assert.Empty(t, g.TopoSort())
-}
-
-func keysOf(m map[string]int) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 // BenchmarkGraph measures the cost of building the dependency DAG from

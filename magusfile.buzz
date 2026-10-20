@@ -1,6 +1,7 @@
 import "magus";
 import "./hack/magusfile/toolchain-policy" as policy;
 import "./hack/magusfile/drift" as drift;
+import "./hack/magusfile/run-golangci" as golangci;
 import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
@@ -9,10 +10,12 @@ import "./hack/policy/commits" as wording;
 import "./hack/policy/pull_requests" as descriptions;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
+import "./hack/magusfile/conformance-ratchet" as ratchet;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
 magus\guard.builtins(agentbuiltins\BUILTINS);
+magus\guard.profile("strict");
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
@@ -45,15 +48,18 @@ import "lcov";
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
 import "./hack/magusfile/releases" as releases;
-import "./libs/conventions/proofread" as proofread;
+import "./libs/proofread/proofread" as proofread;
 import "./hack/magusfile/mockassert" as mockassert;
 import "spells/golang/gomod";
 
 import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/conventions";
+import "project/libs/proofread" as proofreadlib;
 import "project/libs/testlayout";
 import "project/libs/scipbuzz";
+import "project/libs/xdg";
+import "project/libs/cmdline";
 
 // Declaring trusted keys is what enables the cache; the insecure arm ignores them all.
 // This reads raw env while the engine reads parsed config, so the two can disagree.
@@ -142,6 +148,11 @@ magus\project({
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
         "benchmarks/agent/internal/bench/testdata/*",
+        "internal/textembed/testdata/*",
+        // Embedded in the textrank package, and no other glob matches it.
+        "internal/textrank/weights.json",
+        // The retrieval eval's judgments and its holdout ledger.
+        "testdata/retrieval/*",
         // Embedded in the binary, and no other glob matches it.
         "internal/selfupdate/release-keys.json",
     ],
@@ -157,7 +168,16 @@ magus\project({
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "symbol-digest-generate": {"skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
-        "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
+        "agent-bench-run": {
+            "skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened",
+            "human_only": "launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
+        },
+        "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
+        "retrieval-eval": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
+        "hoste2e-test": {
+            "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
+            "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
+        },
         "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
@@ -172,9 +192,15 @@ magus\project({
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
         // Linux pipepeer tests read their children's /proc entries.
+        // The raced suite measured 13m21s of its own work on a loaded 8-core machine, with
+        // vcs, cmd/magus and internal/guard each over five minutes: the hg and sl parity
+        // tests alone spend about seven minutes spawning those tools.
+        // slots as go-test: its go-test ops run inline under this step's seat, so the seat
+        // is what sizes their -p and GOMAXPROCS.
         "test": {
-            "timeout": "15m",
+            "timeout": "25m",
             "memory_mb": 10240,
+            "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
         "coverage-render": {"skip_cache": "reads the console's figure and the assembled site, which it cannot declare as inputs"},
@@ -195,6 +221,13 @@ magus\project({
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
+        // Four of a 10-core machine's 10 slots: the seat runs go test -p 4 with GOMAXPROCS=4,
+        // so two suites and the other workers' builds share the machine the broker counts.
+        "go-test": {"slots": 4},
+        // Measured over 159 scip-go runs longer than 10 s: p75 width 3.6 cores, p75 peak 1.7 GiB,
+        // max 2.9 GiB. Undeclared, each claimed 1 slot and 0 MiB, so the broker admitted
+        // every worker's graph build at once and scip-go took every core.
+        "scip": {"slots": 4, "memory_mb": 2048},
     },
 });
 
@@ -281,6 +314,13 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     if (!said.startsWith("magus ")) {
         throw "go-build: the built ./magus did not answer `version` with a `magus ` line: {said}";
     }
+}
+
+// go's go-test over the root module. The guard's pull-request-text test runs the proofread
+// binary, so a fresh worktree builds it first, as `test` does.
+export fun go_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(proofreadlib\proofread_build);
+    go["go-test"](ctx);
 }
 
 // host is what login authenticates against and repository is where a push goes;
@@ -620,36 +660,37 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
         "."], ".", {});
 }
 
-// Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock,
-// both serialized from the internal/cli registry. The Markdown manpages belong to docs/.
+// Renders the roff man pages into manpage/ and refreshes internal/commands/testdata/api.lock,
+// both serialized from the internal/commands tree. The Markdown manpages belong to docs/.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Both lines compile internal/spell, which go:embeds generated files, so every generator
     // writing Go under internal/ or types/gen must finish first or MGS4008 refuses the run.
     ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
               mcp_tools_generate, config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
+        "libs/cmdline/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/commands/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/cli/..."]);
+    proc\exec("go", ["generate", "./internal/commands/..."]);
 }
 
 // Renders every exported declaration of the public Go packages (the list lives in
-// cmd/magus-utils/public_api.go) into internal/cli/testdata/api-go.lock, beside the CLI's api.lock.
+// cmd/magus-utils/public_api.go) into internal/commands/testdata/api-go.lock, beside the CLI's api.lock.
 export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The packages are type-checked from source and the root embeds generated files, so
     // every generator writing Go under internal/ or types/gen must finish first.
     ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
               mcp_tools_generate, config_generate, mocks_generate);
-    ctx.readsFiles("cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go",
+    ctx.readsFiles("cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go", "libs/cmdline/**/*.go",
         "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
-    ctx.writesFiles("internal/cli/testdata/api-go.lock");
-    proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/cli/testdata/api-go.lock"]);
+    ctx.writesFiles("internal/commands/testdata/api-go.lock");
+    proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/commands/testdata/api-go.lock"]);
 }
 
 fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> any {
@@ -698,7 +739,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 // holds none of the author's runs. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(conventions\proofread_build);
+    ctx.needs(proofreadlib\proofread_build);
     final parsed = flags\parse(args, switches: [<str>], valued: ["--title", "--body"], required: ["--title", "--body"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "pr-description: unexpected arguments {args.join(" ")}; pass --title=<title> --body=<description>";
@@ -780,14 +821,15 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the magusfile API lock through TestMagusAPILocked.
+// Regenerates the magusfile API lock through TestMagusAPILocked and the std method-name
+// lock through TestStdAPILocked.
 // -count=1 is load-bearing: a cached pass writes no file.
 export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(bindings_generate);
-    ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock");
-    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "-run", "TestMagusAPILocked",
-            "./internal/interp/bindings/"]});
+    ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock", "std/gen/std-api.lock");
+    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "UPDATE_STD_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-count=1", "-run", "TestMagusAPILocked|TestStdAPILocked",
+            "./internal/interp/bindings/", "./std/"]});
 }
 
 // Regenerates the host-module snapshot the playground's completion and hover read
@@ -833,7 +875,8 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml): into the interface's
-// gen/mocks when other packages import the mock, beside it in mocks_test.go otherwise.
+// gen/<pkg>test when other packages import the mock (types' into internal/gen/typestest),
+// beside it in mocks_test.go otherwise.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     // mockery type-checks packages that import the bindings and config gen packages.
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
@@ -843,7 +886,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
-    ctx.writesFiles("**/gen/mocks/*.go", "**/mocks_test.go");
+    ctx.writesFiles("**/gen/*test/*.go", "**/mocks_test.go");
     proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
     mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));
@@ -1301,14 +1344,15 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     final pbinary = exe_name("proofread", goos: goos);
     final pstage = fs\join("dist", "proofread-" + goos + "-" + goarch + suffix);
     fs\mkdirAll(pstage);
-    // -C runs the build inside proofread's own module, whose go.mod carries the replace
-    // directives `go install` refuses, so -o climbs back out to dist/. The flags are
+    // -C runs the build inside proofread's own module, so -o climbs back out to dist/. The flags are
     // proofread-build's: proofread stamps no version, which BUILDINFO records instead.
     final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
     go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
         "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
+    // The embedded tagger model is trained on CC BY-SA 4.0 data, which requires its attribution.
+    fs\copyFile(fs\join(proofread\home, proofread\attribution), fs\join(pstage, "ATTRIBUTION-wordclass"));
     archive_release_stage(pstage, tool: "proofread", binary: pbinary,
-        readme: fs\join(proofread\home, "readme.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
+        readme: fs\join(proofread\home, "README.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
 }
 
 fun release_target_platform(goos: str, goarch: str) > [str] !> any {
@@ -1990,6 +2034,9 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
 
 // Tests with race detection and a coverage floor. The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
+    // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
+    ctx.needs(generate);
     ctx.needs(advice_test);
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
@@ -2023,7 +2070,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts");
     ctx.readsFiles("MAGUS.md");
     // The guard's pull-request-text test runs the binary proofread-build links.
-    ctx.needs(format, buzz_test, conventions\proofread_build);
+    ctx.needs(buzz_test, proofreadlib\proofread_build);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
     // `args`. cmd/magus runs without -race: its TestScripts re-exec the raced binary hundreds
     // of times, and the engine's concurrency lives in the raced packages.
@@ -2106,12 +2153,9 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 // console/coverage.txt, so run `magus run test console` first; the console
 // imports this project, so it cannot be a need.
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
-    // test reads every module's Go files, which each library test's own format rewrites.
-    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format);
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
-        conventions\test, testlayout\test, scipbuzz\test, buzz_test);
+        conventions\test, testlayout\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2129,7 +2173,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
          "libs/conventions/coverage.out", "libs/testlayout/coverage.out",
-         "libs/scipbuzz/coverage.out"]));
+         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/cmdline/coverage.out"]));
     final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2147,7 +2191,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links.
-    ctx.needs(conventions\proofread_build);
+    ctx.needs(proofreadlib\proofread_build);
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
@@ -2223,7 +2267,6 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
-    ctx.needs(format);
     if (ctx.hasCharm("container")) {
         ctx.needs(image_build);
     } else {
@@ -2234,12 +2277,14 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // Runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its
 // cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
 export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
-    // gofmt rewrites libs/testlayout, which this compiles.
+    // The custom linters read Go sources that format may rewrite. Keep the reader after
+    // that writer whenever lint runs on its own as well as under the CI composition.
     ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/conventions/go.mod", "libs/conventions/go.sum",
-                   "libs/conventions/**/*.go");
+                   "libs/conventions/**/*.go",
+                   "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go");
     // Removed first so the link gets a fresh inode: macOS keys the code signature on the
     // inode, and an in-place rewrite gets the next exec SIGKILLed.
     fs\remove(".magus/custom-gcl");
@@ -2250,8 +2295,11 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 // each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
 export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
-    // The proofread rules run the linked proofread rather than compile it.
-    ctx.needs(format, conventions\proofread_build);
+    // This rule reads broad source and prose globs. Run every formatter CI uses first so
+    // the scheduler can order those writes before its reads (MGS4008).
+    ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
+        testlayout\format, scipbuzz\format, xdg\format, cmdline\format,
+        proofreadlib\proofread_build);
     ctx.readsFiles("hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    "hack/README.md",
@@ -2261,19 +2309,23 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/guides/integrations/agents/package.json", "libs/textsearch/package.json",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
-                   "libs/conventions/magusfile.buzz",
+                   "libs/conventions/magusfile.buzz", "libs/proofread/magusfile.buzz",
                    // proofread's staleness check hashes the labeled cases the binary embeds.
-                   "libs/conventions/proofread/testdata/cases/*.txtar",
+                   "libs/proofread/internal/calibrate/cases/*.txtar", "libs/proofread/proofread.buzz",
+                   "libs/proofread/testdata/*.css",
                    "libs/diagnostics/magusfile.buzz",
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
-                   "libs/scipbuzz/magusfile.buzz",
+                   "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz",
+                   "libs/cmdline/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
-                   ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".gitattributes", "dprint-base.json",
-                   "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static",
+                   ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
+                   ".gitattributes", "dprint-base.json",
+                   "mise.toml", "magus.yaml", "hack/policy/conformance.jsonl", "Dockerfile", "Dockerfile.static",
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                    ".claude/skills/magus-skill-authoring/SKILL.md",
                    ".claude/skills/magus-local-development/SKILL.md",
+                   ".claude/skills/idiomatic-adrs/SKILL.md",
                    ".claude/skills/shepherd-pull-requests/SKILL.md",
                    "types/diagnostic.go",
                    ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
@@ -2282,26 +2334,32 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/site/diagrams/*.buzz", "libs/figure/figure.buzz",
                    "**/*.md", "console/**/*.md", "docs/**/*.md",
                    "docs/guides/integrations/agents/**/*.md",
-                   "libs/conventions/**/*.md",
+                   "libs/conventions/**/*.md", "libs/proofread/**/*.md",
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
-                   "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "proto/**/*.md",
-                   "**/*_test.go", "libs/conventions/**/*_test.go",
+                   "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md",
+                   "libs/cmdline/**/*.md",
+                   "proto/**/*.md",
+                   "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
-                   "libs/scipbuzz/**/*_test.go",
-                   "**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
-                   "libs/conventions/**/*.go",
+                   "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go",
+                   "libs/cmdline/**/*_test.go",
+                   "**/*.go",
+                   "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
+                   "libs/proofread/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
-                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
+                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
+                   "libs/cmdline/**/*.go", "hack/embed/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
                    "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                    "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                    "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
+                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "hack/embed/**/*.buzz",
                    "proto/**/*.buzz",
-                   "**/*.css", "console/**/*.css", "docs/**/*.css", "libs/conventions/**/*.css",
+                   "**/*.css", "console/**/*.css", "docs/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
                    "**/*.mjs", "console/**/*.mjs",
                    "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",
@@ -2331,11 +2389,20 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Formats and builds the linter first, then golangci-lint, go vet, markdownlint,
+// golangci-lint over the root module through .magus/custom-gcl, built first; the stock
+// binary the go spell would run cannot read .golangci.yml.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(install_linter);
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
+                   "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml");
+    golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
+}
+
+// Builds the linter first, then golangci-lint, go vet, markdownlint,
 // shellcheck, and actionlint. govulncheck lives in `security`. install_linter compiles
 // golangci-lint with the go on PATH, so mise must pin one go for build and analysis.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, install_linter, lint_rules, harness_drift);
+    ctx.needs(install_linter, lint_rules, harness_drift);
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml",
@@ -2347,24 +2414,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.sh", "**/*.bash", ".shellcheckrc",
                    ".github/workflows/*.yaml",
                    "mise.toml", "magus.yaml");
-    // An in-checkout cache: golangci-lint stores absolute paths, so sibling worktrees
-    // would replay each other's findings.
-    final lintCache = magus\describe.project().workspace + "/.magus/golangci-lint";
-    os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
-        proc\exec(".magus/custom-gcl", ["run"]);
-        // golangci-lint stops at a go.mod, so each other module gets its own run of the
-        // tree-wide conventions. hack/lint/testlayout-pairing-has-no-exemptions.buzz
-        // refuses this list without testpair.
-        final root = magus\describe.project().workspace;
-        foreach (mod in fs\glob("libs/**/go.mod")) {
-            final dir = fs\dirname(mod.value);
-            // gopherbuzz's error text follows upstream Buzz, not Go's error-string idiom.
-            final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-            proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings],
-                      dir);
-        }
-    });
+    golangci\run(".", []);
+    // golangci-lint stops at a go.mod, so each other module gets its own run of the
+    // tree-wide conventions.
+    foreach (mod in fs\glob("libs/**/go.mod")) {
+        golangci\lintLib(fs\dirname(mod.value), false);
+    }
     go["go-vet"](ctx);
     // Type-checks the playground for wasm, which nothing else in ci does. Stock go, not
     // TinyGo; not ./..., since the server does not build for wasm.
@@ -2390,8 +2445,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
             + malformed.join("\n  ");
     }
 }
-// Regenerates, then formats Go, tidies `go.mod`, and formats Markdown.
-export fun format(ctx: magus\Context, args: [str]) > void {
+// Regenerates, then formats Go, tidies `go.mod`, formats Markdown, and deletes from the
+// conformance ratchet what no longer violates.
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate);
     // Not writesFiles: gofmt amends authored code, which must stay off the replay path.
     ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum",
@@ -2401,22 +2457,23 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-mod-tidy"](ctx);
     // Not a project, so no project's format tidies it.
     go["go-mod-tidy"](ctx.withCwd("libs/gopherbuzz/benchmarks/comparison"));
-    // Scoped by argv: dprint formats a nested dprint.json's subtree under its own config,
-    // which writes into child projects (MGS3001). Keep this list in step with dprint.json's
-    // `includes`.
+    // Keep in step with dprint.json's `includes`.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
         "internal/agent/agents-section.md");
-    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
-        "./internal/agent/agents-section.md"]});
+    markdown["dprint"](ctx);
+    // After go-fmt, so the lens measures the formatted tree lint_rules then judges.
+    ctx.modifiesExistingFiles("hack/policy/conformance.jsonl");
+    ratchet\run("hack/policy/conformance.jsonl");
 }
 
 // Runs the CI gates through their declared dependencies.
 // Under `--inherited=fatal` security runs in the body: ctx.needs hands a dependency no args.
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
-    // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
-    // rewrites (MGS4008).
-    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format);
+    // Only ci rewrites files: format first, so lint, build and test read the formatted
+    // tree. lint reads libs/**/*.go and test reads **/*.go, which each nested module's
+    // format rewrites (MGS4008).
+    ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
+        testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;
@@ -2564,12 +2621,40 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 
+// Runs cmd/magus's agent eval, which skips in the ordinary test target because it
+// spends tokens. MAGUS_AGENT_EVAL_VARIANTS, _REPS, _RESULTS and CLAUDE_CODE_EXECPATH pass through.
+export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
+    // Each run gets a fresh HOME, where the claude CLI's own login cannot follow, so
+    // the agent needs a token from the secret provider.
+    final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+    final env = mut {"GOEXPERIMENT": "jsonv2", "MAGUS_AGENT_EVAL": "1", "CLAUDE_CODE_OAUTH_TOKEN": token};
+    foreach (name in ["MAGUS_AGENT_EVAL_VARIANTS", "MAGUS_AGENT_EVAL_REPS", "MAGUS_AGENT_EVAL_RESULTS",
+                      "CLAUDE_CODE_EXECPATH"]) {
+        env[name] = os\env(name) ?? "";
+    }
+    go["go-test"](ctx.withEnv(env),
+        {"args": ["-run=^TestAgentEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
+}
+
+// Replays each eval set under testdata/retrieval through query, refs and explain and
+// prints recall, MRR and nDCG per set; no score fails it. MAGUS_EVAL_CANDIDATE unseals
+// the judged holdout for one recorded read, MAGUS_EVAL_REPORT_ONLY=1 permits a further
+// read that chooses nothing, and MAGUS_RETRIEVAL_EVAL_BASELINE names a file to write the
+// report to for a person to review.
+export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("testdata/retrieval/*");
+    final env = mut {"GOEXPERIMENT": "jsonv2"};
+    foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {
+        env[name] = os\env(name) ?? "";
+    }
+    go["go-test"](ctx.withEnv(env),
+        {"args": ["-tags", "retrievaleval", "-run=^TestRetrievalEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
+}
+
 // Runs internal/compress's tests under the cgo tags, which the ordinary test target
 // cannot reach. Requires libzstd and liblzma rather than skipping without them. Not
 // `test:cgo`: charms patch argv, and this needs CGO_ENABLED in the environment.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
-    // After format: gofmt rewrites these files in place (MGS4008).
-    ctx.needs(format);
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
         proc\exec("pkg-config", ["--exists", lib], ".", {});
@@ -2577,6 +2662,15 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // Explicit args replace go-test's `./...`, so this compiles one package under cgo.
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-tags", "liblzma,libzstd", "./internal/compress/"]});
+}
+
+// Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired
+// workspace; see docs/guides/integrations/agents.md. Not `go-test` with forwarded args:
+// a target is what a policy can name, and this one spends model tokens.
+export fun hoste2e_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("internal/hoste2e/**");
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-tags", "e2e", "-run", "TestHosts", "-count=1", "./internal/hoste2e/"]});
 }
 
 // Names every producer in one command: the root cannot depend on docs or console, since

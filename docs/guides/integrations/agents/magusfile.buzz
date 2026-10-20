@@ -16,8 +16,7 @@ import "magus/spell/markdown";
 magus\project({
     "spells": [typescript],
     // Affected tracks this glob, not the import graph, so it names every input.
-    "sources": ["*.ts", "*.buzz", "lib/*.buzz", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
-                "host-e2e/*.tmpl",
+    "sources": ["*.ts", "*.buzz", "lib/*.buzz", "codex-hooks.json", "*.md", "*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json",
                 // The Claude Code mod. Only Claude Code's engine can test or type-check
@@ -118,20 +117,6 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
     proc\exec("node", run, ".", {});
-}
-
-// host_integration drives real local agent hosts, spending the caller's auth and quota,
-// so it stays out of ci. Opt in with MAGUS_HOST_E2E=1 and pass descriptors:
-//
-//   MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
-//     host-e2e/example.json
-//
-// An all-skip run exits nonzero. MAGUS_HOST_E2E_KEEP=1 keeps passing workspaces.
-export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install);
-    var command = mut ["host-e2e.ts"];
-    foreach (arg in args) { command.append(arg); }
-    proc\exec("node", args: command, dir: ".", opts: {});
 }
 
 // The anchor `magus affected ci` keys off.

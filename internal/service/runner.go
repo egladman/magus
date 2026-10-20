@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/spells"
 )
 
@@ -53,7 +53,7 @@ const DefaultShutdownTimeout = 40 * time.Second
 // instead, and is known only through its readiness probe and stop command.
 //
 // Process control (group setup, graceful terminate, hard group-kill) is delegated to
-// internal/proc/run's platform primitives so grandchildren of a wrapper like `docker run`
+// internal/proc/spawn's platform primitives so grandchildren of a wrapper like `docker run`
 // are reaped, not orphaned, on every OS (the same handling magus uses for ordinary
 // forked commands).
 //
@@ -110,7 +110,7 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 	c := exec.Command(s.Command.Bin, s.Command.Args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	run.SetupProcessGroup(c) // own process group so Stop can reap the whole subtree
+	spawn.SetupProcessGroup(c) // own process group so Stop can reap the whole subtree
 	if err := c.Start(); err != nil {
 		return nil, fmt.Errorf("service: start %q: %w", s.Command.Bin, err)
 	}
@@ -180,7 +180,7 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 // process group; either way escalate to a hard group kill if it does not exit within
 // the grace window (or ctx ends first), and wait for it to be reaped unless ctx ends
 // before that too. Signaling and killing target the whole group (via
-// internal/proc/run) so a wrapper's grandchildren are not orphaned.
+// internal/proc/spawn) so a wrapper's grandchildren are not orphaned.
 func stopProc(ctx context.Context, h *execHandle) {
 	select {
 	case <-h.done:
@@ -191,7 +191,7 @@ func stopProc(ctx context.Context, h *execHandle) {
 	if h.stop.Bin != "" {
 		runStopCommand(ctx, h.stop, h.grace)
 	} else {
-		_ = run.TerminateGroup(h.cmd)
+		_ = spawn.TerminateGroup(h.cmd)
 	}
 
 	select {
@@ -203,7 +203,7 @@ func stopProc(ctx context.Context, h *execHandle) {
 		// than waiting out the rest of grace, so a bounded Shutdown cannot be stalled
 		// past its own deadline by one slow-to-exit process.
 	}
-	run.KillGroup(h.cmd)
+	spawn.KillGroup(h.cmd)
 	select {
 	case <-h.done:
 	case <-ctx.Done():

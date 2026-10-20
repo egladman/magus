@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
-	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
 
@@ -107,38 +108,50 @@ type machineGate struct {
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
+	_, release, err := g.claim(ctx, c)
+	return release, err
+}
+
+// claim is acquire, also returning the id of the claim granted: "" when nothing
+// arbitrates the step.
+func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	if g == nil || g.admit == nil {
-		return func() {}, nil
+		return "", func() {}, nil
 	}
 	for {
 		v, err := g.admit.Request(ctx, c)
 		if err != nil {
-			if g.required {
-				return nil, brokerUnavailableError(c, err)
+			// An admitter that answers with an exit status refused the step itself (its
+			// workspace's admission config does not read), which no broker policy excuses.
+			if exit := (types.ExitError{}); errors.As(err, &exit) {
+				return "", nil, err
 			}
-			return g.admitOpen(ctx, err), nil
+			if g.required {
+				return "", nil, brokerUnavailableError(c, err)
+			}
+			return "", g.admitOpen(ctx, err), nil
 		}
 		switch {
 		case v.Granted:
-			return g.releaser(v.ID), nil
+			return v.ID, g.releaser(v.ID), nil
 		case !v.Fits:
-			return nil, machineDoesNotFitError(c, v)
+			return "", nil, machineDoesNotFitError(c, v)
 		case v.OwnRun:
 			// Falls out of the switch to the wait below.
 		case blindToOwnAncestry(ctx):
 			// A nested magus that cannot name its ancestors cannot be excused from its own
 			// parent's claim, so the refusal names the fix rather than the holders.
-			return nil, machineBlindError(c, v)
+			return "", nil, machineBlindError(c, v)
 		default:
-			return nil, machineBusyError(c, v)
+			return "", nil, machineBusyError(c, v)
 		}
 		// The holders are this run's own steps, whose progress feeds the stall watchdog,
-		// or another invocation of this process, whose progress does not; beat for the
-		// latter, or a run queued in the server trips MGS3012.
+		// or another invocation of this process or of this job tree holding its validation
+		// seat, whose progress does not; beat for the latter, or a queued run trips MGS3012.
 		ProgressFromContext(ctx).Beat()
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+			return "", nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
 		case <-time.After(machinePollEvery):
 		}
 	}
@@ -153,7 +166,7 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 // variable was in the process the whole time), and refused an in-process SDK run against
 // its own parent's claim.
 func blindToOwnAncestry(ctx context.Context) bool {
-	return runPkg.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
+	return spawn.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
 }
 
 // releaser hands the claim back on a fresh, BOUNDED context. Fresh because the step's
@@ -167,6 +180,57 @@ func (g *machineGate) releaser(id string) func() {
 		ctx, cancel := context.WithTimeout(context.Background(), machineReleaseTimeout)
 		defer cancel()
 		g.admit.Release(ctx, id)
+	}
+}
+
+// GroupHolder is an admitter that ends a step's process groups with the step's claim:
+// the broker stops a group still running when the claim is released, or when this
+// process's connection to it closes, as it does when the process dies.
+type GroupHolder interface {
+	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
+	// ReleaseHold returns an error when the broker did not answer and may still hold the
+	// group.
+	ReleaseHold(ctx context.Context, id string) error
+}
+
+// withStepGroups returns ctx under which every process group spawn.Exec starts rides
+// claim, when admit can hold groups.
+func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) context.Context {
+	holder, ok := admit.(GroupHolder)
+	if !ok || claim == "" {
+		return ctx
+	}
+	return spawn.WithGroupWatch(ctx, func(pgid int, command string) func() {
+		return holdStepGroup(ctx, holder, claim, pgid, command)
+	})
+}
+
+// holdStepGroup hands holder process group pgid, which the step holding claim started,
+// so the group ends with the claim: when the claim is released, or when this process
+// dies and its connection to the broker closes. Call release once the group's leader has
+// exited, before it is reaped: a stop after the reap could reach another group that took
+// the id.
+//
+// The hold runs on a context no sibling's failure cancels: a cancel mid-request could
+// leave a hold the broker recorded that this process never learns the id of, and so
+// never releases. It is bounded the way a release is, so a sick broker cannot stall the
+// step that started the group.
+func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string) (release func()) {
+	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+	id, err := holder.HoldGroup(hctx, claim, pgid, command)
+	cancel()
+	if err != nil {
+		slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", pgid, command),
+			attr.Error(err))
+		return func() {}
+	}
+	return func() {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+		defer cancel()
+		if err := holder.ReleaseHold(rctx, id); err != nil {
+			slog.WarnContext(ctx, fmt.Sprintf("the broker may still hold process group %d (%s), which ended", pgid, command),
+				attr.Error(err))
+		}
 	}
 }
 
@@ -206,7 +270,7 @@ func ancestorInvocations(ctx context.Context) []string {
 	if len(refs) == 0 {
 		// Nothing upstream stamped one, so the environment is the only carrier left.
 		// childEnv puts it on every op subprocess, magus or not.
-		return runPkg.AncestorsFromEnv()
+		return spawn.AncestorsFromEnv()
 	}
 	if mintedHere(refs[len(refs)-1]) {
 		return refs[:len(refs)-1]
@@ -238,8 +302,8 @@ func workingDir() string {
 	return dir
 }
 
-// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the server
-// side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
+// The exit status is per refusal (types.ExitError, and see libs/cmdline/exit.Code for the
+// server side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 
@@ -264,7 +328,8 @@ var machineAwaitEvery = 500 * time.Millisecond
 // AwaitMachine blocks until the budget snapshot reads would admit every claim in claims
 // beside what it holds, each on its own: a run's steps wait on one another rather than
 // refuse. It takes and holds nothing, so a run started once it returns can still lose
-// the budget to another invocation that asks first.
+// the budget to another invocation that asks first; ReserveMachine holds the seat for a
+// known reader.
 //
 // It returns nil at once when snapshot fails, since no broker means nothing refuses the
 // run; the MGS3009 refusal for a claim larger than the whole budget, which no wait
@@ -289,17 +354,71 @@ func AwaitMachine(ctx context.Context, snapshot func(context.Context) (types.Mac
 		if !budget.fits(blocked, 0, 0) {
 			return machineDoesNotFitError(blocked, v)
 		}
-		if !announced && waiting != nil {
-			waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
-				displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
-				describeMachineRemaining(v), describeMachineHolders(v.Holders)))
-			announced = true
+		if err := awaitTurn(ctx, blocked, v, &announced, waiting); err != nil {
+			return err
 		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
-		case <-time.After(machineAwaitEvery):
+	}
+}
+
+// ReserveMachine blocks until the budget can seat the widest of claims, then holds that
+// seat for process reader and returns nil: the seat is the reader's until its first
+// claim takes it, the reader exits, or it claims nothing within the broker's bound (see
+// MachineBudget.Reserve). Unlike AwaitMachine, the run started once it returns does not
+// race other invocations for the seat it waited on.
+//
+// reserve is one ask of the broker. Its error is returned wrapped, so the caller decides
+// what an absent broker means. A claim larger than the whole budget is refused with
+// MGS3009 at once, and ctx ending returns its error. waiting is called once, when the
+// first ask keeps it out.
+func ReserveMachine(ctx context.Context, reserve func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error), claims []types.MachineClaim, reader int, waiting func(msg string)) error {
+	seat := widestSeat(claims)
+	announced := false
+	for {
+		v, err := reserve(ctx, seat, reader)
+		switch {
+		case err != nil:
+			return fmt.Errorf("machine budget: reserving a seat for pid %d: %w", reader, err)
+		case v.Granted:
+			return nil
+		case !v.Fits:
+			return machineDoesNotFitError(seat, v)
 		}
+		if err := awaitTurn(ctx, seat, v, &announced, waiting); err != nil {
+			return err
+		}
+	}
+}
+
+// widestSeat is the one seat that admits every claim of a run on its own: the largest
+// memory claim, taking the most slots any claim takes. A run's later steps wait on its
+// earlier ones, so it needs room for its largest step, not for their sum.
+func widestSeat(claims []types.MachineClaim) types.MachineClaim {
+	var seat types.MachineClaim
+	slots := 1
+	for i, c := range claims {
+		if i == 0 || c.MemoryMB > seat.MemoryMB {
+			seat = c
+		}
+		slots = max(slots, c.Slots)
+	}
+	seat.Slots = slots
+	return seat
+}
+
+// awaitTurn says once, through waiting, what keeps blocked out, then waits one
+// machineAwaitEvery. It returns ctx's error, wrapped, if ctx ends first.
+func awaitTurn(ctx context.Context, blocked types.MachineClaim, v types.MachineVerdict, announced *bool, waiting func(msg string)) error {
+	if !*announced && waiting != nil {
+		waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
+			displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
+			describeMachineRemaining(v), describeMachineHolders(v.Holders)))
+		*announced = true
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(blocked.Project), blocked.Target, ctx.Err())
+	case <-time.After(machineAwaitEvery):
+		return nil
 	}
 }
 
@@ -362,17 +481,20 @@ func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
 	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
 			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
-		displayProject(c.Project), c.Target, runPkg.AncestorsEnvVar,
+		displayProject(c.Project), c.Target, spawn.AncestorsEnvVar,
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 
-// describeMachineDeclaration says where the figure came from. A composed target is
-// held over a number a target in its chain wrote, and a reader sent to its own policy
-// would find nothing to change there.
+// describeMachineDeclaration says where the memory and slots came from. A composed
+// target is held over a number a target in its chain wrote, and a reader sent to its
+// own policy would find nothing to change there.
 func describeMachineDeclaration(c types.MachineClaim) string {
 	slots := fmt.Sprintf("%d slot", max(c.Slots, 1))
 	if max(c.Slots, 1) != 1 {
 		slots += "s"
+	}
+	if how := c.Sizing.Slots.String(); how != "" {
+		slots += " (" + how + ")"
 	}
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots

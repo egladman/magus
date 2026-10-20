@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkSrc(src string) []typeError {
+func checkSource(src string) []typeError {
 	prog, err := ParseEmbedded(src)
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
@@ -29,14 +29,14 @@ func checkSrc(src string) []typeError {
 // checkOK asserts that Check reports no errors for src.
 func checkOK(t *testing.T, src string) {
 	t.Helper()
-	errs := checkSrc(src)
+	errs := checkSource(src)
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
 // checkErr asserts that Check reports at least one error containing substr.
 func checkErr(t *testing.T, src, substr string) {
 	t.Helper()
-	errs := checkSrc(src)
+	errs := checkSource(src)
 	if !assert.NotEmptyf(t, errs, "expected error containing %q, got none", substr) {
 		return
 	}
@@ -365,7 +365,7 @@ final _f = &greet(1);
 // arguments afterwards, against slots they were never matched to, would stack a
 // spurious type error on top of the real one.
 func TestCheck_UnresolvedArgumentsReportOnce(t *testing.T) {
-	errs := checkSrc(`
+	errs := checkSource(`
 fun f(a: str, b: int) > void {}
 f(b: 2);
 `)
@@ -383,10 +383,49 @@ final c = Color.Yellow;
 `, `has no case "Yellow"`)
 }
 
+// An anonymous literal checked against an `obj{ ... }` annotation resolves each
+// field against the declared field type, as upstream's
+// TypeChecker.populateAnonymousObject does for any object target, anonymous or
+// named. Upstream Buzz 0.6.0-dev+049a7de runs every program here.
+func TestCheck_AnonymousObjectTypeInfersEnumCase(t *testing.T) {
+	const tier = "enum Tier { low, high }\n"
+	for name, src := range map[string]string{
+		"return":      `fun pick() > obj{ tier: Tier, name: str } { return .{ tier = .high, name = "x" }; }`,
+		"declaration": `final b: obj{ tier: Tier } = .{ tier = .low };`,
+		"discard":     `fun f() > void { _: obj{ tier: Tier } = .{ tier = .low }; }`,
+		"nested":      `fun pick() > obj{ inner: obj{ tier: Tier }, tiers: [Tier] } { return .{ inner = .{ tier = .high }, tiers = [.low] }; }`,
+		"optional":    `fun pick() > obj{ tier: Tier?, n: int } { return .{ n = 1, tier = .low }; }`,
+		"lambda":      `final pick = fun () > obj{ tier: Tier } { return .{ tier = .high }; };`,
+		"method":      `object Box { fun pick() > obj{ tier: Tier } { return .{ tier = .low }; } }`,
+		"generic":     `fun wrap::<T>(data: T) > obj{ data: T } { return .{ data = data }; }`,
+		"function":    `fun pick() > obj{ f: fun () > str, tier: Tier } { return .{ f = fun () > str => "x", tier = .low }; }`,
+	} {
+		t.Run(name, func(t *testing.T) { checkOK(t, tier+src) })
+	}
+}
+
+// Upstream rejects an anonymous literal that does not fit its obj{} annotation:
+// E66 "Return value: got type `.{ tier: str }`, expected `.{ tier: Tier }`" at a
+// return, E4 "Wrong variable type" at a declaration. A missing field fails even
+// when it is optional.
+func TestCheck_AnonymousObjectTypeMismatch(t *testing.T) {
+	const tier = "enum Tier { low, high }\n"
+	for name, tc := range map[string]struct{ src, want string }{
+		"str for an enum field": {`fun pick() > obj{ tier: Tier } { return .{ tier = "high" }; }`, "wrong property type: field tier"},
+		"declared str":          {`final b: obj{ tier: Tier } = .{ tier = "low" };`, "wrong property type: field tier"},
+		"extra field":           {`fun pick() > obj{ a: int } { return .{ a = 1, b = 2 }; }`, `has no field "b"`},
+		"missing field":         {`fun pick() > obj{ a: int, b: int } { return .{ a = 1 }; }`, `missing field "b"`},
+		"missing optional":      {`fun pick() > obj{ a: int, b: int? } { return .{ a = 1 }; }`, `missing field "b"`},
+		"unknown case":          {`fun pick() > obj{ tier: Tier } { return .{ tier = .mid }; }`, `has no case "mid"`},
+	} {
+		t.Run(name, func(t *testing.T) { checkErr(t, tier+tc.src, tc.want) })
+	}
+}
+
 func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// A host embedding gopherbuzz can inject a namespace global (the magusfile
 	// pattern, where the magus host binds `magus`). Such a global is pre-registered
-	// as types.Any via extraGlobals, so member calls on it type-check. checkSrc
+	// as types.Any via extraGlobals, so member calls on it type-check. checkSource
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
 	prog, err := ParseEmbedded(`host.project.register(".");`)
 	require.NoError(t, err, "parse")
@@ -560,7 +599,7 @@ func TestCheckTypeNoFalsePositives(t *testing.T) {
 // stdlib module), an alias equal to the path's last segment binds the same name the
 // import would without it. collectTopLevel computes the default name from the path
 // string alone, so this needs no file on disk (unlike the Session-based import
-// tests below). checkSrc runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
+// tests below). checkSource runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
 // for the strict side of this rule).
 func TestCheck_RedundantImportAlias(t *testing.T) {
 	checkErr(t, `import "spells/harness/codex" as codex;`, `import alias "codex" is redundant, drop `+"`as codex`")
@@ -1276,8 +1315,8 @@ final __r = resume f;`
 	})
 }
 
-// warningsOf type-checks src and returns only the non-fatal diagnostics.
-func warningsOf(t *testing.T, src string) []typeError {
+// typeWarnings type-checks src and returns only the non-fatal diagnostics.
+func typeWarnings(t *testing.T, src string) []typeError {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err)
@@ -1299,7 +1338,7 @@ func TestStringAccumulationWarnsInEveryLoopForm(t *testing.T) {
 		{"deep in the concat spine", `var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := warningsOf(t, tc.src)
+			got := typeWarnings(t, tc.src)
 			require.Len(t, got, 1)
 			assert.Equal(t, diagnostics.Code("BZZ3002"), got[0].Code)
 			assert.Equal(t, SeverityWarning, got[0].Severity, "BZZ3002 must never fail a compile")
@@ -1320,7 +1359,7 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 		{"list append, the fix itself", `final parts: mut [str] = mut [<str>]; foreach (p in ["a"]) { parts.append(p); }`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Empty(t, warningsOf(t, tc.src))
+			assert.Empty(t, typeWarnings(t, tc.src))
 		})
 	}
 }
@@ -1329,7 +1368,7 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 // walks function bodies ahead of the real check purely to learn types. It discards errors;
 // it must discard warnings too, or every accumulation inside a function is reported twice.
 func TestStringAccumulationReportedOnce(t *testing.T) {
-	got := warningsOf(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
+	got := typeWarnings(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
 	require.Len(t, got, 1, "the speculative pass must not double-report")
 }
 
@@ -1483,7 +1522,7 @@ func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			errs := checkSrc(tc.src)
+			errs := checkSource(tc.src)
 			require.NotEmpty(t, errs)
 			assert.Equal(t, tc.line, errs[0].Line, fmtErrors(errs))
 			assert.Equal(t, tc.col, errs[0].Col, fmtErrors(errs))

@@ -45,7 +45,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 		"docs/guide.md": "# guide\n",
 		"notes/v1.md":   "# v1\n",
 	})
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

@@ -4,6 +4,8 @@
 // learn two spellings of one condition. The throw deliberately does not CALL
 // ClassifyDrift (whole-tree drift has no single target's inputs to classify against), so
 // this pins only the code text, read from the Go constant the engine emits.
+//
+// Tier 1, mechanical: the fix is the code text.
 namespace generatedrift;
 
 import "assert";

@@ -17,7 +17,7 @@
 // would hide all of that behind an exec call.
 //
 // The descriptor set is resolved into real protoreflect descriptors via protodesc rather than
-// walked as raw descriptorpb.FileDescriptorProto: that gives exact source line numbers
+// walked as raw descriptorpb.FileDescriptorProto: that gives source comments
 // (FileDescriptor.SourceLocations), map/oneof/optional resolution, and extension access
 // (proto.GetExtension against a field's Options) for free, instead of hand-rolled
 // SourceCodeInfo path arithmetic.
@@ -39,7 +39,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	"buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/render/md"
@@ -95,14 +95,12 @@ type api struct {
 
 type service struct {
 	Name, Package, File, Doc string
-	Line                     int32
 	Deprecated               bool
 	Methods                  []method
 }
 
 type method struct {
 	Name, Doc, Input, Output string
-	Line                     int32
 	ClientStreaming          bool
 	ServerStreaming          bool
 	Deprecated               bool
@@ -125,7 +123,6 @@ func (m method) kind() string {
 
 type message struct {
 	Name, Package, File, Doc string
-	Line                     int32
 	Deprecated               bool
 	Fields                   []field
 	Reserved                 string
@@ -157,7 +154,6 @@ type field struct {
 
 type enumType struct {
 	Name, Package, File, Doc string
-	Line                     int32
 	Deprecated               bool
 	Values                   []enumValueDef
 	Reserved                 string
@@ -172,7 +168,6 @@ type enumValueDef struct {
 
 type pkgPage struct {
 	Package, File, Doc string
-	Line               int32
 }
 
 // newAPI flattens the descriptor set. Only magus's own contract is kept: the module pulls in
@@ -201,8 +196,7 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 		if err != nil {
 			return api{}, fmt.Errorf("resolve file %s: %w", fp.GetName(), err)
 		}
-		doc, line := fileDoc(fd)
-		pkgMeta[pkg] = pkgPage{Package: pkg, File: fd.Path(), Doc: doc, Line: line}
+		pkgMeta[pkg] = pkgPage{Package: pkg, File: fd.Path(), Doc: fileDoc(fd)}
 
 		for i := 0; i < fd.Messages().Len(); i++ {
 			a.collectMessage(fd, fd.Messages().Get(i))
@@ -212,17 +206,15 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 		}
 		for i := 0; i < fd.Services().Len(); i++ {
 			sd := fd.Services().Get(i)
-			svcDoc, svcLine := bodyDoc(fd, sd)
 			svc := service{
 				Name: string(sd.Name()), Package: pkg, File: fd.Path(),
-				Doc: svcDoc, Line: svcLine,
+				Doc:        bodyDoc(fd, sd),
 				Deprecated: isDeprecated(sd.Options()),
 			}
 			for j := 0; j < sd.Methods().Len(); j++ {
 				md := sd.Methods().Get(j)
-				mDoc, mLine := bodyDoc(fd, md)
 				svc.Methods = append(svc.Methods, method{
-					Name: string(md.Name()), Doc: mDoc, Line: mLine,
+					Name: string(md.Name()), Doc: bodyDoc(fd, md),
 					Input:           string(md.Input().FullName()),
 					Output:          string(md.Output().FullName()),
 					ClientStreaming: md.IsStreamingClient(),
@@ -281,10 +273,9 @@ func (a *api) enumsInPackage(pkg string) []string {
 
 func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.MessageDescriptor) {
 	full := string(md.FullName())
-	doc, line := bodyDoc(fd, md)
 	msg := message{
 		Name: full, Package: string(md.ParentFile().Package()), File: fd.Path(),
-		Doc: doc, Line: line,
+		Doc:        bodyDoc(fd, md),
 		Deprecated: isDeprecated(md.Options()),
 		Reserved:   reservedFieldNote(md),
 	}
@@ -350,10 +341,9 @@ func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.Mes
 
 func (a *api) collectEnum(fd protoreflect.FileDescriptor, ed protoreflect.EnumDescriptor) {
 	full := string(ed.FullName())
-	doc, line := bodyDoc(fd, ed)
 	et := enumType{
 		Name: full, Package: string(ed.ParentFile().Package()), File: fd.Path(),
-		Doc: doc, Line: line,
+		Doc:        bodyDoc(fd, ed),
 		Deprecated: isDeprecated(ed.Options()),
 		Reserved:   reservedEnumNote(ed),
 	}
@@ -633,9 +623,8 @@ func reservedNote(nums []string, names protoreflect.Names) string {
 // fileDoc reads the package-level comment. There is no protoreflect.Descriptor for a
 // `package` declaration, so it is addressed by SourceCodeInfo path [2] (the `package` field
 // of FileDescriptorProto) directly, via ByPath rather than ByDescriptor.
-func fileDoc(fd protoreflect.FileDescriptor) (string, int32) {
-	loc := fd.SourceLocations().ByPath(protoreflect.SourcePath{2})
-	return bodyComments(loc), int32(loc.StartLine) + 1
+func fileDoc(fd protoreflect.FileDescriptor) string {
+	return bodyComments(fd.SourceLocations().ByPath(protoreflect.SourcePath{2}))
 }
 
 // bodyDoc reads a comment that renders as page PROSE: a service, method, message, or enum
@@ -647,9 +636,8 @@ func fileDoc(fd protoreflect.FileDescriptor) (string, int32) {
 // Fields and enum values keep docAndLine instead. Their prose lands in a table cell, which
 // cannot hold a line break at all, so flattening there is the only option rather than a
 // choice.
-func bodyDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) (string, int32) {
-	loc := fd.SourceLocations().ByDescriptor(desc)
-	return bodyComments(loc), int32(loc.StartLine) + 1
+func bodyDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) string {
+	return bodyComments(fd.SourceLocations().ByDescriptor(desc))
 }
 
 // cellDoc reads a comment destined for a table cell (a field or an enum value) and
@@ -997,7 +985,7 @@ func renderIndex(a api) string {
 
 	b.WriteString("# Daemon API\n\n")
 	b.WriteString("The daemon serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.\n\n")
-	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the exact line in the `.proto` source that defines it.\n\n")
+	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract. Every service, method, message, and enum heading below links to the `.proto` file that defines it.\n\n")
 
 	b.WriteString("## Before you call anything\n\n")
 	b.WriteString("Start the daemon with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.\n\n")
@@ -1137,8 +1125,8 @@ func firstServerStreaming(a api) (service, method, bool) {
 	return service{}, method{}, false
 }
 
-func sourceLink(file string, line int32) string {
-	return fmt.Sprintf("[%s:%d](%s/proto/%s#L%d)", filepath.Base(file), line, docs.RepoBlob, file, line)
+func sourceLink(file string) string {
+	return fmt.Sprintf("[%s](%s/proto/%s)", filepath.Base(file), docs.RepoBlob, file)
 }
 
 func renderService(a api, s service, usedBy map[string][]usage) string {
@@ -1147,8 +1135,8 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       s.Name,
 		Description: firstSentence(s.Doc, fmt.Sprintf("The %s service in the magus daemon API: every method, request, response, and enum.", s.Name)),
-		// The heading-level source links already point at this page's own .proto file
-		// and line; the section overview is where the whole schema's source is named.
+		// The heading-level source links already point at this page's own .proto file;
+		// the section overview is where the whole schema's source is named.
 		GeneratedFrom: pageGeneratedFrom,
 		Tags:          []string{"api", "proto", "connect", "grpc", strings.ToLower(s.Name)},
 	})
@@ -1160,7 +1148,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 	if s.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", s.Doc)
 	}
-	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Part of the [daemon API](%s.md).\n\n", s.Package, s.File, sourceLink(s.File, s.Line), relLink(path, "index"))
+	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Part of the [daemon API](%s.md).\n\n", s.Package, s.File, sourceLink(s.File), relLink(path, "index"))
 
 	b.WriteString("## Methods\n\n")
 	for _, m := range s.Methods {
@@ -1171,7 +1159,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 		if m.Doc != "" {
 			fmt.Fprintf(&b, "%s\n\n", m.Doc)
 		}
-		fmt.Fprintf(&b, "`POST /%s.%s/%s`: %s. Source: %s.\n\n", s.Package, s.Name, m.Name, m.kind(), sourceLink(s.File, m.Line))
+		fmt.Fprintf(&b, "`POST /%s.%s/%s`: %s. Source: %s.\n\n", s.Package, s.Name, m.Name, m.kind(), sourceLink(s.File))
 		fmt.Fprintf(&b, "Takes %s, returns %s.\n\n",
 			a.typeLink(leafName(m.Input), m.Input, s.Package, path),
 			a.typeLink(leafName(m.Output), m.Output, s.Package, path))
@@ -1209,7 +1197,7 @@ func renderPackage(a api, p pkgPage, usedBy map[string][]usage) string {
 	if p.Doc != "" {
 		fmt.Fprintf(&b, "%s\n\n", p.Doc)
 	}
-	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Declares no service of its own; part of the [daemon API](%s.md).\n\n", p.Package, p.File, sourceLink(p.File, p.Line), relLink(path, "index"))
+	fmt.Fprintf(&b, "Package `%s`, defined in `proto/%s`. Source: %s. Declares no service of its own; part of the [daemon API](%s.md).\n\n", p.Package, p.File, sourceLink(p.File), relLink(path, "index"))
 
 	msgNames := a.messagesInPackage(p.Package)
 	enumNames := a.enumsInPackage(p.Package)
@@ -1281,7 +1269,7 @@ func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath s
 	if m.Doc != "" {
 		fmt.Fprintf(b, "%s\n\n", m.Doc)
 	}
-	fmt.Fprintf(b, "Source: %s.\n\n", sourceLink(m.File, m.Line))
+	fmt.Fprintf(b, "Source: %s.\n\n", sourceLink(m.File))
 	if len(m.Fields) == 0 {
 		b.WriteString("No fields.\n\n")
 	} else {
@@ -1327,7 +1315,7 @@ func writeEnum(b *strings.Builder, e enumType, used []usage, fromPath string) {
 	if e.Doc != "" {
 		fmt.Fprintf(b, "%s\n\n", e.Doc)
 	}
-	fmt.Fprintf(b, "Source: %s.\n\n", sourceLink(e.File, e.Line))
+	fmt.Fprintf(b, "Source: %s.\n\n", sourceLink(e.File))
 	rows := make([][]string, 0, len(e.Values))
 	for _, v := range e.Values {
 		doc := v.Doc

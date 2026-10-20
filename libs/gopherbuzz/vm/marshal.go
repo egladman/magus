@@ -94,7 +94,11 @@ import (
 // closure captures by reference. An older VM has no case for the three new opcodes
 // and would abort mid-chunk, and would read a v20 upvalue as if the cell itself were
 // the value. A newer VM reading v19 bytecode would deref a raw value as a cell.
-const BytecodeVersion uint16 = 21
+//
+// v22 adds FunDecl's IsExtern flag, read before the body, and an extern object method
+// encodes no body. OpNewObject's B now counts only the methods that emit a closure. A
+// v21 reader would take the flag for the body's tag and desynchronize.
+const BytecodeVersion uint16 = 22
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -646,6 +650,11 @@ func (e *enc) node(n ast.Node) error {
 		e.str(v.RetAnnot)
 		e.str(v.YieldAnnot)
 		e.boolean(v.IsStatic)
+		e.boolean(v.IsExtern)
+		if v.IsExtern {
+			// An extern has no body; its nil *BlockStmt is not a nil Node.
+			return e.node(nil)
+		}
 		return e.node(v.Body)
 	case *ast.ObjectDecl:
 		e.u8(nodeObjectDecl)
@@ -1659,15 +1668,26 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		isExtern, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		body, err := d.node()
 		if err != nil {
 			return nil, err
 		}
-		blockBody, ok := body.(*ast.BlockStmt)
-		if !ok {
-			return nil, fmt.Errorf("FunDecl body: expected *ast.BlockStmt, got %T", body)
+		var blockBody *ast.BlockStmt
+		if isExtern {
+			if body != nil {
+				return nil, fmt.Errorf("FunDecl %s: an extern carries no body, got %T", name, body)
+			}
+		} else {
+			var ok bool
+			if blockBody, ok = body.(*ast.BlockStmt); !ok {
+				return nil, fmt.Errorf("FunDecl body: expected *ast.BlockStmt, got %T", body)
+			}
 		}
-		return &ast.FunDecl{Pos: p, Name: name, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, IsStatic: isStatic, Body: blockBody}, nil
+		return &ast.FunDecl{Pos: p, Name: name, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, IsStatic: isStatic, IsExtern: isExtern, Body: blockBody}, nil
 	case nodeObjectDecl:
 		name, err := d.str()
 		if err != nil {

@@ -543,7 +543,8 @@ func buildFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 }
 
 // generatedOutput reports a path the workspace declares as a target's output. A caller
-// that cannot classify leaves the map to speak for itself.
+// that cannot classify, the workspace not opening within inspectBudget included, leaves the
+// map to speak for itself.
 func generatedOutput(deps Dependencies, rel string) bool {
 	ctx := context.Background()
 	ws, err := deps.inspect(ctx, "")
@@ -587,6 +588,11 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 		}
 		if rc.whole(m.lines) {
 			if nav.Lines > 0 && m.lines <= nav.Lines || generatedOutput(deps, rel) {
+				continue
+			}
+			// This caller was refused this file once and served its map, so asking again is
+			// a whole read it chose with the map in hand. Judge marks the refusal.
+			if deps.facts.AlreadyFired(readNavigationKind(deps.caller.Agent, rel)) {
 				continue
 			}
 			d := denyReadNavigation(m)

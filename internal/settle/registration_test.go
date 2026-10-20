@@ -31,7 +31,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 `,
 		"gen/catalog.md": "kept\n",
 	}).Root()
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	hooks := filepath.Join(root, ".git", "hooks")

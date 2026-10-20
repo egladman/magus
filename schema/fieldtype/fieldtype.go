@@ -63,6 +63,7 @@ type Field struct {
 	Flag     FlagNames // long + optional short; Long empty means env-only
 	Kind     Kind
 	Usage    string // one-line description for flag.Usage
+	Doc      string // the field's first doc paragraph
 }
 
 // String returns a single-line summary suitable for log output and %v

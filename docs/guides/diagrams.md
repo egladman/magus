@@ -84,6 +84,15 @@ Every drawn directory needs a symbol index, so run `magus graph build` first.
 drawn by a box or a group, or left out with `except(dirs, why:)`, which is for a
 true exclusion. A figure with no code behind it says so with `unscoped(why:)`.
 
+To find the directories a question touches, ask the graph before writing the
+scope: `magus query 'kind=~^(dir|project|package)$ how does a target reach the cache'`.
+To check whether a figure already answers it, ask for figures:
+`magus query 'kind=figure how does the Buzz engine load a spell'`. The graph
+reads each figure's id, title, eyebrow and description from its `figure\of`
+call, and links the figure to every directory a `magus\dir` call in the same
+function names. The query only suggests. A figure draws what its source names,
+so rendering never reads the ranking and the same source draws the same figure.
+
 ## Findings
 
 Nothing is drawn until the figure is clean. Each finding names the call to
@@ -104,8 +113,11 @@ change:
 `magus run diagrams-generate docs` lays every figure out from the symbol index
 and writes into `docs/assets/gen/` the dark and light pair the README loads,
 the page copy the site inlines, and a receipt beside each: the stamp, the claim
-counts, the findings and the index digest it was drawn at. The stamp is also in
-each SVG's metadata. It fails when the committed files move; `:rw` rewrites
+counts (imports, calls, flow) and the findings. The receipt carries no index
+digest, so it changes only when its figure does. A box anchoring a symbol stamps
+the symbol and its signature rather than where it is defined: moving the
+definition changes nothing, and a signature change moves the stamp. The stamp is
+also in each SVG's metadata. It fails when the committed files move; `:rw` rewrites
 them. The site render reads only the page copies, so it never needs the index.
 
 ## The console view

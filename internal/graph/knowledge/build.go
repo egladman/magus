@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/readlog"
+	"github.com/egladman/magus/types"
 )
 
 // BuildOptions carries the build toggles so callers pass named fields rather than
@@ -50,6 +51,10 @@ type BuildOptions struct {
 	// Inputs.Reads), under the same rule as IndexesFunc: only once the evaluation is paid
 	// for, and only for a manifest that has none recorded.
 	ReadsFunc func(context.Context) (readlog.Reads, error)
+	// HumanOnlyFunc resolves what the workspace declares human_only (see Inputs.HumanOnly),
+	// under IndexesFunc's rule: only once the evaluation is paid for, and only for a
+	// manifest that has none recorded.
+	HumanOnlyFunc func(context.Context) (types.HumanOnlyIndex, error)
 	// Root is the workspace root stamped onto the returned graph (see Graph.SetRoot).
 	Root string
 }
@@ -60,7 +65,7 @@ type BuildOptions struct {
 // build; steady state writes only the shards whose content changed.
 func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, log *slog.Logger) (*Graph, error) {
 	opts.Stamps, opts.StampsFunc = nil, nil
-	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc = nil, nil, nil, nil
+	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc, opts.HumanOnlyFunc = nil, nil, nil, nil, nil
 	if opts.Root == "" {
 		opts.Root = in.Root
 	}
@@ -185,8 +190,8 @@ func (e *ensureRun) resolveStamps(ctx context.Context) error {
 
 // recordFastStamps records the fast stamps of the fresh classes the full stamps had to settle (a
 // store written before fast stamps existed), so the next read settles them the cheap way
-// instead of paying the full stamps forever. The declared indexes ride along when the
-// evaluated workspace was paid for anyway, and only then.
+// instead of paying the full stamps forever. The declared indexes and human_only targets
+// ride along when the evaluated workspace was paid for anyway, and only then.
 func (e *ensureRun) recordFastStamps(ctx context.Context, fresh []ShardClass) error {
 	rec := fastStampRecord{stamps: e.opts.FastStamps, classes: fresh}
 	if e.opts.FastStampsFunc != nil && !e.man.readsKnown() {
@@ -212,6 +217,15 @@ func (e *ensureRun) recordFastStamps(ctx context.Context, fresh []ShardClass) er
 			indexes = []SymbolIndexDeclaration{}
 		}
 		rec.indexes = indexes
+	}
+	if e.stampsResolved && e.opts.HumanOnlyFunc != nil && !e.man.humanOnlyKnown() {
+		humanOnly, err := e.opts.HumanOnlyFunc(ctx)
+		if err != nil {
+			return err
+		}
+		if len(humanOnly.Projects) > 0 {
+			rec.humanOnly = &humanOnly
+		}
 	}
 	return e.store.recordFastStamps(ctx, e.man, rec)
 }
@@ -299,6 +313,9 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 		}
 	}
 	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, refresh: opts.Refresh}
+	if len(in.HumanOnly.Projects) > 0 {
+		plan.humanOnly = &in.HumanOnly
+	}
 	if err := store.syncClasses(ctx, shards, fps, plan); err != nil {
 		return nil, err
 	}

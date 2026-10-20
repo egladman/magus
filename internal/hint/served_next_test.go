@@ -7,7 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ import (
 // keeps the newest servedNextKept lines and drops the rest.
 func TestServedNextJournalAppendsAndRotates(t *testing.T) {
 	base := t.TempDir()
-	one := []Next{breadcrumb("query-explain", Explain, "why", "spell:go")}
+	one := []types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")}
 
 	for range servedNextKept + 5 {
 		AppendServedNext(base, one)
@@ -51,7 +52,7 @@ func TestServedNextPathIsOnePerCheckout(t *testing.T) {
 // Nothing to write to, and nothing to write: both are silent no-ops, because a
 // journal is not worth failing a query over.
 func TestServedNextJournalIsBestEffort(t *testing.T) {
-	AppendServedNext("", []Next{breadcrumb("query-explain", Explain, "why", "spell:go")})
+	AppendServedNext("", []types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})
 
 	base := t.TempDir()
 	AppendServedNext(base, nil)
@@ -62,7 +63,7 @@ func TestServedNextJournalIsBestEffort(t *testing.T) {
 // is ordinary on a file several processes append to.
 func TestReadServedNextSkipsWhatItCannotAttribute(t *testing.T) {
 	base := t.TempDir()
-	AppendServedNext(base, []Next{breadcrumb("query-explain", Explain, "why", "spell:go")})
+	AppendServedNext(base, []types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})
 
 	f, err := os.OpenFile(ServedNextPath(base), os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
@@ -90,7 +91,7 @@ func TestServedNextJournalSurvivesConcurrentWriters(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range each {
-				AppendServedNext(base, []Next{breadcrumb("query-explain", Explain, "why", "spell:go")})
+				AppendServedNext(base, []types.NextStep{breadcrumb("query-explain", Explain, "why", "spell:go")})
 			}
 		}()
 	}

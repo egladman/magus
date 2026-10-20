@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-upstream-source/SKILL.md
 description: "Last resort: read magus's OWN source code at the exact commit of the magus binary in use, to trace behavior its docs cannot explain."
 tags: [agents, skills, magus-upstream-source]
 skill_full_bytes: 3184
-skill_short_bytes: 2353
+skill_short_bytes: 1822
 ---
 
 # magus-upstream-source
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
-| `knowledge-schema-version` | `17` |
-| `skill-content` | `1865a18b4fde` |
+| `agent-skill-version` | `142` |
+| `knowledge-schema-version` | `23` |
+| `skill-content` | `143cf73ba982` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,34 +54,28 @@ magus agent install --tar | tar -xO -f - magus-upstream-source/SKILL.md
 ```
 
 ````markdown
-# Reading magus's own source at your build
+# magus source at your build
 
-This is a last resort. Assume the workspace is wrong before you assume magus is.
+Last resort; assume workspace wrong before magus.
 
-Read magus's source only when both hold:
+Read magus source only when both hold:
+- magus crashed (Go panic, trace), or magus-upstream-docs could not reconcile docs with binary.
+- Reproduction: one command, output showing problem.
 
-- magus crashed (a Go panic and trace), or the magus-upstream-docs skill could
-  not reconcile the docs with what the binary does.
-- You have a reproduction: one command and the output that shows the problem.
-
-## Pin the source to the binary
+## Pin source to binary
 
 ```sh
 magus version -o json
 ```
 
-Read `commit`, `dirty` and `repository`. Use the full `commit`.
+Read `commit`, `dirty`, `repository`; use full `commit`.
+Stop when `dirty` true or `commit` is `unknown`: source unfetchable; say so, use reproduction alone.
+Never read main or latest release: other version explains behavior binary lacks.
 
-Stop when `dirty` is true or `commit` is `unknown`. That build's source exists
-nowhere you can fetch, so say so and work from the reproduction alone.
+## Fetch outside workspace
 
-Never read main or the latest release instead. Another version explains
-behavior your binary lacks.
-
-## Fetch it outside the workspace
-
-Keep one clone per commit in the user cache. Never clone into the workspace,
-where its VCS status and graph would pick it up.
+One clone per commit, in user cache.
+Never clone into workspace: VCS status and graph pick it up.
 
 ```sh
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/magus-upstream/<commit>"
@@ -91,35 +85,30 @@ git -C "$dir" fetch --depth 1 origin <commit>
 git -C "$dir" checkout -q FETCH_HEAD
 ```
 
-Reuse the directory when it already exists. `couldn't find remote ref` means the
-commit was never pushed. Stop, as for a dirty build.
+Reuse directory when it exists.
+`couldn't find remote ref` -> commit never pushed -> stop, as dirty.
 
-## Read it without changing it
+## Read, never change
 
-Point every command at the clone with `--root "$dir"`, placed before the verb.
+Every command: `--root "$dir"` before verb.
+- `magus --root "$dir" query "<terms>"`: doc sections, spells, targets, Buzz functions; no build step.
+- `magus --root "$dir" refs --text "<pattern>"`: searches files.
+- `magus --root "$dir" refs <symbol>`: needs symbol index -> run `magus graph build` with same `--root` once.
+- When refs still answers "unknown, not absent" -> `refs --text`.
+- Read files with ordinary tools.
 
-- `magus --root "$dir" query "<terms>"` finds doc sections, spells, targets and
-  Buzz functions. It needs no build step.
-- `magus --root "$dir" refs --text "<pattern>"` searches the clone's files.
-- `magus --root "$dir" refs <symbol>` needs a symbol index. Run
-  `magus graph build` with the same `--root` once. When refs
-  still answers "unknown, not absent", use `refs --text`.
-- Read files with your ordinary file tools.
+Never run targets in clone, build, test or edit it; reading suffices.
 
-Never run targets in the clone, build it, test it or edit it. The question is
-what the code says, and reading answers it.
+## Report
 
-## Report what the code says
+Cite each claim: `<repository>/blob/<commit>/<path>#L<line>`.
+Conclude one:
+- Workspace does X, code requires Y -> fix workspace; usual.
+- magus defect -> give reproduction, code path.
 
-Cite each claim as `<repository>/blob/<commit>/<path>#L<line>`.
-
-Conclude one of two things:
-
-- The workspace does X and the code requires Y. Fix the workspace. This is the usual result.
-- magus has a defect. Give the reproduction and the code path that produces it.
-
-Never patch the clone to work around a defect. Never file an issue or post
-anything. Hand the finding to the person.
+Never patch clone around defect.
+Never file issue or post anything.
+Hand finding to person.
 ````
 
 

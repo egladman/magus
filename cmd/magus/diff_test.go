@@ -18,13 +18,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/interactive/difftui"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -48,9 +50,9 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		flags   gen.DiffFlags
+		flags   flaggen.DiffFlags
 		src     diffInput
-		format  Format
+		format  output.Format
 		term    diffTUITerm
 		enabled bool
 		want    bool
@@ -65,7 +67,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--generated composes: it only sets the initial fold",
-			flags:   gen.DiffFlags{Generated: true},
+			flags:   flaggen.DiffFlags{Generated: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -85,7 +87,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--no-tui is the one explicit answer",
-			flags:   gen.DiffFlags{NoTui: true},
+			flags:   flaggen.DiffFlags{NoTui: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -113,7 +115,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--watch drives the terminal itself",
-			flags:   gen.DiffFlags{Watch: true},
+			flags:   flaggen.DiffFlags{Watch: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -128,7 +130,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--impact asked for a report, which the viewer has nowhere to put",
-			flags:   gen.DiffFlags{Impact: true},
+			flags:   flaggen.DiffFlags{Impact: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -136,7 +138,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--ack records and returns",
-			flags:   gen.DiffFlags{Ack: true},
+			flags:   flaggen.DiffFlags{Ack: true},
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -272,8 +274,12 @@ func impactFixture() diffImpact {
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
 		},
-		Rationale: []rationaleHit{
-			{Path: "internal/cache/signing.go", Line: 32, Until: "no store still serves ed25519 envelopes"},
+		LeftBehind: &impactLeftBehind{
+			Markers: []leftMarker{
+				{Path: "internal/cache/signing.go", Line: 32, Marker: "compat(until:", Text: "no store still serves ed25519 envelopes"},
+			},
+			Unreferenced:      []string{"signEd25519 (internal/cache/signing.go:40)"},
+			UnreferencedKnown: true,
 		},
 		Evidence: []trail.Consultation{
 			{Verb: "explain", Subject: "internal/cache", Count: 2},
@@ -320,8 +326,10 @@ func TestImpactRendersEverySection(t *testing.T) {
 		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
 		"      note secret-value-type anchors symbol:m types/Secret# [drifted-anchor]",
 		"",
-		"RATIONALE: 1 compat(until:) marker in files you changed - each names why the code stays",
-		"      internal/cache/signing.go:32 until no store still serves ed25519 envelopes",
+		"LEFT BEHIND: 1 compat(until:) or Deprecated: marker added",
+		"      internal/cache/signing.go:32 compat(until: no store still serves ed25519 envelopes",
+		"      1 symbol lost the last use here and is still defined",
+		"        signEd25519 (internal/cache/signing.go:40)",
 		"",
 		"EVIDENCE: 2 questions the authors asked magus while writing this",
 		"      explain internal/cache (x2)",
@@ -359,7 +367,7 @@ func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
 		"",
 		"ANCHORS: no note anchors a changed file or symbol",
 		"",
-		"RATIONALE: no compat(until:) marker in the files you changed",
+		"LEFT BEHIND: not measured",
 		"",
 		"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
 		"      This record is per checkout, and wiring it is `magus agent install`.",
@@ -989,7 +997,9 @@ func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 
 	// Read back through a SECOND store, because the watermark has to survive the process: one
 	// that lived in memory marks the whole conversation new again the next morning.
-	assert.Equal(t, []string{"t1", "t2"}, changeset.NewStore(cache).LoadSeenComments())
+	seen, err := changeset.NewStore(cache).LoadSeenComments()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"t1", "t2"}, seen)
 }
 
 func TestCompatUntil(t *testing.T) {
@@ -1006,57 +1016,49 @@ func TestCompatUntil(t *testing.T) {
 	}
 }
 
-func TestCollectRationale(t *testing.T) {
-	w := testkit.NewWorkspace(t)
-	root, write := w.Root(), w.Write
-	write("a.go", "package a\n\n// compat(until: no store holds v1 descriptors): keep the branch.\nfunc F() {}\n")
-	write("b.go", "package b\n\nfunc G() {}\n")
-	write("gen/c.go", "package gen\n\n// compat(until: whatever): generated.\n")
+// Only the markers a change ADDS are left behind by it: a marker already in the file is
+// context, a removed one is the opposite, and one in generated output was written by its
+// generator. A bare mention of the marker outside a comment is not one.
+func TestAddedMarkers(t *testing.T) {
+	patch := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1,4 +1,6 @@\n package a\n" +
+		" // compat(until: already here): context.\n" +
+		"-// compat(until: gone): removed.\n" +
+		"+// compat(until: no store holds v1 descriptors): keep the branch.\n" +
+		"+const marker = \"compat(until: x)\"\n" +
+		"+// Deprecated: use G.\n" +
+		" func F() {}\n" +
+		"diff --git a/gen/c.go b/gen/c.go\n--- a/gen/c.go\n+++ b/gen/c.go\n@@ -1 +1,2 @@\n package gen\n" +
+		"+// compat(until: whatever): generated.\n"
 
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "a.go", Role: types.DiffRoleSource},
-		{Path: "b.go", Role: types.DiffRoleSource},
-		{Path: "gen/c.go", Role: types.DiffRoleOutput},
-	}}
-
-	got := collectRationale(root, rev)
-	assert.Equal(t, []rationaleHit{{Path: "a.go", Line: 3, Until: "no store holds v1 descriptors"}}, got)
+	got := addedMarkers(patch, map[string]bool{"gen/c.go": true})
+	assert.Equal(t, []leftMarker{
+		{Path: "a.go", Line: 3, Marker: "compat(until:", Text: "no store holds v1 descriptors"},
+		{Path: "a.go", Line: 5, Marker: "Deprecated:", Text: "use G."},
+	}, got)
 }
 
-func TestImpactRationaleLines(t *testing.T) {
-	t.Run("empty says nothing was marked, not nothing was checked", func(t *testing.T) {
-		lines := impactRationaleLines(nil)
-		require.Len(t, lines, 1)
-		assert.Contains(t, lines[0], "no compat(until:) marker")
+func TestImpactLeftBehindLines(t *testing.T) {
+	t.Run("each empty form says what it means", func(t *testing.T) {
+		assert.Equal(t, []string{
+			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
+			"      no symbol it stopped using is still defined",
+		}, impactLeftBehindLines(&impactLeftBehind{UnreferencedKnown: true}))
+		assert.Equal(t, []string{
+			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
+			"      symbols left unused: not measured, read only for the working tree",
+		}, impactLeftBehindLines(&impactLeftBehind{UnreferencedReason: "read only for the working tree"}))
 	})
 
-	t.Run("names the file, the line, and the condition", func(t *testing.T) {
-		lines := impactRationaleLines([]rationaleHit{{Path: "a.go", Line: 12, Until: "no store holds v1"}})
-		assert.Contains(t, lines[0], "1 compat(until:) marker")
-		assert.Equal(t, "      a.go:12 until no store holds v1", lines[1])
-	})
-
-	// The marker appears as a bare token in this tool's own source, in doc comments naming
-	// the convention, and in lint patterns. Matching those would put the reporting code at
-	// the top of its own report.
-	t.Run("a bare mention of the marker is not a decision", func(t *testing.T) {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"),
-			[]byte("package a\n\nconst marker = \"compat(until:\"\n// the compat(until:) convention\n"), 0o644))
-
-		got := collectRationale(root, types.Diff{
-			Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}},
-		})
-		assert.Empty(t, got)
-	})
-
-	t.Run("the list is capped", func(t *testing.T) {
-		var hits []rationaleHit
-		for i := range rationaleShown + 3 {
-			hits = append(hits, rationaleHit{Path: "a.go", Line: i, Until: "x"})
+	t.Run("the lists are capped", func(t *testing.T) {
+		l := &impactLeftBehind{UnreferencedKnown: true}
+		for i := range impactListCap + 3 {
+			l.Markers = append(l.Markers, leftMarker{Path: "a.go", Line: i, Marker: "Deprecated:", Text: "x"})
+			l.Unreferenced = append(l.Unreferenced, fmt.Sprintf("S%d (a.go:%d)", i, i))
 		}
-		lines := impactRationaleLines(hits)
-		assert.Contains(t, lines[rationaleShown+1], "and 3 more")
+		lines := impactLeftBehindLines(l)
+		assert.Equal(t, "      and 3 more", lines[impactListCap+1])
+		assert.Equal(t, fmt.Sprintf("      %d symbols lost the last use here and are still defined", impactListCap+3), lines[impactListCap+2])
+		assert.Equal(t, "      and 3 more", lines[len(lines)-1])
 	})
 }
 
@@ -2014,7 +2016,7 @@ func TestScopeFromArgs(t *testing.T) {
 	t.Run("a bare dash is a source, and says where it moved", func(t *testing.T) {
 		_, err := scopeFromArgs([]string{"-"})
 		require.Error(t, err)
-		assert.IsType(t, errUsage{}, err)
+		assert.Equal(t, exit.Usage, exit.Code(err))
 		assert.Contains(t, err.Error(), "--patch -")
 	})
 
@@ -2029,33 +2031,33 @@ func TestScopeFromArgs(t *testing.T) {
 // flag, and exactly one flag may name it.
 func TestDiffSourceFromFlags(t *testing.T) {
 	t.Run("nothing named reads the working tree", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputWorkingTree, label: "the working tree"}, in)
 	})
 
 	t.Run("--patch - reads stdin", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "-"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Patch: "-"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputStdin, label: "a patch on stdin"}, in)
 	})
 
 	t.Run("--patch names a file", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "change.patch"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Patch: "change.patch"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputFile, path: "change.patch", label: "the patch in change.patch"}, in)
 	})
 
 	t.Run("--rev reads a range", func(t *testing.T) {
-		in, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic"})
+		in, err := diffSourceFromFlags(&flaggen.DiffFlags{Rev: "main...topic"})
 		require.NoError(t, err)
 		assert.Equal(t, diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}, in)
 	})
 
 	t.Run("two sources are refused rather than ranked", func(t *testing.T) {
-		_, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic", Patch: "-"})
+		_, err := diffSourceFromFlags(&flaggen.DiffFlags{Rev: "main...topic", Patch: "-"})
 		require.Error(t, err)
-		assert.IsType(t, errUsage{}, err)
+		assert.Equal(t, exit.Usage, exit.Code(err))
 		assert.Contains(t, err.Error(), "only one may be given")
 	})
 }
@@ -2069,7 +2071,7 @@ func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
 			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
 
 			require.Error(t, err)
-			assert.IsType(t, errUsage{}, err)
+			assert.Equal(t, exit.Usage, exit.Code(err))
 			assert.Contains(t, err.Error(), "--thread narrows the review to one thread")
 		})
 	}
@@ -2094,10 +2096,10 @@ func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
 	term := diffTUITerm{Reads: true, Paints: true}
 	src := diffInput{kind: inputWorkingTree}
 
-	assert.True(t, wantsTUI(&gen.DiffFlags{Unread: true}, src, outputText, term, true))
-	assert.True(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
-	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
-	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
 }
 
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
@@ -2366,4 +2368,41 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 1)
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
+}
+
+func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
+	t.Parallel()
+
+	api := func(stage types.ReleaseStage) *types.DiffAPI {
+		return &types.DiffAPI{Base: "main", Floor: types.DiffBumpMajor, Likely: types.DiffBumpMajor, Removed: 1, Stage: stage}
+	}
+	cases := map[string]struct {
+		stage types.ReleaseStage
+		want  []string
+	}{
+		"below 1.0 a major floor ships as a minor": {
+			stage: types.ReleaseStage{Tag: "v0.4.0", Major: 0},
+			want:  []string{"  newest release v0.4.0: below 1.0 a major floor ships as a minor release"},
+		},
+		"from 1.0 on the tag stands alone": {
+			stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1},
+			want:  []string{"  newest release v1.2.0"},
+		},
+		"no tag visible says nothing about a stage": {},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			lines := diffAPILines(api(tc.stage))
+			var stageLines []string
+			for _, l := range lines {
+				if strings.HasPrefix(l, "  newest release") {
+					stageLines = append(stageLines, l)
+				}
+			}
+			assert.Equal(t, tc.want, stageLines)
+			assert.Equal(t, "  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely", lines[len(lines)-1],
+				"the caveat stays last")
+		})
+	}
 }

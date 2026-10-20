@@ -75,15 +75,17 @@ tax() { echo $(( $1 / 10 )); }
 total() { echo $(( $1 - $2 )); }
 -- apply.out --
 created release/pricing, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 created release/tax, declared, with 1 write path(s)
+model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 -- pass.out --
 integration: release/pricing passes in ~/src/shop; its state is unchanged
 release/pricing: 1 of 1 goal(s) met
   [met] check
 -- ls.out --
-JOB              HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
-release/pricing  -       declared  -      1      alone     magus run test .
-release/tax      -       declared  -      1      disjoint  magus run test .
+JOB              HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
+release/pricing  -       declared  standard  1      alone     magus run test .
+release/tax      -       declared  standard  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- fail.out --

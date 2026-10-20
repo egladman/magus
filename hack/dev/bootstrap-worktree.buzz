@@ -13,14 +13,18 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script never compiles magus\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
-    + "(the main checkout, or the one --from names), refreshes the wired harness skills, builds the graph, takes the job's\n"
-    + "lease, then refuses unless the row names this worktree as its checkout and the base it recorded matches the row's\n"
-    + "checkpoint. Writes ./magus, the graph, harness skills and the job row.\n\n"
+    + "(the main checkout, or the one --from names), refreshes the wired harness skills, takes the job's lease, refuses\n"
+    + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
+    + "the graph last. The lease comes first so an edit made while the graph builds lands after the base is recorded. A\n"
+    + "graph build that fails prints a line naming `./magus graph build` and does not fail the bootstrap. The last line\n"
+    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, harness skills,\n"
+    + "the job row and the graph.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
-    + "placed only when it is provably the binary this worktree would build: no Go build input (a file under a package\n"
-    + "./cmd/magus compiles, or a go.mod, go.sum or go.work) differs between the commit the binary was built at and this\n"
-    + "worktree, and none went into it uncommitted. Docs, console and other non-Go changes do not count, so a base commit\n"
-    + "later than the binary's usually qualifies. Otherwise the script refuses and names what to build in the root.\n"
+    + "placed only when it is provably the binary this worktree would build: no Go build input (a file in a package\n"
+    + "`go list -deps ./cmd/magus` names, or the root go.mod, go.sum or go.work) differs between the commit the binary was\n"
+    + "built at and this worktree, and none went into it uncommitted. Docs, console, a package nothing links and a separate\n"
+    + "module such as hack/embed do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
+    + "script refuses and names what to build in the root.\n"
     + "--check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
 
@@ -59,15 +63,18 @@ export fun parseBuild(versionJSON: str) > BuildFacts !> any {
     return BuildFacts{ commit = j["commit"] ?? "", dirty = version.endsWith("-dirty") };
 }
 
-// The files that decide the module graph a Go build resolves, wherever they sit.
+// The files that decide the module graph a Go build resolves, at the root.
 final MODULE_FILES = ["go.mod", "go.sum", "go.work", "go.work.sum"];
 
-// packageScopes are where a file other than Go source can reach the binary, root-relative:
-// "dir/" for everything under a package directory below root, a bare path for one file the
-// root package embeds. listed is `go list -deps` output, one package per line as its
-// absolute directory then each go:embed file after a "|". A standard-library or module-cache
-// directory is not under root and drops out. The root package contributes only its embedded
-// files, since a "dir/" for root would take in MAGUS.md and every doc.
+// ROOT_SCOPE marks the root package among the scopes. It is not a prefix: a "dir/" for root
+// would take in MAGUS.md and every doc.
+final ROOT_SCOPE = "./";
+
+// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
+// directory below root, ROOT_SCOPE for the root package, a bare path for one file the root
+// package embeds. listed is `go list -deps` output, one package per line as its absolute
+// directory then each go:embed file after a "|". A standard-library or module-cache
+// directory is not under root and drops out.
 export fun packageScopes(listed: str, root: str) > [str] {
     final scopes = mut [<str>];
     final base = path\clean(root);
@@ -78,6 +85,7 @@ export fun packageScopes(listed: str, root: str) > [str] {
         final fields = line.trim().split("|");
         final dir = path\clean(fields[0]);
         if (dir == base) {
+            scopes.append(ROOT_SCOPE);
             foreach (embedded in fields.sub(1)) {
                 scopes.append(embedded);
             }
@@ -89,9 +97,10 @@ export fun packageScopes(listed: str, root: str) > [str] {
 }
 
 // buildInputs are the changed root-relative paths that can change the compiled binary: a
-// non-test Go file anywhere, a module file, or a file inside a scope, which is where go:embed
-// reads from. The Go file rule keeps a package deleted since the listing counted. A test file
-// is not linked in, and docs, console and changelog fragments sit outside every scope.
+// non-test Go file in a linked package, a module file at the root, or a file inside a package
+// directory, which is where go:embed reads from. A package nothing links, a separate module
+// beside it, a test file, docs, console and changelog fragments are not inputs. A linked
+// package deleted since the listing is not missed: whatever imported it changed too.
 export fun buildInputs(changed: [str], scopes: [str]) > [str] {
     final inputs = mut [<str>];
     foreach (p in changed) {
@@ -104,17 +113,18 @@ export fun buildInputs(changed: [str], scopes: [str]) > [str] {
 
 fun isBuildInput(p: str, scopes: [str]) > bool {
     final name = fs\basename(p);
-    if (MODULE_FILES.indexOf(name) != null) {
+    final dir = fs\dirname(p);
+    if (MODULE_FILES.indexOf(name) != null and dir == ".") {
         return true;
-    }
-    if (name.endsWith("_test.go")) {
-        return false;
     }
     if (name.endsWith(".go")) {
-        return true;
+        if (name.endsWith("_test.go")) {
+            return false;
+        }
+        return scopes.indexOf(if (dir == ".") ROOT_SCOPE else dir + "/") != null;
     }
     foreach (s in scopes) {
-        if (s == p or (s.endsWith("/") and p.startsWith(s))) {
+        if (s == p or (s != ROOT_SCOPE and s.endsWith("/") and p.startsWith(s))) {
             return true;
         }
     }
@@ -287,11 +297,12 @@ export fun refusal(why: str, source: str) > str {
         + "(`{source}/magus --root {source} run go-build .`), then reruns this with `--from {source}`.";
 }
 
-// bootstrap places ./magus in root, refreshes harness skills, builds the graph, takes job, and returns the row as the
-// fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
+// bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
+// returns the row as the fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
 // and only when that binary is provably root's own build; otherwise it raises, since a worker
 // checkout never compiles magus. Raises on any step that fails and on a row unfit for a worker
-// here, so a caller never starts work on a wrong binding.
+// here, so a caller never starts work on a wrong binding. The graph build runs last, after the
+// lease records the base on a clean tree; its failure is printed, not raised.
 export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     final main = checkRepository(root);
     final origin = if (source == "") main else source;
@@ -310,26 +321,52 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
     // A bound job cannot rewrite the skills that steer it, so refresh every wired
-    // harness before job exec takes the lease. Do this before graph build so it
-    // indexes the installed skill content when the installer updates it.
+    // harness before job exec takes the lease.
     magusAt(local, root: root, args: ["agent", "harness", "install"]);
     std\print("refreshed the wired harness skills");
-    magusAt(local, root: root, args: ["graph", "build", "--silent"]);
-    std\print("built the graph");
-    final took = magusAt(local, root: root, args: ["job", "exec", job]);
+    return claimThenIndex(
+        fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
+        root: root,
+        job: job,
+        main: main,
+        trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
+    );
+}
+
+// claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
+// graph: the lease records the base, so an edit made while the graph builds lands after it.
+// run executes a magus subcommand and returns its output.
+export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any) > Row !> any {
+    final took = run(["job", "exec", job]);
     foreach (line in took.split("\n")) {
         if (line.trim() != "") {
             std\print("  {line.trim()}");
         }
     }
-    final row = parseRow(magusAt(local, root: root, args: ["describe", "job", job, "-o", "json"]));
-    final trackedClean = (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0;
+    final row = parseRow(run(["describe", "job", job, "-o", "json"]));
     try {
-        checkFit(row, root: root, main: main, trackedClean: trackedClean);
+        checkFit(row, root: root, main: main, trackedClean: trackedClean());
     } catch (e: str) {
         throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
     }
+    try {
+        run(["graph", "build", "--silent"]);
+        std\print("built the graph");
+    } catch (e: str) {
+        std\print(graphBuildFailed(e));
+    }
     return row;
+}
+
+// graphBuildFailed is the line printed when the graph build fails after the lease is taken: the
+// job is bound and usable, only the graph is cold.
+export fun graphBuildFailed(cause: str) > str {
+    return "the graph did not build; the lease is taken and the worktree works, but run `./magus graph build` before querying: {cause}";
+}
+
+// readyLine is the last line the bootstrap prints.
+export fun readyLine(row: Row, root: str) > str {
+    return "ready: job {row.id} is taken in {root}; setup is finished and edits may begin";
 }
 
 export fun render(row: Row, root: str) > [str] {
@@ -376,9 +413,11 @@ export fun main(args: [str]) > void !> any {
     if (job == "") {
         throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
     }
-    foreach (line in render(bootstrap(root, job: job, source: source), root: root)) {
+    final row = bootstrap(root, job: job, source: source);
+    foreach (line in render(row, root: root)) {
         std\print(line);
     }
+    std\print(readyLine(row, root: root));
 }
 
 final WT = "/work/magus/.claude/worktrees/w1";
@@ -420,6 +459,18 @@ test "a row bound to the main checkout is refused, naming it" {
     ], message: "main");
 }
 
+test "bootstrap names the graph build as the fix when it fails after the lease" {
+    final line = graphBuildFailed("exit 1:\nMGS3009");
+    assert\equal(line.indexOf("`./magus graph build`") != null, want: true, message: "names the command");
+    assert\equal(line.indexOf("lease is taken") != null, want: true, message: "says the lease held");
+    assert\equal(line.indexOf("MGS3009") != null, want: true, message: "keeps the cause");
+}
+
+test "bootstrap ends on a line that says the worktree is ready" {
+    final row = fixture("bootstrap-match.json");
+    assert\equal(readyLine(row, root: WT), want: "ready: job {row.id} is taken in {WT}; setup is finished and edits may begin", message: "ready");
+}
+
 test "a diverged base is refused with the checkpoint to switch to" {
     assert\equal(fitReasons(fixture("bootstrap-diverged.json"), root: WT, main: MAIN, trackedClean: true), want: [
         "job agent-scripts recorded base 1111111111111111111111111111111111111111, verdict diverged, but its checkpoint is 7472f16fc709ab3827cd38ff281fecc0a217ca88; `git switch --detach 7472f16fc709ab3827cd38ff281fecc0a217ca88` (or the row's branch at it), then bootstrap again",
@@ -430,6 +481,22 @@ test "a row with no checkpoint passes and says nothing verified its base" {
     final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
     assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
+}
+
+test "the lease is taken before the graph is built" {
+    final described = fs\readFile("hack/testdata/bootstrap-match.json");
+    final ran = mut [<str>];
+    claimThenIndex(
+        fun (args: [str]) > str !> any {
+            ran.append(args.join(" "));
+            return if (args[0] == "describe") described else "";
+        },
+        root: "/work/magus/.claude/worktrees/w1",
+        job: "agent-scripts",
+        main: "/work/magus",
+        trackedClean: fun () > bool !> any => true,
+    );
+    assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
 }
 
 test "an ended job is refused" {
@@ -464,12 +531,12 @@ test "a binary is this worktree's build while no Go build input differs, at any 
 test "package scopes are the package directories below the root and the files the root embeds" {
     final listed = "/work/magus|assets/a.txt\n/work/magus/internal/guard\n/work/magus/libs/figure|figure.buzz\n"
         + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2\n/work/magus-other/x\n\n";
-    assert\equal(packageScopes(listed, root: "/work/magus"), want: ["assets/a.txt", "internal/guard/", "libs/figure/"],
+    assert\equal(packageScopes(listed, root: "/work/magus"), want: ["./", "assets/a.txt", "internal/guard/", "libs/figure/"],
         message: "module-cache and sibling directories drop out; the root contributes only what it embeds");
 }
 
-test "a build input is a Go file, a module file, or a file in a package scope" {
-    final scopes = ["assets/a.txt", "internal/guard/", "libs/figure/"];
+test "a build input is a Go file in a linked package, a root module file, or a file in a package scope" {
+    final scopes = ["./", "assets/a.txt", "internal/guard/", "internal/guard/builtin/", "libs/figure/"];
     assert\equal(buildInputs([
         "run.go", "run_test.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/brief_test.go",
         "internal/guard/builtin/builtin.go", "spells/go/go.buzz", "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz",
@@ -479,6 +546,11 @@ test "a build input is a Go file, a module file, or a file in a package scope" {
         "run.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/builtin/builtin.go",
         "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz", "assets/a.txt",
     ], message: "docs, console, hack, tests and root-level files outside the embeds are not inputs");
+    assert\equal(buildInputs([
+        "internal/textembed/embed.go", "internal/guard/unlinked/x.go", "hack/embed/go.mod", "hack/embed/go.sum",
+        "hack/embed/teacher/nomicbert.go", "internal/textembed/go.mod", "internal/guard/new.go",
+    ], scopes: scopes), want: ["internal/guard/new.go"],
+        message: "a Go file in a package nothing links, and a separate module's files, are not inputs; a file in a linked package is");
     assert\equal(buildInputs(["docs/x.md", "run_test.go"], scopes: scopes), want: [<str>], message: "a docs-and-tests commit changes no input");
     assert\equal(placed("/r/magus", commit: "166d3dabd", rootRev: "166d3dabd7d7", scopes: 3),
         want: "/r/magus was built at 166d3dabd, which this worktree is at; no Go build input under 3 package scopes differs", message: "same commit");

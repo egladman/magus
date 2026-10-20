@@ -62,6 +62,7 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] \| --check --from <checkout>)` | places the orchestrator's ./magus (never builds one), refreshes the wired harness skills, builds the graph, then takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` (default: the main checkout) names the checkout whose ./magus it copies, only when no Go build input differs from the commit that binary was built at; otherwise it refuses and prints the one build to run in the root. `--check` prints that verdict and writes nothing | a graph build; seconds for the copy |
 | `magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]` | read-only: a worker's complete brief from its job row | two job-store reads |
 | `magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
+| `magus buzz hack/dev/summarize-root-cost.buzz -- [--all]` | read-only: the cost section of `magus session show` rolled up across the sessions this checkout loaded, each total saying how many sessions measured it | none |
 | `magus buzz hack/dev/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
 | `magus buzz hack/dev/show-review-context.buzz -- [--rev <base>...<head> \| --patch <file\|-> \| --from <diff.json\|->] [--baseline <graph.json>] [--budget <n>] [--lens architecture\|code\|all] [-o json]` | read-only: a change's per-symbol review context (callers, callees, tests, the path to the API, cited diagnostics) and what it does to projects, dependencies and vocabulary | needs the code index; about six graph reads per carded symbol |
 | `magus buzz hack/dev/host-schemas.buzz -- verify \| fetch` | named before the verb rule: `verify` reports the vendored agent-host schemas that moved upstream, `fetch` rewrites them | network |
@@ -88,6 +89,14 @@ and 0004 pin and `flags` cannot express.
 
 ## ci/
 
+For GitHub CI failures, select the pull request's current head with `--commit`
+or its run with `--run` in `show-failures.buzz`, then pipe its records to
+`magus query output --stdin`. PR status summaries and raw job logs do not
+isolate the captured output for each failed target. A run without retained
+failure artifacts is reported as such; read its raw job logs with
+`gh run view <run-id> --log-failed` to diagnose setup failures and jobs or workflows
+without target artifacts. Missing artifacts do not mean a passing run.
+
 | script | does | cost |
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |
@@ -109,6 +118,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
+| `hack/magusfile/conformance-ratchet.buzz` | the prune `format` runs over `hack/policy/conformance.jsonl`: it deletes the known items that no longer violate, and only those, and only when every symbol index is already current |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
@@ -116,6 +126,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
 | `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
 | `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
+| `hack/magusfile/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 

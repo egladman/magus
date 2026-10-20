@@ -19,34 +19,22 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
-)
-
-// Format is an output format an invocation asks for: the -o value.
-type Format string
-
-// The formats a [Sink] renders. Template is the -o template=... family; its body is
-// the caller's to apply to the result and does not change how progress renders.
-const (
-	FormatText     Format = "text"
-	FormatJSON     Format = "json"
-	FormatYAML     Format = "yaml"
-	FormatJSONL    Format = "jsonl"
-	FormatName     Format = "name"
-	FormatTemplate Format = "template"
 )
 
 // encoders is the one place a format is registered: each entry builds the encoder
 // that renders every event a sink receives in that format. A document format keeps
 // stdout for the single result its caller writes when the run ends, so its progress is
-// the text encoder's, on stderr.
-var encoders = map[Format]func(sinkEnv) encoder{
-	FormatText:     newTextEncoder,
-	FormatJSON:     newTextEncoder,
-	FormatYAML:     newTextEncoder,
-	FormatName:     newTextEncoder,
-	FormatTemplate: newTextEncoder,
-	FormatJSONL:    newJSONLEncoder,
+// the text encoder's, on stderr. Template's body is the caller's to apply to the
+// result and does not change how progress renders.
+var encoders = map[output.Format]func(sinkEnv) encoder{
+	output.Text:     newTextEncoder,
+	output.JSON:     newTextEncoder,
+	output.YAML:     newTextEncoder,
+	output.Name:     newTextEncoder,
+	output.Template: newTextEncoder,
+	output.JSONL:    newJSONLEncoder,
 }
 
 // sinkEnv is what an encoder is built from.
@@ -121,7 +109,7 @@ func WithSinkFilter(terms []string) SinkOption {
 //
 // An unknown format, a nil writer or an invalid filter term is an error. The caller
 // owns the writers and must Close the sink after the run to flush it.
-func NewSink(format Format, stdout, stderr io.Writer, opts ...SinkOption) (*Sink, error) {
+func NewSink(format output.Format, stdout, stderr io.Writer, opts ...SinkOption) (*Sink, error) {
 	build, ok := encoders[format]
 	if !ok {
 		return nil, fmt.Errorf("magus: no sink renders output format %q", format)
@@ -185,7 +173,7 @@ func (t teeEncoder) recordWriter() *report.Writer { return t.records.recordWrite
 func (s *Sink) Close() error { return s.enc.close() }
 
 // GraphObserver returns the observer that records graph-traversal events on this sink,
-// for [Magus.SetGraphObserver]. It observes nothing for a format that writes no records.
+// for [WithObserver]. It observes nothing for a format that writes no records.
 func (s *Sink) GraphObserver() types.Observer { return report.GraphObserver(s.records) }
 
 // EmitScope emits the run's project selection, the "projects: ..." header. It starts a
@@ -200,12 +188,13 @@ func (s *Sink) EmitCharms(ctx context.Context, charms string) {
 	s.emit(ctx, report.RunCharms{Charms: charms})
 }
 
-// EmitCache emits which cache tiers the run can reach and whether it may write to them,
-// as [Magus.CacheDescription] reports them. Text prints the boring case too: a pull
-// request reads the shared cache but must not publish to it, which is invisible unless
+// EmitCache emits which cache tiers the run can reach, whether it may write to them, and
+// where the local tier's entries live, as [Magus.CacheDescription] reports them. Text
+// prints the boring case too: a pull request reads the shared cache but must not publish
+// to it, and a checkout replays what its sibling worktrees stored, both invisible unless
 // something says so. An empty tier, a workspace with no cache, prints nothing.
-func (s *Sink) EmitCache(ctx context.Context, tier, mode string) {
-	s.emit(ctx, report.RunCache{Tier: tier, Mode: mode})
+func (s *Sink) EmitCache(ctx context.Context, tier, mode, dir string) {
+	s.emit(ctx, report.RunCache{Tier: tier, Mode: mode, Dir: dir})
 }
 
 // EmitBase emits what an affected run's change set was compared against, the third
@@ -342,7 +331,7 @@ func pickTerminal(w io.Writer) terminal {
 
 // textSink is the sink a run reports through when its caller passed none.
 func (m *Magus) textSink() *Sink {
-	return sinkOver(textEncoder{term: pickTerminal(os.Stderr), level: m.cfg.Log.SlogLevel()})
+	return sinkOver(textEncoder{term: pickTerminal(m.noticeWriter()), level: m.cfg.Log.SlogLevel()})
 }
 
 // plainTerminal writes uncolored lines to w.
@@ -413,7 +402,11 @@ func (t textEncoder) encode(ctx context.Context, e any) {
 		t.info(ctx, "charms: %s\n", charms)
 	case report.RunCache:
 		if e.Tier != "" {
-			t.info(ctx, "cache: %s (%s)\n", e.Tier, e.Mode)
+			where := ""
+			if e.Dir != "" {
+				where = " in " + e.Dir
+			}
+			t.info(ctx, "cache: %s (%s)%s\n", e.Tier, e.Mode, where)
 		}
 	case report.RunBase:
 		if e.Base != "" {

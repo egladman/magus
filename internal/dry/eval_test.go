@@ -500,7 +500,7 @@ func TestPlaygroundSourceModules(t *testing.T) {
 
 const actorFigureJSON = `{
   "id": "t", "title": "T", "eyebrow": "", "desc": "", "direction": "down",
-  "generated": false, "unscopedWhy": "a process", "graphEdges": false,
+  "unscopedWhy": "a process", "graphEdges": false,
   "boxes": [
     {"actor": {"name": "a", "sub": "", "tag": "", "link": "/code/a", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false},
     {"actor": {"name": "b", "sub": "", "tag": "", "link": "", "look": "plain"}, "label": "", "sub": "", "tag": "", "focal": false}

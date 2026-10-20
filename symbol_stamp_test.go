@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -45,7 +46,7 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -114,6 +115,67 @@ func TestSymbolStampMovesWithTheIndex(t *testing.T) {
 	probes.Store(0)
 	assert.Equal(t, types.SymbolIndexStale, stampedFreshness(t, m), "no run wrote these bytes, so no entry vouches for them")
 	assert.Positive(t, probes.Load(), "a rewritten index is a different file, so the stamp vouches for it no longer")
+}
+
+func TestChangedSinceIndexListsSourcesNewerThanTheIndexSorted(t *testing.T) {
+	m, src, index, _ := newStampedWorkspace(t)
+	built := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(index, built, built))
+	before, after := built.Add(-time.Minute), built.Add(time.Minute)
+	require.NoError(t, os.Chtimes(src, before, before))
+	require.NoError(t, os.Chtimes(filepath.Join(m.Root(), "magusfile.buzz"), before, before))
+	for _, name := range []string{"zeta.go", "alpha.go"} {
+		path := filepath.Join(m.Root(), name)
+		require.NoError(t, os.WriteFile(path, []byte("package main\n"), 0o644))
+		require.NoError(t, os.Chtimes(path, after, after))
+	}
+
+	changed, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceMemo())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"alpha.go", "zeta.go"}, changed, "newer sources, sorted; main.go and the magusfile predate the index")
+}
+
+func TestChangedSinceIndexWithoutAnIndexFails(t *testing.T) {
+	m, _, index, _ := newStampedWorkspace(t)
+	require.NoError(t, os.Remove(index))
+
+	_, err := m.changedSinceIndex(t.Context(), m.Get("."), spells.DefaultSymbolIndexOp, index, cache.NewSourceMemo())
+	assert.Error(t, err, "no index file is no build time to compare against, never an empty list")
+}
+
+func TestChangedSinceIndexReadsAKeyedSourcePathFromTheRight(t *testing.T) {
+	for line, want := range map[string]string{
+		"src:main.go:abc:0":   "main.go",
+		"src:a:b/c.go:abc:1":  "a:b/c.go",
+		"env:PATH=/bin":       "",
+		"src:broken":          "",
+		"srcdir:x.go:abc:0":   "",
+		"spell:src:x.go:ab:0": "",
+	} {
+		got, ok := keyedSource(line)
+		assert.Equal(t, want, got, line)
+		assert.Equal(t, want != "", ok, line)
+	}
+}
+
+func TestSymbolIndexStatusByStampNamesTheChangedSources(t *testing.T) {
+	m, src, _, _ := newStampedWorkspace(t)
+	require.Equal(t, types.SymbolIndexFresh, stampedFreshness(t, m))
+
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(src, later, later))
+
+	for _, s := range m.SymbolIndexStatusByStamp(t.Context()) {
+		if s.Project.Path != "." {
+			continue
+		}
+		assert.Equal(t, types.SymbolIndexStale, s.Freshness)
+		assert.Equal(t, []string{"main.go"}, s.Changed)
+		assert.Equal(t, 1, s.ChangedCount)
+		return
+	}
+	t.Fatal("the root project is missing from the status")
 }
 
 func TestSymbolStampWithoutAnIndexIsNotBuilt(t *testing.T) {

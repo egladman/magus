@@ -2,9 +2,7 @@
 
 package std
 
-//go:generate go run ../cmd/magus-utils bindings -module proc -lang buzz -out ../internal/interp/bindings/gen/proc.go
-
-func init() { Register(Proc) }
+//go:generate go run ../cmd/magus-utils bindings -module proc -lang buzz -out ../internal/interp/bindings/gen/proc.go -pkg bindgen
 
 // Proc is running OTHER processes, and it is a separate module from os for a
 // reason that is structural rather than cosmetic.

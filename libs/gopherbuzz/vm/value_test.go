@@ -199,3 +199,80 @@ func TestValueEqualFunctionIdentity(t *testing.T) {
 	fnB := DirectValue("a", noop)
 	assert.False(t, fnA.Equal(fnB), "distinct function values are not equal")
 }
+
+func TestValueEnumDef(t *testing.T) {
+	def := EnumDefValue("Tier", []string{"low", "high"}, nil)
+	name, cases, ok := def.EnumDef()
+	require.True(t, ok)
+	assert.Equal(t, "Tier", name)
+	assert.Equal(t, []string{"low", "high"}, cases, "cases come back in declaration order")
+
+	cases[0] = "edited"
+	_, again, _ := def.EnumDef()
+	assert.Equal(t, "low", again[0], "the returned cases are a copy, not the definition's own")
+
+	high := NewVM(context.Background()).enumCase(def, 1)
+	for _, v := range []Value{high, NewMap(), StrValue("Tier"), NullValue()} {
+		name, cases, ok := v.EnumDef()
+		assert.False(t, ok, "%s is not an enum definition", v.Kind())
+		assert.Empty(t, name)
+		assert.Nil(t, cases)
+	}
+}
+
+func TestValueEnumCase(t *testing.T) {
+	vm := NewVM(context.Background())
+	tier := EnumDefValue("Tier", []string{"low", "high"}, nil)
+	enum, name, ok := vm.enumCase(tier, 1).EnumCase()
+	require.True(t, ok)
+	assert.Equal(t, "Tier", enum)
+	assert.Equal(t, "high", name)
+
+	// An enum<str> case may assign a value other than its name: EnumCase still
+	// names the case, and EnumValue reads the assigned value.
+	mode := EnumDefValue("Mode", []string{"fast"}, []Value{StrValue("f")})
+	fast := vm.enumCase(mode, 0)
+	_, name, ok = fast.EnumCase()
+	require.True(t, ok)
+	assert.Equal(t, "fast", name)
+	backing, _ := fast.EnumValue()
+	assert.Equal(t, "f", backing.AsString())
+
+	for _, v := range []Value{tier, IntValue(1), StrValue("high"), NullValue()} {
+		enum, name, ok := v.EnumCase()
+		assert.False(t, ok, "%s is not an enum case", v.Kind())
+		assert.Empty(t, enum)
+		assert.Empty(t, name)
+	}
+}
+
+// MapKeys reduces the int 1 and the str "1" to the same display string;
+// MapKeyValues keeps each key, an enum case included.
+func TestValueMapKeyValues(t *testing.T) {
+	tier := EnumDefValue("Tier", []string{"low", "high"}, nil)
+	high := NewVM(context.Background()).enumCase(tier, 1)
+	m := NewMap()
+	m.asMap().setVal(high, StrValue("by case"))
+	m.asMap().setVal(IntValue(1), StrValue("by int"))
+	m.asMap().setVal(StrValue("1"), StrValue("by str"))
+
+	keys := m.MapKeyValues()
+	require.Len(t, keys, 3)
+	require.Len(t, m.MapValues(), len(keys), "keys and values are parallel")
+
+	enum, name, ok := keys[0].EnumCase()
+	require.True(t, ok)
+	assert.Equal(t, "Tier", enum)
+	assert.Equal(t, "high", name)
+	assert.Equal(t, "by case", m.MapValues()[0].AsString())
+
+	assert.True(t, keys[1].IsInt())
+	assert.Equal(t, int64(1), keys[1].AsInt())
+	assert.True(t, keys[2].IsStr())
+	assert.Equal(t, "1", keys[2].AsString())
+	assert.Equal(t, m.MapKeys()[1], m.MapKeys()[2], "MapKeys is lossy where MapKeyValues is not")
+
+	for _, v := range []Value{StrValue("m"), ListValue(nil), NullValue(), high} {
+		assert.Nil(t, v.MapKeyValues(), "%s is not a map", v.Kind())
+	}
+}

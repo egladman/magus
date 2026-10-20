@@ -29,8 +29,10 @@ import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
+import "hack/lint/code-stays-within-the-conformance-ratchet" as conformanceratchet;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
@@ -46,7 +48,9 @@ import "hack/lint/provider-io-is-buzz" as providerio;
 import "hack/lint/prose-names-targets-that-exist" as prosetargets;
 import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
 import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
+import "hack/lint/rules-name-their-tier" as ruletiers;
 import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
+import "hack/lint/skill-renders-follow-markdown-and-description-budgets" as skillrenders;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
@@ -74,6 +78,7 @@ export fun rules() > [Rule] {
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
         Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
         Rule{ name = "generate-drift-throw-names-the-engine-drift-code", reads = generatedrift\reads(), check = generatedrift\check },
+        Rule{ name = "generated-go-packages-name-their-owner", reads = generatedpackages\reads(), check = generatedpackages\check },
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
@@ -88,10 +93,13 @@ export fun rules() > [Rule] {
         Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
+        Rule{ name = "code-stays-within-the-conformance-ratchet", reads = conformanceratchet\reads(), check = conformanceratchet\check },
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
+        Rule{ name = "skill-renders-follow-markdown-and-description-budgets", reads = skillrenders\reads(), check = skillrenders\check },
         Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
+        Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
     ];
 }
 

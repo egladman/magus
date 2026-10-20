@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 )
 
 // Consultation is one question an agent asked magus while producing a change: a read verb, what

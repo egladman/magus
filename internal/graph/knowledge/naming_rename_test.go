@@ -36,8 +36,9 @@ func TestConformanceFindsARenameLeftover(t *testing.T) {
 		"internal/run/wait_test.go": "ctx := types.WithDependencyWait(ctx, 0) // trackDependencyWait was here\n",
 	})
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(subj), Introduced: introduced(subj), Read: read,
+	got := g.ConformanceChecks(ConformanceChange{
+		Conformance: testConformance(),
+		Subjects:    subjectIDs(subj), Introduced: introduced(subj), Read: read,
 		Renamed: map[string]string{symID(subj): "TrackDependencyWait"},
 	})
 
@@ -55,8 +56,9 @@ func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
 		"web/src/queue.ts": "import { applyPlan } from './plan';\n\n// landPlan runs once per queue entry.\nconst LAND_PLAN_RETRIES = 3;\n",
 	})
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(subj), Read: read, Renamed: map[string]string{symID(subj): "landPlan"},
+	got := g.ConformanceChecks(ConformanceChange{
+		Conformance: testConformance(),
+		Subjects:    subjectIDs(subj), Read: read, Renamed: map[string]string{symID(subj): "landPlan"},
 	})
 
 	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckRenameLeftover,
@@ -76,8 +78,9 @@ func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
 		"internal/cmd/run.go": "ep := trail.EntryPointFromContext(ctx)\nqueue.Apply(p) // Land was the old name\nvcs.ReadFileAt(p) // OpenFileAt too\n",
 	})
 
-	got := g.Conformance(ConformanceChange{
-		Subjects: subjectIDs(longer, oneWord, shared), Read: read,
+	got := g.ConformanceChecks(ConformanceChange{
+		Conformance: testConformance(),
+		Subjects:    subjectIDs(longer, oneWord, shared), Read: read,
 		Renamed: map[string]string{
 			symID(longer):  "EntryPointFrom", // every use of the new name spells the old one inside it
 			symID(oneWord): "Land",           // one word is a word everybody uses
@@ -86,6 +89,6 @@ func TestConformanceSilentOnRenamesItCannotTellApart(t *testing.T) {
 	})
 
 	assert.Empty(t, got)
-	assert.Empty(t, g.Conformance(ConformanceChange{Subjects: subjectIDs(longer), Renamed: map[string]string{symID(longer): "EntryPointFrom"}}),
+	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(longer), Renamed: map[string]string{symID(longer): "EntryPointFrom"}}),
 		"no reader, no search")
 }

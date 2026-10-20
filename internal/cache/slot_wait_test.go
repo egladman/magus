@@ -51,9 +51,12 @@ func TestSlotWaitMeterFedByLimiter(t *testing.T) {
 	require.NoError(t, lim.Acquire(context.Background()))
 
 	queued := make(chan struct{})
-	lim.SetHooks(nil, nil, func(delta int) {
-		m.Add(delta)
-		if delta > 0 {
+	lim.SetHooks(func(ev PoolEvent) {
+		if ev.Queued == 0 {
+			return
+		}
+		m.Add(ev.Queued)
+		if ev.Queued > 0 {
 			close(queued)
 		}
 	})

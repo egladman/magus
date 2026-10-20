@@ -41,6 +41,10 @@ env:
   BENCH_KEEP_WORKTREE   1 keeps the run worktree (or trial container) for inspection
   BENCH_PROBE_FAIL      honored only by the self-test arm; forces a probe failure
   RUNNER_AGENT          replaces runner/agent.sh (runner/fake-agent.sh for tests)
+  BENCH_CLAUDE_BIN      the claude CLI runner/agent.sh launches (default: claude on PATH)
+  BENCH_ALLOWED_TOOLS   tools the session may run unasked (Bash); unset, it may not run
+                        a command that is not read-only
+  BENCH_C1_DIR          skills dir the skills-c1 arm copies in; required by that arm
 EOF
 }
 

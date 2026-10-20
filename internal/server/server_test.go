@@ -21,7 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
-	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -86,7 +86,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -188,7 +188,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -254,7 +254,7 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -332,7 +332,7 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -458,7 +458,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	port := freePort(t)
@@ -737,7 +737,7 @@ func TestMCPHTTPOff(t *testing.T) {
 	srv, _, socket := serverSocket(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	builtConsole(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	off := false
 	socketNeeds := make(chan map[string]types.Need, 1)
@@ -845,7 +845,7 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 // with a connector token and refused with the operator token.
 func TestInsecureBindListensWhereItSays(t *testing.T) {
 	testkit.Isolate(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	port := freePort(t)
 	logs := &syncBuffer{}
@@ -1010,7 +1010,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := magus.Open(ctx, root)
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -1122,7 +1122,7 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	srv, addr, client := serverSocket(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	builtConsole(t)
-	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 
 	socketNeeds := make(chan map[string]types.Need, 1)

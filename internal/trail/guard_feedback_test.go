@@ -2,10 +2,15 @@ package trail
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
@@ -91,6 +96,60 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 		Evidence: []string{"cursor:real (1 denials)"},
 	}, feedback[0])
 	assert.False(t, feedback[0].NeedsReview(), "one operator cannot manufacture the repeat that promotes a candidate")
+}
+
+func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	deny := func(lease, rule, decision string) {
+		AppendAgentCommand(t.Context(), base, AgentCommand{
+			Host: "claude-code", Session: "one", Tool: "shell.command", Command: "edit " + rule,
+			Decision: decision, Reason: rule + " says no", Rule: rule, Lease: lease,
+		})
+	}
+	deny("wave/a", "lease-write", "deny")
+	deny("wave/a", "", "pass")
+	deny("wave/b", "focus-read", "deny")
+	deny("wave/a", "raw-tool", "deny")
+
+	got, known, err := LeaseDenials(base, "wave/a", 0, 64)
+	require.NoError(t, err)
+	assert.True(t, known, "a trail inside the retained window is read whole")
+	require.Len(t, got, 2)
+	assert.Equal(t, []string{"lease-write", "raw-tool"}, []string{got[0].Rule, got[1].Rule})
+	wantFirst := got[0]
+	wantFirst.Reason, wantFirst.Action = "lease-write says no", "shell.command"
+	assert.Equal(t, wantFirst, got[0])
+	assert.Positive(t, got[0].Ts)
+
+	newest, _, err := LeaseDenials(base, "wave/a", 0, 1)
+	require.NoError(t, err)
+	require.Len(t, newest, 1)
+	assert.Equal(t, "raw-tool", newest[0].Rule, "the cap keeps the newest")
+
+	later, known, err := LeaseDenials(base, "wave/a", got[1].Ts+3600, 64)
+	require.NoError(t, err)
+	assert.Empty(t, later)
+	assert.True(t, known, "nothing since then is none, not unknown, while the trail is whole")
+}
+
+// A full window with no agent command at or before since may have rotated the attempt's
+// denials away, so an empty answer is unknown.
+func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
+	line, err := json.Marshal(Event{Ts: 5_000_000, Kind: KindJob, Action: "graph build", Outcome: OutcomeOK})
+	require.NoError(t, err)
+	body := strings.Repeat(string(line)+"\n", maxEvents)
+	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))
+
+	got, known, err := LeaseDenials(base, "wave/a", 1, 64)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.False(t, known)
 }
 
 func recordFeedbackCommand(t *testing.T, base, host, session, command string) {

@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -26,7 +26,7 @@ import (
 // which still rides the listener, still reads as served.
 func TestMCPEndpointStatusWithHTTPOff(t *testing.T) {
 	cfg := mcpServing(t, http.StatusOK)
-	cfg.HTTP = boolPtr(false)
+	cfg.HTTP = new(false)
 	got := buildMCPEndpointStatus(context.Background(), cfg)
 	require.NotNil(t, got)
 	assert.Equal(t, mcpHTTPOff, got.State)

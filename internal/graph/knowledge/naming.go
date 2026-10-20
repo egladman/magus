@@ -18,20 +18,11 @@ import (
 // advisor's target half, the norm is derived from the tree and never declared, so every finding
 // states its counts.
 //
-// Silence is the default, and it is the hard part. A norm needs a cohort of at least MinCohort
-// declarations agreeing at MinShare or more; a workspace that has not decided yields nothing. The
-// change's own new declarations never count toward a norm, so a change cannot manufacture the
+// Silence is the default, and it is the hard part. A norm needs a cohort of at least Gates.MinCohort
+// declarations agreeing at Gates.MinShare or more; a workspace that has not decided yields nothing.
+// The change's own new declarations never count toward a norm, so a change cannot manufacture the
 // convention it is then measured against.
-const (
-	conformanceMinCohort = 5
-	conformanceMinShare  = 0.8
-	// conformanceBar is the score a finding needs to be reported at all. Below it a finding is a
-	// guess, and a guess shown beside facts teaches readers to skim both.
-	conformanceBar = 0.5
-	// conformanceMaxFindings caps what one change reports, strongest first.
-	conformanceMaxFindings = 5
-	conformanceExamples    = 3
-)
+const conformanceExamples = 3
 
 // ConformanceChange describes the change [Graph.Conformance] observes.
 type ConformanceChange struct {
@@ -47,22 +38,31 @@ type ConformanceChange struct {
 	// Read returns a workspace file's text as the change leaves it. nil skips the one check that
 	// searches text, for a renamed symbol's former name.
 	Read func(path string) (string, bool)
-	// MinCohort and MinShare are the silence gates: how many declarations a norm needs, and the
-	// share of them that must agree. Zero takes the defaults, 5 and 0.8.
-	MinCohort int
-	MinShare  float64
+	// Conformance is knowledge.conformance as this run applies it. Its Gates are the silence gates and
+	// the report bar and cap, taken as given: a zero gate is zero, never a default. The
+	// threshold check judges subjects against its policy and is silent with no RatchetPath.
+	Conformance types.ConformanceOptions
+	// RatchetBase is the ratchet record at the diff's base, nil when the base has none. The
+	// threshold check compares it with Conformance.Ratchet to see what the change moves.
+	RatchetBase *types.ConformanceRatchet
+	// Base is the knowledge graph at the diff's base, nil without a baseline. The threshold check
+	// reads a known item's measure there to say how far the change grew it.
+	Base *Graph
+	// Touched holds the symbol IDs whose bodies the change edits and that are not Subjects.
+	Touched []string
 }
 
-// Conformance runs every conformance check over the change and returns what clears the bar,
-// keyed by the subject each finding is about. At most conformanceMaxFindings are returned across the change, strongest first, ties
-// broken by check name, message and subject so two runs over one graph agree byte for byte.
+// ConformanceChecks runs every conformance check over the change and returns what clears the bar,
+// keyed by the subject each finding is about. At most Conformance.Gates.MaxFindings are returned
+// across the change, strongest first, ties broken by check name, message and subject so two runs
+// over one graph agree byte for byte.
 //
 // Each finding is a [types.Check] with Status advice and Evidence inferred: a fact about the
 // index, never a rule. It reads only language-neutral facts (name, kind, scope, calls,
 // references, and the declaration shape a language's reader reports), reads a file only through
 // ConformanceChange.Read, and never fails: a symbol it cannot place is skipped.
-func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
-	if len(c.Subjects) == 0 {
+func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]types.Check {
+	if len(c.Subjects) == 0 && len(c.Touched) == 0 {
 		return nil
 	}
 	x := newNamingIndex(g, c)
@@ -73,7 +73,7 @@ func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
 	var all []named
 	for _, chk := range conformanceChecks {
 		for _, f := range chk.run(x) {
-			if f.score >= conformanceBar {
+			if f.score >= x.gates.Bar {
 				all = append(all, named{chk.name(), f})
 			}
 		}
@@ -83,7 +83,7 @@ func (g *Graph) Conformance(c ConformanceChange) map[string][]types.Check {
 			cmp.Compare(a.message, b.message), cmp.Compare(a.subject, b.subject))
 	})
 	out := map[string][]types.Check{}
-	for _, f := range all[:min(len(all), conformanceMaxFindings)] {
+	for _, f := range all[:min(len(all), x.gates.MaxFindings)] {
 		out[f.subject] = append(out[f.subject], types.Check{
 			Name: f.check, Status: types.CheckAdvice, Message: f.message, Details: f.details,
 			Evidence: types.EvidenceInferred,
@@ -101,7 +101,8 @@ type conformanceCheck interface {
 }
 
 var conformanceChecks = []conformanceCheck{
-	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{},
+	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{}, thresholdCheck{}, callSeqCheck{}, sprawlCheck{},
+	couplingCheck{}, aliasCheck{},
 }
 
 // finding is one scored observation about the declaration subject names.
@@ -158,6 +159,7 @@ func (d *namingDecl) file() string {
 type namingIndex struct {
 	g        *Graph
 	change   ConformanceChange
+	gates    types.ConformanceGates
 	cohort   int
 	share    float64
 	byID     map[string]*namingDecl
@@ -170,11 +172,13 @@ type namingIndex struct {
 }
 
 func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
+	gates := c.Conformance.Gates
 	x := &namingIndex{
 		g:      g,
 		change: c,
-		cohort: cmp.Or(c.MinCohort, conformanceMinCohort),
-		share:  cmp.Or(c.MinShare, conformanceMinShare),
+		gates:  gates,
+		cohort: gates.MinCohort,
+		share:  gates.MinShare,
 		byID:   map[string]*namingDecl{},
 		groups: map[string][]*namingDecl{},
 	}
@@ -192,7 +196,7 @@ func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
 		}
 		// Test and generated code is never a subject and never a norm, so it is not read at all.
 		file, _, _ := strings.Cut(n.Source, ":")
-		if file == "" || IsTestPath(file) || x.generated(file) {
+		if file == "" || types.IsTestPath(file) || x.generated(file) {
 			continue
 		}
 		full, ok := parseDescriptors(id)

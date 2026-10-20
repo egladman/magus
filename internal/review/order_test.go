@@ -128,3 +128,55 @@ func TestOrderLinesNameAHunkThatLeavesNoLine(t *testing.T) {
 
 	assert.Contains(t, orderText(rev, true), "    core.go:3 (deleted)  F\n")
 }
+
+// withSymbols puts F in core.go's first hunk and M, G in its second, innermost first.
+func withSymbols(rev types.Diff, syms ...types.DiffSymbol) types.Diff {
+	rev.Files[0].Hunks[0].Symbols = []string{"F"}
+	rev.Files[0].Hunks[1].Symbols = []string{"M", "G"}
+	rev.Files[0].Symbols = syms
+	return rev
+}
+
+func TestOrderPrintsEachStepsSignature(t *testing.T) {
+	t.Parallel()
+	rev := withSymbols(orderTestDiff(),
+		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G(n int)\n\terror"},
+		types.DiffSymbol{ID: "F", Label: "F", Signature: "func F()"},
+		types.DiffSymbol{ID: "M", Label: "M", Signature: "func (T) M()"},
+	)
+
+	got := orderText(rev, true)
+
+	assert.Contains(t, got, "    core.go:3  F\n        starts the group\n    signature: func F()\n  step 2\n")
+	assert.Contains(t, got, "        uses F, defined in step 1\n    signature: func G(n int) error\n    signature: func (T) M()\n\ngroup 2")
+}
+
+func TestOrderMarksAChangedSignature(t *testing.T) {
+	t.Parallel()
+	rev := withSymbols(orderTestDiff(),
+		types.DiffSymbol{ID: "F", Label: "F", Signature: "func F(n int)", BaseSignature: "func F()"},
+		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G()", BaseSignature: "func G()"},
+		types.DiffSymbol{ID: "M", Label: "M", Signature: "func (T) M()"},
+	)
+
+	got := orderText(rev, true)
+
+	assert.Contains(t, got, "    signature: func F(n int) was func F()\n")
+	assert.Contains(t, got, "    signature: func G()\n", "an unchanged signature carries no was")
+	assert.NotContains(t, got, "func G() was")
+	assert.NotContains(t, got, "func (T) M() was", "a symbol with no base signature carries no was")
+}
+
+func TestOrderSaysWhenTheIndexerGaveNoSignature(t *testing.T) {
+	t.Parallel()
+	rev := withSymbols(orderTestDiff(),
+		types.DiffSymbol{ID: "F", Label: "F"},
+		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G()"},
+		types.DiffSymbol{ID: "M", Label: "M"},
+	)
+
+	got := orderText(rev, true)
+
+	assert.Contains(t, got, "    signature: F (no signature from the indexer)\n")
+	assert.Contains(t, got, "    signature: func G()\n    signature: M (no signature from the indexer)\n")
+}

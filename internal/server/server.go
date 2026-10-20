@@ -6,10 +6,6 @@
 // server's unix socket as well. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
-//
-// The CLI injects a *Server into the root magus package via
-// magus.SetServer; magus.Serve then delegates here. That indirection
-// keeps magus free of an import cycle (server depends on magus, not vice versa).
 package server
 
 import (
@@ -38,7 +34,7 @@ import (
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
-	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
 	planhandler "github.com/egladman/magus/internal/handler/plan"
@@ -46,14 +42,17 @@ import (
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
 	"github.com/egladman/magus/internal/handler/trailrpc"
-	viewer "github.com/egladman/magus/internal/handler/viewer"
+	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
@@ -74,7 +73,7 @@ import (
 var connectReadMax = connect.WithReadMaxBytes(handler.MaxWireBodyBytes)
 
 // Server assembles and runs the server's HTTP listener from a set of MCP server
-// options. It satisfies magus.Server.
+// options.
 type Server struct {
 	opts       mcp.Options
 	runs       func() []types.StatusRun
@@ -210,7 +209,11 @@ func (s *Server) Serve(ctx context.Context) error {
 	// performs under a single acquisition then serializes against nothing. The client
 	// tool's magus\job runs in a forked worker and opens the store itself.
 	if opts.Jobs == nil && opts.Magus != nil {
-		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+		stateBase, err := xdg.StateDir()
+		if err != nil {
+			return fmt.Errorf("server: resolve the user state dir that holds the job store: %w", err)
+		}
+		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), StateBase: stateBase, Root: opts.Magus.Root()})
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No
@@ -319,7 +322,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
-				Telemetry: opts.Magus.Telemetry(),
+				Telemetry: viewInternals(opts.Magus).Telemetry(),
 			}
 			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
 			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
@@ -341,7 +344,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
-			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, opts.Magus.Telemetry())
+			attentionH := attentionhandler.NewHandler(opts.Magus.Root(), opts.Version, log, viewInternals(opts.Magus).Telemetry())
 
 			// Every /api/v1 route is mounted on its own, behind the Need apiNeeds names for it,
 			// with rebind + CORS + header-only bearer auth. CORS sits outside the bearer guard so
@@ -571,7 +574,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
-			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
+			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(viewInternals(opts.Magus), opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
@@ -586,7 +589,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// either: unlike notes and memory, nothing here is attributable to a person, and the
 			// same facts are already served unaudited over /api/v1/graph. The two doors onto that
 			// one body of data hold the same need, console=read.
-			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus), connectReadMax)
+			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(viewInternals(opts.Magus)), connectReadMax)
 			f.service(graphPath, graphServiceHandler)
 			bridgeLog.InfoContext(ctx, "graph service mounted", slog.String("path", graphPath))
 
@@ -883,20 +886,32 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	return s.run(ctx, log, f)
 }
 
+// magusInternals is an opened *magus.Magus as workspace.ViewAs shows it to magus's own
+// packages: with the knowledge graph and the observability provider, which the public
+// type does not carry.
+type magusInternals interface {
+	types.WorkspaceRepository
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
+	Telemetry() observability.Provider
+}
+
+func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) }
+
 // diagramWorkspace is the workspace plus the import graph the diagrams read.
 type diagramWorkspace struct{ *magus.Magus }
 
 // SymbolIndex reads the manifest's shard fingerprints instead of merging the shards into a
 // graph. The graph is built first so the manifest on disk is current.
 func (w diagramWorkspace) SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error) {
-	if _, err := w.KnowledgeGraph(ctx, false); err != nil {
+	if _, err := viewInternals(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	return knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
 }
 
 func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, error) {
-	kg, err := w.KnowledgeGraphWithSymbols(ctx)
+	kg, err := viewInternals(w.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.ImportGraph{}, err
 	}

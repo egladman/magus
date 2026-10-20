@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -25,6 +26,49 @@ func TestPolicyMarkerIsOwnerOnly(t *testing.T) {
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
+
+// The marker is a JSON Lines file whose last line is the marker; a marker that did not change
+// is not appended again.
+func TestPolicyMarkerIsAppendedAsJSONLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	first := policyMarker{Digest: "d1", ShellRules: 3, SpawnRule: true, Pending: true, Files: []string{"/w/magusfile.buzz"}}
+	second := policyMarker{Digest: "d2", ShellRules: 3, SpawnRule: true, Files: []string{"/w/magusfile.buzz", "/w/rules/a b.buzz"}}
+	writePolicyMarker(path, first)
+	writePolicyMarker(path, first)
+	writePolicyMarker(path, second)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"digest":"d1","shell_rules":3,"spawn_rule":true,"pending":true,"files":["/w/magusfile.buzz"]}`+"\n"+
+		`{"digest":"d2","shell_rules":3,"spawn_rule":true,"pending":false,"files":["/w/magusfile.buzz","/w/rules/a b.buzz"]}`+"\n", string(body))
+	got, ok := readPolicyMarker(path)
+	require.True(t, ok)
+	assert.Equal(t, second, got)
+}
+
+func TestPolicyMarkerThatDoesNotParseIsNotARecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	require.NoError(t, os.WriteFile(path, []byte("digest\td1\n"), 0o600))
+
+	_, ok := readPolicyMarker(path)
+	assert.False(t, ok)
+}
+
+func TestPolicyMarkerPreservesLegacyState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	old := filepath.Join(filepath.Dir(path), "guard-policy.json")
+	const held = "{\"digest\":\"older\"}\n"
+	require.NoError(t, os.WriteFile(old, []byte(held), 0o600))
+	_, err := policyMarkerLog(path).Load()
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	_, ok := readPolicyMarker(path)
+	assert.False(t, ok)
+	writePolicyMarker(path, policyMarker{Digest: "new"})
+	assert.NoFileExists(t, path)
+	raw, err := os.ReadFile(old)
+	require.NoError(t, err)
+	assert.Equal(t, held, string(raw))
 }
 
 // sourcesAt builds the lazy approved-id callback a hook hands RecordPolicy, counting how

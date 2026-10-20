@@ -55,10 +55,10 @@ func (p Path) Rebase(base string) Path {
 	return p
 }
 
-// RelativeTo returns p expressed from base, carrying base as its new Base so the result
+// Relativize returns p expressed from base, carrying base as its new Base so the result
 // is still self-describing. Resolving first is what makes this correct for a path whose
 // current Base differs from the requested one.
-func (p Path) RelativeTo(base string) (Path, error) {
+func (p Path) Relativize(base string) (Path, error) {
 	if p.Value == "" {
 		return p, nil
 	}

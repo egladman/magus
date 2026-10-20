@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // internal/interp cannot link the Buzz VM; the host bindings register from the layer that can
 	interp.RegisterBuzzHostBindings(registerAllBuzz)
 }
 
@@ -162,7 +162,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// unbound. The hand-built members below are the VM-infra ones (project/cache/
 	// pry/log, plus the magus.Context) that can't share a Go Impl across the
 	// boundary; the two sets are disjoint.
-	magus := bindinggen.RegisterMagus(ctx, sess)
+	magus := bindgen.RegisterMagus(ctx, sess)
 	cache := buildCache(ctx, obs)
 	ci := buildCI(ctx, obs)
 	magus.MapSet("project", buildProject(ctx, obs))
@@ -173,7 +173,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	lifecycle := buildLifecycle(ctx, obs)
 	magus.MapSet("lifecycle", lifecycle)
 	magus.MapSet("workspace", buildWorkspace(ctx, obs))
-	magus.MapSet("job", buildJob(obs))
+	jobMap := buildJob(ctx, sess, obs)
+	magus.MapSet("job", jobMap)
 	magus.MapSet("service", buildService(obs))
 	magus.MapSet("vcs", buildVCS(obs))
 	magus.MapSet("trail", buildTrail(obs))
@@ -247,6 +248,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
+		jobMap.MapSet("modelTiers", magusfileOnly(obs, `magus\job.modelTiers`))
+		jobMap.MapSet("modelTier", magusfileOnly(obs, `magus\job.modelTier`))
 	}
 	if len(withheld) > 0 {
 		magus = dropMembers(magus, withheld)
@@ -290,9 +293,14 @@ func dropMagusMethods(entries []types.ModuleEntry, names []string) []types.Modul
 // call, raising MGS1022 with the member's name.
 func magusfileOnly(obs buzz.DirectObserver, member string) vm.Value {
 	return directVal(obs, member, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.Null, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one to declare into", member)
+		return vm.Null, magusfileOnlyError(member)
 	})
+}
+
+// magusfileOnlyError is MGS1022 for member, called where no magusfile is loading.
+func magusfileOnlyError(member string) error {
+	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one", member)
 }
 
 // directVal builds a magus.* host callable timed under name via obs (from

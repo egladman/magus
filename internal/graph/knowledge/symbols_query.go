@@ -35,9 +35,10 @@ type symbolNames struct {
 	Touch map[string][]int `json:"touch"`
 }
 
-// rankedAttrs are the node attrs scoreNode and a match read. Any other attr reaches a
-// query's output only through the neighborhood, which is built from decoded shards.
-var rankedAttrs = []string{attrLanguage, attrRole, types.AttrLayer, types.AttrMarkerFamily, AttrStaleness, AttrOutrunDays}
+// rankedAttrs are the node attrs Retrieve's filters, its lexical document and a match
+// read. Any other attr reaches a query's output only through the neighborhood, which is
+// built from decoded shards.
+var rankedAttrs = []string{attrLanguage, attrRole, types.AttrLayer, types.AttrMarkerFamily, AttrStaleness, AttrOutrunDays, AttrDoc, AttrSignature}
 
 func (s *Store) namesPath() string { return filepath.Join(s.dir, "shards", symbolsNamesFile) }
 
@@ -155,12 +156,15 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 	if !retained {
 		names = s.readSymbolNames(man)
 	}
+	// Ranked over the in-memory index, as Graph.Query over the fully merged graph is, so the
+	// two answers stay byte for byte the same.
+	opts := RetrieveOptions{Reader: readersOn(ctx), Weights: ShippedWeights()}
 	if names == nil || (relationOnly && len(q.terms) == 0) {
 		if err := s.MergeSymbolShards(ctx, g); err != nil {
 			return types.KnowledgeQueryOutput{}, nil, err
 		}
-		out := g.Query(input, budget)
-		return out, g, nil
+		out, err := g.QueryRanked(input, budget, 0, 0, opts)
+		return out, g, err
 	}
 	if budget <= 0 {
 		budget = DefaultBudget
@@ -172,7 +176,10 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 	for _, sh := range overlays {
 		mergeOverlay(ranked, sh)
 	}
-	matches := ranked.Resolve(input, 0)
+	matches, ranking, err := ranked.Retrieve(input, opts)
+	if err != nil {
+		return types.KnowledgeQueryOutput{}, nil, err
+	}
 	seeds := make([]string, len(matches))
 	for i, m := range matches {
 		seeds[i] = m.ID
@@ -222,6 +229,7 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 				Matches:       matches,
 				Nodes:         out.Nodes,
 				Links:         out.Links,
+				Ranking:       &ranking,
 			}, ranked, nil
 		}
 		if err := ctx.Err(); err != nil {

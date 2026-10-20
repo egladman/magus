@@ -13,7 +13,7 @@ import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
 // Imported for proofread_build: the proofread rule pages render from the linked binary's catalog.
-import "project/../libs/conventions" as convmod;
+import "project/../libs/proofread" as proofreadmod;
 import "project/.." as workspace;
 // The guide embeds these templates verbatim, so a template edit must rerun this project's gates.
 import "project/guides/integrations/agents";
@@ -32,7 +32,7 @@ import "magus/spell/markdown";
 magus\project({
     "tools": {"node": policy\node},
     "spells": [typescript, buzz],
-    // content-generate reads proto's descriptor and the render reads libs/figure;
+    // API docs read proto's descriptor and the render reads libs/figure;
     // without these edges the reads are unordered (MGS4004).
     "depends_on": ["..", "../proto", "../libs/figure"],
     // Affected tracks this glob, not the import graph, so it names every input,
@@ -46,17 +46,24 @@ magus\project({
                 "retired.urls.lock",
                 // Not the .proto files: src/**/*.ts already covers the client proto generates.
                 "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
-                "../std/**/*.go", "../host/**/*.go",
-                "../spells/**/*.buzz", "../internal/spell/**/*.go",
-                "../internal/cli/**/*.go", "../internal/config/**/*.go",
-                "../internal/render/**/*.go", "../internal/graph/**/*.go",
-                "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
-                "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
-                "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
-                "../internal/agent/skills/**/*.md",
-                "../hack/magusfile/ruledocs.buzz", "../internal/guard/**/*.go",
-                "../libs/conventions/proofread/**/*.go", "../libs/conventions/cmd/proofread/**/*.go",
-                "../cmd/magus-utils/**/*.go"],
+                // The catalog examples compile the full CLI, including embedded assets.
+                "../*.go", "../internal/**/*.go", "../types/**/*.go", "../schema/**/*.go",
+                "../std/**/*.go", "../host/**/*.go", "../libs/**/*.go",
+                "../libs/**/go.mod", "../libs/**/go.sum",
+                "../go.mod", "../go.sum", "../go.work", "../go.work.sum",
+                "../spells/**", "../std/lib/*.buzz", "../internal/spell/**/*.buzz",
+                "../internal/job/gen/*.json", "../internal/queue/provider/*.buzz",
+                "../internal/selfupdate/release-keys.json", "../internal/textrank/weights.json",
+                "../internal/textembed/testdata/probe.txt", "../internal/agent/agents/**",
+                "../internal/agent/agents-section.md", "../internal/agent/skills/**",
+                "../libs/gopherbuzz/std/*.buzz", "../libs/proofread/internal/wordclass/gen/model.gz",
+                "../libs/proofread/internal/calibrate/cases/*.txtar",
+                "../cmd/magus-docs/**/*.go", "../cmd/magus-utils/**/*.go", "../cmd/magus-spelldocs/**/*.go",
+                "../cmd/magus-configdocs/**/*.go", "../cmd/magus-manpage/**/*.go", "../cmd/magus-skilldocs/**/*.go",
+                "../cmd/magus/**/*.go", "../cmd/magus-examples/**/*.go", "../cmd/magus-protodocs/**/*.go",
+                "../cmd/magus/starter/*.buzz", "../cmd/magus/completions/*",
+                "../proto/gen/descriptor.binpb", "../proto/gen/**/*.go", "../hack/magusfile/ruledocs.buzz",
+                "../benchmarks/agent/reports/**/*.md", "../benchmarks/BENCHMARKS.md"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
@@ -64,6 +71,7 @@ magus\project({
         "ci": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         "test": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
+        "content-generate": {"skip_cache": "composes independently cached content families; every invocation must check their inputs"},
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
         "figure-engine-digest-generate": {"skip_cache": "reads the figure engine the running magus binary embeds, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
@@ -88,32 +96,42 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("docs");
 }
 
-// content-generate regenerates the committed docs Markdown derived from the Go source tree.
+// content-generate composes independently cached families with disjoint outputs.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
-        workspace\file("spells/**/*.buzz"), workspace\file("internal/spell/**/*.go"),
-        workspace\file("internal/cli/**/*.go"), workspace\file("internal/config/**/*.go"),
-        workspace\file("internal/render/**/*.go"), workspace\file("internal/graph/**/*.go"),
-        workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-spelldocs/**/*.go"),
-        workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
-        workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
-        workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
-        // ruledocs renders the running binary's guard catalog, which internal/guard compiles in.
-        workspace\file("hack/magusfile/ruledocs.buzz"), workspace\file("internal/guard/**/*.go"),
-        // The proofread pages render from the linked binary's catalog, which these sources decide.
-        workspace\file("libs/conventions/proofread/**/*.go"),
-        workspace\file("libs/conventions/cmd/proofread/**/*.go"),
-        workspace\file("cmd/magus-utils/**/*.go"),
-        // The .proto files are redundant with the descriptor, kept so a key change names the schema.
-        workspace\file("proto/magus/**/*.proto"),
-        workspace\file("proto/gen/descriptor.binpb"),
-        workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/proofread/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
-    // Hand-written pages with a generated region between markers; as outputs, clean would delete them.
-    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
-        "concepts/review.md",
-        // The byte-identical copies pruneContentPageCopies removes.
-        "reference/config *.md");
+    ctx.needs(catalog_docs_generate, api_docs_generate, proofread_docs_generate, benchmark_docs_generate);
+}
+
+// Reference, CLI, agent and example pages share the host runtime and generated bindings.
+// Keep them together: examples build the CLI and spells also update their landing page.
+// Project dependencies order the root and proto producers before this consumer.
+export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(workspace\file("*.go"), workspace\file("internal/**/*.go"),
+        workspace\file("types/**/*.go"), workspace\file("std/**/*.go"),
+        workspace\file("host/**/*.go"), workspace\file("schema/**/*.go"),
+        workspace\file("libs/**/*.go"), workspace\file("libs/**/go.mod"), workspace\file("libs/**/go.sum"),
+        workspace\file("go.mod"), workspace\file("go.sum"), workspace\file("go.work"), workspace\file("go.work.sum"),
+        workspace\file("spells/**"),
+        workspace\file("std/lib/*.buzz"), workspace\file("internal/spell/**/*.buzz"),
+        workspace\file("internal/job/gen/*.json"), workspace\file("internal/queue/provider/*.buzz"),
+        workspace\file("internal/selfupdate/release-keys.json"), workspace\file("internal/textrank/weights.json"),
+        workspace\file("internal/textembed/testdata/probe.txt"), workspace\file("internal/agent/agents/**"),
+        workspace\file("internal/agent/agents-section.md"), workspace\file("internal/agent/skills/**"),
+        workspace\file("libs/gopherbuzz/std/*.buzz"), workspace\file("libs/figure/figure.buzz"),
+        workspace\file("libs/proofread/internal/wordclass/gen/model.gz"),
+        workspace\file("libs/proofread/internal/calibrate/cases/*.txtar"),
+        workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-utils/**/*.go"),
+        workspace\file("cmd/magus-spelldocs/**/*.go"), workspace\file("cmd/magus-configdocs/**/*.go"),
+        workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-skilldocs/**/*.go"),
+        workspace\file("cmd/magus/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
+        workspace\file("cmd/magus/starter/*.buzz"), workspace\file("cmd/magus/completions/*"),
+        workspace\file("proto/gen/**/*.go"), workspace\file("hack/magusfile/ruledocs.buzz"),
+        "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
+        "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
+        "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md",
+        "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md");
+    // These pages contain authored text. A clean must never delete them.
+    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md", "reference/config *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-utils", "contract", "-src", "../internal/spell/contract.go",
@@ -123,13 +141,40 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     ruledocs\write("reference/rules", rules: magus\describe.rule());
-    ctx.needs(convmod\proofread_build);
-    ruledocs\writeProofread("reference/proofread",
-        raw: proc\exec("../libs/conventions/gen/proofread", ["rules"], ".", {}).stdout);
-    go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
+    pruneContentPageCopies(["reference/config.md"]);
+    pruneGeneratedPageCopies("reference/manpage/*.md");
+    pruneGeneratedPageCopies("reference/skills/*.md");
+    pruneGeneratedPageCopies("reference/rules/*.md");
+}
 
+// API pages consume the descriptor with its comments, not the generated Go client.
+export fun api_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(workspace\file("cmd/magus-protodocs/**/*.go"), workspace\file("internal/docs/**/*.go"),
+        workspace\file("internal/render/md/**/*.go"), workspace\file("go.mod"), workspace\file("go.sum"),
+        workspace\file("go.work"), workspace\file("go.work.sum"), workspace\file("proto/gen/descriptor.binpb"));
+    ctx.writesFiles("reference/api/**/*.md");
+    go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
+}
+
+// Proofread's separately built catalog includes its own generated model and fixtures.
+export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(proofreadmod\proofread_build);
+    // Key the source too: a fresh checkout may not have the built binary yet.
+    ctx.readsFiles(proofreadmod\file("**/*.go"), proofreadmod\file("go.mod"), proofreadmod\file("go.sum"),
+        proofreadmod\file("proofread.buzz"), proofreadmod\file("internal/wordclass/gen/model.gz"),
+        proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz"));
+    ctx.writesFiles("reference/proofread/*.md");
+    ruledocs\writeProofread("reference/proofread",
+        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".", {}).stdout);
+    pruneGeneratedPageCopies("reference/proofread/*.md");
+}
+
+// Published measurements do not depend on the Go generators or their toolchain.
+export fun benchmark_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
+    ctx.writesFiles("benchmarks/**/*.md");
     fs\mkdirAll("benchmarks");
-    final contentPages: mut [str] = mut ["reference/config.md", "benchmarks/build-tools.md"];
+    final contentPages: mut [str] = mut ["benchmarks/build-tools.md"];
     foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
         final rel = report.value.split("../benchmarks/agent/reports/").join("");
         final segments = rel.split("/");
@@ -151,10 +196,6 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         + "tags: [benchmarks, performance, measurement]\n---\n\n"
         + fs\readFile("../benchmarks/BENCHMARKS.md"));
     pruneContentPageCopies(contentPages);
-    pruneGeneratedPageCopies("reference/skills/*.md");
-    pruneGeneratedPageCopies("reference/manpage/*.md");
-    pruneGeneratedPageCopies("reference/rules/*.md");
-    pruneGeneratedPageCopies("reference/proofread/*.md");
 }
 
 // Removes macOS-style "name 3.md" copies, and only byte-identical ones: these pages mix
@@ -236,7 +277,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
     ctx.needs(install);
-    final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
+    final CONTENT = ["reference/buzz", "reference/config.md", "reference/spell-contract.md", "benchmarks", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
         "reference/rules", "reference/proofread", "reference/api"];
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
@@ -265,19 +306,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // format runs dprint over the authored pages.
-// The paths go in argv because dprint would otherwise descend into the agents project's
-// own dprint.json (MGS3001). Keep them in step with dprint.json `includes`: every authored
-// directory except guides/integrations/agents, which formats itself.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    // Keep in step with the dprint args below.
-    ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "decisions/**/*.md", "guides/*.md",
-        "guides/integrations/*.md", "guides/integrations/editor/**/*.md", "guides/jobs/**/*.md",
-        "guides/migrating/**/*.md", "guides/setup/**/*.md", "reference/**/*.md");
-    markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./decisions/**/*.md",
-        "./guides/*.md", "./guides/integrations/*.md", "./guides/integrations/editor/**/*.md",
-        "./guides/jobs/**/*.md", "./guides/migrating/**/*.md", "./guides/setup/**/*.md",
-        "./reference/**/*.md"]});
+    // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
+    // own project.
+    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
+        "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
+        "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
+        "reference/**/*.md");
+    markdown["dprint"](ctx);
 }
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.
@@ -333,9 +370,12 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    // Two stages so build waits for lint's format instead of racing it (MGS4008).
+    // Build waits for lint's format instead of racing it (MGS4008).
     ctx.needs(generate, lint, test);
     ctx.needs(build);
+    // GitHub's gha shards delegate figures to the required docs figures job so the two
+    // memory peaks have separate runners. Local CI validates figures after the site.
+    if (!ctx.hasCharm("gha")) { ctx.needs(diagrams_generate); }
 }
 
 // build-playground compiles the playground's WebAssembly interpreter with stock Go and
@@ -358,8 +398,8 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // diagrams-generate lays every figure out from the knowledge graph and fails when the
-// committed files move. It is not a generate stage: generate runs where no symbol index
-// exists. The files stay in docs because writing the root's assets/gen is MGS1012.
+// committed files move. It is a CI stage rather than a generate stage because it writes
+// docs assets. The files stay in docs because writing the root's assets/gen is MGS1012.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";

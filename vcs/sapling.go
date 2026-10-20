@@ -69,6 +69,11 @@ func (v saplingVCS) ParentRef() string { return "p1(.)" }
 // not written speculatively because nothing today can produce the file to test it against.
 func (v saplingVCS) IsSecondaryCheckout(_ string) bool { return false }
 
+func (v saplingVCS) CreateCheckout(context.Context, string, string, string) error {
+	return fmt.Errorf("sl has no command that makes a second working copy over one store, as git worktree, hg share and jj workspace do: %w",
+		decline[saplingName](types.CapCheckoutProvisioner))
+}
+
 func (v saplingVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := vcsExec(ctx, "sl", "root")
 	cmd.Dir = dir

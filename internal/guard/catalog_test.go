@@ -27,7 +27,7 @@ import (
 func TestEveryRuleIsCatalogued(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	require.NotEmpty(t, src.denies, "parsed no denyRuleName constants; this gate stopped looking")
 
 	catalogued := map[string]types.RuleDoc{}
@@ -48,7 +48,7 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 
 // TestEveryRuleSiteNamesACataloguedRule closes the roads around the constants: a verdict
 // filed under a name spelled at the site, under a constant of another type, or under an
-// advisory kind the catalog lacks. A site is a Verdict's Rule, a ShellVerdict's Kind, a
+// advisory kind the catalog lacks. A site is a GuardJudgment's Rule, a ShellVerdict's Kind, a
 // field of type denyRuleName, a parameter of that type or of hint.MarkerKind, and a
 // conversion to one. Each must name a
 // catalogued rule, a workspace rule or nothing; a value computed at run time arrives
@@ -56,7 +56,7 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 	t.Parallel()
 
-	src := ruleSourceOf(t)
+	src := parseRuleSource(t)
 	require.NotEmpty(t, src.sites, "found no site setting a rule; this gate stopped looking")
 	catalogued := map[string]types.RuleDoc{}
 	for _, r := range Rules() {
@@ -81,7 +81,7 @@ func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 func assertCatalogued(t *testing.T, catalogued map[string]types.RuleDoc, by, name string) {
 	t.Helper()
 	doc, ok := catalogued[name]
-	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: add one to denyRuleDocs or advisoryDocs", by, name) {
+	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: declare a ruleDoc var and name it in ruleDocRegistry", by, name) {
 		assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 	}
 	_, ok = builtin.Defaults()[name]
@@ -109,6 +109,77 @@ func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
 	for name := range rows {
 		_, ok := defaults[name]
 		assert.Truef(t, ok, "catalog row %q is missing from builtin.Defaults", name)
+	}
+}
+
+// TestRuleDocsAreNamedAfterTheirRule pins the one naming every row follows, so a job
+// claiming `catalog.go#ruleDocLeaseGate` can derive the name from the rule's id:
+// ruleDoc plus the id in PascalCase. It also counts the declarations, which fails a row
+// the registry holds that is not a top-level var.
+func TestRuleDocsAreNamedAfterTheirRule(t *testing.T) {
+	t.Parallel()
+
+	src := parseRuleSource(t)
+	f, err := parser.ParseFile(token.NewFileSet(), "catalog.go", nil, 0)
+	require.NoError(t, err)
+
+	seen := 0
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok || len(vs.Values) != 1 {
+				continue
+			}
+			lit, ok := vs.Values[0].(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			if typ, ok := lit.Type.(*ast.SelectorExpr); !ok || typ.Sel.Name != "RuleDoc" {
+				continue
+			}
+			seen++
+			var constant string
+			for _, elt := range lit.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok || kv.Key.(*ast.Ident).Name != "Name" {
+					continue
+				}
+				conv, ok := kv.Value.(*ast.CallExpr)
+				require.Truef(t, ok && len(conv.Args) == 1, "%s: Name is string(<rule constant>)", vs.Names[0].Name)
+				constant = conv.Args[0].(*ast.Ident).Name
+			}
+			name, ok := src.values[constant]
+			require.Truef(t, ok, "%s: %q is not a rule constant", vs.Names[0].Name, constant)
+			assert.Equal(t, "ruleDoc"+pascalCase(name), vs.Names[0].Name, "the var for rule %q", name)
+		}
+	}
+	assert.Len(t, ruleDocRegistry, seen, "every filed row is a top-level ruleDoc var")
+}
+
+// pascalCase joins the words of a kebab-case rule id, each capitalized.
+func pascalCase(id string) string {
+	var b strings.Builder
+	for _, word := range strings.Split(id, "-") {
+		b.WriteString(strings.ToUpper(word[:1]) + word[1:])
+	}
+	return b.String()
+}
+
+// TestEnrolledAdvisoriesAreMarkerKinds keeps the enrolled flag honest: only a
+// hint.MarkerKind constant can hold an advisory to one firing per session.
+func TestEnrolledAdvisoriesAreMarkerKinds(t *testing.T) {
+	t.Parallel()
+
+	src := parseRuleSource(t)
+	enrolled := enrolledAdvisories()
+	require.NotEmpty(t, enrolled)
+	for _, name := range enrolled {
+		_, kind := src.kinds[name]
+		assert.Truef(t, kind, "%q is filed as enrolled but no hint.MarkerKind constant declares it", name)
 	}
 }
 
@@ -221,8 +292,8 @@ func isMarkerKind(expr ast.Expr) bool {
 	return ok && pkg.Name == "hint" && sel.Sel.Name == "MarkerKind"
 }
 
-// ruleSourceOf parses every non-test file of the package.
-func ruleSourceOf(t *testing.T) ruleSource {
+// parseRuleSource parses every non-test file of the package.
+func parseRuleSource(t *testing.T) ruleSource {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
 	require.NoError(t, err)
@@ -240,9 +311,9 @@ func ruleSourceOf(t *testing.T) ruleSource {
 		denies: map[string]string{}, kinds: map[string]string{}, values: map[string]string{},
 		workspace: map[string]bool{}, consts: map[string]bool{},
 	}
-	// Where a rule is set: Verdict.Rule and ShellVerdict.Kind by name, every struct field
+	// Where a rule is set: GuardJudgment.Rule and ShellVerdict.Kind by name, every struct field
 	// of type denyRuleName, and every package function's denyRuleName parameters.
-	fields := map[string]map[string]bool{"Verdict": {"Rule": true}, "ShellVerdict": {"Kind": true}}
+	fields := map[string]map[string]bool{"GuardJudgment": {"Rule": true}, "ShellVerdict": {"Kind": true}}
 	params := map[string][]int{}
 	for _, f := range parsed {
 		for _, decl := range f.Decls {
@@ -299,8 +370,16 @@ func ruleSourceOf(t *testing.T) ruleSource {
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.CompositeLit:
-				typ, ok := n.Type.(*ast.Ident)
-				if !ok {
+				typName := ""
+				switch typ := n.Type.(type) {
+				case *ast.Ident:
+					typName = typ.Name
+				case *ast.SelectorExpr:
+					if pkg, ok := typ.X.(*ast.Ident); ok && pkg.Name == "types" && typ.Sel.Name == "GuardJudgment" {
+						typName = typ.Sel.Name
+					}
+				}
+				if typName == "" {
 					return true
 				}
 				for _, elt := range n.Elts {
@@ -308,8 +387,8 @@ func ruleSourceOf(t *testing.T) ruleSource {
 					if !ok {
 						continue
 					}
-					if key, ok := kv.Key.(*ast.Ident); ok && fields[typ.Name][key.Name] {
-						src.sites = append(src.sites, siteOf(fset, kv.Value))
+					if key, ok := kv.Key.(*ast.Ident); ok && fields[typName][key.Name] {
+						src.sites = append(src.sites, classifySite(fset, kv.Value))
 					}
 				}
 			case *ast.AssignStmt:
@@ -318,12 +397,12 @@ func ruleSourceOf(t *testing.T) ruleSource {
 				}
 				for i, lhs := range n.Lhs {
 					if sel, ok := lhs.(*ast.SelectorExpr); ok && assigned[sel.Sel.Name] {
-						src.sites = append(src.sites, siteOf(fset, n.Rhs[i]))
+						src.sites = append(src.sites, classifySite(fset, n.Rhs[i]))
 					}
 				}
 			case *ast.CallExpr:
 				if len(n.Args) == 1 && isDenyRuleName(n.Fun) {
-					src.sites = append(src.sites, siteOf(fset, n))
+					src.sites = append(src.sites, classifySite(fset, n))
 					return true
 				}
 				name := ""
@@ -335,7 +414,7 @@ func ruleSourceOf(t *testing.T) ruleSource {
 				}
 				for _, i := range params[name] {
 					if i < len(n.Args) {
-						src.sites = append(src.sites, siteOf(fset, n.Args[i]))
+						src.sites = append(src.sites, classifySite(fset, n.Args[i]))
 					}
 				}
 			}
@@ -380,9 +459,9 @@ func (src ruleSource) addConst(t *testing.T, spec *ast.ValueSpec) {
 	}
 }
 
-// siteOf classifies the value a rule is set to, seen through a conversion to string,
+// classifySite classifies the value a rule is set to, seen through a conversion to string,
 // denyRuleName or hint.MarkerKind.
-func siteOf(fset *token.FileSet, value ast.Expr) ruleSite {
+func classifySite(fset *token.FileSet, value ast.Expr) ruleSite {
 	s := ruleSite{at: fset.Position(value.Pos()).String()}
 	if call, ok := value.(*ast.CallExpr); ok && len(call.Args) == 1 {
 		if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "string" || isDenyRuleName(call.Fun) || isMarkerKind(call.Fun) {

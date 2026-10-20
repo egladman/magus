@@ -2,15 +2,22 @@ package job
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -18,7 +25,10 @@ import (
 // SymbolReader answers what the knowledge graph knows about a symbol. Supplied by the
 // caller rather than reached for here, because internal/job grades evidence and does not
 // own a graph; the CLI, the MCP tool and the Buzz binding each already hold one.
-type SymbolReader func(ctx context.Context, name string) (SymbolFact, bool)
+//
+// signature is a declared signature to compare with the indexed one, which the fact
+// answers in SignatureMatch; "" reads the symbol only.
+type SymbolReader func(ctx context.Context, name, signature string) (SymbolFact, bool)
 
 // CheckpointObserver answers what a job changed, what is in the tree, and what the graph
 // says about the symbols its gates named.
@@ -35,8 +45,12 @@ type SymbolReader func(ctx context.Context, name string) (SymbolFact, bool)
 // opposite of the guard's fail-open rule: a guard that cannot ask must not refuse a
 // person's own command, while a gate that cannot verify must not certify. Refusing costs
 // a re-run; certifying on an unread diff is the attestation the gate replaced.
+//
+// The regions a diff placed are cached in the footprint cache on ctx, which [Wait] and
+// [GradeGates] set to their store's, so a dry-run store's grading writes none.
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
 	return func(ctx context.Context, row types.Job) (Observed, error) {
+		ctx = withFootprintCache(ctx, footprintCacheIn(ctx).forRow(row))
 		tree := workTree(root, row)
 		var driver types.VCSDriver
 		unresolved := ""
@@ -48,8 +62,11 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		if seen.ChangedFrom != "" {
 			seen.ChangedFrom = base.named
 		}
+		if seen.ChangedKnown {
+			seen.ChangedRevision = checkpointRevision(base.revision)
+		}
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
-		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
+		seen.readSymbols(ctx, row.EffectiveGoals(), symbols)
 		// Workspace only, as for every rule that acts: a default in one person's global
 		// config must not loosen what a check accepts. An unreadable magus.yaml leaves no
 		// defaults, so a check binds only to the charms it names.
@@ -183,6 +200,13 @@ func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root,
 // backend declining the capability is named as that, since it is the one failure nobody
 // can fix by re-running.
 func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) ([]types.RegionChange, bool, string) {
+	cache := footprintCacheIn(ctx)
+	key, keyed := cache.regionsKey(ctx, driver, root, revision, files)
+	if keyed {
+		if regions, ok := cache.read(key); ok {
+			return regions, true, ""
+		}
+	}
 	regions, err := driver.Regions(ctx, root, revision, files)
 	var declined *types.VCSUnsupportedError
 	switch {
@@ -190,6 +214,13 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 		return nil, false, fmt.Sprintf("%s does not report changed regions (%s)", declined.VCS, declined.Capability)
 	case err != nil:
 		return nil, false, fmt.Sprintf("the regions changed since %s could not be read: %v", revision, err)
+	}
+	// A file rewritten while Regions read it would file these regions under content they
+	// were not read from.
+	if keyed {
+		if again, ok := cache.regionsKey(ctx, driver, root, revision, files); ok && again == key {
+			cache.write(key, regions)
+		}
 	}
 	return regions, true, ""
 }
@@ -224,7 +255,21 @@ func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration)
 		return types.JobList{}, err
 	}
 	list := types.NewJobList(rows).Flag(now, staleAfter)
-	list.Overlaps = MeasureOverlaps(ctx, s.root, list.Jobs, list.Overlaps)
+	// A footprint reads each holder's diff, a VCS call per changed path, and a stale row's
+	// holder is the one least likely to still be writing: on a store of abandoned rows,
+	// measuring them all held `magus ls jobs` for minutes.
+	stale := func(o types.JobOverlap) bool {
+		return slices.Contains(list.Stale, o.JobA) || slices.Contains(list.Stale, o.JobB)
+	}
+	measured := MeasureOverlaps(withFootprintCache(ctx, s.footprintCache()), s.root, list.Jobs, slices.DeleteFunc(slices.Clone(list.Overlaps), stale))
+	for i, o := range list.Overlaps {
+		if !stale(o) {
+			list.Overlaps[i], measured = measured[0], measured[1:]
+			continue
+		}
+		list.Overlaps[i].Footprint = &types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
+			Reason: fmt.Sprintf("not measured: %s or %s is stale (jobs.stale_after is %s)", o.JobA, o.JobB, staleAfter)}
+	}
 	return list, nil
 }
 
@@ -284,8 +329,23 @@ func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job
 	if dir == "" {
 		return footprint{reason: fmt.Sprintf("no checkout of this repository has taken %s", id)}
 	}
-	seen := changedSince(ctx, driver, "", dir, diffBase(ctx, driver, dir, rows[i]).revision)
-	return footprint{regions: seen.Regions, known: seen.RegionsKnown, reason: seen.RegionsReason}
+	cache := footprintCacheIn(ctx).forRow(rows[i])
+	key, keyed := cache.footprintKey(ctx, driver, rows[i])
+	if keyed {
+		if regions, ok := cache.read(key); ok {
+			return footprint{regions: regions, known: true}
+		}
+	}
+	seen := changedSince(withFootprintCache(ctx, cache), driver, "", dir, diffBase(ctx, driver, dir, rows[i]).revision)
+	fp := footprint{regions: seen.Regions, known: seen.RegionsKnown, reason: seen.RegionsReason}
+	// The checkout is probed again because a commit or an edit landing while the diff was
+	// read would file this footprint under a state it was not read from.
+	if keyed && fp.known {
+		if again, ok := cache.footprintKey(ctx, driver, rows[i]); ok && again == key {
+			cache.write(key, fp.regions)
+		}
+	}
+	return fp
 }
 
 // compareFootprints collides two footprints' regions, both sides of each.
@@ -354,16 +414,19 @@ func presentIn(root string, row types.Job) ([]string, bool) {
 	return out, true
 }
 
-// readSymbols resolves every symbol the row's gates named. One miss from the reader leaves
-// the whole observation unknown: a graph that answered for three names and failed on the
-// fourth cannot be told apart from one that found the fourth absent, and those mean
-// opposite things to a gate.
-func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[string]SymbolFact, bool) {
+// readSymbols resolves every symbol goals name into o: a signature goal's against its
+// declared signature, every other one's plainly. One miss from the reader leaves the whole
+// observation unknown: a graph that answered for three names and failed on the fourth cannot
+// be told apart from one that found the fourth absent, and those mean opposite things to a
+// gate.
+func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read SymbolReader) {
+	o.Symbols, o.Signatures, o.conflicts, o.SymbolsKnown = nil, nil, nil, false
 	if read == nil {
-		return nil, false
+		return
 	}
-	out := map[string]SymbolFact{}
-	for _, gate := range row.EffectiveGoals() {
+	symbols, signatures := map[string]SymbolFact{}, map[string]SymbolFact{}
+	declared, conflicts := map[string]string{}, map[string]bool{}
+	for _, gate := range goals {
 		if gate.Kind != types.GoalKindSymbol {
 			continue
 		}
@@ -371,14 +434,30 @@ func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[str
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
-			fact, ok := read(ctx, name)
-			if !ok {
-				return nil, false
+			signature := ""
+			if gate.Expect == types.ExpectSignature {
+				signature = gate.Signature
+				if prior, ok := declared[name]; ok && prior != signature {
+					conflicts[name] = true
+					continue
+				}
+				declared[name] = signature
 			}
-			out[name] = fact
+			fact, ok := read(ctx, name, signature)
+			if !ok {
+				return
+			}
+			if gate.Expect == types.ExpectSignature {
+				signatures[name] = fact
+			} else {
+				symbols[name] = fact
+			}
 		}
 	}
-	return out, true
+	o.Symbols, o.Signatures, o.SymbolsKnown = symbols, signatures, true
+	if len(conflicts) > 0 {
+		o.conflicts = conflicts
+	}
 }
 
 // SymbolGraph is the slice of the knowledge graph a symbol gate needs.
@@ -391,13 +470,16 @@ type SymbolGraph interface {
 	// Resolve is how a bare name is checked for other symbols carrying it, since Refs
 	// answers for the top-ranked one alone.
 	Resolve(input string, limit int) []types.KnowledgeMatch
+	// SignatureMatches compares a declared signature with the one the graph holds for
+	// symbol node id; ok is false when it holds none.
+	SignatureMatches(id, declared string) (indexed string, match, ok bool)
 }
 
 // GraphSymbols reads symbol facts off a loaded graph. A nil graph reads as UNREADABLE
 // rather than as a graph with nothing in it, which is the distinction a symbol gate turns
 // on: absent and unknown mean opposite things to a verdict.
 func GraphSymbols(g SymbolGraph) SymbolReader {
-	return func(_ context.Context, name string) (SymbolFact, bool) {
+	return func(_ context.Context, name, signature string) (SymbolFact, bool) {
 		if g == nil {
 			return SymbolFact{}, false
 		}
@@ -420,6 +502,10 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 		fact := SymbolFact{DefinedIn: definedIn, ReferenceCount: out.RefCount}
 		if out.Symbol != name {
 			fact.SameNameDefinitions = sameNameDefinitions(g, name)
+		}
+		if indexed, match, ok := g.SignatureMatches(out.Symbol, signature); ok {
+			fact.Signature = indexed
+			fact.SignatureMatch = signature != "" && match
 		}
 		return fact, true
 	}
@@ -464,4 +550,274 @@ func sameNameDefinitions(g SymbolGraph, name string) []string {
 	}
 	slices.Sort(files)
 	return files
+}
+
+// footprintCache keeps what reading a footprint cost, under the job store's directory, so an
+// unchanged checkout is not diffed again: the regions a diff placed, keyed by what they were
+// read from (see regionsKey), and a row's whole footprint, keyed by the row and the state of
+// its checkout (see footprintKey). Entries sit in one directory per checkpoint revision,
+// which retention prunes by (see [Store.pruneFootprints]).
+//
+// An entry that will not read, or whose recorded key is not the one asked, is a miss, and a
+// miss computes as if there were no cache: it may cost a recomputation and never a verdict.
+// The zero value reads and writes nothing.
+type footprintCache struct {
+	dir string
+	// revision is the checkpoint revision of the row being read; its entries go under it.
+	revision string
+	readOnly bool
+	// build is the running build's identity (see [Location.Build]); empty keys nothing.
+	build string
+}
+
+type footprintCacheKey struct{}
+
+func withFootprintCache(ctx context.Context, c footprintCache) context.Context {
+	return context.WithValue(ctx, footprintCacheKey{}, c)
+}
+
+func footprintCacheIn(ctx context.Context) footprintCache {
+	c, _ := ctx.Value(footprintCacheKey{}).(footprintCache)
+	return c
+}
+
+// footprintsDir is where the store whose ledger is at ledger keeps its footprint cache.
+func footprintsDir(ledger string) string {
+	return filepath.Join(filepath.Dir(ledger), "footprints")
+}
+
+// footprintCache is s's cache; a dry-run store reads it and writes nothing.
+func (s *Store) footprintCache() footprintCache {
+	if s.err != nil || s.path == "" {
+		return footprintCache{}
+	}
+	return footprintCache{dir: footprintsDir(s.path), readOnly: s.dryRun, build: s.build}
+}
+
+// forRow is c filing its entries under row's checkpoint revision.
+func (c footprintCache) forRow(row types.Job) footprintCache {
+	c.revision = checkpointRevision(row.Checkpoint)
+	return c
+}
+
+// regionsKey is what regions read over files since revision in root depend on: the
+// running build, which carries the default funcname patterns, the checkout, its HEAD,
+// which with revision fixes the merge base every file's base side is read at, the
+// configuration placement reads (see regionsConfig), and each file's name and working-tree
+// content. A .gitattributes that changed is among files. false when c is off or any of them
+// cannot be read.
+func (c footprintCache) regionsKey(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) (string, bool) {
+	h, ok := c.keyHash("regions", root, revision)
+	if !ok || driver == nil {
+		return "", false
+	}
+	head, err := driver.FindCommit(ctx, root, "")
+	if err != nil || head.ID == "" {
+		return "", false
+	}
+	fmt.Fprintf(h, "%s\x00", head.ID)
+	if !regionsConfig(ctx, h, driver, root) {
+		return "", false
+	}
+	for _, f := range files {
+		fmt.Fprintf(h, "%s\x00%s\x00%s\x00", f.Path, f.PrevPath, f.Status)
+		if !digestPath(h, root, f.Path, false) {
+			return "", false
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// footprintKey is what row's footprint depends on: the row as last written, its checkout,
+// that checkout's HEAD and uncommitted state (see checkoutState) and the configuration
+// placement reads there (see regionsConfig), read through driver. false when c is off or
+// the checkout cannot be read.
+func (c footprintCache) footprintKey(ctx context.Context, driver types.VCSDriver, row types.Job) (string, bool) {
+	h, ok := c.keyHash("footprint", row.CheckoutRoot, row.Checkpoint)
+	if !ok || driver == nil {
+		return "", false
+	}
+	fmt.Fprintf(h, "%s\x00%d\x00%s\x00", row.ID, row.Updated, row.ReportedBase)
+	if !checkoutState(ctx, h, driver, row.CheckoutRoot) || !regionsConfig(ctx, h, driver, row.CheckoutRoot) {
+		return "", false
+	}
+	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// regionsConfigReader is a backend that says what configuration its Regions reads besides
+// the files and revisions it is handed, such as git's diff.<driver>.xfuncname and the
+// attribute files outside the tree that pick each file's driver.
+type regionsConfigReader interface {
+	RegionsConfig(ctx context.Context, root string) (string, error)
+}
+
+// regionsConfig folds into h the configuration driver places lines in root with. A backend
+// that cannot say what it reads keys nothing, since an edit to its configuration would then
+// answer from an entry placed under the old one.
+func regionsConfig(ctx context.Context, h hash.Hash, driver types.VCSDriver, root string) bool {
+	reader, ok := driver.(regionsConfigReader)
+	if !ok {
+		return false
+	}
+	cfg, err := reader.RegionsConfig(ctx, root)
+	if err != nil {
+		return false
+	}
+	fmt.Fprintf(h, "%d\x00%s", len(cfg), cfg)
+	return true
+}
+
+// keyHash starts a key of kind with the running build's identity and fields. The build is
+// read once per process by whoever opened the Store, not stat'ed here per key (see
+// BenchmarkFootprintKeyHash): a file rebuilt underneath the process must not speak for the
+// code it loaded.
+func (c footprintCache) keyHash(kind string, fields ...string) (hash.Hash, bool) {
+	if c.dir == "" || c.revision == "" || c.build == "" {
+		return nil, false
+	}
+	h := sha256.New()
+	fmt.Fprintf(h, "%s/2\x00%s\x00", kind, c.build)
+	for _, f := range fields {
+		fmt.Fprintf(h, "%s\x00", f)
+	}
+	return h, true
+}
+
+// checkoutState folds dir's HEAD and uncommitted state into h: the backend's diff of the
+// tracked changes, which carries a deletion or rename no file content shows, and the content
+// of every changed path, untracked directories walked. A clean checkout costs two probes.
+func checkoutState(ctx context.Context, h hash.Hash, driver types.VCSDriver, dir string) bool {
+	head, err := driver.FindCommit(ctx, dir, "")
+	if err != nil || head.ID == "" {
+		return false
+	}
+	dirty, err := driver.DirtyFiles(ctx, dir, nil)
+	if err != nil {
+		return false
+	}
+	fmt.Fprintf(h, "%s\x00%d\x00", head.ID, len(dirty))
+	if len(dirty) == 0 {
+		return true
+	}
+	patch, err := driver.DirtyDiff(ctx, dir, nil)
+	if err != nil {
+		return false
+	}
+	fmt.Fprintf(h, "%d\x00%s", len(patch), patch)
+	dirty = slices.Clone(dirty)
+	slices.Sort(dirty)
+	for _, p := range dirty {
+		fmt.Fprintf(h, "%s\x00", p)
+		if !digestPath(h, dir, strings.TrimSuffix(p, "/"), true) {
+			return false
+		}
+	}
+	return true
+}
+
+// digestPath folds the content at root/rel into h: absent, a symlink's target, a file's
+// bytes, or, when walk is set, every file beneath a directory. A directory without walk, or
+// anything unreadable, reports false.
+func digestPath(h hash.Hash, root, rel string, walk bool) bool {
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	info, err := os.Lstat(full)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		fmt.Fprint(h, "absent\x00")
+		return true
+	case err != nil:
+		return false
+	case info.Mode()&fs.ModeSymlink != 0:
+		target, err := os.Readlink(full)
+		if err != nil {
+			return false
+		}
+		fmt.Fprintf(h, "link\x00%s\x00", target)
+		return true
+	case info.IsDir():
+		if !walk {
+			return false
+		}
+		ok := true
+		err := filepath.WalkDir(full, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			sub, err := filepath.Rel(root, p)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(h, "%s\x00", filepath.ToSlash(sub))
+			if !digestPath(h, root, filepath.ToSlash(sub), false) {
+				ok = false
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		return err == nil && ok
+	case !info.Mode().IsRegular():
+		return false
+	}
+	body, err := os.ReadFile(full)
+	if err != nil {
+		return false
+	}
+	fmt.Fprintf(h, "file\x00%d\x00", len(body))
+	_, _ = h.Write(body)
+	return true
+}
+
+// footprintEntry is one cached read. Key is recorded so a file that answers to another key
+// (a truncated name, a hand edit) is a miss rather than an answer.
+type footprintEntry struct {
+	Key     string               `json:"key"`
+	Regions []types.RegionChange `json:"regions"`
+}
+
+func (c footprintCache) entryPath(key string) string {
+	return filepath.Join(c.dir, revisionDir(c.revision), key+".json")
+}
+
+func (c footprintCache) read(key string) ([]types.RegionChange, bool) {
+	raw, err := os.ReadFile(c.entryPath(key))
+	if err != nil {
+		return nil, false
+	}
+	var e footprintEntry
+	if err := json.Unmarshal(raw, &e); err != nil || e.Key != key {
+		return nil, false
+	}
+	return e.Regions, true
+}
+
+// write files regions under key. Best effort: a cache that cannot be written is a later
+// miss, never a failed read.
+func (c footprintCache) write(key string, regions []types.RegionChange) {
+	if c.readOnly {
+		return
+	}
+	raw, err := json.Marshal(footprintEntry{Key: key, Regions: regions})
+	if err != nil {
+		return
+	}
+	p := c.entryPath(key)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	_ = file.WriteFileAtomic(p, raw, 0o644)
+}
+
+// revisionDir is the directory a revision's entries go in: the revision itself when it is
+// a plain name, as every backend's commit id is, else a digest of it.
+func revisionDir(revision string) string {
+	plain := revision != "" && revision != "." && revision != ".." && len(revision) <= 128 &&
+		strings.Trim(revision, "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-") == ""
+	if plain {
+		return revision
+	}
+	sum := sha256.Sum256([]byte(revision))
+	return "rev-" + hex.EncodeToString(sum[:8])
 }

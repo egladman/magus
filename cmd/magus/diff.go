@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -32,12 +32,14 @@ import (
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/gopherbuzz"
-	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -50,24 +52,26 @@ import (
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
 func diffCmd(ctx context.Context, root string, args []string) error {
-	var rf *gen.DiffFlags
+	var rf *flaggen.DiffFlags
 	var gates types.DiffOptions
 	rest, err := cmdParse("diff", args, func(fs *flag.FlagSet) {
-		rf = gen.BindDiff(fs)
-		fs.Float64Var(&gates.MinShare, gen.FlagDiffConformanceMinShare, 0,
-			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)")
+		rf = flaggen.BindDiff(fs)
+		fs.Float64Var(&gates.MinShare, flaggen.FlagDiffConformanceMinShare, 0,
+			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported; defaults to knowledge.conformance.gates.min_share")
 		fs.Usage = func() { diffUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
 	}
+	// compat(until: the advice action reads knowledge.conformance.gates): the action passes its own
+	// 5 and 0.8 on every run, so a flag overrides the configured gate even when nobody chose it.
 	gates.MinCohort = rf.ConformanceMinCohort
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
-		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
+		return exit.Usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
 	rf.Thread = strings.TrimSpace(rf.Thread)
 	if rf.Thread != "" && (rf.Ack || rf.Unread || rf.Impact) {
-		return usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
+		return exit.Usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
@@ -92,14 +96,14 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// re-emitting a filtered patch is a different feature from reading one. Refused rather
 		// than ignored: silently reading the whole patch after being asked for part of it is
 		// how a reader concludes they have seen a file they have not.
-		return usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
+		return exit.Usagef("magus diff: %s is already the changeset somebody chose, so it cannot be narrowed to %s. "+
 			"Narrow it before handing it over, or read the working tree or a range instead",
 			src.label, strings.Join(scopePaths, ", "))
 	}
 	if rf.Watch && src.kind != inputWorkingTree {
 		// stdin is consumed once and a patch file is a snapshot someone handed us; re-reading
 		// either on every tree change would re-render identical output forever.
-		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
 	if rf.Ack && !src.addressable() {
 		// A receipt fingerprints content magus can name, and a patch describes files that may
@@ -108,10 +112,10 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		//
 		// A revision range IS nameable, so it is admitted: its receipts fingerprint the file at
 		// that revision, never the reader's own checkout.
-		return usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
+		return exit.Usagef("magus diff: --ack fingerprints content magus can address, so it cannot be combined with %s", src.label)
 	}
 	if rf.Ack && rf.Watch {
-		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
+		return exit.Usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
 	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
 	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
@@ -128,7 +132,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// the documented taxonomy separates from a 1 (the changeset could not be read).
 		slog.ErrorContext(ctx, "diff --ack records that a person read this, so it needs an interactive terminal",
 			attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -148,7 +152,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
 		// The viewer can join a server's review, which ran with the server's gates, so the
 		// flags could not be honored there.
-		return usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
+		return exit.Usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
 	}
 	render := func() error { return renderDiff(ctx, m, src, opts, rf, gates, root, tui, rf.Impact, scopePaths) }
 	if rf.Watch {
@@ -197,14 +201,14 @@ func revRangeFromFlag(rev string) (diffInput, error) {
 	base, head, ok := strings.Cut(rev, "...")
 	if !ok {
 		if b, _, two := strings.Cut(rev, ".."); two {
-			return diffInput{}, usagef("magus diff: --rev takes base...head with three dots, got %q. "+
+			return diffInput{}, exit.Usagef("magus diff: --rev takes base...head with three dots, got %q. "+
 				"Three dots is what head added since it diverged; two dots would also count everything "+
 				"%s gained meanwhile, which the branch author did not write", rev, b)
 		}
-		return diffInput{}, usagef("magus diff: --rev takes a range written base...head, got %q", rev)
+		return diffInput{}, exit.Usagef("magus diff: --rev takes a range written base...head, got %q", rev)
 	}
 	if base == "" || head == "" {
-		return diffInput{}, usagef("magus diff: --rev needs both ends, got %q. "+
+		return diffInput{}, exit.Usagef("magus diff: --rev needs both ends, got %q. "+
 			"magus does not fill in a default: which branch you are comparing against is the "+
 			"question, not a detail", rev)
 	}
@@ -229,11 +233,11 @@ func scopeFromArgs(rest []string) ([]string, error) {
 	out := make([]string, 0, len(rest))
 	for _, a := range rest {
 		if a == "-" {
-			return nil, usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
+			return nil, exit.Usagef("magus diff: `-` reads a patch on stdin, so it is a source rather than a path. " +
 				"Write it as `--patch -`, and keep the positionals for the paths you want to narrow to")
 		}
 		if strings.HasPrefix(a, "-") {
-			return nil, usagef("magus diff: %q looks like a flag magus does not have. "+
+			return nil, exit.Usagef("magus diff: %q looks like a flag magus does not have. "+
 				"Positionals are paths that narrow the changeset; the changeset itself is named by "+
 				"--rev, --patch, or the working tree by default", a)
 		}
@@ -248,11 +252,11 @@ func scopeFromArgs(rest []string) ([]string, error) {
 // plausible list of the reader's OWN uncommitted edits under exit 0: the worst possible failure,
 // since the output looks exactly like an answer to the question they asked. --rev is that message's
 // successor: the ref has a door now, so the refusal became a feature.
-func diffSourceFromFlags(rf *gen.DiffFlags) (diffInput, error) {
+func diffSourceFromFlags(rf *flaggen.DiffFlags) (diffInput, error) {
 	patch, rev := strings.TrimSpace(rf.Patch), strings.TrimSpace(rf.Rev)
 	switch {
 	case patch != "" && rev != "":
-		return diffInput{}, usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
+		return diffInput{}, exit.Usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
 	case rev != "":
 		return revRangeFromFlag(rev)
 	case patch == "-":
@@ -283,7 +287,7 @@ func gitExternalDiffRefusal(rest []string) error {
 	if len(rest) != 7 || os.Getenv("GIT_DIFF_PATH_TOTAL") == "" {
 		return nil
 	}
-	return usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
+	return exit.Usagef("magus diff: git invoked this as an external diff, one file at a time (%q). "+
 		"magus reports on a whole changeset, so it cannot answer per file. "+
 		"Use git's pager instead, which hands over the entire diff at once: "+
 		"`git config pager.diff '"+hint.Diff.With("--patch", "-")+"'` - then plain `git diff` renders through magus, "+
@@ -316,7 +320,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 //
 // It takes the terminal as an ARGUMENT rather than probing it, which is what makes this
 // testable without a pty.
-func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm, enabled bool) bool {
+func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
 	switch {
 	case rf.NoTui, !enabled:
 		return false
@@ -371,7 +375,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.Options, rf *flaggen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
@@ -480,7 +484,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 
 	var pre *diffImpact
 	if impact {
-		p, err := collectImpact(ctx, m, rootOverride, rev)
+		p, err := collectImpact(ctx, m, rootOverride, rev, patch, src.kind == inputWorkingTree)
 		if err != nil {
 			return fmt.Errorf("magus diff: %w", err)
 		}
@@ -506,13 +510,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
 		// every unread hunk rather than every file that holds one.
 		if rev.Unread != nil {
-			return emitNames(review.HunkNames(types.Diff{Files: shown}))
+			return emitNames(os.Stdout, review.HunkNames(types.Diff{Files: shown}))
 		}
 		paths := make([]string, 0, len(shown))
 		for _, f := range shown {
 			paths = append(paths, f.Path)
 		}
-		return emitNames(paths)
+		return emitNames(os.Stdout, paths)
 	}
 	if rev.Unread != nil {
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
@@ -574,7 +578,7 @@ func short(rev string) string {
 // threadPrint is what printThread reads one thread from. The patch, the changeset annotation
 // and the notes join are the CLI's own; assembling a record from them is review.NewThreadInput's.
 type threadPrint struct {
-	opts OutputOptions
+	opts output.Options
 	// id names the thread: its first comment, or any reply in it.
 	id       string
 	patch    string
@@ -613,12 +617,12 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 			for _, f := range in.Changeset.Files {
 				for _, h := range f.Hunks {
 					if f.Path == rec.Path && h.Index == rec.Hunk.Index {
-						return emitNames([]string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
+						return emitNames(os.Stdout, []string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
 					}
 				}
 			}
 		}
-		return emitNames([]string{rec.Path})
+		return emitNames(os.Stdout, []string{rec.Path})
 	}
 	for _, line := range review.ThreadLines(rec) {
 		fmt.Println(line)
@@ -717,7 +721,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 	fail := func(err error) {
 		rev.Notes = append(rev.Notes, "layout: the package checks could not run: "+err.Error())
 	}
-	graph, err := m.KnowledgeGraphWithSymbols(ctx)
+	graph, err := viewInternals(m).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		fail(err)
 		return
@@ -739,9 +743,14 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 			generated[e.Path] = true
 		}
 	}
-	found := graph.Layout(knowledge.LayoutChange{
-		Added: added, Generated: generated, MinCohort: opts.MinCohort, MinShare: opts.MinShare,
-	})
+	conformance, err := m.ConformanceOptions()
+	if err != nil {
+		fail(err)
+		return
+	}
+	// compat: see diffCmd.
+	gates := conformance.Gates.Override(opts.MinCohort, opts.MinShare)
+	found := graph.Layout(knowledge.LayoutChange{Added: added, Generated: generated, Gates: gates})
 	for dir, checks := range found {
 		i := slices.IndexFunc(rev.Files, func(f types.DiffFile) bool { return path.Dir(f.Path) == dir })
 		if i >= 0 {
@@ -1463,9 +1472,11 @@ func diffUsage(w io.Writer) {
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
 		"so the base must come from the same indexers this tree is indexed with.")
 	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-cohort ",
-		"how many declarations a conformance norm needs before a changed symbol is compared against it (default 5)")
+		"how many declarations a conformance norm needs before a changed symbol is compared against it;",
+		"defaults to knowledge.conformance.gates.min_cohort")
 	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-share  ",
-		"the share of a norm's declarations, above 0 and at most 1, that must agree (default 0.8).",
+		"the share of a norm's declarations, above 0 and at most 1, that must agree;",
+		"defaults to knowledge.conformance.gates.min_share.",
 		"Both apply to the printed report, not the viewer.")
 }
 
@@ -1673,12 +1684,19 @@ func diffAPILines(api *types.DiffAPI) []string {
 	if api.Likely != api.Floor {
 		head += fmt.Sprintf(", likely %s (%d public signature(s) changed)", api.Likely, api.Signature)
 	}
-	return []string{
+	lines := []string{
 		head + " against " + api.Base,
 		fmt.Sprintf("  public symbols: %d added, %d removed, %d re-signed, %d changed in body only",
 			api.Added, api.Removed, api.Signature, api.Body),
-		"  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely",
 	}
+	if api.Stage.Known() {
+		stage := "  newest release " + api.Stage.Tag
+		if api.Stage.Major == 0 {
+			stage += ": below 1.0 a major floor ships as a minor release"
+		}
+		lines = append(lines, stage)
+	}
+	return append(lines, "  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely")
 }
 
 // diffFileFacts is what magus knows about one changed file, one claim per line.
@@ -1815,7 +1833,7 @@ type diffImpact struct {
 	// revision, which is a different fact from a base that is merely old.
 	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
 	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
-	Rationale   []rationaleHit     `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
+	LeftBehind  *impactLeftBehind  `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
 	// reasoning half of the record types.DiffTouch carries: that one names the files an agent
 	// had READ, this one the questions it put to the graph.
@@ -1898,7 +1916,7 @@ const impactListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) (diffImpact, error) {
+func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) (diffImpact, error) {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -1940,7 +1958,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 		return diffImpact{}, aerr
 	}
 	p.Anchors = anchors
-	p.Rationale = collectRationale(m.Root(), rev)
+	p.LeftBehind = collectLeftBehind(ctx, m, rootOverride, rev, patch, working)
 	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
 	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
@@ -2058,7 +2076,7 @@ func impactLines(p diffImpact) []string {
 		impactCostLines(p.Cost),
 		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		impactAnchorLines(p.Anchors),
-		impactRationaleLines(p.Rationale),
+		impactLeftBehindLines(p.LeftBehind),
 		impactEvidenceLines(p.Evidence, p.EvidenceGap),
 		impactReviewLines(p.Review),
 	}
@@ -2461,67 +2479,109 @@ func (e *earnedSync) finished() []review.Receipt {
 // contains the space too, so it matches itself.
 const compatMarker = "compat(until: "
 
-// rationaleHit is one deliberate decision recorded beside code this change touches.
-type rationaleHit struct {
-	Path string `json:"path"      yaml:"path"`
-	Line int    `json:"line"      yaml:"line"`
-	// Until is the retirement condition the marker declares. It is carried rather than the
-	// whole comment because the condition is the part that tells a reader whether their
-	// edit is the thing that retires it.
-	Until string `json:"until" yaml:"until"`
+// deprecatedMarker opens Go's deprecation paragraph, the other way code says it stays for a
+// caller that has not moved.
+const deprecatedMarker = "Deprecated:"
+
+// impactLeftBehind is what a change keeps alive or leaves unused: the markers it added
+// (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
+// still defined. Facts, not reasons: a marker says how long code stays, never whether it
+// should.
+type impactLeftBehind struct {
+	Markers []leftMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
+	// Unreferenced is readSymbolDelta's Left, known only when UnreferencedKnown is;
+	// UnreferencedReason says why it is not.
+	Unreferenced       []string `json:"unreferenced,omitempty" yaml:"unreferenced,omitempty"`
+	UnreferencedKnown  bool     `json:"unreferenced_known" yaml:"unreferenced_known"`
+	UnreferencedReason string   `json:"unreferenced_reason,omitempty" yaml:"unreferenced_reason,omitempty"`
 }
 
-// rationaleShown bounds the list for the same reason every other section is bounded: a
-// report nobody scrolls to the end of has told the reader less than a count would.
-const rationaleShown = 8
+// leftMarker is one marker an added line carries.
+type leftMarker struct {
+	Path string `json:"path" yaml:"path"`
+	Line int    `json:"line" yaml:"line"`
+	// Marker is compatMarker or deprecatedMarker as written, and Text what follows it: the
+	// retirement condition, or the deprecation's advice.
+	Marker string `json:"marker" yaml:"marker"`
+	Text   string `json:"text" yaml:"text"`
+}
 
-// collectRationale finds the compat(until:) markers in the files this change touches.
-//
-// Notes cover the decisions somebody wrote a note about, which is the small minority. This
-// covers the ones recorded where they are actually kept: in a comment beside the code, under
-// the marker this repository's conventions require. Without this, a reader proposing to undo a
-// decision never meets the explanation sitting two lines above the thing they are changing.
-//
-// FILE-level, not hunk-level, and the wording says so. Deciding whether a marker sits inside
-// a changed region needs the hunk ranges, and a marker fifty lines from your edit still
-// governs the code you are in; claiming otherwise would be a precision this does not have.
-//
-// Generated files are skipped: a marker there was written by whatever produced the file.
-func collectRationale(root string, rev types.Diff) []rationaleHit {
-	var out []rationaleHit
+// collectLeftBehind reads the markers from the patch's added lines, in any file the change
+// did not generate, and the symbols it left unused from the graph. Only a working-tree diff
+// reads symbols: the graph describes the tree on disk, which is the head of no other diff.
+func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) *impactLeftBehind {
+	generated := map[string]bool{}
 	for _, f := range rev.Files {
-		if f.Generated() {
+		generated[f.Path] = f.Generated()
+	}
+	l := &impactLeftBehind{Markers: addedMarkers(patch, generated)}
+	if !working {
+		l.UnreferencedReason = "read only for the working tree, the tree the symbol graph describes"
+		return l
+	}
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		l.UnreferencedReason = "no version control answered here"
+		return l
+	}
+	head, err := res.VCS.FindCommit(ctx, m.Root(), "")
+	if err != nil || head.ID == "" {
+		l.UnreferencedReason = "the checkout has no HEAD to compare with"
+		return l
+	}
+	g, err := loadKnowledgeGraph(ctx, rootOverride, false, false, true)
+	if err != nil {
+		l.UnreferencedReason = fmt.Sprintf("the symbol graph could not be read: %v", err)
+		return l
+	}
+	delta, ok := readSymbolDelta(ctx, m.Root(), g, res.VCS, head.ID, review.ChangedPaths(rev))
+	if !ok {
+		l.UnreferencedReason = fmt.Sprintf("the symbol index does not cover the changed files; `%s` builds it", hint.GraphBuild)
+		return l
+	}
+	l.Unreferenced, l.UnreferencedKnown = delta.Left, true
+	return l
+}
+
+// addedMarkers are the markers on the added lines of patch, in a comment, outside the paths
+// generated marks.
+func addedMarkers(patch string, generated map[string]bool) []leftMarker {
+	var out []leftMarker
+	for _, f := range changeset.ParseHunks(patch) {
+		if generated[f.Path] {
 			continue
 		}
-		out = append(out, compatMarkersIn(root, f.Path)...)
+		for _, h := range f.Hunks {
+			line := h.NewStart
+			for _, raw := range h.Lines {
+				switch {
+				case strings.HasPrefix(raw, "+"):
+					if mk, ok := lineMarker(raw[1:]); ok {
+						mk.Path, mk.Line = f.Path, line
+						out = append(out, mk)
+					}
+					line++
+				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
+				default:
+					line++
+				}
+			}
+		}
 	}
 	return out
 }
 
-// compatMarkersIn scans one file. An unreadable file yields nothing: a deleted path is the
-// common case and is not worth a line of report.
-func compatMarkersIn(root, rel string) []rationaleHit {
-	fh, err := os.Open(filepath.Join(root, filepath.FromSlash(rel)))
-	if err != nil {
-		return nil
-	}
-	defer fh.Close()
-
-	var out []rationaleHit
-	sc := bufio.NewScanner(fh)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for line := 1; sc.Scan(); line++ {
-		idx := strings.Index(sc.Text(), compatMarker)
-		if idx < 0 || !inAComment(sc.Text()[:idx]) {
-			continue
+// lineMarker is the marker text carries in a comment, if any.
+func lineMarker(text string) (leftMarker, bool) {
+	if idx := strings.Index(text, compatMarker); idx >= 0 && inAComment(text[:idx]) {
+		if until := compatUntil(text[idx:]); until != "" {
+			return leftMarker{Marker: strings.TrimSpace(compatMarker), Text: until}, true
 		}
-		until := compatUntil(sc.Text()[idx:])
-		if until == "" {
-			continue
-		}
-		out = append(out, rationaleHit{Path: rel, Line: line, Until: until})
 	}
-	return out
+	if idx := strings.Index(text, deprecatedMarker); idx >= 0 && inAComment(text[:idx]) {
+		return leftMarker{Marker: deprecatedMarker, Text: strings.TrimSpace(text[idx+len(deprecatedMarker):])}, true
+	}
+	return leftMarker{}, false
 }
 
 // inAComment reports whether the text preceding a marker opens a comment.
@@ -2555,22 +2615,34 @@ func compatUntil(s string) string {
 	return strings.TrimSpace(rest)
 }
 
-// impactRationaleLines renders the section, including its empty form.
-func impactRationaleLines(hits []rationaleHit) []string {
-	if len(hits) == 0 {
-		return []string{"RATIONALE: no compat(until:) marker in the files you changed"}
+// impactLeftBehindLines renders the section, including its empty forms.
+func impactLeftBehindLines(l *impactLeftBehind) []string {
+	if l == nil {
+		return []string{"LEFT BEHIND: not measured"}
 	}
-	out := []string{fmt.Sprintf("RATIONALE: %d compat(until:) marker%s in files you changed - each names why the code stays",
-		len(hits), plural(len(hits), "", "s"))}
-	shown := hits
-	if len(shown) > rationaleShown {
-		shown = shown[:rationaleShown]
+	var out []string
+	if len(l.Markers) == 0 {
+		out = append(out, "LEFT BEHIND: no compat(until:) or Deprecated: marker added")
+	} else {
+		out = append(out, fmt.Sprintf("LEFT BEHIND: %d compat(until:) or Deprecated: marker%s added",
+			len(l.Markers), plural(len(l.Markers), "", "s")))
+		for _, mk := range impactCap(l.Markers) {
+			out = append(out, fmt.Sprintf("      %s:%d %s %s", mk.Path, mk.Line, mk.Marker, mk.Text))
+		}
+		out = append(out, impactMoreLine(len(l.Markers))...)
 	}
-	for _, h := range shown {
-		out = append(out, fmt.Sprintf("      %s:%d until %s", h.Path, h.Line, h.Until))
-	}
-	if len(hits) > len(shown) {
-		out = append(out, fmt.Sprintf("      and %d more", len(hits)-len(shown)))
+	switch {
+	case !l.UnreferencedKnown:
+		out = append(out, "      symbols left unused: not measured, "+cmp.Or(l.UnreferencedReason, "nothing read them"))
+	case len(l.Unreferenced) == 0:
+		out = append(out, "      no symbol it stopped using is still defined")
+	default:
+		out = append(out, fmt.Sprintf("      %d symbol%s lost the last use here and %s still defined",
+			len(l.Unreferenced), plural(len(l.Unreferenced), "", "s"), plural(len(l.Unreferenced), "is", "are")))
+		for _, name := range impactCap(l.Unreferenced) {
+			out = append(out, "        "+name)
+		}
+		out = append(out, impactMoreLine(len(l.Unreferenced))...)
 	}
 	return out
 }
@@ -2700,7 +2772,7 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	// The caller's already-loaded workspace is attached rather than loaded again:
 	// loadMagus is once-per-process and panics on a second call with a different root.
 	if m != nil {
-		ctx = types.WithWorkspace(ctx, m)
+		ctx = types.WithWorkspace(ctx, viewInternals(m))
 	}
 	return collectAdvice(ctx, dir, localAdvisors, base)
 }
@@ -3072,7 +3144,7 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	for _, p := range paths {
 		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
 		if !inChange[clean] {
-			return types.Diff{}, usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
+			return types.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `"+hint.Diff.With("-o", "name")+"` lists them", p)
 		}
 		want[clean] = true
 	}

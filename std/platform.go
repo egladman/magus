@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/sys/mem"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module platform -lang buzz -out ../internal/interp/bindings/gen/platform.go
+//go:generate go run ../cmd/magus-utils bindings -module platform -lang buzz -out ../internal/interp/bindings/gen/platform.go -pkg bindgen
 
 // HostPlatform returns the Docker/OCI platform triple (GOOS, OCI arch, ARM variant).
 // variant is "v6"/"v7"/"v8" for ARM, "" otherwise; arm reads /proc/cpuinfo on Linux.
@@ -75,8 +75,6 @@ func armVariant() string {
 	}
 	return ""
 }
-
-func init() { Register(Platform) }
 
 // Platform is the "platform" host module: it coheres the many OS/architecture
 // spellings open-source projects use (aarch64 vs arm64, Darwin vs macOS vs mac)

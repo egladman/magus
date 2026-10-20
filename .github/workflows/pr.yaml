@@ -58,13 +58,9 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Squash merges make the title the subject main records.
-      - name: Title is a conventional commit subject
-        run: magus run pr-title:gha .
-
       # The text arrives through env and the joined flag form, so the shell never parses it
-      # and a description opening with `-` stays a value. Runs even when the title failed,
-      # so one push reports every check.
+      # and a description opening with `-` stays a value. This target checks the title and
+      # description through the same proofread judge the local pull-request-text guard uses.
       - name: Title and description follow the proofread rules
         if: ${{ !cancelled() }}
         env:

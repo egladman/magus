@@ -14,7 +14,7 @@ import (
 
 // Registered at init for the reason workspace_provider.go gives: running the provider
 // means running a Buzz spell, which only this layer can do.
-func init() {
+func init() { //nolint:gochecknoinits // internal/workspace cannot link the Buzz VM; the runner registers from the layer that can
 	workspace.RegisterLifecycleRunner(runLifecycleProvider)
 }
 

@@ -4,12 +4,13 @@
 
 Up: [workspace index](../MAGUS.md)
 
-Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), [libs/conventions](../libs/conventions/MAGUS.md), libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
+Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/proofread](../libs/proofread/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
 
 Query: `magus query project=docs`
 
 | Target                          | What it does                                                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `content-generate`              | content-generate composes independently cached families with disjoint outputs.                                                                                           |
 | `site-generate`                 | site-generate renders and publishes the site into gen/.                                                                                                                  |
 | `generate`                      | generate regenerates the committed derived files and fails on drift.                                                                                                     |
 | `format`                        | format runs dprint over the authored pages.                                                                                                                              |
@@ -25,7 +26,10 @@ Query: `magus query project=docs`
 | `render`                        | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                      |
 | `install`                       | install installs node_modules through the typescript spell's pnpm-install op.                                                                                            |
 | `index-generate`                | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.                                                                                   |
-| `content-generate`              | content-generate regenerates the committed docs Markdown derived from the Go source tree.                                                                                |
+| `catalog-docs-generate`         | Reference, CLI, agent and example pages share the host runtime and generated bindings.                                                                                   |
+| `api-docs-generate`             | API pages consume the descriptor with its comments, not the generated Go client.                                                                                         |
+| `proofread-docs-generate`       | Proofread's separately built catalog includes its own generated model and fixtures.                                                                                      |
+| `benchmark-docs-generate`       | Published measurements do not depend on the Go generators or their toolchain.                                                                                            |
 | `changelog-page`                | changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.                                                                                       |
 | `conventions`                   | conventions holds every doc page to docs/conventions.md and to what it documents.                                                                                        |
 | `buzz-test`                     | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.                                                                                             |

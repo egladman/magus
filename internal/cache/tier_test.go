@@ -23,14 +23,14 @@ import (
 // network was not touched rather than infer it. putErr, when set, is what every put
 // answers.
 type countingBackend struct {
-	RemoteBackend
+	types.CacheBackend
 	gets, puts, has atomic.Int64
 	putErr          error
 }
 
 func (b *countingBackend) GetArtifact(ctx context.Context, ns, key string) (io.ReadCloser, error) {
 	b.gets.Add(1)
-	return b.RemoteBackend.GetArtifact(ctx, ns, key)
+	return b.CacheBackend.GetArtifact(ctx, ns, key)
 }
 
 func (b *countingBackend) PutArtifact(ctx context.Context, ns, key string, r io.Reader) error {
@@ -39,12 +39,12 @@ func (b *countingBackend) PutArtifact(ctx context.Context, ns, key string, r io.
 		_, _ = io.Copy(io.Discard, r)
 		return b.putErr
 	}
-	return b.RemoteBackend.PutArtifact(ctx, ns, key, r)
+	return b.CacheBackend.PutArtifact(ctx, ns, key, r)
 }
 
 func (b *countingBackend) HasArtifact(ctx context.Context, ns, key string) (bool, error) {
 	b.has.Add(1)
-	return b.RemoteBackend.HasArtifact(ctx, ns, key)
+	return b.CacheBackend.HasArtifact(ctx, ns, key)
 }
 
 func newCountingBackend(t *testing.T) (*countingBackend, string) {
@@ -52,12 +52,12 @@ func newCountingBackend(t *testing.T) (*countingBackend, string) {
 	dir := t.TempDir()
 	fs, err := NewFSRemoteBackend(dir)
 	require.NoError(t, err)
-	return &countingBackend{RemoteBackend: fs}, dir
+	return &countingBackend{CacheBackend: fs}, dir
 }
 
 // openTiered opens a cache over backend signed with one key and trusting it, then
 // applies opts.
-func openTiered(t *testing.T, backend RemoteBackend, sign bool, opts ...Option) *Cache {
+func openTiered(t *testing.T, backend types.CacheBackend, sign bool, opts ...Option) *Cache {
 	t.Helper()
 	pub, seed := genKeypair(t)
 	all := []Option{WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub})}
@@ -399,10 +399,10 @@ func TestTierEvictionOrdersByLastUse(t *testing.T) {
 	assert.Error(t, err, "the least recently used entry survived")
 }
 
-// A put the store answers with ErrRemoteExists is neither an upload nor a failure.
+// A put the store answers with types.ErrCacheExists is neither an upload nor a failure.
 func TestTierAlreadyStoredIsNeitherUploadNorFailure(t *testing.T) {
 	backend, _ := newCountingBackend(t)
-	backend.putErr = ErrRemoteExists
+	backend.putErr = types.ErrCacheExists
 	c := openTiered(t, backend, true)
 	ctx := ContextWithRemoteStats(t.Context())
 	buildIn(t, ctx, t.TempDir(), c)
@@ -429,13 +429,13 @@ func TestRemoteNamespaceIsSignedVerifiedAndGated(t *testing.T) {
 	assert.Equal(t, "shard bytes", string(got))
 
 	_, err = ns.Get(t.Context(), "absent")
-	assert.ErrorIs(t, err, ErrRemoteMiss)
+	assert.ErrorIs(t, err, types.ErrCacheMiss)
 
 	// Served under another key, the signature still verifies, and the binding refuses it.
-	raw, err := backend.RemoteBackend.GetArtifact(t.Context(), "@shards", "k1")
+	raw, err := backend.CacheBackend.GetArtifact(t.Context(), "@shards", "k1")
 	require.NoError(t, err)
 	data, _ := io.ReadAll(raw)
-	require.NoError(t, backend.RemoteBackend.PutArtifact(t.Context(), "@shards", "k2", bytes.NewReader(data)))
+	require.NoError(t, backend.CacheBackend.PutArtifact(t.Context(), "@shards", "k2", bytes.NewReader(data)))
 	_, err = ns.Get(t.Context(), "k2")
 	assert.ErrorContains(t, err, "not bound to this key")
 

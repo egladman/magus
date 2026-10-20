@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
@@ -22,7 +21,7 @@ type ComposeOption func(*compose)
 // compose is the accumulated state of a ComposeGraph call.
 type compose struct {
 	Graph       *types.Graph
-	History     *forecast.History
+	History     durationPredictor
 	Target      string
 	Upstream    bool
 	SpellFilter string
@@ -49,9 +48,18 @@ func WithComposeRoots(paths ...string) ComposeOption {
 	return func(c *compose) { c.RootFilter = append(c.RootFilter, paths...) }
 }
 
-// WithGraphHistory enables per-node DurationMs prediction in ComposeGraph using
-// adaptive CI history for the given target (typically "ci" or "test").
-func WithGraphHistory(h *forecast.History, target string) ComposeOption {
+// durationPredictor predicts how long target takes on project from recorded runs.
+type durationPredictor interface {
+	PredictDuration(project, target string, tags []string) time.Duration
+}
+
+// WithGraphHistory enables per-node DurationMs prediction in ComposeGraph for the given
+// target (typically "ci" or "test"), from h's record of earlier runs: the CLI passes
+// the adaptive CI history it loads from history_path.
+func WithGraphHistory(h interface {
+	PredictDuration(project, target string, tags []string) time.Duration
+}, target string,
+) ComposeOption {
 	return func(c *compose) { c.History = h; c.Target = target }
 }
 

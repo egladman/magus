@@ -304,8 +304,9 @@ const (
 // has no BZZ code, so the sentence is the only handle: a magusfile calling a host member
 // this build predates, such as `magus\guard.builtins` on a binary built before it,
 // fails with exactly this. A misspelled field fails the same way, which is why the note
-// stays hedged ("unless it is misspelled").
-var missingObjectMember = regexp.MustCompile(`object [A-Za-z_][A-Za-z0-9_]* has no field or method "`)
+// stays hedged ("unless it is misspelled"). The checker words it two ways: "has no field
+// or method" for a member read or call, and "has no field" for an object literal's key.
+var missingObjectMember = regexp.MustCompile(`object [A-Za-z_][A-Za-z0-9_]* has no field (or method )?"`)
 
 // IsStaleBinary reports whether a workspace-load failure looks like an out-of-date
 // binary: any branch of err is stale-shaped, or ExplainStaleBinary already annotated it

@@ -288,8 +288,33 @@ func onlyReads(name, script string, args []string) bool {
 		return !slices.ContainsFunc(args, func(a string) bool {
 			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
 		})
+	case "git":
+		return !gitRemovesOrMoves(args)
 	}
 	return true
+}
+
+// gitRemovesOrMoves reports a git line that deletes or renames files in the work tree.
+func gitRemovesOrMoves(args []string) bool {
+	sub := parseGit(args).sub
+	return sub == "rm" || sub == "mv"
+}
+
+// vcsPathOperands are the paths a git, hg or sl remove or move is pointed at, and false for
+// any other line. hg's -I and -X take the next word as a pattern.
+func vcsPathOperands(name string, args []string) ([]string, bool) {
+	switch name {
+	case "git":
+		if gitRemovesOrMoves(args) {
+			return operands(parseGit(args).rest, ""), true
+		}
+	case "hg", "sl":
+		switch v := parseVCS(name, args); v.sub {
+		case "remove", "rm", "rename", "mv":
+			return operands(v.rest, "IX"), true
+		}
+	}
+	return nil, false
 }
 
 // writeScanDepth bounds how far a nested script is followed. A payload that parses to
@@ -306,6 +331,103 @@ var genericWriteVerbs = map[string]bool{
 	"find": true, "sort": true, "sed": true,
 }
 
+// placedWord is a word a line names, as placeableWord renders it, and the directory its statement
+// runs in by the line's cds, "" when the line does not say.
+type placedWord struct {
+	word string
+	dir  string
+}
+
+// place is where the shell opens w, false when the line does not determine it.
+func (w placedWord) place(home string) (string, bool) { return placePath(w.word, w.dir, home) }
+
+// nestedScript is a `sh -c` or `eval` payload and the directory it starts in.
+type nestedScript struct {
+	text string
+	dir  string
+}
+
+// shellCommands is the commands s runs, wrappers peeled, with each word rendered by render.
+func shellCommands(command string, s *syntax.Stmt, d Dialect, render func(string, *syntax.Word) string) []hint.Invocation {
+	call, ok := s.Cmd.(*syntax.CallExpr)
+	if !ok {
+		return nil
+	}
+	words := make([]string, len(call.Args))
+	for i, w := range call.Args {
+		words[i] = render(command, w)
+	}
+	return peelWrappers(words, d)
+}
+
+// removedOrMovedOperands names the path operands of the line's removes and moves (rm, rmdir,
+// mv, and git, hg and sl remove and move), nested scripts included, each with the directory
+// it runs in, starting at start. Each takes a directory whole, so a boundary has to ask what
+// one holds, not only what it is named.
+func removedOrMovedOperands(command string, depth int, d Dialect, start, home string) []placedWord {
+	if depth > writeScanDepth {
+		return nil
+	}
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil
+	}
+	dirs := stmtDirs(f, command, start, home)
+	var out []placedWord
+	var nested []nestedScript
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if script, ok := shellPayload(literalWords(call.Args)); ok {
+				nested = append(nested, nestedScript{script, dirs[stmt]})
+			}
+		}
+		keep := func(ops []string) {
+			for _, op := range ops {
+				out = append(out, placedWord{op, dirs[stmt]})
+			}
+		}
+		for _, c := range shellCommands(command, stmt, d, placeableWord) {
+			name := path.Base(c.Name)
+			if paths, ok := vcsPathOperands(name, c.Args); ok {
+				keep(paths)
+				continue
+			}
+			switch name {
+			case "rm", "rmdir":
+				keep(operands(c.Args, ""))
+			case "mv":
+				keep(mvOperands(c.Args))
+			}
+		}
+		return true
+	})
+	for _, s := range nested {
+		out = append(out, removedOrMovedOperands(s.text, depth+1, d, s.dir, home)...)
+	}
+	return out
+}
+
+// mvOperands are mv's sources and destination, the one `-t` or `--target-directory` names
+// included. `-S` takes a backup suffix.
+func mvOperands(args []string) []string {
+	out := operands(args, "tS")
+	for i, a := range args {
+		switch {
+		case a == "--":
+			return out
+		case a == "-t" && i+1 < len(args):
+			out = append(out, args[i+1])
+		case strings.HasPrefix(a, "--target-directory="):
+			out = append(out, strings.TrimPrefix(a, "--target-directory="))
+		}
+	}
+	return out
+}
+
 // writeTargetCandidates names every word the line's writes could be aimed at, in the order
 // the walk reaches them: each writing redirect's target, and the operands of every command
 // that is not a known reader.
@@ -318,6 +440,21 @@ var genericWriteVerbs = map[string]bool{
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
 func writeTargetCandidates(command string, depth int, d Dialect) []string {
+	placed := collectWriteCandidates(command, depth, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
+	out := slices.Grow([]string(nil), len(placed)) // stays nil for a line that writes nothing
+	for _, p := range placed {
+		out = append(out, p.word)
+	}
+	return out
+}
+
+// placedWriteCandidates is writeTargetCandidates with each word as placeableWord renders it
+// and the directory its statement runs in, starting at start.
+func placedWriteCandidates(command string, d Dialect, start, home string) []placedWord {
+	return collectWriteCandidates(command, 0, d, start, home, placeableWord)
+}
+
+func collectWriteCandidates(command string, depth int, d Dialect, start, home string, render func(string, *syntax.Word) string) []placedWord {
 	if depth > writeScanDepth {
 		return nil
 	}
@@ -325,7 +462,9 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 	if err != nil {
 		return nil
 	}
-	var out, nested []string
+	dirs := stmtDirs(f, command, start, home)
+	var out []placedWord
+	var nested []nestedScript
 	syntax.Walk(f, func(n syntax.Node) bool {
 		stmt, ok := n.(*syntax.Stmt)
 		if !ok {
@@ -333,21 +472,23 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 		}
 		for _, r := range stmt.Redirs {
 			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
-				out = append(out, literalWord(r.Word.Parts))
+				out = append(out, placedWord{render(command, r.Word), dirs[stmt]})
 			}
 		}
 		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
 			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, script)
+				nested = append(nested, nestedScript{script, dirs[stmt]})
 			}
 		}
-		for _, c := range stmtCommands(stmt, d) {
-			out = append(out, commandWriteCandidates(c, heredocText(stmt))...)
+		for _, c := range shellCommands(command, stmt, d, render) {
+			for _, w := range commandWriteCandidates(c, heredocText(stmt)) {
+				out = append(out, placedWord{w, dirs[stmt]})
+			}
 		}
 		return true
 	})
-	for _, script := range nested {
-		out = append(out, writeTargetCandidates(script, depth+1, d)...)
+	for _, s := range nested {
+		out = append(out, collectWriteCandidates(s.text, depth+1, d, s.dir, home, render)...)
 	}
 	return out
 }
@@ -364,6 +505,11 @@ func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	name := path.Base(c.Name)
 	if onlyReads(name, interpreterScript(c.Args, heredoc), c.Args) {
 		return nil
+	}
+	if paths, ok := vcsPathOperands(name, c.Args); ok {
+		// Only the paths: the subcommand and a global's value (`git -C dir`) are words a
+		// write path could name without the line writing them.
+		return paths
 	}
 	words := c.Args
 	if name == "cp" || name == "install" {
@@ -576,7 +722,8 @@ func stmtCommands(s *syntax.Stmt, d Dialect) []hint.Invocation {
 	return peelWrappers(literalWords(call.Args), d)
 }
 
-// busyWaitFires reports whether the line contains a loop whose body only sleeps.
+// busyWaitFires reports whether the line contains a polling loop that waits rather than
+// works (waitsIn).
 //
 // Structural, not textual, for the reason at the top of this file. The first version of
 // this rule was a pattern and proved the point twice within a minute: it denied `echo
@@ -593,12 +740,39 @@ func busyWaitFires(command string, d Dialect) bool {
 		if found {
 			return false
 		}
-		if body, ok := pollingLoop(n, d); ok && bodyOnlySleeps(body, d) {
+		if body, ok := pollingLoop(n, d); ok && waitsIn(n, body, d) {
 			found = true
 			return false
 		}
 		return true
 	})
+	return found
+}
+
+// waitsIn reports whether a polling loop n, with body, waits rather than works: a while or
+// until loop whose body sleeps anywhere, whatever its condition tests and whatever else
+// each pass runs, or a for loop that only sleeps or sleeps until it breaks out. A while
+// loop that works between sleeps is still a poll: past the tool timeout it is backgrounded
+// rather than killed, and polls on.
+func waitsIn(n syntax.Node, body []*syntax.Stmt, d Dialect) bool {
+	if _, ok := n.(*syntax.WhileClause); ok {
+		return runsIn(body, d, "sleep")
+	}
+	return bodyOnlySleeps(body, d) || runsIn(body, d, "break", "exit", "return")
+}
+
+// runsIn reports whether body runs any of names anywhere, nested commands included.
+func runsIn(body []*syntax.Stmt, d Dialect, names ...string) bool {
+	named := func(inv hint.Invocation) bool { return slices.Contains(names, path.Base(inv.Name)) }
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok && slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), named) {
+				found = true
+			}
+			return !found
+		})
+	}
 	return found
 }
 
@@ -611,27 +785,9 @@ func pollingLoop(n syntax.Node, d Dialect) ([]*syntax.Stmt, bool) {
 	case *syntax.WhileClause:
 		return n.Do, true
 	case *syntax.ForClause:
-		return n.Do, sleepsIn(n.Do, d)
+		return n.Do, runsIn(n.Do, d, "sleep")
 	}
 	return nil, false
-}
-
-// sleepsIn reports whether body runs sleep anywhere, nested commands included.
-func sleepsIn(body []*syntax.Stmt, d Dialect) bool {
-	found := false
-	for _, stmt := range body {
-		syntax.Walk(stmt, func(n syntax.Node) bool {
-			if call, ok := n.(*syntax.CallExpr); ok {
-				for _, inv := range peelWrappers(literalWords(call.Args), d) {
-					if path.Base(inv.Name) == "sleep" {
-						found = true
-					}
-				}
-			}
-			return !found
-		})
-	}
-	return found
 }
 
 // bodyOnlySleeps reports whether a loop body does nothing but sleep, which is what

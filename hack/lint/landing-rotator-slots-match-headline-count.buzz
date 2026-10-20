@@ -6,6 +6,8 @@
 // A span with no delay rule does not lose its animation, it inherits delay 0 and rides
 // the FIRST span's timeline, so two headlines fade in stacked on each other and the <h1>
 // renders as interleaved glyphs.
+//
+// Tier 1, mechanical: the fix is a delay rule per headline.
 namespace landing;
 
 import "assert";

@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
-	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -297,16 +299,7 @@ func backoffDuration(failures int) time.Duration {
 	if failures < 1 {
 		return 0
 	}
-	// Saturate before shifting: base<<4 already exceeds the cap, and a large shift would
-	// otherwise wrap to a small positive value and briefly retry faster than the cap.
-	if failures >= 5 {
-		return symbolIndexBackoffMax
-	}
-	d := symbolIndexBackoffBase << (failures - 1)
-	if d > symbolIndexBackoffMax {
-		return symbolIndexBackoffMax
-	}
-	return d
+	return retry.Backoff(symbolIndexBackoffBase, symbolIndexBackoffMax, failures)
 }
 
 // projectIndex is one symbol index a project declares: the indexer op that writes it, the
@@ -389,7 +382,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			return refsByPath[project]
 		},
 		runIndex: func(ctx context.Context, ref indexRef) error {
-			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
+			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
@@ -606,7 +599,12 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 		return m.cache
 	}
 	m.probeCacheOnce.Do(func() {
-		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
+		storeDir, err := config.StoreDir(m.Root(), m.cfg)
+		if err != nil {
+			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
+			return
+		}
+		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg), cache.WithStoreDir(storeDir))
 		if err != nil {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
 			return
@@ -626,7 +624,7 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	var errs []error
 	done := 0
 	for _, idx := range m.workspaceIndexes() {
-		if err := m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}); err != nil {
+		if err := m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{}); err != nil {
 			errs = append(errs, symbolRunError(idx.projectRef(), idx.language, err))
 			continue
 		}
@@ -739,7 +737,7 @@ func (m *Magus) buildSymbolIndex(ctx context.Context, idx projectIndex, step cac
 	if ran, err := interp.CrossDispatchFromContext(ctx).DispatchStep(ctx, idx.project, step); ran {
 		return err
 	}
-	return m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}})
+	return m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{})
 }
 
 // installedIndexes drops each index whose indexer is not installed, as long as its project
@@ -751,7 +749,7 @@ func installedIndexes(ctx context.Context, idxs []projectIndex) []projectIndex {
 	installed := make([]bool, len(idxs))
 	present := map[string]bool{}
 	for i, idx := range idxs {
-		_, err := procrun.LookPath(ctx, idx.bin)
+		_, err := spawn.LookPath(ctx, idx.bin)
 		installed[i] = err == nil
 		if installed[i] {
 			present[idx.project.Path] = true

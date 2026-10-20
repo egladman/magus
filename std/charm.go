@@ -8,9 +8,7 @@ import (
 	"strconv"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../internal/interp/bindings/gen/charm.go
-
-func init() { Register(Charm) }
+//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../internal/interp/bindings/gen/charm.go -pkg bindgen
 
 // charmPredicate is the type of every *_func anchor: called with one argv element,
 // truthy on the one to anchor at.
@@ -170,15 +168,15 @@ func charmResult(ops ...spells.PatchOp) spells.Charm {
 	return spells.Charm{Ops: ops}
 }
 
-// ptr renders a JSON Pointer to argv index i.
-func ptr(i int) string { return "/" + strconv.Itoa(i) }
+// jsonPointer renders a JSON Pointer to argv index i.
+func jsonPointer(i int) string { return "/" + strconv.Itoa(i) }
 
 // addOps builds a run of `add` ops that insert vals starting at index start, so
 // the values land in order (each subsequent insert sits one past the previous).
 func addOps(start int, vals []string) spells.Charm {
 	ops := make([]spells.PatchOp, len(vals))
 	for k, v := range vals {
-		ops[k] = spells.PatchOp{Op: spells.OpAdd, Path: ptr(start + k), Value: v}
+		ops[k] = spells.PatchOp{Op: spells.OpAdd, Path: jsonPointer(start + k), Value: v}
 	}
 	return charmResult(ops...)
 }
@@ -254,7 +252,7 @@ func CharmSet(_ context.Context, argv []string, anchor, val string) (spells.Char
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: ptr(i), Value: val}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: jsonPointer(i), Value: val}), nil
 }
 
 // CharmDrop implements charm.drop.
@@ -263,7 +261,7 @@ func CharmDrop(_ context.Context, argv []string, anchor string) (spells.Charm, e
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: ptr(i)}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: jsonPointer(i)}), nil
 }
 
 // CharmAfterFunc implements charm.after_func.
@@ -290,7 +288,7 @@ func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: ptr(i), Value: val}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: jsonPointer(i), Value: val}), nil
 }
 
 // CharmDropFunc implements charm.drop_func.
@@ -299,7 +297,7 @@ func CharmDropFunc(ctx context.Context, argv []string, fn Callback) (spells.Char
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: ptr(i)}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: jsonPointer(i)}), nil
 }
 
 // CharmPath implements charm.path: the JSON Pointer of the anchor element.
@@ -308,7 +306,7 @@ func CharmPath(_ context.Context, argv []string, anchor string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return ptr(i), nil
+	return jsonPointer(i), nil
 }
 
 // CharmPathFunc implements charm.path_func.
@@ -317,7 +315,7 @@ func CharmPathFunc(ctx context.Context, argv []string, fn Callback) (string, err
 	if err != nil {
 		return "", err
 	}
-	return ptr(i), nil
+	return jsonPointer(i), nil
 }
 
 // destPointer validates a move/copy destination is a JSON Pointer, failing fast
@@ -338,7 +336,7 @@ func CharmMove(_ context.Context, argv []string, anchor, to string) (spells.Char
 	if err := destPointer(to); err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpMove, From: ptr(i), Path: to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpMove, From: jsonPointer(i), Path: to}), nil
 }
 
 // CharmMoveFunc implements charm.move_func.
@@ -350,7 +348,7 @@ func CharmMoveFunc(ctx context.Context, argv []string, fn Callback, to string) (
 	if err := destPointer(to); err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpMove, From: ptr(i), Path: to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpMove, From: jsonPointer(i), Path: to}), nil
 }
 
 // CharmCopy implements charm.copy.
@@ -362,7 +360,7 @@ func CharmCopy(_ context.Context, argv []string, anchor, to string) (spells.Char
 	if err := destPointer(to); err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: ptr(i), Path: to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: jsonPointer(i), Path: to}), nil
 }
 
 // CharmCopyFunc implements charm.copy_func.
@@ -374,7 +372,7 @@ func CharmCopyFunc(ctx context.Context, argv []string, fn Callback, to string) (
 	if err := destPointer(to); err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: ptr(i), Path: to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: jsonPointer(i), Path: to}), nil
 }
 
 // CharmTest implements charm.test: a guard asserting the anchor is still present
@@ -384,7 +382,7 @@ func CharmTest(_ context.Context, argv []string, anchor string) (spells.Charm, e
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: ptr(i), Value: anchor}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: jsonPointer(i), Value: anchor}), nil
 }
 
 // CharmTestFunc implements charm.test_func.
@@ -393,7 +391,7 @@ func CharmTestFunc(ctx context.Context, argv []string, fn Callback) (spells.Char
 	if err != nil {
 		return spells.Charm{}, err
 	}
-	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: ptr(i), Value: argv[i]}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: jsonPointer(i), Value: argv[i]}), nil
 }
 
 // callPredicate invokes a VM predicate on s and reports its truthiness.

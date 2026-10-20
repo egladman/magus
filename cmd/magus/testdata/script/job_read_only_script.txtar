@@ -32,7 +32,8 @@ stdout '^verified scout/pricing, recorded pass$'
 stdout 'goal check: verified \(out[0-9a-f]{12}\)'
 
 # A check-less scout has nothing a run can bind to, so wait refuses it even citing a
-# recorded run. A scout whose output is prose ends by `magus job exit`, recorded no_return.
+# recorded run. A scout whose output is prose ends by `magus job exit`, recorded no_return
+# with an end_reason saying it returned ungraded rather than that nobody returned it.
 exec magus job fork scout/notes --read-only --criteria 'list the tax rules'
 exec magus job exec scout/notes
 stdin $WORK/notes.json
@@ -40,12 +41,13 @@ exec magus job exit scout/notes --stdin
 ! exec magus job wait scout/notes
 stdout 'declares no check and no goal'
 exec magus job exit scout/notes
-stdout '^abandoned scout/notes, recorded no_return$'
+stdout '^ended scout/notes, recorded no_return: returned ungraded: its holder filed a result'
 
 exec magus job fork scout/prose --read-only --criteria 'summarize the tests'
 exec magus job exec scout/prose
 exec magus job exit scout/prose
-stdout '^abandoned scout/prose, recorded no_return$'
+stdout '^ended scout/prose, recorded no_return: ended ungraded: a read-only row declaring no check or goal'
+! stdout 'abandoned'
 
 # A scout that forgets --read-only names no write paths, which bounds nothing, so fork
 # refuses it and says how to declare it.

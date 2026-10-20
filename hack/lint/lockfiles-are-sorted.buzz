@@ -2,6 +2,8 @@
 // block a comment or blank line delimits, so the file has one right order whether a
 // writer or a person produced it. Blocks keep a hand-written reason attached to the
 // entries it explains.
+//
+// Tier 1, mechanical: the fix is a sort.
 namespace lockfiles;
 
 import "assert";

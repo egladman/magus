@@ -1770,6 +1770,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	for i, f := range v.Fields {
 		thisFields[f.Name] = int32(i)
 	}
+	emitted := 0
 	for _, m := range v.Methods {
 		// An extern method emits NOTHING, for the same reason a top-level extern does:
 		// it declares a signature the checker consumes, and the implementation is
@@ -1778,6 +1779,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		if m.IsExtern {
 			continue
 		}
+		emitted++
 		// A static method has no receiver, so it compiles without this-field access.
 		tf := thisFields
 		if m.IsStatic {
@@ -1826,7 +1828,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	nameIdx := c.nameConst(c.globalName(v.Name))
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
-	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(emitted))
 	// A and B are both spoken for (decl const, method count), so the static-field
 	// count rides in C rather than sharing B with the method count: B's high bits
 	// already carry InstrMutBit on this opcode's literal path, and a second packed

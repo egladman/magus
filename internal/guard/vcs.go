@@ -60,6 +60,54 @@ func isDependencyMutation(c hint.Invocation) bool {
 	return false
 }
 
+// denyRuleHooksOff is a git call that runs with the repository's hooks switched off.
+const denyRuleHooksOff denyRuleName = "hooks-off"
+
+const (
+	denyHooksOff    = "this runs git with the repository's hooks switched off; run it with them on, and fix what a hook reports."
+	denyHooksOffWhy = "Hooks are the checks a repository's owners put in front of every commit and push. `--no-verify`, `commit -n` and `-c core.hooksPath=/dev/null` skip all of them at once, so the change lands unchecked and the failure surfaces later, on someone else's run. " +
+		"A hook that is itself broken is its owners' to fix; a person can still skip it by hand."
+)
+
+// commitValueFlags are git commit's short flags that take a value, which ends a cluster:
+// in `-mn` the n is the message.
+const commitValueFlags = "mFCct"
+
+// hooksOff reports a git call that skips the repository's hooks: core.hooksPath pointed at
+// nothing for the call, `--no-verify` on its verb, or commit's `-n`. A hooks path naming a
+// real directory is a different set of hooks, not none, so it passes.
+func hooksOff(args []string, g gitCommand) bool {
+	for i := 0; i < len(args) && (g.at < 0 || i < g.at); i++ {
+		if args[i] != "-c" || i+1 >= len(args) {
+			continue
+		}
+		key, value, _ := strings.Cut(args[i+1], "=")
+		if strings.EqualFold(key, "core.hooksPath") && (value == "" || value == "/dev/null") {
+			return true
+		}
+	}
+	for _, a := range g.rest {
+		if a == "--" {
+			return false
+		}
+		if a == "--no-verify" {
+			return true
+		}
+		if g.sub != "commit" || len(a) < 2 || a[0] != '-' || a[1] == '-' {
+			continue
+		}
+		for _, r := range a[1:] {
+			if r == 'n' {
+				return true
+			}
+			if strings.ContainsRune(commitValueFlags, r) || !isASCIILetter(r) {
+				break
+			}
+		}
+	}
+	return false
+}
+
 // gitDeny is the deny one git invocation earns, if any.
 func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	if c.Name != "git" {
@@ -68,6 +116,9 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	g := parseGit(c.Args)
 	if g.alias != "" {
 		return denyInlineAlias("git", g.alias), true
+	}
+	if hooksOff(c.Args, g) {
+		return ShellVerdict{Deny: denyHooksOff, Why: denyHooksOffWhy, Rule: denyRule{Name: denyRuleHooksOff, Arg: g.sub}}, true
 	}
 	sub, rest := g.sub, g.rest
 	switch sub {

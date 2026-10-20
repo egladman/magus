@@ -5,9 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module fmt -lang buzz -out ../internal/interp/bindings/gen/fmt.go
-
-func init() { Register(Fmt) }
+//go:generate go run ../cmd/magus-utils bindings -module fmt -lang buzz -out ../internal/interp/bindings/gen/fmt.go -pkg bindgen
 
 // Fmt is the "fmt" host module: string formatting via Go's printf verbs. It
 // exists to collapse long "+"-concatenation chains into a single readable call.

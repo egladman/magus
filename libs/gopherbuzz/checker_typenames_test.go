@@ -29,7 +29,7 @@ func TestCheck_UndefinedTypeName(t *testing.T) {
 }
 
 func TestCheck_UndefinedTypeNameCode(t *testing.T) {
-	errs := checkSrc("final _x = 1;\nfun f(r: Nope, s: Nope) > void {}")
+	errs := checkSource("final _x = 1;\nfun f(r: Nope, s: Nope) > void {}")
 	assert.Equal(t, []typeError{{Line: 2, Col: 1, Code: UndefinedType, Msg: `undefined type "Nope"`}}, errs)
 }
 

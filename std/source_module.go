@@ -2,7 +2,10 @@ package std
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
+	"sync"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -34,7 +37,7 @@ import (
 // nothing downstream could see it.
 //
 // THE DESCRIPTOR IS DERIVED, never hand-written. Parsing the source for its
-// exported functions costs one parse at init and makes drift impossible; a Go
+// exported functions costs one parse on first use and makes drift impossible; a Go
 // descriptor sitting beside the .buzz would be a second source of truth that
 // silently disagrees the first time someone edits one and not the other.
 type SourceModule struct {
@@ -48,54 +51,55 @@ type SourceModule struct {
 	Source string
 }
 
-// sourceModules is the registry of Buzz-implemented modules, kept beside the Go
-// one so All() can report both as a single list.
-var sourceModules = map[string]SourceModule{}
-
-// sourceMethods holds each source module's methods as parsed at registration.
-// The source never changes after init, and every describe caller (the
-// knowledge graph asks once per module) would otherwise parse it all again.
-var sourceMethods = map[string][]Method{}
-
-// RegisterSource adds a Buzz-implemented module to the registry.
-//
-// It PARSES the source and panics on a failure or on a name collision with a Go
-// module, at init, for the same reason Register validates a Go Impl there: a
-// stdlib module that does not load is a programmer error, and discovering it when
-// a magusfile imports it makes it look like the magusfile's fault.
-func RegisterSource(m SourceModule) {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, exists := modules[m.Name]; exists {
-		panic(fmt.Sprintf("std: %q is already registered as a Go module", m.Name))
-	}
-	if _, exists := sourceModules[m.Name]; exists {
-		panic(fmt.Sprintf("std: duplicate source module registration: %q", m.Name))
-	}
-	methods, err := describeSource(m)
-	if err != nil {
-		panic(fmt.Sprintf("std: source module %q: %s", m.Name, err))
-	}
-	sourceModules[m.Name] = m
-	sourceMethods[m.Name] = methods
+// sourceIndex is the registry of Buzz-implemented modules, kept beside the Go
+// one so All() can report both as a single list. methods holds each module's
+// parsed method list, so every describe caller (the knowledge graph asks once
+// per module) does not parse the source again.
+type sourceIndex struct {
+	modules map[string]SourceModule
+	methods map[string][]Method
 }
 
-// AllSource returns a snapshot of every registered SourceModule.
-func AllSource() []SourceModule {
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]SourceModule, 0, len(sourceModules))
-	for _, m := range sourceModules {
-		out = append(out, m)
+// sources indexes sourceBuiltin on first use. It parses each source and panics on
+// a failure or on a name collision with a Go module, for the same reason registry
+// validates a Go Impl: a stdlib module that does not load is a programmer error,
+// and discovering it when a magusfile imports it makes it look like the
+// magusfile's fault.
+var sources = sync.OnceValue(func() sourceIndex {
+	return indexSources(sourceBuiltin)
+})
+
+func indexSources(list []SourceModule) sourceIndex {
+	idx := sourceIndex{
+		modules: make(map[string]SourceModule, len(list)),
+		methods: make(map[string][]Method, len(list)),
 	}
-	return out
+	goModules := registry()
+	for _, m := range list {
+		if _, exists := goModules[m.Name]; exists {
+			panic(fmt.Sprintf("std: %q is already registered as a Go module", m.Name))
+		}
+		if _, exists := idx.modules[m.Name]; exists {
+			panic(fmt.Sprintf("std: duplicate source module registration: %q", m.Name))
+		}
+		methods, err := describeSource(m)
+		if err != nil {
+			panic(fmt.Sprintf("std: source module %q: %s", m.Name, err))
+		}
+		idx.modules[m.Name] = m
+		idx.methods[m.Name] = methods
+	}
+	return idx
+}
+
+// AllSource returns every registered SourceModule, in unspecified order.
+func AllSource() []SourceModule {
+	return slices.Collect(maps.Values(sources().modules))
 }
 
 // GetSource returns the SourceModule registered under name.
 func GetSource(name string) (SourceModule, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	m, ok := sourceModules[name]
+	m, ok := sources().modules[name]
 	return m, ok
 }
 
@@ -202,11 +206,10 @@ func docSummary(doc string) string {
 // the only observable difference and matters to nothing downstream: codegen reads
 // std.All(), never this.
 func SourceModulesAsModules() []Module {
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]Module, 0, len(sourceModules))
-	for name, sm := range sourceModules {
-		out = append(out, Module{Name: sm.Name, Path: sm.Path, Doc: sm.Doc, Methods: sourceMethods[name]})
+	idx := sources()
+	out := make([]Module, 0, len(idx.modules))
+	for name, sm := range idx.modules {
+		out = append(out, Module{Name: sm.Name, Path: sm.Path, Doc: sm.Doc, Methods: idx.methods[name]})
 	}
 	return out
 }

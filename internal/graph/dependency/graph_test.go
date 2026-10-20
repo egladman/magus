@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // build constructs a Graph from a simple spec: each entry is
@@ -44,11 +44,11 @@ func pid(t *testing.T, g *Graph, path string) ID {
 	return id
 }
 
-// pathOf returns the path string for id, asserting validity.
-func pathOf(t *testing.T, g *Graph, id ID) string {
+// mustPath returns the path string for id, asserting validity.
+func mustPath(t *testing.T, g *Graph, id ID) string {
 	t.Helper()
 	p, ok := g.Path(id)
-	require.True(t, ok, "pathOf: id %d out of range", id)
+	require.True(t, ok, "mustPath: id %d out of range", id)
 	return p
 }
 
@@ -83,19 +83,21 @@ func TestBuildDupEdgeOK(t *testing.T) {
 	assert.Equal(t, 2, g.Len())
 }
 
-// TestObserverOnErrorFiresOnCycle verifies Build calls obs.OnError with
+// TestObserverSeesFailedBuildOnCycle verifies Build reports a failed build carrying
 // ErrCycle when cycle detection trips.
-func TestObserverOnErrorFiresOnCycle(t *testing.T) {
+func TestObserverSeesFailedBuildOnCycle(t *testing.T) {
 	t.Parallel()
-	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnError(mock.MatchedBy(func(err error) bool { return errors.Is(err, ErrCycle) })).Return().Once()
+	obs := typestest.NewMockObserver(t)
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool {
+		return e.Op == types.GraphOpBuild && errors.Is(e.Err, ErrCycle)
+	})).Return().Once()
 
 	b := New()
 	a := b.AddNode("a")
 	c := b.AddNode("c")
 	_ = b.AddEdge(a, c)
 	_ = b.AddEdge(c, a)
-	_, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
+	_, err := b.Build(WithObserver(obs))
 	require.Error(t, err, "Build: expected ErrCycle")
 }
 
@@ -139,7 +141,7 @@ func TestReverseClosureIncludesSeeds(t *testing.T) {
 	id := pid(t, g, "solo")
 	got := g.ReverseClosure(nil, []ID{id})
 	require.Len(t, got, 1)
-	assert.Equal(t, "solo", pathOf(t, g, got[0]))
+	assert.Equal(t, "solo", mustPath(t, g, got[0]))
 }
 
 // TestReverseClosureRejectsBadSeed proves an out-of-range seed does not
@@ -191,12 +193,12 @@ func TestNCCDEmpty(t *testing.T) {
 // fires the observer (regression guard).
 func TestNCCDEmptyEmitsEvent(t *testing.T) {
 	t.Parallel()
-	obs := mocks.NewMockObserver(t)
-	obs.EXPECT().OnBuild(mock.Anything).Return().Once()
-	obs.EXPECT().OnQuery(mock.MatchedBy(func(e types.QueryEvent) bool { return e.Op == "nccd" })).Return().Once()
+	obs := typestest.NewMockObserver(t)
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == types.GraphOpBuild })).Return().Once()
+	obs.EXPECT().Observe(mock.MatchedBy(func(e types.GraphEvent) bool { return e.Op == "nccd" })).Return().Once()
 
 	b := New()
-	g, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
+	g, err := b.Build(WithObserver(obs))
 	require.NoError(t, err, "Build")
 	_ = g.NCCD()
 }
@@ -232,8 +234,8 @@ func TestPathsFromSeedsTransitive(t *testing.T) {
 	require.Len(t, paths, 1)
 	chain := paths[0].Chain
 	require.Len(t, chain, 3)
-	assert.Equal(t, "c", pathOf(t, g, chain[0]))
-	assert.Equal(t, "a", pathOf(t, g, chain[2]))
+	assert.Equal(t, "c", mustPath(t, g, chain[0]))
+	assert.Equal(t, "a", mustPath(t, g, chain[2]))
 }
 
 func TestPathsFromSeedsUnreachable(t *testing.T) {
@@ -255,8 +257,8 @@ func TestPathsFromSeedsMultiple(t *testing.T) {
 	target := pid(t, g, "target")
 	paths := g.PathsFromSeeds(target, []ID{pid(t, g, "seed-a"), pid(t, g, "seed-b")}, nil)
 	require.Len(t, paths, 2)
-	assert.Equal(t, "seed-a", pathOf(t, g, paths[0].Seed))
-	assert.Equal(t, "seed-b", pathOf(t, g, paths[1].Seed))
+	assert.Equal(t, "seed-a", mustPath(t, g, paths[0].Seed))
+	assert.Equal(t, "seed-b", mustPath(t, g, paths[1].Seed))
 }
 
 // TestPathsFromSeedsRejectsBadTarget proves an out-of-range target does
@@ -295,11 +297,11 @@ func TestNearCyclesBackPath(t *testing.T) {
 	ncs := g.NearCycles(context.Background(), 3)
 	require.Len(t, ncs, 1)
 	nc := ncs[0]
-	assert.Equal(t, "b", pathOf(t, g, nc.From))
-	assert.Equal(t, "a", pathOf(t, g, nc.To))
+	assert.Equal(t, "b", mustPath(t, g, nc.From))
+	assert.Equal(t, "a", mustPath(t, g, nc.To))
 	require.Len(t, nc.BackPath, 2)
-	assert.Equal(t, "a", pathOf(t, g, nc.BackPath[0]))
-	assert.Equal(t, "b", pathOf(t, g, nc.BackPath[1]))
+	assert.Equal(t, "a", mustPath(t, g, nc.BackPath[0]))
+	assert.Equal(t, "b", mustPath(t, g, nc.BackPath[1]))
 }
 
 func TestNearCyclesCancellable(t *testing.T) {

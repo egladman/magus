@@ -9,12 +9,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -24,6 +26,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -84,7 +88,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// this list and this one used to be written separately and reconciled by a test.
 	// The two env-var defaults below are applied after binding, because they are a
 	// property of THIS process rather than of the documented flag.
-	var rf *gen.RunFlags
+	var rf *flaggen.RunFlags
 	var shardEnvErr error
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
 		rf = bindRunFlags(fs, &skips)
@@ -93,8 +97,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// value (an explicit flag still wins, since parsing runs after this) and
 		// mirroring it into DefValue so -h reports what the flag will actually do.
 		for _, seed := range []struct{ flag, env string }{
-			{gen.FlagRunShard, "MAGUS_SHARD"},
-			{gen.FlagRunNShards, "MAGUS_N_SHARDS"},
+			{flaggen.FlagRunShard, "MAGUS_SHARD"},
+			{flaggen.FlagRunNShards, "MAGUS_N_SHARDS"},
 		} {
 			if err := envDefault(fs, seed.flag, os.Getenv(seed.env)); err != nil {
 				shardEnvErr = fmt.Errorf("%s: %w", seed.env, err)
@@ -122,18 +126,18 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// a value magus could not read means this job would gate less than the caller asked
 	// for while still exiting 0.
 	if shardEnvErr != nil {
-		return usagef("magus run: %v", shardEnvErr)
+		return exit.Usagef("magus run: %v", shardEnvErr)
 	}
 	if saved != nil {
 		switch {
 		case rf.Detach:
-			return usagef("magus run: a plan on --stdin runs here; it does not apply to --detach")
+			return exit.Usagef("magus run: a plan on --stdin runs here; it does not apply to --detach")
 		case rf.Graph:
-			return usagef("magus run: a plan on --stdin runs its shards; it does not apply to --graph")
+			return exit.Usagef("magus run: a plan on --stdin runs its shards; it does not apply to --graph")
 		case len(projectArgs) > 0 || parsedTarget.Path != "":
-			return usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
+			return exit.Usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
 		case len(skips.refs) > 0:
-			return usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
+			return exit.Usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
 		}
 		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
 		if err != nil {
@@ -158,7 +162,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// Refused rather than ignored: --graph renders from the raw roots, so honoring
 		// the flag there would take a second subtraction, and accepting it silently is
 		// the un-gated skip this flag exists to prevent.
-		return usagef("magus run: --skip applies to the run selection, not --graph")
+		return exit.Usagef("magus run: --skip applies to the run selection, not --graph")
 	}
 	// After the usage checks, so a mistyped flag fails here rather than in a log nobody
 	// is reading; before the timeout, which the detached run applies to itself.
@@ -180,7 +184,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// measured 48KB across four agent sessions that could not act on any of it.
 	// A structured invocation never gets this: -o jsonl on a TTY is rare, and the
 	// one free-text line it would add is not worth a special-cased typed event.
-	if global.silent && isInteractiveTTY() && global.output != string(FormatJSONL) {
+	if global.silent && isInteractiveTTY() && global.output != string(outputJSONL) {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
@@ -193,7 +197,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	if rf.Step && !isInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
-		return errSilent{exitCode: 2}
+		return exit.Reported(exit.Usage)
 	}
 
 	if rf.Step {
@@ -245,11 +249,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 
-	sink, closeSink, err := openRunSink(ctx, m, opts)
+	sink, closeSink, err := openSink(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = closeSink() }()
+	// The graph traversal is recorded on the same sink: the run's, and every read before it.
+	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
@@ -313,8 +319,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		charms = magus.CharmsForCI(charms)
 	}
 	sink.EmitCharms(ctx, strings.Join(charms, ","))
-	tier, mode := m.CacheDescription()
-	sink.EmitCache(ctx, tier, mode)
+	tier, mode, dir := m.CacheDescription()
+	sink.EmitCache(ctx, tier, mode, dir)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".
@@ -364,7 +370,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
-	runOpts = append(runOpts, processStdioOption(ctx)...)
+	ctx = processStdioContext(ctx)
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}
@@ -385,7 +391,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Durable invocation facts ride the same fan-out: one fact per target result, into a
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
-	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
+	refs := &resultRefs{}
+	captureHandlers = append(captureHandlers, refs)
+	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
@@ -407,12 +415,17 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		sink.EmitShardTotal(ctx, rf.Shard, rf.NShards, time.Since(startedAt))
 	}
 	if reportedRunErr(err) {
-		return errSilent{exitCode: 1}
+		return exit.Reported(exit.Failure)
 	}
 	if err != nil {
 		return err
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
+	if global.silent && opts.Format == outputText {
+		if line := refLine(refs.list()); line != "" {
+			slog.InfoContext(ctx, line, attr.Notice(""), attr.Result())
+		}
+	}
 
 	sink.RecordValues(targetName, readReturns(targetName))
 	switch opts.Format {
@@ -425,6 +438,51 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	return nil
 }
 
+// resultRefs collects the output ref of every target result the invocation's journal
+// records, in the order the results arrive.
+type resultRefs struct {
+	mu   sync.Mutex
+	refs []string
+}
+
+func (c *resultRefs) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *resultRefs) Handle(_ context.Context, r slog.Record) error {
+	e, ok := journal.EventFromRecord(r)
+	if !ok || e.Kind != journal.KindResult || e.Ref == "" {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !slices.Contains(c.refs, e.Ref) {
+		c.refs = append(c.refs, e.Ref)
+	}
+	return nil
+}
+
+func (c *resultRefs) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *resultRefs) WithGroup(string) slog.Handler      { return c }
+
+func (c *resultRefs) list() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.refs)
+}
+
+// refLine is the one line a successful `-s` run prints: every other line of a pass is
+// dropped, and without the ref a caller reruns without -s just to learn it. It mirrors the
+// "ref  <id>" line a default run prints under each target; "" when no target left a ref.
+func refLine(refs []string) string {
+	switch len(refs) {
+	case 0:
+		return ""
+	case 1:
+		return "ref  " + refs[0]
+	default:
+		return "refs  " + strings.Join(refs, " ")
+	}
+}
+
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
 // line: the identity of what executed, and the form the next command takes as arguments.
 // Shared by run and affected so the two cannot disagree about what a run is named by.
@@ -434,7 +492,7 @@ func emitProjectNames(m *magus.Magus, selection []types.Target) error {
 	for i, p := range projects {
 		names[i] = p.Path
 	}
-	return emitNames(names)
+	return emitNames(os.Stdout, names)
 }
 
 // runSelection is how one run's project selection is named on the command line: the
@@ -491,7 +549,7 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 		}
 	default:
 		// cwd-scope: run only the project containing the caller's cwd, when it is inside
-		// one. Keyed on the explicit cwd (not ws.ExpandCwd, which reads os.Getwd).
+		// one. Keyed on the explicit cwd, never this process's working directory.
 		if sel.cwd != "" {
 			if p, ok := ws.Where(sel.cwd); ok {
 				targets, source = []types.Target{{Path: p.Path, Name: t.Name}}, "cwd"
@@ -522,12 +580,12 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 //
 // A nil skips binds the flag to a throwaway accumulator, which is what the prescan wants:
 // it has to know that --skip CONSUMES its next token, and has no use for the values.
-func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
-	rf := gen.BindRun(fs)
+func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *flaggen.RunFlags {
+	rf := flaggen.BindRun(fs)
 	if skips == nil {
 		skips = &skipFlag{}
 	}
-	fs.Var(skips, gen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
+	fs.Var(skips, flaggen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
 	return rf
 }
 
@@ -537,7 +595,7 @@ func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
 // value reads as false here; the parser reports it.
 func runReadsPlan(args []string) bool {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	bindRunFlags(fs, nil)
 	flags, _ := partitionFlags(fs, args)
@@ -547,7 +605,7 @@ func runReadsPlan(args []string) bool {
 		f := fs.Lookup(name)
 		switch {
 		case f == nil:
-		case name == gen.FlagRunStdin:
+		case name == flaggen.FlagRunStdin:
 			stdin = !hasValue
 			if hasValue {
 				stdin, _ = strconv.ParseBool(value)
@@ -562,7 +620,7 @@ func runReadsPlan(args []string) bool {
 // planRefusal is an MGS3029 refusal. It exits 2, the misuse status: nothing was attempted.
 type planRefusal struct{ error }
 
-func (planRefusal) ExitCode() int { return exitUsage }
+func (planRefusal) ExitCode() int { return exit.Usage }
 
 func (e planRefusal) Unwrap() error { return e.error }
 
@@ -663,7 +721,7 @@ func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shard
 		}
 		return nil
 	case outputName:
-		return emitNames(planProjects(shards))
+		return emitNames(os.Stdout, planProjects(shards))
 	default:
 		if opts.Format == outputTemplate {
 			p.Summary = planSummaryMarkdown(p)
@@ -973,7 +1031,7 @@ type runOutput struct {
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
+func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)

@@ -204,8 +204,8 @@ func New(in Input) *Model {
 	}
 	for _, s := range in.Suggestions {
 		// Answered suggestions are history, not an affordance: showing a declined one again
-		// is the repetition DiffSuggestion.Declined exists to stop.
-		if s.Accepted || s.Declined {
+		// is the repetition DiffSuggestion.Status exists to stop.
+		if s.Status != types.SuggestionPending {
 			continue
 		}
 		k := hunkRef{path: s.Path, hunk: s.Hunk}

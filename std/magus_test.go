@@ -5,17 +5,20 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +69,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	ctx := proc.WithLease(t.Context(), "fleet/captured")
+	ctx := types.WithJobLease(t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
 
@@ -108,7 +111,7 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 
 	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
 	// A nested magus is always captured; the caller reads its output.
-	assert.Equal(t, run.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
+	assert.Equal(t, spawn.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
 
 	bare := nestedExecOptions(ctx, nil, nil)
 	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
@@ -121,7 +124,7 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 // contract: a non-zero exit raises, unless opts.allow_failure returns the result.
 func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	full := []string{"status"}
-	failed := run.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
+	failed := spawn.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
 
 	_, err := nestedResult("cmd", full, failed, nil, nil)
 	require.Error(t, err)
@@ -131,7 +134,7 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
 
-	notStarted := run.ExecResult{Code: -1}
+	notStarted := spawn.ExecResult{Code: -1}
 	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
 	require.ErrorContains(t, err, "no such file")
 	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
@@ -139,10 +142,10 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	assert.Equal(t, -1, got.Code)
 	assert.False(t, got.OK)
 
-	_, err = nestedResult("cmd", full, run.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
 	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
 
-	ok, err := nestedResult("cmd", full, run.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, ok.OK)
 }
@@ -237,9 +240,12 @@ func raiseOpts(cause any, url string) map[string]any {
 // recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
+	groupingLens types.GroupingOutput
 	types.WorkspaceRepository
-	got       types.InsightOptions
-	failTrend bool
+	got             types.InsightOptions
+	failTrend       bool
+	failConformance error
+	conformanceLens types.ConformanceOutput
 }
 
 func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
@@ -269,15 +275,28 @@ func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutpu
 	return types.DuplicationOutput{}, errors.New("no symbol index")
 }
 
+func (f *recordingAnalyzer) Conformance(context.Context) (types.ConformanceOutput, error) {
+	return f.conformanceLens, f.failConformance
+}
+
+func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
+	return types.ModelTierOutput{}, errors.New("no run history")
+}
+
+func (f *recordingAnalyzer) GroupingLens(context.Context) (types.GroupingOutput, error) {
+	return f.groupingLens, nil
+}
+
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingAnalyzer{}
+	a := &recordingAnalyzer{groupingLens: types.GroupingOutput{Definition: types.GroupingDefinition}}
 	ctx := types.WithWorkspace(t.Context(), a)
 
 	report, err := MagusInsight(ctx, nil)
 	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
+	assert.Equal(t, types.GroupingDefinition, report.Grouping.Definition, "the report carries the grouping lens")
 	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
@@ -372,6 +391,22 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestInsightReportCarriesConformanceAndItsMisconfiguration pins that the conformance lens rides the
+// report, and that a configuration it cannot honor fails the report rather than hiding as a
+// clean section.
+func TestInsightReportCarriesConformanceAndItsMisconfiguration(t *testing.T) {
+	t.Parallel()
+
+	a := &recordingAnalyzer{conformanceLens: types.ConformanceOutput{Definition: "conformance"}}
+	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "conformance", report.Conformance.Definition)
+
+	a.failConformance = errors.New("conformance: hack/policy/conformance.json: no such file")
+	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
+	assert.ErrorContains(t, err, "conformance.json")
+}
+
 // ledgerWorkspace is a workspace that can back a job Store: it
 // carries the cache directory jobStoreFromContext needs beyond
 // types.WorkspaceRepository's own Root.
@@ -392,7 +427,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running"})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
@@ -407,7 +442,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
+	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Criteria: new("not what the guard read"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
@@ -443,9 +478,9 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	}
 
 	ctx := job.WithSnapshot(ws, job.Snapshot{Rows: []types.Job{pinned}})
-	_, err = MagusPutJob(ctx, pinned.ID, map[string]any{"state": "pass"})
+	_, err = MagusPutJob(ctx, pinned.ID, types.JobPut{State: new(types.StatePass)})
 	assert.ErrorContains(t, err, "read-only")
-	_, _, err = MagusRegisterJob(ctx, pinned.ID, "abc123")
+	_, _, err = MagusRegisterJob(ctx, pinned.ID)
 	assert.ErrorContains(t, err, "read-only")
 	_, err = MagusClearJob(ctx)
 	assert.ErrorContains(t, err, "read-only")
@@ -470,10 +505,12 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
-	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
+	check, err := types.ParseLeaseCheck("test .")
+	require.NoError(t, err)
+	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
+		_, err := MagusPutJob(ctx, id, types.JobPut{Checkpoint: new(rev), WritePaths: new(paths), Check: new(check), State: new(types.StateRunning)})
 		require.NoError(t, err)
-		_, _, err = MagusRegisterJob(ctx, id, rev)
+		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
 	}
 
@@ -493,7 +530,7 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 
 	_, err := MagusListJob(t.Context())
 	require.Error(t, err)
-	_, err = MagusPutJob(t.Context(), "u1", nil)
+	_, err = MagusPutJob(t.Context(), "u1", types.JobPut{})
 	require.Error(t, err)
 	_, err = MagusClearJob(t.Context())
 	require.Error(t, err)
@@ -510,9 +547,16 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 	assert.ErrorContains(t, err, "cache directory")
 }
 
-// TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
-// internal/job.ParseMerge with magus\job.put: a later put naming only
-// `state` must not erase the goal an earlier put declared.
+// decodedPut decodes a magus\job.put opts map the way the binding does.
+func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
+	t.Helper()
+	put, err := job.DecodePut(opts)
+	require.NoError(t, err)
+	return put
+}
+
+// TestPutLedgerMergesRatherThanReplaces proves a put decoded from magus\job.put's map
+// merges: a later put naming only `state` must not erase the goal an earlier put declared.
 // Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
 // "" hashes to the same state directory in every checkout, so these rows would land in
 // the developer's own store and the clear below would drop what it found there.
@@ -521,10 +565,10 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."})
+	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."}))
 	require.NoError(t, err)
 
-	got, err := MagusPutJob(ctx, "u1", map[string]any{"state": "pass"})
+	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
 	require.NoError(t, err)
 	assert.Equal(t, types.StatePass, got.State) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
 	assert.Equal(t, "the declared goal", got.Criteria, "the state advance must not erase the row")
@@ -533,13 +577,13 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
-// silently ignored; internal/job.ParseMerge is what enforces this, and this pins that
-// the Buzz binding does not swallow its error.
+// silently ignored; internal/job.PutMerge is what enforces this, and this pins that
+// the Go door does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"state": "passed"})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{State: new(types.JobState("passed"))})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 }
@@ -548,9 +592,10 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ctx, "u1", nil)
+	readOnly := types.JobPut{ReadOnly: new(true)}
+	_, err := MagusPutJob(ctx, "u1", readOnly)
 	require.NoError(t, err)
-	_, err = MagusPutJob(ctx, "u2", nil)
+	_, err = MagusPutJob(ctx, "u2", readOnly)
 	require.NoError(t, err)
 
 	cleared, err := MagusClearJob(ctx)
@@ -565,7 +610,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -577,8 +622,10 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
-	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	stateBase, err := xdg.StateDir()
+	require.NoError(t, err)
+	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
+	ctx := types.WithJobLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -596,7 +643,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row"})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("shared row"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
@@ -604,33 +651,6 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
 	assert.Equal(t, "shared row", leases[0].Criteria)
-}
-
-func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
-	t.Parallel()
-
-	result, err := jobResultFromMap(map[string]any{
-		"schema_version": types.JobResultSchemaVersion,
-		"changed_paths":  []any{"internal/job/lifecycle.go"},
-		"validation": map[string]any{
-			"command":    "magus run test .",
-			"output_ref": "out123",
-		},
-		"unresolved_risks": []any{},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, types.JobResultSchemaVersion, result.Version)
-	assert.Equal(t, "out123", result.Validation.OutputRef)
-
-	_, err = jobResultFromMap(map[string]any{
-		"schema_version":   types.JobResultSchemaVersion,
-		"changed_paths":    []any{},
-		"validation":       map[string]any{},
-		"unresolved_risks": []any{},
-		"claimed_pass":     true,
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
 }
 
 // builtGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
@@ -644,13 +664,7 @@ type builtGraphWorkspace struct {
 
 func (f *builtGraphWorkspace) All() []*types.Project { return f.projects }
 
-func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
-	return f.g, nil
-}
-func (f *builtGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
-	return f.g, nil
-}
-func (f *builtGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return f.g, nil
 }
 func (f *builtGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
@@ -684,7 +698,7 @@ func TestGraphMembersAreServedInProcess(t *testing.T) {
 	t.Parallel()
 	ctx := graphContext(t)
 
-	q, err := MagusQuery(ctx, "kind=target", map[string]any{"limit": int64(1)})
+	q, err := MagusQuery(ctx, "kind=target", types.KnowledgeQueryOptions{Limit: 1})
 	require.NoError(t, err)
 	assert.Equal(t, 2, q.MatchCount, "the total survives the window")
 	assert.Len(t, q.Matches, 1)
@@ -715,7 +729,7 @@ func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
 	require.Error(t, err)
 	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", nil)
 	require.Error(t, err)
-	_, err = MagusQuery(ctx, " ", nil)
+	_, err = MagusQuery(ctx, " ", types.KnowledgeQueryOptions{})
 	require.Error(t, err)
 }
 
@@ -723,7 +737,7 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 	t.Parallel()
 	ctx := graphContext(t)
 
-	r, err := MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(1), "limit": int64(1)})
+	r, err := MagusRefs(ctx, graphSymbol, types.KnowledgeRefsOptions{Offset: 1, Limit: 1})
 	require.NoError(t, err)
 	// The counts keep describing the whole set; only Refs is windowed. The answer's coverage is
 	// the fixture's, not this test's to pin.
@@ -738,7 +752,7 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 		Answer:        r.Answer,
 	}, r)
 
-	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", nil)
+	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", types.KnowledgeRefsOptions{})
 	require.NoError(t, err, "a symbol nothing defines is an answer, not a raise")
 	assert.Equal(t, types.VerdictAbsent, absent.Answer.Verdict)
 }
@@ -776,12 +790,10 @@ func TestGraphOptionsAreStrict(t *testing.T) {
 	t.Parallel()
 	ctx := graphContext(t)
 
-	_, err := MagusQuery(ctx, "kind=target", map[string]any{"limt": int64(5)})
-	require.ErrorContains(t, err, `unknown option "limt"`)
-	_, err = MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(-1)})
-	require.ErrorContains(t, err, "must not be negative")
-	_, err = MagusQuery(ctx, "kind=target", map[string]any{"budget": "10"})
-	require.ErrorContains(t, err, "must be a number")
+	_, err := MagusRefs(ctx, graphSymbol, types.KnowledgeRefsOptions{Offset: -1})
+	require.ErrorContains(t, err, "offset must not be negative")
+	_, err = MagusQuery(ctx, "kind=target", types.KnowledgeQueryOptions{Budget: -1})
+	require.ErrorContains(t, err, "budget must not be negative")
 }
 
 func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
@@ -789,10 +801,10 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 	ctx := t.Context()
 
 	calls := map[string]func() error{
-		"query":          func() error { _, err := MagusQuery(ctx, "x", nil); return err },
+		"query":          func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
 		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
 		"path":           func() error { _, err := MagusPath(ctx, "x", "y", nil); return err },
-		"refs":           func() error { _, err := MagusRefs(ctx, "x", nil); return err },
+		"refs":           func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
 		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
 		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
 		"dir":            func() error { _, err := MagusDir(ctx, "x"); return err },
@@ -845,7 +857,7 @@ func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 
 	_, err = MagusOutput(ctx, "out0000000000")
 	require.ErrorContains(t, err, "no stored output")
-	_, err = MagusQuery(ctx, "x", nil)
+	_, err = MagusQuery(ctx, "x", types.KnowledgeQueryOptions{})
 	require.ErrorIs(t, err, types.MagusfileOnlyMember, "the pin opens the output store and no other member")
 }
 
@@ -897,17 +909,17 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 }
 
-// withJobGrader registers g for the test and restores whatever was registered. The
-// registration is process-wide, so a test that uses it does not run in parallel.
+// withJobGrader installs g for the test and restores whatever was installed. The
+// grader is process-wide, so a test that uses it does not run in parallel.
 func withJobGrader(t *testing.T, g job.CheckGrader) {
 	t.Helper()
-	previous := RegisterJobGrader(g)
-	t.Cleanup(func() { RegisterJobGrader(previous) })
+	previous := job.SetCheckGrader(g)
+	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
 // magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
 // held to the guard's verdict on the check the way `magus job fork` is: the grader the
-// composition root registered refuses a denied check, with nothing written.
+// composition root installed refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
@@ -922,7 +934,9 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	root := t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	put := func(check string) error {
-		_, err := MagusPutJob(ctx, "w", map[string]any{"write_paths": []any{"run.go"}, "check": check})
+		c, err := types.ParseLeaseCheck(check)
+		require.NoError(t, err)
+		_, err = MagusPutJob(ctx, "w", types.JobPut{WritePaths: new([]string{"run.go"}), Check: &c})
 		return err
 	}
 
@@ -942,4 +956,29 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	rows, err = stored.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
+}
+
+func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, "src"), 0o755))
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
+
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{WritePaths: new([]string{"src"})})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.WritePathIsDirectory, "the directory is named")
+	assert.ErrorIs(t, err, types.JobUngraded, "so is the missing grade, in the same error")
+}
+
+func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
+	t.Parallel()
+
+	got, err := MagusJobSchema(t.Context())
+	require.NoError(t, err)
+
+	var want map[string]any
+	require.NoError(t, json.Unmarshal([]byte(job.DeclarationSchema), &want))
+	assert.Equal(t, want, got)
+	assert.Contains(t, got, "properties")
 }

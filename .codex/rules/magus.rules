@@ -3,7 +3,7 @@
 # Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The
 # magus PermissionRequest hook answers it: a push a passing gate covers is approved
 # without asking, an ungated push is left to the person, and a push from a leased worker
-# is refused.
+# is refused. A run of each target the workspace declares human_only raises one too.
 prefix_rule(
     pattern = ["git", "push"],
     decision = "prompt",
@@ -23,4 +23,44 @@ prefix_rule(
     pattern = ["jj", "git", "push"],
     decision = "prompt",
     justification = "magus: publishing a commit no passing gate covers needs your approval",
+)
+prefix_rule(
+    pattern = ["magus", "run", "agent-bench-run"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
+)
+prefix_rule(
+    pattern = ["magus", "affected", "agent-bench-run"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
+)
+prefix_rule(
+    pattern = ["./magus", "run", "agent-bench-run"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
+)
+prefix_rule(
+    pattern = ["./magus", "affected", "agent-bench-run"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
+)
+prefix_rule(
+    pattern = ["magus", "run", "hoste-2-e-test"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
+)
+prefix_rule(
+    pattern = ["magus", "affected", "hoste-2-e-test"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
+)
+prefix_rule(
+    pattern = ["./magus", "run", "hoste-2-e-test"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
+)
+prefix_rule(
+    pattern = ["./magus", "affected", "hoste-2-e-test"],
+    decision = "prompt",
+    justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
 )

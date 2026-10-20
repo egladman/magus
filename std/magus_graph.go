@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -21,9 +22,7 @@ import (
 // satisfies it, and it is recovered from the workspace on the context by assertion for
 // the same reason Analyzer is: std cannot import root magus.
 type knowledgeGraphs interface {
-	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
-	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
-	KnowledgeGraphWithSymbolsForRef(ctx context.Context, symbol string) (*knowledge.Graph, error)
+	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
@@ -49,21 +48,16 @@ type memoGraphs struct {
 	memo *types.EvalMemo
 }
 
-func (m memoGraphs) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-	if refresh {
-		return m.g.KnowledgeGraph(ctx, true)
+// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
+func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	if req.Refresh {
+		return m.g.KnowledgeGraph(ctx, req)
 	}
-	return memoGraph(m.memo, "graph", func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, false) })
-}
-
-func (m memoGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
-	return memoGraph(m.memo, "graph+symbols", func() (*knowledge.Graph, error) { return m.g.KnowledgeGraphWithSymbols(ctx) })
-}
-
-// KnowledgeGraphWithSymbolsForRef merges only the shards mentioning symbol, a subset of
-// every shard, so it reuses the full merge rather than caching one graph per symbol.
-func (m memoGraphs) KnowledgeGraphWithSymbolsForRef(ctx context.Context, _ string) (*knowledge.Graph, error) {
-	return m.KnowledgeGraphWithSymbols(ctx)
+	key := "graph"
+	if req.Symbols.Loaded() {
+		key = "graph+symbols:" + req.Symbols.Ref()
+	}
+	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 }
 
 func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
@@ -102,12 +96,11 @@ func graphCoverage(ctx context.Context, g knowledgeGraphs, input string, seeded 
 // MagusQuery backs magus\query: ranked matches for query plus their neighborhood, the
 // record `magus query -o json` prints. A query that seeds the symbol layer reads a graph
 // with the symbol shards merged in; every other query reads the domain graph.
-func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.KnowledgeQueryOutput, error) {
+func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOptions) (types.KnowledgeQueryOutput, error) {
 	if strings.TrimSpace(query) == "" {
 		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, such as \"kind=spell go\"")
 	}
-	o, err := intOptions("query", opts, "budget", "limit", "offset")
-	if err != nil {
+	if err := nonNegative("query", map[string]int{"budget": opts.Budget, "limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "query")
@@ -115,16 +108,18 @@ func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.K
 		return types.KnowledgeQueryOutput{}, err
 	}
 	seeded := knowledge.SeedsLazyLayer(query)
-	var kg *knowledge.Graph
-	if seeded {
-		kg, err = g.KnowledgeGraphWithSymbols(ctx)
-	} else {
-		kg, err = g.KnowledgeGraph(ctx, false)
-	}
+	kg, err := loadGraph(ctx, g, seeded)
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}
-	out := kg.QueryPage(query, o["budget"], o["offset"], o["limit"])
+	reader, readerErr := workspacegraph.ReaderContext(ctx, types.WorkspaceFromContext(ctx), kg.Root())
+	out, err := kg.QueryRanked(query, opts.Budget, opts.Offset, opts.Limit, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights()})
+	if err != nil {
+		return types.KnowledgeQueryOutput{}, err
+	}
+	if readerErr != nil {
+		out.Ranking.Skipped = append(out.Ranking.Skipped, "reader: "+readerErr.Error())
+	}
 	// The verdict judges the whole match set, not the page, so every page states the
 	// same coverage.
 	out.Answer = knowledge.Answer(query, out.MatchCount > 0, graphCoverage(ctx, g, query, seeded))
@@ -160,10 +155,11 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 
 // loadGraph reads the domain graph, with the symbol shards merged when seeded.
 func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.Graph, error) {
+	var req types.GraphRequest
 	if seeded {
-		return g.KnowledgeGraphWithSymbols(ctx)
+		req.Symbols = types.AllSymbols
 	}
-	return g.KnowledgeGraph(ctx, false)
+	return g.KnowledgeGraph(ctx, req)
 }
 
 // MagusPath backs magus\path: the shortest chain of edges between node and to, the
@@ -201,19 +197,18 @@ func MagusPath(ctx context.Context, node, to string, opts map[string]any) (types
 // references it, the record `magus refs -o json` prints. A symbol nothing defines is an
 // answer carrying a verdict, never a raise: absent and unknown are different facts and a
 // caller branches on answer.verdict to tell them apart.
-func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.KnowledgeRefsOutput, error) {
+func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
 		return types.KnowledgeRefsOutput{}, errors.New("magus\\refs: needs a symbol ID or a name that resolves to one")
 	}
-	o, err := intOptions("refs", opts, "limit", "offset")
-	if err != nil {
+	if err := nonNegative("refs", map[string]int{"limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
 	g, err := graphsFromContext(ctx, "refs")
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsMentioning(symbol)})
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
 	}
@@ -227,13 +222,13 @@ func MagusRefs(ctx context.Context, symbol string, opts map[string]any) (types.K
 	}
 	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, graphCoverage(ctx, g, symbol, true))
 	// fileCount and refCount keep describing the whole set; only refs is windowed.
-	if o["offset"] >= len(out.Refs) {
+	if opts.Offset >= len(out.Refs) {
 		out.Refs = nil
 	} else {
-		out.Refs = out.Refs[o["offset"]:]
+		out.Refs = out.Refs[opts.Offset:]
 	}
-	if o["limit"] > 0 && len(out.Refs) > o["limit"] {
-		out.Refs = out.Refs[:o["limit"]]
+	if opts.Limit > 0 && len(out.Refs) > opts.Limit {
+		out.Refs = out.Refs[:opts.Limit]
 	}
 	return out, nil
 }
@@ -246,7 +241,7 @@ func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) 
 	if err != nil {
 		return types.KnowledgeStats{}, err
 	}
-	kg, err := g.KnowledgeGraph(ctx, false)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{})
 	if err != nil {
 		return types.KnowledgeStats{}, err
 	}
@@ -260,7 +255,7 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	if err != nil {
 		return types.ImportGraph{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.ImportGraph{}, err
 	}
@@ -268,17 +263,20 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 }
 
 // precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
-// the graph: a freshen of every index, the freshness verdict `magus status` prints, and which
-// files are declared outputs.
+// the graph: a freshen of every index, the freshness verdict `magus status` prints, which
+// files are declared outputs, and knowledge.conformance, whose gates and dep-fanout ceilings the
+// precedents are judged by.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
+	ConformanceOptions() (types.ConformanceOptions, error)
 }
 
-// indexedGraph is what a member judging the symbol indexes reads: the graph with its symbols,
-// each declared index's freshness, and the files that are declared outputs.
+// indexedGraph is what a member judging the symbol indexes reads: the workspace, the graph
+// with its symbols, each declared index's freshness, and the files that are declared outputs.
 type indexedGraph struct {
+	ws        precedentWorkspace
 	kg        *knowledge.Graph
 	indexes   []types.SymbolIndexStatus
 	generated map[string]bool
@@ -310,7 +308,7 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 			}
 		}
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return indexedGraph{}, err
 	}
@@ -331,7 +329,7 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 			generated[e.Path] = true
 		}
 	}
-	return indexedGraph{kg: kg, indexes: indexes, generated: generated}, nil
+	return indexedGraph{ws: pw, kg: kg, indexes: indexes, generated: generated}, nil
 }
 
 // reportMap is report as the map a Buzz caller reads, keyed as its JSON is: no Buzz object
@@ -348,18 +346,54 @@ func reportMap(report any) (map[string]any, error) {
 	return out, nil
 }
 
-// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
-// and each declared index's freshness, judged as judgedGraph describes. Generated files are
-// never counted. The answer is a PrecedentReport as a map.
+// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish
+// under knowledge.conformance's gates and dep-fanout ceilings, and each declared index's
+// freshness, judged as judgedGraph describes. Generated files are never counted. The answer
+// is a PrecedentReport as a map.
 func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	ig, err := judgedGraph(ctx, "precedents")
 	if err != nil {
 		return nil, err
 	}
+	conformance, err := ig.ws.ConformanceOptions()
+	if err != nil {
+		return nil, fmt.Errorf("magus\\precedents: %w", err)
+	}
+	conformance.Generated = ig.generated
 	return reportMap(types.PrecedentReport{
-		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated}),
+		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conformance: conformance}),
 		Indexes:    ig.indexes,
 	})
+}
+
+// conformanceReport is magus\conformance's answer: the lens beside the freshness of the indexes it
+// was drawn from, flattened so a script reads both as one map.
+type conformanceReport struct {
+	types.ConformanceOutput
+	Indexes []types.SymbolIndexStatus `json:"indexes"`
+}
+
+// MagusConformance backs magus\conformance: the conformance lens over the merged symbol indexes under
+// knowledge.conformance, and each declared index's freshness, judged as judgedGraph describes.
+// Generated files are never counted. It reports and writes nothing: a person commits a
+// proposed value. A ratchet record that is missing, malformed or looser than its anchor is an
+// error. The answer is a ConformanceOutput with an indexes list, as a map.
+func MagusConformance(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "conformance")
+	if err != nil {
+		return nil, err
+	}
+	opts, err := ig.ws.ConformanceOptions()
+	if err != nil {
+		return nil, fmt.Errorf("magus\\conformance: %w", err)
+	}
+	opts.Generated = ig.generated
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("magus\\conformance: %w", err)
+	}
+	out := ig.kg.Conformance(opts)
+	out.Definition = types.ConformanceDefinition
+	return reportMap(conformanceReport{ConformanceOutput: out, Indexes: ig.indexes})
 }
 
 // MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
@@ -389,7 +423,7 @@ func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 	if err != nil {
 		return types.Dir{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.Dir{}, err
 	}
@@ -426,7 +460,7 @@ func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.D
 	if err != nil {
 		return nil, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +481,7 @@ func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 	if err != nil {
 		return types.Layer{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.Layer{}, err
 	}
@@ -493,7 +527,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
-	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
@@ -687,4 +721,14 @@ func intOptions(member string, opts map[string]any, keys ...string) (map[string]
 		out[k] = n
 	}
 	return out, nil
+}
+
+// nonNegative refuses a negative window option, the first in name order.
+func nonNegative(member string, opts map[string]int) error {
+	for _, k := range slices.Sorted(maps.Keys(opts)) {
+		if opts[k] < 0 {
+			return fmt.Errorf("magus\\%s: %s must not be negative, got %d", member, k, opts[k])
+		}
+	}
+	return nil
 }

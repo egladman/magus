@@ -51,6 +51,13 @@ func TestParse_InvalidSyntax(t *testing.T) {
 		_, err := ParseEmbedded(`var x: = ;`)
 		assert.Error(t, err)
 	})
+	// Upstream E20, "Enum must have at least one case." (Parser.zig).
+	t.Run("empty enum", func(t *testing.T) {
+		for _, src := range []string{`enum Nothing {}`, `enum<str> Nothing {}`} {
+			_, err := ParseEmbedded(src)
+			assert.ErrorContains(t, err, "enum Nothing must have at least one case", src)
+		}
+	})
 }
 
 // TestNumericLiteralEval covers the non-decimal integer literals and underscore

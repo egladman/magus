@@ -47,10 +47,10 @@ func Offline() bool {
 var inheritedEnv = map[string]bool{"MAGUS_DAEMON_SOCKET": true}
 
 var registeredEnv = sync.OnceValue(func() map[string]bool {
-	docs := EnvVarDocs()
+	docs := EnvVars()
 	out := make(map[string]bool, len(docs))
 	for _, d := range docs {
-		out[d.EnvVar] = true
+		out[d.Name] = true
 	}
 	return out
 })
@@ -69,7 +69,7 @@ var registeredSuffixes = sync.OnceValue(func() []string {
 })
 
 // KnownEnvVar reports whether magus reads name from its environment: a variable
-// EnvVarDocs registers, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override, or one an older
+// EnvVars registers, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override, or one an older
 // magus parent passes down. A retired variable is not known. An unknown name is not
 // necessarily wrong (see EnvVarProblem); doctor reports every one.
 func KnownEnvVar(name string) bool {

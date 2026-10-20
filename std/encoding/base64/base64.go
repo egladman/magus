@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module base64 -lang buzz -out ../../../internal/interp/bindings/gen/base64.go
+//go:generate go run ../../../cmd/magus-utils bindings -module base64 -lang buzz -out ../../../internal/interp/bindings/gen/base64.go -pkg bindgen
 
 // Module is the "encoding/base64" host module. Buzz's own stdlib hashes
 // (crypto.hash) and serializes JSON but has no general-purpose binary-to-text

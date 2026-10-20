@@ -5,25 +5,21 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/cmd/magus/gen"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 )
 
-// Bridge aliases: the output vocabulary lives in output.go (package main).
-// These keep the cmd/magus switch statements (case outputJSON, …) and OutputOptions
-// signatures reading naturally.
-
+// The -o formats under the names every command's switch spells them (case outputJSON);
+// the values are libs/cmdline/output's.
 const (
-	outputText     = FormatText
-	outputJSON     = FormatJSON
-	outputYAML     = FormatYAML
-	outputJSONL    = FormatJSONL
-	outputName     = FormatName
-	outputTemplate = FormatTemplate
-	outputDot      = FormatDot
-	outputTree     = FormatTree
-	outputMarkdown = FormatMarkdown
-	outputGraphML  = FormatGraphML
+	outputText     = output.Text
+	outputJSON     = output.JSON
+	outputYAML     = output.YAML
+	outputJSONL    = output.JSONL
+	outputName     = output.Name
+	outputTemplate = output.Template
 )
 
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet
@@ -43,7 +39,7 @@ var global globalFlags
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
 // caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") +
+var outputFormatHelp = "Output format (" + output.Join(output.Common, "|") +
 	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
 	"template fields (they are the -o json names)"
 
@@ -55,7 +51,7 @@ func bindGlobalFlags(fs *flag.FlagSet, root, cfgPath *string) {
 	fs.StringVar(root, "C", "", "Short for --root")
 	fs.StringVar(cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
 	fs.StringVar(cfgPath, "c", "", "Short for --config")
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 }
 
 func bindDisplayFlags(fs *flag.FlagSet) {
@@ -72,7 +68,7 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 // cmdParse binds config/display flags, runs local registration, parses args, and returns positionals.
 func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	if local != nil {
 		local(fs)
@@ -140,7 +136,7 @@ func checkOutputSupported(name string, fs *flag.FlagSet) error {
 	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
 		return nil
 	}
-	return usagef("magus %s: -o is not supported by this command", name)
+	return exit.Usagef("magus %s: -o is not supported by this command", name)
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional
@@ -200,7 +196,7 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // limit: one such flag survives it by luck of ordering, two do not.
 func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
-	gen.BindFlags(fs, &globalCfg)
+	flaggen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	if bind != nil {
 		bind(fs)
@@ -220,8 +216,8 @@ func flagIsBool(f *flag.Flag) bool {
 	return ok && b.IsBoolFlag()
 }
 
-func outputOptionsOrDefault() (OutputOptions, error) {
-	return ResolveOutput(global.output)
+func outputOptionsOrDefault() (output.Options, error) {
+	return output.Parse(global.output)
 }
 
 // isFlagNamed and parseFlagValue recognize a flag the way Go's flag package does,
@@ -256,18 +252,13 @@ func parseFlagValue(arg, name string) string {
 
 // ---- what each command actually bound, for the man page's parity gate ----
 
-// The man page's flag list is a SECOND copy of every command's flags, hand-written in
-// internal/cli/registry.go because the real ones are bound in closures inside this
-// package, which nothing outside `package main` can import. A second copy drifts: the
-// registry advertised --simple for months after that flag was deleted, and it has never
-// mentioned most of what `run` and `affected` actually accept.
-//
-// Moving 91 binding sites into an importable package would remove the copy outright, at
-// the cost of touching every command. This is the cheaper half of that trade and it buys
-// the part that matters: the copy stays, but it can no longer drift SILENTLY. cmdParse is
-// the single funnel every command's flags pass through, so recording there yields each
-// command's real, fully-bound flag set (config flags, display flags and local ones alike)
-// and TestManpageFlagsMatchTheCLI compares that against the registry.
+// The registry declares every command's flags and the binders in cmd/magus/gen are
+// generated from it, so a generated flag cannot drift from its man page. What still can
+// is a flag bound by hand: a FlagCustom flag's fs.Var call, and the config-derived
+// globals. cmdParse is the single funnel every command's flags pass through, so
+// recording there yields each command's real, fully-bound flag set (config flags,
+// display flags and local ones alike) and TestManpageFlagsMatchTheCLI compares that
+// against the registry.
 //
 // Recording is unconditional rather than test-gated. It is one map write per invocation
 // of one command, and a record that only exists under a test hook is a record that can be
@@ -282,6 +273,8 @@ var flagRecord struct {
 type recordedFlag struct {
 	Name  string
 	Usage string
+	// Bool is whether the flag takes no value, which the guard reads a command's argv by.
+	Bool bool
 }
 
 // recordFlagSet snapshots every flag bound for name. Called by cmdParse AFTER the local
@@ -289,7 +282,8 @@ type recordedFlag struct {
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage})
+		boolean, _ := f.Value.(interface{ IsBoolFlag() bool })
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: boolean != nil && boolean.IsBoolFlag()})
 	})
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
@@ -325,7 +319,7 @@ func printOwnDefaults(fs *flag.FlagSet) {
 // static version of this check unusable.
 func globalFlagNames() map[string]bool {
 	fs := flag.NewFlagSet("globals", flag.ContinueOnError)
-	gen.BindFlags(fs, &config.Config{})
+	flaggen.BindFlags(fs, &config.Config{})
 	bindDisplayFlags(fs)
 	out := map[string]bool{}
 	fs.VisitAll(func(f *flag.Flag) { out[f.Name] = true })

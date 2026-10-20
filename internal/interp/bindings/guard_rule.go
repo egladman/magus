@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -75,7 +75,7 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 // allow/advise/deny, and once/count for state that lasts the calling session.
 func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 	guardMap.MapSet("allow", directVal(obs, "magus.guard.allow", func(context.Context, []vm.Value) (vm.Value, error) {
-		return bindinggen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}), nil
+		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}), nil
 	}))
 	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
 		member := string(decision)
@@ -91,7 +91,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 				}
 				verdict.Rule = rule
 			}
-			return bindinggen.ObjectGuardVerdict(verdict), nil
+			return bindgen.ObjectGuardVerdict(verdict), nil
 		}))
 	}
 	guardMap.MapSet("once", directVal(obs, "magus.guard.once", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -112,7 +112,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 		if len(args) != 0 {
 			return vm.Null, errors.New(`magus\guard.binary: takes no arguments`)
 		}
-		return bindinggen.ObjectGuardBinary(guardBinary()), nil
+		return bindgen.ObjectGuardBinary(guardBinary()), nil
 	}))
 }
 
