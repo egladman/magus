@@ -59,10 +59,64 @@ var inboundTypes = []string{
 	"ReviewTarget",
 	"ReviewComment",
 	"Project",
+	// The queue script's answers, leaf first.
+	"Person",
+	"QueueIntegration",
+	"QueueRequiredCheck",
+	"QueueSetting",
+	"QueueApp",
+	"QueueSetupStep",
+	"QueueSetup",
+	"QueueSetupRefusal",
+	"QueueCapabilities",
+	"QueueDescribeResult",
+	"QueueChange",
+	"QueueMergedChange",
+	"QueueUnqueuedChange",
+	"QueueClosedChange",
+	"QueueChanges",
+	"QueueApproval",
+	"QueueCheck",
+	"QueueGreenChange",
+	"QueueMergeAnswer",
+	"QueueRunOrigin",
+	"QueueArtifact",
+	"QueueArtifactListing",
+	"QueueReview",
+	"QueueReviews",
+}
+
+// requiredMembers names, per inbound type, the members its decoder refuses an answer
+// without. Absent otherwise decodes as the zero value, and for these a zero would admit
+// what the provider meant to refuse: a change missing "fork" read as one from this
+// repository, a missing approval count as a base requiring no review.
+var requiredMembers = map[string][]string{
+	"QueueCapabilities":   {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
+	"QueueSetup":          {"statusContext", "credential"},
+	"QueueSetupRefusal":   {"reason", "url", "app"},
+	"QueueChange":         {"id", "repo", "head", "base", "method", "fork"},
+	"QueueMergedChange":   {"id", "head", "commit", "method"},
+	"QueueUnqueuedChange": {"id", "head"},
+	"QueueClosedChange":   {"id"},
+	"QueueChanges":        {"changes", "merged", "unqueued"},
+	"QueueApproval":       {"approved", "head", "base", "method", "queued", "branchSharedWith"},
+	"QueueCheck":          {"name", "state"},
+	"QueueGreenChange":    {"id", "repo", "head"},
+	"QueueMergeAnswer":    {"merged"},
+	"QueueRunOrigin":      {"repo", "headRepo", "headBranch", "event", "branchEvent", "definition"},
+	"QueueArtifact":       {"name", "url"},
+	"QueueArtifactListing": {"run", "complete", "artifacts"},
+	"QueueReview":         {"id", "reviewer", "commit"},
+	"QueueReviews":        {"head", "approving"},
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.
 func inboundBoundaryTypes() ([]boundaryType, error) {
+	for name := range requiredMembers {
+		if !slices.Contains(inboundTypes, name) {
+			return nil, fmt.Errorf("requiredMembers names %s, which inboundTypes does not list", name)
+		}
+	}
 	out := make([]boundaryType, 0, len(inboundTypes))
 	for _, name := range inboundTypes {
 		entry, ok := boundaryTypeNamed(name)
@@ -84,7 +138,7 @@ func inboundBoundaryTypes() ([]boundaryType, error) {
 // and the encoder read, a decoder cannot accept a field the mirror does not declare or
 // miss one it does.
 //
-// The decode package imports only vm, spells and types, so internal/spell can import it.
+// The decode package imports only vm and the boundaryPackages, so internal/spell can import it.
 func runBoundaryDecode(args []string) error {
 	fs := flag.NewFlagSet("boundarydecode", flag.ExitOnError)
 	outPath := fs.String("out", "", "output Go file path for the decoders")
@@ -165,25 +219,35 @@ func newDecodeEmitter(entries []boundaryType) *decodeEmitter {
 }
 
 func (e *decodeEmitter) qualify(t reflect.Type) string {
-	pkg := t.PkgPath()[len("github.com/egladman/magus/"):]
-	e.pkgs[pkg] = true
-	return pkg + "." + t.Name()
+	e.pkgs[packageOf(t).alias] = true
+	return qualifyType(t)
 }
 
 func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	t := entry.Type
 	goType := e.qualify(t)
 	var body bytes.Buffer
-	fmt.Fprintf(&body, "// Decode%s decodes a Buzz %s, an object instance or a map, into a %s.\n", t.Name(), entry.Name, goType)
-	fmt.Fprintf(&body, "func Decode%s(v vm.Value) (%s, error) {\n", t.Name(), goType)
-	fmt.Fprintf(&body, "\treturn decode%s(v, %q)\n}\n\n", t.Name(), buzzgen.LowerFirstWord(entry.Name))
+	fmt.Fprintf(&body, "// Decode%s decodes a Buzz %s, an object instance or a map, into a %s.\n", typeIdent(t), entry.Name, goType)
+	fmt.Fprintf(&body, "func Decode%s(v vm.Value) (%s, error) {\n", typeIdent(t), goType)
+	fmt.Fprintf(&body, "\treturn decode%s(v, %q)\n}\n\n", typeIdent(t), buzzgen.LowerFirstWord(entry.Name))
 
-	fmt.Fprintf(&body, "func decode%s(v vm.Value, path string) (%s, error) {\n", t.Name(), goType)
+	fmt.Fprintf(&body, "func decode%s(v vm.Value, path string) (%s, error) {\n", typeIdent(t), goType)
 	fmt.Fprintf(&body, "\tvar out %s\n", goType)
 	fmt.Fprintln(&body, "\tfields, ok := v.MapView()")
 	fmt.Fprintln(&body, "\tif !ok {")
 	fmt.Fprintf(&body, "\t\treturn out, mismatch(path, %q, v)\n", entry.Name)
 	fmt.Fprintln(&body, "\t}")
+	required := requiredMembers[entry.Name]
+	declared := map[string]bool{}
+	for _, bf := range boundaryFields(t) {
+		declared[buzzVMFieldName(bf.StructField)] = true
+	}
+	for _, key := range required {
+		if !declared[key] {
+			return fmt.Errorf("requiredMembers names %q, which %s does not declare", key, entry.Name)
+		}
+		fmt.Fprintf(&body, "\thas%s := false\n", goCase(key))
+	}
 	fmt.Fprintln(&body, "\tfor _, key := range fields.MapKeys() {")
 	fmt.Fprintln(&body, "\t\titem, _ := fields.MapGet(key)")
 	fmt.Fprintln(&body, "\t\tswitch key {")
@@ -191,6 +255,9 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 		f := bf.StructField
 		key := buzzVMFieldName(f)
 		fmt.Fprintf(&body, "\t\tcase %q:\n", key)
+		if slices.Contains(required, key) {
+			fmt.Fprintf(&body, "\t\t\thas%s = true\n", goCase(key))
+		}
 		if err := e.assign(&body, "item", fmt.Sprintf("path+%q", "."+key), "out."+bf.selector, f.Name, f.Type, "\t\t\t"); err != nil {
 			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 		}
@@ -199,6 +266,9 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintf(&body, "\t\t\treturn out, unknownMember(path, %q, key)\n", entry.Name)
 	fmt.Fprintln(&body, "\t\t}")
 	fmt.Fprintln(&body, "\t}")
+	for _, key := range required {
+		fmt.Fprintf(&body, "\tif !has%s {\n\t\treturn out, missingMember(path, %q, %q)\n\t}\n", goCase(key), entry.Name, key)
+	}
 	fmt.Fprintln(&body, "\treturn out, nil")
 	fmt.Fprintln(&body, "}")
 	fmt.Fprintln(&body)
@@ -266,7 +336,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 			return fmt.Errorf("%s is not inbound: add %s to inboundTypes (cmd/magus-utils/boundary_decode.go)", t, buzzName(t))
 		}
 		x := "x" + name
-		fmt.Fprintf(w, "%s%s, err := decode%s(%s, %s)\n", indent, x, t.Name(), src, path)
+		fmt.Fprintf(w, "%s%s, err := decode%s(%s, %s)\n", indent, x, typeIdent(t), src, path)
 		ret(x)
 	case reflect.Pointer:
 		x := "opt" + name
@@ -384,7 +454,7 @@ func (e *decodeEmitter) file() ([]byte, error) {
 	fmt.Fprintln(&b, "// its zero value, a null optional stays nil, and an empty list or map decodes to nil, so")
 	fmt.Fprintln(&b, "// Decode(Object(v)) == v holds for every value, zero included.")
 	fmt.Fprintln(&b, "//")
-	fmt.Fprintln(&b, "// It imports only vm, spells and types, so internal/spell can import it.")
+	fmt.Fprintln(&b, "// It imports only vm and the boundary type packages, so internal/spell can import it.")
 	fmt.Fprintln(&b, "package decode")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "import (")
@@ -394,12 +464,7 @@ func (e *decodeEmitter) file() ([]byte, error) {
 	}
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if e.pkgs["spells"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
-	if e.pkgs["types"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
+	b.WriteString(importLines(e.pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	b.Write(e.funcs.Bytes())
@@ -451,14 +516,9 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 	}
 	fmt.Fprintf(&b, "\t%s \"github.com/egladman/magus/internal/interp/bindings/gen\"\n", bindingsPkg)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if e.pkgs["spells"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
 	// e.pkgs is exact here as well: every struct the decoders reach is an inbound entry,
 	// and every enum they reach is listed below.
-	if e.pkgs["types"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
+	b.WriteString(importLines(e.pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "var inboundTypes = []inboundType{")
@@ -472,7 +532,7 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 			enums = ", ffi.EnumBacking"
 		}
 		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return %s.Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return Decode%s(v) }},\n",
-			entry.Name, q, bindingsPkg, t.Name(), q, enums, t.Name())
+			entry.Name, q, bindingsPkg, typeIdent(t), q, enums, typeIdent(t))
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
@@ -513,6 +573,10 @@ func mismatch(path, want string, got vm.Value) error {
 
 func unknownMember(path, typ, key string) error {
 	return fmt.Errorf("%s: %s has no member %q", path, typ, key)
+}
+
+func missingMember(path, typ, key string) error {
+	return fmt.Errorf("%s: field %q is missing, and a %s requires it", path, key, typ)
 }
 
 func decodeStr(v vm.Value, path string) (string, error) {

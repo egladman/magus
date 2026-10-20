@@ -55,18 +55,18 @@ var (
 // bridge's encoding from the answers.
 var script = `
 import "std";
-import "serialize";
+import "mergequeue/types";
 
-export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"], "required_approvals": 2, "queue_label": "queue: ",
-        "committer": {"name": "bot", "email": "bot@example.com"}};
+export fun describe(req: QueueDescribeRequest) > any {
+    return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash", req.base], "requiredApprovals": 2, "queueLabel": "queue: ",
+        "committer": {"name": "bot", "email": "bot@example.com"}}};
 }
 
-export fun list_changes(io: {str: any}) > any {
+export fun list_changes(req: QueueListChangesRequest) > any {
     return {
         "changes": [{
             "id": "7", "repo": "acme/acme", "head": "` + headA + `", "ref": "refs/pull/7/head",
-            "branch": "feat", "base": "{io["base"]}", "title": "{io["remote_url"]}", "author": "priya", "fork": true,
+            "branch": "feat", "base": req.base, "title": req.remoteURL, "author": "priya", "fork": true,
             "method": "squash", "parent": "6",
         }],
         "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
@@ -75,65 +75,69 @@ export fun list_changes(io: {str: any}) > any {
     };
 }
 
-export fun approval_at(io: {str: any}) > any {
-    return {"approved": io["id"] == "7", "head": io["commit"], "reason": "{io["title"]}",
-        "base": "main", "method": io["method"], "approved_commit": "` + headD + `",
-        "queued": true, "shared_with": ["40"]};
+export fun approval_at(req: QueueApprovalRequest) > any {
+    return {"approved": req.id == "7", "head": req.commit, "reason": req.title,
+        "base": "main", "method": req.method, "approvedCommit": "` + headD + `",
+        "queued": true, "branchSharedWith": ["40"]};
 }
 
-export fun list_green(io: {str: any}) > any {
-    if (io["context"] != "merge-queue") {
-        return {"changes": [<any>]};
+export fun list_green(req: QueueListGreenRequest) > any {
+    if (req.context != "merge-queue") {
+        return [<any>];
     }
-    return {"changes": [{"id": "{io["base"]}", "repo": "{io["remote_url"]}", "head": "` + headD + `"}]};
+    return [{"id": req.base, "repo": req.remoteURL, "head": "` + headD + `"}];
 }
 
-export fun post_status(io: {str: any}) > bool {
-    return io["context"] == "merge-queue" and io["state"] == "success";
+export fun post_status(req: QueueStatusRequest) > Ack {
+    return Ack{ ok = req.context == "merge-queue" and req.state == "success" };
 }
 
-export fun retarget(io: {str: any}) > bool {
-    return io["base"] == "main";
+export fun retarget(req: QueueRetargetRequest) > Ack {
+    return Ack{ ok = req.to == "main" };
 }
 
-export fun merge_change(io: {str: any}) > any {
-    final through = serialize\Boxed.init(io["through"]).listValue();
-    final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
-    return {"merged": io["message"] == "* body" and io["app"] == "q" and (pinned or through.len() == 0), "by_provider": through.len() == 0, "reason": "head moved"};
+export fun merge_change(req: QueueMergeRequest) > any {
+    final through = req.through;
+    final pinned = through.len() == 1 and through[0].id == "5" and through[0].commit == "` + headE + `";
+    return {"merged": req.message == "* body" and req.app == "q" and (pinned or through.len() == 0), "byProvider": through.len() == 0, "reason": "head moved"};
 }
 
-export fun kick_back(io: {str: any}) > bool {
-    final paths = io["paths"] ?? [<str>];
-    final repro = serialize\Boxed.init(io["reproduce"]);
-    return io["report"] == "report" and io["claim"] == "exit 1" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c"
-        and io["source"] == "o/r/runs/7" and repro.q("gate").stringValue() == "make test" and repro.q("regenerate").stringValue() == "";
-}
-
-export fun mark(io: {str: any}) > bool {
-    return io["id"] == "7" and io["repo"] == "acme/acme" and io["mark"] != "kicked_back";
-}
-
-export fun required_checks(io: {str: any}) > any {
-    return {"checks": [{"name": "ci gate", "state": "failure"}, {"name": "{io["commit"]}", "state": "{io["title"]}"}]};
-}
-
-export fun reviews(io: {str: any}) > any {
-    if (io["title"] == "bad commit") {
-        return {"head": "` + headA + `", "reviews": [{"id": "12", "reviewer": "ann", "commit": "d"}]};
+export fun kick_back(req: QueueKickBackRequest) > Ack {
+    var gate = "";
+    var regenerate = "-";
+    if (req.reproduce -> repro) {
+        gate = repro.gate;
+        regenerate = repro.regenerate;
     }
-    return {"head": "` + headA + `", "reviews": [{"id": "12", "reviewer": "{io["title"]}", "commit": "` + headD + `"}]};
+    return Ack{ ok = req.report == "report" and req.claim == "exit 1" and req.code == "KICK_CONFLICT" and "{req.paths}" == "{["a.go", "b.go"]}" and req.candidateCommit == "c"
+        and req.source == "o/r/runs/7" and gate == "make test" and regenerate == "" };
 }
 
-export fun dismiss_review(io: {str: any}) > bool {
-    return io["id"] == "7" and io["review"] == "12" and io["reviewer"] == "ann" and io["commit"] == "` + headD + `" and io["message"] == "a.go changed";
+export fun mark(req: QueueMarkRequest) > Ack {
+    return Ack{ ok = req.id == "7" and req.repo == "acme/acme" and req.mark != "kicked_back" };
 }
 
-export fun list_artifacts(io: {str: any}) > any {
-    final run ={"repo": "o/r", "head_repo": "o/r", "head_branch": "main", "event": "push", "branch_event": true, "definition": "q.yaml"};
-    if (io["source"] == "no run") {
+export fun required_checks(req: QueueRequiredChecksRequest) > any {
+    return [{"name": "ci gate", "state": "failure"}, {"name": req.commit, "state": req.title}];
+}
+
+export fun reviews(req: QueueReviewsRequest) > any {
+    if (req.title == "bad commit") {
+        return {"head": "` + headA + `", "approving": [{"id": "12", "reviewer": "ann", "commit": "d"}]};
+    }
+    return {"head": "` + headA + `", "approving": [{"id": "12", "reviewer": req.title, "commit": "` + headD + `"}]};
+}
+
+export fun dismiss_review(req: QueueDismissReviewRequest) > Ack {
+    return Ack{ ok = req.id == "7" and req.review.id == "12" and req.review.reviewer == "ann" and req.review.commit == "` + headD + `" and req.message == "a.go changed" };
+}
+
+export fun list_artifacts(req: QueueListArtifactsRequest) > any {
+    final run = {"repo": "o/r", "headRepo": "o/r", "headBranch": "main", "event": "push", "branchEvent": true, "definition": "q.yaml"};
+    if (req.source == "no run") {
         return {"complete": true, "artifacts": [<any>]};
     }
-    return {"run": run, "complete": io["source"] == "done", "headers": {"Authorization": "Bearer tok"},
+    return {"run": run, "complete": req.source == "done", "headers": {"Authorization": "Bearer tok"},
         "artifacts": [{"name": "mergequeue-plan", "url": "https://example.invalid/1.zip"}]};
 }
 `
@@ -158,25 +162,30 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 
 // setupScript answers describe with a setup built from what it was asked.
 const setupScript = `
-export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
-        "status_context": io["status_context"],
-        "credential": {"id": "812", "name": io["app"]},
-        "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{io["setup_steps"]}"]}],
+import "mergequeue/types";
+export fun describe(req: QueueDescribeRequest) > any {
+    return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash"], "requiredApprovals": 0, "setup": {
+        "statusContext": req.statusContext,
+        "credential": {"id": "812", "name": req.app},
+        "requiredChecks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["{req.setupSteps}"]}],
         "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
-        "app": {"slug": io["app"], "id": "812", "client_id": "Iv1", "install_url": "https://github.com/apps/q/installations/new",
+        "app": {"slug": req.app, "id": "812", "clientID": "Iv1", "installURL": "https://github.com/apps/q/installations/new",
             "environment": "magus-queue", "variable": "V", "secret": "S"},
         "steps": [{"title": "Install it", "url": "https://github.com/apps/q/installations/new"}, {"title": "Store it", "command": "gh secret set S"}],
-    }};
+    }}};
 }
-export fun list_changes(io: {str: any}) > any { return {}; }
-export fun approval_at(io: {str: any}) > any { return {}; }
-export fun list_green(io: {str: any}) > any { return {}; }
-export fun post_status(io: {str: any}) > bool { return true; }
-export fun retarget(io: {str: any}) > bool { return true; }
-export fun merge_change(io: {str: any}) > any { return {}; }
-export fun kick_back(io: {str: any}) > bool { return true; }
-export fun mark(io: {str: any}) > bool { return true; }
+` + otherOps
+
+// otherOps are the required ops a describe-only script still exports, never called.
+const otherOps = `
+export fun list_changes(req: QueueListChangesRequest) > any { return {}; }
+export fun approval_at(req: QueueApprovalRequest) > any { return {}; }
+export fun list_green(req: QueueListGreenRequest) > any { return {}; }
+export fun post_status(req: QueueStatusRequest) > Ack { return Ack{ ok = true }; }
+export fun retarget(req: QueueRetargetRequest) > Ack { return Ack{ ok = true }; }
+export fun merge_change(req: QueueMergeRequest) > any { return {}; }
+export fun kick_back(req: QueueKickBackRequest) > Ack { return Ack{ ok = true }; }
+export fun mark(req: QueueMarkRequest) > Ack { return Ack{ ok = true }; }
 `
 
 func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
@@ -202,10 +211,10 @@ func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
 // A setup a person could not follow is the provider's error, named where it broke.
 func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"credential": {"id": "812", "name": io["app"]},`, ``, `setup: field "credential" is missing`},
-		{`{"id": "812", "name": io["app"]}`, `{"id": "", "name": io["app"]}`, `without the integration its credential posts as`},
+		{`"credential": {"id": "812", "name": req.app},`, ``, `setup: field "credential" is missing`},
+		{`{"id": "812", "name": req.app}`, `{"id": "", "name": req.app}`, `without the integration its credential posts as`},
 		{`"command": "gh secret set S"`, `"command": "gh secret set S", "url": "https://x"`, `exactly one of a command or a URL`},
-		{`"status_context": io["status_context"],`, `"status_context": "",`, `setup for no status context`},
+		{`"statusContext": req.statusContext,`, `"statusContext": "",`, `setup for no status context`},
 	} {
 		_, err := open(t, strings.Replace(setupScript, tc.from, tc.to, 1)).Describe(context.Background(), types.ListQuery{Base: "main", StatusContext: "gate"})
 		require.ErrorContains(t, err, tc.want, tc.to)
@@ -216,32 +225,25 @@ func TestDescribeRefusesASetupItCannotUse(t *testing.T) {
 // describes one for any other app, which it echoes as the credential's name. Its base
 // picks a refusal that leaves something out.
 const refusedScript = `
-export fun describe(io: {str: any}) > any {
-    if (io["base"] == "no reason") {
+import "mergequeue/types";
+export fun describe(req: QueueDescribeRequest) > any {
+    if (req.base == "no reason") {
         return {"refused": {"url": "https://example.invalid/apps/q", "app": "q:<id>"}};
     }
-    if (io["base"] == "no url") {
+    if (req.base == "no url") {
         return {"refused": {"reason": "no id for q", "url": "", "app": "q:<id>"}};
     }
-    if (io["base"] == "no app") {
+    if (req.base == "no app") {
         return {"refused": {"reason": "no id for q", "url": "https://example.invalid/apps/q", "app": ""}};
     }
-    if (io["app"] == "q") {
+    if (req.app == "q") {
         return {"refused": {"reason": "no id for q", "url": "https://example.invalid/apps/q", "app": "q:<id>"}};
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 0, "setup": {
-        "status_context": io["status_context"], "credential": {"id": "812", "name": io["app"]}, "steps": [<any>],
-    }};
+    return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash"], "requiredApprovals": 0, "setup": {
+        "statusContext": req.statusContext, "credential": {"id": "812", "name": req.app}, "steps": [<any>],
+    }}};
 }
-export fun list_changes(io: {str: any}) > any { return {}; }
-export fun approval_at(io: {str: any}) > any { return {}; }
-export fun list_green(io: {str: any}) > any { return {}; }
-export fun post_status(io: {str: any}) > bool { return true; }
-export fun retarget(io: {str: any}) > bool { return true; }
-export fun merge_change(io: {str: any}) > any { return {}; }
-export fun kick_back(io: {str: any}) > bool { return true; }
-export fun mark(io: {str: any}) > bool { return true; }
-`
+` + otherOps
 
 // --app reaches the provider as the person wrote it, and a provider that declines to
 // describe a setup for it says so as a *types.SetupRefusedError naming the app to ask
@@ -312,11 +314,11 @@ func TestListChangesRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
 // record without "fork" read as a change from this repository.
 func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 	for _, tc := range []struct{ from, want string }{
-		{`, "fork": true`, `list_changes: changes[0]: field "fork" is missing`},
-		{`"repo": "acme/acme", `, `list_changes: changes[0]: field "repo" is missing`},
-		{`"base": "{io["base"]}", `, `list_changes: changes[0]: field "base" is missing`},
+		{`, "fork": true`, `list_changes.changes[0]: field "fork" is missing`},
+		{`"repo": "acme/acme", `, `list_changes.changes[0]: field "repo" is missing`},
+		{`"base": req.base, `, `list_changes.changes[0]: field "base" is missing`},
 		{`"unqueued": [{"id": "9", "head": "` + headF + `", "repo": "acme/acme", "title": "wip", "author": "ann", "branch": "wip", "mark": "queued", "base": "main"}],`, `list_changes: field "unqueued" is missing`},
-		{`, "method": "squash"}]`, `list_changes: merged[0]: field "method" is missing`},
+		{`, "method": "squash"}]`, `list_changes.merged[0]: field "method" is missing`},
 	} {
 		to := ""
 		if strings.HasSuffix(tc.from, "}]") {
@@ -327,19 +329,19 @@ func TestAMissingRequiredFieldIsAnError(t *testing.T) {
 	}
 	for _, tc := range []struct{ from, want string }{
 		{`"queued": true, `, `field "queued" is missing`},
-		{`"shared_with": ["40"]`, `field "shared_with" is missing`},
+		{`"branchSharedWith": ["40"]`, `field "branchSharedWith" is missing`},
 		{`"base": "main", `, `field "base" is missing`},
 	} {
 		_, err := open(t, strings.Replace(script, tc.from, "", 1)).ApprovalAt(context.Background(), change, headD)
 		require.ErrorContains(t, err, tc.want, tc.from)
 	}
-	_, err := open(t, strings.Replace(script, `"linear_stacks": true, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
-	require.ErrorContains(t, err, `field "linear_stacks" is missing`)
+	_, err := open(t, strings.Replace(script, `"linearStacks": true, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `field "linearStacks" is missing`)
 	// Read as zero, a missing count would say the base requires no review.
-	_, err = open(t, strings.Replace(script, `"required_approvals": 2, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
-	require.ErrorContains(t, err, `field "required_approvals" is missing`)
-	_, err = open(t, strings.Replace(script, `"required_approvals": 2, `, `"required_approvals": "2", `, 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
-	require.ErrorContains(t, err, `field "required_approvals" is string, want int`)
+	_, err = open(t, strings.Replace(script, `"requiredApprovals": 2, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `field "requiredApprovals" is missing`)
+	_, err = open(t, strings.Replace(script, `"requiredApprovals": 2, `, `"requiredApprovals": "2", `, 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `describe.capabilities.requiredApprovals: want int`)
 }
 
 func TestListGreenDecodesTheChangesCarryingTheStatus(t *testing.T) {
@@ -350,8 +352,8 @@ func TestListGreenDecodesTheChangesCarryingTheStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	_, err = open(t, script).ListGreen(context.Background(), types.ListQuery{Base: ".."}, "merge-queue")
-	require.ErrorContains(t, err, `list_green: changes[0]: change id ".."`)
-	_, err = open(t, strings.Replace(script, `"head": "`+headD+`"}]}`, `"head": "d"}]}`, 1)).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "merge-queue")
+	require.ErrorContains(t, err, `list_green[0]: change id ".."`)
+	_, err = open(t, strings.Replace(script, `"head": "`+headD+`"}];`, `"head": "d"}];`, 1)).ListGreen(context.Background(), types.ListQuery{Base: "12"}, "merge-queue")
 	require.ErrorContains(t, err, `head "d" is not a full commit id`)
 }
 
@@ -363,15 +365,15 @@ func TestApprovalDecodesAtTheCommitAsked(t *testing.T) {
 }
 
 func TestApprovalWithoutAHeadIsAnError(t *testing.T) {
-	p := open(t, strings.Replace(script, `"head": io["commit"], `, `"head": "", `, 1))
+	p := open(t, strings.Replace(script, `"head": req.commit, `, `"head": "", `, 1))
 	_, err := p.ApprovalAt(context.Background(), change, headD)
 	require.ErrorContains(t, err, `approval_at: head: #7 (add x): head "" is not a full commit id`)
 }
 
 func TestApprovalOfTheWrongTypeNamesTheField(t *testing.T) {
-	p := open(t, strings.Replace(script, `"approved": io["id"] == "7"`, `"approved": "yes"`, 1))
+	p := open(t, strings.Replace(script, `"approved": req.id == "7"`, `"approved": "yes"`, 1))
 	_, err := p.ApprovalAt(context.Background(), change, headA)
-	require.ErrorContains(t, err, `field "approved" is string, want bool`)
+	require.ErrorContains(t, err, `approval_at.approved: want bool`)
 }
 
 func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
@@ -419,11 +421,12 @@ func TestListArtifactsDecodesTheListing(t *testing.T) {
 
 func TestAListingThatDoesNotSayWhatRanIsRefused(t *testing.T) {
 	_, err := open(t, script).ListArtifacts(context.Background(), "no run")
-	require.EqualError(t, err, `provider "echo": list_artifacts: field "run" is missing`)
+	require.EqualError(t, err, `provider "echo": list_artifacts: field "run" is missing, and a QueueArtifactListing requires it`)
 }
 
 func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
-	_, err := newScript(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
+	_, err := newScript(context.Background(), "half", `import "mergequeue/types";
+export fun list_changes(req: QueueListChangesRequest) > any { return {}; }`)
 	require.EqualError(t, err, `provider "half" does not export describe, approval_at, list_green, post_status, retarget, merge_change, kick_back, mark`)
 
 	noRuns := open(t, strings.Split(script, "export fun list_artifacts")[0])
@@ -470,11 +473,6 @@ func TestReviewsDecodesTheApprovalsAndDismissReviewCarriesTheReview(t *testing.T
 func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {
 	_, err := Open(context.Background(), "gitlab")
 	require.ErrorContains(t, err, `provider "gitlab": not built in`)
-}
-
-func TestTheBridgeRefusesAValueItDoesNotPass(t *testing.T) {
-	_, err := toValue(map[string]any{"n": 3})
-	require.EqualError(t, err, `field "n" is int, which the bridge does not pass`)
 }
 
 // cannedGitHub answers the GitHub provider's reads from answers, keyed by method, path and

@@ -23,7 +23,11 @@ func TestProviderOpsAreRegistered(t *testing.T) {
 		assert.True(t, slices.Contains(inboundTypes, buzzName(resp)), "%s: response %s is not in inboundTypes", op.Op, resp)
 		params, returns, err := providerSignature(op)
 		require.NoError(t, err)
-		assert.Equal(t, "target: Target, req: "+buzzName(op.Req), params)
+		want := "target: Target, req: " + buzzName(op.Req)
+		if op.Family == queueFamily {
+			want = "req: " + buzzName(op.Req)
+		}
+		assert.Equal(t, want, params)
 		assert.NotEmpty(t, returns)
 	}
 }
@@ -57,7 +61,10 @@ func TestRunBoundaryDecodeEmitsTheProviderOps(t *testing.T) {
 
 	dec, opType, opVars := run("a")
 	assert.Contains(t, dec, "var ProviderFuncs = []ContractFunc{")
-	assert.Contains(t, dec, `{Name: "resolve_secret", Returns: "Secret", Params: "target: Target, req: SecretRef", Decode: func(v vm.Value) (any, error) { return decodeProviderResolveSecret(v) }},`)
+	assert.Contains(t, dec, `{Name: "resolve_secret", Returns: "Secret", Params: "target: Target, req: SecretRef", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderResolveSecret(v) }},`)
+	assert.Contains(t, dec, "var QueueFuncs = []ContractFunc{")
+	assert.Contains(t, dec, `{Name: "describe", Returns: "QueueDescribeResult", Params: "req: QueueDescribeRequest", Required: true,`)
+	assert.Contains(t, dec, `{Name: "list_artifacts", Returns: "QueueArtifactListing", Params: "req: QueueListArtifactsRequest", Required: false,`)
 	assert.Contains(t, dec, `Returns: "[Lifecycle]", Params: "target: Target, req: LifecycleQuery"`)
 	assert.Contains(t, dec, "func decodeProviderListLifecycles(v vm.Value) ([]spells.Lifecycle, error) {")
 
@@ -65,7 +72,9 @@ func TestRunBoundaryDecodeEmitsTheProviderOps(t *testing.T) {
 	assert.Contains(t, opType, "type ProviderOp[Req, Resp any] struct {")
 
 	assert.Contains(t, opVars, "package providerops")
-	assert.Contains(t, opVars, `var ResolveSecret = bindgen.ProviderOp[types.SecretRef, spells.Secret]{Family: "secret", Name: "resolve_secret", Encode: bindgen.ObjectSecretRef, Decode: decoded[spells.Secret](0)}`)
+	assert.Contains(t, opVars, `var ResolveSecret = bindgen.ProviderOp[types.SecretRef, spells.Secret]{Family: "secret", Name: "resolve_secret", Encode: bindgen.ObjectSecretRef, Decode: decoded[spells.Secret](decode.ProviderFuncs, 0)}`)
+	assert.Contains(t, opVars, `var QueueDescribe = bindgen.ProviderOp[queuetypes.DescribeRequest, queuetypes.DescribeResult]{Family: "queue", Name: "describe", Encode: bindgen.ObjectQueueDescribeRequest, Decode: decoded[queuetypes.DescribeResult](decode.QueueFuncs, 0)}`)
+	assert.Contains(t, opVars, `queuetypes "github.com/egladman/magus/internal/queue/types"`, "the second types package is imported by path, under its own alias")
 	assert.Contains(t, opVars, `var CacheEnabled = bindgen.ProviderOp[types.Empty, types.Ack]{Family: "cache", Name: "enabled"`)
 	assert.Contains(t, opVars, "// CacheEnabled is the cache provider's optional enabled op.")
 

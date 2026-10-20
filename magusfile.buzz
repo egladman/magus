@@ -797,8 +797,8 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates everything derived from the boundary registry: the runtime boundary list,
-// the Go-to-Buzz encoders, the Buzz-to-Go decoders, the provider ops and the spell
-// contract's signatures.
+// the Go-to-Buzz encoders, the Buzz-to-Go decoders, the provider ops, the spell
+// contract's signatures and the merge queue script's record mirrors.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("internal/interp/bindings/gen/boundary_list.go",
         "internal/interp/bindings/gen/boundary_objects.go",
@@ -806,8 +806,10 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/interp/bindings/gen/providerops/providerops.go",
         "internal/interp/bindings/gen/decode/decode.go",
         "internal/interp/bindings/gen/decode/inbound_list_test.go",
-        "internal/interp/bindings/gen/decode/contract.go");
+        "internal/interp/bindings/gen/decode/contract.go",
+        "internal/queue/provider/gen/types/*.buzz");
     proc\exec("go", ["generate", "./cmd/magus-utils"]);
+    proc\exec("go", ["generate", "./internal/queue/provider"]);
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from

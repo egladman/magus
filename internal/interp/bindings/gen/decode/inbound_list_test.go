@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -45,6 +46,30 @@ var inboundTypes = []inboundType{
 	{Name: "ReviewTarget", Zero: types.ReviewTarget{}, Encode: func(v any) vm.Value { return bindgen.ObjectReviewTarget(v.(types.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return DecodeReviewTarget(v) }},
 	{Name: "ReviewComment", Zero: types.ReviewComment{}, Encode: func(v any) vm.Value { return bindgen.ObjectReviewComment(v.(types.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return DecodeReviewComment(v) }},
 	{Name: "Project", Zero: spells.ProvidedProject{}, Encode: func(v any) vm.Value { return bindgen.ObjectProvidedProject(v.(spells.ProvidedProject)) }, Decode: func(v vm.Value) (any, error) { return DecodeProvidedProject(v) }},
+	{Name: "Person", Zero: types.Person{}, Encode: func(v any) vm.Value { return bindgen.ObjectPerson(v.(types.Person)) }, Decode: func(v vm.Value) (any, error) { return DecodePerson(v) }},
+	{Name: "QueueIntegration", Zero: queuetypes.Integration{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueIntegration(v.(queuetypes.Integration)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueIntegration(v) }},
+	{Name: "QueueRequiredCheck", Zero: queuetypes.RequiredCheck{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueRequiredCheck(v.(queuetypes.RequiredCheck)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueRequiredCheck(v) }},
+	{Name: "QueueSetting", Zero: queuetypes.Setting{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueSetting(v.(queuetypes.Setting)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueSetting(v) }},
+	{Name: "QueueApp", Zero: queuetypes.App{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueApp(v.(queuetypes.App)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueApp(v) }},
+	{Name: "QueueSetupStep", Zero: queuetypes.SetupStep{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueSetupStep(v.(queuetypes.SetupStep)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueSetupStep(v) }},
+	{Name: "QueueSetup", Zero: queuetypes.Setup{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueSetup(v.(queuetypes.Setup)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueSetup(v) }},
+	{Name: "QueueSetupRefusal", Zero: queuetypes.SetupRefusedError{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueSetupRefusedError(v.(queuetypes.SetupRefusedError)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueSetupRefusedError(v) }},
+	{Name: "QueueCapabilities", Zero: queuetypes.Capabilities{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueCapabilities(v.(queuetypes.Capabilities)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueCapabilities(v) }},
+	{Name: "QueueDescribeResult", Zero: queuetypes.DescribeResult{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueDescribeResult(v.(queuetypes.DescribeResult)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueDescribeResult(v) }},
+	{Name: "QueueChange", Zero: queuetypes.Change{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueChange(v.(queuetypes.Change)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueChange(v) }},
+	{Name: "QueueMergedChange", Zero: queuetypes.MergedChange{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueMergedChange(v.(queuetypes.MergedChange)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueMergedChange(v) }},
+	{Name: "QueueUnqueuedChange", Zero: queuetypes.UnqueuedChange{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueUnqueuedChange(v.(queuetypes.UnqueuedChange)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueUnqueuedChange(v) }},
+	{Name: "QueueClosedChange", Zero: queuetypes.ClosedChange{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueClosedChange(v.(queuetypes.ClosedChange)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueClosedChange(v) }},
+	{Name: "QueueChanges", Zero: queuetypes.Changes{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueChanges(v.(queuetypes.Changes)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueChanges(v) }},
+	{Name: "QueueApproval", Zero: queuetypes.Approval{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueApproval(v.(queuetypes.Approval)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueApproval(v) }},
+	{Name: "QueueCheck", Zero: queuetypes.Check{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueCheck(v.(queuetypes.Check)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueCheck(v) }},
+	{Name: "QueueGreenChange", Zero: queuetypes.GreenChange{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueGreenChange(v.(queuetypes.GreenChange)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueGreenChange(v) }},
+	{Name: "QueueMergeAnswer", Zero: queuetypes.MergeAnswer{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueMergeAnswer(v.(queuetypes.MergeAnswer)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueMergeAnswer(v) }},
+	{Name: "QueueRunOrigin", Zero: queuetypes.RunOrigin{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueRunOrigin(v.(queuetypes.RunOrigin)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueRunOrigin(v) }},
+	{Name: "QueueArtifact", Zero: queuetypes.Artifact{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueArtifact(v.(queuetypes.Artifact)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueArtifact(v) }},
+	{Name: "QueueArtifactListing", Zero: queuetypes.ArtifactListing{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueArtifactListing(v.(queuetypes.ArtifactListing)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueArtifactListing(v) }},
+	{Name: "QueueReview", Zero: queuetypes.Review{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueReview(v.(queuetypes.Review)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueReview(v) }},
+	{Name: "QueueReviews", Zero: queuetypes.Reviews{}, Encode: func(v any) vm.Value { return bindgen.ObjectQueueReviews(v.(queuetypes.Reviews)) }, Decode: func(v vm.Value) (any, error) { return DecodeQueueReviews(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{

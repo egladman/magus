@@ -4,6 +4,7 @@ package bindgen
 
 import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -233,6 +234,43 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
+	}},
+	{Name: "QueueApprovalRequest", Zero: queuetypes.ApprovalRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueApprovalRequest(v.(queuetypes.ApprovalRequest))
+	}},
+	{Name: "QueueDescribeRequest", Zero: queuetypes.DescribeRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueDescribeRequest(v.(queuetypes.DescribeRequest))
+	}},
+	{Name: "QueueDismissReviewRequest", Zero: queuetypes.DismissReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueDismissReviewRequest(v.(queuetypes.DismissReviewRequest))
+	}},
+	{Name: "QueueKickBackRequest", Zero: queuetypes.KickBackRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueKickBackRequest(v.(queuetypes.KickBackRequest))
+	}},
+	{Name: "QueueListArtifactsRequest", Zero: queuetypes.ListArtifactsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueListArtifactsRequest(v.(queuetypes.ListArtifactsRequest))
+	}},
+	{Name: "QueueListChangesRequest", Zero: queuetypes.ListChangesRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueListChangesRequest(v.(queuetypes.ListChangesRequest))
+	}},
+	{Name: "QueueListGreenRequest", Zero: queuetypes.ListGreenRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueListGreenRequest(v.(queuetypes.ListGreenRequest))
+	}},
+	{Name: "QueueMarkRequest", Zero: queuetypes.MarkRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQueueMarkRequest(v.(queuetypes.MarkRequest)) }},
+	{Name: "QueueMergeRequest", Zero: queuetypes.MergeRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQueueMergeRequest(v.(queuetypes.MergeRequest)) }},
+	{Name: "QueuePinnedChange", Zero: queuetypes.PinnedChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQueuePinnedChange(v.(queuetypes.PinnedChange)) }},
+	{Name: "QueueReproduction", Zero: queuetypes.Reproduction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQueueReproduction(v.(queuetypes.Reproduction)) }},
+	{Name: "QueueRequiredChecksRequest", Zero: queuetypes.RequiredChecksRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueRequiredChecksRequest(v.(queuetypes.RequiredChecksRequest))
+	}},
+	{Name: "QueueRetargetRequest", Zero: queuetypes.RetargetRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueRetargetRequest(v.(queuetypes.RetargetRequest))
+	}},
+	{Name: "QueueReviewsRequest", Zero: queuetypes.ReviewsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueReviewsRequest(v.(queuetypes.ReviewsRequest))
+	}},
+	{Name: "QueueStatusRequest", Zero: queuetypes.StatusRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectQueueStatusRequest(v.(queuetypes.StatusRequest))
 	}},
 	{Name: "Quote", Zero: spells.Quote{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQuote(v.(spells.Quote)) }},
 	{Name: "RefSite", Zero: types.KnowledgeRefSite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeRefSite(v.(types.KnowledgeRefSite)) }},

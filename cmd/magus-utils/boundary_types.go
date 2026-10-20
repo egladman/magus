@@ -6,6 +6,7 @@ package main
 import (
 	"reflect"
 
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -85,6 +86,48 @@ var boundaryTypes = []boundaryType{
 	{Name: "ProjectQuery", Type: reflect.TypeFor[types.ProjectQuery](), RuntimeObject: true},
 	{Name: "ReviewTarget", Type: reflect.TypeFor[types.ReviewTarget]()},
 	{Name: "ReviewComment", Type: reflect.TypeFor[types.ReviewComment]()},
+	// The merge queue provider script's records, leaf first, each taking a Queue prefix
+	// because Change, Check and Setting already name other mirrors. host.go provides them to
+	// the queue's session; nothing else imports them.
+	{Name: "Person", Type: reflect.TypeFor[types.Person]()},
+	{Name: "QueueIntegration", Type: reflect.TypeFor[queuetypes.Integration]()},
+	{Name: "QueueRequiredCheck", Type: reflect.TypeFor[queuetypes.RequiredCheck]()},
+	{Name: "QueueSetting", Type: reflect.TypeFor[queuetypes.Setting]()},
+	{Name: "QueueApp", Type: reflect.TypeFor[queuetypes.App]()},
+	{Name: "QueueSetupStep", Type: reflect.TypeFor[queuetypes.SetupStep]()},
+	{Name: "QueueSetup", Type: reflect.TypeFor[queuetypes.Setup]()},
+	{Name: "QueueSetupRefusal", Type: reflect.TypeFor[queuetypes.SetupRefusedError]()},
+	{Name: "QueueCapabilities", Type: reflect.TypeFor[queuetypes.Capabilities]()},
+	{Name: "QueueDescribeResult", Type: reflect.TypeFor[queuetypes.DescribeResult]()},
+	{Name: "QueueChange", Type: reflect.TypeFor[queuetypes.Change]()},
+	{Name: "QueueMergedChange", Type: reflect.TypeFor[queuetypes.MergedChange]()},
+	{Name: "QueueUnqueuedChange", Type: reflect.TypeFor[queuetypes.UnqueuedChange]()},
+	{Name: "QueueClosedChange", Type: reflect.TypeFor[queuetypes.ClosedChange]()},
+	{Name: "QueueChanges", Type: reflect.TypeFor[queuetypes.Changes]()},
+	{Name: "QueueApproval", Type: reflect.TypeFor[queuetypes.Approval]()},
+	{Name: "QueueCheck", Type: reflect.TypeFor[queuetypes.Check]()},
+	{Name: "QueueGreenChange", Type: reflect.TypeFor[queuetypes.GreenChange]()},
+	{Name: "QueueMergeAnswer", Type: reflect.TypeFor[queuetypes.MergeAnswer]()},
+	{Name: "QueueRunOrigin", Type: reflect.TypeFor[queuetypes.RunOrigin]()},
+	{Name: "QueueArtifact", Type: reflect.TypeFor[queuetypes.Artifact]()},
+	{Name: "QueueArtifactListing", Type: reflect.TypeFor[queuetypes.ArtifactListing]()},
+	{Name: "QueueReview", Type: reflect.TypeFor[queuetypes.Review]()},
+	{Name: "QueueReviews", Type: reflect.TypeFor[queuetypes.Reviews]()},
+	{Name: "QueuePinnedChange", Type: reflect.TypeFor[queuetypes.PinnedChange](), RuntimeObject: true},
+	{Name: "QueueReproduction", Type: reflect.TypeFor[queuetypes.Reproduction](), RuntimeObject: true},
+	{Name: "QueueDescribeRequest", Type: reflect.TypeFor[queuetypes.DescribeRequest](), RuntimeObject: true},
+	{Name: "QueueListChangesRequest", Type: reflect.TypeFor[queuetypes.ListChangesRequest](), RuntimeObject: true},
+	{Name: "QueueApprovalRequest", Type: reflect.TypeFor[queuetypes.ApprovalRequest](), RuntimeObject: true},
+	{Name: "QueueRequiredChecksRequest", Type: reflect.TypeFor[queuetypes.RequiredChecksRequest](), RuntimeObject: true},
+	{Name: "QueueListGreenRequest", Type: reflect.TypeFor[queuetypes.ListGreenRequest](), RuntimeObject: true},
+	{Name: "QueueStatusRequest", Type: reflect.TypeFor[queuetypes.StatusRequest](), RuntimeObject: true},
+	{Name: "QueueRetargetRequest", Type: reflect.TypeFor[queuetypes.RetargetRequest](), RuntimeObject: true},
+	{Name: "QueueMergeRequest", Type: reflect.TypeFor[queuetypes.MergeRequest](), RuntimeObject: true},
+	{Name: "QueueKickBackRequest", Type: reflect.TypeFor[queuetypes.KickBackRequest](), RuntimeObject: true},
+	{Name: "QueueMarkRequest", Type: reflect.TypeFor[queuetypes.MarkRequest](), RuntimeObject: true},
+	{Name: "QueueListArtifactsRequest", Type: reflect.TypeFor[queuetypes.ListArtifactsRequest](), RuntimeObject: true},
+	{Name: "QueueReviewsRequest", Type: reflect.TypeFor[queuetypes.ReviewsRequest](), RuntimeObject: true},
+	{Name: "QueueDismissReviewRequest", Type: reflect.TypeFor[queuetypes.DismissReviewRequest](), RuntimeObject: true},
 	{Name: "Ack", Type: reflect.TypeFor[types.Ack]()},
 	{Name: "GreenRun", Type: reflect.TypeFor[types.GreenRun]()},
 	{Name: "Strings", Type: reflect.TypeFor[types.Strings]()},

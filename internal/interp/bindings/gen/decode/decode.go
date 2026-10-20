@@ -10,12 +10,13 @@
 // its zero value, a null optional stays nil, and an empty list or map decodes to nil, so
 // Decode(Object(v)) == v holds for every value, zero included.
 //
-// It imports only vm, spells and types, so internal/spell can import it.
+// It imports only vm and the boundary type packages, so internal/spell can import it.
 package decode
 
 import (
 	"fmt"
 
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -1587,28 +1588,1592 @@ func decodeProvidedProject(v vm.Value, path string) (spells.ProvidedProject, err
 	return out, nil
 }
 
-// ProviderFuncs is every provider op a spell may export, one row per
+// DecodePerson decodes a Buzz Person, an object instance or a map, into a types.Person.
+func DecodePerson(v vm.Value) (types.Person, error) {
+	return decodePerson(v, "person")
+}
+
+func decodePerson(v vm.Value, path string) (types.Person, error) {
+	var out types.Person
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Person", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "email":
+			sEmail, err := decodeStr(item, path+".email")
+			if err != nil {
+				return out, err
+			}
+			out.Email = sEmail
+		default:
+			return out, unknownMember(path, "Person", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueIntegration decodes a Buzz QueueIntegration, an object instance or a map, into a queuetypes.Integration.
+func DecodeQueueIntegration(v vm.Value) (queuetypes.Integration, error) {
+	return decodeQueueIntegration(v, "queueIntegration")
+}
+
+func decodeQueueIntegration(v vm.Value, path string) (queuetypes.Integration, error) {
+	var out queuetypes.Integration
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueIntegration", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		default:
+			return out, unknownMember(path, "QueueIntegration", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueRequiredCheck decodes a Buzz QueueRequiredCheck, an object instance or a map, into a queuetypes.RequiredCheck.
+func DecodeQueueRequiredCheck(v vm.Value) (queuetypes.RequiredCheck, error) {
+	return decodeQueueRequiredCheck(v, "queueRequiredCheck")
+}
+
+func decodeQueueRequiredCheck(v vm.Value, path string) (queuetypes.RequiredCheck, error) {
+	var out queuetypes.RequiredCheck
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueRequiredCheck", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "context":
+			sContext, err := decodeStr(item, path+".context")
+			if err != nil {
+				return out, err
+			}
+			out.Context = sContext
+		case "integration":
+			sIntegration, err := decodeStr(item, path+".integration")
+			if err != nil {
+				return out, err
+			}
+			out.Integration = sIntegration
+		case "events":
+			strsEvents, err := decodeStrs(item, path+".events")
+			if err != nil {
+				return out, err
+			}
+			out.Events = strsEvents
+		default:
+			return out, unknownMember(path, "QueueRequiredCheck", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueSetting decodes a Buzz QueueSetting, an object instance or a map, into a queuetypes.Setting.
+func DecodeQueueSetting(v vm.Value) (queuetypes.Setting, error) {
+	return decodeQueueSetting(v, "queueSetting")
+}
+
+func decodeQueueSetting(v vm.Value, path string) (queuetypes.Setting, error) {
+	var out queuetypes.Setting
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueSetting", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "value":
+			sValue, err := decodeStr(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = sValue
+		case "want":
+			sWant, err := decodeStr(item, path+".want")
+			if err != nil {
+				return out, err
+			}
+			out.Want = sWant
+		default:
+			return out, unknownMember(path, "QueueSetting", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueApp decodes a Buzz QueueApp, an object instance or a map, into a queuetypes.App.
+func DecodeQueueApp(v vm.Value) (queuetypes.App, error) {
+	return decodeQueueApp(v, "queueApp")
+}
+
+func decodeQueueApp(v vm.Value, path string) (queuetypes.App, error) {
+	var out queuetypes.App
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueApp", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "slug":
+			sSlug, err := decodeStr(item, path+".slug")
+			if err != nil {
+				return out, err
+			}
+			out.Slug = sSlug
+		case "id":
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "clientID":
+			sClientID, err := decodeStr(item, path+".clientID")
+			if err != nil {
+				return out, err
+			}
+			out.ClientID = sClientID
+		case "registrationURL":
+			sRegistrationURL, err := decodeStr(item, path+".registrationURL")
+			if err != nil {
+				return out, err
+			}
+			out.RegistrationURL = sRegistrationURL
+		case "installURL":
+			sInstallURL, err := decodeStr(item, path+".installURL")
+			if err != nil {
+				return out, err
+			}
+			out.InstallURL = sInstallURL
+		case "environment":
+			sEnvironment, err := decodeStr(item, path+".environment")
+			if err != nil {
+				return out, err
+			}
+			out.Environment = sEnvironment
+		case "variable":
+			sVariable, err := decodeStr(item, path+".variable")
+			if err != nil {
+				return out, err
+			}
+			out.Variable = sVariable
+		case "secret":
+			sSecret, err := decodeStr(item, path+".secret")
+			if err != nil {
+				return out, err
+			}
+			out.Secret = sSecret
+		default:
+			return out, unknownMember(path, "QueueApp", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueSetupStep decodes a Buzz QueueSetupStep, an object instance or a map, into a queuetypes.SetupStep.
+func DecodeQueueSetupStep(v vm.Value) (queuetypes.SetupStep, error) {
+	return decodeQueueSetupStep(v, "queueSetupStep")
+}
+
+func decodeQueueSetupStep(v vm.Value, path string) (queuetypes.SetupStep, error) {
+	var out queuetypes.SetupStep
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueSetupStep", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "title":
+			sTitle, err := decodeStr(item, path+".title")
+			if err != nil {
+				return out, err
+			}
+			out.Title = sTitle
+		case "command":
+			sCommand, err := decodeStr(item, path+".command")
+			if err != nil {
+				return out, err
+			}
+			out.Command = sCommand
+		case "url":
+			sURL, err := decodeStr(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		default:
+			return out, unknownMember(path, "QueueSetupStep", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueSetup decodes a Buzz QueueSetup, an object instance or a map, into a queuetypes.Setup.
+func DecodeQueueSetup(v vm.Value) (queuetypes.Setup, error) {
+	return decodeQueueSetup(v, "queueSetup")
+}
+
+func decodeQueueSetup(v vm.Value, path string) (queuetypes.Setup, error) {
+	var out queuetypes.Setup
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueSetup", v)
+	}
+	hasStatusContext := false
+	hasCredential := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "statusContext":
+			hasStatusContext = true
+			sStatusContext, err := decodeStr(item, path+".statusContext")
+			if err != nil {
+				return out, err
+			}
+			out.StatusContext = sStatusContext
+		case "credential":
+			hasCredential = true
+			xCredential, err := decodeQueueIntegration(item, path+".credential")
+			if err != nil {
+				return out, err
+			}
+			out.Credential = xCredential
+		case "requiredChecks":
+			listRequiredChecks, err := decodeList(item, path+".requiredChecks", "[QueueRequiredCheck]")
+			if err != nil {
+				return out, err
+			}
+			if len(listRequiredChecks) > 0 {
+				itemsRequiredChecks := make([]queuetypes.RequiredCheck, len(listRequiredChecks))
+				for indexRequiredChecks, itemRequiredChecks := range listRequiredChecks {
+					xRequiredChecksItem, err := decodeQueueRequiredCheck(itemRequiredChecks, fmt.Sprintf("%s[%d]", path+".requiredChecks", indexRequiredChecks))
+					if err != nil {
+						return out, err
+					}
+					itemsRequiredChecks[indexRequiredChecks] = xRequiredChecksItem
+				}
+				out.RequiredChecks = itemsRequiredChecks
+			}
+		case "settings":
+			listSettings, err := decodeList(item, path+".settings", "[QueueSetting]")
+			if err != nil {
+				return out, err
+			}
+			if len(listSettings) > 0 {
+				itemsSettings := make([]queuetypes.Setting, len(listSettings))
+				for indexSettings, itemSettings := range listSettings {
+					xSettingsItem, err := decodeQueueSetting(itemSettings, fmt.Sprintf("%s[%d]", path+".settings", indexSettings))
+					if err != nil {
+						return out, err
+					}
+					itemsSettings[indexSettings] = xSettingsItem
+				}
+				out.Settings = itemsSettings
+			}
+		case "app":
+			if !item.IsNull() {
+				var optApp queuetypes.App
+				xApp, err := decodeQueueApp(item, path+".app")
+				if err != nil {
+					return out, err
+				}
+				optApp = xApp
+				out.App = &optApp
+			}
+		case "steps":
+			listSteps, err := decodeList(item, path+".steps", "[QueueSetupStep]")
+			if err != nil {
+				return out, err
+			}
+			if len(listSteps) > 0 {
+				itemsSteps := make([]queuetypes.SetupStep, len(listSteps))
+				for indexSteps, itemSteps := range listSteps {
+					xStepsItem, err := decodeQueueSetupStep(itemSteps, fmt.Sprintf("%s[%d]", path+".steps", indexSteps))
+					if err != nil {
+						return out, err
+					}
+					itemsSteps[indexSteps] = xStepsItem
+				}
+				out.Steps = itemsSteps
+			}
+		default:
+			return out, unknownMember(path, "QueueSetup", key)
+		}
+	}
+	if !hasStatusContext {
+		return out, missingMember(path, "QueueSetup", "statusContext")
+	}
+	if !hasCredential {
+		return out, missingMember(path, "QueueSetup", "credential")
+	}
+	return out, nil
+}
+
+// DecodeQueueSetupRefusedError decodes a Buzz QueueSetupRefusal, an object instance or a map, into a queuetypes.SetupRefusedError.
+func DecodeQueueSetupRefusedError(v vm.Value) (queuetypes.SetupRefusedError, error) {
+	return decodeQueueSetupRefusedError(v, "queueSetupRefusal")
+}
+
+func decodeQueueSetupRefusedError(v vm.Value, path string) (queuetypes.SetupRefusedError, error) {
+	var out queuetypes.SetupRefusedError
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueSetupRefusal", v)
+	}
+	hasReason := false
+	hasUrl := false
+	hasApp := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "reason":
+			hasReason = true
+			sReason, err := decodeStr(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		case "url":
+			hasUrl = true
+			sURL, err := decodeStr(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		case "app":
+			hasApp = true
+			sApp, err := decodeStr(item, path+".app")
+			if err != nil {
+				return out, err
+			}
+			out.App = sApp
+		default:
+			return out, unknownMember(path, "QueueSetupRefusal", key)
+		}
+	}
+	if !hasReason {
+		return out, missingMember(path, "QueueSetupRefusal", "reason")
+	}
+	if !hasUrl {
+		return out, missingMember(path, "QueueSetupRefusal", "url")
+	}
+	if !hasApp {
+		return out, missingMember(path, "QueueSetupRefusal", "app")
+	}
+	return out, nil
+}
+
+// DecodeQueueCapabilities decodes a Buzz QueueCapabilities, an object instance or a map, into a queuetypes.Capabilities.
+func DecodeQueueCapabilities(v vm.Value) (queuetypes.Capabilities, error) {
+	return decodeQueueCapabilities(v, "queueCapabilities")
+}
+
+func decodeQueueCapabilities(v vm.Value, path string) (queuetypes.Capabilities, error) {
+	var out queuetypes.Capabilities
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueCapabilities", v)
+	}
+	hasStackMerge := false
+	hasLinearStacks := false
+	hasMethods := false
+	hasRequiredApprovals := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "stackMerge":
+			hasStackMerge = true
+			sStackMerge, err := decodeStr(item, path+".stackMerge")
+			if err != nil {
+				return out, err
+			}
+			out.StackMerge = queuetypes.StackMerge(sStackMerge)
+		case "linearStacks":
+			hasLinearStacks = true
+			bLinearStacks, err := decodeBool(item, path+".linearStacks")
+			if err != nil {
+				return out, err
+			}
+			out.LinearStacks = bLinearStacks
+		case "methods":
+			hasMethods = true
+			listMethods, err := decodeList(item, path+".methods", "[str]")
+			if err != nil {
+				return out, err
+			}
+			if len(listMethods) > 0 {
+				itemsMethods := make([]queuetypes.MergeMethod, len(listMethods))
+				for indexMethods, itemMethods := range listMethods {
+					sMethodsItem, err := decodeStr(itemMethods, fmt.Sprintf("%s[%d]", path+".methods", indexMethods))
+					if err != nil {
+						return out, err
+					}
+					itemsMethods[indexMethods] = queuetypes.MergeMethod(sMethodsItem)
+				}
+				out.Methods = itemsMethods
+			}
+		case "requiredApprovals":
+			hasRequiredApprovals = true
+			nRequiredApprovals, err := decodeInt(item, path+".requiredApprovals")
+			if err != nil {
+				return out, err
+			}
+			out.RequiredApprovals = int(nRequiredApprovals)
+		case "queueLabel":
+			sQueueLabel, err := decodeStr(item, path+".queueLabel")
+			if err != nil {
+				return out, err
+			}
+			out.QueueLabel = sQueueLabel
+		case "committer":
+			xCommitter, err := decodePerson(item, path+".committer")
+			if err != nil {
+				return out, err
+			}
+			out.Committer = xCommitter
+		case "setup":
+			if !item.IsNull() {
+				var optSetup queuetypes.Setup
+				xSetup, err := decodeQueueSetup(item, path+".setup")
+				if err != nil {
+					return out, err
+				}
+				optSetup = xSetup
+				out.Setup = &optSetup
+			}
+		default:
+			return out, unknownMember(path, "QueueCapabilities", key)
+		}
+	}
+	if !hasStackMerge {
+		return out, missingMember(path, "QueueCapabilities", "stackMerge")
+	}
+	if !hasLinearStacks {
+		return out, missingMember(path, "QueueCapabilities", "linearStacks")
+	}
+	if !hasMethods {
+		return out, missingMember(path, "QueueCapabilities", "methods")
+	}
+	if !hasRequiredApprovals {
+		return out, missingMember(path, "QueueCapabilities", "requiredApprovals")
+	}
+	return out, nil
+}
+
+// DecodeQueueDescribeResult decodes a Buzz QueueDescribeResult, an object instance or a map, into a queuetypes.DescribeResult.
+func DecodeQueueDescribeResult(v vm.Value) (queuetypes.DescribeResult, error) {
+	return decodeQueueDescribeResult(v, "queueDescribeResult")
+}
+
+func decodeQueueDescribeResult(v vm.Value, path string) (queuetypes.DescribeResult, error) {
+	var out queuetypes.DescribeResult
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueDescribeResult", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "capabilities":
+			if !item.IsNull() {
+				var optCapabilities queuetypes.Capabilities
+				xCapabilities, err := decodeQueueCapabilities(item, path+".capabilities")
+				if err != nil {
+					return out, err
+				}
+				optCapabilities = xCapabilities
+				out.Capabilities = &optCapabilities
+			}
+		case "refused":
+			if !item.IsNull() {
+				var optRefused queuetypes.SetupRefusedError
+				xRefused, err := decodeQueueSetupRefusedError(item, path+".refused")
+				if err != nil {
+					return out, err
+				}
+				optRefused = xRefused
+				out.Refused = &optRefused
+			}
+		default:
+			return out, unknownMember(path, "QueueDescribeResult", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeQueueChange decodes a Buzz QueueChange, an object instance or a map, into a queuetypes.Change.
+func DecodeQueueChange(v vm.Value) (queuetypes.Change, error) {
+	return decodeQueueChange(v, "queueChange")
+}
+
+func decodeQueueChange(v vm.Value, path string) (queuetypes.Change, error) {
+	var out queuetypes.Change
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueChange", v)
+	}
+	hasId := false
+	hasRepo := false
+	hasHead := false
+	hasBase := false
+	hasMethod := false
+	hasFork := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "repo":
+			hasRepo = true
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		case "ref":
+			sRef, err := decodeStr(item, path+".ref")
+			if err != nil {
+				return out, err
+			}
+			out.Ref = sRef
+		case "branch":
+			sBranch, err := decodeStr(item, path+".branch")
+			if err != nil {
+				return out, err
+			}
+			out.Branch = sBranch
+		case "base":
+			hasBase = true
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "title":
+			sTitle, err := decodeStr(item, path+".title")
+			if err != nil {
+				return out, err
+			}
+			out.Title = sTitle
+		case "author":
+			sAuthor, err := decodeStr(item, path+".author")
+			if err != nil {
+				return out, err
+			}
+			out.Author = sAuthor
+		case "method":
+			hasMethod = true
+			sMethod, err := decodeStr(item, path+".method")
+			if err != nil {
+				return out, err
+			}
+			out.Method = queuetypes.MergeMethod(sMethod)
+		case "parent":
+			sParent, err := decodeStr(item, path+".parent")
+			if err != nil {
+				return out, err
+			}
+			out.Parent = sParent
+		case "fork":
+			hasFork = true
+			bFork, err := decodeBool(item, path+".fork")
+			if err != nil {
+				return out, err
+			}
+			out.Fork = bFork
+		case "affected":
+			strsAffected, err := decodeStrs(item, path+".affected")
+			if err != nil {
+				return out, err
+			}
+			out.Affected = strsAffected
+		case "unboundedBy":
+			sUnboundedBy, err := decodeStr(item, path+".unboundedBy")
+			if err != nil {
+				return out, err
+			}
+			out.UnboundedBy = sUnboundedBy
+		case "stackBase":
+			sStackBase, err := decodeStr(item, path+".stackBase")
+			if err != nil {
+				return out, err
+			}
+			out.StackBase = sStackBase
+		case "below":
+			sBelow, err := decodeStr(item, path+".below")
+			if err != nil {
+				return out, err
+			}
+			out.Below = sBelow
+		default:
+			return out, unknownMember(path, "QueueChange", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueChange", "id")
+	}
+	if !hasRepo {
+		return out, missingMember(path, "QueueChange", "repo")
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueChange", "head")
+	}
+	if !hasBase {
+		return out, missingMember(path, "QueueChange", "base")
+	}
+	if !hasMethod {
+		return out, missingMember(path, "QueueChange", "method")
+	}
+	if !hasFork {
+		return out, missingMember(path, "QueueChange", "fork")
+	}
+	return out, nil
+}
+
+// DecodeQueueMergedChange decodes a Buzz QueueMergedChange, an object instance or a map, into a queuetypes.MergedChange.
+func DecodeQueueMergedChange(v vm.Value) (queuetypes.MergedChange, error) {
+	return decodeQueueMergedChange(v, "queueMergedChange")
+}
+
+func decodeQueueMergedChange(v vm.Value, path string) (queuetypes.MergedChange, error) {
+	var out queuetypes.MergedChange
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueMergedChange", v)
+	}
+	hasId := false
+	hasHead := false
+	hasCommit := false
+	hasMethod := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		case "commit":
+			hasCommit = true
+			sCommit, err := decodeStr(item, path+".commit")
+			if err != nil {
+				return out, err
+			}
+			out.Commit = sCommit
+		case "method":
+			hasMethod = true
+			sMethod, err := decodeStr(item, path+".method")
+			if err != nil {
+				return out, err
+			}
+			out.Method = queuetypes.MergeMethod(sMethod)
+		default:
+			return out, unknownMember(path, "QueueMergedChange", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueMergedChange", "id")
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueMergedChange", "head")
+	}
+	if !hasCommit {
+		return out, missingMember(path, "QueueMergedChange", "commit")
+	}
+	if !hasMethod {
+		return out, missingMember(path, "QueueMergedChange", "method")
+	}
+	return out, nil
+}
+
+// DecodeQueueUnqueuedChange decodes a Buzz QueueUnqueuedChange, an object instance or a map, into a queuetypes.UnqueuedChange.
+func DecodeQueueUnqueuedChange(v vm.Value) (queuetypes.UnqueuedChange, error) {
+	return decodeQueueUnqueuedChange(v, "queueUnqueuedChange")
+}
+
+func decodeQueueUnqueuedChange(v vm.Value, path string) (queuetypes.UnqueuedChange, error) {
+	var out queuetypes.UnqueuedChange
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueUnqueuedChange", v)
+	}
+	hasId := false
+	hasHead := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "repo":
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		case "title":
+			sTitle, err := decodeStr(item, path+".title")
+			if err != nil {
+				return out, err
+			}
+			out.Title = sTitle
+		case "author":
+			sAuthor, err := decodeStr(item, path+".author")
+			if err != nil {
+				return out, err
+			}
+			out.Author = sAuthor
+		case "branch":
+			sBranch, err := decodeStr(item, path+".branch")
+			if err != nil {
+				return out, err
+			}
+			out.Branch = sBranch
+		case "base":
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "mark":
+			sMark, err := decodeStr(item, path+".mark")
+			if err != nil {
+				return out, err
+			}
+			out.Mark = queuetypes.Mark(sMark)
+		default:
+			return out, unknownMember(path, "QueueUnqueuedChange", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueUnqueuedChange", "id")
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueUnqueuedChange", "head")
+	}
+	return out, nil
+}
+
+// DecodeQueueClosedChange decodes a Buzz QueueClosedChange, an object instance or a map, into a queuetypes.ClosedChange.
+func DecodeQueueClosedChange(v vm.Value) (queuetypes.ClosedChange, error) {
+	return decodeQueueClosedChange(v, "queueClosedChange")
+}
+
+func decodeQueueClosedChange(v vm.Value, path string) (queuetypes.ClosedChange, error) {
+	var out queuetypes.ClosedChange
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueClosedChange", v)
+	}
+	hasId := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "repo":
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		default:
+			return out, unknownMember(path, "QueueClosedChange", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueClosedChange", "id")
+	}
+	return out, nil
+}
+
+// DecodeQueueChanges decodes a Buzz QueueChanges, an object instance or a map, into a queuetypes.Changes.
+func DecodeQueueChanges(v vm.Value) (queuetypes.Changes, error) {
+	return decodeQueueChanges(v, "queueChanges")
+}
+
+func decodeQueueChanges(v vm.Value, path string) (queuetypes.Changes, error) {
+	var out queuetypes.Changes
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueChanges", v)
+	}
+	hasChanges := false
+	hasMerged := false
+	hasUnqueued := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "schema":
+			sSchema, err := decodeStr(item, path+".schema")
+			if err != nil {
+				return out, err
+			}
+			out.Schema = sSchema
+		case "base":
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "remoteURL":
+			sRemoteURL, err := decodeStr(item, path+".remoteURL")
+			if err != nil {
+				return out, err
+			}
+			out.RemoteURL = sRemoteURL
+		case "changes":
+			hasChanges = true
+			listChanges, err := decodeList(item, path+".changes", "[QueueChange]")
+			if err != nil {
+				return out, err
+			}
+			if len(listChanges) > 0 {
+				itemsChanges := make([]queuetypes.Change, len(listChanges))
+				for indexChanges, itemChanges := range listChanges {
+					xChangesItem, err := decodeQueueChange(itemChanges, fmt.Sprintf("%s[%d]", path+".changes", indexChanges))
+					if err != nil {
+						return out, err
+					}
+					itemsChanges[indexChanges] = xChangesItem
+				}
+				out.Changes = itemsChanges
+			}
+		case "merged":
+			hasMerged = true
+			listMerged, err := decodeList(item, path+".merged", "[QueueMergedChange]")
+			if err != nil {
+				return out, err
+			}
+			if len(listMerged) > 0 {
+				itemsMerged := make([]queuetypes.MergedChange, len(listMerged))
+				for indexMerged, itemMerged := range listMerged {
+					xMergedItem, err := decodeQueueMergedChange(itemMerged, fmt.Sprintf("%s[%d]", path+".merged", indexMerged))
+					if err != nil {
+						return out, err
+					}
+					itemsMerged[indexMerged] = xMergedItem
+				}
+				out.Merged = itemsMerged
+			}
+		case "unqueued":
+			hasUnqueued = true
+			listUnqueued, err := decodeList(item, path+".unqueued", "[QueueUnqueuedChange]")
+			if err != nil {
+				return out, err
+			}
+			if len(listUnqueued) > 0 {
+				itemsUnqueued := make([]queuetypes.UnqueuedChange, len(listUnqueued))
+				for indexUnqueued, itemUnqueued := range listUnqueued {
+					xUnqueuedItem, err := decodeQueueUnqueuedChange(itemUnqueued, fmt.Sprintf("%s[%d]", path+".unqueued", indexUnqueued))
+					if err != nil {
+						return out, err
+					}
+					itemsUnqueued[indexUnqueued] = xUnqueuedItem
+				}
+				out.Unqueued = itemsUnqueued
+			}
+		case "closed":
+			listClosed, err := decodeList(item, path+".closed", "[QueueClosedChange]")
+			if err != nil {
+				return out, err
+			}
+			if len(listClosed) > 0 {
+				itemsClosed := make([]queuetypes.ClosedChange, len(listClosed))
+				for indexClosed, itemClosed := range listClosed {
+					xClosedItem, err := decodeQueueClosedChange(itemClosed, fmt.Sprintf("%s[%d]", path+".closed", indexClosed))
+					if err != nil {
+						return out, err
+					}
+					itemsClosed[indexClosed] = xClosedItem
+				}
+				out.Closed = itemsClosed
+			}
+		default:
+			return out, unknownMember(path, "QueueChanges", key)
+		}
+	}
+	if !hasChanges {
+		return out, missingMember(path, "QueueChanges", "changes")
+	}
+	if !hasMerged {
+		return out, missingMember(path, "QueueChanges", "merged")
+	}
+	if !hasUnqueued {
+		return out, missingMember(path, "QueueChanges", "unqueued")
+	}
+	return out, nil
+}
+
+// DecodeQueueApproval decodes a Buzz QueueApproval, an object instance or a map, into a queuetypes.Approval.
+func DecodeQueueApproval(v vm.Value) (queuetypes.Approval, error) {
+	return decodeQueueApproval(v, "queueApproval")
+}
+
+func decodeQueueApproval(v vm.Value, path string) (queuetypes.Approval, error) {
+	var out queuetypes.Approval
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueApproval", v)
+	}
+	hasApproved := false
+	hasHead := false
+	hasBase := false
+	hasMethod := false
+	hasQueued := false
+	hasBranchSharedWith := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "approved":
+			hasApproved = true
+			bApproved, err := decodeBool(item, path+".approved")
+			if err != nil {
+				return out, err
+			}
+			out.Approved = bApproved
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		case "reason":
+			sReason, err := decodeStr(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		case "base":
+			hasBase = true
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "method":
+			hasMethod = true
+			sMethod, err := decodeStr(item, path+".method")
+			if err != nil {
+				return out, err
+			}
+			out.Method = queuetypes.MergeMethod(sMethod)
+		case "queued":
+			hasQueued = true
+			bQueued, err := decodeBool(item, path+".queued")
+			if err != nil {
+				return out, err
+			}
+			out.Queued = bQueued
+		case "approvedCommit":
+			sApprovedCommit, err := decodeStr(item, path+".approvedCommit")
+			if err != nil {
+				return out, err
+			}
+			out.ApprovedCommit = sApprovedCommit
+		case "branchSharedWith":
+			hasBranchSharedWith = true
+			strsBranchSharedWith, err := decodeStrs(item, path+".branchSharedWith")
+			if err != nil {
+				return out, err
+			}
+			out.BranchSharedWith = strsBranchSharedWith
+		default:
+			return out, unknownMember(path, "QueueApproval", key)
+		}
+	}
+	if !hasApproved {
+		return out, missingMember(path, "QueueApproval", "approved")
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueApproval", "head")
+	}
+	if !hasBase {
+		return out, missingMember(path, "QueueApproval", "base")
+	}
+	if !hasMethod {
+		return out, missingMember(path, "QueueApproval", "method")
+	}
+	if !hasQueued {
+		return out, missingMember(path, "QueueApproval", "queued")
+	}
+	if !hasBranchSharedWith {
+		return out, missingMember(path, "QueueApproval", "branchSharedWith")
+	}
+	return out, nil
+}
+
+// DecodeQueueCheck decodes a Buzz QueueCheck, an object instance or a map, into a queuetypes.Check.
+func DecodeQueueCheck(v vm.Value) (queuetypes.Check, error) {
+	return decodeQueueCheck(v, "queueCheck")
+}
+
+func decodeQueueCheck(v vm.Value, path string) (queuetypes.Check, error) {
+	var out queuetypes.Check
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueCheck", v)
+	}
+	hasName := false
+	hasState := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			hasName = true
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "state":
+			hasState = true
+			sState, err := decodeStr(item, path+".state")
+			if err != nil {
+				return out, err
+			}
+			out.State = queuetypes.CommitState(sState)
+		default:
+			return out, unknownMember(path, "QueueCheck", key)
+		}
+	}
+	if !hasName {
+		return out, missingMember(path, "QueueCheck", "name")
+	}
+	if !hasState {
+		return out, missingMember(path, "QueueCheck", "state")
+	}
+	return out, nil
+}
+
+// DecodeQueueGreenChange decodes a Buzz QueueGreenChange, an object instance or a map, into a queuetypes.GreenChange.
+func DecodeQueueGreenChange(v vm.Value) (queuetypes.GreenChange, error) {
+	return decodeQueueGreenChange(v, "queueGreenChange")
+}
+
+func decodeQueueGreenChange(v vm.Value, path string) (queuetypes.GreenChange, error) {
+	var out queuetypes.GreenChange
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueGreenChange", v)
+	}
+	hasId := false
+	hasRepo := false
+	hasHead := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "repo":
+			hasRepo = true
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		default:
+			return out, unknownMember(path, "QueueGreenChange", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueGreenChange", "id")
+	}
+	if !hasRepo {
+		return out, missingMember(path, "QueueGreenChange", "repo")
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueGreenChange", "head")
+	}
+	return out, nil
+}
+
+// DecodeQueueMergeAnswer decodes a Buzz QueueMergeAnswer, an object instance or a map, into a queuetypes.MergeAnswer.
+func DecodeQueueMergeAnswer(v vm.Value) (queuetypes.MergeAnswer, error) {
+	return decodeQueueMergeAnswer(v, "queueMergeAnswer")
+}
+
+func decodeQueueMergeAnswer(v vm.Value, path string) (queuetypes.MergeAnswer, error) {
+	var out queuetypes.MergeAnswer
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueMergeAnswer", v)
+	}
+	hasMerged := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "merged":
+			hasMerged = true
+			bMerged, err := decodeBool(item, path+".merged")
+			if err != nil {
+				return out, err
+			}
+			out.Merged = bMerged
+		case "byProvider":
+			bByProvider, err := decodeBool(item, path+".byProvider")
+			if err != nil {
+				return out, err
+			}
+			out.ByProvider = bByProvider
+		case "reason":
+			sReason, err := decodeStr(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		default:
+			return out, unknownMember(path, "QueueMergeAnswer", key)
+		}
+	}
+	if !hasMerged {
+		return out, missingMember(path, "QueueMergeAnswer", "merged")
+	}
+	return out, nil
+}
+
+// DecodeQueueRunOrigin decodes a Buzz QueueRunOrigin, an object instance or a map, into a queuetypes.RunOrigin.
+func DecodeQueueRunOrigin(v vm.Value) (queuetypes.RunOrigin, error) {
+	return decodeQueueRunOrigin(v, "queueRunOrigin")
+}
+
+func decodeQueueRunOrigin(v vm.Value, path string) (queuetypes.RunOrigin, error) {
+	var out queuetypes.RunOrigin
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueRunOrigin", v)
+	}
+	hasRepo := false
+	hasHeadRepo := false
+	hasHeadBranch := false
+	hasEvent := false
+	hasBranchEvent := false
+	hasDefinition := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "repo":
+			hasRepo = true
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "headRepo":
+			hasHeadRepo = true
+			sHeadRepo, err := decodeStr(item, path+".headRepo")
+			if err != nil {
+				return out, err
+			}
+			out.HeadRepo = sHeadRepo
+		case "headBranch":
+			hasHeadBranch = true
+			sHeadBranch, err := decodeStr(item, path+".headBranch")
+			if err != nil {
+				return out, err
+			}
+			out.HeadBranch = sHeadBranch
+		case "event":
+			hasEvent = true
+			sEvent, err := decodeStr(item, path+".event")
+			if err != nil {
+				return out, err
+			}
+			out.Event = sEvent
+		case "branchEvent":
+			hasBranchEvent = true
+			bBranchEvent, err := decodeBool(item, path+".branchEvent")
+			if err != nil {
+				return out, err
+			}
+			out.BranchEvent = bBranchEvent
+		case "definition":
+			hasDefinition = true
+			sDefinition, err := decodeStr(item, path+".definition")
+			if err != nil {
+				return out, err
+			}
+			out.Definition = sDefinition
+		default:
+			return out, unknownMember(path, "QueueRunOrigin", key)
+		}
+	}
+	if !hasRepo {
+		return out, missingMember(path, "QueueRunOrigin", "repo")
+	}
+	if !hasHeadRepo {
+		return out, missingMember(path, "QueueRunOrigin", "headRepo")
+	}
+	if !hasHeadBranch {
+		return out, missingMember(path, "QueueRunOrigin", "headBranch")
+	}
+	if !hasEvent {
+		return out, missingMember(path, "QueueRunOrigin", "event")
+	}
+	if !hasBranchEvent {
+		return out, missingMember(path, "QueueRunOrigin", "branchEvent")
+	}
+	if !hasDefinition {
+		return out, missingMember(path, "QueueRunOrigin", "definition")
+	}
+	return out, nil
+}
+
+// DecodeQueueArtifact decodes a Buzz QueueArtifact, an object instance or a map, into a queuetypes.Artifact.
+func DecodeQueueArtifact(v vm.Value) (queuetypes.Artifact, error) {
+	return decodeQueueArtifact(v, "queueArtifact")
+}
+
+func decodeQueueArtifact(v vm.Value, path string) (queuetypes.Artifact, error) {
+	var out queuetypes.Artifact
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueArtifact", v)
+	}
+	hasName := false
+	hasUrl := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			hasName = true
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "url":
+			hasUrl = true
+			sURL, err := decodeStr(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		default:
+			return out, unknownMember(path, "QueueArtifact", key)
+		}
+	}
+	if !hasName {
+		return out, missingMember(path, "QueueArtifact", "name")
+	}
+	if !hasUrl {
+		return out, missingMember(path, "QueueArtifact", "url")
+	}
+	return out, nil
+}
+
+// DecodeQueueArtifactListing decodes a Buzz QueueArtifactListing, an object instance or a map, into a queuetypes.ArtifactListing.
+func DecodeQueueArtifactListing(v vm.Value) (queuetypes.ArtifactListing, error) {
+	return decodeQueueArtifactListing(v, "queueArtifactListing")
+}
+
+func decodeQueueArtifactListing(v vm.Value, path string) (queuetypes.ArtifactListing, error) {
+	var out queuetypes.ArtifactListing
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueArtifactListing", v)
+	}
+	hasRun := false
+	hasComplete := false
+	hasArtifacts := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "run":
+			hasRun = true
+			xRun, err := decodeQueueRunOrigin(item, path+".run")
+			if err != nil {
+				return out, err
+			}
+			out.Run = xRun
+		case "complete":
+			hasComplete = true
+			bComplete, err := decodeBool(item, path+".complete")
+			if err != nil {
+				return out, err
+			}
+			out.Complete = bComplete
+		case "headers":
+			entriesHeaders, err := decodeMap(item, path+".headers", "{str: str}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesHeaders.MapKeys(); len(keys) > 0 {
+				mappedHeaders := make(map[string]string, len(keys))
+				for _, keyHeaders := range keys {
+					elemHeaders, _ := entriesHeaders.MapGet(keyHeaders)
+					var valueHeaders string
+					sHeadersValue, err := decodeStr(elemHeaders, fmt.Sprintf("%s[%q]", path+".headers", keyHeaders))
+					if err != nil {
+						return out, err
+					}
+					valueHeaders = sHeadersValue
+					mappedHeaders[keyHeaders] = valueHeaders
+				}
+				out.Headers = mappedHeaders
+			}
+		case "artifacts":
+			hasArtifacts = true
+			listArtifacts, err := decodeList(item, path+".artifacts", "[QueueArtifact]")
+			if err != nil {
+				return out, err
+			}
+			if len(listArtifacts) > 0 {
+				itemsArtifacts := make([]queuetypes.Artifact, len(listArtifacts))
+				for indexArtifacts, itemArtifacts := range listArtifacts {
+					xArtifactsItem, err := decodeQueueArtifact(itemArtifacts, fmt.Sprintf("%s[%d]", path+".artifacts", indexArtifacts))
+					if err != nil {
+						return out, err
+					}
+					itemsArtifacts[indexArtifacts] = xArtifactsItem
+				}
+				out.Artifacts = itemsArtifacts
+			}
+		default:
+			return out, unknownMember(path, "QueueArtifactListing", key)
+		}
+	}
+	if !hasRun {
+		return out, missingMember(path, "QueueArtifactListing", "run")
+	}
+	if !hasComplete {
+		return out, missingMember(path, "QueueArtifactListing", "complete")
+	}
+	if !hasArtifacts {
+		return out, missingMember(path, "QueueArtifactListing", "artifacts")
+	}
+	return out, nil
+}
+
+// DecodeQueueReview decodes a Buzz QueueReview, an object instance or a map, into a queuetypes.Review.
+func DecodeQueueReview(v vm.Value) (queuetypes.Review, error) {
+	return decodeQueueReview(v, "queueReview")
+}
+
+func decodeQueueReview(v vm.Value, path string) (queuetypes.Review, error) {
+	var out queuetypes.Review
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueReview", v)
+	}
+	hasId := false
+	hasReviewer := false
+	hasCommit := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			hasId = true
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "reviewer":
+			hasReviewer = true
+			sReviewer, err := decodeStr(item, path+".reviewer")
+			if err != nil {
+				return out, err
+			}
+			out.Reviewer = sReviewer
+		case "commit":
+			hasCommit = true
+			sCommit, err := decodeStr(item, path+".commit")
+			if err != nil {
+				return out, err
+			}
+			out.Commit = sCommit
+		default:
+			return out, unknownMember(path, "QueueReview", key)
+		}
+	}
+	if !hasId {
+		return out, missingMember(path, "QueueReview", "id")
+	}
+	if !hasReviewer {
+		return out, missingMember(path, "QueueReview", "reviewer")
+	}
+	if !hasCommit {
+		return out, missingMember(path, "QueueReview", "commit")
+	}
+	return out, nil
+}
+
+// DecodeQueueReviews decodes a Buzz QueueReviews, an object instance or a map, into a queuetypes.Reviews.
+func DecodeQueueReviews(v vm.Value) (queuetypes.Reviews, error) {
+	return decodeQueueReviews(v, "queueReviews")
+}
+
+func decodeQueueReviews(v vm.Value, path string) (queuetypes.Reviews, error) {
+	var out queuetypes.Reviews
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "QueueReviews", v)
+	}
+	hasHead := false
+	hasApproving := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "head":
+			hasHead = true
+			sHead, err := decodeStr(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Head = sHead
+		case "approving":
+			hasApproving = true
+			listApproving, err := decodeList(item, path+".approving", "[QueueReview]")
+			if err != nil {
+				return out, err
+			}
+			if len(listApproving) > 0 {
+				itemsApproving := make([]queuetypes.Review, len(listApproving))
+				for indexApproving, itemApproving := range listApproving {
+					xApprovingItem, err := decodeQueueReview(itemApproving, fmt.Sprintf("%s[%d]", path+".approving", indexApproving))
+					if err != nil {
+						return out, err
+					}
+					itemsApproving[indexApproving] = xApprovingItem
+				}
+				out.Approving = itemsApproving
+			}
+		default:
+			return out, unknownMember(path, "QueueReviews", key)
+		}
+	}
+	if !hasHead {
+		return out, missingMember(path, "QueueReviews", "head")
+	}
+	if !hasApproving {
+		return out, missingMember(path, "QueueReviews", "approving")
+	}
+	return out, nil
+}
+
+// ProviderFuncs is every provider op a spell may export, one row per spell-family
 // cmd/magus-utils providerOps entry and in its order. Required is false on every row:
 // which ops a provider needs is its family's to say.
 var ProviderFuncs = []ContractFunc{
-	{Name: "resolve_secret", Returns: "Secret", Params: "target: Target, req: SecretRef", Decode: func(v vm.Value) (any, error) { return decodeProviderResolveSecret(v) }},
-	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderCIEnabled(v) }},
-	{Name: "group_start", Returns: "Ack", Params: "target: Target, req: CIGroup", Decode: func(v vm.Value) (any, error) { return decodeProviderGroupStart(v) }},
-	{Name: "group_end", Returns: "Ack", Params: "target: Target, req: CIGroupEnd", Decode: func(v vm.Value) (any, error) { return decodeProviderGroupEnd(v) }},
-	{Name: "annotate", Returns: "Ack", Params: "target: Target, req: CIAnnotation", Decode: func(v vm.Value) (any, error) { return decodeProviderAnnotate(v) }},
-	{Name: "quote_prefixes", Returns: "Strings", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderQuotePrefixes(v) }},
-	{Name: "last_green_run", Returns: "GreenRun", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderLastGreenRun(v) }},
-	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderCacheEnabled(v) }},
-	{Name: "get_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderGetArtifact(v) }},
-	{Name: "has_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderHasArtifact(v) }},
-	{Name: "put_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPutArtifact(v) }},
-	{Name: "prune", Returns: "PruneResult", Params: "target: Target, req: PruneRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPrune(v) }},
-	{Name: "list_lifecycles", Returns: "[Lifecycle]", Params: "target: Target, req: LifecycleQuery", Decode: func(v vm.Value) (any, error) { return decodeProviderListLifecycles(v) }},
-	{Name: "find_review", Returns: "ReviewTarget", Params: "target: Target, req: FindReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderFindReview(v) }},
-	{Name: "publish_review", Returns: "Ack", Params: "target: Target, req: PublishReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPublishReview(v) }},
-	{Name: "reply_review", Returns: "Ack", Params: "target: Target, req: ReplyReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderReplyReview(v) }},
-	{Name: "review_threads", Returns: "[ReviewComment]", Params: "target: Target, req: ReviewRef", Decode: func(v vm.Value) (any, error) { return decodeProviderReviewThreads(v) }},
-	{Name: "list_projects", Returns: "[Project]", Params: "target: Target, req: ProjectQuery", Decode: func(v vm.Value) (any, error) { return decodeProviderListProjects(v) }},
+	{Name: "resolve_secret", Returns: "Secret", Params: "target: Target, req: SecretRef", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderResolveSecret(v) }},
+	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderCIEnabled(v) }},
+	{Name: "group_start", Returns: "Ack", Params: "target: Target, req: CIGroup", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderGroupStart(v) }},
+	{Name: "group_end", Returns: "Ack", Params: "target: Target, req: CIGroupEnd", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderGroupEnd(v) }},
+	{Name: "annotate", Returns: "Ack", Params: "target: Target, req: CIAnnotation", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderAnnotate(v) }},
+	{Name: "quote_prefixes", Returns: "Strings", Params: "target: Target, req: Empty", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderQuotePrefixes(v) }},
+	{Name: "last_green_run", Returns: "GreenRun", Params: "target: Target, req: Empty", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderLastGreenRun(v) }},
+	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderCacheEnabled(v) }},
+	{Name: "get_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderGetArtifact(v) }},
+	{Name: "has_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderHasArtifact(v) }},
+	{Name: "put_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderPutArtifact(v) }},
+	{Name: "prune", Returns: "PruneResult", Params: "target: Target, req: PruneRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderPrune(v) }},
+	{Name: "list_lifecycles", Returns: "[Lifecycle]", Params: "target: Target, req: LifecycleQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderListLifecycles(v) }},
+	{Name: "find_review", Returns: "ReviewTarget", Params: "target: Target, req: FindReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderFindReview(v) }},
+	{Name: "publish_review", Returns: "Ack", Params: "target: Target, req: PublishReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderPublishReview(v) }},
+	{Name: "reply_review", Returns: "Ack", Params: "target: Target, req: ReplyReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReplyReview(v) }},
+	{Name: "review_threads", Returns: "[ReviewComment]", Params: "target: Target, req: ReviewRef", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReviewThreads(v) }},
+	{Name: "list_projects", Returns: "[Project]", Params: "target: Target, req: ProjectQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderListProjects(v) }},
+}
+
+// QueueFuncs is every op a merge queue provider script may export, one row per queue
+// providerOps entry and in its order. Its ops take no Target.
+var QueueFuncs = []ContractFunc{
+	{Name: "describe", Returns: "QueueDescribeResult", Params: "req: QueueDescribeRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueDescribe(v) }},
+	{Name: "list_changes", Returns: "QueueChanges", Params: "req: QueueListChangesRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueListChanges(v) }},
+	{Name: "approval_at", Returns: "QueueApproval", Params: "req: QueueApprovalRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueApprovalAt(v) }},
+	{Name: "list_green", Returns: "[QueueGreenChange]", Params: "req: QueueListGreenRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueListGreen(v) }},
+	{Name: "post_status", Returns: "Ack", Params: "req: QueueStatusRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueuePostStatus(v) }},
+	{Name: "retarget", Returns: "Ack", Params: "req: QueueRetargetRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueRetarget(v) }},
+	{Name: "merge_change", Returns: "QueueMergeAnswer", Params: "req: QueueMergeRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueMergeChange(v) }},
+	{Name: "kick_back", Returns: "Ack", Params: "req: QueueKickBackRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueKickBack(v) }},
+	{Name: "mark", Returns: "Ack", Params: "req: QueueMarkRequest", Required: true, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueMark(v) }},
+	{Name: "list_artifacts", Returns: "QueueArtifactListing", Params: "req: QueueListArtifactsRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueListArtifacts(v) }},
+	{Name: "required_checks", Returns: "[QueueCheck]", Params: "req: QueueRequiredChecksRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueRequiredChecks(v) }},
+	{Name: "reviews", Returns: "QueueReviews", Params: "req: QueueReviewsRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueReviews(v) }},
+	{Name: "dismiss_review", Returns: "Ack", Params: "req: QueueDismissReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderQueueDismissReview(v) }},
 }
 
 func decodeProviderResolveSecret(v vm.Value) (spells.Secret, error) {
@@ -1821,6 +3386,156 @@ func decodeProviderListProjects(v vm.Value) ([]spells.ProvidedProject, error) {
 	return out, nil
 }
 
+func decodeProviderQueueDescribe(v vm.Value) (queuetypes.DescribeResult, error) {
+	var out queuetypes.DescribeResult
+	xQueueDescribe, err := decodeQueueDescribeResult(v, "describe")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueDescribe
+	return out, nil
+}
+
+func decodeProviderQueueListChanges(v vm.Value) (queuetypes.Changes, error) {
+	var out queuetypes.Changes
+	xQueueListChanges, err := decodeQueueChanges(v, "list_changes")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueListChanges
+	return out, nil
+}
+
+func decodeProviderQueueApprovalAt(v vm.Value) (queuetypes.Approval, error) {
+	var out queuetypes.Approval
+	xQueueApprovalAt, err := decodeQueueApproval(v, "approval_at")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueApprovalAt
+	return out, nil
+}
+
+func decodeProviderQueueListGreen(v vm.Value) ([]queuetypes.GreenChange, error) {
+	var out []queuetypes.GreenChange
+	listQueueListGreen, err := decodeList(v, "list_green", "[QueueGreenChange]")
+	if err != nil {
+		return out, err
+	}
+	if len(listQueueListGreen) > 0 {
+		itemsQueueListGreen := make([]queuetypes.GreenChange, len(listQueueListGreen))
+		for indexQueueListGreen, itemQueueListGreen := range listQueueListGreen {
+			xQueueListGreenItem, err := decodeQueueGreenChange(itemQueueListGreen, fmt.Sprintf("%s[%d]", "list_green", indexQueueListGreen))
+			if err != nil {
+				return out, err
+			}
+			itemsQueueListGreen[indexQueueListGreen] = xQueueListGreenItem
+		}
+		out = itemsQueueListGreen
+	}
+	return out, nil
+}
+
+func decodeProviderQueuePostStatus(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xQueuePostStatus, err := decodeAck(v, "post_status")
+	if err != nil {
+		return out, err
+	}
+	out = xQueuePostStatus
+	return out, nil
+}
+
+func decodeProviderQueueRetarget(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xQueueRetarget, err := decodeAck(v, "retarget")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueRetarget
+	return out, nil
+}
+
+func decodeProviderQueueMergeChange(v vm.Value) (queuetypes.MergeAnswer, error) {
+	var out queuetypes.MergeAnswer
+	xQueueMergeChange, err := decodeQueueMergeAnswer(v, "merge_change")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueMergeChange
+	return out, nil
+}
+
+func decodeProviderQueueKickBack(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xQueueKickBack, err := decodeAck(v, "kick_back")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueKickBack
+	return out, nil
+}
+
+func decodeProviderQueueMark(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xQueueMark, err := decodeAck(v, "mark")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueMark
+	return out, nil
+}
+
+func decodeProviderQueueListArtifacts(v vm.Value) (queuetypes.ArtifactListing, error) {
+	var out queuetypes.ArtifactListing
+	xQueueListArtifacts, err := decodeQueueArtifactListing(v, "list_artifacts")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueListArtifacts
+	return out, nil
+}
+
+func decodeProviderQueueRequiredChecks(v vm.Value) ([]queuetypes.Check, error) {
+	var out []queuetypes.Check
+	listQueueRequiredChecks, err := decodeList(v, "required_checks", "[QueueCheck]")
+	if err != nil {
+		return out, err
+	}
+	if len(listQueueRequiredChecks) > 0 {
+		itemsQueueRequiredChecks := make([]queuetypes.Check, len(listQueueRequiredChecks))
+		for indexQueueRequiredChecks, itemQueueRequiredChecks := range listQueueRequiredChecks {
+			xQueueRequiredChecksItem, err := decodeQueueCheck(itemQueueRequiredChecks, fmt.Sprintf("%s[%d]", "required_checks", indexQueueRequiredChecks))
+			if err != nil {
+				return out, err
+			}
+			itemsQueueRequiredChecks[indexQueueRequiredChecks] = xQueueRequiredChecksItem
+		}
+		out = itemsQueueRequiredChecks
+	}
+	return out, nil
+}
+
+func decodeProviderQueueReviews(v vm.Value) (queuetypes.Reviews, error) {
+	var out queuetypes.Reviews
+	xQueueReviews, err := decodeQueueReviews(v, "reviews")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueReviews
+	return out, nil
+}
+
+func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xQueueDismissReview, err := decodeAck(v, "dismiss_review")
+	if err != nil {
+		return out, err
+	}
+	out = xQueueDismissReview
+	return out, nil
+}
+
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
@@ -1839,6 +3554,10 @@ func mismatch(path, want string, got vm.Value) error {
 
 func unknownMember(path, typ, key string) error {
 	return fmt.Errorf("%s: %s has no member %q", path, typ, key)
+}
+
+func missingMember(path, typ, key string) error {
+	return fmt.Errorf("%s: field %q is missing, and a %s requires it", path, key, typ)
 }
 
 func decodeStr(v vm.Value, path string) (string, error) {
