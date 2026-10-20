@@ -352,6 +352,9 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 	if row, ok := titled(); ok {
 		forked, bound = boundModelTier(deps, row)
 	}
+	if bound && at.models != nil {
+		forked.rows = at.models()
+	}
 	host := types.HarnessKey{ID: who.Host}
 	var findings []costFinding
 	switch s := deps.settingLookup(string(denyRuleSpawnNamesModel)); {
@@ -379,6 +382,9 @@ type forkedTier struct {
 	record types.JobModelTier
 	tier   types.ModelTier
 	set    *types.ModelTierSet
+	// rows are the harness_models rows: their aliases name the short model a host's spawn
+	// tool takes where the declaration maps only full ids.
+	rows []types.ModelPricing
 }
 
 // boundModelTier is the tier row was forked at, as tierIn finds it in the workspace's
@@ -419,7 +425,8 @@ func (f forkedTier) line(alias string) string {
 }
 
 // refusal is spawn-names-model's refusal at strict of a spawn of model from host, "" when
-// model resolves to a tier of the forked rank or is the model the row itself named. A host
+// model resolves to a tier of the forked rank, through the declaration or a harness_models
+// row's id or alias, or is the model the row itself named. A host
 // the declaration maps no model for is refused too, naming the hosts entry that would map
 // one.
 func (f forkedTier) refusal(host types.HarnessKey, model string) string {
@@ -431,7 +438,7 @@ func (f forkedTier) refusal(host types.HarnessKey, model string) string {
 		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\job.modelTiers declares, or spawn the job from a harness it maps.",
 			f.job, f.record.Name, err, host.ID)
 	}
-	spawned, ok := f.set.Resolve(host, model)
+	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
 	if ok && spawned.Rank() == f.tier.Rank() {
 		return ""
 	}
@@ -446,7 +453,7 @@ func (f forkedTier) refusal(host types.HarnessKey, model string) string {
 // rankedAbove is spawn-above-model-tier's advice for a spawn of model from host, "" unless
 // model resolves to a tier ranking above the forked one.
 func (f forkedTier) rankedAbove(host types.HarnessKey, model string) string {
-	spawned, ok := f.set.Resolve(host, model)
+	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
 	if !ok {
 		return ""
 	}

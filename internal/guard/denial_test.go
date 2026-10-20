@@ -204,6 +204,23 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 }
 
+// A catalogued rule that refuses for a second reason says that reason in full: its
+// Catches line summarizes the first, and would misname the second.
+func TestShapeDenyRepeatsOnlyTheSameReason(t *testing.T) {
+	gate := hint.NewGate(t.TempDir(), "s1")
+	rule := string(denyRuleSpawnNamesModel)
+	deny := func(reason string) string {
+		got, _, _ := shapeDeny(t.Context(), gate, rule, reason, "", "", nil, false)
+		return got
+	}
+	again := "denied again [" + rule + "]: "
+
+	assert.False(t, strings.HasPrefix(deny("this spawn names no model."), again))
+	assert.False(t, strings.HasPrefix(deny("this spawn runs opus, at the wrong tier."), again),
+		"another reason from the same rule is not a repeat")
+	assert.True(t, strings.HasPrefix(deny("this spawn names no model."), again), "the same reason is")
+}
+
 // TestWholeTreeStoresTheBackendsScratchCheckout pins the scratch checkout a whole-tree deny
 // names for its backend. It sits in the stored verdict, and an hg or jj user is never told
 // to add a git worktree, which they cannot follow.
