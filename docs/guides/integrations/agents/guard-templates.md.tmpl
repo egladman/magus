@@ -285,6 +285,28 @@ It declares no `magus-guard-coverage` line, for the reason
 
 <!-- embed: proofread-reply.buzz -->
 
+## `magus-buzz-check.buzz`
+
+Wire it after the tools that write a file (Claude Code's `PostToolUse` on
+`Write|Edit|MultiEdit`, Codex's on `apply_patch`, Cursor's `postToolUse` on
+`Write|StrReplace|Edit`) as `magus buzz -s magus-buzz-check.buzz -- --agent-name <host>`.
+It runs `magus buzz --check` on a `.buzz` file the agent just wrote, so a type error
+or a conflict marker comes back at edit time rather than at the next run. The harness
+spells declare it through `magus/harness.buzzCheckHook`.
+
+It takes the written path from `tool_input.file_path`, else `tool_input.path`, else
+the Add File and Update File lines of an `apply_patch` input, and skips any path that
+is not a `.buzz` file. A `magusfile.buzz`, and anything under `magusfiles/`, `spells/`
+or `hack/`, is checked with `--embedded`, the mode the engine loads it in; any other
+`.buzz` file is checked strict. A failure prints `{"decision":"block","reason":...}`,
+which the host hands the agent as the reason to fix the file. A pass prints nothing,
+and it always exits 0.
+
+It declares no `magus-guard-coverage` line: it judges a file the agent already wrote,
+not a call.
+
+<!-- embed: magus-buzz-check.buzz -->
+
 ## Trying a verdict by hand
 
 ```sh

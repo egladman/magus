@@ -389,6 +389,32 @@ its instructions only ask for. Codex's read-only sandbox blocks writes, which ma
 include magus's own cache and activity records, so a query that needs one can fail
 inside the scout. That has not been run live here.
 
+### Checking the Buzz it writes
+
+`PostToolUse` on `apply_patch` runs
+[`magus-buzz-check.buzz`](guard-templates.md#magus-buzz-checkbuzz). It reads the Add
+File and Update File lines of the patch, runs `magus buzz --check` on each `.buzz` file
+among them, and hands a failure back as the reason to fix it:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name codex",
+            "statusMessage": "magus: checking the Buzz it wrote"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## Handing a compacted session its state back
 
 The `SessionStart` entry matches `compact`, the moment Codex replaces a long
