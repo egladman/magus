@@ -322,7 +322,7 @@ func evalTexts(records []sourceRecord, files map[string][]byte, root, rev, dir s
 		}
 		queries, err := readQueries(filepath.Join(root, "testdata", "retrieval", q[1]))
 		if err != nil {
-			return nil, fmt.Errorf("eval set %s: %w; name it in -no-eval to leave it out", q[0], err)
+			return nil, fmt.Errorf("eval set %s (name it in -no-eval to leave it out): %w", q[0], err)
 		}
 		e.add(q[0], queries...)
 	}

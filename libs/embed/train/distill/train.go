@@ -35,20 +35,20 @@ type Model struct {
 // an error, since it could never learn a gradient through the norm.
 func NewModel(dirs [][]float64, weights []float64) (*Model, error) {
 	if len(dirs) == 0 || len(dirs) != len(weights) {
-		return nil, fmt.Errorf("model: %d directions and %d weights", len(dirs), len(weights))
+		return nil, fmt.Errorf("new model: %d directions and %d weights", len(dirs), len(weights))
 	}
 	dims := len(dirs[0])
 	if dims < 1 {
-		return nil, errors.New("model: directions have no dims")
+		return nil, errors.New("new model: directions have no dims")
 	}
 	m := &Model{dims: dims, vec: make([]float64, len(dirs)*dims), beta: make([]float64, len(dirs))}
 	for t, d := range dirs {
 		if len(d) != dims {
-			return nil, fmt.Errorf("model: direction %d has %d dims, direction 0 %d", t, len(d), dims)
+			return nil, fmt.Errorf("new model: direction %d has %d dims, direction 0 %d", t, len(d), dims)
 		}
 		n := math.Sqrt(dot(d, d))
 		if !(n > 0) || math.IsInf(n, 0) {
-			return nil, fmt.Errorf("model: direction %d has norm %v", t, n)
+			return nil, fmt.Errorf("new model: direction %d has norm %v", t, n)
 		}
 		row := m.row(t)
 		for j, x := range d {
@@ -56,7 +56,7 @@ func NewModel(dirs [][]float64, weights []float64) (*Model, error) {
 		}
 		w := weights[t]
 		if !(w > 0) || math.IsInf(w, 0) {
-			return nil, fmt.Errorf("model: weight %d is %v, not positive and finite", t, w)
+			return nil, fmt.Errorf("new model: weight %d is %v, not positive and finite", t, w)
 		}
 		m.beta[t] = softplusInv(w)
 	}

@@ -83,7 +83,7 @@ func verify(cache string, in inputRecord) (string, error) {
 	path := filepath.Join(cache, in.Path)
 	sum, err := teacher.FileSHA256(path)
 	if err != nil {
-		return "", fmt.Errorf("%w (run: embed fetch %s)", err, in.Name)
+		return "", fmt.Errorf("input %s (embed fetch %s fetches it): %w", in.Name, in.Name, err)
 	}
 	if sum != in.SHA256 {
 		return "", fmt.Errorf("%s has sha256 %s, inputs.jsonl pins %s", path, sum, in.SHA256)

@@ -273,7 +273,7 @@ func readEvalSets(e *evalCorpus, dir string, leftOut map[string]bool) error {
 	}
 	for _, name := range requiredEvalSets {
 		if !found[name] && !leftOut[name] {
-			return fmt.Errorf("eval set %s: no %s.jsonl under -eval %q; export it, or name it in -no-eval to leave it out", name, name, dir)
+			return fmt.Errorf("eval set %s: no %s.jsonl under -eval %q, export it or name it in -no-eval to leave it out", name, name, dir)
 		}
 	}
 	return nil
