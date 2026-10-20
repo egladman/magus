@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
@@ -79,13 +78,7 @@ func stallGate(cacheDir, lease string) hint.Gate {
 }
 
 func readStall(gate hint.Gate) stallRecord {
-	var rec stallRecord
-	if gate.CacheDir() == "" {
-		return rec
-	}
-	if body, err := os.ReadFile(hint.MarkerPath(gate.CacheDir(), gate.Session(), stallRecordKind)); err == nil {
-		_ = json.Unmarshal(body, &rec)
-	}
+	rec, _ := readMarker[stallRecord](gate, stallRecordKind)
 	return rec
 }
 

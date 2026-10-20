@@ -777,6 +777,21 @@ func TestAgentMarkerMode(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
 }
 
+// A marker that does not decode is absent, never a zero record that reads as present.
+func TestCorruptMarkerReadsAsAbsent(t *testing.T) {
+	facts := hint.NewGate(t.TempDir(), FactsKey("claude-code", "8f2c6a1e"))
+	for _, kind := range []hint.MarkerKind{spawnedAgentKind("a1b2c3"), costStateKind, stallRecordKind} {
+		path := hint.MarkerPath(facts.CacheDir(), facts.Session(), kind)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(`{"truncated`), 0o644))
+	}
+
+	_, ok := readMarker[spawnedAgent](facts, spawnedAgentKind("a1b2c3"))
+	assert.False(t, ok)
+	assert.Equal(t, costState{}, readCostState(facts))
+	assert.Equal(t, stallRecord{}, readStall(facts))
+}
+
 // A stop for an agent magus never saw spawned still records its size, and a transcript
 // with no usage records nothing rather than a zero.
 func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
