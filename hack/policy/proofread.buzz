@@ -41,8 +41,17 @@ final RULES: {str: str} = {
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
-    // The review rules ship off until a labeling round measures them; here they advise, each
-    // backed by the study or convention its page cites.
+    // Graded where their words can mean another thing, but the Markdown lint, the
+    // pr-description step and the commit guard denied them on pages, changelog fragments,
+    // descriptions and commits: a stock label, "in order to", "let's dive in", a template's
+    // unfilled placeholder, a fragment's unknown group.
+    "reply-voice": "deny",
+    "wordy": "deny",
+    "signpost": "deny",
+    "leak": "deny",
+    "changelog-group": "deny",
+    // The review rules ship off until a labeling round measures them; here they run graded,
+    // at weight 0 until one does, each backed by the study or convention its page cites.
     "no-reason": "advise",
     "nit-label": "advise",
     "empty-request-changes": "advise",
@@ -51,13 +60,13 @@ final RULES: {str: str} = {
     "deferral-no-link": "advise",
     "decline-no-reason": "advise",
     "impatience": "advise",
-    // The list and date rules ship off until a labeling round measures them; here they advise,
-    // backed by the Google and Microsoft list guidance and the date mix in decision record 0001.
+    // The list and date rules ship off until a labeling round measures them; here they run
+    // graded, at weight 0 until one does, backed by the Google and Microsoft list guidance and the date mix in decision record 0001.
     "list-marks": "advise",
     "list-parallel": "advise",
     "date-format": "advise",
     // The agent-compact rules and the skill rules ship off until a labeling round measures them;
-    // here they advise, each backed by the token counts and studies its page cites. None denies
+    // here they run graded, at weight 0 until one does, each backed by the token counts and studies its page cites. None denies
     // while the short skill forms are not yet compressed to the floor.
     "compact-filler": "advise",
     "compact-markup": "advise",
@@ -70,9 +79,52 @@ final RULES: {str: str} = {
     "instruction-position": "advise",
 };
 
-// DECISIONS_FILE is RULES as the JSON file a caller that cannot import this module hands
-// proofread: the console's stylesheet lint and the comment guard for a stylesheet read from
-// stdin. A test holds the two equal.
+// MINIMUMS are the grades this repository holds each kind it judges to; proofread ships
+// none, and a run over a kind with no minimum exits 2. Each was set on 2026-10-20 at
+// 002e91670 to the lowest grade that kind had in the tree, so no text that passed then
+// fails, and a raise is a commit with its reason. The texts behind each are in the comment.
+final MINIMUMS: {str: int} = {
+    // 305 hand-written pages; the lowest, libs/gopherbuzz/docs/codes/BZZ1008.md, grades 82.7
+    // on its participles.
+    "reference": 82,
+    // 49 pages under docs/guides; the lowest, docs/guides/migrating/from-nx.md, grades 92.4.
+    "guide": 92,
+    // The 6 skills and AGENTS.md files an agent loads; every one grades 100.
+    "agent-brief": 100,
+    // The 16 shipped skill bodies; every one grades 100.
+    "skill-template": 100,
+    // 1076 changelog fragments; the lowest, model-tier-first-pass.md, grades 52.3 on a hedge.
+    "changelog": 52,
+    // The doc comments of 16065 Go and TypeScript declarations; the lowest,
+    // docs/src/site/diagram-zoom.ts, grades 69.9 on a filler word.
+    "doc-comment": 69,
+    // 510 help texts in internal/commands/registry.go; every one grades 100.
+    "cli-help": 100,
+    // 22 MCP tool and skill descriptions; every one grades 100.
+    "tool-description": 100,
+    // The last 200 commits on main grade 74.1 at the lowest (claim). 20 is lower, so one
+    // finding of the strongest graded rule (subject-mood, 0.80) passes a subject of any
+    // length and two fail one under 100 words; libs/proofread/grade_test.go pins both.
+    "commit-message": 20,
+    // The last 100 merged pull requests: #537 grades 0 on claim and a defect lead.
+    "change-description": 0,
+    // The 2 issues filed; the lower, #527, grades 95.3.
+    "issue": 95,
+    // The 4 pull request comments people wrote; every one grades 100.
+    "review-reply": 100,
+    // No review summary, inline comment or agent reply is kept in this repository's history,
+    // so none was measured and none fails on its grade until one is.
+    "review-summary": 0,
+    "review-inline": 0,
+    "agent-reply": 0,
+    // docs/src/styles grade 47.1 at the lowest comment, but console's stylesheets were not
+    // measured, so none fails on its grade until they are.
+    "stylesheet": 0,
+};
+
+// DECISIONS_FILE is RULES and MINIMUMS as the JSON file a caller that cannot import this
+// module hands proofread: the console's stylesheet lint and the comment guard for a
+// stylesheet read from stdin. A test holds them equal.
 export final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
 
 // PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that
@@ -104,6 +156,7 @@ export fun table(files: [str]) > {str: any} !> any {
     }
     final decisions = mut {<str: any>};
     decisions["rules"] = RULES;
+    decisions["minimums"] = MINIMUMS;
     if (paths.len() > 0) {
         decisions["paths"] = paths;
     }
@@ -140,17 +193,29 @@ test "the decisions file is the table as JSON" {
     final read: {str: any} = json\parse(fs\readFile(file) catch "\{}") catch {<str: any>};
     std\assert(read["rules"]?["tense"] == "deny", message: "{read}");
     std\assert(read["paths"]?["blog/**"]?["tense"] == "off", message: "{read}");
+    std\assert(read["minimums"]?["commit-message"] != null, message: "{read}");
     fs\remove(file) catch void;
 }
 
-test "the checked-in decisions file for the Stop hook holds RULES" {
+test "the checked-in decisions file for the Stop hook holds RULES and MINIMUMS" {
     final read: {str: any} = json\parse(fs\readFile(DECISIONS_FILE) catch "\{}") catch {<str: any>};
     final rules: {str: any} = read["rules"] ?? {<str: any>};
-    std\assert(read.len() == 1, message: "{DECISIONS_FILE} holds rules alone: a reply is read from stdin, which no path glob matches");
+    final minimums: {str: any} = read["minimums"] ?? {<str: any>};
+    std\assert(read.len() == 2, message: "{DECISIONS_FILE} holds rules and minimums alone: a reply is read from stdin, which no path glob matches");
     std\assert(rules.len() == RULES.len(), message: "{DECISIONS_FILE} lists {rules.len()} rules, RULES {RULES.len()}");
     foreach (rule, decision in RULES) {
         std\assert(rules[rule] == decision, message: "{DECISIONS_FILE}: {rule} is not {decision}");
     }
+    std\assert(minimums.len() == MINIMUMS.len(), message: "{DECISIONS_FILE} lists {minimums.len()} minimums, MINIMUMS {MINIMUMS.len()}");
+    foreach (kind, minimum in MINIMUMS) {
+        std\assert(std\toInt(minimums[kind] ?? -1) == minimum, message: "{DECISIONS_FILE}: the {kind} minimum is not {minimum}");
+    }
+}
+
+test "the commit-message minimum is the one proofread's short-commit test pins" {
+    final source = fs\readFile("libs/proofread/grade_test.go") catch "";
+    final pinned = "const commitMessageMinimum = {MINIMUMS["commit-message"] ?? -1}\n";
+    std\assert(source.indexOf(pinned) != null, message: "libs/proofread/grade_test.go does not hold `{pinned.trim()}`");
 }
 
 test "an outside judge's finding takes this repository's decision" {

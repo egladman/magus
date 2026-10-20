@@ -24,7 +24,7 @@ import (
 // anything, that HEAD left something stale (generated output, formatting, or both) and
 // hands over the commands that fix it in place. Normally reached via `magus job run
 // check-drift`, which is all the post-commit and pre-push hooks installed by
-// installDriftHooks ever call; see that function and types.DriftHookInstaller for why
+// installVCSHook ever call; see that function and types.DriftHookInstaller for why
 // the hook itself does none of this work.
 //
 // Two classes, two different cheapness stories:

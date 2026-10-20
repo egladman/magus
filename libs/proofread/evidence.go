@@ -1,80 +1,76 @@
 package proofread
 
-// evidenceCeiling caps a rule's shipped default at the strictest decision
-// fresh labeled firings support: advise needs a Wilson 95% lower bound on
-// precision of 0.70 over 30 or more firings, deny 0.90. Fresh means text the
-// rule's exceptions were never tuned on, so a rule tightened against one
-// round's cases is judged on the next. A rule leaves this table once its
-// fresh evidence supports its declared decision, and a decisions table still
-// sets any rule it names.
-//
-// Measured 2026-10-11 over labeling round 3: 458 firings sampled from the
-// AIDev export and this repository after the round-1 fixes, labeled by two
-// labelers and adjudicated. Each entry gives its correct firings over all
-// labeled, then the lower bound. repeated-marks (34/34, 0.90) supports its
-// declared advise and is not capped.
-//
-// The second group was tuned after labeling round 2 and measured over frozen
-// round 4 (178 fresh firings, two labelers, adjudicated): each entry gives its
-// correct firings over all labeled, then the lower bound. nonspecific,
-// second-person and participles were redesigned after round 4 and measured
-// over frozen round 5 (testdata/rounds/round5.json); second-person fired on no
-// guide there, so it keeps its round-2 precision and lower bound. participles
-// passed advise in round 7 at z 2.24 (38/40, lower bound 0.81); a person
-// spot-checked ten agreed-correct labels, so its declared advise now ships.
-var evidenceCeiling = map[Rule]Decision{
-	RuleNonspecific:               DecisionOff,    // round 7: 17/40, 0.27 at z 2.24
-	RuleAbsolute:                  DecisionOff,    // 6/40, 0.07
-	RuleSecondPerson:              DecisionOff,    // round 2: 0.19, 0.10; no fresh firing in round 5
-	RuleIssueRepro:                DecisionOff,    // 26/40, 0.50
-	RuleChangelogHeading:          DecisionOff,    // no fresh firing
-	RuleIngTail:                   DecisionOff,    // 3/17, 0.06
-	RuleClaim:                     DecisionOff,    // 22/40, 0.40
-	RuleOptionList:                DecisionOff,    // 0/1
-	RuleVerdict:                   DecisionOff,    // 16/40, 0.26
-	RuleJudgmentAsFact:            DecisionOff,    // 15/40, 0.24
-	RuleStaccato:                  DecisionOff,    // 6/12, 0.25
-	RuleIntent:                    DecisionOff,    // 1/4, 0.05
-	RuleChatbot:                   DecisionOff,    // 13/20, 0.43
-	RuleBareImperative:            DecisionOff,    // 29/40, 0.57
-	RuleReplyOpener:               DecisionOff,    // 21/40, 0.37
-	RuleCondescension:             DecisionOff,    // 20/26, 0.58
-	RuleContrast:                  DecisionOff,    // 4/5, 0.38
-	RuleHedge:                     DecisionOff,    // 31/40, 0.62
-	RuleAllCaps:                   DecisionOff,    // 27/40, 0.52
-	RuleFiller:                    DecisionOff,    // 32/40, 0.65
-	RuleNoReason:                  DecisionOff,    // no labeled firing yet
-	RuleNitLabel:                  DecisionOff,    // no labeled firing yet
-	RuleEmptyRequestChanges:       DecisionOff,    // no labeled firing yet
-	RuleApproveBlocker:            DecisionOff,    // no labeled firing yet
-	RuleBareLGTM:                  DecisionOff,    // no labeled firing yet
-	RuleDeferralNoLink:            DecisionOff,    // no labeled firing yet
-	RuleDeclineNoReason:           DecisionOff,    // no labeled firing yet
-	RuleImpatience:                DecisionOff,    // no labeled firing yet
-	RuleListMarks:                 DecisionOff,    // no labeled firing yet
-	RuleListParallel:              DecisionOff,    // no labeled firing yet
-	RuleDateFormat:                DecisionOff,    // no labeled firing yet
-	RuleCompactFiller:             DecisionOff,    // no labeled firing yet
-	RuleCompactMarkup:             DecisionOff,    // no labeled firing yet
-	RuleCompactCostlyAbbrev:       DecisionOff,    // no labeled firing yet
-	RuleCompactSymbolNegation:     DecisionOff,    // no labeled firing yet
-	RuleCompactLine:               DecisionOff,    // no labeled firing yet
-	RuleCompactDuplicate:          DecisionOff,    // no labeled firing yet
-	RuleSkillDescriptionBudget:    DecisionOff,    // no labeled firing yet
-	RuleSkillSetDescriptionBudget: DecisionOff,    // no labeled firing yet
-	RuleInstructionPosition:       DecisionOff,    // no labeled firing yet
-	RuleBlame:                     DecisionAdvise, // 34/37, 0.79
-	RuleSubjectMood:               DecisionAdvise, // 37/40, 0.80
+// weights are what one advise finding costs its text's [Grade]: the Wilson 95%
+// lower bound on the rule's precision in the latest round that scored it, where
+// that round labeled 30 or more firings (testdata/rounds). internal/calibrate
+// recomputes each. A rule absent here weighs 0.
+var weights = map[Rule]float64{
+	RuleAbsolute:          0.07, // round 4: 6/40
+	RuleAgreementOpener:   0.91, // round 1: 40/40
+	RuleAllCaps:           0.52, // round 3: 27/40
+	RuleBareImperative:    0.57, // round 3: 29/40
+	RuleBlame:             0.79, // round 3: 34/37
+	RuleBodySeparator:     0.91, // round 1: 40/40
+	RuleBoldLabel:         0.91, // round 1: 40/40
+	RuleBuzzword:          0.50, // round 2: 26/40
+	RuleBuzzwordWeak:      0.14, // round 2: 10/40
+	RuleClaim:             0.40, // round 4: 22/40
+	RuleClosingOffer:      0.80, // round 2: 37/40
+	RuleCredit:            0.71, // round 2: 34/40
+	RuleFiller:            0.65, // round 3: 32/40
+	RuleHedge:             0.62, // round 3: 31/40
+	RuleIssueRepro:        0.50, // round 4: 26/40
+	RuleJudgmentAsFact:    0.24, // round 3: 15/40
+	RuleLeadContext:       0.55, // round 2: 28/40
+	RuleLeak:              0.57, // round 1: 29/40
+	RuleLongThread:        0.91, // round 2: 40/40
+	RuleNominalizations:   0.52, // round 2: 27/40
+	RuleNonspecific:       0.29, // round 7: 17/40
+	RuleParticiples:       0.83, // round 7: 38/40
+	RuleRepeatedMarks:     0.90, // round 3: 34/34
+	RuleReplyOpener:       0.37, // round 3: 21/40
+	RuleReplyVoice:        0.55, // round 1: 28/40
+	RuleShortReplyHeading: 0.91, // round 1: 40/40
+	RuleStackedHedge:      0.77, // round 1: 36/40
+	RuleSubjectLength:     0.91, // round 1: 40/40
+	RuleSubjectMood:       0.80, // round 3: 37/40
+	RuleSubjectPeriod:     0.91, // round 1: 40/40
+	RuleUnbackedDone:      0.71, // round 1: 34/40
+	RuleVerdict:           0.26, // round 3: 16/40
+	RuleWordy:             0.57, // round 1: 29/40
 }
 
-// strictness orders decisions from off to deny.
-func strictness(d Decision) int {
-	switch d {
-	case DecisionDeny:
-		return 2
-	case DecisionAdvise:
-		return 1
-	default:
-		return 0
-	}
+// unmeasured ship off until a round measures 30 or more fresh firings and gives
+// them a weight; a decisions table still sets any rule it names. Each entry
+// gives its latest round's correct firings over all labeled.
+var unmeasured = map[Rule]bool{
+	RuleSecondPerson:              true, // round 5: no fresh firing
+	RuleChangelogHeading:          true, // round 4: no fresh firing
+	RuleIngTail:                   true, // round 4: 3/17
+	RuleOptionList:                true, // round 4: 0/1
+	RuleStaccato:                  true, // round 3: 6/12
+	RuleIntent:                    true, // round 3: 1/4
+	RuleChatbot:                   true, // round 3: 13/20
+	RuleCondescension:             true, // round 3: 20/26
+	RuleContrast:                  true, // round 3: 4/5
+	RuleNoReason:                  true, // no labeled firing yet
+	RuleNitLabel:                  true, // no labeled firing yet
+	RuleEmptyRequestChanges:       true, // no labeled firing yet
+	RuleApproveBlocker:            true, // no labeled firing yet
+	RuleBareLGTM:                  true, // no labeled firing yet
+	RuleDeferralNoLink:            true, // no labeled firing yet
+	RuleDeclineNoReason:           true, // no labeled firing yet
+	RuleImpatience:                true, // no labeled firing yet
+	RuleListMarks:                 true, // no labeled firing yet
+	RuleListParallel:              true, // no labeled firing yet
+	RuleDateFormat:                true, // no labeled firing yet
+	RuleCompactFiller:             true, // no labeled firing yet
+	RuleCompactMarkup:             true, // no labeled firing yet
+	RuleCompactCostlyAbbrev:       true, // no labeled firing yet
+	RuleCompactSymbolNegation:     true, // no labeled firing yet
+	RuleCompactLine:               true, // no labeled firing yet
+	RuleCompactDuplicate:          true, // no labeled firing yet
+	RuleSkillDescriptionBudget:    true, // no labeled firing yet
+	RuleSkillSetDescriptionBudget: true, // no labeled firing yet
+	RuleInstructionPosition:       true, // no labeled firing yet
 }

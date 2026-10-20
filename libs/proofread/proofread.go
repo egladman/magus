@@ -207,7 +207,8 @@ type Decision string
 const (
 	// DecisionOff is a rule that does not run.
 	DecisionOff Decision = "off"
-	// DecisionAdvise is a finding a gate reports and lets through.
+	// DecisionAdvise is a graded finding: it fails nothing alone, and its
+	// Weight lowers its text's [Grade].
 	DecisionAdvise Decision = "advise"
 	// DecisionDeny is a finding a gate refuses.
 	DecisionDeny Decision = "deny"
@@ -240,15 +241,15 @@ var (
 	toneKinds = slices.Concat(reviewed, []Kind{KindCommitMessage, KindIssue})
 )
 
-// check is one rule: the kinds it judges, its default decision on each, and
-// the judge itself.
+// check is one rule: the kinds it judges, its default decision, and the judge
+// itself.
 type check struct {
 	rule Rule
 	on   []Kind
-	// advise lists the kinds of on where the default is [DecisionAdvise]: the
-	// rule's words also have senses there it cannot tell apart from the one it
-	// means. On the rest of on the default is [DecisionDeny].
-	advise []Kind
+	// graded marks a rule whose default is [DecisionAdvise] on every kind of
+	// on: its words have senses it cannot tell apart from the one it means, so
+	// its measured weight lowers a grade instead. Any other rule denies.
+	graded bool
 	// house marks a rule that encodes one repository's conventions rather than
 	// plain writing. It defaults to [DecisionOff] on every kind and
 	// runs only where a decisions table names it.
@@ -257,22 +258,21 @@ type check struct {
 }
 
 // defaultDecision is what c decides on kind when no decisions table names it:
-// its declared decision, capped at its [evidenceCeiling].
+// its declared decision, or off for an [unmeasured] rule.
 func (c check) defaultDecision(kind Kind) Decision {
-	d := c.declaredDecision(kind)
-	if ceiling, ok := evidenceCeiling[c.rule]; ok && strictness(d) > strictness(ceiling) {
-		return ceiling
+	if unmeasured[c.rule] {
+		return DecisionOff
 	}
 
-	return d
+	return c.declaredDecision(kind)
 }
 
-// declaredDecision is what c's check declares for kind, before any ceiling.
+// declaredDecision is what c's check declares for kind, before [unmeasured].
 func (c check) declaredDecision(kind Kind) Decision {
 	switch {
 	case c.house || !slices.Contains(c.on, kind):
 		return DecisionOff
-	case slices.Contains(c.advise, kind):
+	case c.graded:
 		return DecisionAdvise
 	default:
 		return DecisionDeny
@@ -285,7 +285,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
-	compactChecks, skillChecks, []check{templateCheck})
+	compactChecks, skillChecks, []check{templateCheck, gradeCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: diagnostic, judge: messageLength},
@@ -303,8 +303,7 @@ var templateCheck = check{rule: RuleTemplate, on: []Kind{KindSkillTemplate}, hou
 // itself, so one span gives one finding; see [input.reports].
 var (
 	fillerCheck = check{
-		rule: RuleFiller, on: slices.Concat(everywhere, stylesheet), advise: slices.Concat(agentReply, stylesheet),
-		judge: filler,
+		rule: RuleFiller, on: slices.Concat(everywhere, stylesheet), graded: true, judge: filler,
 	}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
 	tenseCheck       = check{rule: RuleTense, on: slices.Concat(proseKinds, compact, stylesheet), house: true, judge: tense}
@@ -314,8 +313,6 @@ var (
 // rules judge alike.
 var comment = slices.Concat(docOnly, stylesheet)
 
-// A stylesheet has no labeled cases yet for the judgment rules it shares with
-// written text, so on it they advise until cases support a deny.
 var coreChecks = []check{
 	{rule: RuleCommentBlock, on: comment, house: true, judge: commentBlock},
 	{rule: RuleCommentSentence, on: comment, house: true, judge: commentSentence},
@@ -325,16 +322,13 @@ var coreChecks = []check{
 	{rule: RuleHistory, on: comment, house: true, judge: history},
 	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
 	leadContextCheck,
-	{rule: RuleReplyVoice, on: slices.Concat(withReply, compact, stylesheet), advise: stylesheet, judge: replyVoice},
+	{rule: RuleReplyVoice, on: slices.Concat(withReply, compact, stylesheet), graded: true, judge: replyVoice},
 	tenseCheck,
-	{
-		rule: RuleHedge, on: slices.Concat(proseKinds, compact, agentReply, stylesheet),
-		advise: slices.Concat(agentReply, stylesheet), judge: hedge,
-	},
+	{rule: RuleHedge, on: slices.Concat(proseKinds, compact, agentReply, stylesheet), graded: true, judge: hedge},
 	{rule: RuleAttribution, on: slices.Concat(withReply, compact, stylesheet), house: true, judge: attribution},
 	{rule: RuleTerseSentence, on: brief, house: true, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: brief, house: true, judge: terseParagraph},
-	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: wordy},
+	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), graded: true, judge: wordy},
 	{rule: RuleBareRule, on: slices.Concat(brief, compact), house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
@@ -393,6 +387,9 @@ type Finding struct {
 	// itself and no table names it: a rule whose words are sure in one reading
 	// and a guess in another reports the guess that way.
 	Decision Decision
+	// Weight is what the finding costs its text's [Grade]: its rule's measured
+	// weight on an advise finding, 0 on a deny finding or an unmeasured rule.
+	Weight float64
 	// Code is the rule's PRF code, and URL the page that documents it.
 	Code diagnostics.Code
 	URL  string
@@ -415,6 +412,9 @@ type options struct {
 	threadLength int
 	event        Event
 	voice        *Voice
+	// minimum is the grade under which a text gets a [RuleGrade] finding, nil
+	// for a call that grades nothing.
+	minimum *int
 }
 
 // WithOnly judges by the named rules alone. A named rule that does not apply
@@ -520,7 +520,12 @@ func run(in input) []Finding {
 		}
 	}
 
-	return in.suppress(out)
+	out = in.suppress(out)
+	if f, ok := in.grade(out); ok {
+		out = append(out, f)
+	}
+
+	return out
 }
 
 // locate gives f the columns its Match spans on its line as written. A Match
@@ -574,6 +579,11 @@ func (o options) settle(c check, f Finding, d Decision) Finding {
 	f.Rule = c.rule
 	f.Code = ruleTexts[c.rule].code
 	f.URL = prf.URL(f.Code)
+
+	f.Weight = 0
+	if f.Decision == DecisionAdvise {
+		f.Weight = weights[c.rule]
+	}
 
 	return f
 }

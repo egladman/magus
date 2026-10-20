@@ -37,12 +37,13 @@ proofread explain filler
 Pipe a message to the `commit-message` kind and read the lines it prints:
 
 ```sh
-printf 'Update the parser\n\nIt simply works.\n' | proofread commit-message --stdin -o text
+printf 'Update the parser\n\nIt simply works.\n' | proofread commit-message --stdin -o text --minimum 20
 ```
 
 `-o text` prints one line per finding, `path:line:col: CODE rule [decision]
-message`, and a count on stderr when there are findings. Without `--fail-on` the exit
-code stays 0, so the line is advice.
+message`, and a count on stderr when there are findings. `--minimum` is the grade the
+message must reach; section 6 explains it. A run with neither `--minimum` nor a decisions
+table that sets one exits 2 and names the kind.
 
 ## 3. Install a git commit-msg hook
 
@@ -50,7 +51,7 @@ code stays 0, so the line is advice.
 
    ```sh
    #!/bin/sh
-   exec proofread commit-message -o text --fail-on deny "$1"
+   exec proofread commit-message -o text --minimum 20 "$1"
    ```
 
 2. Mark it executable:
@@ -77,7 +78,7 @@ transaction and pipe it to stdin.
 
    ```ini
    [hooks]
-   pretxncommit.proofread = hg log -r $HG_NODE -T '{desc}' | proofread commit-message --stdin -o text --fail-on deny
+   pretxncommit.proofread = hg log -r $HG_NODE -T '{desc}' | proofread commit-message --stdin -o text --minimum 20
    ```
 
 2. Commit with a message that breaks a rule. A non-zero exit from a `pretxncommit` hook
@@ -92,7 +93,7 @@ messages a change adds, or by hand through an alias.
 
    ```toml
    [aliases]
-   check-message = ["util", "exec", "--", "sh", "-c", "jj log --no-graph -r @ -T description | proofread commit-message --stdin -o text --fail-on deny"]
+   check-message = ["util", "exec", "--", "sh", "-c", "jj log --no-graph -r @ -T description | proofread commit-message --stdin -o text --minimum 20"]
    ```
 
 2. Run `jj check-message` before you push, or call the same pipeline from CI for each
@@ -100,21 +101,29 @@ messages a change adds, or by hand through an alias.
 
 ## 6. Choose what blocks a commit
 
-`--fail-on` sets the bar for the exit code:
+proofread exits 1 when a `deny` finding remains, and 0 otherwise. A `deny` finding is
+from a rule that is rarely wrong. An `advise` finding fails nothing alone. It lowers the
+message's grade instead, out of 100:
 
-| Value             | Exit 1 when                                       |
-| ----------------- | ------------------------------------------------- |
-| `deny`            | a `deny` finding remains                          |
-| `advise`          | any finding remains                               |
-| `never` (default) | never; the findings print and the commit proceeds |
+```text
+grade = 100 - 100 * (sum of the advise findings' weights) / (1 + min(words, 1000) / 100)
+```
 
-Exit 2 means proofread could not judge: a bad flag, a missing file or a malformed
-decisions table. A hook that blocks on any non-zero exit blocks on both. Start with
-`deny`, which holds only the rules that are rarely wrong. A finding silenced by a
-`proofread:ignore RULE reason` line in the message, or covered by a baseline, does not
-count toward the bar. To change a rule's decision for commit messages, pass
-`--decisions FILE`; each rule has a page in the reference, such as
-[filler](../reference/proofread/filler.md).
+A finding's `weight` is its rule's measured lower bound on precision, so a rule right 4
+times in 5 costs four times one right 1 time in 5. A grade under the minimum is a `grade`
+finding, decided `deny`, that names the minimum and the rules that cost the most.
+
+proofread ships no minimum; you pick one. `--minimum 20` lets one finding of the
+strongest graded rule through on a message of any length and fails two on a message
+under 100 words. A higher minimum is stricter. A decisions file sets one per kind
+instead, as `"minimums": {"commit-message": 20}`; pass one or the other.
+
+Exit 2 means proofread could not judge: a bad flag, a missing file, a malformed
+decisions table, or no minimum for the kind. A hook that blocks on any non-zero exit
+blocks on both. A finding silenced by a `proofread:ignore RULE reason` line in the
+message, or covered by a baseline, neither fails nor lowers the grade. To change a rule's
+decision for commit messages, pass `--decisions FILE`; each rule has a page in the
+reference, such as [filler](../reference/proofread/filler.md).
 
 ## 7. Count which rules help
 
@@ -122,7 +131,7 @@ A rule that authors override more than they obey costs more than it saves. Add
 `--record` to the hook to keep the evidence:
 
 ```sh
-exec proofread commit-message -o text --fail-on deny --record "$1"
+exec proofread commit-message -o text --minimum 20 --record "$1"
 ```
 
 `--record` stores, per message file and rule, the fingerprint of each finding: a hash of
@@ -174,7 +183,7 @@ chose and no path. It never leaves your machine, and you never commit it.
 4. Judge a draft with the file, at the path the summary's `wrote` line names:
 
    ```sh
-   proofread review-reply --stdin --voice <voice file> -o text < draft.md
+   proofread review-reply --stdin --voice <voice file> --minimum 0 -o text < draft.md
    ```
 
    A `voice-drift` finding names each feature that drifted, whether the draft runs

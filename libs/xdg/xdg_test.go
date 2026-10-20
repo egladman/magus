@@ -17,6 +17,7 @@ func TestDirs(t *testing.T) {
 	}{
 		{"state", "XDG_STATE_HOME", StateDir, filepath.Join(home, ".local", "state")},
 		{"cache", "XDG_CACHE_HOME", CacheDir, filepath.Join(home, ".cache")},
+		{"data", "XDG_DATA_HOME", DataDir, filepath.Join(home, ".local", "share")},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -44,8 +45,10 @@ func TestDirsUseLocalAppDataOnWindows(t *testing.T) {
 	t.Setenv("LocalAppData", lad)
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
 	assertDir(t, StateDir, lad)
 	assertDir(t, CacheDir, lad)
+	assertDir(t, DataDir, lad)
 }
 
 func TestDirsFailWithNoHome(t *testing.T) {
@@ -56,8 +59,9 @@ func TestDirsFailWithNoHome(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
 	for name, resolve := range map[string]func() (string, error){
-		"config": ConfigDir, "state": StateDir, "cache": CacheDir,
+		"config": ConfigDir, "state": StateDir, "cache": CacheDir, "data": DataDir,
 	} {
 		if got, err := resolve(); err == nil {
 			t.Errorf("%s with no home: got %q, want an error", name, got)

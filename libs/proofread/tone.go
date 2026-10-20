@@ -57,20 +57,19 @@ var (
 
 // toneChecks are the rules for posture: blame, verdicts, absolutes, intent,
 // credit, claims without evidence and the review-reply rules. They run after
-// [coreChecks]. A rule whose words have senses it cannot tell apart from the
-// one it means advises: of these, only blame and reply-opener measured no
-// false positive over the last 200 merged pull requests.
+// [coreChecks]. Each is graded: its words have senses it cannot tell apart from
+// the one it means, and no labeling round measured one at the deny bar.
 var toneChecks = []check{
-	{rule: RuleBlame, on: agentTone, advise: agentReply, judge: ownWords(blame)},
-	{rule: RuleVerdict, on: toneKinds, advise: toneKinds, judge: ownWords(verdict)},
-	{rule: RuleAbsolute, on: toneKinds, advise: toneKinds, judge: absolute},
-	{rule: RuleIntent, on: agentTone, advise: agentTone, judge: ownWords(intent)},
-	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
-	{rule: RuleClaim, on: agentTone, advise: agentTone, judge: claim},
-	{rule: RuleReplyOpener, on: reviewText, judge: replyOpening},
-	{rule: RuleJudgmentAsFact, on: reviewText, advise: reviewText, judge: judgmentAsFact},
-	{rule: RuleStackedHedge, on: reviewText, advise: reviewText, judge: stackedHedge},
-	{rule: RuleLongThread, on: reviewText, advise: reviewText, judge: longThread},
+	{rule: RuleBlame, on: agentTone, graded: true, judge: ownWords(blame)},
+	{rule: RuleVerdict, on: toneKinds, graded: true, judge: ownWords(verdict)},
+	{rule: RuleAbsolute, on: toneKinds, graded: true, judge: absolute},
+	{rule: RuleIntent, on: agentTone, graded: true, judge: ownWords(intent)},
+	{rule: RuleCredit, on: pullRequestOnly, graded: true, judge: creditEarlier},
+	{rule: RuleClaim, on: agentTone, graded: true, judge: claim},
+	{rule: RuleReplyOpener, on: reviewText, graded: true, judge: replyOpening},
+	{rule: RuleJudgmentAsFact, on: reviewText, graded: true, judge: judgmentAsFact},
+	{rule: RuleStackedHedge, on: reviewText, graded: true, judge: stackedHedge},
+	{rule: RuleLongThread, on: reviewText, graded: true, judge: longThread},
 }
 
 // matchFindings reports each span pattern finds in the prose of in, less those exempt

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,10 @@ func row(node, source, kind string, rule proofread.Rule, decision proofread.Deci
 
 	for _, doc := range proofread.Catalog() {
 		if doc.Name == rule {
+			if decision == proofread.DecisionAdvise {
+				f.Weight = doc.Weight
+			}
+
 			f.Code = string(doc.Code)
 			f.URL = "https://eli.gladman.cc/magus/reference/proofread/" + string(rule) + "/"
 		}
@@ -71,7 +76,7 @@ func runJudge(t *testing.T, stdin string) (code int, stdout, stderr string) {
 
 	var out, errOut bytes.Buffer
 
-	code = run([]string{"doc-comment", "--stdin"}, strings.NewReader(stdin), &out, &errOut)
+	code = run(ungraded([]string{"doc-comment", "--stdin"}), strings.NewReader(stdin), &out, &errOut)
 
 	return code, out.String(), errOut.String()
 }
@@ -86,16 +91,19 @@ func assertRun(t *testing.T, stdin string, wantCode int, wantStdout, wantStderr 
 	}
 }
 
-// assertArgs runs proofread with args over stdin and wants exit 0 with want
-// on stdout.
+// assertArgs runs proofread with args, [ungraded], over stdin and wants want
+// on stdout, with exit 1 when want holds a deny finding and 0 otherwise.
 func assertArgs(t *testing.T, args []string, stdin, want string) {
 	t.Helper()
 
-	var out, errOut bytes.Buffer
+	wantCode := exitOK
+	if strings.Contains(want, `"decision":"deny"`) {
+		wantCode = exitFindings
+	}
 
-	code := run(args, strings.NewReader(stdin), &out, &errOut)
-	if code != 0 || out.String() != want || errOut.String() != "" {
-		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	code, out, errOut := runArgs(t, args, stdin)
+	if code != wantCode || out != want || errOut != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code %d stdout %q", code, out, errOut, wantCode, want)
 	}
 }
 
@@ -130,7 +138,7 @@ func houseTable(t *testing.T, rules ...proofread.Rule) string {
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
 	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve returns the path. TBD."}]`
 
-	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD")), "")
+	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleLeak, proofread.DecisionAdvise, leakTBD, "TBD")), "")
 }
 
 func TestRunWritesAnEmptyArrayWhenNothingIsFound(t *testing.T) {
@@ -149,8 +157,8 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 		`{"node":"a","name":"Open","kind":"function","doc":"Open opens. TBD."}]`
 	want := rows(t,
 		row("b", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent"),
-		row("b", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD"),
-		row("a", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD"),
+		row("b", "", "doc-comment", proofread.RuleLeak, proofread.DecisionAdvise, leakTBD, "TBD"),
+		row("a", "", "doc-comment", proofread.RuleLeak, proofread.DecisionAdvise, leakTBD, "TBD"),
 	)
 
 	assertArgs(t, []string{"doc-comment", "--stdin", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
@@ -162,7 +170,7 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 	b := writeFile(t, dir, "b.md", "- **Cache:** on\n")
 
 	want := rows(t,
-		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionDeny,
+		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionAdvise,
 			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**").at(1, 3, 13),
 		row(a, a+":3", "reference", proofread.RuleBuzzwordWeak, proofread.DecisionAdvise, weakCrucial, "crucial").at(3, 7, 14),
 	)
@@ -173,7 +181,7 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n")
 
-	want := rows(t, row(path, path+":7", "skill-template", proofread.RuleWordy, proofread.DecisionDeny,
+	want := rows(t, row(path, path+":7", "skill-template", proofread.RuleWordy, proofread.DecisionAdvise,
 		"Write 'to', not 'in order to'.", "in order to").at(7, 8, 19).replacing("to"))
 
 	assertArgs(t, []string{"skill-template", path}, "", want)
@@ -182,7 +190,7 @@ func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 func TestRunReadsAFormerKindNameAsItsKind(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\nRun it in order to replay.\n")
 
-	want := rows(t, row(path, path+":3", "skill-template", proofread.RuleWordy, proofread.DecisionDeny,
+	want := rows(t, row(path, path+":3", "skill-template", proofread.RuleWordy, proofread.DecisionAdvise,
 		"Write 'to', not 'in order to'.", "in order to").at(3, 8, 19).replacing("to"))
 
 	assertArgs(t, []string{"agent-instructions-template", path}, "", want)
@@ -266,14 +274,14 @@ func TestRunTakesTheReviewEvent(t *testing.T) {
 	advise := writeFile(t, t.TempDir(), "d.json", `{"rules":{"approve-blocker":"advise"}}`)
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"review-summary", "--stdin", "-event", "APPROVE", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run(ungraded([]string{"review-summary", "--stdin", "-event", "APPROVE", "-decisions", advise}), strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		!strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("APPROVE: code %d, stdout %s, stderr %s; want an approve-blocker finding", code, stdout.String(), stderr.String())
 	}
 
 	stdout.Reset()
 
-	if code := run([]string{"review-summary", "--stdin", "-event", "COMMENT", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run(ungraded([]string{"review-summary", "--stdin", "-event", "COMMENT", "-decisions", advise}), strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("COMMENT: code %d, stdout %s; want no approve-blocker finding", code, stdout.String())
 	}
@@ -304,7 +312,7 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
 	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run hands work to a sub-agent. TBD."}]`
 
-	leak := row("n", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD")
+	leak := row("n", "", "doc-comment", proofread.RuleLeak, proofread.DecisionAdvise, leakTBD, "TBD")
 	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent")
 	decisions := houseTable(t, proofread.RuleTerms, proofread.RuleCommentBlock)
 
@@ -365,7 +373,7 @@ func TestRunExplainsARuleByNameOrCode(t *testing.T) {
 		for _, line := range []string{
 			want,
 			"\nDefault decisions:\n",
-			"  doc-comment                  off\n",
+			"  doc-comment                  advise\n",
 			"\nPage: https://eli.gladman.cc/magus/reference/proofread/filler/\n",
 		} {
 			if !strings.Contains(out.String(), line) {
@@ -442,6 +450,9 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 	unknownScopedRule := table(`{"paths":{"*.md":{"tone":"off"}}}`)
 	noMatch := table(`{"paths":{"blog/**":{"filler":"off"}}}`)
 	unknownField := table(`{"rule":{"filler":"off"}}`)
+	noMinimum := table(`{"rules":{"filler":"advise"}}`)
+	referenceMinimum := table(`{"minimums":{"reference":80}}`)
+	unknownKindMinimum := table(`{"minimums":{"page":80}}`)
 	page := writeFile(t, dir, "page.md", "It works.\n")
 
 	cases := []struct {
@@ -449,14 +460,18 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
-		{"an unknown bar", []string{"reference", "-fail-on", "error", page},
-			"proofread: unknown --fail-on \"error\": want deny, advise or never\n"},
+		{"a kind with no minimum", []string{"reference", "-decisions", noMinimum, page},
+			"proofread: no minimum grade for reference: set \"minimums\": {\"reference\": N} in --decisions, or pass --minimum N\n"},
+		{"two minimums", []string{"reference", "-decisions", referenceMinimum, "-minimum", "50", page},
+			"proofread: --minimum and the decisions table both set the reference minimum: pass one\n"},
+		{"a minimum for no kind", []string{"reference", "-decisions", unknownKindMinimum, page},
+			"proofread: decisions " + unknownKindMinimum + ": minimums: unknown kind \"page\"\n"},
 		{"record with no file", []string{"change-description", "--stdin", "-record"},
 			"proofread: --record needs a file to judge, since an outcome is kept per path\n"},
-		{"two message files", []string{"commit-message", page, page},
+		{"two message files", []string{"commit-message", "-minimum", "0", page, page},
 			"proofread: commit-message takes one message file, or reads stdin\n"},
 		{"stats with an argument", []string{"stats", "filler"}, "proofread: stats takes no arguments\n"},
-		{"a path for symbols", []string{"doc-comment", "a.md"},
+		{"a path for symbols", []string{"doc-comment", "-minimum", "0", "a.md"},
 			"proofread: a path needs the reference subcommand, since symbols are read from stdin\n"},
 		{"stdin with no --stdin", []string{"review-reply"}, "proofread: pass --stdin to read the review-reply from stdin\n"},
 		{"a message with no file or --stdin", []string{"commit-message"},
@@ -466,9 +481,9 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
 		{"explain with no rule", []string{"explain"}, "proofread: explain takes one rule name or code\n"},
 		{"explain an unknown rule", []string{"explain", "fillers"}, "proofread: unknown rule or code \"fillers\"\n"},
-		{"a path for a change description", []string{"change-description", "a.md"},
+		{"a path for a change description", []string{"change-description", "-minimum", "0", "a.md"},
 			"proofread: a change-description is read from stdin, not from a path\n"},
-		{"a missing file", []string{"reference", "missing.md"},
+		{"a missing file", []string{"reference", "-minimum", "0", "missing.md"},
 			"proofread: read missing.md: open missing.md: no such file or directory\n"},
 		{"unknown rule to keep", []string{"doc-comment", "--stdin", "-only", "filler,fillers"}, "proofread: unknown rule \"fillers\"\n"},
 		{"an off rule to keep", []string{"doc-comment", "--stdin", "-only", "terms"},
@@ -546,7 +561,7 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 func TestRunRejectsAnUnknownFormat(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"reference", "-o", "xml"}, strings.NewReader(""), &out, &errOut)
+	code := run(ungraded([]string{"reference", "-o", "xml"}), strings.NewReader(""), &out, &errOut)
 	if code != exitError || out.String() != "" || errOut.String() != "proofread: unknown -o \"xml\": want json, sarif, rdjson or text\n" {
 		t.Errorf("run: got code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
@@ -559,7 +574,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"reference", "-baseline", baselinePath, page}, strings.NewReader(""), &out, &errOut)
+	code := run(ungraded([]string{"reference", "-baseline", baselinePath, page}), strings.NewReader(""), &out, &errOut)
 	if code != exitError || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with --prune to create it") {
 		t.Fatalf("a missing baseline: code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
@@ -577,7 +592,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 func TestRunNeedsABaselineForPrune(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"reference", "-prune"}, strings.NewReader(""), &out, &errOut)
+	code := run(ungraded([]string{"reference", "-prune"}), strings.NewReader(""), &out, &errOut)
 	if code != exitError || errOut.String() != "proofread: --prune needs --baseline\n" {
 		t.Errorf("run: got code %d stderr %q", code, errOut.String())
 	}
@@ -614,68 +629,99 @@ func TestRunWritesTextAndACountOnStderr(t *testing.T) {
 	}
 }
 
-func TestRunFailsOnlyAtTheBar(t *testing.T) {
+func TestRunFailsOnADenyFindingOrAGradeUnderTheMinimum(t *testing.T) {
 	dir := t.TempDir()
-	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
-	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off buzzword-weak: quoting the user -->\nIt is crucial.\n")
-	advise := writeFile(t, dir, "advise.json", `{"rules":{"buzzword-weak":"advise"}}`)
-	deny := writeFile(t, dir, "deny.json", `{"rules":{"buzzword-weak":"deny"}}`)
+	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
+	deny := writeFile(t, dir, "deny.json", `{"rules":{"filler":"deny"},"minimums":{"reference":0}}`)
+	low := writeFile(t, dir, "low.json", `{"minimums":{"reference":90}}`)
+	lenient := writeFile(t, dir, "lenient.json", `{"minimums":{"reference":10}}`)
 
 	cases := []struct {
 		name string
 		args []string
 		want int
 	}{
-		{"never is the default", []string{"reference", "-decisions", deny, bad}, exitOK},
-		{"never", []string{"reference", "-fail-on", "never", "-decisions", deny, bad}, exitOK},
-		{"deny meets a deny", []string{"reference", "-fail-on", "deny", "-decisions", deny, bad}, exitFindings},
-		{"advise meets a deny", []string{"reference", "-fail-on", "advise", "-decisions", deny, bad}, exitFindings},
-		{"deny passes an advise", []string{"reference", "-fail-on", "deny", "-decisions", advise, bad}, exitOK},
-		{"advise meets an advise", []string{"reference", "-fail-on", "advise", "-decisions", advise, bad}, exitFindings},
-		{"a clean file", []string{"reference", "-fail-on", "advise", clean}, exitOK},
-		{"a suppressed finding", []string{"reference", "-fail-on", "advise", suppressed}, exitOK},
+		{"a deny finding", []string{"reference", "-decisions", deny, bad}, exitFindings},
+		{"a grade under the table's minimum", []string{"reference", "-decisions", low, bad}, exitFindings},
+		{"a grade at the table's minimum", []string{"reference", "-decisions", lenient, bad}, exitOK},
+		{"a grade under --minimum", []string{"reference", "-minimum", "90", bad}, exitFindings},
+		{"a clean file", []string{"reference", "-minimum", "100", clean}, exitOK},
+		{"a suppressed finding", []string{"reference", "-minimum", "100", suppressed}, exitOK},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if code, _, _ := runArgs(t, tc.args, ""); code != tc.want {
-				t.Errorf("run %v: code %d, want %d", tc.args, code, tc.want)
+			var out, errOut bytes.Buffer
+
+			if code := run(tc.args, strings.NewReader(""), &out, &errOut); code != tc.want {
+				t.Errorf("run %v: code %d, want %d: %s", tc.args, code, tc.want, errOut.String())
 			}
 		})
+	}
+
+	var got []finding
+
+	runInto(t, []string{"reference", "-minimum", "90", bad}, &got)
+
+	if len(got) != 2 || got[0].Rule != "filler" || got[0].Weight == 0 || got[1].Rule != "grade" ||
+		got[1].Decision != "deny" || got[1].Weight != 0 {
+		t.Errorf("findings = %+v, want a weighed filler finding, then a grade finding", got)
+	}
+
+	code, _, errOut := runArgs(t, []string{"reference", "-minimum", "101", bad}, "")
+	if code != exitError || !strings.Contains(errOut, "want a grade from 0 to 100, not \"101\"") {
+		t.Errorf("a minimum past 100: code %d stderr %q", code, errOut)
 	}
 }
 
 func TestRunFailsOnlyOnFindingsPastTheBaseline(t *testing.T) {
 	dir := t.TempDir()
-	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	deny := writeFile(t, dir, "deny.json", `{"rules":{"filler":"deny"}}`)
 	baselinePath := filepath.Join(dir, "baseline.json")
 
-	runArgs(t, []string{"reference", "-baseline", baselinePath, "-prune", bad}, "")
+	runArgs(t, []string{"reference", "-decisions", deny, "-baseline", baselinePath, "-prune", bad}, "")
 
-	if code, _, _ := runArgs(t, []string{"reference", "-fail-on", "advise", "-baseline", baselinePath, bad}, ""); code != exitOK {
+	if code, _, _ := runArgs(t, []string{"reference", "-decisions", deny, "-baseline", baselinePath, bad}, ""); code != exitOK {
 		t.Errorf("a baselined finding: code %d, want %d", code, exitOK)
 	}
 }
 
-// runArgs runs proofread with args over stdin.
+// ungraded gives a run of a kind that names no -minimum a minimum of 0, so a
+// case about anything but the grade needs no decisions table to hold one.
+func ungraded(args []string) []string {
+	if len(args) == 0 || slices.Contains(args, "-minimum") {
+		return args
+	}
+
+	if _, ok := proofread.ParseKind(args[0]); !ok {
+		return args
+	}
+
+	return slices.Concat(args[:1], []string{"-minimum", "0"}, args[1:])
+}
+
+// runArgs runs proofread with args over stdin, [ungraded].
 func runArgs(t *testing.T, args []string, stdin string) (code int, stdout, stderr string) {
 	t.Helper()
 
 	var out, errOut bytes.Buffer
 
-	code = run(args, strings.NewReader(stdin), &out, &errOut)
+	code = run(ungraded(args), strings.NewReader(stdin), &out, &errOut)
 
 	return code, out.String(), errOut.String()
 }
 
-// runInto runs proofread with args and decodes its stdout into into.
+// runInto runs proofread with args, [ungraded], and decodes its stdout into
+// into. A run with a deny finding exits 1 and still writes them.
 func runInto(t *testing.T, args []string, into any) {
 	t.Helper()
 
 	var out, errOut bytes.Buffer
 
-	if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 || errOut.String() != "" {
+	if code := run(ungraded(args), strings.NewReader(""), &out, &errOut); code > exitFindings || errOut.String() != "" {
 		t.Fatalf("run %v: code %d stderr %q", args, code, errOut.String())
 	}
 

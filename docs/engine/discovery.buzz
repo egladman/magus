@@ -19,15 +19,16 @@ export fun writeSEOFiles(site: Site) > void !> any {
     var urls: mut [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+    final body = mut [<str>];
+    body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
     foreach (u in sorted) {
         var loc = u;
         if (loc == "index.html") { loc = ""; }
-        body = body + "  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n";
+        body.append("  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n");
     }
-    body = body + "</urlset>\n";
-    fs\writeFile(site.outDir + "/sitemap.xml", body);
+    body.append("</urlset>\n");
+    fs\writeFile(site.outDir + "/sitemap.xml", body.join(""));
     fs\writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
 }
 
@@ -41,19 +42,20 @@ fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
         return strLess(a.url, b.url);
     });
-    var body = "# " + title + "\n\n"
+    final body = mut [<str>];
+    body.append("# " + title + "\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
         + "Every link below is the page's raw Markdown (its index.md sibling), "
         + "so an agent fetches clean content directly.\n\n"
-        + "## Documentation\n\n";
+        + "## Documentation\n\n");
     foreach (p in sorted) {
         // Link straight to the page's Markdown (url + index.md), not the HTML, so no URL
         // guessing is needed.
-        var line = "- [" + p.title + "](" + base + p.url + "index.md)";
-        if (p.desc != "") { line = line + ": " + p.desc; }
-        body = body + line + "\n";
+        body.append("- [" + p.title + "](" + base + p.url + "index.md)");
+        if (p.desc != "") { body.append(": " + p.desc); }
+        body.append("\n");
     }
-    return body;
+    return body.join("");
 }
 
 

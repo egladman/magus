@@ -179,3 +179,84 @@ Weighed and declined:
   lines), or whether the answer there is smaller changes.
 - Whether the completeness line and the folded group are enough to show what the order
   leaves out, so a reviewer reads the code as well as the grouping.
+
+## Amendments
+
+### 2026-10-20: proofread returns a grade with a required minimum
+
+Alternatives above declines "review scores, completion ratios, or anything that rewards
+clearing a review unread". That row stays as written. It covers a reviewer's progress through
+a change. It does not cover the text an author writes, and proofread now grades that text.
+Eli decided this on 2026-10-20.
+
+The forces, from the tree at 002e91670:
+
+- An advise finding fails nothing. The `pr-description` target prints it with
+  `magus\log.warn` and passes (`magusfile.buzz:735-758`). That is the warning nobody reads
+  in a CI log, which [No silent defaults](../doctrine.md#no-silent-defaults) rules out.
+- The pass bar is a flag, not policy. `--fail-on deny|advise|never` defaults to `never`
+  (`libs/proofread/cmd/proofread/main.go:252`), so a bare run exits 0 whatever it finds.
+- How far to trust a rule is already measured, then dropped. `evidenceCeiling`
+  (`libs/proofread/evidence.go`) records each rule's Wilson 95% lower bound on precision in
+  a comment, and uses it only to cap a rule at off or advise. blame is 34/37 (0.79),
+  subject-mood 37/40 (0.80), filler 32/40 (0.65), absolute 6/40 (0.07). A finding from
+  absolute counts the same as one from subject-mood.
+
+#### Decision
+
+| Item                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | State |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| A judged text gets a grade: `100 - 100 * sum(w) / (1 + min(words, cap) / k)`, floored at 0. `w` is the rule's Wilson 95% lower bound on precision, pinned in `libs/proofread/evidence.go` and held by a test to what `internal/calibrate` recomputes from the latest labeling round in `testdata/rounds`. A rule no round measured over 30 firings weighs 0. A rule that is off does not fire. `k` is 100 words and `cap` is 1,000, so padding a text past 1,000 words buys no headroom                                                                                                                                   | done  |
+| A deny finding fails the text whatever its grade. The grade replaces the advise tier and nothing else                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | done  |
+| A grade under its kind's minimum is itself a deny finding, rule `grade` (PRF1100), whose message names the grade, the minimum and the rules that cost the most. Every caller that already fails on deny fails on it, and the findings contract (ADR 0008) gains only a `weight` per finding                                                                                                                                                                                                                                                                                                                               | done  |
+| Each kind's minimum sits beside the decisions table in `hack/policy/proofread.buzz`, with its reason, and the decisions file proofread reads carries it. A run over a kind with no minimum exits 2 and names the kind. It never falls back to 0 or 100                                                                                                                                                                                                                                                                                                                                                                    | done  |
+| The first minimums are the lowest grade each kind has in this tree at the commit that lands them, so the change fails no text that passes today. Raising one is a commit with its reason. Two kinds depart, each with its reason in `MINIMUMS`: commit-message sits at 20, under its lowest of 74, so the length test below holds; and the review kinds, agent-reply and stylesheet sit at 0, since this repository keeps no such text or this change could not read it                                                                                                                                                   | done  |
+| Deleted: `--fail-on` and `reachesBar`; the warn loop in the `pr-description` target; and every `evidenceCeiling` entry a weight replaces. The off entries for rules no round has measured over 30 firings stay, as `unmeasured`                                                                                                                                                                                                                                                                                                                                                                                           | done  |
+| Each check's per-kind `advise` list becomes one flag for the whole rule. A rule that advised on any kind is graded on every kind it judges, and its measured weight carries what the list encoded by hand. A rule that advised nowhere keeps denying. Rules that judged some kinds at deny and others at advise (reply-voice, wordy, signpost, leak, changelog-group) lose the deny. This repository puts each back in its decisions table, with a reason, since its own gates relied on them. subject-mood and reply-opener, which their checks declared deny and the ceiling held to advise and off, carry the flag too | done  |
+| A test pins the length risk: a commit message of 12 words or fewer, with one finding from the strongest measured rule, grades at or above the commit-message minimum, and two findings grade below it                                                                                                                                                                                                                                                                                                                                                                                                                     | done  |
+
+The exit codes keep their meaning: 0 passes, 1 is a deny finding (a low grade among them),
+2 is input proofread cannot judge.
+
+#### Doctrine checked
+
+- [No silent defaults](../doctrine.md#no-silent-defaults): a kind with no minimum is an
+  error, and advice that changed nothing is gone from CI output.
+- [A refusal carries its reason](../doctrine.md#a-refusal-carries-its-reason): a low grade
+  names the minimum and the rules that cost the most, not only a number.
+- [Agents propose, humans dispose](../doctrine.md#agents-propose-humans-dispose): the
+  minimums are this repository's policy, committed by a person with a reason. No number
+  measured here ships as a default in the binary, as section 2 already requires.
+- [The outer harness stays outside](../doctrine.md#the-outer-harness-stays-outside): the
+  guard reads the grade and denies or allows. It rewrites nothing the host sends.
+
+#### Alternatives
+
+- **Keep pass/fail with advise.** It lost because advice fails nothing and a reader cannot
+  tell 1 finding from 20. Evidence: the `pr-description` warn loop and `--fail-on` default
+  above. It would come back if a grade turned out to track only length (see the next item).
+- **A plain count of findings, no weights.** It lost because it treats a 0.07 rule like a
+  0.80 rule. Evidence: the bounds in `evidenceCeiling`. It would come back if the weights
+  moved between labeling rounds by more than the minimums allow.
+- **An uncapped length normalizer.** It lost because padding would buy headroom. It would
+  come back if long reference pages hit the cap often and grade unfairly low.
+- **A weight for each kind as well as each rule.** This is what the deleted `advise` lists
+  approximated by hand. It was not built because no labeling round has measured a rule per
+  kind. It would come back with a round whose per-kind lower bounds differ by more than 0.10
+  for one rule.
+- **A diff-level score.** It stays declined. The 2026-10-10 diff-grade research found that
+  size alone separated its classes at AUC 0.82, so a score over a whole change mostly
+  measures how big it is.
+
+#### Open questions
+
+- Whether the grade tracks length on short texts too. The diff-grade result (AUC 0.82 from
+  size alone) is the reason to doubt it, and the short-commit test pins only one point. The
+  first labeling round after this lands should report the correlation between grade and
+  word count per kind.
+- Whether the Markdown, symbol-doc and help-text lints should grade each text or keep
+  reading deny findings alone. They pass deny findings through today, and the `grade`
+  finding reaches them now that their kinds have minimums.
+- Whether a minimum of 100, which agent-brief, skill-template, cli-help, tool-description
+  and review-reply hold, should stay: on those kinds any graded finding fails, as a deny
+  would.

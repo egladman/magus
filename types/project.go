@@ -13,20 +13,9 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// workspaceScheme is the URI scheme WorkspaceURI renders: "workspace://<path>".
-//
-// A bare workspace-relative path is the only spelling magus teaches;
-// internal/file.ResolveProject warns on the scheme when it parses one, and
-// nothing in magus renders it any more. Display (the bare path) is what every
-// command prints; WorkspaceURI and WorkspaceRef exist for external callers not
-// yet migrated. Do not reach for them for new output.
-const workspaceScheme = "workspace://"
-
 // ProjectRef is the canonical project reference: holds the data once
-// (workspace-relative path plus optional absolute dir) and exposes two
-// render methods. One source of truth means the URI form and the display
-// form cannot drift: they share the same fields and the same ProjectLabel
-// / WorkspaceRef helpers both delegate to a method on this struct.
+// (workspace-relative path plus optional absolute dir) and renders it with
+// Display, so the ProjectLabel helper delegates to a method on this struct.
 type ProjectRef struct {
 	// Path is the workspace-relative identifier: "." for the root, "pkg/foo"
 	// for a nested project. Always forward-slash, never absolute, never escapes.
@@ -53,19 +42,6 @@ func NewProjectRef(path, dir string) ProjectRef {
 	return r
 }
 
-// WorkspaceURI renders the project as a "workspace://<path>" reference. An
-// empty path is the workspace root, so a caller never prints a bare "." or "".
-//
-// Deprecated: the workspace:// spelling is retired; render the bare
-// workspace-relative path instead (Display or ProjectLabel). Magus no longer
-// emits this form itself.
-func (r ProjectRef) WorkspaceURI() string {
-	if r.Path == "" {
-		return workspaceScheme + "."
-	}
-	return workspaceScheme + r.Path
-}
-
 // Display renders the project for human consumption: the bare path for
 // nested projects, the dir basename for the root (so a bare "." never
 // appears in logs or graph labels), and "(workspace root)" as the final
@@ -89,17 +65,6 @@ func (r ProjectRef) Display() string {
 // and ProjectLabel picks them up automatically.
 func ProjectLabel(path, dir string) string {
 	return ProjectRef{Path: path, Dir: dir}.Display()
-}
-
-// WorkspaceRef is a convenience for the WorkspaceURI form when the caller
-// only has a path. The dir is intentionally absent: a URI is path-only, and
-// Display's dir-based root naming has no place in the machine-readable form.
-//
-// Deprecated: the workspace:// spelling is retired; render the bare
-// workspace-relative path instead (Display or ProjectLabel). Magus no longer
-// emits this form itself.
-func WorkspaceRef(path string) string {
-	return ProjectRef{Path: path}.WorkspaceURI()
 }
 
 // ProjectDisplayName returns an explicit display name when available,

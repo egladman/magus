@@ -17,6 +17,11 @@
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
+    "reply-voice": "deny",
+    "wordy": "deny",
+    "signpost": "deny",
+    "leak": "deny",
+    "changelog-group": "deny",
     "no-reason": "advise",
     "nit-label": "advise",
     "empty-request-changes": "advise",
@@ -37,5 +42,23 @@
     "skill-description-budget": "advise",
     "skill-set-description-budget": "advise",
     "instruction-position": "advise"
+  },
+  "minimums": {
+    "reference": 82,
+    "guide": 92,
+    "agent-brief": 100,
+    "skill-template": 100,
+    "changelog": 52,
+    "doc-comment": 69,
+    "cli-help": 100,
+    "tool-description": 100,
+    "commit-message": 20,
+    "change-description": 0,
+    "issue": 95,
+    "review-reply": 100,
+    "review-summary": 0,
+    "review-inline": 0,
+    "agent-reply": 0,
+    "stylesheet": 0
   }
 }

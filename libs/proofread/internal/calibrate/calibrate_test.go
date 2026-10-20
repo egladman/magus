@@ -1,8 +1,11 @@
 package calibrate
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -42,6 +45,11 @@ func TestEveryRuleHasAHitAndAPassCase(t *testing.T) {
 	}
 
 	for _, r := range proofread.Rules() {
+		// grade reads a text's other findings, which a case's one rule cannot show.
+		if r == proofread.RuleGrade {
+			continue
+		}
+
 		if !labels[r][labelHit] || !labels[r][labelPass] {
 			t.Errorf("cases/%s.txtar needs a hit and a pass case, has %v", r, labels[r])
 		}
@@ -419,5 +427,59 @@ func TestGatesHoldTheShippedDefaultAgainstTheEvidence(t *testing.T) {
 	if g.Dimension != proofread.DimensionEvidence || g.Firings != 10 || g.Wrong != 1 || *g.Precision != 0.9 ||
 		math.Abs(*g.Lower-wilsonLower(0.9, 10)) > 1e-12 {
 		t.Errorf("gate = %+v", g)
+	}
+}
+
+// roundScore is the part of a testdata/rounds record a weight reads.
+type roundScore struct {
+	Round int `json:"round"`
+	Rules map[proofread.Rule]struct {
+		Score *struct {
+			N       int `json:"n"`
+			Correct int `json:"correct"`
+		} `json:"score"`
+	} `json:"rules"`
+}
+
+func TestEveryWeightIsItsLatestRoundsLowerBound(t *testing.T) {
+	paths, err := filepath.Glob("../../testdata/rounds/round*.json")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no rounds: %v", err)
+	}
+
+	type latest struct{ round, correct, n int }
+
+	scored := map[proofread.Rule]latest{}
+
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var r roundScore
+		if err := json.Unmarshal(data, &r); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+
+		for rule, v := range r.Rules {
+			if v.Score != nil && r.Round > scored[rule].round {
+				scored[rule] = latest{r.Round, v.Score.Correct, v.Score.N}
+			}
+		}
+	}
+
+	for _, doc := range proofread.Catalog() {
+		s := scored[doc.Name]
+
+		want := 0.0
+		if s.n >= gateFirings {
+			want = math.Round(wilsonLower(float64(s.correct)/float64(s.n), s.n)*100) / 100
+		}
+
+		if doc.Weight != want {
+			t.Errorf("%s weighs %v; round %d measured %d of %d, a lower bound of %v", doc.Name, doc.Weight,
+				s.round, s.correct, s.n, want)
+		}
 	}
 }

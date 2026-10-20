@@ -14,12 +14,9 @@ export fun semverSortKey(name: str) > str {
     if (v.startsWith("v")) { v = v.sub(1); }
     if (v.endsWith(".yaml")) { v = v.sub(0, v.len() - 5); }
     final parts = v.split(".");
-    var key = "";
-    foreach (p in parts) {
-        if (key.len() > 0) { key = key + "."; }
-        key = key + pad4(strToNat(p));
-    }
-    return key;
+    final key = mut [<str>];
+    foreach (p in parts) { key.append(pad4(strToNat(p))); }
+    return key.join(".");
 }
 
 // isVersionTag reports whether a git tag names a release: "v" followed by three

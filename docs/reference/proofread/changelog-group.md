@@ -1,13 +1,13 @@
 ---
 title: "changelog-group"
-description: "A rule that denies on `changelog` and advises on `release-notes` by default: it reports a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security."
-tags: [proofread, rules, changelog-group, deny]
+description: "An advisory by default: it explains, and blocks nothing, on a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security."
+tags: [proofread, rules, changelog-group, advise]
 aliases: [reference/prose/changelog-group]
 ---
 
 # changelog-group
 
-A rule that denies on `changelog` and advises on `release-notes` by default: it reports a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security.
+An advisory by default: it explains, and blocks nothing, on a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security.
 
 ## What it catches
 
@@ -29,7 +29,7 @@ The code is `PRF1031`. The decision depends on the kind of text judged:
 | Kind            | Default |
 | --------------- | ------- |
 | `release-notes` | advise  |
-| `changelog`     | deny    |
+| `changelog`     | advise  |
 
 ## Changing it
 
@@ -52,7 +52,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "changelog-group", "code": "PRF1031", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-group/"}
+{"rule": "changelog-group", "code": "PRF1031", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-group/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

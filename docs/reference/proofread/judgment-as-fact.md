@@ -1,13 +1,13 @@
 ---
 title: "judgment-as-fact"
-description: "A rule that is off by default: it reports a recommendation in a review reply stated as a fact, with no reason given once a decisions table turns it on."
-tags: [proofread, rules, judgment-as-fact, off]
+description: "An advisory by default: it explains, and blocks nothing, on a recommendation in a review reply stated as a fact, with no reason given."
+tags: [proofread, rules, judgment-as-fact, advise]
 aliases: [reference/prose/judgment-as-fact]
 ---
 
 # judgment-as-fact
 
-A rule that is off by default: it reports a recommendation in a review reply stated as a fact, with no reason given once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a recommendation in a review reply stated as a fact, with no reason given.
 
 ## What it catches
 
@@ -28,9 +28,9 @@ The code is `PRF8002`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | off     |
-| `review-inline`  | off     |
-| `review-reply`   | off     |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "judgment-as-fact", "code": "PRF8002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/judgment-as-fact/"}
+{"rule": "judgment-as-fact", "code": "PRF8002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/judgment-as-fact/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -235,7 +235,7 @@ func sourceLines(source, rendered string, at []int) []int {
 		}
 	}
 
-	lineOf := func(offset int) int {
+	sourceLine := func(offset int) int {
 		n, _ := slices.BinarySearch(breaks, offset)
 
 		return n + 1
@@ -248,9 +248,9 @@ func sourceLines(source, rendered string, at []int) []int {
 	for {
 		switch {
 		case start < len(rendered):
-			out = append(out, lineOf(at[start]))
+			out = append(out, sourceLine(at[start]))
 		case len(at) > 0:
-			out = append(out, lineOf(at[len(at)-1]+1))
+			out = append(out, sourceLine(at[len(at)-1]+1))
 		default:
 			out = append(out, 1)
 		}

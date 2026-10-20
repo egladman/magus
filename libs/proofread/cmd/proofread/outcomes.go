@@ -410,3 +410,11 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 
 	return exitOK
 }
+
+func writeJSON(w io.Writer, v any) error {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		return fmt.Errorf("write the output: %w", err)
+	}
+
+	return nil
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
@@ -308,6 +309,16 @@ func TestPreviewFollowsTheSelection(t *testing.T) {
 	b.items[0].LogPath = "" // no file: loadPreview yields nil, which is still a SET
 	dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEscape)), b, nil, &sel)
 	assert.Equal(t, 1, sel, "the selection moved")
+}
+
+func TestLoadPreviewNamesAnUnreadableLog(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gone.log")
+	rows := loadPreview(cache.Failure{LogPath: missing}, 200)
+	require.Len(t, rows, 1)
+	assert.Contains(t, rows[0], "could not read the log")
+	assert.Contains(t, rows[0], missing)
+
+	assert.Nil(t, loadPreview(cache.Failure{}, 200), "no log path means no preview")
 }
 
 // TestSanitizeLogLineFlattensWhatWouldBreakTheBox pins the two cases that

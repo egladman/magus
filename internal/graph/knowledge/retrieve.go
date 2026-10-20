@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,7 +58,7 @@ var ShippedWeights = sync.OnceValue(func() textrank.Weights {
 })
 
 // Retrieve ranks the nodes matching input. Field matchers filter exactly as they always
-// have. Free-text terms are split by textrank.Tokens and scored by BM25F, any term
+// have. Free-text terms are split by embed.Tokens and scored by BM25F, any term
 // matching (ranked OR): a match holding fewer of the query's tokens than it has is
 // labeled partial by Why.Matched and Why.Of, never dropped. The lexical score is scaled
 // by the node kind's prior. A personalized PageRank seeded by the top lexical hits and the
@@ -106,7 +107,7 @@ func queryTokens(terms []compiledTerm) (score, need []string) {
 		if t.glob != nil {
 			continue
 		}
-		for _, tok := range textrank.Tokens(t.lc) {
+		for _, tok := range embed.Tokens(t.lc) {
 			if !seen[tok] {
 				seen[tok] = true
 				score = append(score, tok)

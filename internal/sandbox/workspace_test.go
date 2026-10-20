@@ -115,6 +115,19 @@ func TestFromConfigRefusesABadAllowOrPassthrough(t *testing.T) {
 	}
 }
 
+// With no home directory the host grants cannot be resolved, so a policy is refused
+// rather than built with an empty Home.
+func TestFromConfigRefusesAMissingHome(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", "")
+
+	_, err := FromConfig(root, "", "", config.SandboxConfig{}, nil)
+	assert.ErrorContains(t, err, "home directory")
+
+	_, err = FromConfigBoxed(root, config.SandboxConfig{}, nil, Box{Environ: []string{"HOME=/box"}, TempDir: t.TempDir()})
+	assert.ErrorContains(t, err, "home directory")
+}
+
 // The private temp dir exists outside the workspace, is the children's TMPDIR, and
 // is the same dir for every build of one workspace's policy.
 func TestFromConfigGivesChildrenAPrivateTempDir(t *testing.T) {

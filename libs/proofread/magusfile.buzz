@@ -42,13 +42,14 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Trains the word-class tagger's model on UD English EWT, fetched by a pinned digest, and
 // writes the test split its accuracy test reads. Not part of generate: it needs the network.
-// `proofread train` links the whole binary, so every Go file it builds from is an input.
+// proofread-train lives in the nested train module and links this module's packages, so
+// both modules' Go is an input. -C runs it there, so the outputs are named from train/.
 export fun wordclass_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("*.go", "cmd/proofread/*.go", "internal/**/*.go", "go.mod", "go.sum");
+    ctx.readsFiles("*.go", "internal/**/*.go", "go.mod", "go.sum", "train/**/*.go", "train/go.mod", "train/go.sum");
     ctx.writesFiles("internal/wordclass/gen/model.gz", "internal/wordclass/testdata/en_ewt-ud-test.conllu.gz");
-    go["go-run"](ctx, {"args": ["./" + proofread\command, "train",
-                                "-model", "internal/wordclass/gen/model.gz",
-                                "-testdata", "internal/wordclass/testdata/en_ewt-ud-test.conllu.gz"]});
+    go["go-run"](ctx, {"args": ["-C", "train", "./cmd/proofread-train", "train",
+                                "-model", "../internal/wordclass/gen/model.gz",
+                                "-testdata", "../internal/wordclass/testdata/en_ewt-ud-test.conllu.gz"]});
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
@@ -68,8 +69,9 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {
 export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
     // change to it must relink: a replayed digest from the old code would deny every call.
-    ctx.readsFiles("**/*.go", "internal/wordclass/gen/model.gz", "internal/calibrate/cases/*.txtar", "go.mod", "go.sum",
-                   "proofread.buzz");
+    // The globs leave out train/, its own module, which the binary does not link.
+    ctx.readsFiles("*.go", "cmd/**/*.go", "internal/**/*.go", "internal/wordclass/gen/model.gz",
+                   "internal/calibrate/cases/*.txtar", "go.mod", "go.sum", "proofread.buzz");
     // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
     ctx.writesFiles("gen/proofread", "gen/proofread.inputs");
     go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./" + proofread\command]});
@@ -79,8 +81,8 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void {
     // readsFiles replaces the project baseline, so it names the fixtures the tests read
     // as well as the sources.
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "testdata/**/*", "internal/wordclass/gen/model.gz",
-                   "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar");
+    ctx.readsFiles("*.go", "cmd/**/*.go", "internal/**/*.go", "go.mod", "go.sum", "testdata/**/*",
+                   "internal/wordclass/gen/model.gz", "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar");
     ctx.writesFiles("coverage.out");
     go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."] + args});
 }

@@ -26,17 +26,17 @@ export fun relativePath(fromDir: str, toUrl: str) > str {
     final dirLike = (toUrl == "" or toUrl.endsWith("/"));
     var i = 0;
     while (i < fromSegs.len() and i < toSegs.len() and fromSegs[i] == toSegs[i]) { i = i + 1; }
-    var rel = "";
+    final parts = mut [<str>];
     var j = i;
-    while (j < fromSegs.len()) { rel = rel + "../"; j = j + 1; }
+    while (j < fromSegs.len()) { parts.append("../"); j = j + 1; }
     var k = i;
     while (k < toSegs.len()) {
-        rel = rel + toSegs[k];
-        if (k < toSegs.len() - 1 or dirLike) { rel = rel + "/"; }
+        parts.append(toSegs[k]);
+        if (k < toSegs.len() - 1 or dirLike) { parts.append("/"); }
         k = k + 1;
     }
-    if (rel == "") { rel = "./"; }
-    return rel;
+    if (parts.len() == 0) { return "./"; }
+    return parts.join("");
 }
 
 // firstPathSegment returns the leading segment of a clean URL ("spells/go/" -> "spells").
@@ -65,9 +65,9 @@ export fun sharedTagCount(aJoined: str, bJoined: str) > int {
 
 // pad4 zero-pads a small non-negative int to four digits so scores sort lexically.
 export fun pad4(n: int) > str {
-    var s = "{n}";
-    while (s.len() < 4) { s = "0" + s; }
-    return s;
+    final s = "{n}";
+    if (s.len() >= 4) { return s; }
+    return "0".repeat(4 - s.len()) + s;
 }
 
 // strToNat parses a decimal digit string to a non-negative int, ignoring

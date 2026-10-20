@@ -871,8 +871,8 @@ var storeMechanicsAllowed = map[string]string{
 	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 
-// storeMechanicsSkipDirs are trees the rule does not govern. libs/ and any directory
-// with its own go.mod (hack/embed) hold modules of their own, which ship apart from magus.
+// storeMechanicsSkipDirs are trees the rule does not govern. libs/, and any other directory
+// with its own go.mod, hold modules of their own, which ship apart from magus.
 var storeMechanicsSkipDirs = skipDirs("gen", "testdata")
 
 // TestStoreMechanicsLiveInInternalFile holds the file-persistence mechanics to one

@@ -75,27 +75,14 @@ func TestProjectLabel(t *testing.T) {
 	assert.Equal(t, "(workspace root)", ProjectLabel("", "."))
 }
 
-func TestWorkspaceRef(t *testing.T) {
-	t.Parallel()
-	// Machine form: the scheme is always present (this is what users pipe
-	// back into commands). Empty paths resolve to the root.
-	assert.Equal(t, "workspace://.", WorkspaceRef(""))
-	assert.Equal(t, "workspace://.", WorkspaceRef("."))
-	assert.Equal(t, "workspace://pkg/foo", WorkspaceRef("pkg/foo"))
-}
-
 func TestProjectRef(t *testing.T) {
 	t.Parallel()
-	// One struct, two render forms. Display is the human form (same as the
-	// ProjectLabel helper above); WorkspaceURI is the machine form.
 	root := NewProjectRef(".", "/home/user/magus")
 	assert.Equal(t, ".", root.Path)
 	assert.Equal(t, "magus", root.Display(), "root display uses the dir basename, never a bare '.'")
-	assert.Equal(t, "workspace://.", root.WorkspaceURI())
 
 	nested := NewProjectRef("pkg/foo", "/home/user/magus/pkg/foo")
 	assert.Equal(t, "pkg/foo", nested.Display())
-	assert.Equal(t, "workspace://pkg/foo", nested.WorkspaceURI())
 }
 
 // TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate covers the two things

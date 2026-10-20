@@ -28,7 +28,7 @@ const subjectMaxBytes = 100
 var commitKind = []Kind{KindCommitMessage}
 
 var commitChecks = []check{
-	{rule: RuleSubjectMood, on: commitKind, judge: subjectMood},
+	{rule: RuleSubjectMood, on: commitKind, graded: true, judge: subjectMood},
 	{rule: RuleSubjectLength, on: commitKind, judge: subjectLength},
 	{rule: RuleSubjectPeriod, on: commitKind, judge: subjectPeriod},
 	{rule: RuleBodySeparator, on: commitKind, judge: bodySeparator},

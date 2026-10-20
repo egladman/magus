@@ -710,10 +710,8 @@ use where kinds mix, alongside `target:` and `spell:`.
 The `workspace://pkg/foo` scheme is DEPRECATED. It still parses, with a warning
 (`internal/file/resolve.go`), so a ref written against it keeps resolving; it is
 not taught or printed any more, and it never bought a reading the bare path did
-not already have. `types.WorkspaceRef` still renders it and is down to two error
-wraps in `magus.go`; both it and `ProjectLabel` route through
-`types.ProjectRef{Path, Dir}`, so new rendering rules go on the struct's methods
-and both pick them up.
+not already have. Nothing renders it; `ProjectLabel` routes through
+`types.ProjectRef{Path, Dir}`, so new rendering rules go on the struct's methods.
 
 ## Release-signing key rotation
 

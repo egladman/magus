@@ -23,6 +23,13 @@ func occAt(line, col, n int) *scip.Occurrence {
 	return &scip.Occurrence{Symbol: monikerV1, TypedRange: r.AsTypedRange()}
 }
 
+func indexKey(t *testing.T, idx *scip.Index, projectPath, key string) KeyOccurrences {
+	t.Helper()
+	all, err := IndexOccurrences(t.Context(), idx, projectPath)
+	require.NoError(t, err)
+	return all[key]
+}
+
 func fileReader(files map[string]string) func(string) ([]byte, error) {
 	return func(p string) ([]byte, error) {
 		data, ok := files[p]
@@ -45,8 +52,7 @@ func TestParseOccurrencesIsUncapped(t *testing.T) {
 	}
 	idx := &scip.Index{Documents: []*scip.Document{doc}}
 
-	files, _, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	files := indexKey(t, idx, "", "gomod example.com/foo Bar#").Files
 	require.Len(t, files, 1)
 	assert.Len(t, files[0].Occurrences, total,
 		"every occurrence must survive: MaxRefLines is the graph edge's cap, not this path's")
@@ -66,8 +72,8 @@ func TestParseOccurrencesRangesRolesAndOrder(t *testing.T) {
 		Occurrences: []*scip.Occurrence{occAt(20, 8, 3), def, occAt(20, 2, 3)},
 	}}}
 
-	files, names, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	got := indexKey(t, idx, "", "gomod example.com/foo Bar#")
+	files, names := got.Files, got.Names
 	assert.Equal(t, []string{"Bar"}, names, "the name a rename would replace")
 	require.Len(t, files, 1)
 	occs := files[0].Occurrences
@@ -96,10 +102,12 @@ func TestParseOccurrencesSkipsOtherSymbolsAndOutsideDocuments(t *testing.T) {
 		{RelativePath: "../../../elsewhere/dep.go", Occurrences: []*scip.Occurrence{occAt(3, 0, 3)}},
 	}}
 
-	files, _, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	files := indexKey(t, idx, "", "gomod example.com/foo Bar#").Files
 	require.Len(t, files, 1, "the out-of-workspace document is dropped entirely")
 	assert.Equal(t, "pkg/foo/foo.go", files[0].File)
+	all, err := IndexOccurrences(t.Context(), idx, "")
+	require.NoError(t, err)
+	assert.NotContains(t, all, "gomod example.com/foo Missing#", "a key the index never names is absent from the map")
 	require.Len(t, files[0].Occurrences, 1, "only the requested symbol, and never a local one")
 	assert.Equal(t, 3, files[0].Occurrences[0].Line)
 }
@@ -112,8 +120,7 @@ func TestParseOccurrencesRebasesOntoTheProject(t *testing.T) {
 		RelativePath: "vm/value.go",
 		Occurrences:  []*scip.Occurrence{occAt(0, 0, 3)},
 	}}}
-	files, _, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "libs/gopherbuzz", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	files := indexKey(t, idx, "libs/gopherbuzz", "gomod example.com/foo Bar#").Files
 	require.Len(t, files, 1)
 	assert.Equal(t, "libs/gopherbuzz/vm/value.go", files[0].File)
 }
@@ -280,8 +287,8 @@ func TestParseOccurrencesKeepsBothSpellingsOfAPackage(t *testing.T) {
 		Occurrences:  []*scip.Occurrence{occ, call},
 	}}}
 
-	files, names, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod github.com/stretchr/testify `github.com/stretchr/testify/assert`/")
-	require.NoError(t, err)
+	pkg := indexKey(t, idx, "", "gomod github.com/stretchr/testify `github.com/stretchr/testify/assert`/")
+	files, names := pkg.Files, pkg.Names
 	require.Equal(t, []string{"assert", "github.com/stretchr/testify/assert"}, names,
 		"identifier first (what a rename targets), import path second")
 
@@ -327,8 +334,7 @@ func TestParseOccurrencesReadsTheDisplayNameFromAnyDocument(t *testing.T) {
 		{RelativePath: "a.go", Occurrences: []*scip.Occurrence{occAt(0, 0, 3)}},
 	}}
 
-	_, names, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	names := indexKey(t, idx, "", "gomod example.com/foo Bar#").Names
 	assert.Equal(t, []string{"Bar", "com/foo/Bar"}, names,
 		"the display name must survive a document the workspace filter drops, without taking first place")
 }
@@ -355,8 +361,7 @@ func TestParseOccurrencesCollapsesDuplicateSites(t *testing.T) {
 		{RelativePath: "a.go", Occurrences: []*scip.Occurrence{occAt(4, 2, 3), occAt(9, 1, 3)}},
 	}}
 
-	files, _, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	files := indexKey(t, idx, "", "gomod example.com/foo Bar#").Files
 	require.Len(t, files, 1, "two Document entries for one path yield one file")
 	require.Len(t, files[0].Occurrences, 2, "the repeated site collapses; the distinct one survives")
 	assert.Equal(t, 5, files[0].Occurrences[0].Line)
@@ -374,8 +379,7 @@ func TestParseOccurrencesSkipsAnUnreadableRange(t *testing.T) {
 		Occurrences:  []*scip.Occurrence{bad, occAt(7, 0, 3)},
 	}}}
 
-	files, _, err := ParseOccurrences(t.Context(), marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
-	require.NoError(t, err)
+	files := indexKey(t, idx, "", "gomod example.com/foo Bar#").Files
 	require.Len(t, files[0].Occurrences, 1, "only the resolvable range is reported")
 	assert.Equal(t, 8, files[0].Occurrences[0].Line)
 }
@@ -388,7 +392,7 @@ func TestOccurrenceReadsObserveCancellation(t *testing.T) {
 	cancel()
 
 	idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "a.go", Occurrences: []*scip.Occurrence{occAt(0, 0, 3)}}}}
-	_, _, err := ParseOccurrences(ctx, marshalIndex(t, idx), "", "gomod example.com/foo Bar#")
+	_, err := IndexOccurrences(ctx, idx, "")
 	assert.ErrorIs(t, err, context.Canceled)
 
 	files := []types.SymbolOccurrenceFile{{File: "a.go", Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 1, EndColumn: 4}}}}

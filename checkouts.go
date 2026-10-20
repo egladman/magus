@@ -46,7 +46,7 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 	var unread string
 	var unreadGone bool
 	var consulted []string
-	recorded := m.recordedCheckouts(ref)
+	recorded := m.recordedCheckouts(ctx, ref)
 	candidates := recorded
 	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok && !slices.Contains(recorded, primary) {
 		candidates = append(slices.Clone(recorded), primary)
@@ -128,17 +128,19 @@ func (r *refMiss) foldInto(e *cache.RefNotFoundError) {
 // having run the ref ref names, newest first. Only checkouts that recorded the ref are
 // named, so a repository with hundreds of worktrees costs one store read, never a walk of
 // them. A ref that is not shaped like an output ref names none, and reads nothing.
-func (m *Magus) recordedCheckouts(ref string) []string {
+func (m *Magus) recordedCheckouts(ctx context.Context, ref string) []string {
 	ref = strings.ToLower(strings.TrimSpace(ref))
 	if !cache.LooksLikeRef(ref) {
 		return nil
 	}
 	dir, err := sessions.Dir(m.ws.Root)
 	if err != nil {
+		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil
 	}
 	fold, err := sessions.ReadAll(dir)
 	if err != nil {
+		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil
 	}
 	self := resolvedPath(m.ws.Root)

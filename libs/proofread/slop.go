@@ -58,9 +58,6 @@ var (
 	withReply = slices.Concat(proseKinds, reviewText)
 	// everywhere is every kind that holds prose, doc comments included.
 	everywhere = slices.Concat(all, compact, changeText, help, reviewText, agentReply)
-	// notPullRequest is where a tell a change description refuses outright
-	// only advises: a page may state a contrast on purpose.
-	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentBrief, KindAgentCompact}, reviewText, changeText)
 	// prosePages are the kinds written as running prose. A guide's steps and a
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.
@@ -71,38 +68,35 @@ var (
 
 // slopChecks run after [toneChecks].
 var slopChecks = []check{
-	{
-		rule: RuleSignpost, on: agentWords, advise: agentReply,
-		judge: tellJudge("Drop '%s': state the point itself.", signposts...),
-	},
+	{rule: RuleSignpost, on: agentWords, graded: true, judge: tellJudge("Drop '%s': state the point itself.", signposts...)},
 	{
 		rule: RuleChatbot, on: slices.Concat(withReply, compact),
 		judge: ownWords(tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)),
 	},
 	{
-		rule: RuleLeak, on: everywhere, advise: agentReply,
+		rule: RuleLeak, on: everywhere, graded: true,
 		judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...),
 	},
 	{rule: RuleBuzzword, on: agentWords, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
 	{
-		rule: RuleBuzzwordWeak, on: agentWords, advise: agentWords,
+		rule: RuleBuzzwordWeak, on: agentWords, graded: true,
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: slices.Concat(proseKinds, compact, agentReply), advise: slices.Concat(notPullRequest, agentReply),
+		rule: RuleContrast, on: slices.Concat(proseKinds, compact, agentReply), graded: true,
 		judge: ownWords(tellJudgeExcept("State the positive claim directly: drop the negation in '%s'.",
 			contrastExempt, contrasts...)),
 	},
 	{rule: RuleVague, on: agentWords, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
 	{rule: RuleCloser, on: agentWords, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
 	{
-		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(proseKinds, agentReply),
+		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), graded: true,
 		judge: ownWords(tellJudgeExcept("Make '%s' a sentence with a subject, or cut it.", ingTailExempt, ingTails...)),
 	},
-	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: ownWords(staccato)},
+	{rule: RuleStaccato, on: prosePages, graded: true, judge: ownWords(staccato)},
 	{rule: RuleDash, on: agentWords, house: true, judge: dash},
 	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
-	{rule: RuleHeadingCase, on: pageKinds, advise: pageKinds, judge: headingCase},
+	{rule: RuleHeadingCase, on: pageKinds, graded: true, judge: headingCase},
 }
 
 // tell is one pattern of a rule. An opening tell is anchored to the start of

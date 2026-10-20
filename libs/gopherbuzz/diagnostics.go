@@ -34,6 +34,7 @@ const (
 	UnknownMember        diagnostics.Code = "BZZ1007" // access to a member an imported module does not export
 	RedundantImportAlias diagnostics.Code = "BZZ1008" // an import alias equal to the name the import would bind anyway
 	UnimportedNamespace  diagnostics.Code = "BZZ1009" // a qualified name whose namespace no import in this module binds
+	ImmutableWrite       diagnostics.Code = "BZZ1010" // a field or key written through a map or object bound without mut
 
 	// Session / runtime errors (session.go).
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
@@ -46,15 +47,16 @@ const (
 
 	// Warnings (checker.go).
 	StringAccumulation diagnostics.Code = "BZZ3002" // a string rebuilt from itself with + inside a loop
+	RedundantUnwrap    diagnostics.Code = "BZZ3003" // a force-unwrap ! on an operand that is not optional
 )
 
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
 // TestAllBZZCodesEnumerated; it is the source of truth for the doc-coverage drift test.
 var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
-	RedundantImportAlias, UnimportedNamespace,
+	RedundantImportAlias, UnimportedNamespace, ImmutableWrite,
 	UnresolvedImport, FiberMisuse, FFIDisabled,
-	UnusedImport, StringAccumulation,
+	UnusedImport, StringAccumulation, RedundantUnwrap,
 }
 
 // Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every

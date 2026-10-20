@@ -24,8 +24,8 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/rankeval"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/embed/rankeval"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,7 +44,7 @@ func TestRetrievalEval(t *testing.T) {
 	require.NoError(t, err)
 	data := filepath.Join(root, "testdata", "retrieval")
 	agreement := readRetrievalFile(t, filepath.Join(data, "judgments.jsonl"), rankeval.ReadJudgments,
-		"harvest it with ./magus buzz hack/retrieval/harvest.buzz")
+		"restore it from version control")
 	queries, qrels, judgedAbsent := readJudged(t, data)
 
 	cfg, err := config.LoadWithRoot("", root)
@@ -240,20 +240,20 @@ func definitionLookup(agreement []rankeval.Judgment, judged []rankeval.Query, sy
 // graph, which holds no symbol.
 func TestDefinitionLookupSeedsTheSymbolLayer(t *testing.T) {
 	symbols := knowledge.NewGraph()
-	symbols.AddNode(types.KnowledgeNode{ID: "file:internal/textembed/index.go", Kind: types.KindFile, Source: "internal/textembed/index.go"})
-	symbols.AddNode(types.KnowledgeNode{ID: "symbol:readIndex", Kind: types.KindSymbol, Label: "readIndex", Source: "internal/textembed/index.go:131"})
+	symbols.AddNode(types.KnowledgeNode{ID: "file:libs/embed/index.go", Kind: types.KindFile, Source: "libs/embed/index.go"})
+	symbols.AddNode(types.KnowledgeNode{ID: "symbol:readIndex", Kind: types.KindSymbol, Label: "readIndex", Source: "libs/embed/index.go:131"})
 	known := map[string]string{}
 	for _, n := range symbols.Nodes() {
 		known[n.ID] = n.Source
 	}
 	agreement := []rankeval.Judgment{{
 		ID: "agent/1", Query: "readIndex", Verb: readQuery, Date: "2026-10-01", Source: "harvest",
-		Set: rankeval.SetAgentAgreement, Shape: rankeval.ShapeIdentifier, Gold: map[string]int{"file:internal/textembed/index.go": 1},
+		Set: rankeval.SetAgentAgreement, Shape: rankeval.ShapeIdentifier, Gold: map[string]int{"file:libs/embed/index.go": 1},
 	}}
 
 	lookup, skipped := definitionLookup(agreement, nil, symbols, known)
 	require.Len(t, lookup, 1, skipped)
-	require.Equal(t, map[string]int{"file:internal/textembed/index.go": 2}, lookup[0].Gold)
+	require.Equal(t, map[string]int{"file:libs/embed/index.go": 2}, lookup[0].Gold)
 	require.False(t, knowledge.SeedsLazyLayer("readIndex"), "a bare identifier seeds the symbol layer now; ask it bare")
 	r := replayer{domain: knowledge.NewGraph(), symbols: symbols}
 	require.Same(t, symbols, r.loadedGraph(lookup[0].Query), "%q is replayed against the domain graph", lookup[0].Query)

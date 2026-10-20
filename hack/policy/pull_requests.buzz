@@ -6,7 +6,8 @@
 //
 // The words are judged by libs/proofread under this repository's decisions table
 // (hack/policy/proofread.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
-// denied, every one listed with its rule; one decided advise is told once per pull request.
+// denied, every one listed with its rule, a grade under the kind's minimum among them; one
+// decided advise is graded there and not repeated here.
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
 // This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
 // shape past the lead, the areas the diff touches, an unfinished-work checklist and the
@@ -713,7 +714,8 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         final run = proc\exec(bin, args: words + ["--stdin", "--decisions", table],
             opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         fs\remove(table) catch void;
-        if (run == null or run!.code != 0) {
+        // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
+        if (run == null or (run!.code != 0 and run!.code != 1)) {
             var why = "{bin} did not start";
             if (run != null) {
                 why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
@@ -1131,7 +1133,8 @@ fun isReview(kind: str) > bool {
 
 // judgeText is this rule's decision over one readable text, the one the guard and the
 // pr-description CI step both reach. judge runs over the body, a description's title on
-// the line above it; a deny finding is a denial and an advise finding advice. facts reads
+// the line above it; a deny finding is a denial. An advise finding is graded, and proofread
+// turns a grade under the kind's minimum into a deny finding of its own. facts reads
 // the branch's Facts, and is called only for a description's body. cited judges each output
 // ref a description cites (see citedRun): the guard holds the author's runs and passes
 // citedRun; CI's checkout holds none of them and passes skipCited.
@@ -1145,11 +1148,11 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
     final judgedWords = mut [<str>];
     if (t.body != null) {
         foreach (f in judge(text, kind: judgedKind(t))) {
-            final problem = judgedProblem(f, kind: t.kind);
-            if (f.decision == "advise") {
-                advice.append(problem);
-            } else {
-                problems.append(problem);
+            // A judge that did not run is this rule's own advice; proofread's grades the rest.
+            if (f.decision != "advise") {
+                problems.append(judgedProblem(f, kind: t.kind));
+            } else if (f.rule == "judge") {
+                advice.append(judgedProblem(f, kind: t.kind));
             }
             if (f.matched != "") {
                 judgedWords.append(f.matched.lower());
@@ -1735,16 +1738,11 @@ test "every deny finding is listed with where it sits and its rule, under the ru
     std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word proofread reported is not reported twice: {t.reason}");
 }
 
-test "an advise finding is told once per pull request and never denies" {
+test "an advise finding is graded by proofread, so this rule neither denies nor advises on it" {
     final verdict = Judged{ rule = "verdict", line = 2, message = "Name the behavior 'broken' stands for.", decision = "advise" };
-    final once = helpers\counter();
-    final first = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(verdict), once: once);
-    std\assert(first.decision == "advise" and first.rule == "pull-request-text", message: first.reason);
-    std\assert(first.reason.indexOf("description line 1: Name the behavior 'broken' stands for. [verdict]") != null, message: first.reason);
-    final again = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(verdict), once: once);
-    std\assert(again.decision == "allow", message: "said once: {again.reason}");
+    final v = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(verdict), once: helpers\counter());
+    std\assert(v.decision == "allow", message: "{v.decision}: {v.reason}");
 }
 
 fun run(ref: str, project: str, target: str, failed: bool) > magus\OutputRecord {
@@ -1972,16 +1970,15 @@ test "a commit message denial names the subject, its rule and the shape, under i
     std\assert(b.reason.indexOf("line 3: Drop 'actually': state the fact. [filler]") != null, message: b.reason);
 }
 
-test "a commit message advice is told once per subject and never denies" {
+test "a commit message's advise finding is graded by proofread and allowed here" {
     final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
-    final once = helpers\counter();
-    final first = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(claim), once: once);
-    std\assert(first.decision == "advise" and first.rule == "commit-message-text", message: "{first.decision} {first.reason}");
-    std\assert(first.reason.startsWith("This commit message could read better:"), message: first.reason);
-    final again = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(claim), once: once);
-    std\assert(again.decision == "allow", message: "told once");
+    final v = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(claim), once: helpers\counter());
+    std\assert(v.decision == "allow", message: "{v.decision} {v.reason}");
+    final low = Judged{ rule = "grade", line = 0, message = "Grade 0.0 is under the minimum of 20." };
+    final denied = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(low), once: helpers\counter());
+    std\assert(denied.decision == "deny" and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
 }
 
 test "a judge that did not run is advice for a commit message and a denial for a pull request" {
@@ -2002,10 +1999,9 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final repro = Judged{ rule = "issue-repro", line = 1, message = "Say what happened.", decision = "advise" };
     final bad = Judged{ rule = "blame", line = 3, message = "Describe what happened." };
     final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
-    final advised = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
+    final graded = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(repro), once: helpers\counter());
-    std\assert(advised.decision == "advise" and advised.rule == "forge-text", message: "{advised.decision} {advised.reason}");
-    std\assert(advised.reason.startsWith("This issue could read better:") and advised.reason.indexOf("the title: Say what happened. [issue-repro]") != null, message: advised.reason);
+    std\assert(graded.decision == "allow", message: "{graded.decision} {graded.reason}");
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(bad), once: helpers\counter());
     std\assert(denied.decision == "deny" and denied.rule == "forge-text", message: denied.reason);

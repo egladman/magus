@@ -23,12 +23,12 @@ const (
 // listKinds are the Markdown kinds, each of which writes lists and dates.
 var listKinds = slices.Concat(withReply, agentReply)
 
-// listChecks judge a text's lists and dates. Each advises until a labeling
-// round measures it.
+// listChecks judge a text's lists and dates. Each is graded, and ships off
+// until a labeling round measures it.
 var listChecks = []check{
-	{rule: RuleListMarks, on: listKinds, advise: listKinds, judge: listMarks},
-	{rule: RuleListParallel, on: listKinds, advise: listKinds, judge: listParallel},
-	{rule: RuleDateFormat, on: listKinds, advise: listKinds, judge: dateFormat},
+	{rule: RuleListMarks, on: listKinds, graded: true, judge: listMarks},
+	{rule: RuleListParallel, on: listKinds, graded: true, judge: listParallel},
+	{rule: RuleDateFormat, on: listKinds, graded: true, judge: dateFormat},
 }
 
 const listConvention = "Google's developer style guide (developers.google.com/style/lists) asks for \"the same " +

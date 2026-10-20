@@ -72,12 +72,15 @@ const previewRows = 10
 // loadPreview reads the tail of a failure's captured output.
 //
 // Called when the selection MOVES, never from the paint path: resolving this
-// opens a file, and the band repaints from a timer. An unreadable log is not an
-// error: the column stays empty, and the ref is still printed in the
-// transcript for anyone who wants the whole thing.
+// opens a file, and the band repaints from a timer. A failure with no log has no
+// preview. An unreadable log yields one row naming the error, so the column says
+// why it is not showing the output.
 func loadPreview(f cache.Failure, width int) []string {
 	if f.LogPath == "" {
 		return nil
+	}
+	unreadable := func(err error) []string {
+		return []string{tty.ClipCols(sanitizeLogLine("could not read the log: "+err.Error()), width)}
 	}
 	// The TAIL is read, not the whole file. This runs on every selection change,
 	// including mouse motion across the band, and a failed build's captured log
@@ -85,12 +88,12 @@ func loadPreview(f cache.Failure, width int) []string {
 	// line-split per pointer movement, synchronously under the handler's mutex.
 	fh, err := os.Open(f.LogPath)
 	if err != nil {
-		return nil
+		return unreadable(err)
 	}
 	defer func() { _ = fh.Close() }()
 	info, err := fh.Stat()
 	if err != nil {
-		return nil
+		return unreadable(err)
 	}
 	const tailBytes = 64 << 10 // enough for previewRows of any sane line length
 	at, size := int64(0), info.Size()
@@ -99,7 +102,7 @@ func loadPreview(f cache.Failure, width int) []string {
 	}
 	b := make([]byte, size-at)
 	if _, err := fh.ReadAt(b, at); err != nil {
-		return nil
+		return unreadable(err)
 	}
 	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	if at > 0 && len(lines) > 0 {

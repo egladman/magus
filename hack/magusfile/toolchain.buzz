@@ -212,15 +212,9 @@ fun support() > void {
                 continue;
             }
             seen[key] = true;
-            var line = "toolchain " + row.bin + " " + row.installedVersion + ": " + row.support;
-            if (row.cycle != "") {
-                line = line + " (" + row.lifecycle + " " + row.cycle;
-                if (row.eol != "") {
-                    line = line + ", end of life " + row.eol;
-                }
-                line = line + ")";
-            }
-            std\print(line);
+            final eol = if (row.eol != "") ", end of life " + row.eol else "";
+            final cycle = if (row.cycle != "") " (" + row.lifecycle + " " + row.cycle + eol + ")" else "";
+            std\print("toolchain " + row.bin + " " + row.installedVersion + ": " + row.support + cycle);
         }
         if (tools.lifecycle.state == "offline" or tools.lifecycle.state == "unreached") {
             std\print("toolchain lifecycle: " + tools.lifecycle.provider + " " + tools.lifecycle.state

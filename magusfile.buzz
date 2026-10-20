@@ -107,7 +107,8 @@ magus\project({
     "name": "magus",
     // Only this edge puts a .proto edit in the affected set and orders proto's generate first.
     // libs/figure: go-build embeds figure.buzz.
-    "depends_on": ["proto", "libs/figure"],
+    // libs/embed: go.mod replaces it with the local module, so its Go builds into magus.
+    "depends_on": ["proto", "libs/figure", "libs/embed"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
@@ -148,7 +149,7 @@ magus\project({
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
         "benchmarks/agent/internal/bench/testdata/*",
-        "internal/textembed/testdata/*",
+        "libs/embed/testdata/*",
         // Embedded in the textrank package, and no other glob matches it.
         "internal/textrank/weights.json",
         // The retrieval eval's judgments and its holdout ledger.
@@ -173,7 +174,7 @@ magus\project({
             "human_only": "launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
         },
         "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
-        "retrieval-eval": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
+        "retrieval-eval-test": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
         "hoste2e-test": {
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
@@ -733,9 +734,10 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 
 // Fails a pull request whose title or description the guard's pull-request-text rule
 // would deny. It runs the same judgeText: proofread under this repository's
-// decisions table, the word budget the branch's diff earns and the title checks. Advice,
-// such as an area the branch touches that the description never names, is a warning,
-// which fails nothing. The output refs a description cites are not checked: this checkout
+// decisions table, a grade under the change-description minimum included, the word budget
+// the branch's diff earns and the title checks. The guard's advice, such as an area the
+// branch touches that the description never names, is told to the author when the text is
+// written, not here. The output refs a description cites are not checked: this checkout
 // holds none of the author's runs. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
@@ -748,9 +750,6 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
         body = parsed.values["--body"] ?? "" };
     final found = descriptions\judgeText(text, facts: fun () > descriptions\Facts => descriptions\branchDiff(".")(""),
         judge: descriptions\judgeRunner("."), cited: descriptions\skipCited);
-    foreach (note in found.advice) {
-        magus\log.warn("pr-description: {note}");
-    }
     if (found.denies.len() > 0) {
         throw "pr-description: the description breaks the proofread rules (docs/conventions.md):\n  " + found.denies.join("\n  ");
     }
@@ -2347,17 +2346,18 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/cmdline/**/*_test.go",
                    "**/*.go",
                    "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
-                   "libs/proofread/**/*.go",
+                   "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
-                   "libs/cmdline/**/*.go", "hack/embed/**/*.go",
+                   "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
                    "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                    "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                    "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
-                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "hack/embed/**/*.buzz",
+                   "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "libs/embed/**/*.buzz",
+                   "libs/embed/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
                    "proto/**/*.buzz",
                    "**/*.css", "console/**/*.css", "docs/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
@@ -2640,8 +2640,9 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
 // prints recall, MRR and nDCG per set; no score fails it. MAGUS_EVAL_CANDIDATE unseals
 // the judged holdout for one recorded read, MAGUS_EVAL_REPORT_ONLY=1 permits a further
 // read that chooses nothing, and MAGUS_RETRIEVAL_EVAL_BASELINE names a file to write the
-// report to for a person to review.
-export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
+// report to for a person to review. Not a `test` charm: this reads the knowledge graph in
+// the cache and those three variables, and so cannot share test's cache entry.
+export fun retrieval_eval_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("testdata/retrieval/*");
     final env = mut {"GOEXPERIMENT": "jsonv2"};
     foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {

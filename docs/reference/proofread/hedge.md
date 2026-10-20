@@ -1,13 +1,13 @@
 ---
 title: "hedge"
-description: "A rule that is off by default: it reports a softener qualifying a claim (\"might fix\", \"could potentially\") once a decisions table turns it on."
-tags: [proofread, rules, hedge, off]
+description: "An advisory by default: it explains, and blocks nothing, on a softener qualifying a claim (\"might fix\", \"could potentially\")."
+tags: [proofread, rules, hedge, advise]
 aliases: [reference/prose/hedge]
 ---
 
 # hedge
 
-A rule that is off by default: it reports a softener qualifying a claim ("might fix", "could potentially") once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a softener qualifying a claim ("might fix", "could potentially").
 
 ## What it catches
 
@@ -28,17 +28,17 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | off     |
-| `guide`              | off     |
-| `change-description` | off     |
-| `agent-brief`        | off     |
-| `commit-message`     | off     |
-| `issue`              | off     |
-| `release-notes`      | off     |
-| `changelog`          | off     |
-| `agent-compact`      | off     |
-| `agent-reply`        | off     |
-| `stylesheet`         | off     |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-brief`        | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
+| `agent-compact`      | advise  |
+| `agent-reply`        | advise  |
+| `stylesheet`         | advise  |
 
 ## Changing it
 
@@ -61,7 +61,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "hedge", "code": "PRF3002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
+{"rule": "hedge", "code": "PRF3002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

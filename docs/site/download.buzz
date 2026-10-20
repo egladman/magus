@@ -33,14 +33,11 @@ final ROUTES = [
 ];
 
 fun routeLinks() > str {
-    var row = "";
-    var first = true;
+    final links = mut [<str>];
     foreach (route in ROUTES) {
-        if (!first) { row = row + " <span class=\"download-route-sep\" aria-hidden=\"true\">&middot;</span> "; }
-        row = row + "<a href=\"../" + route["href"] + "\">" + route["label"] + "</a>";
-        first = false;
+        links.append("<a href=\"../" + route["href"] + "\">" + route["label"] + "</a>");
     }
-    return row;
+    return links.join(" <span class=\"download-route-sep\" aria-hidden=\"true\">&middot;</span> ");
 }
 
 // renderDownloadPage writes gen/download/index.html.

@@ -836,7 +836,7 @@ func buzzRunContext(ctx context.Context, root string) (context.Context, error) {
 }
 
 // buzzCheck parses and type-checks each named file WITHOUT running it, printing
-// every diagnostic and failing only on errors.
+// every diagnostic and failing on any of them, warnings included.
 //
 // Running a file is not a check of it. That is the gap this fills: a hook script
 // whose whole job is a side effect (read the event on stdin, judge it, exec magus)
@@ -863,8 +863,8 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 			level := slog.LevelWarn
 			if d.Severity != buzz.SeverityWarning {
 				level = slog.LevelError
-				failed++
 			}
+			failed++
 			slog.LogAttrs(ctx, level, d.String(), attr.Notice(""))
 			if !noted && buzzSpellImportUnresolved(d) {
 				slog.InfoContext(ctx, buzzSpellImportNote, attr.Notice("note"))

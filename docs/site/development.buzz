@@ -145,11 +145,12 @@ fun workspaceDependencies(graph: magus\Graph) > str {
     final nodes = graph.nodes;
     if (nodes.len() == 0) { return ""; }
 
-    var buf = "## Workspace dependencies\n\n"
+    final buf = mut [<str>];
+    buf.append("## Workspace dependencies\n\n"
         + "The projects above in dependency order: each row runs after everything it "
         + "depends on. Blast radius counts the projects a change here can reach, so it "
         + "is the cost of touching that project.\n\n"
-        + "| project | depends on | blast radius |\n| --- | --- | --- |\n";
+        + "| project | depends on | blast radius |\n| --- | --- | --- |\n");
     foreach (n in nodes) {
         final label = projectLabel(n);
         final slug = slugifyProject(label);
@@ -158,22 +159,21 @@ fun workspaceDependencies(graph: magus\Graph) > str {
         final deps = graph.dependsOn[n] ?? [<str>];
         var depCell = "-";
         if (deps.len() > 0) {
-            var parts = "";
+            final parts = mut [<str>];
             foreach (d in deps) {
-                if (parts != "") { parts = parts + ", "; }
                 final dLabel = projectLabel(d);
-                parts = parts + "[`" + dLabel + "`](" + UP + slugifyProject(dLabel) + "/)";
+                parts.append("[`" + dLabel + "`](" + UP + slugifyProject(dLabel) + "/)");
             }
-            depCell = parts;
+            depCell = parts.join(", ");
         }
-        buf = buf + "| [`" + label + "`](" + UP + slug + "/) | " + depCell + " | "
-            + "{graph.blastRadius[n] ?? 0}" + " |\n";
+        buf.append("| [`" + label + "`](" + UP + slug + "/) | " + depCell + " | "
+            + "{graph.blastRadius[n] ?? 0}" + " |\n");
     }
     // No figure here on purpose. A layered placement of THIS graph is unreadable: most
     // projects are roots or wholly independent, so it draws a tall stack of disconnected
     // boxes with a few edges wandering across empty canvas. The table above says the same
     // thing in less space.
-    return buf;
+    return buf.join("");
 }
 
 // projectCatalog renders one project's target catalog as Markdown from the TYPED graph
@@ -186,7 +186,7 @@ fun projectCatalog(proj: magus\TargetGraphProject) > str {
     // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
     // rather than null. That is what makes the annotation worth having - the field names
     // are compile-checked AND the values have the shape the mirror declares.
-    var buf = "";
+    final buf = mut [<str>];
     final nodes = proj.nodes;
     final cycle = proj.cycle;
     final dependsOn = proj.dependsOn;
@@ -198,35 +198,33 @@ fun projectCatalog(proj: magus\TargetGraphProject) > str {
             + engine + "` engine.\n";
     }
     if (cycle.len() > 0) {
-        buf = buf + "> **Cycle detected:** " + cycle.join(" -> ") + "\n\n";
+        buf.append("> **Cycle detected:** " + cycle.join(" -> ") + "\n\n");
     }
     if (dependsOn.len() > 0) {
-        buf = buf + "Depends on " + dependsOn.join(", ") + ".\n\n";
+        buf.append("Depends on " + dependsOn.join(", ") + ".\n\n");
     }
 
-    buf = buf + "| target | depends on | drives |\n| --- | --- | --- |\n";
+    buf.append("| target | depends on | drives |\n| --- | --- | --- |\n");
     foreach (n in nodes) {
-        var drives = "";
-        foreach (use in n.spells) {
-            if (drives != "") { drives = drives + ", "; }
-            drives = drives + use.spell;
-        }
+        final driven = mut [<str>];
+        foreach (use in n.spells) { driven.append(use.spell); }
+        var drives = driven.join(", ");
         if (drives == "") { drives = "-"; }
         var deps = "-";
         final nd = n.dependencies;
         if (nd.len() > 0) { deps = "`" + nd.join("`, `") + "`"; }
-        buf = buf + "| `" + n.name + "` | " + deps + " | " + drives + " |\n";
+        buf.append("| `" + n.name + "` | " + deps + " | " + drives + " |\n");
     }
 
     // Per-target detail: the doc comment is the authored description, so it carries the
     // intent a table cannot.
-    buf = buf + "\n";
+    buf.append("\n");
     foreach (n in nodes) {
         if (n.doc != "") {
-            buf = buf + "### `" + n.name + "`\n\n" + n.doc + "\n\n";
+            buf.append("### `" + n.name + "`\n\n" + n.doc + "\n\n");
         }
     }
-    return buf;
+    return buf.join("");
 }
 
 // renderDevelopment writes the /development/ section BELOW its landing: one themed page
@@ -283,7 +281,7 @@ export fun renderDevelopment(site: Site) > void !> any {
     // hrefs so each links straight to the project page. They sit on /development/projects/,
     // and the project pages are its SIBLINGS rather than its children, so each href climbs
     // one level (UP) before naming the slug.
-    var projectCards = "";
+    final projectCards = mut [<str>];
     foreach (proj in projects) {
         final name = projectLabel(proj.path);
         // The card subtitle carries the project's real shape - which toolchains it
@@ -294,10 +292,9 @@ export fun renderDevelopment(site: Site) > void !> any {
         if (n.len() > 0) {
             desc = "{n.len()} targets";
         }
-        projectCards = projectCards
-            + "        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
+        projectCards.append("        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
             + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
-            + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n";
+            + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n");
     }
 
     // The project-level view, rendered through the markdown pipeline for its table and
@@ -319,7 +316,7 @@ export fun renderDevelopment(site: Site) > void !> any {
 <p>One card per magus project in this repository, each linking to that project's runnable targets - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming and search.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
-{{{depsSection}}}`, {"projectCards": projectCards, "depsSection": depsSection});
+{{{depsSection}}}`, {"projectCards": projectCards.join(""), "depsSection": depsSection});
     renderDevelopmentPageRaw("Projects", PROJECTS_DESC,
         devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius",
         "development/projects/", "development/projects/_index.md", site);

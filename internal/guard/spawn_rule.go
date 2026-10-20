@@ -483,7 +483,7 @@ func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
 // its title names that row of rows, and its spawner could hand the job out.
 func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
 	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
-		rec, ok := readSpawnedRecord(facts, kind)
+		rec, ok := readMarker[spawnedAgent](facts, kind)
 		if !ok || rec.UntrustedJob != "" {
 			continue
 		}
@@ -497,7 +497,7 @@ func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
 // spawnedAsJob reports whether the spawn record filed under agentID attributed that agent to
 // job, as spawnedJob does for any agent of the session.
 func spawnedAsJob(facts hint.Gate, rows []types.Job, agentID, job string) bool {
-	rec, ok := readSpawnedRecord(facts, spawnedAgentKind(agentID))
+	rec, ok := readMarker[spawnedAgent](facts, spawnedAgentKind(agentID))
 	if !ok || rec.UntrustedJob != "" {
 		return false
 	}
@@ -930,20 +930,20 @@ func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {
 	if agentID == "" {
 		return spawnedAgent{}, false
 	}
-	return readSpawnedRecord(facts, spawnedAgentKind(agentID))
+	return readMarker[spawnedAgent](facts, spawnedAgentKind(agentID))
 }
 
-func readSpawnedRecord(facts hint.Gate, kind hint.MarkerKind) (spawnedAgent, bool) {
+// readMarker decodes one marker of the session. A missing cache dir, an unreadable file
+// and a corrupt body all read as absent, so a half-written marker never counts as a record.
+func readMarker[T any](facts hint.Gate, kind hint.MarkerKind) (T, bool) {
+	var rec T
 	if facts.CacheDir() == "" {
-		return spawnedAgent{}, false
+		return rec, false
 	}
 	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
-	if err != nil {
-		return spawnedAgent{}, false
-	}
-	var rec spawnedAgent
-	if json.Unmarshal(body, &rec) != nil {
-		return spawnedAgent{}, false
+	if err != nil || json.Unmarshal(body, &rec) != nil {
+		var zero T
+		return zero, false
 	}
 	return rec, true
 }

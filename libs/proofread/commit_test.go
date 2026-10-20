@@ -179,7 +179,7 @@ func TestCommitMessageMeetsTheWordRulesButNotTheDescriptionShape(t *testing.T) {
 		}
 	}
 
-	if got[0].Match != "simply" || got[0].Line != 1 || got[0].Decision != DecisionDeny {
+	if got[0].Match != "simply" || got[0].Line != 1 || got[0].Decision != DecisionAdvise {
 		t.Errorf("filler: %+v", got[0])
 	}
 

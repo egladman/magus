@@ -60,13 +60,12 @@ fun publish_registries(ctx: magus\Context) > [Registry] {
 // than a silent no-op.
 fun select(registries: [Registry], host: str) > [Registry] {
     if (host == "") { return registries; }
-    var hosts = "";
+    final hosts = mut [<str>];
     foreach (reg in registries) {
         if (reg.host == host) { return [reg]; }
-        if (hosts != "") { hosts = hosts + ", "; }
-        hosts = hosts + reg.host;
+        hosts.append(reg.host);
     }
-    throw "no registry \"" + host + "\"; these charms use: " + hosts;
+    throw "no registry \"" + host + "\"; these charms use: " + hosts.join(", ");
 }
 
 // Probing with try/catch, because a provider signals "not available" by THROWING -
@@ -91,15 +90,15 @@ export fun registries(ctx: magus\Context, args: [str]) > void {
         magus\log.info("nothing is published under these charms; try `run registries:prod`");
         return;
     }
-    var report = "";
+    final report = mut [<str>];
     foreach (reg in selected) {
         var state = "ready";
         if (!readable(reg.user_ref) or !readable(reg.token_ref)) {
             state = "needs " + reg.user_ref + " and " + reg.token_ref;
         }
-        report = report + "\n" + reg.host + "  ->  " + reg.repository + "  (" + state + ")";
+        report.append("\n" + reg.host + "  ->  " + reg.repository + "  (" + state + ")");
     }
-    magus\log.info("publishes to:" + report);
+    magus\log.info("publishes to:" + report.join(""));
 }
 
 // Verb two: ACT. The same list, so the set logged into is by construction the set

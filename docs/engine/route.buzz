@@ -35,10 +35,7 @@ export fun outputName(base: str) > str {
 
 // climb builds n repetitions of "../".
 export fun climb(n: int) > str {
-    var s = "";
-    var i = 0;
-    while (i < n) { s = s + "../"; i = i + 1; }
-    return s;
+    return "../".repeat(n);
 }
 
 // climbFromDir returns the "../" prefix from a gen-relative directory back to gen's root,

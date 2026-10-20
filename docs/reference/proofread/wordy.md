@@ -1,13 +1,13 @@
 ---
 title: "wordy"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent (\"in order to\")."
-tags: [proofread, rules, wordy, deny]
+description: "An advisory by default: it explains, and blocks nothing, on a phrase with a shorter equivalent (\"in order to\")."
+tags: [proofread, rules, wordy, advise]
 aliases: [reference/prose/wordy]
 ---
 
 # wordy
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent ("in order to").
+An advisory by default: it explains, and blocks nothing, on a phrase with a shorter equivalent ("in order to").
 
 ## What it catches
 
@@ -28,14 +28,14 @@ The code is `PRF4002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-brief`        | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-brief`        | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
 | `agent-reply`        | advise  |
 
 ## Changing it
@@ -46,7 +46,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"wordy": "advise"},
+  "rules": {"wordy": "deny"},
   "paths": {"blog/**": {"wordy": "off"}}
 }
 ```
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "wordy", "code": "PRF4002", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/wordy/"}
+{"rule": "wordy", "code": "PRF4002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/wordy/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

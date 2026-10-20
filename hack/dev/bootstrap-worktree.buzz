@@ -23,7 +23,7 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "placed only when it is provably the binary this worktree would build: no Go build input (a file in a package\n"
     + "`go list -deps ./cmd/magus` names, or the root go.mod, go.sum or go.work) differs between the commit the binary was\n"
     + "built at and this worktree, and none went into it uncommitted. Docs, console, a package nothing links and a separate\n"
-    + "module such as hack/embed do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
+    + "module such as libs/embed/train do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
     + "script refuses and names what to build in the root.\n"
     + "--check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
@@ -547,8 +547,8 @@ test "a build input is a Go file in a linked package, a root module file, or a f
         "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz", "assets/a.txt",
     ], message: "docs, console, hack, tests and root-level files outside the embeds are not inputs");
     assert\equal(buildInputs([
-        "internal/textembed/embed.go", "internal/guard/unlinked/x.go", "hack/embed/go.mod", "hack/embed/go.sum",
-        "hack/embed/teacher/nomicbert.go", "internal/textembed/go.mod", "internal/guard/new.go",
+        "internal/unlinked/embed.go", "internal/guard/unlinked/x.go", "libs/embed/train/go.mod", "libs/embed/train/go.sum",
+        "libs/embed/train/teacher/nomicbert.go", "internal/unlinked/go.mod", "internal/guard/new.go",
     ], scopes: scopes), want: ["internal/guard/new.go"],
         message: "a Go file in a package nothing links, and a separate module's files, are not inputs; a file in a linked package is");
     assert\equal(buildInputs(["docs/x.md", "run_test.go"], scopes: scopes), want: [<str>], message: "a docs-and-tests commit changes no input");

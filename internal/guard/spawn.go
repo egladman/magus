@@ -176,9 +176,8 @@ func livePendingSpawns(facts hint.Gate, now time.Time) []pendingSpawnEntry {
 		if err != nil || now.Sub(time.Unix(0, nanos)) > pendingSpawnWindow {
 			continue
 		}
-		body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
-		var p pendingSpawn
-		if err != nil || json.Unmarshal(body, &p) != nil {
+		p, ok := readMarker[pendingSpawn](facts, kind)
+		if !ok {
 			continue
 		}
 		out = append(out, pendingSpawnEntry{kind: kind, spawn: p})

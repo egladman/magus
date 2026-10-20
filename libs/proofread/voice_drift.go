@@ -312,7 +312,7 @@ func rankP(sorted []float64, value float64, higher bool) float64 {
 }
 
 var voiceChecks = []check{
-	{rule: RuleVoiceDrift, on: voiceJudged, advise: voiceJudged, judge: voiceDrift},
+	{rule: RuleVoiceDrift, on: voiceJudged, graded: true, judge: voiceDrift},
 }
 
 var voiceTexts = map[Rule]ruleText{

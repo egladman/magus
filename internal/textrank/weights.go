@@ -51,7 +51,7 @@ type PPRWeights struct {
 	Iterations int                `json:"iterations"` // 20: starting value, not from a paper
 	Tolerance  float64            `json:"tolerance"`  // 1e-6: starting value, not from a paper
 	MaxNodes   int                `json:"max_nodes"`  // 5000: starting value, not from a paper
-	Edges      map[string]float64 `json:"edges"`      // no published source: starting weights to tune against internal/rankeval
+	Edges      map[string]float64 `json:"edges"`      // no published source: starting weights to tune against libs/embed/rankeval
 }
 
 // FusionWeights holds the reciprocal rank fusion constant K and each list's weight by name.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,7 +49,7 @@ func lexicalWeights(t *testing.T) textrank.BM25F {
 func hitIDs(t *testing.T, ix *textrank.Index, query string) []string {
 	t.Helper()
 	var ids []string
-	for _, h := range ix.Score(textrank.Tokens(query), lexicalWeights(t)) {
+	for _, h := range ix.Score(embed.Tokens(query), lexicalWeights(t)) {
 		ids = append(ids, h.ID)
 	}
 	return ids
@@ -80,6 +81,16 @@ func TestLexicalDocumentSplitsIdentifiers(t *testing.T) {
 	assert.Equal(t, []string{"docs", "guide", "md"}, section.Fields[textrank.FieldPath], "the path drops its #anchor")
 	assert.Equal(t, []string{"install", "the", "binary"}, section.Fields[textrank.FieldBody])
 	assert.Equal(t, []string{"guide", "md", "setup", "setup"}, section.Fields[textrank.FieldName])
+}
+
+func TestLexicalDocumentKeepsTheBuzzErrorOperator(t *testing.T) {
+	n := types.KnowledgeNode{
+		ID:    "function:libs/gopherbuzz/std/fs.buzz:readFile",
+		Kind:  "function",
+		Attrs: map[string]string{AttrSignature: "fun readFile(path: str) > str !> any"},
+	}
+	doc := lexicalDocument(n, "")
+	assert.Equal(t, []string{"fun", "readfile", "read", "file", "path", "str", "str", "!>", "any"}, doc.Fields[textrank.FieldSignature])
 }
 
 func TestLexicalSourcePath(t *testing.T) {
