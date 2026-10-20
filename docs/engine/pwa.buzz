@@ -74,16 +74,16 @@ export fun writeManifest(site: Site) > void !> any {
 // to fetch the new worker.
 export fun buildServiceWorker(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
-    var manifest = "";
+    final manifest = mut [<str>];
     foreach (asset in site.config.precacheAssets) {
-        var rel = asset;
-        if (rel.endsWith("/")) { rel = rel + "index.html"; }  // a dir URL caches its index.html
+        // a dir URL caches its index.html
+        final rel = if (asset.endsWith("/")) asset + "index.html" else asset;
         final p = fs\join(site.outDir, rel);
         if (fs\isFile(p)) {
-            manifest = manifest + rel + ":" + fileSha256(p) + "\n";
+            manifest.append(rel + ":" + fileSha256(p) + "\n");
         }
     }
-    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest).hex().sub(0, 12);
+    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
     os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
         "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
         "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.config.precacheAssets),

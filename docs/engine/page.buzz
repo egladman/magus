@@ -6,7 +6,6 @@
 // render.buzz and every writer module; it sits below the writers that call it.
 namespace page;
 
-import "magus";
 import "markdown";
 import "fs";
 import "io";
@@ -20,15 +19,16 @@ import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
-// The single importer of the diagram registry. A module imported by two different paths
-// binds only once: the second import resolves to nothing, with no error at the import
-// site, so everything downstream fails as an undefined symbol.
-import "site/diagrams/all" as diagrams;
 import "engine/meta" as _;
 import "engine/path" as _;
 import "engine/types" as _;
 import "engine/route" as _;
 import "engine/nav" as _;
+// The single importer of the diagram registry. A module imported by two different paths
+// binds only once: the second import resolves to nothing, with no error at the import
+// site, so everything downstream fails as an undefined symbol. It follows engine/types,
+// whose import of magus the diagram modules' magus\ types resolve through.
+import "site/diagrams/all" as diagrams;
 
 // render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched
 // path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths
@@ -351,9 +351,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     final gen = generatedFrom != "";
     var tagsHtml = "";
     if (gen or tags.len() > 0) {
-        var chips = "";
+        final chips = mut [<str>];
         if (gen) {
-            chips = chips + renderGeneratedChips(generatedFrom, root, site);
+            chips.append(renderGeneratedChips(generatedFrom, root, site));
         }
         foreach (t in tags) {
             // A tag carried by two or more pages has a real /tags/<slug>/ page, which is a URL a
@@ -363,13 +363,13 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             // to stay querystring-safe.
             final slug = tagSlug(t);
             if (site.tagPages[slug] != null) {
-                chips = chips + "<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>";
+                chips.append("<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>");
             } else {
                 final tagQuery = urlcodec\encode("tag:\"" + t + "\"");
-                chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+                chips.append("<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>");
             }
         }
-        tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
+        tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips.join("") + "</div>\n";
     }
     // The .toc aside carries two lists: "In this section" (siblings within the section)
     // and "On this page" (this page's h2/h3). Either may be empty - a top-level page has no

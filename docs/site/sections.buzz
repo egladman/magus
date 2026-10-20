@@ -38,11 +38,11 @@ fun sectionTitle(seg: str) > str {
 fun parentPrefixes(url: str) > [str] {
     var dirs: mut [str] = mut [<str>];
     final segs = splitPath(url);
-    var acc = "";
+    final accParts = mut [<str>];
     var i = 0;
     while (i < segs.len() - 1) {
-        acc = acc + segs[i] + "/";
-        dirs.append(acc);
+        accParts.append(segs[i] + "/");
+        dirs.append(accParts.join(""));
         i = i + 1;
     }
     return dirs;
