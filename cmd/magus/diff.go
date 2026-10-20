@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -1150,9 +1151,10 @@ const diffBridgeMarks = 64
 const diffBridgeClose = 3 * time.Second
 
 // dialDiffBridge attaches to the server's session, or returns nil when there is nothing to
-// join: no token, no listener, a server with no workspace. Every one of those is an ordinary
-// state rather than an error: the terminal reads the diff on its own and says nothing about
-// a server the reader never asked for.
+// join. No token file and a refused connection are ordinary (no server was ever set up or
+// started) and stay silent; a token that cannot load, a non-200 answer, an undecodable
+// session and a declined as-of each log a warning naming the cause, so a server that is up
+// but not joined is never mistaken for one that is absent.
 //
 // asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
 // the server computed its changeset from the same bytes. Without that check a server serving
@@ -1160,8 +1162,15 @@ const diffBridgeClose = 3 * time.Second
 // about a tree the reader is not looking at, and the coordinate every comment and every
 // viewed mark is keyed by would silently mean something else.
 func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridge {
+	warn := func(msg string, why ...any) {
+		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
+	}
 	token, err := auth.LoadOperator()
+	if errors.Is(err, auth.ErrNoToken) {
+		return nil
+	}
 	if err != nil {
+		warn("the review is not shared with the server: the operator token did not load", attr.Error(err))
 		return nil
 	}
 	q := url.Values{}
@@ -1178,17 +1187,23 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			warn("the review is not shared with the server: it did not answer", attr.Error(err))
+		}
 		return nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		warn("the review is not shared with the server: it refused the session", attr.Why(resp.Status))
 		return nil
 	}
 	var sess types.DiffReview
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
+		warn("the review is not shared with the server: its session did not decode", attr.Error(err))
 		return nil
 	}
 	if sess.AsOf != asOf {
+		warn("the review is not shared with the server: it computed its changeset from a different patch", attr.Why("as-of "+sess.AsOf+", this patch is "+asOf))
 		return nil
 	}
 	b.session = &sess
