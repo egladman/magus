@@ -404,8 +404,38 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 
 	v = judgeSpawn(ctx, t, deps, "claude-haiku-5-5")
 	assert.Equal(t, decisionDeny, v.Decision, "an id no alias names has no tier")
-	assert.Contains(t, storedVerdict(t, at.cacheDir, v.Reason), "claude-haiku-5-5, which harness claude-code maps to no model tier",
-		"a repeat cites the rule's summary inline and stores the full reason")
+	assert.Contains(t, v.Reason, "claude-haiku-5-5, which harness claude-code maps to no model tier",
+		"a denial for another reason than the last speaks in full")
+}
+
+// The shipped declaration maps full ids, and a host's spawn tool may take only the short
+// name a harness_models row declares as its alias. That alias resolves the spawn's tier.
+func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{}, {}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Hosts:  map[types.HarnessKey][]string{{ID: "claude-code"}: {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+	})
+	require.NoError(t, err)
+	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := strictDeps(t)
+	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{
+			{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku"},
+			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
+		}
+	}
+	at := hookLocation(ctx, deps)
+	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+
+	v := judgeSpawn(ctx, t, deps, "haiku")
+	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "haiku is the economy row's alias")
+
+	v = judgeSpawn(ctx, t, deps, "opus")
+	assert.Equal(t, decisionDeny, v.Decision)
+	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), and job scout was forked at economy (rank 0)")
 }
 
 // A declaration that maps no model for the spawning host is refused at strict, naming the

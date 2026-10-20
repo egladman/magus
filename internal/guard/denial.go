@@ -96,18 +96,18 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	if (!catalogued && !namedWorkspaceRule(rule)) || advisoryRule()[rule] {
 		return denial{Say: reason, Why: why}.full(), "", nil
 	}
-	// A catalogued rule's Catches summarizes every denial it makes. A named workspace rule
-	// has no such line and its reasons differ call to call, so only the same reason
-	// repeating is a repeat: a different denial from the same rule speaks in full.
-	d, see, catches, marker := denial{Say: reason, Why: why}, "", firstLine(reason), denyMarker(rule+"-"+reasonDigest(reason))
+	d, see, catches := denial{Say: reason, Why: why}, "", firstLine(reason)
 	if catalogued {
-		d, see, catches, marker = verdictParts(reason, why), "\nsee: "+ruleDocsBase+rule+"/", doc.Catches, denyMarker(rule)
+		d, see, catches = verdictParts(reason, why), "\nsee: "+ruleDocsBase+rule+"/", doc.Catches
 	}
 	// A rule that already carried the note shows it once, after the verdict.
 	if line := strings.TrimPrefix(note, "\n"); line != "" {
 		d.Say = strings.TrimSpace(strings.Replace(d.Say, line, "", 1))
 		d.Why = strings.TrimSpace(strings.Replace(d.Why, line, "", 1))
 	}
+	// Only the same verdict, note aside, is a repeat: a rule that refuses for a second
+	// reason would have its Catches line misname it.
+	marker := denyMarker(rule + "-" + reasonDigest(d.Say))
 	stored := d.Say + note
 	if d.Why != "" {
 		stored += "\n" + d.Why
