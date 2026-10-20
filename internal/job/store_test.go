@@ -784,7 +784,7 @@ func TestStoreHandlesALineNoWriterFinished(t *testing.T) {
 }
 
 // A plan an older magus kept as one JSON document is refused, never read as empty, and the
-// error says how to move it aside.
+// error preserves it while an older checkout may still own its jobs.
 func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	t.Parallel()
 
@@ -796,9 +796,13 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, []byte(`{"jobs":[{"id":"a"}]}`+"\n"), 0o644))
 
 	_, err = s.List()
-	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
 	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
-	require.ErrorContains(t, err, "mv "+old+" "+old+".old", "a write is refused too")
+	require.ErrorIs(t, err, file.ErrLegacyStore, "a write is refused too")
+	raw, err := os.ReadFile(old)
+	require.NoError(t, err)
+	assert.Equal(t, "{\"jobs\":[{\"id\":\"a\"}]}\n", string(raw))
 	assert.NoFileExists(t, path)
 
 	require.NoError(t, os.Rename(old, old+".old"))

@@ -112,9 +112,11 @@ func CompactDue(lines, keys int) bool { return lines > 2*keys+CompactSlack }
 // CompactSlack is the lines a store may hold past twice its entries.
 const CompactSlack = 64
 
-// RefuseOld fails when old, a file an older magus kept a store in that this one no longer
-// reads, exists. Reading it would be a second reader to keep, and passing it by in silence
-// would drop what it holds with no word, so the error names it and how to move it aside.
+// ErrLegacyStore identifies state whose older writers may still be active.
+var ErrLegacyStore = errors.New("store version conflict")
+
+// RefuseOld preserves a store this build cannot read. Moving it aside while an older
+// checkout still writes it would create two independent accounts of the same state.
 func RefuseOld(old string) error {
 	_, err := os.Lstat(old)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -123,7 +125,7 @@ func RefuseOld(old string) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%s is a store an older magus wrote and this one does not read, so move it aside with `mv %s %s.old`", old, old, old)
+	return fmt.Errorf("%w: %s was written by an older magus; preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
 }
 
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a

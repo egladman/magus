@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking approval",
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent",
             "type": "command"
           }
@@ -28,7 +28,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking the call",
             "type": "command"
           }
@@ -40,7 +40,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: restating this checkout's rules",
             "type": "command"
           }
@@ -52,8 +52,8 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
-            "statusMessage": "magus: recording where the work stands",
+            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
+            "statusMessage": "magus: proofreading the reply",
             "type": "command"
           }
         ]
@@ -61,8 +61,8 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
-            "statusMessage": "magus: proofreading the reply",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording where the work stands",
             "type": "command"
           }
         ]
@@ -72,7 +72,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: briefing the subagent",
             "type": "command"
           }
@@ -81,7 +81,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: joining the subagent to its spawn",
             "type": "command"
           }
@@ -92,7 +92,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent's context",
             "type": "command"
           }
@@ -103,7 +103,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: noting the request",
             "type": "command"
           }

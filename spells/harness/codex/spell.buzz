@@ -29,11 +29,11 @@ fun codex_skills_paths() > [str] {
 
 // codex_buzz_command runs one Buzz glue script as a plain argv. The interpreter is PATH's
 // `magus`, a constant, so the committed config is the same on every machine. Codex
-// documents no project-directory variable for a hook, so unlike the claude-code spell
-// nothing here runs from the workspace root with `-C`. Flags ride after `--`, which
-// `magus buzz` forwards to the script.
+// documents no project-directory variable for a hook. -C . names the hook's working
+// directory explicitly so PATH's magus can hand off to that workspace's own build.
+// Flags ride after `--`, which `magus buzz` forwards to the script.
 fun codex_buzz_command(script: str, flags: [str]) > str {
-    final base = "magus buzz -s docs/guides/integrations/agents/{script}.buzz";
+    final base = "magus buzz -C . -s docs/guides/integrations/agents/{script}.buzz";
     if (flags.len() == 0) { return base; }
     return base + " -- " + flags.join(" ");
 }
@@ -438,7 +438,7 @@ test "guard commands name the Buzz glue as a plain argv" {
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
     foreach (cmd in [codex_guard_command(), codex_rehydrate_command(), codex_checkpoint_command()]) {
-        assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
+        assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix or POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
     }
 }

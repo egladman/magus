@@ -283,15 +283,14 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
 	env := append(withoutLeaseClaim(os.Environ()),
-		// What the host exports to every hook: the root the session started in. Its wired
-		// commands find the checkout's own build through it, so a probe without it grades
-		// a different interpreter than the one a session runs.
-		"CLAUDE_PROJECT_DIR="+root,
 		"HOME="+scratch,
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
 		"TMPDIR="+scratch,
 	)
+	if strings.Contains(command, "CLAUDE_PROJECT_DIR") {
+		env = append(env, "CLAUDE_PROJECT_DIR="+root)
+	}
 	if supportsHostResponseOverride(command) {
 		// HOST_ADVISE_BRANCH='' is not "suppress the advisory": it is "do not append
 		// the branch this template would otherwise splice into HOST_RESPONSE",
@@ -335,7 +334,18 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	}
 	decision := strings.TrimSpace(stdout.String())
 	if len(wantDecisions) > 0 && !slices.Contains(wantDecisions, decision) {
-		return HarnessUncovered, fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
+		reason := fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
+		if runErr != nil {
+			reason += "; " + runErr.Error()
+		}
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			const limit = 1024
+			if len(detail) > limit {
+				detail = "..." + detail[len(detail)-limit:]
+			}
+			reason += "; stderr: " + detail
+		}
+		return HarnessUncovered, reason
 	}
 	return HarnessVerified, ""
 }

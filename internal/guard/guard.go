@@ -1660,6 +1660,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
 	files, isPatch := envelopePatch(env.ToolInput)
+	command := cmp.Or(envelopeString(env.ToolInput, "command"), envelopeString(env.ToolInput, "cmd"))
 	switch {
 	case tool != "":
 		// An MCP call to one of magus's own tools, normalized to the one shape every
@@ -1685,8 +1686,14 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		req.Value, req.IsPath = files[0].Path, true
 		req.Write = writeFields{Content: patchContent(files)}
 		req.Patch = files
-	case envelopeString(env.ToolInput, "command") != "":
-		req.Value = envelopeString(env.ToolInput, "command")
+	case command != "":
+		req.Value = command
+		if dir := envelopeString(env.ToolInput, "workdir"); dir != "" {
+			req.Cwd = dir
+			if !filepath.IsAbs(dir) {
+				req.Cwd = filepath.Join(env.Cwd, dir)
+			}
+		}
 		req.Description = envelopeString(env.ToolInput, "description")
 		// Only an explicit true, as for a spawn. A JSON number decodes as float64.
 		req.CallBackground = env.ToolInput["run_in_background"] == true

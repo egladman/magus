@@ -128,15 +128,18 @@ func TestJSONLNamesTheLineThatDoesNotDecode(t *testing.T) {
 }
 
 // While the file an older magus kept the store in exists, neither a read nor a write goes on,
-// and the error says how to move it aside.
+// and the error preserves it while older writers may still be active.
 func TestJSONLRefusesWhileTheOldFileExists(t *testing.T) {
 	t.Parallel()
 
 	l := marks(filepath.Join(t.TempDir(), "marks.jsonl"))
 	require.NoError(t, os.WriteFile(l.Old, []byte(`[]`), 0o644))
-	want := "move it aside with `mv " + l.Old + " " + l.Old + ".old`"
 	_, err := l.Load()
-	require.ErrorContains(t, err, want)
-	require.ErrorContains(t, l.Update(t.Context(), set(mark{Key: "a"})), want)
+	require.ErrorIs(t, err, ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
+	require.ErrorIs(t, l.Update(t.Context(), set(mark{Key: "a"})), ErrLegacyStore)
+	raw, err := os.ReadFile(l.Old)
+	require.NoError(t, err)
+	assert.Equal(t, "[]", string(raw))
 	assert.NoFileExists(t, l.Path)
 }

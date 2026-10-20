@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -208,7 +209,11 @@ func readPolicyMarker(path string) (policyMarker, bool) {
 // reportGuardMemo logs a memo that could not be read or written. The guard goes on without
 // it, so the log is how a person learns it was not used.
 func reportGuardMemo(err error) {
-	slog.With(attr.Component("magus")).ErrorContext(context.Background(), "guard memo", attr.Error(err))
+	message := "guard memo"
+	if errors.Is(err, file.ErrLegacyStore) {
+		message = "legacy guard memo: state belongs to an older magus"
+	}
+	slog.With(attr.Component("magus")).ErrorContext(context.Background(), message, attr.Error(err))
 }
 
 // writePolicyMarker appends the marker when it differs from the last one, so a racing hook

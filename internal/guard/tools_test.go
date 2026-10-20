@@ -70,6 +70,29 @@ func toolEnvelope(t *testing.T, session, cwd, tool string, input map[string]any)
 	return string(raw)
 }
 
+func TestCommandFieldsUseTheCallsWorkdir(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		input map[string]any
+		cwd   string
+	}{
+		"command":          {map[string]any{"command": "git stash"}, "/session"},
+		"cmd":              {map[string]any{"cmd": "git stash"}, "/session"},
+		"absolute workdir": {map[string]any{"cmd": "git stash", "workdir": "/worktree"}, "/worktree"},
+		"relative workdir": {map[string]any{"cmd": "git stash", "workdir": "nested"}, filepath.Join("/session", "nested")},
+		"command workdir":  {map[string]any{"command": "git stash", "workdir": "/worktree"}, "/worktree"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/session", "exec_command", tc.input))
+			require.True(t, ok)
+			assert.Equal(t, hookRequest{
+				Value: "git stash", Cwd: tc.cwd,
+				Who: hookAttribution{Session: "s1", Event: "PreToolUse"},
+			}, req)
+		})
+	}
+}
+
 func TestReadLineStandsForTheReadToolsWindow(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -52,6 +53,22 @@ func TestPolicyMarkerThatDoesNotParseIsNotARecord(t *testing.T) {
 
 	_, ok := readPolicyMarker(path)
 	assert.False(t, ok)
+}
+
+func TestPolicyMarkerPreservesLegacyState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), policyMarkerFile)
+	old := filepath.Join(filepath.Dir(path), "guard-policy.json")
+	const held = "{\"digest\":\"older\"}\n"
+	require.NoError(t, os.WriteFile(old, []byte(held), 0o600))
+	_, err := policyMarkerLog(path).Load()
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	_, ok := readPolicyMarker(path)
+	assert.False(t, ok)
+	writePolicyMarker(path, policyMarker{Digest: "new"})
+	assert.NoFileExists(t, path)
+	raw, err := os.ReadFile(old)
+	require.NoError(t, err)
+	assert.Equal(t, held, string(raw))
 }
 
 // sourcesAt builds the lazy approved-id callback a hook hands RecordPolicy, counting how

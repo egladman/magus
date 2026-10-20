@@ -139,6 +139,43 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
 }
 
+func TestVerifyHarnessProbeReportsTheInterpreterFailure(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'cannot load this checkout' >&2\nexit 7\n")
+	writeProbeableHarness(t, w.Root(), "failed-interpreter", probeCommand)
+	result, err := VerifyHarness(untimedProbes(), w.Root(), "failed-interpreter")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Status)
+	assert.Contains(t, result.Reason, "exit status 7")
+	assert.Contains(t, result.Reason, "cannot load this checkout")
+}
+
+func TestVerifyHarnessProbeUsesTheExplicitWorkingDirectory(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\n[ -z \"$CLAUDE_PROJECT_DIR\" ] || exit 9\nprintf deny\n")
+	bin := t.TempDir()
+	shim := filepath.Join(bin, "magus")
+	require.NoError(t, os.WriteFile(shim, []byte("#!/bin/sh\n[ \"$1\" = buzz ] && [ \"$2\" = -C ] && [ \"$3\" = . ] || exit 8\nexec ./magus \"$@\"\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	writeProbeableHarness(t, w.Root(), "explicit-directory", "magus buzz -C . -s magus-command.buzz")
+	result, err := VerifyHarness(untimedProbes(), w.Root(), "explicit-directory")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
+}
+
+func TestVerifyHarnessProbeBoundsMalformedOutputDiagnostics(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf wrong\nprintf '%02000d' 0 >&2\n")
+	writeProbeableHarness(t, w.Root(), "malformed", probeCommand)
+	result, err := VerifyHarness(untimedProbes(), w.Root(), "malformed")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Status)
+	assert.Contains(t, result.Reason, "answered \"wrong\"")
+	assert.Contains(t, result.Reason, "stderr: ...")
+	assert.Less(t, len(result.Reason), 1400)
+}
+
 // TestVerifyHarnessProbeJudgesTheEventUnleased pins the cause of a verify run from inside a
 // leased worker reading uncovered: the probe inherited the worker's lease, whose write
 // boundary denied the synthetic event the probe expects to advise.

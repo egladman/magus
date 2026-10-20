@@ -154,7 +154,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking the call"
           }
         ]
@@ -166,7 +166,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent"
           }
         ]
@@ -177,7 +177,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: briefing the subagent"
           }
         ]
@@ -186,7 +186,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: joining the subagent to its spawn"
           }
         ]
@@ -197,7 +197,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: recording the subagent's context"
           }
         ]
@@ -209,7 +209,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus guard: checking approval"
           }
         ]
@@ -221,7 +221,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
             "statusMessage": "magus: restating this checkout's rules"
           }
         ]
@@ -232,7 +232,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -243,7 +243,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex --tool-rows .codex/magus/tools",
             "statusMessage": "magus: noting the request"
           }
         ]
@@ -253,7 +253,7 @@ shown here:
 }
 ```
 
-Every entry runs the Buzz glue as a plain argv: `magus buzz -s <file>`, with the
+Every entry runs the Buzz glue as a plain argv: `magus buzz -C . -s <file>`, with the
 host and any flags after `--`. It needs neither jq nor a POSIX shell. The harness
 descriptor only merges those opaque fragments into `.codex/hooks.json`; Magus does
 not inject a codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the
@@ -325,7 +325,7 @@ entry to `.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
             "statusMessage": "magus: proofreading the reply"
           }
         ]

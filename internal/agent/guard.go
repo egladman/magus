@@ -228,7 +228,9 @@ var guardInputs = []string{"command", "path", "mcp"}
 // in place of --reports-skills, which a config written for 30 passes on every judging entry.
 // Under that config a 29 copy reports the flag as unsupported and every skill gate stands
 // down.
-const GuardTemplateVersion = 30
+// 31: native shell calls may carry cmd and workdir. The shared command glue selects
+// that directory's binary, and Codex explicitly names its starting directory for handoff.
+const GuardTemplateVersion = 31
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

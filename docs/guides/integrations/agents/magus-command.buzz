@@ -126,7 +126,7 @@
 // passes, leaves an ask to the person, and denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 30
+// magus-guard-template: 31
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -586,7 +586,7 @@ fun main(args: [str]) > void {
     final rawEvent = hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath);
     // A shell command line, which alone has a Codex prompt rule, a background mode and a
     // timeout: a string at the command field of a call that is not over MCP.
-    final commandPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
+    final commandPath = hook\envOr("HOST_EVENT_PATH", fallback: hook\commandPath(event));
     final shellCall = !hook\wholeEvent(event, dotPath: commandPath, toolPath: toolPath);
 
     // Read BEFORE the availability check below, because the notices that check prints
@@ -620,7 +620,9 @@ fun main(args: [str]) > void {
         capabilities.append("--renders-ask");
     }
 
-    final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final cwd = hook\commandDir(event,
+        cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")),
+        commandPath: commandPath, toolPath: toolPath);
     final bin = hook\resolveBin(cwd: cwd, session: session, file: "magus-command.buzz");
 
     // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the

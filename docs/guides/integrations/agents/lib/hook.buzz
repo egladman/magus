@@ -100,6 +100,31 @@ export fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
     return !(value is str);
 }
 
+export fun commandPath(event: any?) > str {
+    if (field(event, dotPath: "tool_input.command") != "") { return "tool_input.command"; }
+    return "tool_input.cmd";
+}
+
+// A shell tool's directory overrides its session directory; an MCP parameter does not.
+export fun commandDir(event: any?, cwd: str, commandPath: str, toolPath: str) > str {
+    if (wholeEvent(event, dotPath: commandPath, toolPath: toolPath)) { return cwd; }
+    final dir = field(event, dotPath: "tool_input.workdir");
+    if (dir == "") { return cwd; }
+    if (path\isAbs(dir) or cwd == "") { return path\clean(dir); }
+    return path\clean("{cwd}/{dir}");
+}
+
+test "native command fields select their own working directory" {
+    final event = {"tool_name": "exec_command", "tool_input": {"cmd": "git stash", "workdir": "/worktree"}};
+    std\assert(commandPath(event) == "tool_input.cmd");
+    std\assert(commandDir(event, cwd: "/session", commandPath: commandPath(event), toolPath: "tool_name") == "/worktree");
+    std\assert(commandPath({"tool_input": {"command": "first", "cmd": "second"}}) == "tool_input.command");
+    final relative = {"tool_input": {"command": "git stash", "workdir": "nested"}};
+    std\assert(commandDir(relative, cwd: "/session", commandPath: commandPath(relative), toolPath: "tool_name") == "/session/nested");
+    final mcp = {"tool_name": "mcp__server__tool", "tool_input": {"cmd": "git stash", "workdir": "/other"}};
+    std\assert(commandDir(mcp, cwd: "/session", commandPath: commandPath(mcp), toolPath: "tool_name") == "/session");
+}
+
 // trimTrailingNewlines matches shell command substitution, which drops every
 // trailing newline from a captured verdict.
 export fun trimTrailingNewlines(s: str) > str {
