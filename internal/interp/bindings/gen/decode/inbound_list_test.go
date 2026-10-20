@@ -42,6 +42,9 @@ var inboundTypes = []inboundType{
 	{Name: "Secret", Zero: spells.Secret{}, Encode: func(v any) vm.Value { return bindgen.ObjectSecret(v.(spells.Secret)) }, Decode: func(v vm.Value) (any, error) { return DecodeSecret(v) }},
 	{Name: "ReleaseCycle", Zero: spells.ReleaseCycle{}, Encode: func(v any) vm.Value { return bindgen.ObjectReleaseCycle(v.(spells.ReleaseCycle)) }, Decode: func(v vm.Value) (any, error) { return DecodeReleaseCycle(v) }},
 	{Name: "Lifecycle", Zero: spells.Lifecycle{}, Encode: func(v any) vm.Value { return bindgen.ObjectLifecycle(v.(spells.Lifecycle)) }, Decode: func(v vm.Value) (any, error) { return DecodeLifecycle(v) }},
+	{Name: "ReviewTarget", Zero: types.ReviewTarget{}, Encode: func(v any) vm.Value { return bindgen.ObjectReviewTarget(v.(types.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return DecodeReviewTarget(v) }},
+	{Name: "ReviewComment", Zero: types.ReviewComment{}, Encode: func(v any) vm.Value { return bindgen.ObjectReviewComment(v.(types.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return DecodeReviewComment(v) }},
+	{Name: "Project", Zero: spells.ProvidedProject{}, Encode: func(v any) vm.Value { return bindgen.ObjectProvidedProject(v.(spells.ProvidedProject)) }, Decode: func(v vm.Value) (any, error) { return DecodeProvidedProject(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{

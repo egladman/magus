@@ -47,6 +47,13 @@ var providerOps = []providerOp{
 	{Family: "cache", Op: "prune", Req: reflect.TypeFor[types.PruneRequest](), Resp: reflect.TypeFor[types.PruneResult](), Optional: true},
 
 	{Family: "lifecycle", Op: "list_lifecycles", Req: reflect.TypeFor[types.LifecycleQuery](), Resp: reflect.TypeFor[[]spells.Lifecycle]()},
+
+	{Family: "review", Op: "find_review", Req: reflect.TypeFor[types.FindReviewRequest](), Resp: reflect.TypeFor[types.ReviewTarget]()},
+	{Family: "review", Op: "publish_review", Req: reflect.TypeFor[types.PublishReviewRequest](), Resp: reflect.TypeFor[types.Ack]()},
+	{Family: "review", Op: "reply_review", Req: reflect.TypeFor[types.ReplyReviewRequest](), Resp: reflect.TypeFor[types.Ack]()},
+	{Family: "review", Op: "review_threads", Req: reflect.TypeFor[types.ReviewRef](), Resp: reflect.TypeFor[[]types.ReviewComment](), Optional: true},
+
+	{Family: "workspace", Op: "list_projects", Req: reflect.TypeFor[types.ProjectQuery](), Resp: reflect.TypeFor[[]spells.ProvidedProject]()},
 }
 
 // providerVar names the generated ProviderOp value of op: the op in Go case, prefixed by

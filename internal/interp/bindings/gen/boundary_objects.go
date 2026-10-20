@@ -2208,6 +2208,58 @@ func ObjectLifecycleQuery(v types.LifecycleQuery) vm.Value {
 	return out
 }
 
+func ObjectFindReviewRequest(v types.FindReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("remote", vm.StrValue(v.Remote))
+	out.MapSet("wantViewer", vm.BoolValue(v.WantViewer))
+	return out
+}
+
+func ObjectReviewDraft(v types.ReviewDraft) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectPublishReviewRequest(v types.PublishReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("summary", vm.StrValue(v.Summary))
+	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
+	itemsDrafts := make([]vm.Value, len(v.Drafts))
+	for indexDrafts := range v.Drafts {
+		itemsDrafts[indexDrafts] = ObjectReviewDraft(v.Drafts[indexDrafts])
+	}
+	out.MapSet("drafts", vm.ListValue(itemsDrafts))
+	return out
+}
+
+func ObjectReplyReviewRequest(v types.ReplyReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("thread", vm.StrValue(v.Thread))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectReviewRef(v types.ReviewRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	return out
+}
+
+func ObjectProjectQuery(v types.ProjectQuery) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StrValue(v.Root))
+	return out
+}
+
 func ObjectCommitAuthor(v types.CommitAuthor) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -4280,5 +4332,58 @@ func ObjectLifecycle(v spells.Lifecycle) vm.Value {
 		itemsCycles[indexCycles] = ObjectReleaseCycle(v.Cycles[indexCycles])
 	}
 	out.MapSet("cycles", vm.ListValue(itemsCycles))
+	return out
+}
+
+func ObjectReviewTarget(v types.ReviewTarget) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("state", vm.StrValue(v.State))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("viewer", vm.StrValue(v.Viewer))
+	return out
+}
+
+func ObjectReviewComment(v types.ReviewComment) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("hunk", vm.IntValue(int64(v.Hunk)))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("body", vm.StrValue(v.Body))
+	out.MapSet("root", vm.StrValue(v.Root))
+	out.MapSet("outdated", vm.BoolValue(v.Outdated))
+	out.MapSet("diffHunk", vm.StrValue(v.DiffHunk))
+	out.MapSet("new", vm.BoolValue(v.New))
+	return out
+}
+
+func ObjectProvidedProject(v spells.ProvidedProject) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("name", vm.StrValue(v.Name))
+	itemsSpells := make([]vm.Value, len(v.Spells))
+	for indexSpells := range v.Spells {
+		itemsSpells[indexSpells] = vm.StrValue(v.Spells[indexSpells])
+	}
+	out.MapSet("spells", vm.ListValue(itemsSpells))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("depends_on", vm.ListValue(itemsDependsOn))
+	itemsSources := make([]vm.Value, len(v.Sources))
+	for indexSources := range v.Sources {
+		itemsSources[indexSources] = vm.StrValue(v.Sources[indexSources])
+	}
+	out.MapSet("sources", vm.ListValue(itemsSources))
+	itemsOutputs := make([]vm.Value, len(v.Outputs))
+	for indexOutputs := range v.Outputs {
+		itemsOutputs[indexOutputs] = vm.StrValue(v.Outputs[indexOutputs])
+	}
+	out.MapSet("outputs", vm.ListValue(itemsOutputs))
 	return out
 }

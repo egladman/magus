@@ -55,9 +55,9 @@ func getThread(h http.Handler, query string) *httptest.ResponseRecorder {
 }
 
 func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
-		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
+	withReviewProvider(t, []types.ReviewComment{
+		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"},
+		{ID: "t2", Root: "t1", Author: "marcus", Body: "see the cache"},
 	})
 	h := NewThreadHandler(ThreadOptions{
 		Workspace: threadWorkspace{patch: threadRoutePatch},
@@ -100,9 +100,9 @@ func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
 // TestThreadRouteAnswersAReplyIdWithTheThreadId. A client holding the id of the reply it just saw
 // arrive gets the thread, and learns the thread id to key it by.
 func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
-		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
+	withReviewProvider(t, []types.ReviewComment{
+		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"},
+		{ID: "t2", Root: "t1", Author: "marcus", Body: "see the cache"},
 	})
 	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
@@ -117,9 +117,7 @@ func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 // TestThreadRouteNamesWhatItCouldNotJoin. A server with no notes wiring must not let an empty
 // anchors section read as "no note anchors this file".
 func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
-	})
+	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t1")
@@ -133,9 +131,7 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 }
 
 func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
-	})
+	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "").Code, "no id")
@@ -161,9 +157,7 @@ func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
 // A misdeclared notes store is a fault the person has to fix, so the route reports it rather than
 // serving a record whose notes read as a clean tree nobody checked.
 func TestThreadRouteReportsAnAnchorsFailure(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
-	})
+	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{
 		Workspace: threadWorkspace{patch: threadRoutePatch},
 		Anchors: func(context.Context, types.Diff) ([]review.AnchorHit, error) {

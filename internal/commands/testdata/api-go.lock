@@ -328,6 +328,7 @@ github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteExecutable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
+github.com/egladman/magus/libs/testkit/register.ReviewSpell func(tb github.com/egladman/magus/libs/testkit.TB, at github.com/egladman/magus/types.ReviewTarget, threads []github.com/egladman/magus/types.ReviewComment) string
 github.com/egladman/magus/libs/testkit/register.Spell func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/std.All func() []Module
 github.com/egladman/magus/std.AllSource func() []SourceModule
@@ -2005,6 +2006,10 @@ github.com/egladman/magus/types.FileStat.Added field int "json:\"added\""
 github.com/egladman/magus/types.FileStat.Binary field bool "json:\"binary\""
 github.com/egladman/magus/types.FileStat.Deleted field int "json:\"deleted\""
 github.com/egladman/magus/types.FileStat.Path field string "json:\"path\""
+github.com/egladman/magus/types.FindReviewRequest type struct
+github.com/egladman/magus/types.FindReviewRequest.Branch field string
+github.com/egladman/magus/types.FindReviewRequest.Remote field string
+github.com/egladman/magus/types.FindReviewRequest.WantViewer field bool
 github.com/egladman/magus/types.Finding type struct
 github.com/egladman/magus/types.Finding.Col field int
 github.com/egladman/magus/types.Finding.Fix field string
@@ -3782,6 +3787,8 @@ github.com/egladman/magus/types.ProjectOptionSince func(key string) (string, boo
 github.com/egladman/magus/types.ProjectOptions var []ProjectOption
 github.com/egladman/magus/types.ProjectOrigin type string
 github.com/egladman/magus/types.ProjectOrigin.Provider method func() (string, bool)
+github.com/egladman/magus/types.ProjectQuery type struct
+github.com/egladman/magus/types.ProjectQuery.Root field string
 github.com/egladman/magus/types.ProjectRef type struct
 github.com/egladman/magus/types.ProjectRef.Dir field string "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.ProjectRef.Display method func() string
@@ -3808,6 +3815,12 @@ github.com/egladman/magus/types.PublicSymbol.ID field string "json:\"id\"       
 github.com/egladman/magus/types.PublicSymbol.Label field string "json:\"label\"               yaml:\"label\""
 github.com/egladman/magus/types.PublicSymbol.Signature field string "json:\"signature,omitempty\" yaml:\"signature,omitempty\""
 github.com/egladman/magus/types.PublicSymbol.UsedBy field int "json:\"used_by\" yaml:\"used_by\""
+github.com/egladman/magus/types.PublishReviewRequest type struct
+github.com/egladman/magus/types.PublishReviewRequest.Drafts field []ReviewDraft
+github.com/egladman/magus/types.PublishReviewRequest.ID field string
+github.com/egladman/magus/types.PublishReviewRequest.Repo field string
+github.com/egladman/magus/types.PublishReviewRequest.Summary field string
+github.com/egladman/magus/types.PublishReviewRequest.Verdict field ReviewVerdict
 github.com/egladman/magus/types.PushLease type struct
 github.com/egladman/magus/types.PushLease.Expected field string
 github.com/egladman/magus/types.PushLease.Ref field string
@@ -3920,6 +3933,11 @@ github.com/egladman/magus/types.RemoteSpellUndeclared const DiagnosticCode = "MG
 github.com/egladman/magus/types.RemovedOption const DiagnosticCode = "MGS1038"
 github.com/egladman/magus/types.RemovedOptions var map[string]string
 github.com/egladman/magus/types.RenamedCharmError func(name string) error
+github.com/egladman/magus/types.ReplyReviewRequest type struct
+github.com/egladman/magus/types.ReplyReviewRequest.Body field string
+github.com/egladman/magus/types.ReplyReviewRequest.ID field string
+github.com/egladman/magus/types.ReplyReviewRequest.Repo field string
+github.com/egladman/magus/types.ReplyReviewRequest.Thread field string
 github.com/egladman/magus/types.RequestInvalid const DiagnosticCode = "MGS9023"
 github.com/egladman/magus/types.ReservedCharmDoc func(name string) string
 github.com/egladman/magus/types.ReservedCharms func() []string
@@ -3954,11 +3972,18 @@ github.com/egladman/magus/types.ReviewComment.New field bool "json:\"new,omitemp
 github.com/egladman/magus/types.ReviewComment.Outdated field bool "json:\"outdated,omitempty\" yaml:\"outdated,omitempty\""
 github.com/egladman/magus/types.ReviewComment.Path field string "json:\"path\" yaml:\"path\""
 github.com/egladman/magus/types.ReviewComment.Root field string "json:\"root,omitempty\" yaml:\"root,omitempty\""
+github.com/egladman/magus/types.ReviewDraft type struct
+github.com/egladman/magus/types.ReviewDraft.Body field string
+github.com/egladman/magus/types.ReviewDraft.Line field int
+github.com/egladman/magus/types.ReviewDraft.Path field string
 github.com/egladman/magus/types.ReviewHostFailed const DiagnosticCode = "MGS9029"
 github.com/egladman/magus/types.ReviewOpMissing const DiagnosticCode = "MGS1102"
 github.com/egladman/magus/types.ReviewOrigin type struct
 github.com/egladman/magus/types.ReviewOrigin.Branch field string "json:\"branch,omitempty\" yaml:\"branch,omitempty\""
 github.com/egladman/magus/types.ReviewOrigin.Remote field string "json:\"remote,omitempty\" yaml:\"remote,omitempty\""
+github.com/egladman/magus/types.ReviewRef type struct
+github.com/egladman/magus/types.ReviewRef.ID field string
+github.com/egladman/magus/types.ReviewRef.Repo field string
 github.com/egladman/magus/types.ReviewTarget type struct
 github.com/egladman/magus/types.ReviewTarget.AllowedVerdicts method func() []ReviewVerdict
 github.com/egladman/magus/types.ReviewTarget.Author field string "json:\"author,omitempty\" yaml:\"author,omitempty\""

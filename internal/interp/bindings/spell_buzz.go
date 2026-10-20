@@ -162,8 +162,8 @@ func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Contex
 // reads the inputs magus copies into it from req.Params, then returns its result,
 // marshaled back to a Go value.
 //
-// TODO: only the harness, review and workspace-provider ops still use this; once they
-// move onto CallOp, delete it and newBuzzSpellInvoker's fallback with it.
+// TODO: only the harness_* ops still use this; step 3 of the typed spell contract replaces
+// them with typed mgs_ functions, and then this and newBuzzSpellInvoker's fallback go.
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeRequest) (any, error) {
 	sess, err := execSpellSource(ctx, src, fmt.Sprintf("spell handler op %q", fn))
 	if err != nil {

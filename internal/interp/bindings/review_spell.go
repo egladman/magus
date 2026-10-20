@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -40,20 +41,18 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	// change while a server runs, so the second call is paid once and the cache spares every
 	// lookup after it. A provider that answers nothing leaves it empty, which reads as unknown.
 	want := cachedViewer()
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.FindReviewContract,
-		Params: map[string]any{"branch": branch, "remote": remote, "want_viewer": want == ""},
-	})
-	if err != nil {
-		return types.ReviewTarget{Reason: "review provider: " + err.Error()}
-	}
-	at, err := decodeReviewTarget(resp.Data)
+	op := providerops.FindReview
+	at, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""),
+		types.FindReviewRequest{Branch: branch, Remote: remote, WantViewer: want == ""})
 	if err != nil {
 		// A malformed answer becomes a REASON rather than a zero target, because those two
 		// render identically and mean opposite things. Silently emptying `id` would say
 		// "no pull request for this branch", sending the reader to look at their branch when
 		// the fault is in their spell.
-		return types.ReviewTarget{Reason: err.Error()}
+		return types.ReviewTarget{Reason: "review provider: " + err.Error()}
+	}
+	if !exported {
+		return types.ReviewTarget{Reason: "review provider: the spell does not export " + op.Name}
 	}
 	// Remember what the provider named, or reuse what it named earlier. Either way the answer
 	// carries it, so a caller never has to know which lookup paid for it.
@@ -89,35 +88,6 @@ func rememberViewer(name string) {
 	viewer.name = name
 }
 
-func decodeReviewTarget(data any) (types.ReviewTarget, error) {
-	where := "review provider: " + spells.FindReviewContract
-	m, ok := data.(map[string]any)
-	if !ok {
-		return types.ReviewTarget{}, fmt.Errorf("%s returned %T, want a record", where, data)
-	}
-	var at types.ReviewTarget
-	var err error
-	if at.ID, err = strField(m, "id", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	if at.Repo, err = strField(m, "repo", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	if at.Reason, err = strField(m, "reason", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	if at.State, err = strField(m, "state", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	if at.Author, err = strField(m, "author", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	if at.Viewer, err = strField(m, "viewer", where); err != nil {
-		return types.ReviewTarget{}, err
-	}
-	return at, nil
-}
-
 // PublishReview sends drafts as ONE review.
 //
 // The batch is the unit for the reason spells/review.go gives: self-review is a pass, and
@@ -140,39 +110,30 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, w
 		return "", errNoReviewProvider
 	}
 	verdict := at.PermittedVerdict(want)
-	rows := make([]any, 0, len(drafts))
+	rows := make([]types.ReviewDraft, 0, len(drafts))
 	for _, d := range drafts {
-		rows = append(rows, map[string]any{
-			"path": d.Path,
-			// The hunk index is not a line number, and the spell needs a line. Carried as-is so
-			// the spell can say so plainly rather than inventing a position: a comment anchored
-			// to the wrong line is worse than one the host rejected.
-			"line": d.Line,
-			"body": d.Body,
-		})
+		// Line, never the hunk index, which means nothing outside this changeset. The spell
+		// drops a zero Line: a comment on the wrong line is worse than one the host rejected.
+		rows = append(rows, types.ReviewDraft{Path: d.Path, Line: d.Line, Body: d.Body})
 	}
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.PublishReviewContract,
-		Params: map[string]any{
-			"repo": at.Repo, "id": at.ID, "summary": summary, "drafts": rows,
-			// The RESOLVED verdict, never the requested one: a spell is handed a decision that
-			// has already been checked, so it has nothing to get wrong.
-			"verdict": string(verdict),
-		},
+	op := providerops.PublishReview
+	ack, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""), types.PublishReviewRequest{
+		Repo: at.Repo, ID: at.ID, Summary: summary, Drafts: rows,
+		// The RESOLVED verdict, never the requested one: a spell is handed a decision that
+		// has already been checked, so it has nothing to get wrong.
+		Verdict: verdict,
 	})
 	if err != nil {
 		return "", err
 	}
-	// An absent op answers nil without failing, which is the read paths' "this provider lacks
-	// the capability" and cannot mean the same thing here: the caller marks every draft
-	// published on a nil error, and publish considers only unpublished drafts, so a silent
-	// no-op costs the remarks permanently.
-	if resp.Data == nil {
-		// Coded: a WRITE to an op nobody implemented would otherwise report success and lose
-		// the remarks permanently, which is the asymmetry MGS1102 documents.
+	// Coded: the caller marks every draft published on a nil error, so a write to an op
+	// nobody implemented would lose the remarks permanently, the asymmetry MGS1102 documents.
+	if !exported {
 		return "", types.DiagnosticErrorf(types.ReviewOpMissing,
-			"the review provider's %s is not implemented by this spell, so nothing was sent",
-			spells.PublishReviewContract)
+			"the review provider's %s is not implemented by this spell, so nothing was sent", op.Name)
+	}
+	if !ack.OK {
+		return "", fmt.Errorf("review provider: %s did not accept the review", op.Name)
 	}
 	// What came back is not read beyond that. A review posts as ONE request, so a per-draft
 	// count could only restate the length of what was sent, which the caller already has. See
@@ -191,16 +152,18 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 	if !ok {
 		return errNoReviewProvider
 	}
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.ReplyReviewContract,
-		Params: map[string]any{"repo": at.Repo, "id": at.ID, "thread": thread, "body": body},
-	})
+	op := providerops.ReplyReview
+	ack, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""),
+		types.ReplyReviewRequest{Repo: at.Repo, ID: at.ID, Thread: thread, Body: body})
 	if err != nil {
 		return err
 	}
-	if sent, _ := resp.Data.(bool); !sent {
-		return fmt.Errorf("review provider: %s did not accept a reply to thread %s",
-			spells.ReplyReviewContract, thread)
+	if !exported {
+		return types.DiagnosticErrorf(types.ReviewOpMissing,
+			"the review provider's %s is not implemented by this spell, so nothing was sent", op.Name)
+	}
+	if !ack.OK {
+		return fmt.Errorf("review provider: %s did not accept a reply to thread %s", op.Name, thread)
 	}
 	return nil
 }
@@ -212,7 +175,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 // that changeset is not the stranger's to cut short.
 //
 // at is not Open when there is nothing to read, and at.Reason says why. err is
-// [ReviewComments]'s, with the comments that did decode beside it.
+// [ReviewComments]'s.
 func OriginReviewComments(ctx context.Context, from types.ReviewOrigin, bound time.Duration) (at types.ReviewTarget, comments []types.ReviewComment, err error) {
 	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
@@ -231,10 +194,9 @@ func OriginReviewComments(ctx context.Context, from types.ReviewOrigin, bound ti
 // working when it is not. Nil error, empty list; ReviewCommentsReached is for the caller that
 // cannot afford to lose that distinction.
 //
-// A MALFORMED comment is different, and is reported. Dropping one leaves the client saying a
-// colleague said nothing, which is the single worst thing a review reader can be told, and
-// the comments that did decode still come back, so the caller shows what it has and says what
-// it could not read.
+// A MALFORMED answer is different, and is reported. The list decodes strictly, so one bad
+// comment fails the whole answer and none come back: a provider bug shows as an error,
+// never as a review a colleague said nothing on.
 func ReviewComments(ctx context.Context, at types.ReviewTarget) ([]types.ReviewComment, error) {
 	comments, _, err := ReviewCommentsReached(ctx, at)
 	return comments, err
@@ -255,80 +217,25 @@ func ReviewCommentsReached(ctx context.Context, at types.ReviewTarget) (comments
 	if !ok || !at.Open() {
 		return nil, true, nil
 	}
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.ReviewThreadsContract,
-		Params: map[string]any{"repo": at.Repo, "id": at.ID},
-	})
+	op := providerops.ReviewThreads
+	comments, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""), types.ReviewRef{Repo: at.Repo, ID: at.ID})
 	if err != nil {
+		if errors.Is(err, errMalformedAnswer) {
+			return nil, true, err
+		}
 		//nolint:nilerr // an unreachable host is not a failure of this call; see the doc above.
 		return nil, false, nil
 	}
-	where := "review provider: " + spells.ReviewThreadsContract
-	if resp.Data == nil {
-		// Absent reads as the zero value, not as an error: the posture spell_decode.go states
-		// for this whole layer. A spell whose review has no threads returns nothing, and
-		// calling that malformed would put a provider bug on the screen for an empty review.
+	if !exported {
 		return nil, true, nil
 	}
-	rows, ok := resp.Data.([]any)
-	if !ok {
-		return nil, true, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
+	for i := range comments {
+		// UNPLACED until something places it. The zero value is a valid hunk index, so leaving
+		// it would render every comment against the first hunk of its file on any path that
+		// does not reach changeset.PlaceThreads.
+		comments[i].Hunk = -1
 	}
-	out := make([]types.ReviewComment, 0, len(rows))
-	// Every row is attempted. Returning at the first bad one would drop the comments AFTER it,
-	// so a provider with one malformed remark near the top would render as a review nobody had
-	// commented on, which is the failure this whole path is written to avoid.
-	var bad []error
-	for i, r := range rows {
-		c, derr := decodeReviewComment(r, fmt.Sprintf("%s[%d]", where, i))
-		if derr != nil {
-			bad = append(bad, derr)
-			continue
-		}
-		out = append(out, c)
-	}
-	return out, true, errors.Join(bad...)
-}
-
-func decodeReviewComment(row any, where string) (types.ReviewComment, error) {
-	m, ok := row.(map[string]any)
-	if !ok {
-		return types.ReviewComment{}, fmt.Errorf("%s is %T, want a record", where, row)
-	}
-	// UNPLACED until something places it. The zero value is a valid hunk index, so leaving it
-	// would render every comment against the first hunk of its file (the wrong code, stated
-	// confidently) on any path that does not reach changeset.PlaceThreads.
-	c := types.ReviewComment{Hunk: -1}
-	var err error
-	if c.ID, err = strField(m, "id", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.Path, err = strField(m, "path", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.Line, err = intField(m, "line", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.Author, err = strField(m, "author", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.Body, err = strField(m, "body", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	// compat(until: the spell contract in docs/concepts/review.md names root, outdated and
-	// diff_hunk as required and no review spell in the registry returns a record without them):
-	// a spell written before they existed still decodes, and absent reads as empty and false,
-	// which is "a top-level comment on a live line".
-	if c.Root, err = strField(m, "root", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.DiffHunk, err = strField(m, "diff_hunk", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	if c.Outdated, err = boolField(m, "outdated", where); err != nil {
-		return types.ReviewComment{}, err
-	}
-	return c, nil
+	return comments, true, nil
 }
 
 func reviewDriver() (spells.Driver, bool) {

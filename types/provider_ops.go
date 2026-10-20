@@ -84,3 +84,49 @@ type PruneResult struct {
 type LifecycleQuery struct {
 	Keys []string
 }
+
+// FindReviewRequest is what find_review is asked: the branch and remote magus resolved, so
+// the spell never rederives them. WantViewer asks the provider to also name who the
+// credential belongs to, which magus sets only while it does not know yet.
+type FindReviewRequest struct {
+	Branch     string
+	Remote     string
+	WantViewer bool
+}
+
+// ReviewDraft is one remark publish_review places inline, at a path and a new-side line.
+// The spell drops a draft with no line rather than guessing a position.
+type ReviewDraft struct {
+	Path string
+	Line int
+	Body string
+}
+
+// PublishReviewRequest sends a batch of drafts as one review. Verdict is the one magus
+// already permitted, never the one the person asked for.
+type PublishReviewRequest struct {
+	Repo    string
+	ID      string
+	Summary string
+	Verdict ReviewVerdict
+	Drafts  []ReviewDraft
+}
+
+// ReplyReviewRequest answers one existing thread of a review.
+type ReplyReviewRequest struct {
+	Repo   string
+	ID     string
+	Thread string
+	Body   string
+}
+
+// ReviewRef names one review in the provider's own terms.
+type ReviewRef struct {
+	Repo string
+	ID   string
+}
+
+// ProjectQuery is what list_projects is asked: the workspace root it reports projects under.
+type ProjectQuery struct {
+	Root string
+}

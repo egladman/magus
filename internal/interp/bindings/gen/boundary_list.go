@@ -100,6 +100,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileInfo", Zero: types.FileInfo{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileInfo(v.(types.FileInfo)) }},
 	{Name: "FileReport", Zero: types.FileReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileReport(v.(types.FileReport)) }},
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
+	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
@@ -222,10 +223,14 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
 	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt)) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
+	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }},
 	{Name: "Projects", Zero: types.ProjectsOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectsOutput(v.(types.ProjectsOutput)) }},
 	{Name: "PruneRequest", Zero: types.PruneRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPruneRequest(v.(types.PruneRequest)) }},
 	{Name: "PublicSymbol", Zero: types.PublicSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPublicSymbol(v.(types.PublicSymbol)) }},
+	{Name: "PublishReviewRequest", Zero: types.PublishReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectPublishReviewRequest(v.(types.PublishReviewRequest))
+	}},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
 	}},
@@ -236,7 +241,12 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRegionChange(v.(types.RegionChange)) }},
 	{Name: "ReleaseStage", Zero: types.ReleaseStage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReleaseStage(v.(types.ReleaseStage)) }},
+	{Name: "ReplyReviewRequest", Zero: types.ReplyReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectReplyReviewRequest(v.(types.ReplyReviewRequest))
+	}},
 	{Name: "RetryVerdict", Zero: types.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRetryVerdict(v.(types.RetryVerdict)) }},
+	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
+	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc)) }},
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(types.StatusRun), enums) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},

@@ -278,8 +278,7 @@ never shifts another's indices.
 A provider exports **provider ops** instead: `fun <op>(target: Target, req: <Req>) > <Resp>`,
 each request and response an object from `magus/spell`. They return data rather than a
 `Command`, and the signature is checked when the spell loads
-([MGS1051](../reference/codes/magusfile/MGS1051.md)). The review ops still take the older
-`(target: Target, cb: fun(any))` form.
+([MGS1051](../reference/codes/magusfile/MGS1051.md)).
 
 Four subsystems accept one, and each detects its ops by name:
 

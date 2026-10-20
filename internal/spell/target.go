@@ -201,6 +201,14 @@ var LifecycleSource string
 //go:generate go run ../../cmd/magus-utils types -type PruneRequest -out gen/types/prunerequest.buzz
 //go:generate go run ../../cmd/magus-utils types -type PruneResult -out gen/types/pruneresult.buzz
 //go:generate go run ../../cmd/magus-utils types -type LifecycleQuery -out gen/types/lifecyclequery.buzz
+//go:generate go run ../../cmd/magus-utils types -type FindReviewRequest -out gen/types/findreviewrequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type ReviewDraft -out gen/types/reviewdraft.buzz
+//go:generate go run ../../cmd/magus-utils types -type PublishReviewRequest -out gen/types/publishreviewrequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type ReplyReviewRequest -out gen/types/replyreviewrequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type ReviewRef -out gen/types/reviewref.buzz
+//go:generate go run ../../cmd/magus-utils types -type ReviewTarget -out gen/types/reviewtarget.buzz
+//go:generate go run ../../cmd/magus-utils types -type ReviewComment -out gen/types/reviewcomment.buzz
+//go:generate go run ../../cmd/magus-utils types -type ProjectQuery -out gen/types/projectquery.buzz
 var (
 	//go:embed gen/types/empty.buzz
 	emptySource string
@@ -226,6 +234,22 @@ var (
 	pruneResultSource string
 	//go:embed gen/types/lifecyclequery.buzz
 	lifecycleQuerySource string
+	//go:embed gen/types/findreviewrequest.buzz
+	findReviewRequestSource string
+	//go:embed gen/types/reviewdraft.buzz
+	reviewDraftSource string
+	//go:embed gen/types/publishreviewrequest.buzz
+	publishReviewRequestSource string
+	//go:embed gen/types/replyreviewrequest.buzz
+	replyReviewRequestSource string
+	//go:embed gen/types/reviewref.buzz
+	reviewRefSource string
+	//go:embed gen/types/reviewtarget.buzz
+	reviewTargetSource string
+	//go:embed gen/types/reviewcomment.buzz
+	reviewCommentSource string
+	//go:embed gen/types/projectquery.buzz
+	projectQuerySource string
 )
 
 // LintModulePath is the import path of the lint value-types module: the Finding a Buzz
@@ -261,4 +285,6 @@ var CharmModuleSource string
 // apart.
 var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
-	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource}, "\n")
+	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
+	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
+	reviewTargetSource, reviewCommentSource, projectQuerySource}, "\n")

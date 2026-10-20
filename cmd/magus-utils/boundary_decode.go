@@ -56,6 +56,9 @@ var inboundTypes = []string{
 	"Secret",
 	"ReleaseCycle",
 	"Lifecycle",
+	"ReviewTarget",
+	"ReviewComment",
+	"Project",
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.

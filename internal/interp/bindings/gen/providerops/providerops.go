@@ -52,6 +52,21 @@ var Prune = bindgen.ProviderOp[types.PruneRequest, types.PruneResult]{Family: "c
 // ListLifecycles is the lifecycle provider's required list_lifecycles op.
 var ListLifecycles = bindgen.ProviderOp[types.LifecycleQuery, []spells.Lifecycle]{Family: "lifecycle", Name: "list_lifecycles", Encode: bindgen.ObjectLifecycleQuery, Decode: decoded[[]spells.Lifecycle](12)}
 
+// FindReview is the review provider's required find_review op.
+var FindReview = bindgen.ProviderOp[types.FindReviewRequest, types.ReviewTarget]{Family: "review", Name: "find_review", Encode: bindgen.ObjectFindReviewRequest, Decode: decoded[types.ReviewTarget](13)}
+
+// PublishReview is the review provider's required publish_review op.
+var PublishReview = bindgen.ProviderOp[types.PublishReviewRequest, types.Ack]{Family: "review", Name: "publish_review", Encode: bindgen.ObjectPublishReviewRequest, Decode: decoded[types.Ack](14)}
+
+// ReplyReview is the review provider's required reply_review op.
+var ReplyReview = bindgen.ProviderOp[types.ReplyReviewRequest, types.Ack]{Family: "review", Name: "reply_review", Encode: bindgen.ObjectReplyReviewRequest, Decode: decoded[types.Ack](15)}
+
+// ReviewThreads is the review provider's optional review_threads op.
+var ReviewThreads = bindgen.ProviderOp[types.ReviewRef, []types.ReviewComment]{Family: "review", Name: "review_threads", Encode: bindgen.ObjectReviewRef, Decode: decoded[[]types.ReviewComment](16)}
+
+// ListProjects is the workspace provider's required list_projects op.
+var ListProjects = bindgen.ProviderOp[types.ProjectQuery, []spells.ProvidedProject]{Family: "workspace", Name: "list_projects", Encode: bindgen.ObjectProjectQuery, Decode: decoded[[]spells.ProvidedProject](17)}
+
 // decoded reads row i of decode.ProviderFuncs as Resp. The row decodes into exactly
 // Resp, so the assertion holds by construction.
 func decoded[Resp any](i int) func(vm.Value) (Resp, error) {

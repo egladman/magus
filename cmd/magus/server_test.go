@@ -319,18 +319,11 @@ func TestEnsureConsoleServerReturnsWithoutSpawning(t *testing.T) {
 	require.NoError(t, ensureConsoleServer(t.Context(), addr, t.TempDir()))
 }
 
-// checkReviewWorkspace opens a throwaway workspace and wires a review provider whose
-// review_threads answer the caller chooses, so the job can be driven without a forge.
-//
-// The provider is asked for a MERGED review, since the merged report is the job's whole output
-// and the branch under test decides whether it is written.
-func checkReviewWorkspace(t *testing.T, threads func() (any, error), opts ...magus.Option) (context.Context, string, *magus.Magus) {
-	t.Helper()
-	return checkReviewWorkspaceIn(t, "merged", threads, opts...)
-}
-
-// checkReviewWorkspaceIn is checkReviewWorkspace for a review the host reports in state.
-func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, error), opts ...magus.Option) (context.Context, string, *magus.Magus) {
+// checkReviewWorkspace opens a throwaway workspace and selects the review provider registered
+// as provider, so the job can be driven without a forge. Most cases ask for a MERGED review,
+// since the merged report is the job's whole output and the branch under test decides whether
+// it is written.
+func checkReviewWorkspace(t *testing.T, provider string, opts ...magus.Option) (context.Context, string, *magus.Magus) {
 	t.Helper()
 	// The job parses its own flags, and that binding writes defaults into the global config.
 	saved := globalCfg
@@ -345,22 +338,31 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	m, err := magus.Open(context.Background(), root, append(opts, magus.WithSpawnRule(magus.TierCeiling))...)
 	require.NoError(t, err, "fixture workspace must open")
 
-	name := register.Spell(t, "fake-job-review",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme", "state": state}, nil
-			case spells.ReviewThreadsContract:
-				return threads()
-			default:
-				return map[string]any{}, nil
-			}
-		}))
 	prev := bindings.ReviewProvider()
-	bindings.SetReviewProvider(name)
+	bindings.SetReviewProvider(provider)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 
 	return withMagus(context.Background(), m), root, m
+}
+
+// reviewIn registers a provider whose review 482 on acme/acme is in state and holds threads.
+func reviewIn(t *testing.T, state string, threads ...types.ReviewComment) string {
+	t.Helper()
+	return register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme", State: state}, threads)
+}
+
+// mergedReviewAnswering registers a provider whose merged review answers review_threads with
+// body, for the answers ReviewSpell cannot give: a malformed row, a throw, a call that waits.
+func mergedReviewAnswering(t *testing.T, body string) string {
+	t.Helper()
+	return register.Spell(t, "fake-job-review", spells.WithFuncSource(`import "magus/spell";
+import "http";
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme", state = "merged" };
+}
+export fun review_threads(target: Target, req: ReviewRef) > any !> any {
+`+body+`
+}`))
 }
 
 // mergedReviewEvents returns the review.merged events the job left on the trail.
@@ -377,17 +379,12 @@ func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
 	return out
 }
 
-// One unreadable remark must not blank the merge report. The threads that decoded are in hand,
-// and the job's error is a MALFORMED record rather than an unreachable host; reading it as the
-// latter meant a single bad row suppressed the only notice this merge would ever get, and the
-// conversation was then gone with the branch.
+// One unreadable remark must not blank the merge report. The job's error is a MALFORMED record
+// rather than an unreachable host; reading it as the latter meant a single bad row suppressed
+// the only notice this merge would ever get, and the conversation was then gone with the branch.
 func TestCheckReviewReportsAMergeDespiteAMalformedRemark(t *testing.T) {
-	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
-		return []any{
-			map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
-			map[string]any{"id": "t2", "line": "not a number"},
-		}, nil
-	})
+	ctx, root, m := checkReviewWorkspace(t, mergedReviewAnswering(t, `
+    return [{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}, {"id": "t2", "line": "not a number"}];`))
 	// The watermark is the opt-in: without it the job asks the forge nothing at all. Marking the
 	// readable thread seen also keeps review.said out of the way of the assertion below.
 	reader := changeset.NewStore(m.CacheDir())
@@ -399,15 +396,16 @@ func TestCheckReviewReportsAMergeDespiteAMalformedRemark(t *testing.T) {
 	merged := mergedReviewEvents(t, m.CacheDir())
 	require.Len(t, merged, 1, "a malformed remark must not suppress the merge report")
 	assert.Contains(t, merged[0].Preview, "acme/acme")
+	assert.Contains(t, merged[0].Preview, "unknown", "the count is not guessed")
+	assert.Contains(t, merged[0].Preview, "[1].line", "and the decode failure is named")
 }
 
 // A forge that could not be reached says nothing rather than reporting a count it derived from
 // an empty list. The drafts here are real and local, so the pre-fix reading emitted "1 remark"
 // about a review whose whole conversation was unread.
 func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
-	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
-		return nil, errors.New("dial: connection refused")
-	})
+	ctx, root, m := checkReviewWorkspace(t, mergedReviewAnswering(t, `
+    throw "dial: connection refused";`))
 	reader := changeset.NewStore(m.CacheDir())
 	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
 	reader.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
@@ -440,7 +438,7 @@ func newMergeWhileReadingRecorder(t *testing.T) *mergeWhileReadingRecorder {
 // remarks, no drafts, no seen threads. The mark is the only trace that a review was opened here.
 func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
 	started := time.Now().Add(-90 * time.Second)
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
 	require.NoError(t, err)
@@ -464,7 +462,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 // pull request, and counting the old mark would put a reader under a merge they never started on.
 func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
@@ -480,12 +478,18 @@ func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 // survives and the metric, which belongs to whoever clears the mark, is not counted.
 func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
+	// The provider's review_threads calls this host before answering, which is where the
+	// reader sets a mark on another review mid-job.
 	var store *changeset.Store
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) {
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, err := store.SetReading(context.Background(), types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
-		require.NoError(t, err)
-		return []any{}, nil
-	}, workspace.WithTelemetryProvider(rec))
+		assert.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(host.Close)
+	ctx, _, m := checkReviewWorkspace(t, mergedReviewAnswering(t, `
+    http\get("`+host.URL+`");
+    return [<ReviewComment>];`), workspace.WithTelemetryProvider(rec))
 	store = changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-time.Minute))
 	require.NoError(t, err)
@@ -501,7 +505,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 // asking the forge, and it is cleared.
 func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-changeset.ReadingTTL-time.Minute))
 	require.NoError(t, err)
@@ -516,7 +520,7 @@ func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 // A review closed without merging will never merge, so the mark that was waiting on it goes.
 func TestCheckReviewClearsTheMarkOfAReviewClosedUnmerged(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspaceIn(t, "closed", func() (any, error) { return []any{}, nil }, workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "closed"),workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
@@ -572,9 +576,9 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 // costs the metric nothing: the two facts are independent.
 func TestCheckReviewCountsNoReadingWhenNobodyWasReading(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
-		return []any{map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}}, nil
-	}, workspace.WithTelemetryProvider(rec))
+	ctx, root, m := checkReviewWorkspace(t,
+		reviewIn(t, "merged", types.ReviewComment{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}),
+		workspace.WithTelemetryProvider(rec))
 	reader := changeset.NewStore(m.CacheDir())
 	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
 	reader.MarkCommentsSeen(root, []string{"t1"})

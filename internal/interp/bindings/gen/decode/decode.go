@@ -1392,6 +1392,201 @@ func decodeLifecycle(v vm.Value, path string) (spells.Lifecycle, error) {
 	return out, nil
 }
 
+// DecodeReviewTarget decodes a Buzz ReviewTarget, an object instance or a map, into a types.ReviewTarget.
+func DecodeReviewTarget(v vm.Value) (types.ReviewTarget, error) {
+	return decodeReviewTarget(v, "reviewTarget")
+}
+
+func decodeReviewTarget(v vm.Value, path string) (types.ReviewTarget, error) {
+	var out types.ReviewTarget
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ReviewTarget", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "repo":
+			sRepo, err := decodeStr(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "reason":
+			sReason, err := decodeStr(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		case "state":
+			sState, err := decodeStr(item, path+".state")
+			if err != nil {
+				return out, err
+			}
+			out.State = sState
+		case "author":
+			sAuthor, err := decodeStr(item, path+".author")
+			if err != nil {
+				return out, err
+			}
+			out.Author = sAuthor
+		case "viewer":
+			sViewer, err := decodeStr(item, path+".viewer")
+			if err != nil {
+				return out, err
+			}
+			out.Viewer = sViewer
+		default:
+			return out, unknownMember(path, "ReviewTarget", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeReviewComment decodes a Buzz ReviewComment, an object instance or a map, into a types.ReviewComment.
+func DecodeReviewComment(v vm.Value) (types.ReviewComment, error) {
+	return decodeReviewComment(v, "reviewComment")
+}
+
+func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
+	var out types.ReviewComment
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ReviewComment", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "line":
+			nLine, err := decodeInt(item, path+".line")
+			if err != nil {
+				return out, err
+			}
+			out.Line = int(nLine)
+		case "hunk":
+			nHunk, err := decodeInt(item, path+".hunk")
+			if err != nil {
+				return out, err
+			}
+			out.Hunk = int(nHunk)
+		case "author":
+			sAuthor, err := decodeStr(item, path+".author")
+			if err != nil {
+				return out, err
+			}
+			out.Author = sAuthor
+		case "body":
+			sBody, err := decodeStr(item, path+".body")
+			if err != nil {
+				return out, err
+			}
+			out.Body = sBody
+		case "root":
+			sRoot, err := decodeStr(item, path+".root")
+			if err != nil {
+				return out, err
+			}
+			out.Root = sRoot
+		case "outdated":
+			bOutdated, err := decodeBool(item, path+".outdated")
+			if err != nil {
+				return out, err
+			}
+			out.Outdated = bOutdated
+		case "diffHunk":
+			sDiffHunk, err := decodeStr(item, path+".diffHunk")
+			if err != nil {
+				return out, err
+			}
+			out.DiffHunk = sDiffHunk
+		case "new":
+			bNew, err := decodeBool(item, path+".new")
+			if err != nil {
+				return out, err
+			}
+			out.New = bNew
+		default:
+			return out, unknownMember(path, "ReviewComment", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeProvidedProject decodes a Buzz Project, an object instance or a map, into a spells.ProvidedProject.
+func DecodeProvidedProject(v vm.Value) (spells.ProvidedProject, error) {
+	return decodeProvidedProject(v, "project")
+}
+
+func decodeProvidedProject(v vm.Value, path string) (spells.ProvidedProject, error) {
+	var out spells.ProvidedProject
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Project", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "spells":
+			strsSpells, err := decodeStrs(item, path+".spells")
+			if err != nil {
+				return out, err
+			}
+			out.Spells = strsSpells
+		case "depends_on":
+			strsDependsOn, err := decodeStrs(item, path+".depends_on")
+			if err != nil {
+				return out, err
+			}
+			out.DependsOn = strsDependsOn
+		case "sources":
+			strsSources, err := decodeStrs(item, path+".sources")
+			if err != nil {
+				return out, err
+			}
+			out.Sources = strsSources
+		case "outputs":
+			strsOutputs, err := decodeStrs(item, path+".outputs")
+			if err != nil {
+				return out, err
+			}
+			out.Outputs = strsOutputs
+		default:
+			return out, unknownMember(path, "Project", key)
+		}
+	}
+	return out, nil
+}
+
 // ProviderFuncs is every provider op a spell may export, one row per
 // cmd/magus-utils providerOps entry and in its order. Required is false on every row:
 // which ops a provider needs is its family's to say.
@@ -1409,6 +1604,11 @@ var ProviderFuncs = []ContractFunc{
 	{Name: "put_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPutArtifact(v) }},
 	{Name: "prune", Returns: "PruneResult", Params: "target: Target, req: PruneRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPrune(v) }},
 	{Name: "list_lifecycles", Returns: "[Lifecycle]", Params: "target: Target, req: LifecycleQuery", Decode: func(v vm.Value) (any, error) { return decodeProviderListLifecycles(v) }},
+	{Name: "find_review", Returns: "ReviewTarget", Params: "target: Target, req: FindReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderFindReview(v) }},
+	{Name: "publish_review", Returns: "Ack", Params: "target: Target, req: PublishReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPublishReview(v) }},
+	{Name: "reply_review", Returns: "Ack", Params: "target: Target, req: ReplyReviewRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderReplyReview(v) }},
+	{Name: "review_threads", Returns: "[ReviewComment]", Params: "target: Target, req: ReviewRef", Decode: func(v vm.Value) (any, error) { return decodeProviderReviewThreads(v) }},
+	{Name: "list_projects", Returns: "[Project]", Params: "target: Target, req: ProjectQuery", Decode: func(v vm.Value) (any, error) { return decodeProviderListProjects(v) }},
 }
 
 func decodeProviderResolveSecret(v vm.Value) (spells.Secret, error) {
@@ -1547,6 +1747,76 @@ func decodeProviderListLifecycles(v vm.Value) ([]spells.Lifecycle, error) {
 			itemsListLifecycles[indexListLifecycles] = xListLifecyclesItem
 		}
 		out = itemsListLifecycles
+	}
+	return out, nil
+}
+
+func decodeProviderFindReview(v vm.Value) (types.ReviewTarget, error) {
+	var out types.ReviewTarget
+	xFindReview, err := decodeReviewTarget(v, "find_review")
+	if err != nil {
+		return out, err
+	}
+	out = xFindReview
+	return out, nil
+}
+
+func decodeProviderPublishReview(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xPublishReview, err := decodeAck(v, "publish_review")
+	if err != nil {
+		return out, err
+	}
+	out = xPublishReview
+	return out, nil
+}
+
+func decodeProviderReplyReview(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xReplyReview, err := decodeAck(v, "reply_review")
+	if err != nil {
+		return out, err
+	}
+	out = xReplyReview
+	return out, nil
+}
+
+func decodeProviderReviewThreads(v vm.Value) ([]types.ReviewComment, error) {
+	var out []types.ReviewComment
+	listReviewThreads, err := decodeList(v, "review_threads", "[ReviewComment]")
+	if err != nil {
+		return out, err
+	}
+	if len(listReviewThreads) > 0 {
+		itemsReviewThreads := make([]types.ReviewComment, len(listReviewThreads))
+		for indexReviewThreads, itemReviewThreads := range listReviewThreads {
+			xReviewThreadsItem, err := decodeReviewComment(itemReviewThreads, fmt.Sprintf("%s[%d]", "review_threads", indexReviewThreads))
+			if err != nil {
+				return out, err
+			}
+			itemsReviewThreads[indexReviewThreads] = xReviewThreadsItem
+		}
+		out = itemsReviewThreads
+	}
+	return out, nil
+}
+
+func decodeProviderListProjects(v vm.Value) ([]spells.ProvidedProject, error) {
+	var out []spells.ProvidedProject
+	listListProjects, err := decodeList(v, "list_projects", "[Project]")
+	if err != nil {
+		return out, err
+	}
+	if len(listListProjects) > 0 {
+		itemsListProjects := make([]spells.ProvidedProject, len(listListProjects))
+		for indexListProjects, itemListProjects := range listListProjects {
+			xListProjectsItem, err := decodeProvidedProject(itemListProjects, fmt.Sprintf("%s[%d]", "list_projects", indexListProjects))
+			if err != nil {
+				return out, err
+			}
+			itemsListProjects[indexListProjects] = xListProjectsItem
+		}
+		out = itemsListProjects
 	}
 	return out, nil
 }
