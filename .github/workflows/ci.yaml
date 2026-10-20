@@ -254,7 +254,9 @@ jobs:
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # docs runs conservative (see the gate below) so site-generate fits in 16GB; that
+    # width finishes main in ~12m under aggressive and blew past 45m cold on a PR.
+    timeout-minutes: ${{ matrix.label == 'docs' && 90 || 45 }}
     permissions:
       contents: read
     env:
@@ -431,10 +433,11 @@ jobs:
           # guess it is in CI, so every invocation that wants the machine says so itself.
           # docs alone is conservative: under aggressive, site-generate's buzz heap
           # plus lint/diagrams swaps a 16GB runner to death and the host cancels the
-          # shard. A main run passes --inherited=fatal for the same reason: security
-          # fails on every actionable finding main carries, not only on what a change
-          # introduced. A target argument, not a charm, since a charm keys every step
-          # and main's cache is the one pull requests read.
+          # shard. The job timeout above is 90m for that label so a cold PR still
+          # finishes. A main run passes --inherited=fatal for the same reason:
+          # security fails on every actionable finding main carries, not only on what
+          # a change introduced. A target argument, not a charm, since a charm keys
+          # every step and main's cache is the one pull requests read.
           command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile ${{ matrix.label == 'docs' && 'conservative' || 'aggressive' }} ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
