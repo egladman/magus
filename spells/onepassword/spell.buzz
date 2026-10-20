@@ -43,12 +43,9 @@ fun has(haystack: str, needle: str) > bool {
 // spell's decision, not a magus convention.
 final SCHEME = "op://";
 
-// resolve_secret is the secret-provider contract, detected by name and invoked by
-// magus\secret.read(). It receives the reference as payload.ref and returns a Secret.
-//
-// `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at
-// compile time - a provider returning the wrong shape fails to load rather than failing
-// at the first read. Secret comes from magus/spell, like Target and Command.
+// resolve_secret is the secret-provider contract, detected by name and called by
+// magus\secret.read(). It receives the reference as req.ref and returns a Secret. Both
+// come from magus/spell, like Target and Command.
 //
 // The reference may be written either way, because both read naturally at a call site:
 //
@@ -60,10 +57,8 @@ final SCHEME = "op://";
 // all fail the read rather than returning a blank that fails later at whatever consumes
 // it - but by way of the classified throws below, not proc\exec's own raise, which
 // allow_failure deliberately turns off so the exit code can be inspected first.
-export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
-    final io = {};
-    cb(io);
-    final ref = "{io["ref"]}";
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+    final ref = req.ref;
     if (ref == "") {
         throw "onepassword: no reference given";
     }

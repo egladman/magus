@@ -36,9 +36,8 @@ import (
 
 // TestImportedBuzzSpellInvokesExportedFunc is the generalization check: a Buzz
 // spell loaded via the ordinary import path (loadLocalBuzzSpell) can have its
-// exported functions invoked by name — the direct-invoke path a cache backend
-// uses. It declares no ops (mgs_listTargets); the invoker falls back to the
-// exported function when the target isn't a command op.
+// exported functions invoked by name. It declares no ops (mgs_listTargets); the
+// invoker falls back to the exported function when the target isn't a command op.
 func TestImportedBuzzSpellInvokesExportedFunc(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-import"; }
@@ -95,23 +94,20 @@ func writeSpell(t *testing.T, name, srvURL string) string {
 	t.Helper()
 	src := fmt.Sprintf(`
 import "http" as xhttp
+import "magus/spell";
 
 export fun mgs_getName() > str { return %q; }
 
 final BASE = %q;
 
-export fun get_artifact(target: any, cb: fun(any)) > bool !> any {
-    final io = {};
-    cb(io);
-    final url = BASE + "/blob/" + io["hash"];
-    return xhttp\download(url, "" + io["dest"], {}) == 200;
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    final url = BASE + "/blob/" + req.hash;
+    return Ack{ ok = xhttp\download(url, req.path, {}) == 200 };
 }
-export fun put_artifact(target: any, cb: fun(any)) > bool !> any {
-    final io = {};
-    cb(io);
-    final url = BASE + "/blob/" + io["hash"];
-    final res = xhttp\upload_chunked("PUT", url, "" + io["src"], 0, {});
-    return res[0] == 200;
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    final url = BASE + "/blob/" + req.hash;
+    final res = xhttp\upload_chunked("PUT", url, req.path, 0, {});
+    return Ack{ ok = res[0] == 200 };
 }
 `, name, srvURL)
 	path := filepath.Join(t.TempDir(), name+".buzz")
@@ -158,9 +154,10 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 // answer rather than answering no.
 func TestSpellRemoteBackendAnswersAreDistinct(t *testing.T) {
 	src := `
+import "magus/spell";
 export fun mgs_getName() > str { return "answering-cache"; }
-export fun put_artifact(target: any, cb: fun(any)) > bool { return false; }
-export fun get_artifact(target: any, cb: fun(any)) > bool !> any { throw "store unreachable"; }
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack { return Ack{ ok = false }; }
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { throw "store unreachable"; }
 `
 	path := filepath.Join(t.TempDir(), "answering-cache.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
@@ -185,9 +182,9 @@ func TestResolveBackendSpellMissingName(t *testing.T) {
 	assert.Error(t, err, "expected error for unregistered spell name")
 }
 
-// TestLoadSpellFileDirectFunc checks the direct-invoke machinery directly: a loaded
-// spell's exported function runs in the VM, receives Params, and returns Data — the
-// path a cache backend uses. The spell declares no ops.
+// TestLoadSpellFileHandlerOp checks the direct-invoke machinery directly: a loaded
+// spell's exported function runs in the VM, receives Params, and returns Data. The
+// spell declares no ops.
 func TestLoadSpellFileHandlerOp(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-spell"; }

@@ -77,40 +77,36 @@ fun sectionID(s: str) > str {
 
 // group_start opens a section. Unlike Actions, GitLab can show one expanded, so
 // a caller asking for that gets it rather than having the fold skipped.
-export fun group_start(target: Target, cb: fun(any)) > bool {
-    final io = {<str: any>};
-    cb(io);
-    final id = sectionID("{io["id"]}");
+export fun group_start(target: Target, req: CIGroup) > Ack {
+    final id = sectionID(req.id);
     // A section with no name could never be closed, so emit nothing.
-    if (id == "") { return true; }
+    if (id == "") { return Ack{ ok = true }; }
     var collapsed = "";
-    if (io["collapsed"] == true) { collapsed = "[collapsed=true]"; }
+    if (req.collapsed) { collapsed = "[collapsed=true]"; }
     std\print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
-        + "\r" + HIDE + ("{io["title"]}"));
-    return true;
+        + "\r" + HIDE + req.title);
+    return Ack{ ok = true };
 }
 
-export fun group_end(target: Target, cb: fun(any)) > bool {
-    final io = {<str: any>};
-    cb(io);
-    final id = sectionID("{io["id"]}");
-    if (id == "") { return true; }
+export fun group_end(target: Target, req: CIGroupEnd) > Ack {
+    final id = sectionID(req.id);
+    if (id == "") { return Ack{ ok = true }; }
     std\print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
-    return true;
+    return Ack{ ok = true };
 }
 
 // annotate does nothing: GitLab has no in-log annotation syntax. Declaring the
-// op and returning true says "this provider does not do that" explicitly,
-// rather than leaving magus to infer it from a missing export.
-export fun annotate(target: Target, cb: fun(any)) > bool {
-    return true;
+// op says "this provider does not do that" explicitly, rather than leaving magus
+// to infer it from a missing export.
+export fun annotate(target: Target, req: CIAnnotation) > Ack {
+    return Ack{ ok = true };
 }
 
 // quote_prefixes declares the line prefix that introduces a section marker, so
 // replayed subprocess output cannot close a section magus opened or forge one.
 // magus reads this once and does the per-line matching itself.
-export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
-    return [HIDE + "section_"];
+export fun quote_prefixes(target: Target, req: Empty) > Strings {
+    return Strings{ items = [HIDE + "section_"] };
 }
 
 import "assert";
