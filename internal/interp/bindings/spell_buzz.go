@@ -52,11 +52,14 @@ func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, stri
 		probes.MarkNotSpell(path)
 		return spells.Descriptor{}, "", spell.ErrNotASpell
 	}
-	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
-	if err != nil {
-		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
+	resolved, err := resolveWithModules(ctx, src, filepath.Dir(path))
+	if err == nil {
+		var spec spells.Descriptor
+		if spec, err = resolved.Descriptor(); err == nil {
+			return spec, src, nil
+		}
 	}
-	return spec, src, nil
+	return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
 }
 
 // loadBuzzSpell reads, extracts (with host modules registered), and idempotently
@@ -90,71 +93,15 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 	if err != nil {
 		return spells.Descriptor{}, nil, err
 	}
-	sp := spells.NewSpell(spec.Name,
-		spells.WithSources(spec.Needs...),
-		spells.WithIgnoreDirs(spec.IgnoreDirs...),
-		spells.WithManifests(spec.Manifests...),
-		spells.WithScriptRunners(spec.ScriptRunners...),
-		spells.WithOutputs(spec.Provides...),
-		spells.WithTargets(spec.OpNames()...),
-		spells.WithServiceTargets(spec.ServiceOpNames()...),
-		spells.WithInvoker(newBuzzSpellInvoker(spec, src)),
-		spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
-		spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
-		spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
-		spells.WithServiceView(newServiceViewer(spec.Ops)),
-		spells.WithTargetCharms(charmNamesByTarget(spec.Ops)),
-		spells.WithTargetDocs(docsByTarget(spec.Ops)),
-		// A workspace-local Buzz spell: doctor enforces a doc comment on each
-		// function-handler target (record-style {cmd,args} ops are exempt).
-		spells.WithDocRequiredTargets(spec.DocOps...),
-	)
-	// The rest of OptionalContract. These are applied here rather than in the
-	// NewSpell call above because each is conditional on the spell having declared
-	// it, and NewSpell takes options rather than a descriptor.
-	//
-	// Omitting them was a silent, three-way capability loss for every
-	// workspace-local spell: the descriptor carried mgs_getVersionProbe,
-	// mgs_getLanguage and mgs_isOpaque faithfully, and none of them reached the
-	// registered spell. A declared version probe therefore never ran and never
-	// entered the cache key, so a local spell's toolchain could drift with nothing
-	// invalidating; the spell reported no language; and an opaque spell was treated
-	// as transparent. The two sibling construction paths in spell.go already wired
-	// all of this, which is why built-in spells were unaffected and the gap stayed
-	// invisible.
-	var extra []spells.Option
-	extra = append(extra, spells.WithOps(spec.Ops), spells.WithTools(spec.Tools), spells.WithVersionProber(versionProber))
-	if spec.Language != "" {
-		extra = append(extra, spells.WithLanguage(spec.Language))
-	}
-	if len(spec.LanguageExtensions) > 0 {
-		extra = append(extra, spells.WithLanguageExtensions(spec.LanguageExtensions))
-	}
-	if spec.Syntax != nil {
-		extra = append(extra, spells.WithSyntax(spec.Syntax))
-	}
-	if spec.SymbolIndexer != nil {
-		extra = append(extra, spells.WithSymbolIndexer(spec.SymbolIndexer))
-	}
-	if spec.Sandbox != nil {
-		extra = append(extra, spells.WithSandbox(spec.Sandbox))
-	}
-	if spec.Opaque {
-		extra = append(extra, spells.WithOpaque())
-	}
-	for _, o := range extra {
-		o(sp)
-	}
+	sp := spells.NewSpell(spec.Name, append(localSpellBaseOptions(spec), spells.WithInvoker(newBuzzSpellInvoker(spec, src)))...)
 	return spec, sp, nil
 }
 
-// extractDescriptorWithModules runs the spell module in a session that has the std
-// and extra host modules registered, then resolves its mgs_ functions. This is the
-// load-time twin of callBuzzSpellFunc's session setup, so a spell that imports
-// host modules at top level loads as well as it runs. dir is the spell file's own
-// directory, added to the import search path so a spell that imports sibling helper
-// modules (e.g. render.buzz's `import "render_text"`) resolves during discovery.
-func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.Descriptor, error) {
+// resolveWithModules runs the spell module in a session with the host modules registered,
+// the load-time twin of callBuzzSpellFunc's session, then resolves its mgs_ functions.
+// dir is the spell's own directory, on the import search path so sibling helper modules
+// resolve during discovery.
+func resolveWithModules(ctx context.Context, src, dir string) (spell.Resolved, error) {
 	roots := []string{dir}
 	if source := interp.SourceFromContext(ctx); source != nil && source.Dir != dir {
 		roots = append(roots, source.Dir)
@@ -173,9 +120,9 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	RegisterMagusNamespace(ctx, sess)
 	registerMagusModules(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
-		return spells.Descriptor{}, err
+		return spell.Resolved{}, err
 	}
-	return spell.Resolve(ctx, sess)
+	return spell.Resolve(ctx, sess, src)
 }
 
 // spellSearchPaths resolves imports from the candidate and its magusfile's directory.

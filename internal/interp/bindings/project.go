@@ -17,7 +17,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -260,11 +261,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			name := nv.AsString()
 			if _, exists := project.DefaultSpellRegistry().Lookup(name); !exists {
-				m, err := spell.DecodeHandle(item)
-				if err != nil {
-					return nil, fmt.Errorf("magus.project: spell %q: %w", name, err)
-				}
-				registerLocalSpell(m)
+				return nil, fmt.Errorf("magus.project: spell %q is not registered; importing a spell registers it", name)
 			}
 			// A tool spell bound to contribute targets that exposes none almost always
 			// means its mgs_listTargets was omitted or misnamed: the spell loads and
@@ -550,7 +547,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// The same declaration magus.yaml's sandbox and a spell's mgs_getSandbox make,
 			// through the spell decoder, so every layer accepts the same shape.
 			if sv, ok := pv.MapGet("sandbox"); ok {
-				sb, err := spell.DecodeSandboxValue(sv)
+				sb, err := decodeTargetSandbox(sv)
 				if err != nil {
 					return nil, types.DiagnosticErrorf(types.AllowlistUnresolved, "magus.project: targets[%q].sandbox: %v", name, err)
 				}
@@ -559,6 +556,22 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 	}
 	return opts, nil
+}
+
+// decodeTargetSandbox reads a target's sandbox policy with the decoder and the checks a
+// spell's mgs_getSandbox goes through, so both layers accept one declaration.
+func decodeTargetSandbox(v vm.Value) (spells.Sandbox, error) {
+	sb, err := decode.DecodeSandbox(v)
+	if err != nil {
+		return sb, err
+	}
+	if err := sandbox.CheckDeclaration(sb); err != nil {
+		return sb, err
+	}
+	if len(sb.Caches) > 0 {
+		return sb, errors.New("caches are a spell's declaration, keyed by its tools, a target declares none")
+	}
+	return sb, nil
 }
 
 // contributesNothing reports whether binding sp adds nothing to a project. A declaration
