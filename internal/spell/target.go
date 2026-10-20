@@ -11,7 +11,7 @@ import (
 // which now ship with the host module that returns them (see host_types.go and
 // internal/interp/bindings/modules.go). A spell does `import "magus/spell";` to
 // bring Target into scope so its mgs_listTargets can be typed as a map of
-// fun(Target, fun(any)) handlers instead of `any`. The runtime registers the
+// fun(Target) Command handlers, and its provider ops as fun(Target, Req) Resp. The runtime registers the
 // module as embedded source (see the buzz bindings' registerMagusModules), and so
 // does the session that loads the built-ins.
 //
@@ -186,6 +186,48 @@ var ReleaseCycleSource string
 //go:embed gen/types/lifecycle.buzz
 var LifecycleSource string
 
+// The provider op records (types/provider_ops.go): what magus hands a provider op and what
+// the op returns. None references another, so their order in the bundle is free.
+//
+//go:generate go run ../../cmd/magus-utils types -type Empty -out gen/types/empty.buzz
+//go:generate go run ../../cmd/magus-utils types -type Ack -out gen/types/ack.buzz
+//go:generate go run ../../cmd/magus-utils types -type SecretRef -out gen/types/secretref.buzz
+//go:generate go run ../../cmd/magus-utils types -type GreenRun -out gen/types/greenrun.buzz
+//go:generate go run ../../cmd/magus-utils types -type Strings -out gen/types/strings.buzz
+//go:generate go run ../../cmd/magus-utils types -type CIGroup -out gen/types/cigroup.buzz
+//go:generate go run ../../cmd/magus-utils types -type CIGroupEnd -out gen/types/cigroupend.buzz
+//go:generate go run ../../cmd/magus-utils types -type CIAnnotation -out gen/types/ciannotation.buzz
+//go:generate go run ../../cmd/magus-utils types -type ArtifactRequest -out gen/types/artifactrequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type PruneRequest -out gen/types/prunerequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type PruneResult -out gen/types/pruneresult.buzz
+//go:generate go run ../../cmd/magus-utils types -type LifecycleQuery -out gen/types/lifecyclequery.buzz
+var (
+	//go:embed gen/types/empty.buzz
+	emptySource string
+	//go:embed gen/types/ack.buzz
+	ackSource string
+	//go:embed gen/types/secretref.buzz
+	secretRefSource string
+	//go:embed gen/types/greenrun.buzz
+	greenRunSource string
+	//go:embed gen/types/strings.buzz
+	stringsSource string
+	//go:embed gen/types/cigroup.buzz
+	ciGroupSource string
+	//go:embed gen/types/cigroupend.buzz
+	ciGroupEndSource string
+	//go:embed gen/types/ciannotation.buzz
+	ciAnnotationSource string
+	//go:embed gen/types/artifactrequest.buzz
+	artifactRequestSource string
+	//go:embed gen/types/prunerequest.buzz
+	pruneRequestSource string
+	//go:embed gen/types/pruneresult.buzz
+	pruneResultSource string
+	//go:embed gen/types/lifecyclequery.buzz
+	lifecycleQuerySource string
+)
+
 // LintModulePath is the import path of the lint value-types module: the Finding a Buzz
 // lint rule returns. Like magus/spell it is source only, so importing it makes Finding
 // constructible, which a type declared on the magus namespace is not.
@@ -213,7 +255,10 @@ var CharmModuleSource string
 
 // SpellModuleSource is the magus/spell bundle: the spell-authored value types in
 // their declare-before-use order (PatchOp before Charm before Command before
-// Service and SymbolIndexer, each referencing the prior; Target and Project have no
-// cross-references so their position is free). Shared by the runtime registration
-// (modules.go) and the built-in loader (builtins.go), so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource}, "\n")
+// Service and SymbolIndexer, each referencing the prior; Target, Project and the provider
+// op records have no cross-references so their position is free). Shared by the runtime
+// registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
+// apart.
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
+	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
+	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource}, "\n")

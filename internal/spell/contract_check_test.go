@@ -54,6 +54,22 @@ export fun mgs_listTargets() > any { return {}; }`,
 			want: "line 1: mgs_getName takes parameters; a contract function takes none",
 		},
 		{
+			name: "a provider op takes its Target and its request",
+			src: `export fun mgs_getName() > str { return "x"; }
+export fun resolve_secret(t: Target, ask: SecretRef) > Secret { return Secret{value = ask.ref}; }
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] { return []; }`,
+		},
+		{
+			name: "a provider op still on the input callback",
+			src:  `export fun get_artifact(target: Target, cb: fun(any)) > bool { return false; }`,
+			want: "line 1: get_artifact takes (Target, fun(any)); the provider contract wants (target: Target, req: ArtifactRequest)",
+		},
+		{
+			name: "a provider op returning the bare value",
+			src:  `export fun resolve_secret(target: Target, req: SecretRef) > str { return ""; }`,
+			want: "line 1: resolve_secret declares > str; the contract wants > Secret",
+		},
+		{
 			name: "an mgs_ name the contract does not list",
 			src:  `export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`,
 			want: "line 1: mgs_getVersionProbe is not a spell contract function",

@@ -11,13 +11,13 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 )
 
 // CheckSpellFile compiles the Buzz spell at path without registering it and returns
@@ -93,12 +93,13 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 	if err != nil {
 		return spells.Descriptor{}, nil, err
 	}
-	sp := spells.NewSpell(spec.Name, append(localSpellBaseOptions(spec), spells.WithInvoker(newBuzzSpellInvoker(spec, src)))...)
+	sp := spells.NewSpell(spec.Name, append(localSpellBaseOptions(spec),
+		spells.WithInvoker(newBuzzSpellInvoker(spec, src)), spells.WithFuncSource(src))...)
 	return spec, sp, nil
 }
 
 // resolveWithModules runs the spell module in a session with the host modules registered,
-// the load-time twin of callBuzzSpellFunc's session, then resolves its mgs_ functions.
+// the load-time twin of execSpellSource's session, then resolves its mgs_ functions.
 // dir is the spell's own directory, on the import search path so sibling helper modules
 // resolve during discovery.
 func resolveWithModules(ctx context.Context, src, dir string) (spell.Resolved, error) {
@@ -143,12 +144,10 @@ func spellSearchPaths(roots ...string) []string {
 }
 
 // newBuzzSpellInvoker dispatches a request against a Buzz spell. A declared command
-// op (from mgs_listTargets) runs its command through the shared bridge. Otherwise,
-// if the spell exports a function by that name, it is called directly in the VM —
-// the escape hatch a remote cache backend uses: its enabled/get_artifact/
-// put_artifact/prune are plain exported functions, invoked by name with req.Params,
-// not operations in the command model. An unknown name is a no-op (fan-out skip, or
-// an optional backend op a spell doesn't implement).
+// op (from mgs_listTargets) runs its command through the shared bridge. Otherwise, if
+// the spell exports a function by that name, callBuzzSpellFunc calls it with req.Params.
+// An unknown name is a no-op (a fan-out skip). Provider ops do not come through here:
+// they go through CallOp.
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
@@ -158,41 +157,31 @@ func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Contex
 	}
 }
 
-// callBuzzSpellFunc executes src in a fresh module-registered session and calls
-// the exported handler fn with the invocation's Target and the input callback cb,
-// returning its result marshaled back to a Go value. The handler signature is
-// fun(target: Target, cb: fun(any)) > bool: the handler calls cb(io) with an empty
-// map and reads the op's inputs the host writes into it (the cache passes
-// {project, hash, dest/src} via req.Params). Inputs arrive by mutation rather than
-// as a data argument because cb is a fun(any) callback, not a payload — the same
-// typed contract a command spell's cb callback uses. A fresh session per call means
-// the spell's top-level code re-runs every invocation, so a handler op spell's
-// module body must be idempotent (no one-time side effects) — the mgs_ functions
-// and op bodies do the work.
+// callBuzzSpellFunc calls the exported function fn of src as
+// fun(target: Target, cb: fun(any)): the function calls cb(io) with an empty map and
+// reads the inputs magus copies into it from req.Params, then returns its result,
+// marshaled back to a Go value.
+//
+// TODO: only the harness, review and workspace-provider ops still use this; once they
+// move onto CallOp, delete it and newBuzzSpellInvoker's fallback with it.
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeRequest) (any, error) {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
-	defer sess.Close()
-	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
-	// Same script mode as the descriptor-extraction session above, so a handler op
-	// body and the spell's top level see one `magus` namespace rather than two.
-	RegisterMagusNamespace(ctx, sess)
-	registerMagusModules(ctx, sess)
-	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
-		return nil, fmt.Errorf("spell handler op %q: exec: %w", fn, err)
+	sess, err := execSpellSource(ctx, src, fmt.Sprintf("spell handler op %q", fn))
+	if err != nil {
+		return nil, err
 	}
+	defer sess.Close()
 	f, ok := sess.Exports()[fn]
 	if !ok {
-		// No such exported function: a no-op, not an error. This is the fan-out-skip
-		// for an unknown target, and how an optional backend op (a cache backend that
-		// declares no enabled()/prune()) reports "unsupported" — nil Data, which the
-		// remote-cache adapter reads as always-active / not-implemented.
+		// No such exported function: a no-op, not an error. This is the fan-out skip
+		// for an unknown target, and how an op a spell does not implement reports it:
+		// nil Data.
 		return nil, nil //nolint:nilnil // documented no-op: unknown function, nil Data
 	}
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
 	params := ffi.AnyToValue(req.Params)
-	tgt := targetValue(ctx, req)
+	tgt := bindgen.ObjectTarget(providerTarget(ctx, req.Target, req.Dir))
 	cb := vm.DirectValue("magus.cb", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
 			for _, k := range params.MapKeys() {
@@ -210,23 +199,4 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 		return nil, fmt.Errorf("spell handler op %q: %w", fn, err)
 	}
 	return ffi.ValueToAny(rv), nil
-}
-
-// targetValue builds the Buzz Target value a spell handler receives as its first
-// argument. A plain map suffices — member access (target.name) reads a map key —
-// and most handlers ignore it; it carries the invocation's identity for those
-// that don't. The active charms ride on ctx, so a handler that inspects
-// target.charms sees the run's real charms rather than an always-empty list.
-func targetValue(ctx context.Context, req spells.InvokeRequest) vm.Value {
-	t := vm.NewMap()
-	t.MapSet("name", vm.StrValue(req.Target))
-	t.MapSet("projectPath", vm.StrValue(req.Dir))
-	charms := types.CharmsFromContext(ctx)
-	cv := make([]vm.Value, len(charms))
-	for i, c := range charms {
-		cv[i] = vm.StrValue(c)
-	}
-	t.MapSet("charms", vm.ListValue(cv))
-	t.MapSet("files", vm.ListValue(nil))
-	return t
 }
