@@ -6,8 +6,8 @@ import (
 	"io"
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"

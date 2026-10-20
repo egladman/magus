@@ -1,4 +1,4 @@
-package register_test
+package register
 
 import (
 	"testing"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
-	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -19,7 +18,7 @@ func TestReviewSpellAnswersThroughTheTypedProviderOps(t *testing.T) {
 		{ID: "t1", Path: "a.go", Line: 9, Author: "priya", Body: "why {this}?\n\"quoted\""},
 		{ID: "t2", Root: "t1", Author: "eli", Body: "because", Outdated: true, DiffHunk: "@@ -1 +1 @@"},
 	}
-	drv, ok := project.DefaultSpellRegistry().Lookup(register.ReviewSpell(t, at, threads))
+	drv, ok := project.DefaultSpellRegistry().Lookup(ReviewSpell(t, at, threads))
 	require.True(t, ok)
 
 	gotAt, exported, err := bindings.CallOp(t.Context(), drv, providerops.FindReview, types.Target{}, types.FindReviewRequest{})

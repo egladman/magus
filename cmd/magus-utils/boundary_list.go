@@ -38,7 +38,7 @@ func runBoundaryList(args []string) error {
 		}
 		t := e.Type
 		qualified := qualifyType(t)
-		used[packageOf(t).alias] = true
+		used[typePackage(t).alias] = true
 		// The encoder is named after the Go type, matching buzzValueEmitter.funcName.
 		// Carried as a closure rather than left for the test to look up: a method could
 		// be reached through an interface assertion, and a free function cannot.

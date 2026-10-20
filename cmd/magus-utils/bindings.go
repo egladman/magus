@@ -682,13 +682,13 @@ func buzzValConv(t std.TypeTag, src string) string {
 // hand-bound members in the parent package, which is why types carried a second,
 // parallel set of encoders as METHODS until this replaced them.
 type buzzValueEmitter struct {
-	funcs      bytes.Buffer
-	emitted    map[reflect.Type]bool
-	enumReach  map[reflect.Type]bool
+	funcs     bytes.Buffer
+	emitted   map[reflect.Type]bool
+	enumReach map[reflect.Type]bool
 	// pkgs holds the boundaryPackages aliases the encoders spell, for importLines.
 	pkgs     map[string]bool
 	usesTime bool
-	usesFFI    bool
+	usesFFI  bool
 	// usesEnums records that a call this emitter rendered passes `enums`, so the
 	// trampoline file must declare it.
 	usesEnums bool
@@ -777,9 +777,9 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 }
 
-// packageOf is t's entry in boundaryPackages. A type from any other package panics: the
+// typePackage is t's entry in boundaryPackages. A type from any other package panics: the
 // generator would otherwise emit a spelling no generated file imports.
-func packageOf(t reflect.Type) boundaryPackage {
+func typePackage(t reflect.Type) boundaryPackage {
 	for _, p := range boundaryPackages {
 		if p.path == t.PkgPath() {
 			return p
@@ -791,12 +791,12 @@ func packageOf(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
-	return packageOf(t).alias + "." + t.Name()
+	return typePackage(t).alias + "." + t.Name()
 }
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
-	return packageOf(t).prefix + t.Name()
+	return typePackage(t).prefix + t.Name()
 }
 
 // importLines renders the import of each package in used, which is keyed by alias, in
@@ -824,7 +824,7 @@ func (e *buzzValueEmitter) qualify(t reflect.Type) string {
 }
 
 func (e *buzzValueEmitter) markPkg(t reflect.Type) {
-	e.pkgs[packageOf(t).alias] = true
+	e.pkgs[typePackage(t).alias] = true
 }
 
 // value renders the conversion for one field, emitting any temporaries it needs first.

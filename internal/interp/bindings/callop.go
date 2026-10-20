@@ -45,7 +45,7 @@ func CallOp[Req, Resp any](ctx context.Context, drv spells.Driver, op bindgen.Pr
 		return resp, true, fmt.Errorf("spell %q: %s: %w", drv.Name(), op.Name, err)
 	}
 	if resp, err = op.Decode(rv); err != nil {
-		return resp, true, fmt.Errorf("spell %q: %w: %w", drv.Name(), errMalformedAnswer, err)
+		return resp, true, fmt.Errorf("%w: spell %q: %w", errMalformedAnswer, drv.Name(), err)
 	}
 	return resp, true, nil
 }

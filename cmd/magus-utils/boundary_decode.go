@@ -91,23 +91,23 @@ var inboundTypes = []string{
 // what the provider meant to refuse: a change missing "fork" read as one from this
 // repository, a missing approval count as a base requiring no review.
 var requiredMembers = map[string][]string{
-	"QueueCapabilities":   {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
-	"QueueSetup":          {"statusContext", "credential"},
-	"QueueSetupRefusal":   {"reason", "url", "app"},
-	"QueueChange":         {"id", "repo", "head", "base", "method", "fork"},
-	"QueueMergedChange":   {"id", "head", "commit", "method"},
-	"QueueUnqueuedChange": {"id", "head"},
-	"QueueClosedChange":   {"id"},
-	"QueueChanges":        {"changes", "merged", "unqueued"},
-	"QueueApproval":       {"approved", "head", "base", "method", "queued", "branchSharedWith"},
-	"QueueCheck":          {"name", "state"},
-	"QueueGreenChange":    {"id", "repo", "head"},
-	"QueueMergeAnswer":    {"merged"},
-	"QueueRunOrigin":      {"repo", "headRepo", "headBranch", "event", "branchEvent", "definition"},
-	"QueueArtifact":       {"name", "url"},
+	"QueueCapabilities":    {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
+	"QueueSetup":           {"statusContext", "credential"},
+	"QueueSetupRefusal":    {"reason", "url", "app"},
+	"QueueChange":          {"id", "repo", "head", "base", "method", "fork"},
+	"QueueMergedChange":    {"id", "head", "commit", "method"},
+	"QueueUnqueuedChange":  {"id", "head"},
+	"QueueClosedChange":    {"id"},
+	"QueueChanges":         {"changes", "merged", "unqueued"},
+	"QueueApproval":        {"approved", "head", "base", "method", "queued", "branchSharedWith"},
+	"QueueCheck":           {"name", "state"},
+	"QueueGreenChange":     {"id", "repo", "head"},
+	"QueueMergeAnswer":     {"merged"},
+	"QueueRunOrigin":       {"repo", "headRepo", "headBranch", "event", "branchEvent", "definition"},
+	"QueueArtifact":        {"name", "url"},
 	"QueueArtifactListing": {"run", "complete", "artifacts"},
-	"QueueReview":         {"id", "reviewer", "commit"},
-	"QueueReviews":        {"head", "approving"},
+	"QueueReview":          {"id", "reviewer", "commit"},
+	"QueueReviews":         {"head", "approving"},
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.
@@ -219,7 +219,7 @@ func newDecodeEmitter(entries []boundaryType) *decodeEmitter {
 }
 
 func (e *decodeEmitter) qualify(t reflect.Type) string {
-	e.pkgs[packageOf(t).alias] = true
+	e.pkgs[typePackage(t).alias] = true
 	return qualifyType(t)
 }
 

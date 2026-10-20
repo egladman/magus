@@ -223,7 +223,7 @@ func ReviewCommentsReached(ctx context.Context, at types.ReviewTarget) (comments
 		if errors.Is(err, errMalformedAnswer) {
 			return nil, true, err
 		}
-		//nolint:nilerr // an unreachable host is not a failure of this call; see the doc above.
+		// An unreachable host is not a failure of this call; see the doc above.
 		return nil, false, nil
 	}
 	if !exported {

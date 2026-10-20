@@ -315,14 +315,14 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
 }`)
 
 	first := FindReview(context.Background(), "feat/x", "")
-	assert.Equal(t, "asked", first.Reason)
+	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "asked"}, first)
 	opened, known := first.OpenedByViewer()
 	assert.True(t, known, "both names present means the question is answerable")
 	assert.False(t, opened, "priya's review is not eli's")
 
+	// Asked once, then never again, and the cached owner rides along on every later answer.
 	second := FindReview(context.Background(), "feat/x", "")
-	assert.Equal(t, "not asked", second.Reason, "asked once, then never again")
-	assert.Equal(t, "eli", second.Viewer, "the cached owner rides along on every later answer")
+	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "not asked"}, second)
 }
 
 // A provider that names neither party leaves the question UNANSWERED, which is not the same as

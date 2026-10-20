@@ -438,7 +438,7 @@ func newMergeWhileReadingRecorder(t *testing.T) *mergeWhileReadingRecorder {
 // remarks, no drafts, no seen threads. The mark is the only trace that a review was opened here.
 func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
 	started := time.Now().Add(-90 * time.Second)
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
 	require.NoError(t, err)
@@ -462,7 +462,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 // pull request, and counting the old mark would put a reader under a merge they never started on.
 func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
 	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
@@ -505,7 +505,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 // asking the forge, and it is cleared.
 func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"),workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-changeset.ReadingTTL-time.Minute))
 	require.NoError(t, err)
@@ -520,7 +520,7 @@ func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 // A review closed without merging will never merge, so the mark that was waiting on it goes.
 func TestCheckReviewClearsTheMarkOfAReviewClosedUnmerged(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
-	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "closed"),workspace.WithTelemetryProvider(rec))
+	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "closed"), workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
 	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
