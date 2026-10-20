@@ -254,9 +254,7 @@ jobs:
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
-    # docs runs --concurrency 1 (see the gate below) so site-generate's buzz heap
-    # never shares the 16GB runner with lint/diagrams; that serializes past 45m cold.
-    timeout-minutes: ${{ matrix.label == 'docs' && 90 || 45 }}
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -431,14 +429,12 @@ jobs:
           # touching an explicitly named one. --concurrency-profile aggressive is the
           # explicit ask for the whole runner: magus reads no environment variable to
           # guess it is in CI, so every invocation that wants the machine says so itself.
-          # docs alone is --concurrency 1: conservative still stacked site-generate's
-          # buzz heap with lint/diagrams until the host swapped multi-GB and cancelled
-          # the shard. The job timeout above is 90m for that label so a cold PR still
-          # finishes. A main run passes --inherited=fatal for the same reason:
-          # security fails on every actionable finding main carries, not only on what
-          # a change introduced. A target argument, not a charm, since a charm keys
-          # every step and main's cache is the one pull requests read.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms ${{ matrix.label == 'docs' && '--concurrency 1' || '--concurrency-profile aggressive' }} ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
+          # A main run passes --inherited=fatal for the same reason: security fails on
+          # every actionable finding main carries, not only on what a change introduced.
+          # A target argument, not a charm, since a charm keys every step and main's
+          # cache is the one pull requests read. docs figures stay off this shard (see
+          # the figures job): site-generate plus diagrams-generate OOMs 16GB together.
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
@@ -646,13 +642,63 @@ jobs:
         with:
           baseline: ${{ steps.baseline.outputs.path }}
 
+  # The figures, laid out from the symbol index a shard never builds. Outside the queue
+  # gate's box on purpose: the index is keyed by the checkout's absolute path, and each gate
+  # invocation checks out into a fresh box, so an index built by one gate is invisible to
+  # the next.
+  #
+  # Every figure draws its edges from this tree's index, so a Go change that moves an import
+  # between two packages a figure draws, or adds a package inside a figure's scope, fails
+  # here, and the target names the fix. Kept off the docs shard so site-generate and
+  # diagrams-generate do not share one 16GB runner.
+  figures:
+    name: docs figures
+    needs: [plan]
+    if: needs.plan.outputs.inherit != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # The symbol index needs a WRITABLE local cache tier; see the advisor job above.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # scip-go and scip-typescript are pinned in mise.toml. Cache on pull requests only,
+      # as the shards restore it; this job holds no secret and no write token.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: ${{ github.event_name == 'pull_request' }}
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+
+      # A project whose indexer fails is reported and skipped, not fatal. The step below
+      # is what refuses: with no index it fails, and a partial one fails on whatever
+      # figure draws a directory the index lost.
+      - name: Build the symbol index
+        run: magus graph build --no-sessions
+
+      # --no-default-charms drops the workspace's rw, which would rewrite the figures
+      # instead of failing on them.
+      - name: Lay out every figure from the symbol index
+        run: magus run diagrams-generate docs --no-default-charms
+
   # One stable check name a branch rule can require, standing for the whole run.
   #
   # The shards are the real verdict, but their names come from a matrix the plan sizes
   # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
-    needs: [plan, ci]
+    needs: [plan, ci, figures]
     # always(), or a skipped or failed dependency would skip this job too - and a required
     # check that never reports blocks the pull request instead of failing it, which reads
     # as an infrastructure problem rather than a red build.
@@ -694,12 +740,13 @@ jobs:
           merge-history: 'true'
           ci-result: ${{ needs.ci.result }}
 
-      - name: Require the plan, doctor, and every shard to have passed
+      - name: Require the plan, doctor, every shard and the figures to have passed
         if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           DOCTOR_RESULT: ${{ needs.plan.outputs.doctor }}
           CI_RESULT: ${{ needs.ci.result }}
+          FIGURES_RESULT: ${{ needs.figures.result }}
         run: |
           set -euo pipefail
           # Every verdict is reported before exiting, so one red run names everything that
@@ -720,5 +767,10 @@ jobs:
           case "$CI_RESULT" in
             success|skipped) echo "shards: ${CI_RESULT}" ;;
             *) echo "::error::shards did not pass (${CI_RESULT})"; failed=1 ;;
+          esac
+          # skipped is a pass for the same reason: an inherited verdict skips the figures too.
+          case "$FIGURES_RESULT" in
+            success|skipped) echo "figures: ${FIGURES_RESULT}" ;;
+            *) echo "::error::docs figures did not pass (${FIGURES_RESULT})"; failed=1 ;;
           esac
           exit "$failed"

@@ -330,9 +330,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // Two stages so build waits for lint's format instead of racing it (MGS4008).
-    // diagrams-generate belongs to this gate: symbol_digest_generate freshens the index
-    // it reads, so CI needs no separate figures runner or pre-built graph.
-    ctx.needs(generate, lint, test, diagrams_generate);
+    // diagrams-generate stays on the separate docs figures runner: folding it into this
+    // gate with site-generate OOMs a 16GB shard, and serializing past that never finishes
+    // a cold PR before the job is cancelled.
+    ctx.needs(generate, lint, test);
     ctx.needs(build);
 }
 
