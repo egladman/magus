@@ -1,0 +1,190 @@
+// buzz-sources-pass-the-static-check holds every tracked .buzz file to `magus buzz --check` and
+// reports its warnings as well as its errors, because --check's exit status says nothing about a
+// warning on every binary. The rule reads the printed diagnostics instead.
+//
+// Magusfiles, spells, hack/, docs/, std/examples/, cmd/, console/ and internal/queue/ check with
+// --embedded, the mode their host loads them in; everything else checks strict. docs/ checks from
+// docs/, where its `lib/...` and `engine/...` imports resolve.
+//
+// A BZZ2001 for an import of magus/spell/*, project/* or mergequeue is ignored: the host binds
+// those at load, so --check cannot resolve them. Skipped: testdata, the docs figures (the figure
+// rule owns them), internal/spell/gen and the FFI demo.
+//
+// Tier 1, mechanical: the fix is what the checker names.
+namespace buzzcheck;
+
+import "assert";
+import "magus";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// DIAGNOSTIC matches one line --check prints: an optional code, the file as passed, its
+// position and the message. Unanchored, because a raised magus\cmd prefixes the first one.
+final DIAGNOSTIC = std\pattern(`(\[BZZ\d+\] )?buzz: (\S+?\.buzz):(\d+):(\d+): (.*)`);
+
+final DOCS = "docs/";
+
+final SKIPPED = ["docs/site/diagrams/", "internal/spell/gen/", "libs/gopherbuzz/examples/"];
+
+final EMBEDDED = ["spells/", "hack/", "docs/", "std/examples/", "cmd/", "console/", "internal/queue/"];
+
+// HOST_BOUND are the import prefixes the host binds at load.
+final HOST_BOUND = ["magus/spell/", "project/", "mergequeue"];
+
+final FIX = "Fix what the checker names; a warning fails here as an error does. Run "
+    + "`magus buzz --check [--embedded] <file>` to see it.";
+
+export fun reads() > [str] {
+    return ["**/*.buzz"];
+}
+
+// skipped reports whether the rule leaves path p to another check.
+export fun skipped(p: str) > bool {
+    if (("/" + p).indexOf("/testdata/") != null) {
+        return true;
+    }
+    foreach (prefix in SKIPPED) {
+        if (p.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// embedded reports whether path p checks with --embedded.
+export fun embedded(p: str) > bool {
+    if (p == "magusfile.buzz" or p.endsWith("/magusfile.buzz")) {
+        return true;
+    }
+    foreach (prefix in EMBEDDED) {
+        if (p.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// hostBound reports whether message is the unresolved-import error for an import the host
+// binds at load.
+export fun hostBound(code: str, message: str) > bool {
+    if ((code + message).indexOf("[BZZ2001]") == null) {
+        return false;
+    }
+    foreach (prefix in HOST_BOUND) {
+        if (message.indexOf("\"" + prefix) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// findings turns --check's output into one finding per diagnostic, taking the `see:` line
+// under it as the url. prefix is what the files were passed relative to.
+export fun findings(output: str, prefix: str) > [Finding] {
+    final found = mut [<Finding>];
+    final lines = output.split("\n");
+    var i = 0;
+    while (i < lines.len()) {
+        final m = DIAGNOSTIC.match(lines[i]);
+        i = i + 1;
+        if (m == null or hostBound(m![1], message: m![5])) {
+            continue;
+        }
+        var url = "";
+        if (i < lines.len() and lines[i].trim().startsWith("see: ")) {
+            url = lines[i].trim().sub(5);
+        }
+        found.append(Finding{ path = prefix + m![2], line = std\parseInt(m![3]) ?? 0, col = std\parseInt(m![4]) ?? 0,
+            message = m![1] + m![5], fix = FIX, url = url });
+    }
+    return found;
+}
+
+// run checks one batch from dir; prefix turns the paths it prints back into workspace paths.
+fun run(argv: [str], dir: str, prefix: str) > [Finding] {
+    var output = "";
+    var raised = "";
+    try {
+        output = magus\cmd("buzz", args: argv, opts: {"dir": dir, "quiet": true}).stderr;
+    } catch (e) {
+        raised = "{e}";
+        output = raised;
+    }
+    final found = findings(output, prefix: prefix);
+    if (found.len() == 0 and raised != "" and raised.indexOf("BZZ2001") == null) {
+        return [Finding{ path = argv[argv.len() - 1], message = "magus buzz --check failed without a diagnostic: " + raised,
+            fix = FIX }];
+    }
+    return found;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final root = mut [<str>];
+    final docs = mut [<str>];
+    final strict = mut [<str>];
+    var base = "";
+    foreach (f in files) {
+        if (skipped(f.value)) {
+            continue;
+        }
+        base = f.base;
+        if (f.value.startsWith(DOCS)) {
+            docs.append(f.value.sub(DOCS.len()));
+        } else if (embedded(f.value)) {
+            root.append(f.value);
+        } else {
+            strict.append(f.value);
+        }
+    }
+    final home = if (base == "") "." else base;
+    final found = mut [<Finding>];
+    if (root.len() > 0) {
+        foreach (f in run(["--check", "--embedded"] + root, dir: home, prefix: "")) { found.append(f); }
+    }
+    if (docs.len() > 0) {
+        final dir = if (base == "") "docs" else base + "/docs";
+        foreach (f in run(["--check", "--embedded"] + docs, dir: dir, prefix: DOCS)) { found.append(f); }
+    }
+    if (strict.len() > 0) {
+        foreach (f in run(["--check"] + strict, dir: home, prefix: "")) { found.append(f); }
+    }
+    return found;
+}
+
+test "findings reads each diagnostic and drops a host-bound import" {
+    final output = "[BZZ2001] buzz: a.buzz:1:1: cannot resolve import \"magus/spell/go\"\n"
+        + "[BZZ2001] buzz: a.buzz:2:1: cannot resolve import \"hack/nowhere\"\n"
+        + "[BZZ3002] buzz: b.buzz:12:9: warning: \"s\" is rebuilt from itself inside a loop\n"
+        + "  see: https://example.test/BZZ3002.md\n";
+    final got = findings(output, prefix: "docs/");
+    assert\equal(got.len(), want: 2, message: "the host-bound import is ignored: {support\messages(got)}");
+    assert\equal(got[0].path, want: "docs/a.buzz", message: "prefixed path");
+    assert\equal(got[0].line, want: 2, message: "line");
+    assert\equal(got[1].col, want: 9, message: "col");
+    assert\equal(got[1].url, want: "https://example.test/BZZ3002.md", message: "see line");
+}
+
+test "mode follows the path" {
+    assert\isTrue(embedded("magusfile.buzz"), message: "root magusfile");
+    assert\isTrue(embedded("libs/x/magusfile.buzz"), message: "nested magusfile");
+    assert\isTrue(embedded("spells/go/spell.buzz"), message: "spell");
+    assert\isTrue(embedded("hack/lint/run.buzz"), message: "hack");
+    assert\isTrue(!embedded("libs/gopherbuzz/x.buzz"), message: "libs is strict");
+    assert\isTrue(!embedded("evals/x.buzz"), message: "evals is strict");
+    assert\isTrue(skipped("internal/x/testdata/a.buzz"), message: "testdata");
+    assert\isTrue(skipped("docs/site/diagrams/a.buzz"), message: "figures");
+    assert\isTrue(skipped("libs/gopherbuzz/examples/ffi/a.buzz"), message: "ffi demo");
+    assert\isTrue(!skipped("docs/lib/text.buzz"), message: "docs library");
+}
+
+test "a file with a warning is reported and a clean one is not" {
+    final got = check(support\fixture({
+        "hack/clean.buzz": "namespace clean;\n\nfun one() > int \{\n    return 1;\n}\n",
+        "hack/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
+            + "    foreach (p in parts) \{\n        s = s + p;\n    }\n    return s;\n}\n",
+        "internal/x/testdata/bad.buzz": "this is not buzz\n",
+    }));
+    assert\equal(got.len(), want: 1, message: "one finding: {support\messages(got)}");
+    assert\equal(got[0].path, want: "hack/rebuilt.buzz", message: "the warning fails");
+}
