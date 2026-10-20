@@ -14,19 +14,21 @@ import (
 )
 
 // checkContract compares every exported top-level mgs_ function in src with
-// decode.ContractFuncs, and every exported function named like a provider op with
-// decode.ProviderFuncs, reporting every violation in one MGS1051 error so a spell
-// author fixes them in one pass. A return type other than the contract's (`> any`
-// included), none at all, the wrong parameters, or an mgs_ name the contract lacks
-// refuses the spell.
+// decode.ContractFuncs and decode.HarnessFuncs, and every exported function named like a
+// provider op with decode.ProviderFuncs, reporting every violation in one MGS1051 error so
+// a spell author fixes them in one pass. A return type other than the contract's (`> any`
+// included), none at all, the wrong parameters, or an mgs_ name no contract lists refuses
+// the spell.
 func checkContract(src string) error {
 	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return fmt.Errorf("magus/spell: contract check: %w", err)
 	}
-	want := make(map[string]string, len(decode.ContractFuncs))
-	for _, fn := range decode.ContractFuncs {
-		want[fn.Name] = fn.Returns
+	contract := make(map[string]decode.ContractFunc, len(decode.ContractFuncs)+len(decode.HarnessFuncs))
+	for _, table := range [][]decode.ContractFunc{decode.ContractFuncs, decode.HarnessFuncs} {
+		for _, fn := range table {
+			contract[fn.Name] = fn
+		}
 	}
 	// Two families may share an op name; the generator refuses one read two ways, so
 	// either row says what the export must declare.
@@ -42,21 +44,18 @@ func checkContract(src string) error {
 			continue
 		}
 		if op, ok := ops[fd.Name]; ok {
-			problems = append(problems, checkProviderOp(fd, op)...)
+			problems = append(problems, checkSignature(fd, op)...)
 			continue
 		}
 		if !strings.HasPrefix(fd.Name, "mgs_") {
 			continue
 		}
-		returns, known := want[fd.Name]
-		switch {
-		case !known:
+		fn, known := contract[fd.Name]
+		if !known {
 			problems = append(problems, fmt.Sprintf("line %d: %s is not a spell contract function", fd.Line, fd.Name))
 			continue
-		case len(fd.Params) > 0:
-			problems = append(problems, fmt.Sprintf("line %d: %s takes parameters; a contract function takes none", fd.Line, fd.Name))
 		}
-		problems = append(problems, checkReturn(fd, returns)...)
+		problems = append(problems, checkSignature(fd, fn)...)
 	}
 	if len(problems) == 0 {
 		return nil
@@ -65,24 +64,29 @@ func checkContract(src string) error {
 		"spell does not match the spell contract (docs/reference/spell-contract.md):\n  %s", strings.Join(problems, "\n  "))
 }
 
-// checkProviderOp holds a provider op's export to op's parameter types and return type.
-// Parameter names are the spell's own.
-func checkProviderOp(fd *ast.FunDecl, op decode.ContractFunc) []string {
+// checkSignature holds an export to fn's parameter types and return type. Parameter names
+// are the spell's own; a function whose Params is empty takes none.
+func checkSignature(fd *ast.FunDecl, fn decode.ContractFunc) []string {
 	var wantTypes []string
-	for _, param := range strings.Split(op.Params, ",") {
-		_, typ, _ := strings.Cut(param, ":")
-		wantTypes = append(wantTypes, squash(typ))
+	if fn.Params != "" {
+		for _, param := range strings.Split(fn.Params, ",") {
+			_, typ, _ := strings.Cut(param, ":")
+			wantTypes = append(wantTypes, squash(typ))
+		}
 	}
 	gotTypes := make([]string, len(fd.ParamAnnots))
 	for i, annot := range fd.ParamAnnots {
 		gotTypes[i] = squash(annot)
 	}
 	var problems []string
-	if !slices.Equal(gotTypes, wantTypes) {
-		problems = append(problems, fmt.Sprintf("line %d: %s takes (%s); the provider contract wants (%s)",
-			fd.Line, fd.Name, strings.Join(fd.ParamAnnots, ", "), op.Params))
+	switch {
+	case fn.Params == "" && len(fd.Params) > 0:
+		problems = append(problems, fmt.Sprintf("line %d: %s takes parameters; a contract function takes none", fd.Line, fd.Name))
+	case !slices.Equal(gotTypes, wantTypes):
+		problems = append(problems, fmt.Sprintf("line %d: %s takes (%s); the contract wants (%s)",
+			fd.Line, fd.Name, strings.Join(fd.ParamAnnots, ", "), fn.Params))
 	}
-	return append(problems, checkReturn(fd, op.Returns)...)
+	return append(problems, checkReturn(fd, fn.Returns)...)
 }
 
 func checkReturn(fd *ast.FunDecl, returns string) []string {

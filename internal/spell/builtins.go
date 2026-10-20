@@ -179,6 +179,7 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 	defer func() { _ = sess.Close() }()
 	sess.SetModuleDecls(SpellModulePath, SpellModuleSource)
 	sess.SetModuleDecls(CharmModulePath, CharmModuleSource)
+	sess.SetModuleDecls(HarnessModulePath, HarnessModuleSource)
 	sess.SetModuleDecls(LintModulePath, LintModuleSource)
 	var unresolved string
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {

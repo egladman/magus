@@ -311,7 +311,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	DeclareMagusTypes(sess)
 }
 
-// RegisterSpellDecls stores the spell, charm, and lint declaration source.
+// RegisterSpellDecls stores the spell, charm, harness and lint declaration source.
 // Storing it does not parse it: a declaration module is parsed when something
 // imports it. DeclareMagusTypes is the parse, and it is separate because a
 // closed script (a guard hook) never imports magus and should not pay for the
@@ -319,6 +319,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 func RegisterSpellDecls(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.HarnessModulePath, spell.HarnessModuleSource)
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 }
 

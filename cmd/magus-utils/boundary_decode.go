@@ -307,6 +307,13 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		return nil
 	}
 	switch t.Kind() {
+	case reflect.Interface:
+		if t != reflect.TypeFor[any]() {
+			return fmt.Errorf("interface %s has no decoder: only any decodes, as opaque host JSON", t)
+		}
+		a := "a" + name
+		fmt.Fprintf(w, "%s%s, err := decodeAny(%s, %s)\n", indent, a, src, path)
+		ret(a)
 	case reflect.String:
 		s := "s" + name
 		fmt.Fprintf(w, "%s%s, err := decodeStr(%s, %s)\n", indent, s, src, path)
@@ -674,5 +681,53 @@ func decodeMap(v vm.Value, path, want string) (vm.Value, error) {
 		return vm.Null, mismatch(path, want, v)
 	}
 	return v, nil
+}
+
+// decodeAny reads an any field as the plain Go value JSON would give it: null, bool,
+// int64, float64, string, []any or map[string]any, an enum case as its backing value and
+// an object instance as its members. A function or any other value JSON cannot hold is an
+// error, since the field is opaque host JSON.
+func decodeAny(v vm.Value, path string) (any, error) {
+	if backing, ok := v.EnumValue(); ok {
+		v = backing
+	}
+	switch {
+	case v.IsNull():
+		return nil, nil
+	case v.IsBool():
+		return v.AsBool(), nil
+	case v.IsInt():
+		return v.AsInt(), nil
+	case v.IsFloat():
+		return v.AsFloat(), nil
+	case v.IsStr():
+		return v.AsString(), nil
+	case v.IsList():
+		items := v.ListItems()
+		out := make([]any, len(items))
+		for i, item := range items {
+			x, err := decodeAny(item, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return nil, err
+			}
+			out[i] = x
+		}
+		return out, nil
+	}
+	fields, ok := v.MapView()
+	if !ok {
+		return nil, mismatch(path, "any JSON value", v)
+	}
+	keys := fields.MapKeys()
+	out := make(map[string]any, len(keys))
+	for _, key := range keys {
+		item, _ := fields.MapGet(key)
+		x, err := decodeAny(item, fmt.Sprintf("%s[%q]", path, key))
+		if err != nil {
+			return nil, err
+		}
+		out[key] = x
+	}
+	return out, nil
 }
 `

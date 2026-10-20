@@ -252,6 +252,68 @@ var (
 	projectQuerySource string
 )
 
+// The harness contract's records (types/harness_contract.go): what a harness spell's mgs_
+// functions return and the ShippedAgent mgs_renderAgents takes. Each file carries the enum
+// its fields name; ModelRow follows Price and PriceStep, and HarnessTools HarnessTool.
+//
+//go:generate go run ../../cmd/magus-utils types -type HarnessConfig -out gen/types/harnessconfig.buzz
+//go:generate go run ../../cmd/magus-utils types -type HarnessSkills -out gen/types/harnessskills.buzz
+//go:generate go run ../../cmd/magus-utils types -type HookCommand -out gen/types/hookcommand.buzz
+//go:generate go run ../../cmd/magus-utils types -type ManagedEntries -out gen/types/managedentries.buzz
+//go:generate go run ../../cmd/magus-utils types -type McpServer -out gen/types/mcpserver.buzz
+//go:generate go run ../../cmd/magus-utils types -type Price -out gen/types/price.buzz
+//go:generate go run ../../cmd/magus-utils types -type PriceStep -out gen/types/pricestep.buzz
+//go:generate go run ../../cmd/magus-utils types -type ModelRow -out gen/types/modelrow.buzz
+//go:generate go run ../../cmd/magus-utils types -type HarnessTool -out gen/types/harnesstool.buzz
+//go:generate go run ../../cmd/magus-utils types -type HarnessTools -out gen/types/harnesstools.buzz
+//go:generate go run ../../cmd/magus-utils types -type AgentFile -out gen/types/agentfile.buzz
+//go:generate go run ../../cmd/magus-utils types -type Prompt -out gen/types/prompt.buzz
+//go:generate go run ../../cmd/magus-utils types -type Setting -out gen/types/setting.buzz
+//go:generate go run ../../cmd/magus-utils types -type Limits -out gen/types/limits.buzz
+//go:generate go run ../../cmd/magus-utils types -type ShippedAgent -out gen/types/shippedagent.buzz
+var (
+	//go:embed gen/types/harnessconfig.buzz
+	harnessConfigSource string
+	//go:embed gen/types/harnessskills.buzz
+	harnessSkillsSource string
+	//go:embed gen/types/hookcommand.buzz
+	hookCommandSource string
+	//go:embed gen/types/managedentries.buzz
+	managedEntriesSource string
+	//go:embed gen/types/mcpserver.buzz
+	mcpServerSource string
+	//go:embed gen/types/price.buzz
+	priceSource string
+	//go:embed gen/types/pricestep.buzz
+	priceStepSource string
+	//go:embed gen/types/modelrow.buzz
+	modelRowSource string
+	//go:embed gen/types/harnesstool.buzz
+	harnessToolSource string
+	//go:embed gen/types/harnesstools.buzz
+	harnessToolsSource string
+	//go:embed gen/types/agentfile.buzz
+	agentFileSource string
+	//go:embed gen/types/prompt.buzz
+	promptSource string
+	//go:embed gen/types/setting.buzz
+	settingSource string
+	//go:embed gen/types/limits.buzz
+	limitsSource string
+	//go:embed gen/types/shippedagent.buzz
+	shippedAgentSource string
+)
+
+// HarnessModulePath is the import path of the pure-Buzz harness module: the quoting and
+// hook-command builders every harness spell renders its host's files with.
+const HarnessModulePath = "magus/harness"
+
+// HarnessModuleSource is the magus/harness module. It imports magus/spell for the
+// HookCommand it builds, and calls no host module, so the built-in session offers it.
+//
+//go:embed harness.buzz
+var HarnessModuleSource string
+
 // LintModulePath is the import path of the lint value-types module: the Finding a Buzz
 // lint rule returns. Like magus/spell it is source only, so importing it makes Finding
 // constructible, which a type declared on the magus namespace is not.
@@ -287,4 +349,7 @@ var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, Pa
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
 	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
-	reviewTargetSource, reviewCommentSource, projectQuerySource}, "\n")
+	reviewTargetSource, reviewCommentSource, projectQuerySource,
+	harnessConfigSource, harnessSkillsSource, hookCommandSource, managedEntriesSource, mcpServerSource,
+	priceSource, priceStepSource, modelRowSource, harnessToolSource, harnessToolsSource,
+	agentFileSource, promptSource, settingSource, limitsSource, shippedAgentSource}, "\n")

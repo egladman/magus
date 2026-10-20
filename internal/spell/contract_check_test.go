@@ -62,7 +62,23 @@ export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] { 
 		{
 			name: "a provider op still on the input callback",
 			src:  `export fun get_artifact(target: Target, cb: fun(any)) > bool { return false; }`,
-			want: "line 1: get_artifact takes (Target, fun(any)); the provider contract wants (target: Target, req: ArtifactRequest)",
+			want: "line 1: get_artifact takes (Target, fun(any)); the contract wants (target: Target, req: ArtifactRequest)",
+		},
+		{
+			name: "a harness function takes the arguments the harness contract names",
+			src: `export fun mgs_getName() > str { return "x"; }
+export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = ".x/hooks.json"}; }
+export fun mgs_renderAgents(shipped: [ShippedAgent]) > [AgentFile] { return []; }`,
+		},
+		{
+			name: "a harness function with the wrong argument",
+			src:  `export fun mgs_renderPrompts(humanOnly: [str]) > [Prompt] { return []; }`,
+			want: "line 1: mgs_renderPrompts takes ([str]); the contract wants (humanOnly: {str: str})",
+		},
+		{
+			name: "a harness function still on the input callback",
+			src:  `export fun mgs_getMcp(target: Target, cb: fun(any)) > McpServer { return McpServer{}; }`,
+			want: "line 1: mgs_getMcp takes parameters; a contract function takes none",
 		},
 		{
 			name: "a provider op returning the bare value",

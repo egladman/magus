@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run . contract -src ../../internal/spell/contract.go -out ../../internal/interp/bindings/gen/decode/contract.go
+//go:generate go run . contract -src ../../internal/spell/contract.go -harness ../../spells/harness.go -out ../../internal/interp/bindings/gen/decode/contract.go
 
 import (
 	"bytes"
@@ -22,9 +22,11 @@ import (
 // contractFunc is one field of internal/spell.Contract: the mgs_ function a spell exports
 // and the Buzz return type the checker must see on it.
 type contractFunc struct {
-	Name     string
-	Field    string
-	Returns  string
+	Name    string
+	Field   string
+	Returns string
+	// Params is the Buzz parameter list of a func-typed field, "" for a load-time function.
+	Params   string
 	Required bool
 	Handler  bool
 	Doc      string
@@ -42,20 +44,25 @@ type contractFunc struct {
 func runContract(args []string) error {
 	fs := flag.NewFlagSet("contract", flag.ExitOnError)
 	srcPath := fs.String("src", "", "path to internal/spell/contract.go")
+	harnessPath := fs.String("harness", "", "path to spells/harness.go, whose HarnessContract becomes decode.HarnessFuncs")
 	outPath := fs.String("out", "", "output Go file path for the signature table")
 	docsPath := fs.String("docs", "", "output Markdown path for the reference page")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *srcPath == "" || *outPath == "" && *docsPath == "" {
-		return fmt.Errorf("usage: magus-utils contract -src <contract.go> [-out <contract.go>] [-docs <page.md>]")
+	if *srcPath == "" || *outPath == "" && *docsPath == "" || *outPath != "" && *harnessPath == "" {
+		return fmt.Errorf("usage: magus-utils contract -src <contract.go> [-harness <harness.go> -out <contract.go>] [-docs <page.md>]")
 	}
-	funcs, err := readContract(*srcPath)
+	funcs, err := readContract(*srcPath, "Contract")
 	if err != nil {
 		return err
 	}
 	if *outPath != "" {
-		src, err := renderContractTable(funcs)
+		harness, err := readContract(*harnessPath, "HarnessContract")
+		if err != nil {
+			return err
+		}
+		src, err := renderContractTable(funcs, harness)
 		if err != nil {
 			return err
 		}
@@ -71,9 +78,10 @@ func runContract(args []string) error {
 	return nil
 }
 
-// readContract parses the Contract struct out of path and resolves each field's Go type
-// to the Buzz type its mgs_ function returns.
-func readContract(path string) ([]contractFunc, error) {
+// readContract parses the struct named structName out of path and resolves each field's
+// Go type to the Buzz type its mgs_ function returns. A func-typed field is a function
+// called with arguments: its parameters become Params and its one result the return.
+func readContract(path, structName string) ([]contractFunc, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
@@ -88,7 +96,7 @@ func readContract(path string) ([]contractFunc, error) {
 		}
 		imports[name] = p
 	}
-	st, err := contractStruct(file)
+	st, err := contractStruct(file, structName)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -126,7 +134,16 @@ func readContract(path string) ([]contractFunc, error) {
 				return nil, fmt.Errorf("%s: Contract.%s: unknown mgs tag option %q", pos, fieldName, opt)
 			}
 		}
-		rt, err := contractFieldType(field.Type, imports)
+		typeExpr := field.Type
+		if ft, ok := typeExpr.(*ast.FuncType); ok {
+			if handler {
+				return nil, fmt.Errorf("%s: %s.%s: a func field cannot be a handler", pos, structName, fieldName)
+			}
+			if typeExpr, fn.Params, err = contractFuncSignature(ft, imports); err != nil {
+				return nil, fmt.Errorf("%s: %s.%s: %w", pos, structName, fieldName, err)
+			}
+		}
+		rt, err := contractFieldType(typeExpr, imports)
 		if err != nil {
 			return nil, fmt.Errorf("%s: Contract.%s: %w", pos, fieldName, err)
 		}
@@ -140,7 +157,7 @@ func readContract(path string) ([]contractFunc, error) {
 	return out, nil
 }
 
-func contractStruct(file *ast.File) (*ast.StructType, error) {
+func contractStruct(file *ast.File, name string) (*ast.StructType, error) {
 	for _, decl := range file.Decls {
 		gd, ok := decl.(*ast.GenDecl)
 		if !ok {
@@ -148,17 +165,44 @@ func contractStruct(file *ast.File) (*ast.StructType, error) {
 		}
 		for _, spec := range gd.Specs {
 			ts, ok := spec.(*ast.TypeSpec)
-			if !ok || ts.Name.Name != "Contract" {
+			if !ok || ts.Name.Name != name {
 				continue
 			}
 			st, ok := ts.Type.(*ast.StructType)
 			if !ok {
-				return nil, fmt.Errorf("type Contract is not a struct")
+				return nil, fmt.Errorf("type %s is not a struct", name)
 			}
 			return st, nil
 		}
 	}
-	return nil, fmt.Errorf("no Contract struct")
+	return nil, fmt.Errorf("no %s struct", name)
+}
+
+// contractFuncSignature renders a func field's parameters as the Buzz parameter list its
+// export declares, and returns the expression of its one result. Parameter names are
+// part of the declaration, so each must be named.
+func contractFuncSignature(ft *ast.FuncType, imports map[string]string) (ast.Expr, string, error) {
+	if ft.Results == nil || len(ft.Results.List) != 1 || len(ft.Results.List[0].Names) > 1 {
+		return nil, "", fmt.Errorf("a func field returns exactly one value")
+	}
+	var params []string
+	for _, p := range ft.Params.List {
+		if len(p.Names) == 0 {
+			return nil, "", fmt.Errorf("a func field names each parameter")
+		}
+		rt, err := contractFieldType(p.Type, imports)
+		if err != nil {
+			return nil, "", err
+		}
+		buzzType, _, err := buzzgen.FieldType(rt, mirrorOptions())
+		if err != nil {
+			return nil, "", err
+		}
+		for _, n := range p.Names {
+			params = append(params, n.Name+": "+buzzType)
+		}
+	}
+	return ft.Results.List[0].Type, strings.Join(params, ", "), nil
 }
 
 // contractFieldType turns a field's type expression into the reflect.Type it names, so
@@ -245,22 +289,27 @@ func contractReturn(rt reflect.Type, handler bool) (string, error) {
 	return "{str: fun(" + buzzName(reflect.TypeFor[types.Target]()) + ") " + elem + "}", nil
 }
 
-func renderContractTable(funcs []contractFunc) ([]byte, error) {
+func renderContractTable(funcs, harness []contractFunc) ([]byte, error) {
 	entries, err := inboundBoundaryTypes()
 	if err != nil {
 		return nil, err
 	}
 	e := newDecodeEmitter(entries)
 	var decoders bytes.Buffer
-	for _, fn := range funcs {
-		fmt.Fprintf(&decoders, "func decodeContract%s(v vm.Value) (%s, error) {\n", fn.Field, e.goType(fn.Decoded))
-		fmt.Fprintf(&decoders, "\tvar out %s\n", e.goType(fn.Decoded))
-		if err := e.assign(&decoders, "v", strconv.Quote(fn.Name), "out", fn.Field, fn.Decoded, "\t"); err != nil {
-			return nil, fmt.Errorf("Contract.%s: %w", fn.Field, err)
+	for _, table := range []struct {
+		prefix string
+		funcs  []contractFunc
+	}{{"decodeContract", funcs}, {"decodeHarnessFunc", harness}} {
+		for _, fn := range table.funcs {
+			fmt.Fprintf(&decoders, "func %s%s(v vm.Value) (%s, error) {\n", table.prefix, fn.Field, e.goType(fn.Decoded))
+			fmt.Fprintf(&decoders, "\tvar out %s\n", e.goType(fn.Decoded))
+			if err := e.assign(&decoders, "v", strconv.Quote(fn.Name), "out", fn.Field, fn.Decoded, "\t"); err != nil {
+				return nil, fmt.Errorf("%s: %w", fn.Name, err)
+			}
+			fmt.Fprintln(&decoders, "\treturn out, nil")
+			fmt.Fprintln(&decoders, "}")
+			fmt.Fprintln(&decoders)
 		}
-		fmt.Fprintln(&decoders, "\treturn out, nil")
-		fmt.Fprintln(&decoders, "}")
-		fmt.Fprintln(&decoders)
 	}
 	if len(e.enums) > 0 {
 		return nil, fmt.Errorf("a Contract field reaches an enum directly, which the contract decoders do not render")
@@ -311,6 +360,15 @@ func renderContractTable(funcs []contractFunc) ([]byte, error) {
 	for _, fn := range funcs {
 		fmt.Fprintf(&b, "\t{Name: %q, Field: %q, Returns: %q, Required: %t, Handler: %t, Decode: func(v vm.Value) (any, error) { return decodeContract%s(v) }},\n",
 			fn.Name, fn.Field, fn.Returns, fn.Required, fn.Handler, fn.Field)
+	}
+	fmt.Fprintln(&b, "}")
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, "// HarnessFuncs is every function of the harness contract, in the order")
+	fmt.Fprintln(&b, "// spells.HarnessContract declares them. Required marks the one a harness must export.")
+	fmt.Fprintln(&b, "var HarnessFuncs = []ContractFunc{")
+	for _, fn := range harness {
+		fmt.Fprintf(&b, "\t{Name: %q, Field: %q, Returns: %q, Params: %q, Required: %t, Decode: func(v vm.Value) (any, error) { return decodeHarnessFunc%s(v) }},\n",
+			fn.Name, fn.Field, fn.Returns, fn.Params, fn.Required, fn.Field)
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)

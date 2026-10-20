@@ -345,7 +345,24 @@ var boundaryTypes = []boundaryType{
 	// a list of records. There is deliberately no ModelTier object: that name is the
 	// workspace's own Buzz enum.
 	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
-	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
+	// The harness contract's records (types/harness_contract.go), leaf first: a harness
+	// spell's mgs_ functions return all but ShippedAgent, which magus hands
+	// mgs_renderAgents.
+	{Name: "HarnessConfig", Type: reflect.TypeFor[types.HarnessConfig]()},
+	{Name: "HarnessSkills", Type: reflect.TypeFor[types.HarnessSkills]()},
+	{Name: "HookCommand", Type: reflect.TypeFor[types.HookCommand]()},
+	{Name: "ManagedEntries", Type: reflect.TypeFor[types.ManagedEntries]()},
+	{Name: "McpServer", Type: reflect.TypeFor[types.McpServer]()},
+	{Name: "Price", Type: reflect.TypeFor[types.Price]()},
+	{Name: "PriceStep", Type: reflect.TypeFor[types.PriceStep]()},
+	{Name: "ModelRow", Type: reflect.TypeFor[types.ModelRow]()},
+	{Name: "HarnessTool", Type: reflect.TypeFor[types.HarnessTool]()},
+	{Name: "HarnessTools", Type: reflect.TypeFor[types.HarnessTools]()},
+	{Name: "AgentFile", Type: reflect.TypeFor[types.AgentFile]()},
+	{Name: "Prompt", Type: reflect.TypeFor[types.Prompt]()},
+	{Name: "Setting", Type: reflect.TypeFor[types.Setting]()},
+	{Name: "Limits", Type: reflect.TypeFor[types.Limits]()},
+	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
 	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
@@ -561,6 +578,22 @@ var boundaryEnums = []boundaryEnum{
 		Type: reflect.TypeFor[types.JobKind](),
 		Cases: []enumCase{{"check", "check"}, {"symbol", "symbol"}, {"paths", "paths"},
 			{"script", "script"}, {"prose", "prose"}},
+	},
+	{
+		Name:  "SkillForm",
+		Type:  reflect.TypeFor[types.SkillForm](),
+		Cases: []enumCase{{"both", "both"}, {"short", "short"}, {"full", "full"}},
+	},
+	{
+		Name: "ToolCapability",
+		Type: reflect.TypeFor[types.ToolCapability](),
+		Cases: []enumCase{{"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
+			{"network", "network"}, {"inert", "inert"}},
+	},
+	{
+		Name:  "McpTransport",
+		Type:  reflect.TypeFor[types.McpTransport](),
+		Cases: []enumCase{{"stdio", "stdio"}, {"http", "http"}},
 	},
 	{
 		Name:  "ModelTierSource",
