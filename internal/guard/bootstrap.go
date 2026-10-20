@@ -157,7 +157,18 @@ func (g goCall) recoversMagus() bool {
 		args = trimpathOptional(args)
 		return len(args) == 3 && args[0] == "-o" && args[1] == "magus" && path.Clean(args[2]) == "cmd/magus"
 	case "generate":
-		return len(args) > 0 && !slices.ContainsFunc(args, func(a string) bool { return !insidePackage(a) })
+		if len(args) == 0 {
+			return false
+		}
+		for _, arg := range args {
+			if arg != "." && !strings.HasPrefix(arg, "./") {
+				return false
+			}
+			if !filepath.IsLocal(filepath.FromSlash(arg)) {
+				return false
+			}
+		}
+		return true
 	case "run":
 		args = trimpathOptional(args)
 		return len(args) >= 2 && path.Clean(args[0]) == "cmd/magus-utils" && slices.Contains(magusUtilsGenerators, args[1])
@@ -170,16 +181,6 @@ func trimpathOptional(args []string) []string {
 		return args[1:]
 	}
 	return args
-}
-
-// insidePackage reports a package operand naming a directory under the build root: no
-// flag, no absolute path, nothing that climbs out.
-func insidePackage(a string) bool {
-	if a == "" || strings.HasPrefix(a, "-") || path.IsAbs(a) {
-		return false
-	}
-	c := path.Clean(a)
-	return c != ".." && !strings.HasPrefix(c, "../")
 }
 
 // soleGoCall is the line's call when it is one go command and nothing else: no pipe,
