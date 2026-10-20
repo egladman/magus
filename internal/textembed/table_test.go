@@ -122,7 +122,7 @@ func TestTableRoundTrip(t *testing.T) {
 // same digest on every architecture, and a layout change must bump tableFormat.
 func TestTableGolden(t *testing.T) {
 	data := encode(t, testSpec(probeVocab(), 64))
-	const want = "971904b4e5777c8b0ac79dfdd28731d25832325c53c67083b15aeb98f714d21c"
+	const want = "bf02e8edb121f77d890e4ea3a9c2af88ae049764b378f12795c36cb1192752f6"
 	if got := read(t, data).Digest(); got != want {
 		t.Errorf("probe table digest = %s, want %s", got, want)
 	}
@@ -131,11 +131,14 @@ func TestTableGolden(t *testing.T) {
 	}
 }
 
-// TestTableTokenizerDigest fails when textrank.Tokens or the probe changes. Either
+// tokenizerWithoutErrorOperator is the digest of the tokenizer that dropped "!>".
+const tokenizerWithoutErrorOperator = "1f021cc9256fabab0fb891a53270047faa9ea49231b3a982e62377d94ee86ad7"
+
+// TestTableTokenizerDigest fails when textrank.Tokens or a probe changes. Either
 // refuses every table encoded before, so the fix is to retrain the table, then update
 // want.
 func TestTableTokenizerDigest(t *testing.T) {
-	const want = "1f021cc9256fabab0fb891a53270047faa9ea49231b3a982e62377d94ee86ad7"
+	const want = "d62f3a9e2c1ad064ff7878c9f54c14fad7fead0dde89e20fe197b188c72fae8e"
 	if got := tokenizerDigest(); got != want {
 		t.Errorf("tokenizer digest = %s, want %s", got, want)
 	}
@@ -268,6 +271,8 @@ func TestTableReadRefuses(t *testing.T) {
 		{"header no teacher", withHeader(func(h *tableHeader) { h.Teacher = "" }), "provenance teacher is empty"},
 		{"header no pairs", withHeader(func(h *tableHeader) { h.PairsDigest = "" }), "provenance pairs_digest is empty"},
 		{"other tokenizer", withHeader(func(h *tableHeader) { h.TokenizerDigest = "feed" }), "tokenizer digest feed, but textrank.Tokens over the probe gives"},
+		{"tokenizer before the error operator", withHeader(func(h *tableHeader) { h.TokenizerDigest = tokenizerWithoutErrorOperator }),
+			"tokenizer digest " + tokenizerWithoutErrorOperator + ", but textrank.Tokens over the probe gives " + tokenizerDigest() + ": retrain the table under today's tokenizer"},
 		{"dims 65", withHeader(func(h *tableHeader) { h.Dims = 65 }), "dims 65"},
 		{"zero tokens", withHeader(func(h *tableHeader) { h.Tokens = 0 }), "header names 0 tokens"},
 		{"too many tokens", withHeader(func(h *tableHeader) { h.Tokens = 1 << 30 }), "header names 1073741824 tokens"},

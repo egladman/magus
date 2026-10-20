@@ -47,9 +47,13 @@ func SplitIdentifier(s string) []string {
 	return parts
 }
 
+const errorOperator = "!>"
+
 // Tokens lowercases text and splits it on non-word runes. Every identifier-shaped word
 // yields the whole word and then its SplitIdentifier parts, so a query for either finds
-// it. Nothing is stemmed.
+// it. Nothing is stemmed. The one punctuation token is Buzz's error operator "!>", kept
+// whole so a search for what a Buzz function throws finds it; every other non-word rune
+// is dropped.
 func Tokens(text string) []string {
 	var out []string
 	emit := func(word string) {
@@ -69,6 +73,9 @@ func Tokens(text string) []string {
 		if start >= 0 {
 			emit(text[start:i])
 			start = -1
+		}
+		if strings.HasPrefix(text[i:], errorOperator) {
+			out = append(out, errorOperator)
 		}
 	}
 	if start >= 0 {

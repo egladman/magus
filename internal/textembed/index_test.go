@@ -70,7 +70,7 @@ func TestIndexGolden(t *testing.T) {
 	_, ix := smallDocSet(t)
 	data := writeIndex(t, ix)
 	sum := sha256.Sum256(data)
-	if got, want := hex.EncodeToString(sum[:]), "78bb15b2d80e750271bdb37704807d718d342b08a5dd255904086ee0891b3519"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "16ed85696b45875a6105e20ed75da511e347dc9cfb0f492c9bab178704b087d4"; got != want {
 		t.Errorf("index digest = %q, want %q", got, want)
 	}
 }

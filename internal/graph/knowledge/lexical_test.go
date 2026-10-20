@@ -82,6 +82,16 @@ func TestLexicalDocumentSplitsIdentifiers(t *testing.T) {
 	assert.Equal(t, []string{"guide", "md", "setup", "setup"}, section.Fields[textrank.FieldName])
 }
 
+func TestLexicalDocumentKeepsTheBuzzErrorOperator(t *testing.T) {
+	n := types.KnowledgeNode{
+		ID:    "function:libs/gopherbuzz/std/fs.buzz:readFile",
+		Kind:  "function",
+		Attrs: map[string]string{AttrSignature: "fun readFile(path: str) > str !> any"},
+	}
+	doc := lexicalDocument(n, "")
+	assert.Equal(t, []string{"fun", "readfile", "read", "file", "path", "str", "str", "!>", "any"}, doc.Fields[textrank.FieldSignature])
+}
+
 func TestLexicalSourcePath(t *testing.T) {
 	for in, want := range map[string]string{
 		"a/b.go:12":    "a/b.go",

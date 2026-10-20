@@ -56,6 +56,16 @@ func TestVocabForcesProductNames(t *testing.T) {
 	assert.Subset(t, v.Tokens, []string{"mgs2001", "readsfiles", "reads", "files", "go", "test"})
 }
 
+func TestVocabForcesTheBuzzErrorOperator(t *testing.T) {
+	opts := vocabOptions()
+	opts.Size = 2
+	opts.Forced = []string{"!>"}
+	v, err := BuildVocab(vocabTexts(), opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"spell", "!>"}, v.Tokens)
+	assert.Equal(t, Bag{Rows: []int32{1}, Counts: []float64{1}}, v.Bag("fun f() > void !> any"))
+}
+
 func TestVocabRefuses(t *testing.T) {
 	opts := vocabOptions()
 	opts.Size = 2

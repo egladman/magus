@@ -35,10 +35,15 @@ const (
 //go:embed testdata/probe.txt
 var probe string
 
+// operatorProbe extends the digest over the punctuation textrank.Tokens keeps. It sits
+// outside probe so the probe table and the vectors pinned over it stay as they were.
+const operatorProbe = "fun parse(s: str) > int !> str"
+
 var tokenizerDigest = sync.OnceValue(func() string {
 	h := sha256.New()
-	for _, tok := range textrank.Tokens(probe) {
-		// A token holds only letters, digits and '_', so '\n' cannot occur inside one.
+	for _, tok := range textrank.Tokens(probe + "\n" + operatorProbe) {
+		// A token is a word of letters, digits and '_' or the operator "!>", so '\n'
+		// cannot occur inside one.
 		_, _ = h.Write([]byte(tok))
 		_, _ = h.Write([]byte{'\n'})
 	}
