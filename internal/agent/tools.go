@@ -313,6 +313,7 @@ func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
 type modelRowLine struct {
 	ID           string  `json:"id"`
 	Tier         string  `json:"tier,omitzero"`
+	Alias        string  `json:"alias,omitzero"`
 	Window       int64   `json:"window,omitzero"`
 	Input        float64 `json:"input,omitzero"`
 	CacheWrite5m float64 `json:"cache_write_5m,omitzero"`
@@ -327,7 +328,7 @@ func encodeModelRows(rows []types.ModelPricing) string {
 	var b strings.Builder
 	for _, r := range rows {
 		line := modelRowLine{
-			ID: r.ID, Tier: r.Tier, Window: r.Window, Input: float64(r.Input), CacheWrite5m: float64(r.CacheWrite5m),
+			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: float64(r.Input), CacheWrite5m: float64(r.CacheWrite5m),
 			CacheWrite1h: float64(r.CacheWrite1h), CacheRead: float64(r.CacheRead), Output: float64(r.Output),
 		}
 		if r.LongContext != nil {
@@ -346,7 +347,7 @@ func decodeModelRows(body []byte) ([]types.ModelPricing, error) {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
 		row := types.ModelPricing{
-			ID: line.ID, Tier: line.Tier, Window: line.Window, Input: types.USDPerMTok(line.Input), CacheWrite5m: types.USDPerMTok(line.CacheWrite5m),
+			ID: line.ID, Tier: line.Tier, Alias: line.Alias, Window: line.Window, Input: types.USDPerMTok(line.Input), CacheWrite5m: types.USDPerMTok(line.CacheWrite5m),
 			CacheWrite1h: types.USDPerMTok(line.CacheWrite1h), CacheRead: types.USDPerMTok(line.CacheRead), Output: types.USDPerMTok(line.Output),
 		}
 		if line.PriceStep > 0 {
