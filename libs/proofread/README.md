@@ -44,9 +44,10 @@ download and both checks.
 Proofread speaks the decisions of a magus guard rule. Each rule ships a default
 on each kind it judges, `deny` or `advise`, and a decisions table sets any rule
 `off`, `advise` or `deny`, the way `magus\guard.builtins` overrides a built-in
-guard rule. A caller refuses on `deny`, reports `advise` and lets it through, and
-never sees `off`. A rule marked `advise` has words with senses it cannot tell
-apart from the one it means; `lead-context` marks a lead that opens on a defect
+guard rule. A caller refuses on `deny` and never sees `off`. `advise` means
+graded: a graded rule has words with senses it cannot tell apart from the one it
+means, so its finding fails nothing alone and lowers the text's grade by its
+rule's weight (see Findings). `lead-context` marks a lead that opens on a defect
 `advise` itself. A table that names a rule sets every one of its findings,
 those included.
 
@@ -63,10 +64,14 @@ not on stdin:
 ```json
 {
   "rules": {"terms": "deny", "verdict": "deny", "staccato": "off"},
-  "paths": {"docs/blog/**": {"tense": "off"}}
+  "paths": {"docs/blog/**": {"tense": "off"}},
+  "minimums": {"reference": 80, "commit-message": 20}
 }
 ```
 
+`minimums` holds the grade, 0 to 100, each kind is held to. proofread ships none:
+a run over a kind the table names no minimum for exits 2 and names the kind, unless
+`--minimum N` sets it for that run. Passing both for one kind is an error too.
 `rules` applies to everything judged. `paths` applies to the file arguments a
 glob matches, each glob in the order the file lists them, so the last match
 wins over `rules` and over an earlier glob. A glob matches the argument as
@@ -81,7 +86,7 @@ posted in the thread, and `--anchored` that the reply sits on a line of the
 diff, an inline comment or a reply in its thread: that line is what it refers
 to, so `nonspecific` judges only top-level comments. The flags follow the kind. `proofread rules` writes every
 rule as its reference page shows it, `{name, code, kinds, decisions, house,
-catches, why}`, and judges nothing; `proofread explain <rule or code>` prints one
+weight, dimension, catches, why}`, and judges nothing; `proofread explain <rule or code>` prints one
 rule's catches, reason, default decisions and page as text. A first argument
 that names no subcommand prints the usage and exits 2.
 
@@ -90,12 +95,19 @@ that names no subcommand prints the usage and exits 2.
 The findings JSON is the contract: any command that writes the same array, a
 team's own style checker or a reviewer it drives, feeds the same consumers, and
 the same decisions table applies to it. proofread writes one JSON array on
-stdout and, by default, exits 0 whatever it found; a finding is not a failure, and
-the caller decides what one costs. `--fail-on deny|advise|never` makes the exit code
-say it: 1 when a finding at or above that decision remains after suppression and
-the baseline, 0 otherwise, and 2 when proofread could not judge (a bad flag, a
-missing file, a malformed table), so a caller tells a finding from a failure. The
-default is `never`.
+stdout and exits 1 when a `deny` finding remains after suppression and the
+baseline, 0 otherwise, and 2 when proofread could not judge (a bad flag, a missing
+file, a malformed table, no minimum for the kind), so a caller tells a finding from
+a failure.
+
+Each text also gets a grade out of 100: 100 minus `100 * sum(weight) / (1 + min(words,
+1000) / 100)`, floored at 0, over its prose words and its advise findings. A
+finding's `weight` is its rule's Wilson 95% lower bound on precision in the latest
+labeling round that scored 30 or more of its firings, and 0 for a rule no round
+measured that well. A text past 1000 words grades as one of 1000, so padding buys
+no headroom. A grade under the kind's minimum is a `grade` finding (PRF1100),
+decided `deny`, whose message names the grade, the minimum and the three rules that
+cost the most.
 
 | Field      | Holds                                                                               |
 | ---------- | ----------------------------------------------------------------------------------- |
@@ -108,6 +120,7 @@ default is `never`.
 | `message`  | the fix, with an example where the rule has one                                     |
 | `match`    | the offending text, or `""` for a budget                                            |
 | `url`      | the rule's page, `https://eli.gladman.cc/magus/reference/proofread/<rule>/`         |
+| `weight`   | what the finding costs its text's grade: its rule's weight on `advise`, 0 on `deny` |
 
 Codes are numbered by family and never reused: `PRF1xxx` shape, `PRF2xxx` tone,
 `PRF3xxx` claims and hedges, `PRF4xxx` generated-writing tells, `PRF5xxx` house
@@ -131,7 +144,7 @@ findings it writes a count on stderr. Any other format exits 2.
 ```sh
 proofread reference -o sarif docs/*.md > proofread.sarif
 proofread reference -o rdjson docs/*.md | reviewdog -f=rdjson -reporter=github-pr-review
-proofread reference -o text --fail-on deny docs/*.md
+proofread reference -o text --minimum 80 docs/*.md
 ```
 
 `proofread commit-message FILE` judges the message file a VCS hook passes. It drops
@@ -380,13 +393,15 @@ walks through it step by step. In short:
 | score      | precision, Wilson lower bound, alpha and the per-source gate; a rule file changed since the freeze voids it |
 | pool       | a deny weighs two frozen rounds on different sources                                                        |
 
-The gates: advise needs a Wilson 95% lower bound of 0.70 over 30 or more firings, on
+A round that labels 30 or more of a rule's firings gives it a weight, the Wilson 95%
+lower bound on its precision, recorded in `evidence.go`'s `weights`; until then a rule
+that ships off stays in `unmeasured`. The gates: advise needs a Wilson 95% lower bound of 0.70 over 30 or more firings, on
 the worst source with 10 or more, with at most one disagreement per 10 firings (or
 alpha 0.80) and a note on every one. A rule's repeat attempt is frozen with z = 2.24,
 so trying again cannot pass by luck. Deny needs two rounds on different sources,
 pooled to 60 firings with at most 1 wrong, both passing agreement. A rule that passes
 gets 10 of its agreed-correct labels spot-checked by a person before its
-`evidenceCeiling` entry moves.
+default moves.
 
 ### Tune without fooling yourself
 

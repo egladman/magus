@@ -182,6 +182,7 @@
 {"group":"file:changes/unreleased/raw-package-manager-installs-advised-not.md","path":"changes/unreleased/raw-package-manager-installs-advised-not.md"}
 {"group":"file:changes/unreleased/refactor-remove-preflight.md","path":"changes/unreleased/refactor-remove-preflight.md"}
 {"group":"file:changes/unreleased/release-rc-images-use-tagged.md","path":"changes/unreleased/release-rc-images-use-tagged.md"}
+{"group":"file:changes/unreleased/remove-deprecated-workspace-ref-aliases.md","path":"changes/unreleased/remove-deprecated-workspace-ref-aliases.md"}
 {"group":"file:changes/unreleased/renames.md","path":"changes/unreleased/renames.md"}
 {"group":"file:changes/unreleased/renderedskills-takes-form-not-variant.md","path":"changes/unreleased/renderedskills-takes-form-not-variant.md"}
 {"group":"file:changes/unreleased/repeated-guard-deny-one-line-ref.md","path":"changes/unreleased/repeated-guard-deny-one-line-ref.md"}
