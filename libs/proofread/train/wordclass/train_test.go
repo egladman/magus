@@ -1,4 +1,4 @@
-package train
+package wordclass
 
 import (
 	"bytes"
@@ -38,7 +38,7 @@ func gunzip(tb testing.TB, path string) []byte {
 func ewt(tb testing.TB) []sentence {
 	tb.Helper()
 
-	sentences, err := readSentences(bytes.NewReader(gunzip(tb, "../testdata/en_ewt-ud-test.conllu.gz")))
+	sentences, err := readSentences(bytes.NewReader(gunzip(tb, "../../internal/wordclass/testdata/en_ewt-ud-test.conllu.gz")))
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func BenchmarkTag(b *testing.B) {
 
 func TestTagAccuracy(t *testing.T) {
 	var m wordclass.Model
-	if err := m.UnmarshalBinary(gunzip(t, "../gen/model.gz")); err != nil {
+	if err := m.UnmarshalBinary(gunzip(t, "../../internal/wordclass/gen/model.gz")); err != nil {
 		t.Fatal(err)
 	}
 

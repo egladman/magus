@@ -28,7 +28,7 @@ func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return runRound(args[1:], stdout, stderr)
 	}
 
-	fset := flag.NewFlagSet("proofread calibrate", flag.ContinueOnError)
+	fset := flag.NewFlagSet("proofread-train calibrate", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	casesDir := fset.String("cases", "", "read labeled case files from this `dir` instead of the ones proofread carries")
 	format := fset.String("o", "table", "write `table` or json")
@@ -126,7 +126,7 @@ func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
 
 	for _, g := range all {
 		if !g.Pass {
-			return exitFindings
+			return exitGateFailed
 		}
 	}
 
@@ -148,17 +148,16 @@ func sampleKind(name string) (proofread.Kind, error) {
 		return "", errors.New("--sample needs --kind")
 	}
 
-	if kind, ok := proofread.ParseKind(name); ok {
-		if s, ok := kindCommand(kind); ok {
-			if s.kind == proofread.KindSkillTemplate {
-				return "", fmt.Errorf("--kind %s renders a template first and cannot be sampled", name)
-			}
-
-			return s.kind, nil
-		}
+	kind, ok := proofread.ParseKind(name)
+	if !ok {
+		return "", fmt.Errorf("unknown kind %q", name)
 	}
 
-	return "", fmt.Errorf("unknown kind %q", name)
+	if kind == proofread.KindSkillTemplate {
+		return "", fmt.Errorf("--kind %s renders a template first and cannot be sampled", name)
+	}
+
+	return kind, nil
 }
 
 func splitFields(list string) []string {

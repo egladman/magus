@@ -1,4 +1,4 @@
-package train
+package wordclass
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
-// The defaults proofread train passes. Tuned on dev: past 1024 levels and 10
+// The defaults proofread-train train passes. Tuned on dev: past 1024 levels and 10
 // passes, accuracy holds and the model grows.
 const (
 	DefaultIterations = 10

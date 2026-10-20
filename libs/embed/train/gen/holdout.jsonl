@@ -1404,6 +1404,12 @@
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/vm.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/vm_test.go"}
 {"group":"dir:libs/proofread/testdata","path":"libs/proofread/testdata/guideline.md"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/fetch.go"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/perceptron.go"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/sentences.go"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/sentences_test.go"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/train.go"}
+{"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/train_test.go"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/gen/closures","path":"libs/scipbuzz/testdata/snapshots/gen/closures/main.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/gen/generics","path":"libs/scipbuzz/testdata/snapshots/gen/generics/main.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/input/imports_relative/lib","path":"libs/scipbuzz/testdata/snapshots/input/imports_relative/lib/util.buzz"}

@@ -55,7 +55,7 @@ var rulePathspecs = []string{
 	":(top,exclude)libs/proofread/round.go",
 }
 
-// runRound runs `proofread calibrate round sample|freeze|score|pool`.
+// runRound runs `proofread-train calibrate round sample|freeze|score|pool`.
 func runRound(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		return failure(stderr, errors.New("round needs sample, freeze, score or pool"))
@@ -188,7 +188,7 @@ func (r *repeated) Set(v string) error {
 }
 
 func runRoundSample(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread calibrate round sample", flag.ContinueOnError)
+	fset := flag.NewFlagSet("proofread-train calibrate round sample", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	rulesList := fset.String("rules", "", "sample firings of these comma-separated `rules`")
 	seed := fset.Int64("seed", 0, "draw with this `seed`, fixed before anyone sees the sample")
@@ -346,13 +346,26 @@ func (c *sampleConfig) resolveDecisions(p string) error {
 		return fmt.Errorf("read decisions %s: %w", p, err)
 	}
 
-	t, err := parseTable(data)
-	if err != nil {
+	var raw struct {
+		Rules    map[string]string `json:"rules"`
+		Paths    json.RawMessage   `json:"paths"`
+		Minimums json.RawMessage   `json:"minimums"`
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&raw); err != nil {
 		return fmt.Errorf("decisions %s: %w", p, err)
 	}
 
-	if len(t.paths) > 0 {
+	if len(raw.Paths) > 0 && string(raw.Paths) != "null" {
 		return fmt.Errorf("decisions %s: a sample's records have no path, so the table cannot scope rules by glob", p)
+	}
+
+	decisions, err := ruleDecisions(raw.Rules)
+	if err != nil {
+		return fmt.Errorf("decisions %s: %w", p, err)
 	}
 
 	house := map[proofread.Rule]bool{}
@@ -361,14 +374,38 @@ func (c *sampleConfig) resolveDecisions(p string) error {
 	}
 
 	for _, r := range c.rules {
-		if !t.turnsOn(r, house[r]) {
+		if d, set := decisions[r]; (set && d == proofread.DecisionOff) || (!set && house[r]) {
 			return fmt.Errorf("decisions %s sets %q off, so it cannot be sampled", p, r)
 		}
 	}
 
-	c.decisions = t.rules
+	c.decisions = decisions
 
 	return nil
+}
+
+// ruleDecisions checks each name against the rules and each value against the
+// three decisions. A copy of cmd/proofread's: neither main package can import the other.
+func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision, error) {
+	known := proofread.Rules()
+	out := make(map[proofread.Rule]proofread.Decision, len(in))
+
+	for _, name := range slices.Sorted(maps.Keys(in)) {
+		r, d := proofread.Rule(name), proofread.Decision(in[name])
+		if !slices.Contains(known, r) {
+			return nil, fmt.Errorf("unknown rule %q", name)
+		}
+
+		switch d {
+		case proofread.DecisionOff, proofread.DecisionAdvise, proofread.DecisionDeny:
+		default:
+			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
+		}
+
+		out[r] = d
+	}
+
+	return out, nil
 }
 
 var sourceName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
@@ -1424,7 +1461,7 @@ type freezeRecord struct {
 }
 
 func runRoundFreeze(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread calibrate round freeze", flag.ContinueOnError)
+	fset := flag.NewFlagSet("proofread-train calibrate round freeze", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	dir := fset.String("dir", "", "freeze the round sampled into this `dir`")
 	guideline := fset.String("guideline", "", "the guideline `file` labelers judge by")
@@ -1600,7 +1637,7 @@ type scoresRecord struct {
 }
 
 func runRoundScore(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread calibrate round score", flag.ContinueOnError)
+	fset := flag.NewFlagSet("proofread-train calibrate round score", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	dir := fset.String("dir", "", "score the round labeled in this `dir`")
 	out := fset.String("out", "", "write the scores to this `file` (default DIR/scores.json)")
@@ -2038,7 +2075,7 @@ type poolRecord struct {
 }
 
 func runRoundPool(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread calibrate round pool", flag.ContinueOnError)
+	fset := flag.NewFlagSet("proofread-train calibrate round pool", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 
 	var dirs repeated
@@ -2380,12 +2417,12 @@ func proofreadVersion() string {
 func executableSHA256() (string, error) {
 	path, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("find the running proofread binary: %w", err)
+		return "", fmt.Errorf("find the running proofread-train binary: %w", err)
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("hash the running proofread binary: %w", err)
+		return "", fmt.Errorf("hash the running proofread-train binary: %w", err)
 	}
 
 	return sha256Hex(data), nil

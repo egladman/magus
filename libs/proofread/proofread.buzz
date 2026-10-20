@@ -16,14 +16,14 @@ export final build = "magus run proofread-build libs/proofread";
 
 // PACKAGES are the directories under home whose non-test Go the binary links. A directory
 // that does not exist lists nothing.
-final PACKAGES = [".", "internal/calibrate", "internal/wordclass", "internal/wordclass/train", "internal/xdg", command];
+final PACKAGES = [".", "internal/calibrate", "internal/wordclass", "internal/xdg", command];
 
 // attribution is the CC BY-SA 4.0 notice the embedded tagger model needs, relative to home.
 export final attribution = "internal/wordclass/ATTRIBUTION";
 
 // sources lists every file proofread is linked from, relative to dir, the libs/proofread
 // module: its go.mod and go.sum, the non-test Go of the packages it builds, the tagger
-// model wordclass embeds, and the labeled cases the binary embeds for `proofread calibrate`.
+// model wordclass embeds, and the labeled cases internal/calibrate embeds.
 // proofread-build hashes this list and the guard rehashes it, so neither can drift from the other.
 export fun sources(dir: str) > [str] !> any {
     final found = mut ["go.mod", "go.sum"];
@@ -79,7 +79,7 @@ export fun whyStale(dir: str) > str {
 test "a proofread that is missing or linked from other sources is stale" {
     final dir = fs\tempDir("proofread") catch "";
     std\assert(dir != "", message: "a temp dir");
-    foreach (sub in ["internal/calibrate/cases", "internal/wordclass/train", "internal/wordclass/gen", "internal/xdg",
+    foreach (sub in ["internal/calibrate/cases", "internal/wordclass/gen", "internal/xdg",
                      "cmd/proofread", "gen"]) {
         fs\mkdirAll("{dir}/{sub}") catch void;
     }
@@ -89,14 +89,13 @@ test "a proofread that is missing or linked from other sources is stale" {
     fs\writeFile("{dir}/proofread_test.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/internal/calibrate/calibrate.go", content: "package calibrate\n") catch void;
     fs\writeFile("{dir}/internal/wordclass/tag.go", content: "package wordclass\n") catch void;
-    fs\writeFile("{dir}/internal/wordclass/train/train.go", content: "package train\n") catch void;
     fs\writeFile("{dir}/internal/wordclass/gen/model.gz", content: "model") catch void;
     fs\writeFile("{dir}/internal/xdg/xdg.go", content: "package xdg\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
     fs\writeFile("{dir}/internal/calibrate/cases/filler.txtar", content: "-- hit/reference --\nx\n") catch void;
 
     std\assert((sources(dir) catch [<str>]).join(",") == "go.mod,go.sum,proofread.go,internal/calibrate/calibrate.go,"
-        + "internal/wordclass/tag.go,internal/wordclass/train/train.go,internal/xdg/xdg.go,"
+        + "internal/wordclass/tag.go,internal/xdg/xdg.go,"
         + "cmd/proofread/main.go,internal/wordclass/gen/model.gz,internal/calibrate/cases/filler.txtar",
         message: (sources(dir) catch [<str>]).join(","));
     std\assert(whyStale(dir) == "libs/proofread/gen/proofread is not built", message: whyStale(dir));

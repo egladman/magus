@@ -332,7 +332,9 @@ nothing at check time learns or loads weights. What the labeled data does is
 calibrate: it measures how often a hand-written rule is right on text nobody tuned it
 on, and that measurement decides the rule's default decision (`off`, `advise` or
 `deny`). Fixing a rule is ordinary code review. Promoting one takes evidence from a
-frozen labeling round.
+frozen labeling round. Both the rounds and the word-class tagger's training run from
+`proofread-train`, a separate binary in the `train/` module, so neither ships in
+`proofread` or reaches `libs/conventions`.
 
 ### Where things live
 
@@ -345,7 +347,8 @@ frozen labeling round.
 | `evidence.go`                           | `evidenceCeiling`: the strictest decision each rule's labeled evidence supports                         |
 | `internal/calibrate/`                   | the case loader, the precision tally, Wilson, Krippendorff and the shape separation                     |
 | `internal/calibrate/cases/<rule>.txtar` | the labeled cases: regression tests and the tuning set                                                  |
-| `internal/wordclass/`                   | the word-class tagger the grammar measures read, and its model trained by `proofread train`             |
+| `internal/wordclass/`                   | the word-class tagger the grammar measures read, and its model trained by `proofread-train train`       |
+| `train/`                                | the `proofread-train` module: the tagger's trainer, the case replay and the labeling rounds             |
 | `testdata/guideline.md`                 | the labeling guideline every round is frozen with                                                       |
 | `testdata/rounds/roundN.json`           | one record per labeling round: counts, scores and gates, no text                                        |
 
@@ -381,7 +384,7 @@ frozen labeling round.
 ### Earn a default
 
 A rule's default moves only on a frozen labeling round, run with
-`proofread calibrate round`; [the round guide](../../docs/guides/proofread-calibration.md)
+`proofread-train calibrate round`; [the round guide](../../docs/guides/proofread-calibration.md)
 walks through it step by step. In short:
 
 | Step       | What happens                                                                                                |
