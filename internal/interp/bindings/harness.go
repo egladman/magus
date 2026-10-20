@@ -11,17 +11,17 @@ import (
 )
 
 // buildHarness assembles magus\harness for a magusfile. provider() wires an imported
-// spell as an agent-host harness (a fifth provider-style contract beside cache,
-// CI, secret and review):
+// spell as an agent-host harness (a provider-style contract beside cache, CI, secret and
+// review):
 //
 //	import "ghcr.io/egladman/magus/spells/harness/cursor";
 //	magus\harness.provider(cursor);
 //
-// The spell exports harness_config / harness_skills / harness_entries; Magus
-// invokes them by name on describe/verify. A workspace may use several harnesses.
+// The spell exports the harness contract's mgs_ functions (spells.HarnessContract); Magus
+// calls them on describe/verify. A workspace may use several harnesses.
 //
-// provider returns the harness's HarnessKey, the typed key a magus\job.modelTiers hosts
-// map is keyed by. A call that discards it wires the harness as before.
+// provider returns the harness id, the key a magus\job.modelTiers hosts map is keyed by. A
+// call that discards it wires the harness all the same.
 func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	harness := vm.NewMap()
 	harness.MapSet("provider", directVal(obs, "magus.harness.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -39,9 +39,7 @@ func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.AddHarness(name)
 		}
-		key := vm.NewMap()
-		key.MapSet("id", vm.StrValue(name))
-		return key, nil
+		return vm.StrValue(name), nil
 	}))
 	return harness
 }

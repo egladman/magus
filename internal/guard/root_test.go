@@ -409,13 +409,13 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 }
 
 // The shipped declaration maps full ids, and a host's spawn tool may take only the short
-// name a harness_models row declares as its alias. That alias resolves the spawn's tier.
+// name a mgs_listModels row declares as its alias. That alias resolves the spawn's tier.
 func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
 		Bounds: []types.ModelTierBounds{{}, {}, {}},
 		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
-		Hosts:  map[types.HarnessKey][]string{{ID: "claude-code"}: {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
 	})
 	require.NoError(t, err)
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
@@ -532,7 +532,7 @@ func testModelTiers(t *testing.T, host string) *types.ModelTierSet {
 		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
 		Bounds: []types.ModelTierBounds{{MaxContext: 100_000}, {}, {}},
 		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
-		Hosts:  map[types.HarnessKey][]string{{ID: host}: {"haiku", "sonnet", "opus"}},
+		Hosts:  map[string][]string{host: {"haiku", "sonnet", "opus"}},
 	})
 	require.NoError(t, err)
 	return set
