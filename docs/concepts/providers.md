@@ -132,9 +132,8 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "my-lifecycles"; }
 
-export fun list_lifecycles(target: Target, cb: fun(any)) > [Lifecycle] !> any {
-    final io = {<str: any>};
-    cb(io); // io["keys"] is every product the workspace's spells name
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] !> any {
+    // req.keys is every product the workspace's spells name
     return [
         Lifecycle{
             key = "go",
