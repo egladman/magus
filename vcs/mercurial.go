@@ -357,14 +357,14 @@ func hgReadPending(ctx context.Context, prog, dir string) (hgPending, error) {
 // deleted, so nothing of theirs is at risk in between.
 func hgRestorePending(ctx context.Context, prog string, p hgPending) error {
 	if len(p.unknown) > 0 {
-		if err := hgRun(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
+		if err := runVCS(ctx, prog, p.root, append([]string{"forget", "--"}, p.unknown...)); err != nil {
 			return err
 		}
 	}
 	if len(p.missing) == 0 {
 		return nil
 	}
-	if err := hgRun(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
+	if err := runVCS(ctx, prog, p.root, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
 		return err
 	}
 	for _, rel := range p.missing {
@@ -402,7 +402,7 @@ func hgStatusPaths(ctx context.Context, prog, dir, class string) ([]string, erro
 	return files, nil
 }
 
-func hgRun(ctx context.Context, prog, dir string, args []string) error {
+func runVCS(ctx context.Context, prog, dir string, args []string) error {
 	cmd := vcsExec(ctx, prog, args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {

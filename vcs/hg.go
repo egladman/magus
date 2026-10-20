@@ -1174,10 +1174,10 @@ func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error 
 	if err := checkNewCheckout(root, dir); err != nil {
 		return err
 	}
-	if err := hgRun(ctx, "hg", root, []string{"share", "--config", "extensions.share=", "--noupdate", "--", root, dir}); err != nil {
+	if err := runVCS(ctx, "hg", root, []string{"share", "--config", "extensions.share=", "--noupdate", "--", root, dir}); err != nil {
 		return err
 	}
-	if err := hgRun(ctx, "hg", dir, []string{"update", "--clean", "--rev", rev}); err != nil {
+	if err := runVCS(ctx, "hg", dir, []string{"update", "--clean", "--rev", rev}); err != nil {
 		return errors.Join(err, os.RemoveAll(dir))
 	}
 	return recordMadeCheckout(ctx, hgMetaDir(root), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir)})
