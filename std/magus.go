@@ -636,12 +636,12 @@ var Magus = Module{
 		},
 		{
 			Name: "harness",
-			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.",
+			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarnessConfig, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.",
 			Methods: []Method{{
 				Name:    "provider",
-				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness's HarnessKey, which keys the hosts map of magus\\job.modelTiers; a call that ignores it wires the harness as before.",
+				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness id, which keys the hosts map of magus\\job.modelTiers; a call that ignores it wires the harness all the same.",
 				Args:    []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessKey"}},
+				Returns: []Ret{{Type: TypeString}},
 				Extern:  true,
 			}},
 		},
@@ -867,7 +867,7 @@ var Magus = Module{
 					Name: "modelTiers",
 					Doc: "Declare the model tiers a fork assigns: an enum of your own, cheapest case first, " +
 						"which magus reads once at load. tiers is that enum and default one of its cases. " +
-						"hosts maps each harness the magusfile wired, keyed by the HarnessKey " +
+						"hosts maps each harness the magusfile wired, keyed by the harness id " +
 						"magus\\harness.provider returns, to a function from a tier to the model alias that harness spawns; " +
 						"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
 						"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
@@ -1021,9 +1021,9 @@ var Magus = Module{
 				},
 				{
 					Name:    "harness",
-					Doc:     "What each wired harness's host config needs merged: {id, files, merge, mcpHint, wired} per harness, files keyed by workspace path. magus never writes host config; the person runs merge. Omit `id` for every wired harness; an unknown id raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "id", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
-					Returns: []Ret{{Type: TypeAny, Object: "[HarnessPlan]"}},
+					Doc:     "What the wired harness id's host config needs merged: {id, files, merge, mcpHint, wired}, files keyed by workspace path. magus never writes host config; the person runs merge. An empty or unknown id raises, naming the wired ids. Runs a nested magus.",
+					Args:    []Arg{{Name: "id", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessPlan"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1399,17 +1399,25 @@ func MagusDescribeRule(ctx context.Context, name string, opts map[string]any) ([
 	return []types.RuleDoc{rule}, nil
 }
 
-// MagusDescribeHarness implements magus\describe.harness. Like rule, a named read
-// prints one plan bare, so it is wrapped to keep the collection shape.
-func MagusDescribeHarness(ctx context.Context, id string, opts map[string]any) ([]types.HarnessPlan, error) {
-	if id == "" {
-		return runMagusJSON[[]types.HarnessPlan](ctx, "describe", []string{"harness"}, opts)
+// MagusDescribeHarness implements magus\describe.harness: the plan of the one wired harness
+// id names. An empty id is an error naming the wired ids, which a nested describe lists.
+func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessPlan, error) {
+	if id != "" {
+		return runMagusJSON[types.HarnessPlan](ctx, "describe", []string{"harness", id}, nil)
 	}
-	plan, err := runMagusJSON[types.HarnessPlan](ctx, "describe", []string{"harness", id}, opts)
+	plans, err := runMagusJSON[[]types.HarnessPlan](ctx, "describe", []string{"harness"}, nil)
 	if err != nil {
-		return nil, err
+		return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id; listing the wired ones failed: %w`, err)
 	}
-	return []types.HarnessPlan{plan}, nil
+	ids := make([]string, len(plans))
+	for i, p := range plans {
+		ids[i] = p.ID
+	}
+	wired := strings.Join(ids, ", ")
+	if wired == "" {
+		wired = "none"
+	}
+	return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id; the wired ones are %s`, wired)
 }
 
 // MagusDescribeMCPTool implements magus\describe.mcpTool.
