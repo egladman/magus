@@ -27,7 +27,7 @@ const benchQueryPrompt = "Represent this query for searching relevant code: "
 const benchDepth = 100
 
 // runBench writes CodeRankEmbed's runs over one subset the external harness exported
-// (internal/textembed/eval_test.go) into its runs/<digest>/, where the harness
+// (internal/textembed/search_test.go) into its runs/<digest>/, where the harness
 // fuses and scores them. One corpus encoding serves two runs: queries with the model
 // card's prompt, the teacher as published, and prompt-less, the symmetric model the
 // student is distilled toward. Every text goes through resumable teacher shards under

@@ -56,8 +56,8 @@ export final SANCTIONED = {
     "hack/embed/cmd/embed/main.go: evalCorpus": "the command wires the decontamination input collection",
     "hack/embed/cmd/embed/main_test.go: evalCorpus": "the command test constructs the decontamination input collection",
     "internal/rankeval/results.go: corpus": "the ranker comment names the standard retrieval input",
-    "internal/textembed/eval_test.go: corpus": "the CoIR data layout and export protocol fix this term",
-    "internal/textembed/eval_test.go: TestExternalHarnessDedupeCorpus": "the test names the external evaluation layout it covers",
+    "internal/textembed/search_test.go: corpus": "the CoIR data layout and export protocol fix this term",
+    "internal/textembed/search_test.go: TestExternalHarnessDedupeCorpus": "the test names the external evaluation layout it covers",
 };
 
 final DETERMINER_ONE = std\pattern(`(?i)\b(?:a|an|this|every|each|one|another|neither|either|per)\s+surface\b`);

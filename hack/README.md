@@ -93,7 +93,9 @@ For GitHub CI failures, select the pull request's current head with `--commit`
 or its run with `--run` in `show-failures.buzz`, then pipe its records to
 `magus query output --stdin`. PR status summaries and raw job logs do not
 isolate the captured output for each failed target. A run without retained
-failure artifacts is reported as such; do not treat that as a passing run.
+failure artifacts is reported as such; read its raw job logs with
+`gh run view <run-id> --log-failed` to diagnose setup failures and jobs or workflows
+without target artifacts. Missing artifacts do not mean a passing run.
 
 | script | does | cost |
 | --- | --- | --- |

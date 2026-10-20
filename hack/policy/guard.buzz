@@ -10,7 +10,8 @@
 // Rules, each keyed on facts the guard hands over (parsed programs, titles, paths), never
 // on prose:
 //   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
-//   ci-batch-poll (deny): CI status summaries or raw logs instead of failure artifacts.
+//   ci-batch-poll (deny): CI status summaries instead of failure artifacts.
+//   ci-log-read (advise once per session): prefer artifacts, leaving raw job diagnostics available.
 //   queue-poll (advise once per session): the merge queue's state read through GitHub.
 //   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
 //   pr-watch (deny): a pull request's own state (merged, auto-merge, mergeability) read
@@ -69,8 +70,8 @@
 //     sets under $XDG_CACHE_HOME/proofread/calibration/sealed, however it spells the path.
 //     The labels beside them stay open.
 //
-// Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
-// six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
+// Each rule lives beside its tests in the file named for what it guards: gh.buzz (the
+// GitHub calls), cadence.buzz (the gate and the push), branches.buzz (push-authority and
 // branch-name), binaries.buzz (foreign-binary and
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
