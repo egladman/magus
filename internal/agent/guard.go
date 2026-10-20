@@ -229,7 +229,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // Under that config a 29 copy reports the flag as unsupported and every skill gate stands
 // down.
 // 31: native shell calls may carry cmd and workdir. The shared command glue selects
-// that directory's binary, and Codex explicitly names its starting directory for handoff.
+// that directory's binary, and the hook names its starting directory for handoff.
 const GuardTemplateVersion = 31
 
 // GuardTemplateMarker introduces the version line each template carries, and is

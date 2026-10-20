@@ -125,7 +125,7 @@ func RefuseOld(old string) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%w: %s was written by an older magus; preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
+	return fmt.Errorf("%w: %s was written by an older magus: preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
 }
 
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a
