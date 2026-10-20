@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -81,8 +82,8 @@ func TestUnreadLoadViewedSaysWhenTheMarksCannotBeRead(t *testing.T) {
 	}
 }
 
-// An old JSON file is neither read nor skipped: the error names it and says how to clear it.
-func TestUnreadLoadViewedNamesAnOldJSONFileAndHowToMoveItAside(t *testing.T) {
+// An old JSON file is neither read nor skipped: the error names it and says to preserve it.
+func TestUnreadLoadViewedNamesAnOldJSONFileAndHowToPreserveIt(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -92,9 +93,9 @@ func TestUnreadLoadViewedNamesAnOldJSONFileAndHowToMoveItAside(t *testing.T) {
 
 	_, err := NewStore(dir).LoadViewed()
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), old)
-	assert.Contains(t, err.Error(), "mv "+old+" "+old+".old")
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
+	require.ErrorContains(t, err, old)
 }
 
 func TestUnreadLoadViewedWithNoStateDirectoryIsTheSentinel(t *testing.T) {

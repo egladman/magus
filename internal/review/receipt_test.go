@@ -164,9 +164,9 @@ func TestOldReceiptsJSONIsNamedNotRead(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, []byte(`[{"path":"a.go","digest":"d"}]`), 0o600))
 
 	_, err := Load(dir)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), old)
-	assert.Contains(t, err.Error(), "mv "+old+" "+old+".old")
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
+	require.ErrorContains(t, err, old)
 	require.Error(t, Record(dir, []Receipt{{Path: "b.go", Digest: "d", At: time.Now()}}))
 }
 

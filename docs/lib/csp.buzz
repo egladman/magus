@@ -17,7 +17,7 @@ import "assert";
 // writeSiteManifest's per-asset integrity list), so the two never compute "the same
 // hash" two different ways.
 export fun fileSha256(path: str) > str !> any {
-    return crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(path)).hex();
+    return crypto\hash(crypto\HashAlgorithm.Sha256, data: fs\readFile(path)).hex();
 }
 
 // scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes
@@ -26,7 +26,7 @@ export fun fileSha256(path: str) > str !> any {
 // CSP hash-sources are base64, so hexDecode back to raw digest bytes before
 // base64-encoding.
 export fun scriptHash(js: str) > str !> any {
-    return "sha256-" + base64\encode(hex\decode(crypto\hash(crypto\HashAlgorithm.Sha256, js).hex()));
+    return "sha256-" + base64\encode(hex\decode(crypto\hash(crypto\HashAlgorithm.Sha256, data: js).hex()));
 }
 
 // extractInlineScripts pulls the text of every attribute-less `<script>...</script>`
@@ -97,15 +97,16 @@ export final CSP_IMG_SRC_BADGES = CSP_IMG_SRC_DEFAULT + " https://github.com htt
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, <iframe>.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
 export fun computeCSP(imgSrc: str) > str !> any {
-    var scriptSrc = "'self' 'wasm-unsafe-eval'";
+    var hashes: mut [str] = mut [<str>];
     foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
         final f = io\File.open(path, io\FileMode.read);
         final html = f.readAll();
         f.close();
         foreach (js in extractInlineScripts(html)) {
-            scriptSrc = scriptSrc + " '" + scriptHash(js) + "'";
+            hashes.append(" '" + scriptHash(js) + "'");
         }
     }
+    final scriptSrc = "'self' 'wasm-unsafe-eval'" + hashes.join("");
     return "default-src 'self'; script-src " + scriptSrc
         + "; style-src 'self' 'unsafe-inline'"
         + "; img-src " + imgSrc

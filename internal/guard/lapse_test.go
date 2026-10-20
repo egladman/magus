@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
 )
@@ -129,14 +130,15 @@ func TestRememberedSettingsAreAppendedPerRule(t *testing.T) {
 }
 
 // A JSON memo an older magus left is not read as a second format: recalling the settings fails
-// naming the file to move aside, and a lapse grades by the defaults.
+// naming the file to preserve, and a lapse grades by the defaults.
 func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	dir := t.TempDir()
 	old := filepath.Join(dir, oldSettingsFile)
 	require.NoError(t, os.WriteFile(old, []byte(`{"busy-wait":{"decision":"deny"}}`), 0o644))
 
 	settings, err := recallSettings(dir)
-	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
 	assert.Nil(t, settings)
 	assert.Nil(t, recalledSettings(dir))
 }

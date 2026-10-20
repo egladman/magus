@@ -2068,7 +2068,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 }
 
 // A run beside a history store an older magus left behind says so as an error, naming the
-// file and how to move it aside, and says what the run does without its history. Silent,
+// file and saying to preserve it, and says what the run does without its history. Silent,
 // every claim fell back to its declaration and no outcome was recorded.
 func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
 	spellName := register.Spell(t, "zzz-unreadable-history-spell",
@@ -2101,7 +2101,8 @@ func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
 	got := logged.String()
 	assert.Equal(t, 1, strings.Count(got, "run history is unreadable"), "said once, however many readers wait on it")
 	assert.Contains(t, got, "sizes claims from declarations and records no history")
-	assert.Contains(t, got, "mv "+old+" "+old+".old")
+	assert.Contains(t, got, "preserve it")
+	assert.Contains(t, got, old)
 }
 
 // TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into

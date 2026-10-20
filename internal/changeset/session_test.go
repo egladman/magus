@@ -181,7 +181,7 @@ func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 }
 
 // An old JSON file is not read as a second format and not skipped without a word: the error
-// names the file and how to move it aside.
+// names the file and says to preserve it until writers stop.
 func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 	load := map[string]func(*Store) error{
 		"viewed.json":       func(s *Store) error { _, err := s.LoadViewed(); return err },
@@ -195,7 +195,9 @@ func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 			old := filepath.Join(dir, "review", name)
 			require.NoError(t, mkdirAllWrite(old, `["x"]`))
 
-			require.ErrorContains(t, load(NewStore(dir)), "mv "+old+" "+old+".old")
+			err := load(NewStore(dir))
+			require.ErrorIs(t, err, file.ErrLegacyStore)
+			require.ErrorContains(t, err, "preserve it")
 			got := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
 			assert.Empty(t, got.Viewed)
 			assert.Empty(t, got.SeenComments)

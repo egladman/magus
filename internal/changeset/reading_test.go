@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/types"
 )
 
@@ -195,6 +196,7 @@ func TestReadingMarkOfAnOlderMagusIsNamedNotRead(t *testing.T) {
 
 	m, err := NewStore(dir).LoadReading()
 
-	require.ErrorContains(t, err, "mv "+old+" "+old+".old")
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
 	assert.False(t, m.Active(), "the JSON is not read as a second format")
 }

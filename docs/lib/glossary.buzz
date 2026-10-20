@@ -30,18 +30,18 @@ export object GlossaryLinkResult {
 // "output-reference"; "MAGUS.md" -> "magusmd"; "write_file" -> "write-file".
 export fun glossarySlug(term: str) > str {
     final low = term.lower();
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var i = 0;
     while (i < low.len()) {
         final b = low.byte(i);
         if (b == 32 or b == 95) {   // space or underscore -> hyphen
-            buf = buf + "-";
+            parts.append("-");
         } else if ((b >= 97 and b <= 122) or (b >= 48 and b <= 57) or b == 45) {
-            buf = buf + low.sub(i, len: 1);
+            parts.append(low.sub(i, len: 1));
         }
         i = i + 1;
     }
-    return buf;
+    return parts.join("");
 }
 
 fun isWordByte(b: int) > bool {
@@ -92,17 +92,17 @@ fun scanPast(html: str, start: int, s: str) > int {
 fun tagNameLower(html: str, at: int) > str {
     var j = at + 1;
     if (j < html.len() and html.byte(j) == 47) { j = j + 1; }   // '/'
-    var name = "";
+    final parts: mut [str] = mut [<str>];
     while (j < html.len()) {
         final b = html.byte(j);
         if ((b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57)) {
-            name = name + html.sub(j, len: 1);
+            parts.append(html.sub(j, len: 1));
             j = j + 1;
         } else {
             break;
         }
     }
-    return name.lower();
+    return parts.join("").lower();
 }
 
 // isSkipContainer is true for tags whose text content must never be auto-linked: pre
@@ -132,13 +132,10 @@ object linkIns {
     open: str = "",
 }
 
-// spaces returns n space bytes, built by doubling (O(log n) concats) so masking a large
-// protected region stays cheap.
+// spaces returns n space bytes so masking a large protected region stays cheap.
 fun spaces(n: int) > str {
     if (n <= 0) { return ""; }
-    var s = " ";
-    while (s.len() < n) { s = s + s; }
-    return s.sub(0, len: n);
+    return " ".repeat(n);
 }
 
 // maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced
@@ -155,14 +152,14 @@ fun maskLinkable(html: str, skipInlineCode: bool) > str {
         if (html.byte(i) == 60) {   // '<': mask this tag / comment / skip container
             var end = 0;
             if (i + 3 < total and html.byte(i + 1) == 33 and html.byte(i + 2) == 45 and html.byte(i + 3) == 45) {
-                end = scanPast(html, i + 4, "-->");
+                end = scanPast(html, start: i + 4, s: "-->");
             } else {
                 final isClose = (i + 1 < total and html.byte(i + 1) == 47);
-                final name = tagNameLower(html, i);
-                final tagEnd = scanPastByte(html, i + 1, 62);
-                if (isClose == false and (isSkipContainer(name, skipInlineCode)
-                        or hasNoLinkAttr(html, i, tagEnd))) {
-                    end = scanPast(html, i + 1, "</" + name + ">");
+                final name = tagNameLower(html, at: i);
+                final tagEnd = scanPastByte(html, start: i + 1, target: 62);
+                if (isClose == false and (isSkipContainer(name, skipInlineCode: skipInlineCode)
+                        or hasNoLinkAttr(html, start: i, tagEnd: tagEnd))) {
+                    end = scanPast(html, start: i + 1, s: "</" + name + ">");
                 } else {
                     end = tagEnd;
                 }
@@ -237,7 +234,7 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
         // inside code or an existing link, so one term cost megabytes of copying on one
         // page. Scanning in place is what makes this loop linear in the page.
         var pos = searchable.indexOf(needle);
-        while (pos != null and acceptable(searchable, pos!, n, ins) == false) {
+        while (pos != null and acceptable(searchable, pos: pos!, n: n, ins: ins) == false) {
             pos = searchable.indexOf(needle, from: pos! + 1);
         }
         if (pos != null) {
@@ -288,7 +285,7 @@ export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: st
             + "\" data-def=\"" + escapeAttr(t.def) + "\">");
         keys.append(t.anchor);
     }
-    return applyLinks(html, maskLinkable(html, true), tokens, opens, keys);   // prose: mask inline code
+    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: true), tokens: tokens, opens: opens, keys: keys);   // prose: mask inline code
 }
 
 // Entity is one linkable domain reference recognized in INLINE code (and prose), never in
@@ -338,8 +335,8 @@ export fun linkCodeEntities(html: str, entities: [Entity], pageDir: str) > str {
     final opens: mut [str] = mut [<str>];
     final keys: mut [str] = mut [<str>];
     foreach (e in entities) {
-        var href = relativePath(pageDir, e.url);
-        if (e.anchor != "") { href = href + "#" + e.anchor; }
+        final base = relativePath(fromDir: pageDir, toUrl: e.url);
+        final href = if (e.anchor != "") base + "#" + e.anchor else base;
         tokens.append(e.token.lower());
         opens.append("<a class=\"code-xref\" href=\"" + href + "\" data-kind=\"" + e.kind
             + "\" data-def=\"" + escapeAttr(e.summary) + "\">");
@@ -347,7 +344,7 @@ export fun linkCodeEntities(html: str, entities: [Entity], pageDir: str) > str {
     }
     // code mode: inline <code> stays linkable (that is where these references appear); only
     // fenced <pre> blocks, tags, and links are masked out.
-    return applyLinks(html, maskLinkable(html, false), tokens, opens, keys).html;
+    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: false), tokens: tokens, opens: opens, keys: keys).html;
 }
 
 // ConfigKey is a parsed config.md table row: the dotted key and a popover summary built
@@ -407,14 +404,17 @@ test "parseConfigRow skips header, separator, and bare section keys" {
 // string surgery; anchors with no fragment are left untouched.
 export fun injectBacklinks(html: str, byAnchor: {str: str}) > str {
     final marker = "<h3 id=\"";
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(marker);
     while (idx != null) {
-        buf = buf + rest.sub(0, len: idx! + marker.len());
+        parts.append(rest.sub(0, len: idx! + marker.len()));
         rest = rest.sub(idx! + marker.len());
         final q = rest.indexOf("\"");
-        if (q == null) { return buf + rest; }
+        if (q == null) {
+            parts.append(rest);
+            return parts.join("");
+        }
         final anchor = rest.sub(0, len: q!);
         var cut = rest.len();
         final nextH3 = rest.indexOf("<h3 id=\"");
@@ -423,35 +423,43 @@ export fun injectBacklinks(html: str, byAnchor: {str: str}) > str {
         if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
         final frag = byAnchor[anchor];
         if (frag != null) {
-            buf = buf + rest.sub(0, len: cut) + frag!;
+            parts.append(rest.sub(0, len: cut) + frag!);
         } else {
-            buf = buf + rest.sub(0, len: cut);
+            parts.append(rest.sub(0, len: cut));
         }
         rest = rest.sub(cut);
         idx = rest.indexOf(marker);
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // unwrapLinks turns each markdown "[text](url)" into just "text".
 fun unwrapLinks(s: str) > str {
-    var buf = "";
+    final parts: mut [str] = mut [<str>];
     var rest = s;
     var open = rest.indexOf("[");
     while (open != null) {
-        buf = buf + rest.sub(0, len: open!);
+        parts.append(rest.sub(0, len: open!));
         rest = rest.sub(open! + 1);
         final bracket = rest.indexOf("](");
-        if (bracket == null) { buf = buf + "["; break; }
+        if (bracket == null) {
+            parts.append("[");
+            break;
+        }
         final label = rest.sub(0, len: bracket!);
         rest = rest.sub(bracket! + 2);
         final paren = rest.indexOf(")");
-        if (paren == null) { buf = buf + label; break; }
-        buf = buf + label;
+        if (paren == null) {
+            parts.append(label);
+            break;
+        }
+        parts.append(label);
         rest = rest.sub(paren! + 1);
         open = rest.indexOf("[");
     }
-    return buf + rest;
+    parts.append(rest);
+    return parts.join("");
 }
 
 // cleanDef reduces a glossary definition paragraph to a short plain-text blurb for the
@@ -504,11 +512,12 @@ export fun parseGlossary(md: str) > [GlossaryTerm] {
             final term = lines[i].sub(4).trim();
             var j = i + 1;
             while (j < lines.len() and lines[j].trim() == "") { j = j + 1; }
-            var def = "";
+            final defParts: mut [str] = mut [<str>];
             while (j < lines.len() and lines[j].trim() != "" and lines[j].startsWith("#") == false) {
-                if (def == "") { def = lines[j].trim(); } else { def = def + " " + lines[j].trim(); }
+                defParts.append(lines[j].trim());
                 j = j + 1;
             }
+            final def = defParts.join(" ");
             terms.append(GlossaryTerm{ term = term, anchor = glossarySlug(term), def = cleanDef(def) });
         }
         i = i + 1;
@@ -552,7 +561,7 @@ test "linkCodeEntities links inside inline code but never in a fenced block" {
     final html = "<p>see <code>MGS1002</code> here</p><pre><code>MGS1002 again</code></pre>";
     assert\equal(linkCodeEntities(html, ents, "concepts/cache"),
         "<p>see <code><a class=\"code-xref\" href=\"../../reference/codes/graph/MGS1002/\" data-kind=\"code\" data-def=\"duplicate spell\">MGS1002</a></code> here</p><pre><code>MGS1002 again</code></pre>",
-        "inline code linked, fenced block untouched, first occurrence only");
+        message: "inline code linked, fenced block untouched, first occurrence only");
 }
 
 test "linkCodeEntities builds an anchored href for a method ref" {
@@ -560,7 +569,7 @@ test "linkCodeEntities builds an anchored href for a method ref" {
     ents.append(Entity{ token = "fs\\glob", kind = "method", url = "reference/buzz/fs/", anchor = "glob", summary = "list files" });
     assert\equal(linkCodeEntities("<p><code>fs\\glob</code></p>", ents, "concepts/cache"),
         "<p><code><a class=\"code-xref\" href=\"../../reference/buzz/fs/#glob\" data-kind=\"method\" data-def=\"list files\">fs\\glob</a></code></p>",
-        "method ref links to its anchor");
+        message: "method ref links to its anchor");
 }
 
 test "linkCodeEntities favors a full command over its bare alias" {
@@ -570,7 +579,7 @@ test "linkCodeEntities favors a full command over its bare alias" {
     final sorted = sortEntitiesLongestFirst(ents);
     assert\equal(linkCodeEntities("<p><code>magus affected ci</code></p>", sorted, ""),
         "<p><code><a class=\"code-xref\" href=\"reference/manpage/magus-affected/\" data-kind=\"command\" data-def=\"run a target for changed projects\">magus affected</a> ci</code></p>",
-        "full command links once");
+        message: "full command links once");
 }
 
 test "sortEntitiesLongestFirst orders by descending match length" {
@@ -588,7 +597,7 @@ test "injectBacklinks appends a fragment at the end of each term section" {
     final html = "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<h3 id=\"target\">Target</h3>\n<p>def b</p>\n";
     assert\equal(injectBacklinks(html, byAnchor),
         "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<div>refs-cache</div><h3 id=\"target\">Target</h3>\n<p>def b</p>\n<div>refs-target</div>",
-        "each fragment inserted before the next heading / at the end");
+        message: "each fragment inserted before the next heading / at the end");
 }
 
 test "injectBacklinks leaves a term with no fragment untouched" {
@@ -610,7 +619,7 @@ test "linkGlossaryTerms links the first linkable occurrence and records it" {
     final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms, "../glossary/");
     assert\equal(r.html,
         "<p>The <a class=\"glossary-term\" href=\"../glossary/#cache\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
-        "first occurrence only, definition baked in");
+        message: "first occurrence only, definition baked in");
     assert\equal(r.linked.len(), 1, "one anchor recorded");
     assert\equal(r.linked[0], "cache", "recorded the cache anchor");
 }
@@ -637,7 +646,7 @@ test "linkGlossaryTerms prefers the longer term" {
     terms.append(GlossaryTerm{ term = "pool", anchor = "pool" });
     assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms, "g/").html,
         "<p><a class=\"glossary-term\" href=\"g/#pool-mode\" data-def=\"\">pool mode</a> here</p>",
-        "longer term wins");
+        message: "longer term wins");
 }
 
 test "linkGlossaryTerms honors the noglossary opt-out" {

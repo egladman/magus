@@ -1155,8 +1155,9 @@ func TestHistoryRefusesTheOldDocument(t *testing.T) {
 
 	var h History
 	err := h.Load(t.Context(), path)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "mv "+filepath.Join(dir, "v1.json"))
+	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorContains(t, err, "preserve it")
+	require.ErrorContains(t, err, filepath.Join(dir, "v1.json"))
 	require.Error(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
 	assert.NoFileExists(t, path, "nothing is written while the old document stands")
 }
