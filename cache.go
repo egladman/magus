@@ -157,7 +157,10 @@ func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
 			projects[s.Name()] = append(projects[s.Name()], p)
 		}
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("locate spell caches: %w", err)
+	}
 	var out []declaredCaches
 	for _, name := range slices.Sorted(maps.Keys(bySpell)) {
 		s, sb := bySpell[name], bySpell[name].Sandbox()
