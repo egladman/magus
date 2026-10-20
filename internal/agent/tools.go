@@ -41,7 +41,7 @@ func validateHarnessTools(t types.HarnessTools) error {
 		case r.Name == "" || strings.ContainsAny(r.Name, "\n\r"):
 			return fmt.Errorf("row %d: name must be one non-empty line", i+1)
 		case r.Capability == "" || !r.Capability.Valid():
-			return fmt.Errorf("row %d (%s): capability %q is none of %s", i+1, r.Name, r.Capability, strings.Join(r.Capability.Values(), ", "))
+			return fmt.Errorf("row %d (%s): capability %q is none of %s", i+1, r.Name, string(r.Capability), strings.Join(r.Capability.Values(), ", "))
 		case seen[r.Name]:
 			return fmt.Errorf("row %d: %s is declared twice", i+1, r.Name)
 		}

@@ -67,7 +67,7 @@ var (
 // plugin) that already names magus shell. Optional MCP client wiring is a
 // separate document (or register hint), always bound to a secret ref.
 //
-// Each field holds what one function of spells.HarnessContract returned, nil or zero when
+// Each field holds what one function of spell.HarnessContract returned, nil or zero when
 // the spell does not export it.
 type HarnessDescriptor struct {
 	SchemaVersion  int                    `json:"schema_version"`

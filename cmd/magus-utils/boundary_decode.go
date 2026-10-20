@@ -84,6 +84,21 @@ var inboundTypes = []string{
 	"QueueArtifactListing",
 	"QueueReview",
 	"QueueReviews",
+	// The harness contract's answers (spell.HarnessContract), leaf first.
+	"HarnessConfig",
+	"HarnessSkills",
+	"HookCommand",
+	"ManagedEntries",
+	"McpServer",
+	"Price",
+	"PriceStep",
+	"ModelRow",
+	"HarnessTool",
+	"HarnessTools",
+	"AgentFile",
+	"Prompt",
+	"Setting",
+	"Limits",
 }
 
 // requiredMembers names, per inbound type, the members its decoder refuses an answer

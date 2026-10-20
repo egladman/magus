@@ -3661,6 +3661,16 @@ func ObjectJobWorktree(v types.JobWorktree) vm.Value {
 	return out
 }
 
+func ObjectShippedAgent(v types.ShippedAgent) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("instructions", vm.StrValue(v.Instructions))
+	out.MapSet("model", vm.StrValue(v.Model))
+	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))
+	return out
+}
+
 func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -4980,5 +4990,167 @@ func ObjectQueueReviews(v queuetypes.Reviews) vm.Value {
 		itemsApproving[indexApproving] = ObjectQueueReview(v.Approving[indexApproving])
 	}
 	out.MapSet("approving", vm.ListValue(itemsApproving))
+	return out
+}
+
+func ObjectHarnessConfig(v types.HarnessConfig) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	mappedDefaults := vm.NewMap()
+	for keyDefaults, itemDefaults := range v.Defaults {
+		mappedDefaults.MapSet(keyDefaults, ffi.AnyVal(itemDefaults))
+	}
+	out.MapSet("defaults", mappedDefaults)
+	return out
+}
+
+func ObjectHarnessSkills(v types.HarnessSkills, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	out.MapSet("form", enums.Case("SkillForm", string(v.Form)))
+	return out
+}
+
+func ObjectHookCommand(v types.HookCommand) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("event", vm.StrValue(v.Event))
+	out.MapSet("matcher", vm.StrValue(v.Matcher))
+	out.MapSet("script", vm.StrValue(v.Script))
+	itemsFlags := make([]vm.Value, len(v.Flags))
+	for indexFlags := range v.Flags {
+		itemsFlags[indexFlags] = vm.StrValue(v.Flags[indexFlags])
+	}
+	out.MapSet("flags", vm.ListValue(itemsFlags))
+	out.MapSet("timeoutS", vm.IntValue(int64(v.TimeoutS)))
+	return out
+}
+
+func ObjectManagedEntries(v types.ManagedEntries) vm.Value {
+	out := vm.NewMap()
+	itemsPath := make([]vm.Value, len(v.Path))
+	for indexPath := range v.Path {
+		itemsPath[indexPath] = vm.StrValue(v.Path[indexPath])
+	}
+	out.MapSet("path", vm.ListValue(itemsPath))
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		mappedEntriesItem := vm.NewMap()
+		for keyEntriesItem, itemEntriesItem := range v.Entries[indexEntries] {
+			mappedEntriesItem.MapSet(keyEntriesItem, ffi.AnyVal(itemEntriesItem))
+		}
+		itemsEntries[indexEntries] = mappedEntriesItem
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
+	return out
+}
+
+func ObjectMcpServer(v types.McpServer, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("transport", enums.Case("McpTransport", string(v.Transport)))
+	itemsCommand := make([]vm.Value, len(v.Command))
+	for indexCommand := range v.Command {
+		itemsCommand[indexCommand] = vm.StrValue(v.Command[indexCommand])
+	}
+	out.MapSet("command", vm.ListValue(itemsCommand))
+	out.MapSet("url", vm.StrValue(v.URL))
+	out.MapSet("tokenRef", vm.StrValue(v.TokenRef))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	out.MapSet("docs", vm.StrValue(v.Docs))
+	itemsRegister := make([]vm.Value, len(v.Register))
+	for indexRegister := range v.Register {
+		itemsRegister[indexRegister] = vm.StrValue(v.Register[indexRegister])
+	}
+	out.MapSet("register", vm.ListValue(itemsRegister))
+	return out
+}
+
+func ObjectPrice(v types.Price) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("input", vm.FloatValue(float64(v.Input)))
+	out.MapSet("cacheWrite5m", vm.FloatValue(float64(v.CacheWrite5m)))
+	out.MapSet("cacheWrite1h", vm.FloatValue(float64(v.CacheWrite1h)))
+	out.MapSet("cacheRead", vm.FloatValue(float64(v.CacheRead)))
+	out.MapSet("output", vm.FloatValue(float64(v.Output)))
+	return out
+}
+
+func ObjectPriceStep(v types.PriceStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("above", vm.IntValue(int64(v.Above)))
+	out.MapSet("multiplier", vm.FloatValue(float64(v.Multiplier)))
+	return out
+}
+
+func ObjectModelRow(v types.ModelRow) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("tier", vm.StrValue(v.Tier))
+	out.MapSet("alias", vm.StrValue(v.Alias))
+	out.MapSet("window", vm.IntValue(int64(v.Window)))
+	out.MapSet("price", ObjectPrice(v.Price))
+	out.MapSet("step", ObjectPriceStep(v.Step))
+	return out
+}
+
+func ObjectHarnessTool(v types.HarnessTool, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("capability", enums.Case("ToolCapability", string(v.Capability)))
+	return out
+}
+
+func ObjectHarnessTools(v types.HarnessTools, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectHarnessTool(v.Rows[indexRows], enums)
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	return out
+}
+
+func ObjectAgentFile(v types.AgentFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("content", vm.StrValue(v.Content))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	return out
+}
+
+func ObjectPrompt(v types.Prompt) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("content", vm.StrValue(v.Content))
+	itemsKey := make([]vm.Value, len(v.Key))
+	for indexKey := range v.Key {
+		itemsKey[indexKey] = vm.StrValue(v.Key[indexKey])
+	}
+	out.MapSet("key", vm.ListValue(itemsKey))
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	return out
+}
+
+func ObjectSetting(v types.Setting) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	itemsKey := make([]vm.Value, len(v.Key))
+	for indexKey := range v.Key {
+		itemsKey[indexKey] = vm.StrValue(v.Key[indexKey])
+	}
+	out.MapSet("key", vm.ListValue(itemsKey))
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	return out
+}
+
+func ObjectLimits(v types.Limits) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("foregroundDefaultMs", vm.IntValue(int64(v.ForegroundDefaultMs)))
+	out.MapSet("foregroundMaxMs", vm.IntValue(int64(v.ForegroundMaxMs)))
+	out.MapSet("hookTimeoutMs", vm.IntValue(int64(v.HookTimeoutMs)))
 	return out
 }

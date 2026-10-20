@@ -9,13 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	contractSrc = "../../internal/spell/contract.go"
-	harnessSrc  = "../../spells/harness.go"
-)
+const contractSrc = "../../internal/spell/contract.go"
 
 func TestReadHarnessContract(t *testing.T) {
-	funcs, err := readContract(harnessSrc, "HarnessContract")
+	funcs, err := readContract(contractSrc, "HarnessContract")
 	require.NoError(t, err)
 	signatures := map[string]string{}
 	for _, fn := range funcs {
@@ -113,7 +110,7 @@ func TestReadContractRefuses(t *testing.T) {
 
 func TestRunContract(t *testing.T) {
 	table := readGenerated(t, runContract, func(out string) []string {
-		return []string{"-src", contractSrc, "-harness", harnessSrc, "-out", out}
+		return []string{"-src", contractSrc, "-out", out}
 	})
 	assert.Contains(t, table, `{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false,`)
 	assert.Contains(t, table, "func decodeHarnessFuncConfig(v vm.Value) (types.HarnessConfig, error) {")
@@ -131,16 +128,11 @@ func TestRunContract(t *testing.T) {
 	assert.Contains(t, page, "Required. The spell's name")
 
 	assertDeterministic(t, runContract, func(out string) []string {
-		return []string{"-src", contractSrc, "-harness", harnessSrc, "-out", out}
+		return []string{"-src", contractSrc, "-out", out}
 	})
 
 	t.Run("no -src", func(t *testing.T) {
 		err := runContract([]string{"-out", "x.go"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "usage:")
-	})
-	t.Run("-out without -harness", func(t *testing.T) {
-		err := runContract([]string{"-src", contractSrc, "-out", "x.go"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})

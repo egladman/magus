@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 12524
-skill_short_bytes: 8464
+skill_full_bytes: 12588
+skill_short_bytes: 8463
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `142` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `7d703cfc5b48` |
+| `skill-content` | `75ee0a3e7a76` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -173,7 +173,7 @@ Adapt one: declare override; change no import, no provider call.
    ```
 
    Import and `magus\harness.provider(cursor)` unchanged. Copy at path without this entry: never read.
-3. Edit workspace spell for whatever host needs: matchers, host-config fragments, guard command, `harness_mcp`.
+3. Edit workspace spell for whatever host needs: matchers, host-config fragments, guard command, `mgs_getMcp`.
    - Every entry's command either runs template magus ships or ends with shell comment `# magus:harness`, after space. describe refuses any other: merge retires only entries it can tell are magus's.
    - Do not edit magus Go, cached copy of pinned spell (re-hashed, replaced), or stamped skills.
 4. Run `magus describe harness <id>`; person reads and runs merge command it prints (magus never writes host config). Then run `magus agent harness verify`.
@@ -398,8 +398,8 @@ To adapt one, declare an override; change no import and no provider call.
    The import and `magus\harness.provider(cursor)` stay as they are. A copy at a
    path without this entry is never read.
 3. Edit the workspace spell for whatever the host needs: matchers, managed host-config fragments, the guard
-   command string, skills form, `harness_mcp` (MCP setup hint, docs pointer, host
-   CLI sketch).
+   command string, skills form, `mgs_getMcp` (MCP setup hint, docs pointer, host
+   CLI sketch). The quoting and glue command builders come from `magus/harness`.
    - Every entry's command either runs a template magus ships or ends with the
      shell comment `# magus:harness`, after a space. describe refuses any other: a
      merge retires only entries it can tell are magus's.

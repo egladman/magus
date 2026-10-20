@@ -582,18 +582,18 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "SkillForm",
 		Type:  reflect.TypeFor[types.SkillForm](),
-		Cases: []enumCase{{"both", "both"}, {"short", "short"}, {"full", "full"}},
+		Cases: []enumCase{{"none", ""}, {"both", "both"}, {"short", "short"}, {"full", "full"}},
 	},
 	{
 		Name: "ToolCapability",
 		Type: reflect.TypeFor[types.ToolCapability](),
-		Cases: []enumCase{{"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
+		Cases: []enumCase{{"none", ""}, {"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
 			{"network", "network"}, {"inert", "inert"}},
 	},
 	{
 		Name:  "McpTransport",
 		Type:  reflect.TypeFor[types.McpTransport](),
-		Cases: []enumCase{{"stdio", "stdio"}, {"http", "http"}},
+		Cases: []enumCase{{"none", ""}, {"stdio", "stdio"}, {"http", "http"}},
 	},
 	{
 		Name:  "ModelTierSource",

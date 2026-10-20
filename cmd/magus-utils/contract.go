@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run . contract -src ../../internal/spell/contract.go -harness ../../spells/harness.go -out ../../internal/interp/bindings/gen/decode/contract.go
+//go:generate go run . contract -src ../../internal/spell/contract.go -out ../../internal/interp/bindings/gen/decode/contract.go
 
 import (
 	"bytes"
@@ -44,21 +44,20 @@ type contractFunc struct {
 func runContract(args []string) error {
 	fs := flag.NewFlagSet("contract", flag.ExitOnError)
 	srcPath := fs.String("src", "", "path to internal/spell/contract.go")
-	harnessPath := fs.String("harness", "", "path to spells/harness.go, whose HarnessContract becomes decode.HarnessFuncs")
 	outPath := fs.String("out", "", "output Go file path for the signature table")
 	docsPath := fs.String("docs", "", "output Markdown path for the reference page")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *srcPath == "" || *outPath == "" && *docsPath == "" || *outPath != "" && *harnessPath == "" {
-		return fmt.Errorf("usage: magus-utils contract -src <contract.go> [-harness <harness.go> -out <contract.go>] [-docs <page.md>]")
+	if *srcPath == "" || *outPath == "" && *docsPath == "" {
+		return fmt.Errorf("usage: magus-utils contract -src <contract.go> [-out <contract.go>] [-docs <page.md>]")
 	}
 	funcs, err := readContract(*srcPath, "Contract")
 	if err != nil {
 		return err
 	}
 	if *outPath != "" {
-		harness, err := readContract(*harnessPath, "HarnessContract")
+		harness, err := readContract(*srcPath, "HarnessContract")
 		if err != nil {
 			return err
 		}
@@ -364,7 +363,7 @@ func renderContractTable(funcs, harness []contractFunc) ([]byte, error) {
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "// HarnessFuncs is every function of the harness contract, in the order")
-	fmt.Fprintln(&b, "// spells.HarnessContract declares them. Required marks the one a harness must export.")
+	fmt.Fprintln(&b, "// spell.HarnessContract declares them. Required marks the one a harness must export.")
 	fmt.Fprintln(&b, "var HarnessFuncs = []ContractFunc{")
 	for _, fn := range harness {
 		fmt.Fprintf(&b, "\t{Name: %q, Field: %q, Returns: %q, Params: %q, Required: %t, Decode: func(v vm.Value) (any, error) { return decodeHarnessFunc%s(v) }},\n",

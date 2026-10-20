@@ -3134,6 +3134,634 @@ func decodeQueueReviews(v vm.Value, path string) (queuetypes.Reviews, error) {
 	return out, nil
 }
 
+// DecodeHarnessConfig decodes a Buzz HarnessConfig, an object instance or a map, into a types.HarnessConfig.
+func DecodeHarnessConfig(v vm.Value) (types.HarnessConfig, error) {
+	return decodeHarnessConfig(v, "harnessConfig")
+}
+
+func decodeHarnessConfig(v vm.Value, path string) (types.HarnessConfig, error) {
+	var out types.HarnessConfig
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessConfig", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "defaults":
+			entriesDefaults, err := decodeMap(item, path+".defaults", "{str: any?}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesDefaults.MapKeys(); len(keys) > 0 {
+				mappedDefaults := make(map[string]interface{}, len(keys))
+				for _, keyDefaults := range keys {
+					elemDefaults, _ := entriesDefaults.MapGet(keyDefaults)
+					var valueDefaults interface{}
+					aDefaultsValue, err := decodeAny(elemDefaults, fmt.Sprintf("%s[%q]", path+".defaults", keyDefaults))
+					if err != nil {
+						return out, err
+					}
+					valueDefaults = aDefaultsValue
+					mappedDefaults[keyDefaults] = valueDefaults
+				}
+				out.Defaults = mappedDefaults
+			}
+		default:
+			return out, unknownMember(path, "HarnessConfig", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHarnessSkills decodes a Buzz HarnessSkills, an object instance or a map, into a types.HarnessSkills.
+func DecodeHarnessSkills(v vm.Value) (types.HarnessSkills, error) {
+	return decodeHarnessSkills(v, "harnessSkills")
+}
+
+func decodeHarnessSkills(v vm.Value, path string) (types.HarnessSkills, error) {
+	var out types.HarnessSkills
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessSkills", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "paths":
+			strsPaths, err := decodeStrs(item, path+".paths")
+			if err != nil {
+				return out, err
+			}
+			out.Paths = strsPaths
+		case "form":
+			sForm, err := decodeEnum(item, path+".form", "SkillForm", enumSkillFormValues)
+			if err != nil {
+				return out, err
+			}
+			out.Form = types.SkillForm(sForm)
+		default:
+			return out, unknownMember(path, "HarnessSkills", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHookCommand decodes a Buzz HookCommand, an object instance or a map, into a types.HookCommand.
+func DecodeHookCommand(v vm.Value) (types.HookCommand, error) {
+	return decodeHookCommand(v, "hookCommand")
+}
+
+func decodeHookCommand(v vm.Value, path string) (types.HookCommand, error) {
+	var out types.HookCommand
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HookCommand", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "event":
+			sEvent, err := decodeStr(item, path+".event")
+			if err != nil {
+				return out, err
+			}
+			out.Event = sEvent
+		case "matcher":
+			sMatcher, err := decodeStr(item, path+".matcher")
+			if err != nil {
+				return out, err
+			}
+			out.Matcher = sMatcher
+		case "script":
+			sScript, err := decodeStr(item, path+".script")
+			if err != nil {
+				return out, err
+			}
+			out.Script = sScript
+		case "flags":
+			strsFlags, err := decodeStrs(item, path+".flags")
+			if err != nil {
+				return out, err
+			}
+			out.Flags = strsFlags
+		case "timeoutS":
+			nTimeoutS, err := decodeInt(item, path+".timeoutS")
+			if err != nil {
+				return out, err
+			}
+			out.TimeoutS = int(nTimeoutS)
+		default:
+			return out, unknownMember(path, "HookCommand", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeManagedEntries decodes a Buzz ManagedEntries, an object instance or a map, into a types.ManagedEntries.
+func DecodeManagedEntries(v vm.Value) (types.ManagedEntries, error) {
+	return decodeManagedEntries(v, "managedEntries")
+}
+
+func decodeManagedEntries(v vm.Value, path string) (types.ManagedEntries, error) {
+	var out types.ManagedEntries
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ManagedEntries", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			strsPath, err := decodeStrs(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = strsPath
+		case "entries":
+			listEntries, err := decodeList(item, path+".entries", "[{str: any?}]")
+			if err != nil {
+				return out, err
+			}
+			if len(listEntries) > 0 {
+				itemsEntries := make([]map[string]interface{}, len(listEntries))
+				for indexEntries, itemEntries := range listEntries {
+					entriesEntriesItem, err := decodeMap(itemEntries, fmt.Sprintf("%s[%d]", path+".entries", indexEntries), "{str: any?}")
+					if err != nil {
+						return out, err
+					}
+					if keys := entriesEntriesItem.MapKeys(); len(keys) > 0 {
+						mappedEntriesItem := make(map[string]interface{}, len(keys))
+						for _, keyEntriesItem := range keys {
+							elemEntriesItem, _ := entriesEntriesItem.MapGet(keyEntriesItem)
+							var valueEntriesItem interface{}
+							aEntriesItemValue, err := decodeAny(elemEntriesItem, fmt.Sprintf("%s[%q]", fmt.Sprintf("%s[%d]", path+".entries", indexEntries), keyEntriesItem))
+							if err != nil {
+								return out, err
+							}
+							valueEntriesItem = aEntriesItemValue
+							mappedEntriesItem[keyEntriesItem] = valueEntriesItem
+						}
+						itemsEntries[indexEntries] = mappedEntriesItem
+					}
+				}
+				out.Entries = itemsEntries
+			}
+		default:
+			return out, unknownMember(path, "ManagedEntries", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeMcpServer decodes a Buzz McpServer, an object instance or a map, into a types.McpServer.
+func DecodeMcpServer(v vm.Value) (types.McpServer, error) {
+	return decodeMcpServer(v, "mcpServer")
+}
+
+func decodeMcpServer(v vm.Value, path string) (types.McpServer, error) {
+	var out types.McpServer
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "McpServer", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "transport":
+			sTransport, err := decodeEnum(item, path+".transport", "McpTransport", enumMcpTransportValues)
+			if err != nil {
+				return out, err
+			}
+			out.Transport = types.McpTransport(sTransport)
+		case "command":
+			strsCommand, err := decodeStrs(item, path+".command")
+			if err != nil {
+				return out, err
+			}
+			out.Command = strsCommand
+		case "url":
+			sURL, err := decodeStr(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		case "tokenRef":
+			sTokenRef, err := decodeStr(item, path+".tokenRef")
+			if err != nil {
+				return out, err
+			}
+			out.TokenRef = sTokenRef
+		case "hint":
+			sHint, err := decodeStr(item, path+".hint")
+			if err != nil {
+				return out, err
+			}
+			out.Hint = sHint
+		case "docs":
+			sDocs, err := decodeStr(item, path+".docs")
+			if err != nil {
+				return out, err
+			}
+			out.Docs = sDocs
+		case "register":
+			strsRegister, err := decodeStrs(item, path+".register")
+			if err != nil {
+				return out, err
+			}
+			out.Register = strsRegister
+		default:
+			return out, unknownMember(path, "McpServer", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePrice decodes a Buzz Price, an object instance or a map, into a types.Price.
+func DecodePrice(v vm.Value) (types.Price, error) {
+	return decodePrice(v, "price")
+}
+
+func decodePrice(v vm.Value, path string) (types.Price, error) {
+	var out types.Price
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Price", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "input":
+			nInput, err := decodeFloat(item, path+".input")
+			if err != nil {
+				return out, err
+			}
+			out.Input = nInput
+		case "cacheWrite5m":
+			nCacheWrite5m, err := decodeFloat(item, path+".cacheWrite5m")
+			if err != nil {
+				return out, err
+			}
+			out.CacheWrite5m = nCacheWrite5m
+		case "cacheWrite1h":
+			nCacheWrite1h, err := decodeFloat(item, path+".cacheWrite1h")
+			if err != nil {
+				return out, err
+			}
+			out.CacheWrite1h = nCacheWrite1h
+		case "cacheRead":
+			nCacheRead, err := decodeFloat(item, path+".cacheRead")
+			if err != nil {
+				return out, err
+			}
+			out.CacheRead = nCacheRead
+		case "output":
+			nOutput, err := decodeFloat(item, path+".output")
+			if err != nil {
+				return out, err
+			}
+			out.Output = nOutput
+		default:
+			return out, unknownMember(path, "Price", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePriceStep decodes a Buzz PriceStep, an object instance or a map, into a types.PriceStep.
+func DecodePriceStep(v vm.Value) (types.PriceStep, error) {
+	return decodePriceStep(v, "priceStep")
+}
+
+func decodePriceStep(v vm.Value, path string) (types.PriceStep, error) {
+	var out types.PriceStep
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "PriceStep", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "above":
+			nAbove, err := decodeInt(item, path+".above")
+			if err != nil {
+				return out, err
+			}
+			out.Above = nAbove
+		case "multiplier":
+			nMultiplier, err := decodeFloat(item, path+".multiplier")
+			if err != nil {
+				return out, err
+			}
+			out.Multiplier = nMultiplier
+		default:
+			return out, unknownMember(path, "PriceStep", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeModelRow decodes a Buzz ModelRow, an object instance or a map, into a types.ModelRow.
+func DecodeModelRow(v vm.Value) (types.ModelRow, error) {
+	return decodeModelRow(v, "modelRow")
+}
+
+func decodeModelRow(v vm.Value, path string) (types.ModelRow, error) {
+	var out types.ModelRow
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ModelRow", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeStr(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "tier":
+			sTier, err := decodeStr(item, path+".tier")
+			if err != nil {
+				return out, err
+			}
+			out.Tier = sTier
+		case "alias":
+			sAlias, err := decodeStr(item, path+".alias")
+			if err != nil {
+				return out, err
+			}
+			out.Alias = sAlias
+		case "window":
+			nWindow, err := decodeInt(item, path+".window")
+			if err != nil {
+				return out, err
+			}
+			out.Window = nWindow
+		case "price":
+			xPrice, err := decodePrice(item, path+".price")
+			if err != nil {
+				return out, err
+			}
+			out.Price = xPrice
+		case "step":
+			xStep, err := decodePriceStep(item, path+".step")
+			if err != nil {
+				return out, err
+			}
+			out.Step = xStep
+		default:
+			return out, unknownMember(path, "ModelRow", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHarnessTool decodes a Buzz HarnessTool, an object instance or a map, into a types.HarnessTool.
+func DecodeHarnessTool(v vm.Value) (types.HarnessTool, error) {
+	return decodeHarnessTool(v, "harnessTool")
+}
+
+func decodeHarnessTool(v vm.Value, path string) (types.HarnessTool, error) {
+	var out types.HarnessTool
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessTool", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "capability":
+			sCapability, err := decodeEnum(item, path+".capability", "ToolCapability", enumToolCapabilityValues)
+			if err != nil {
+				return out, err
+			}
+			out.Capability = types.ToolCapability(sCapability)
+		default:
+			return out, unknownMember(path, "HarnessTool", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHarnessTools decodes a Buzz HarnessTools, an object instance or a map, into a types.HarnessTools.
+func DecodeHarnessTools(v vm.Value) (types.HarnessTools, error) {
+	return decodeHarnessTools(v, "harnessTools")
+}
+
+func decodeHarnessTools(v vm.Value, path string) (types.HarnessTools, error) {
+	var out types.HarnessTools
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessTools", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "dir":
+			sDir, err := decodeStr(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "rows":
+			listRows, err := decodeList(item, path+".rows", "[HarnessTool]")
+			if err != nil {
+				return out, err
+			}
+			if len(listRows) > 0 {
+				itemsRows := make([]types.HarnessTool, len(listRows))
+				for indexRows, itemRows := range listRows {
+					xRowsItem, err := decodeHarnessTool(itemRows, fmt.Sprintf("%s[%d]", path+".rows", indexRows))
+					if err != nil {
+						return out, err
+					}
+					itemsRows[indexRows] = xRowsItem
+				}
+				out.Rows = itemsRows
+			}
+		default:
+			return out, unknownMember(path, "HarnessTools", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeAgentFile decodes a Buzz AgentFile, an object instance or a map, into a types.AgentFile.
+func DecodeAgentFile(v vm.Value) (types.AgentFile, error) {
+	return decodeAgentFile(v, "agentFile")
+}
+
+func decodeAgentFile(v vm.Value, path string) (types.AgentFile, error) {
+	var out types.AgentFile
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "AgentFile", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "content":
+			sContent, err := decodeStr(item, path+".content")
+			if err != nil {
+				return out, err
+			}
+			out.Content = sContent
+		case "hint":
+			sHint, err := decodeStr(item, path+".hint")
+			if err != nil {
+				return out, err
+			}
+			out.Hint = sHint
+		default:
+			return out, unknownMember(path, "AgentFile", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePrompt decodes a Buzz Prompt, an object instance or a map, into a types.Prompt.
+func DecodePrompt(v vm.Value) (types.Prompt, error) {
+	return decodePrompt(v, "prompt")
+}
+
+func decodePrompt(v vm.Value, path string) (types.Prompt, error) {
+	var out types.Prompt
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Prompt", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "content":
+			sContent, err := decodeStr(item, path+".content")
+			if err != nil {
+				return out, err
+			}
+			out.Content = sContent
+		case "key":
+			strsKey, err := decodeStrs(item, path+".key")
+			if err != nil {
+				return out, err
+			}
+			out.Key = strsKey
+		case "value":
+			aValue, err := decodeAny(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = aValue
+		default:
+			return out, unknownMember(path, "Prompt", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSetting decodes a Buzz Setting, an object instance or a map, into a types.Setting.
+func DecodeSetting(v vm.Value) (types.Setting, error) {
+	return decodeSetting(v, "setting")
+}
+
+func decodeSetting(v vm.Value, path string) (types.Setting, error) {
+	var out types.Setting
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Setting", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "key":
+			strsKey, err := decodeStrs(item, path+".key")
+			if err != nil {
+				return out, err
+			}
+			out.Key = strsKey
+		case "value":
+			aValue, err := decodeAny(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = aValue
+		default:
+			return out, unknownMember(path, "Setting", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeLimits decodes a Buzz Limits, an object instance or a map, into a types.Limits.
+func DecodeLimits(v vm.Value) (types.Limits, error) {
+	return decodeLimits(v, "limits")
+}
+
+func decodeLimits(v vm.Value, path string) (types.Limits, error) {
+	var out types.Limits
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Limits", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "foregroundDefaultMs":
+			nForegroundDefaultMs, err := decodeInt(item, path+".foregroundDefaultMs")
+			if err != nil {
+				return out, err
+			}
+			out.ForegroundDefaultMs = nForegroundDefaultMs
+		case "foregroundMaxMs":
+			nForegroundMaxMs, err := decodeInt(item, path+".foregroundMaxMs")
+			if err != nil {
+				return out, err
+			}
+			out.ForegroundMaxMs = nForegroundMaxMs
+		case "hookTimeoutMs":
+			nHookTimeoutMs, err := decodeInt(item, path+".hookTimeoutMs")
+			if err != nil {
+				return out, err
+			}
+			out.HookTimeoutMs = nHookTimeoutMs
+		default:
+			return out, unknownMember(path, "Limits", key)
+		}
+	}
+	return out, nil
+}
+
 // ProviderFuncs is every provider op a spell may export, one row per spell-family
 // cmd/magus-utils providerOps entry and in its order. Required is false on every row:
 // which ops a provider needs is its family's to say.
@@ -3538,9 +4166,12 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
+var enumMcpTransportValues = []string{"", "stdio", "http"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
+var enumSkillFormValues = []string{"", "both", "short", "full"}
 var enumSymbolFormatValues = []string{"", "scip"}
+var enumToolCapabilityValues = []string{"", "runs", "reads", "writes", "spawns", "network", "inert"}
 var enumVersionComponentValues = []string{"", "major", "minor", "patch"}
 
 // mismatch names an object by its type, which says more than "object".
@@ -3655,4 +4286,52 @@ func decodeMap(v vm.Value, path, want string) (vm.Value, error) {
 		return vm.Null, mismatch(path, want, v)
 	}
 	return v, nil
+}
+
+// decodeAny reads an any field as the plain Go value JSON would give it: null, bool,
+// int64, float64, string, []any or map[string]any, an enum case as its backing value and
+// an object instance as its members. A function or any other value JSON cannot hold is an
+// error, since the field is opaque host JSON.
+func decodeAny(v vm.Value, path string) (any, error) {
+	if backing, ok := v.EnumValue(); ok {
+		v = backing
+	}
+	switch {
+	case v.IsNull():
+		return nil, nil
+	case v.IsBool():
+		return v.AsBool(), nil
+	case v.IsInt():
+		return v.AsInt(), nil
+	case v.IsFloat():
+		return v.AsFloat(), nil
+	case v.IsStr():
+		return v.AsString(), nil
+	case v.IsList():
+		items := v.ListItems()
+		out := make([]any, len(items))
+		for i, item := range items {
+			x, err := decodeAny(item, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return nil, err
+			}
+			out[i] = x
+		}
+		return out, nil
+	}
+	fields, ok := v.MapView()
+	if !ok {
+		return nil, mismatch(path, "any JSON value", v)
+	}
+	keys := fields.MapKeys()
+	out := make(map[string]any, len(keys))
+	for _, key := range keys {
+		item, _ := fields.MapGet(key)
+		x, err := decodeAny(item, fmt.Sprintf("%s[%q]", path, key))
+		if err != nil {
+			return nil, err
+		}
+		out[key] = x
+	}
+	return out, nil
 }

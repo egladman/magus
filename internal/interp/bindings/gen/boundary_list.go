@@ -297,6 +297,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ServiceLease", Zero: types.ServiceLease{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectServiceLease(v.(types.ServiceLease)) }},
 	{Name: "ServiceView", Zero: spells.ServiceView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectServiceView(v.(spells.ServiceView)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
+	{Name: "ShippedAgent", Zero: types.ShippedAgent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShippedAgent(v.(types.ShippedAgent)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget)) }},
