@@ -5,41 +5,19 @@ import (
 	"strings"
 	"unicode"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
+	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/types"
 )
 
-// ResolveOption configures Resolve.
-type ResolveOption func(*resolveOptions)
-
-type resolveOptions struct {
-	contractSrc string
-	checked     bool
-}
-
-// WithContractCheck has Resolve check src, the spell's own source, against the spell
-// contract before calling any mgs_ function, and refuse the spell with MGS1051 when an
-// exported mgs_ function declares a return type other than the contract's (`> any`
-// included), declares none, takes parameters, or is not a contract function at all.
-//
-// Off unless passed. Only tests pass it until every shipped spell conforms: typescript,
-// podman and experimental/nx return `> any` from mgs_listTargets, and the benchmark
-// nextjs and jsmod spells export mgs_getVersionProbe, which the contract dropped.
-func WithContractCheck(src string) ResolveOption {
-	return func(o *resolveOptions) {
-		o.contractSrc = src
-		o.checked = true
-	}
-}
-
 // checkContract compares every exported top-level mgs_ function in src with
 // decode.ContractFuncs, reporting every violation in one MGS1051 error so a spell
-// author fixes them in one pass.
+// author fixes them in one pass. A return type other than the contract's (`> any`
+// included), none at all, parameters, or a name the contract lacks refuses the spell.
 func checkContract(src string) error {
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil {
 		return fmt.Errorf("magus/spell: contract check: %w", err)
 	}

@@ -193,7 +193,11 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 		}
 		return spells.Descriptor{}, err
 	}
-	return Resolve(ctx, sess)
+	r, err := Resolve(ctx, sess, src)
+	if err != nil {
+		return spells.Descriptor{}, err
+	}
+	return r.Descriptor()
 }
 
 // MagusContextSource mirrors the two maps a target receives: magus\Context, and the

@@ -1,9 +1,7 @@
 package spell
 
 import (
-	"fmt"
 	"path/filepath"
-	"sort"
 	"testing"
 
 	"github.com/egladman/magus/internal/symbols"
@@ -13,173 +11,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mapObj is a test-only implementation of obj backed by map[string]any.
-type mapObj map[string]any
-
-func (m mapObj) Str(key string) (string, bool) {
-	v, ok := m[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	return s, ok
+// describe runs the semantic checks over a Contract as Resolve would have decoded it.
+func describe(c Contract) (spells.Descriptor, error) {
+	return Resolved{Contract: c}.Descriptor()
 }
 
-func (m mapObj) Bool(key string) bool {
-	v, ok := m[key]
-	if !ok {
-		return false
-	}
-	b, _ := v.(bool)
-	return b
+func targets(ops map[string]spells.Command) Contract {
+	return Contract{Name: "myspell", Targets: ops}
 }
 
-func (m mapObj) Strs(key string) ([]string, error) {
-	v, ok := m[key]
-	if !ok {
-		return nil, nil
-	}
-	if ss, ok := v.([]string); ok {
-		return ss, nil
-	}
-	// The double's stand-in for a mistyped element: production reports the index,
-	// which a []string literal cannot even express.
-	return nil, fmt.Errorf("%q must be a list of strings", key)
-}
-
-func (m mapObj) StrMap(key string) (map[string]string, error) {
-	// Returns the map RAW, empty included: absent-vs-empty normalization is
-	// decodeCommand's job, and a double that pre-normalized would test itself
-	// rather than production.
-	v, ok := m[key]
-	if !ok {
-		return nil, nil
-	}
-	sm, ok := v.(map[string]string)
-	if !ok {
-		return nil, fmt.Errorf("%q must be a map[string]string", key)
-	}
-	return sm, nil
-}
-
-func (m mapObj) Obj(key string) (obj, bool) {
-	v, ok := m[key]
-	if !ok {
-		return nil, false
-	}
-	sub, ok := v.(map[string]any)
-	if !ok {
-		return nil, false
-	}
-	return mapObj(sub), true
-}
-
-func (m mapObj) Objs(key string) []obj {
-	v, ok := m[key]
-	if !ok {
-		return nil
-	}
-	list, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	var out []obj
-	for _, it := range list {
-		if sub, ok := it.(map[string]any); ok {
-			out = append(out, mapObj(sub))
-		}
-	}
-	return out
-}
-
-func (m mapObj) Keys() []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func (m mapObj) CallStrs(key string, args ...string) ([]string, error) {
-	v, ok := m[key]
-	if !ok {
-		return nil, nil
-	}
-	if ss, ok := v.([]string); ok {
-		return ss, nil
-	}
-	if fn, ok := v.(func([]string) ([]string, error)); ok {
-		return fn(args)
-	}
-	return nil, nil
-}
-
-// TestDecode_NoName ensures a missing name field returns an error.
-func TestDecode_NoName(t *testing.T) {
-	_, err := Decode(mapObj{})
-	require.Error(t, err, "Decode with no name: want error, got nil")
+func TestDescriptor_NoName(t *testing.T) {
+	_, err := describe(Contract{})
+	require.Error(t, err, "a Contract with no name: want error, got nil")
 	assert.Contains(t, err.Error(), "name is required")
 }
 
-// TestDecode_NameOnly checks that a spell with only a name and no ops is decoded correctly.
-func TestDecode_NameOnly(t *testing.T) {
-	src := mapObj{"name": "myspell"}
-	m, err := Decode(src)
+func TestDescriptor_NameOnly(t *testing.T) {
+	m, err := describe(Contract{Name: "myspell"})
 	require.NoError(t, err)
 	assert.Equal(t, "myspell", m.Name)
 	assert.Nil(t, m.Ops)
 }
 
-// TestDecode_CommandOp verifies a fork op (cmd and args, no fn) populates the Target correctly.
-func TestDecode_CommandOp(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"build": map[string]any{
-				"bin":  "go",
-				"args": []string{"build", "./..."},
-			},
-		},
-	}
-	m, err := Decode(src)
+func TestDescriptor_CommandOp(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{"build": {Bin: "go", Args: []string{"build", "./..."}}}))
 	require.NoError(t, err)
 	tgt, ok := m.Ops["build"]
 	require.True(t, ok, `Targets["build"] missing`)
 	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"build", "./..."}}}, tgt)
 }
 
-// TestDecode_StartService pins a start service's decode: Start, Readiness and Stop land
-// on the Service, and the op's embedded Command mirrors Start, which is what a direct
-// run executes.
-func TestDecode_StartService(t *testing.T) {
-	src := mapObj{
-		"name": "vm",
-		"ops": map[string]any{
-			"machine": map[string]any{
-				"command":   map[string]any{},
-				"start":     map[string]any{"bin": "podman", "args": []string{"machine", "start"}},
-				"readiness": map[string]any{"bin": "podman", "args": []string{"info"}},
-				"stop":      map[string]any{"bin": "podman", "args": []string{"machine", "stop"}},
-				"idle":      "30m",
-			},
-		},
-	}
-	m, err := Decode(src)
-	require.NoError(t, err)
-	op := m.Ops["machine"]
-	svc := &spells.Service{
+// A start service's Start, Readiness and Stop land on the Service, and the op's embedded
+// Command mirrors Start, which is what a direct run executes.
+func TestDescriptor_StartService(t *testing.T) {
+	svc := spells.Service{
 		Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},
 		Readiness: spells.Command{Bin: "podman", Args: []string{"info"}},
 		Stop:      spells.Command{Bin: "podman", Args: []string{"machine", "stop"}},
 		Idle:      "30m",
 	}
-	assert.Equal(t, spells.Op{Kind: spells.OpKindService, Command: svc.Start, Service: svc}, op)
+	m, err := describe(Contract{Name: "vm", Services: map[string]spells.Service{"machine": svc}})
+	require.NoError(t, err)
+	assert.Equal(t, spells.Op{Kind: spells.OpKindService, Command: svc.Start, Service: &svc}, m.Ops["machine"])
 }
 
-// TestDecode_PodmanMachine pins the built-in podman spell's machine op, which
+// TestDescriptor_PodmanMachine pins the built-in podman spell's machine op, which
 // hack/remote/on-linux.buzz acquires through magus\service.
-func TestDecode_PodmanMachine(t *testing.T) {
+func TestDescriptor_PodmanMachine(t *testing.T) {
 	op, ok := Builtins()["podman"].Ops["machine"]
 	require.True(t, ok, "podman declares a machine op")
 	assert.Equal(t, spells.OpKindService, op.Kind)
@@ -203,40 +81,59 @@ func TestDecode_PodmanMachine(t *testing.T) {
 	})
 }
 
-// TestDecode_ServiceShapeRefused pins that a service the supervisor cannot run is a
-// load error naming the op, not a failure at the first acquire.
-func TestDecode_ServiceShapeRefused(t *testing.T) {
-	start := map[string]any{"bin": "podman", "args": []string{"machine", "start"}}
+// A service the supervisor cannot run is a load error naming the op, not a failure at
+// the first acquire.
+func TestDescriptor_ServiceShapeRefused(t *testing.T) {
+	start := spells.Command{Bin: "podman", Args: []string{"machine", "start"}}
 	tests := []struct {
 		name    string
-		op      map[string]any
+		svc     spells.Service
 		wantErr string
 	}{
-		{"neither", map[string]any{"command": map[string]any{}}, "service declares neither command nor start"},
-		{"both", map[string]any{"command": map[string]any{"bin": "qemu"}, "start": start, "readiness": start, "stop": start}, "service declares both command and start"},
-		{"start without readiness", map[string]any{"start": start, "stop": start}, "a start service needs readiness"},
-		{"start without stop", map[string]any{"start": start, "readiness": start}, "a start service needs stop"},
+		{"neither", spells.Service{}, "service declares neither command nor start"},
+		{"both", spells.Service{Command: spells.Command{Bin: "qemu"}, Start: start, Readiness: start, Stop: start}, "service declares both command and start"},
+		{"start without readiness", spells.Service{Start: start, Stop: start}, "a start service needs readiness"},
+		{"start without stop", spells.Service{Start: start, Readiness: start}, "a start service needs stop"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Decode(mapObj{"name": "vm", "ops": map[string]any{"machine": tt.op}})
+			_, err := describe(Contract{Name: "vm", Services: map[string]spells.Service{"machine": tt.svc}})
 			require.ErrorContains(t, err, `spell "vm" op "machine": `+tt.wantErr)
 		})
 	}
 }
 
-// TestDecode_SymbolIndexer verifies mgs_getSymbolIndexer decodes onto the descriptor
-// AND synthesizes the op the run path dispatches, tagged with the kind the runner
-// matches on rather than recognized by its name.
-func TestDecode_SymbolIndexer(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"symbol_indexer": map[string]any{
-			"format":  "scip",
-			"command": map[string]any{"bin": "scip-go", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
-		},
+// A service op refuses what the supervisor cannot honor on any of its four commands.
+func TestDescriptor_ServiceRefusesSecretsAndHints(t *testing.T) {
+	hinted := spells.Command{Bin: "x", Hints: []spells.Hint{{Contains: "a", Advise: "b"}}}
+	secret := spells.Command{Bin: "x", Secrets: map[string]string{"TOKEN": "TOKEN"}}
+	start := spells.Command{Bin: "podman", Args: []string{"info"}}
+	tests := []struct {
+		name    string
+		svc     spells.Service
+		wantErr string
+	}{
+		{"secrets on command", spells.Service{Command: secret}, "secrets are not supported on a service op"},
+		{"hints on command", spells.Service{Command: hinted}, "hints are not supported on a service op"},
+		{"secrets on start", spells.Service{Start: secret, Readiness: start, Stop: start}, "secrets are not supported on a service start command"},
+		{"hints on readiness", spells.Service{Start: start, Readiness: hinted, Stop: start}, "hints are not supported on a service readiness command"},
+		{"hints on stop", spells.Service{Start: start, Readiness: start, Stop: hinted}, "hints are not supported on a service stop command"},
 	}
-	m, err := Decode(src)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := describe(Contract{Name: "vm", Services: map[string]spells.Service{"machine": tt.svc}})
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+// mgs_getSymbolIndexer decodes onto the descriptor AND synthesizes the op the run path
+// dispatches, tagged with the kind the runner matches on rather than its name.
+func TestDescriptor_SymbolIndexer(t *testing.T) {
+	m, err := describe(Contract{Name: "myspell", SymbolIndexer: &spells.SymbolIndexer{
+		Format:  spells.SymbolFormatSCIP,
+		Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+	}})
 	require.NoError(t, err)
 	require.NotNil(t, m.SymbolIndexer)
 	assert.Equal(t, spells.SymbolFormatSCIP, m.SymbolIndexer.Format)
@@ -254,48 +151,46 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 // An indexer that declares its op runs under that op alone, so an index riding beside
 // scip-go on one project neither shares its cache entry nor fails with it. The declared
 // name is normalized like an authored op, and an authored op of the same name collides.
-func TestDecode_SymbolIndexerDeclaresItsOp(t *testing.T) {
-	indexer := func(op string) map[string]any {
-		return map[string]any{"format": "scip", "op": op, "command": map[string]any{"bin": "scip-mine"}}
+func TestDescriptor_SymbolIndexerDeclaresItsOp(t *testing.T) {
+	indexer := func(op string) *spells.SymbolIndexer {
+		return &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: op, Command: spells.Command{Bin: "scip-mine"}}
 	}
-	m, err := Decode(mapObj{"name": "myspell", "symbol_indexer": indexer("scip_mine")})
+	m, err := describe(Contract{Name: "myspell", SymbolIndexer: indexer("scip_mine")})
 	require.NoError(t, err)
 	assert.Equal(t, "scip-mine", m.SymbolIndexer.OpName())
 	assert.Equal(t, []string{"scip-mine"}, m.OpNames(), "registered once, and not under the default")
 	assert.Equal(t, spells.OpKindSymbolIndex, m.Ops["scip-mine"].Kind)
 
-	_, err = Decode(mapObj{
-		"name":           "myspell",
-		"symbol_indexer": indexer("scip-mine"),
-		"ops":            map[string]any{"scip-mine": map[string]any{"bin": "scip-mine"}},
+	_, err = describe(Contract{
+		Name:          "myspell",
+		SymbolIndexer: indexer("scip-mine"),
+		Targets:       map[string]spells.Command{"scip-mine": {Bin: "scip-mine"}},
 	})
 	require.ErrorContains(t, err, `declares an op named "scip-mine"`)
 
-	_, err = Decode(mapObj{"name": "myspell", "symbol_indexer": indexer("scip mine")})
+	_, err = describe(Contract{Name: "myspell", SymbolIndexer: indexer("scip mine")})
 	require.ErrorContains(t, err, `symbol indexer: op "scip mine"`)
 }
 
 // An indexer's envs decode in order, one overlay per run. An empty overlay or one naming
 // a variable magus sets for the run is refused at load, since either would build an
 // index nobody reads.
-func TestDecode_SymbolIndexerEnvs(t *testing.T) {
-	src := func(envs ...any) mapObj {
-		return mapObj{"name": "myspell", "symbol_indexer": map[string]any{
-			"format":  "scip",
-			"command": map[string]any{"bin": "scip-go"},
-			"envs":    envs,
+func TestDescriptor_SymbolIndexerEnvs(t *testing.T) {
+	src := func(envs ...map[string]string) Contract {
+		return Contract{Name: "myspell", SymbolIndexer: &spells.SymbolIndexer{
+			Format:  spells.SymbolFormatSCIP,
+			Command: spells.Command{Bin: "scip-go"},
+			Envs:    envs,
 		}}
 	}
-	m, err := Decode(src(map[string]any{"GOOS": "linux"}, map[string]any{"GOOS": "windows", "CGO_ENABLED": "0"}))
+	m, err := describe(src(map[string]string{"GOOS": "linux"}, map[string]string{"GOOS": "windows", "CGO_ENABLED": "0"}))
 	require.NoError(t, err)
 	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows", "CGO_ENABLED": "0"}}, m.SymbolIndexer.Envs)
 
-	_, err = Decode(src(map[string]any{}))
+	_, err = describe(src(map[string]string{}))
 	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[0] is empty`)
-	_, err = Decode(src(map[string]any{"GOOS": "linux"}, map[string]any{symbols.IndexEnvVar: "/tmp/x"}))
+	_, err = describe(src(map[string]string{"GOOS": "linux"}, map[string]string{symbols.IndexEnvVar: "/tmp/x"}))
 	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[1] sets MAGUS_SYMBOL_INDEX, which magus sets for each run`)
-	_, err = Decode(src(map[string]any{"GOOS": 1}))
-	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[0].GOOS is not a string`)
 }
 
 // The go spell indexes every GOOS a file suffix can name, so a host indexes the files
@@ -326,332 +221,180 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a
 // tool the spell probes for a version: a used tool with no probe would key the index on
 // nothing, so the load fails naming the spell rather than leaving the index unstaleable.
-func TestDecode_SymbolIndexerUses(t *testing.T) {
-	src := func(uses []string, tools map[string]any) mapObj {
-		return mapObj{
-			"name":  "myspell",
-			"tools": tools,
-			"symbol_indexer": map[string]any{
-				"format":  "scip",
-				"command": map[string]any{"bin": "scip-go"},
-				"uses":    uses,
+func TestDescriptor_SymbolIndexerUses(t *testing.T) {
+	src := func(uses []string, tools map[string]spells.Tool) Contract {
+		return Contract{
+			Name:  "myspell",
+			Tools: tools,
+			SymbolIndexer: &spells.SymbolIndexer{
+				Format:  spells.SymbolFormatSCIP,
+				Command: spells.Command{Bin: "scip-go"},
+				Uses:    uses,
 			},
 		}
 	}
-	probed := map[string]any{"go": map[string]any{"probe": map[string]any{"bin": "go", "args": []string{"version"}}}}
+	probed := map[string]spells.Tool{"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}}}
 
-	m, err := Decode(src([]string{"go"}, probed))
+	m, err := describe(src([]string{"go"}, probed))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"go"}, m.SymbolIndexer.Uses)
 
-	_, err = Decode(src([]string{"gopls"}, probed))
+	_, err = describe(src([]string{"gopls"}, probed))
 	require.EqualError(t, err, `spell "myspell": symbol indexer uses "gopls", which mgs_getTools does not declare with a version probe`)
 
-	observed := map[string]any{"go": map[string]any{"observe": map[string]any{"bin": "go", "args": []string{"version"}}}}
-	_, err = Decode(src([]string{"go"}, observed))
+	observed := map[string]spells.Tool{"go": {Observe: spells.Command{Bin: "go", Args: []string{"version"}}}}
+	_, err = describe(src([]string{"go"}, observed))
 	require.Error(t, err, "an observe probe is not a version probe")
 }
 
-// TestDecode_SymbolIndexerRequiresAFormat proves the format is required rather than
-// defaulted to SCIP: the whole point of naming it is that ingestion no longer assumes.
-func TestDecode_SymbolIndexerRequiresAFormat(t *testing.T) {
-	src := mapObj{
-		"name":           "myspell",
-		"symbol_indexer": map[string]any{"command": map[string]any{"bin": "scip-go"}},
-	}
-	_, err := Decode(src)
+// The format is required rather than defaulted to SCIP: the whole point of naming it is
+// that ingestion no longer assumes.
+func TestDescriptor_SymbolIndexerRequiresAFormat(t *testing.T) {
+	_, err := describe(Contract{Name: "myspell", SymbolIndexer: &spells.SymbolIndexer{Command: spells.Command{Bin: "scip-go"}}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "format")
 }
 
-// TestDecode_ReservedSymbolIndexOpIsRefused proves the pre-declaration spelling (a
-// `scip` entry in mgs_listTargets) fails at load naming the export to move to, rather
-// than decoding as an ordinary op that would run with an unresolved destination and
-// silently drop the project out of the symbol graph.
-func TestDecode_ReservedSymbolIndexOpIsRefused(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops":  map[string]any{spells.DefaultSymbolIndexOp: map[string]any{"bin": "scip-go"}},
-	}
-	_, err := Decode(src)
+// The pre-declaration spelling (a `scip` entry in mgs_listTargets) fails at load naming
+// the export to move to, rather than decoding as an ordinary op that would run with an
+// unresolved destination and silently drop the project out of the symbol graph.
+func TestDescriptor_ReservedSymbolIndexOpIsRefused(t *testing.T) {
+	_, err := describe(targets(map[string]spells.Command{spells.DefaultSymbolIndexOp: {Bin: "scip-go"}}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mgs_getSymbolIndexer")
 }
 
-// TestDecode_CommandDefaultArgs verifies `defaultArgs` decodes onto Op.DefaultArgs,
-// distinct from Args, and that an absent key decodes to nil.
-func TestDecode_CommandDefaultArgs(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"test": map[string]any{
-				"bin":         "go",
-				"args":        []string{"test"},
-				"defaultArgs": []string{"./..."},
-			},
-		},
-	}
-	m, err := Decode(src)
+// DefaultArgs lands on Op.DefaultArgs, distinct from Args, and an absent one stays nil.
+func TestDescriptor_CommandDefaultArgs(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{
+		"test": {Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}},
+	}))
 	require.NoError(t, err)
-	tgt, ok := m.Ops["test"]
-	require.True(t, ok, `Ops["test"] missing`)
-	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}, tgt)
+	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}, m.Ops["test"])
 
-	absent := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"test": map[string]any{"bin": "go", "args": []string{"test"}},
-		},
-	}
-	m, err = Decode(absent)
+	m, err = describe(targets(map[string]spells.Command{"test": {Bin: "go", Args: []string{"test"}}}))
 	require.NoError(t, err)
 	assert.Nil(t, m.Ops["test"].DefaultArgs)
 }
 
-func TestDecode_CommandNeedsArgs(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"serve": map[string]any{"bin": "pnpm", "args": []string{"exec"}, "needsArgs": "name a command"},
-			"build": map[string]any{"bin": "go", "args": []string{"build"}},
-		},
-	}
-	m, err := Decode(src)
+func TestDescriptor_CommandNeedsArgs(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{
+		"serve": {Bin: "pnpm", Args: []string{"exec"}, NeedsArgs: "name a command"},
+		"build": {Bin: "go", Args: []string{"build"}},
+	}))
 	require.NoError(t, err)
 	assert.Equal(t, "name a command", m.Ops["serve"].NeedsArgs)
 	assert.Empty(t, m.Ops["build"].NeedsArgs)
 }
 
-func TestDecode_ModeArgs(t *testing.T) {
-	ops := func() map[string]any {
-		return map[string]any{
-			"node_test": map[string]any{"bin": "node", "args": []string{"--enable-source-maps", "--test"}},
-			"build":     map[string]any{"bin": "go", "args": []string{"build"}},
-		}
+func TestDescriptor_ModeArgs(t *testing.T) {
+	spell := func(modes map[string][]string) Contract {
+		c := targets(map[string]spells.Command{
+			"node_test": {Bin: "node", Args: []string{"--enable-source-maps", "--test"}},
+			"build":     {Bin: "go", Args: []string{"build"}},
+		})
+		c.ModeArgs = modes
+		return c
 	}
-	m, err := Decode(mapObj{"name": "myspell", "ops": ops(), "mode_args": map[string]any{"node_test": []string{"--test"}}})
+	m, err := describe(spell(map[string][]string{"node_test": {"--test"}}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"--test"}, m.Ops["node-test"].ModeArgs)
 	assert.Nil(t, m.Ops["build"].ModeArgs)
 
 	for _, tc := range []struct {
-		modes map[string]any
+		modes map[string][]string
 		want  string
 	}{
-		{modes: map[string]any{"lint": []string{"--test"}}, want: `names op "lint", which the spell does not declare`},
-		{modes: map[string]any{"node-test": []string{"--watch"}}, want: `"--watch" is not in the op's args`},
-		{modes: map[string]any{"node-test": []string{}}, want: "names no args"},
+		{modes: map[string][]string{"lint": {"--test"}}, want: `names op "lint", which the spell does not declare`},
+		{modes: map[string][]string{"node-test": {"--watch"}}, want: `"--watch" is not in the op's args`},
+		{modes: map[string][]string{"node-test": {}}, want: "names no args"},
 	} {
-		_, err := Decode(mapObj{"name": "myspell", "ops": ops(), "mode_args": tc.modes})
+		_, err := describe(spell(tc.modes))
 		require.ErrorContains(t, err, tc.want)
 	}
 }
 
-// TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
-// provider reference) decodes onto Op.Secrets untouched: no resolution happens at
-// decode time, only at spawn.
-func TestDecode_CommandSecrets(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"publish": map[string]any{
-				"bin":     "npm",
-				"args":    []string{"publish"},
-				"secrets": map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
-			},
-		},
-	}
-	m, err := Decode(src)
+// Secrets land on Op.Secrets untouched: no resolution happens at decode time, only at spawn.
+func TestDescriptor_CommandSecrets(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{
+		"publish": {Bin: "npm", Args: []string{"publish"}, Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"}},
+	}))
 	require.NoError(t, err)
-	tgt, ok := m.Ops["publish"]
-	require.True(t, ok, `Ops["publish"] missing`)
-	assert.Equal(t, map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, tgt.Secrets)
+	assert.Equal(t, map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, m.Ops["publish"].Secrets)
 }
 
-// TestDecode_CommandSecretsAbsentOrEmptyIsNil pins that a command with no `secrets`
-// key, and one with an explicitly empty map, both decode Op.Secrets to nil (not an
-// empty non-nil map), so a command with nothing to inject looks identical either way.
-func TestDecode_CommandSecretsAbsentOrEmptyIsNil(t *testing.T) {
-	absent := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"build": map[string]any{"bin": "go", "args": []string{"build"}},
-		},
-	}
-	m, err := Decode(absent)
+// A charm carrying a replace patch op reaches the op as the canonical spells.PatchOp.
+func TestDescriptor_CharmReplaceOp(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{
+		"fmt": {Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+			"write": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+		}},
+	}))
 	require.NoError(t, err)
-	assert.Nil(t, m.Ops["build"].Secrets)
-
-	empty := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"build": map[string]any{"bin": "go", "args": []string{"build"}, "secrets": map[string]string{}},
-		},
-	}
-	m, err = Decode(empty)
-	require.NoError(t, err)
-	assert.Nil(t, m.Ops["build"].Secrets)
-}
-
-// TestDecode_CommandSecretsWrongTypeErrorsLoudly pins that a `secrets` field of the
-// wrong shape is a load-time error naming the spell and op, matching decodeCommand's
-// existing charm error style, not a silently dropped declaration that would leave a
-// spawn with no secret and no signal why.
-func TestDecode_CommandSecretsWrongTypeErrorsLoudly(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"publish": map[string]any{
-				"bin":     "npm",
-				"args":    []string{"publish"},
-				"secrets": "not-a-map",
-			},
-		},
-	}
-	_, err := Decode(src)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `spell "myspell"`)
-	assert.Contains(t, err.Error(), `op "publish"`)
-}
-
-// TestDecode_CharmReplaceOp checks that a charm carrying a replace patch op is
-// decoded into the canonical spells.PatchOp.
-func TestDecode_CharmReplaceOp(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"fmt": map[string]any{
-				"bin":  "gofmt",
-				"args": []string{"-l", "."},
-				"charms": map[string]any{
-					"write": map[string]any{
-						"ops": []any{
-							map[string]any{"op": "replace", "path": "/0", "value": "-w"},
-						},
-					},
-				},
-			},
-		},
-	}
-	m, err := Decode(src)
-	require.NoError(t, err)
-	tgt, ok := m.Ops["fmt"]
-	require.True(t, ok, `Targets["fmt"] missing`)
-	charm, ok := tgt.Charms["write"]
+	charm, ok := m.Ops["fmt"].Charms["write"]
 	require.True(t, ok, `Charms["write"] missing`)
 	assert.Equal(t, []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, charm.Ops)
 }
 
-// TestDecode_CharmAddOp checks that a charm carrying an append patch op (add /-)
-// is decoded into the canonical spells.PatchOp.
-func TestDecode_CharmAddOp(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"test": map[string]any{
-				"bin":  "go",
-				"args": []string{"test", "./..."},
-				"charms": map[string]any{
-					"debug": map[string]any{
-						"ops": []any{
-							map[string]any{"op": "add", "path": "/-", "value": "-v"},
-						},
-					},
-				},
-			},
-		},
-	}
-	m, err := Decode(src)
+// An append patch op (add /-) is accepted.
+func TestDescriptor_CharmAddOp(t *testing.T) {
+	_, err := describe(targets(map[string]spells.Command{
+		"test": {Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]spells.Charm{
+			"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		}},
+	}))
 	require.NoError(t, err)
-	charm, ok := m.Ops["test"].Charms["debug"]
-	require.True(t, ok, `Charms["debug"] missing`)
-	assert.Equal(t, []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, charm.Ops)
 }
 
-// TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)
-// is rejected: element-level only.
-func TestDecode_CharmRootRejected(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"fmt": map[string]any{
-				"bin": "gofmt",
-				"charms": map[string]any{
-					"write": map[string]any{
-						"ops": []any{
-							map[string]any{"op": "replace", "path": "", "value": "x"},
-						},
-					},
-				},
-			},
-		},
-	}
-	_, err := Decode(src)
-	assert.Error(t, err, "Decode with root-path charm op: want error, got nil")
+// A root-path op (whole-argv replace) is rejected: charms are element-level.
+func TestDescriptor_CharmRootRejected(t *testing.T) {
+	_, err := describe(targets(map[string]spells.Command{
+		"fmt": {Bin: "gofmt", Charms: map[string]spells.Charm{
+			"write": {Ops: []spells.PatchOp{{Op: "replace", Path: "", Value: "x"}}},
+		}},
+	}))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `charm "write"`)
 }
 
-// TestDecode_InvalidTargetName ensures ops with invalid names (e.g. containing spaces) are rejected.
-func TestDecode_InvalidTargetName(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"has space": map[string]any{
-				"bin": "echo",
-			},
-		},
-	}
-	_, err := Decode(src)
-	assert.Error(t, err, "Decode with invalid target name: want error, got nil")
+func TestDescriptor_InvalidTargetName(t *testing.T) {
+	_, err := describe(targets(map[string]spells.Command{"has space": {Bin: "echo"}}))
+	assert.Error(t, err, "an op name with a space: want error, got nil")
 }
 
-// TestDecode_NeedsResolved verifies that CallStrs("needs") is called and stored.
-func TestDecode_NeedsResolved(t *testing.T) {
-	src := mapObj{
-		"name":  "myspell",
-		"needs": []string{"**/*.go", "go.mod"},
-	}
-	m, err := Decode(src)
+func TestDescriptor_NeedsAndProvidesAreLexicalValues(t *testing.T) {
+	m, err := describe(Contract{
+		Name:          "myspell",
+		RequiredGlobs: []types.Path{{Value: "**/*.go", Base: "ignored"}, {Value: "go.mod"}},
+		ProvidedGlobs: []types.Path{{Value: "gen/**"}},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"**/*.go", "go.mod"}, m.Needs)
+	assert.Equal(t, []string{"gen/**"}, m.Provides)
 }
 
-// TestDecode_IgnoreDirs verifies the ignore_dirs field (mgs_listIgnoreDirs) is read
-// into spells.Descriptor.IgnoreDirs, and that an absent field decodes to nil (not a panic or
-// empty-slice surprise), the path a spell that declares no ignore dirs takes.
-func TestDecode_IgnoreDirs(t *testing.T) {
-	src := mapObj{
-		"name":        "myspell",
-		"ignore_dirs": []string{"vendor", "target"},
-	}
-	m, err := Decode(src)
+// Ignore dirs reduce to their values, and an absent declaration is nil.
+func TestDescriptor_IgnoreDirs(t *testing.T) {
+	m, err := describe(Contract{Name: "myspell", IgnoreDirs: []types.Path{{Value: "vendor", IsDir: true}, {Value: "target", IsDir: true}}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"vendor", "target"}, m.IgnoreDirs)
 
-	m, err = Decode(mapObj{"name": "bare"})
+	m, err = describe(Contract{Name: "bare"})
 	require.NoError(t, err)
-	assert.Nil(t, m.IgnoreDirs, "a spell with no ignore_dirs must decode to nil")
+	assert.Nil(t, m.IgnoreDirs, "a spell with no ignore dirs must decode to nil")
 }
 
-// TestDecode_OpNameIsNormalized guards a silent-unreachability bug: ValidateTargetName
-// admits '_' and uppercase, but every request reaching dispatchOp has already been
-// kebab-normalized by ParseTarget and dispatch is a plain map hit. An op authored as
-// go_build was therefore stored under go_build, looked up as go-build, missed, and
-// swallowed as a fan-out skip at debug level: declared, and reachable by nothing.
-func TestDecode_OpNameIsNormalized(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"go_build": map[string]any{"bin": "go", "args": []string{"build"}},
-			"goVet":    map[string]any{"bin": "go", "args": []string{"vet"}},
-		},
-	}
-	d, err := Decode(src)
+// ValidateTargetName admits '_' and uppercase, but every request reaching dispatchOp has
+// already been kebab-normalized by ParseTarget and dispatch is a plain map hit. An op
+// stored as authored would be declared and reachable by nothing.
+func TestDescriptor_OpNameIsNormalized(t *testing.T) {
+	d, err := describe(targets(map[string]spells.Command{
+		"go_build": {Bin: "go", Args: []string{"build"}},
+		"goVet":    {Bin: "go", Args: []string{"vet"}},
+	}))
 	require.NoError(t, err)
-
-	// Stored canonically, not as authored.
 	require.ElementsMatch(t, []string{"go-build", "go-vet"}, d.OpNames())
 
-	// And reachable by what a request actually carries.
 	for _, authored := range []string{"go_build", "goVet"} {
 		requested, perr := types.ParseTarget(authored)
 		require.NoErrorf(t, perr, "ParseTarget(%q)", authored)
@@ -660,63 +403,43 @@ func TestDecode_OpNameIsNormalized(t *testing.T) {
 	}
 }
 
-// TestDecode_OpNameCollisionIsAnError guards the other half of op-name
-// normalization. Collapsing keys to canonical form means two spellings can land on
-// one, and a plain map assignment would resolve that by last-write-wins: `go-build`
-// and `goBuild` in one spell used to be two ops (one unreachable), and silently
-// became a single op whose body came from whichever key iteration reached last.
-// That is the same silent loss normalization exists to end, moved to the other side
-// - so it is a load error naming both spellings.
-func TestDecode_OpNameCollisionIsAnError(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"go-build": map[string]any{"bin": "go", "args": []string{"FIRST"}},
-			"goBuild":  map[string]any{"bin": "go", "args": []string{"SECOND"}},
-		},
-	}
-	_, err := Decode(src)
+// Collapsing keys to canonical form means two spellings can land on one, and a plain
+// map assignment would resolve that by last-write-wins: a load error naming both.
+func TestDescriptor_OpNameCollisionIsAnError(t *testing.T) {
+	_, err := describe(targets(map[string]spells.Command{
+		"go-build": {Bin: "go", Args: []string{"FIRST"}},
+		"goBuild":  {Bin: "go", Args: []string{"SECOND"}},
+	}))
 	require.Error(t, err, "two spellings of one canonical op must not decode silently")
 	assert.Contains(t, err.Error(), "go-build", "the error names the canonical op")
 	assert.Contains(t, err.Error(), "goBuild", "and both authored spellings")
 
-	// A spell that declares each op once still decodes, whatever the spelling.
-	ok := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"go-build": map[string]any{"bin": "go", "args": []string{"build"}},
-			"goVet":    map[string]any{"bin": "go", "args": []string{"vet"}},
-		},
-	}
-	d, err := Decode(ok)
+	d, err := describe(targets(map[string]spells.Command{
+		"go-build": {Bin: "go", Args: []string{"build"}},
+		"goVet":    {Bin: "go", Args: []string{"vet"}},
+	}))
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"go-build", "go-vet"}, d.OpNames())
 }
 
-// A spell declaring no tools keeps the conservative default, so every spell that says
-// nothing about its toolchain decodes exactly as before.
-func TestDecodeToolsAbsent(t *testing.T) {
-	m, err := Decode(mapObj{"name": "go"})
+// A spell declaring no tools keeps the conservative default.
+func TestDescriptorToolsAbsent(t *testing.T) {
+	m, err := describe(Contract{Name: "go"})
 	require.NoError(t, err)
 	assert.Empty(t, m.Tools)
 }
 
 // Everything magus knows about one binary arrives in one entry, keyed by the bin an op
 // already names, which is what replaced five parallel declarations.
-func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
-	m, err := Decode(mapObj{
-		"name": "docker",
-		"tools": map[string]any{
-			"docker": map[string]any{
-				"probe": map[string]any{"bin": "docker", "args": []string{"--version"}},
-				"key":   map[string]any{"upTo": "patch"},
-				"ready": map[string]any{"bin": "docker", "args": []string{"info"}},
-			},
-			"hadolint": map[string]any{
-				"probe": map[string]any{"bin": "hadolint", "args": []string{"--version"}},
-			},
+func TestDescriptorToolsCarriesProbeKeyAndReady(t *testing.T) {
+	m, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
+		"docker": {
+			Probe: spells.Command{Bin: "docker", Args: []string{"--version"}},
+			Key:   spells.VersionKey{UpTo: spells.VersionPatch},
+			Ready: spells.Command{Bin: "docker", Args: []string{"info"}},
 		},
-	})
+		"hadolint": {Probe: spells.Command{Bin: "hadolint", Args: []string{"--version"}}},
+	}})
 	require.NoError(t, err)
 
 	d := m.Tools["docker"]
@@ -724,86 +447,65 @@ func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
 	assert.Equal(t, spells.VersionPatch, d.Key.UpTo)
 	assert.Equal(t, "info", d.Ready.Args[0])
 
-	// The asymmetry that motivated per-tool scoping: hadolint is gated by nothing.
 	h := m.Tools["hadolint"]
 	assert.Equal(t, "hadolint", h.Probe.Bin)
 	assert.Empty(t, h.Ready.Bin, "linting a Dockerfile must not wait on the docker daemon")
 }
 
 // A malformed probe or ready command must be a load error, not a silently dropped
-// declaration: decodeTools used to swallow decodeCommand's error with `err == nil`,
-// which left a typo'd tool command decoding as "no command at all" with nothing to
-// tell the author why the tool never gets probed.
-func TestDecodeToolsPropagatesMalformedProbeError(t *testing.T) {
-	_, err := Decode(mapObj{
-		"name": "docker",
-		"tools": map[string]any{
-			"docker": map[string]any{
-				"probe": map[string]any{"bin": "docker", "args": []string{"--version"}, "secrets": "not-a-map"},
-			},
-		},
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `spell "docker"`)
-	assert.Contains(t, err.Error(), `tools["docker"].probe`)
-}
-
-func TestDecodeToolsPropagatesMalformedReadyError(t *testing.T) {
-	_, err := Decode(mapObj{
-		"name": "docker",
-		"tools": map[string]any{
-			"docker": map[string]any{
-				"ready": map[string]any{"bin": "docker", "args": []string{"info"}, "secrets": "not-a-map"},
-			},
-		},
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `spell "docker"`)
-	assert.Contains(t, err.Error(), `tools["docker"].ready`)
+// declaration that leaves a tool never probed with nothing to tell the author why.
+func TestDescriptorToolsPropagatesMalformedCommandErrors(t *testing.T) {
+	malformed := spells.Command{Bin: "docker", Quiet: true}
+	for field, tool := range map[string]spells.Tool{
+		"probe":   {Probe: malformed},
+		"ready":   {Ready: malformed},
+		"observe": {Observe: malformed},
+	} {
+		_, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{"docker": tool}})
+		require.Error(t, err, field)
+		assert.Contains(t, err.Error(), `spell "docker"`)
+		assert.Contains(t, err.Error(), `tools["docker"].`+field)
+	}
 }
 
 // A constant stands in for a tool that cannot report a version, and needs no probe.
-func TestDecodeToolsConstNeedsNoProbe(t *testing.T) {
-	m, err := Decode(mapObj{
-		"name":  "x",
-		"tools": map[string]any{"protoc-gen-go": map[string]any{"key": map[string]any{"const": "protoc-gen-go-1"}}},
-	})
+func TestDescriptorToolsConstNeedsNoProbe(t *testing.T) {
+	m, err := describe(Contract{Name: "x", Tools: map[string]spells.Tool{
+		"protoc-gen-go": {Key: spells.VersionKey{Const: "protoc-gen-go-1"}},
+	}})
 	require.NoError(t, err)
 	tool := m.Tools["protoc-gen-go"]
 	assert.Equal(t, "protoc-gen-go-1", tool.Key.Const)
 	assert.True(t, tool.HasProbe(), "a constant is a version magus can key on")
 }
 
-// The whole point of validating at decode: a typo'd component would otherwise leave a
-// spell claiming "major" while the cache silently kept keying on the whole output.
-func TestDecodeToolsRejectsUnknownComponent(t *testing.T) {
-	_, err := Decode(mapObj{
-		"name":  "go",
-		"tools": map[string]any{"go": map[string]any{"key": map[string]any{"upTo": "mayor"}}},
-	})
+// A typo'd component would otherwise leave a spell claiming "major" while the cache
+// silently kept keying on the whole output.
+func TestDescriptorToolsRejectsUnknownComponent(t *testing.T) {
+	_, err := describe(Contract{Name: "go", Tools: map[string]spells.Tool{
+		"go": {Key: spells.VersionKey{UpTo: "mayor"}},
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `tools["go"].key.upTo`)
 	assert.Contains(t, err.Error(), "mayor")
 }
 
-// A bound is validated with the parser that later COMPARES it. The two used to
-// differ: the validator (Masterminds, coercing by default) accepted a leading
-// zero that the comparison (x/mod/semver) rejects, so the spell loaded and then
-// every Check against it degraded to VerdictUnknown: a declared window that
-// silently constrained nothing.
-func TestDecodeToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
-	for _, field := range []string{"min", "below"} {
-		t.Run(field, func(t *testing.T) {
-			bound := "01.2"
-			require.False(t, spells.ValidBound(bound), "the bound this pins must be one Check cannot read")
-			require.Equal(t, spells.VerdictUnknown,
-				spells.VersionBounds{Min: bound}.Check("v1.5.0"),
-				"and it must be the degradation, not a comparison")
+// A bound is validated with the parser that later COMPARES it. The two used to differ:
+// a leading zero passed validation and failed the comparison, so the spell loaded and
+// every Check against it degraded to VerdictUnknown: a window that constrained nothing.
+func TestDescriptorToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
+	const bound = "01.2"
+	require.False(t, spells.ValidBound(bound), "the bound this pins must be one Check cannot read")
+	require.Equal(t, spells.VerdictUnknown,
+		spells.VersionBounds{Min: bound}.Check("v1.5.0"),
+		"and it must be the degradation, not a comparison")
 
-			_, err := Decode(mapObj{
-				"name":  "go",
-				"tools": map[string]any{"go": map[string]any{"supported": map[string]any{field: bound}}},
-			})
+	for field, supported := range map[string]spells.VersionBounds{
+		"min":   {Min: bound},
+		"below": {Below: bound},
+	} {
+		t.Run(field, func(t *testing.T) {
+			_, err := describe(Contract{Name: "go", Tools: map[string]spells.Tool{"go": {Supported: supported}}})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "tools[\"go\"].supported."+field)
 			assert.Contains(t, err.Error(), bound)
@@ -811,14 +513,13 @@ func TestDecodeToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
 	}
 }
 
-// The forms authors actually write (a partial version, a full one, either with
-// or without the v Go spells) keep loading.
-func TestDecodeToolsAcceptsAuthoredBoundForms(t *testing.T) {
+// The forms authors actually write (a partial version, a full one, either with or
+// without the v Go spells) keep loading.
+func TestDescriptorToolsAcceptsAuthoredBoundForms(t *testing.T) {
 	for _, bound := range []string{"1.21", "25", "2.0.0", "v1.21.0", "1.0.0-rc1"} {
-		m, err := Decode(mapObj{
-			"name":  "go",
-			"tools": map[string]any{"go": map[string]any{"supported": map[string]any{"min": bound}}},
-		})
+		m, err := describe(Contract{Name: "go", Tools: map[string]spells.Tool{
+			"go": {Supported: spells.VersionBounds{Min: bound}},
+		}})
 		require.NoErrorf(t, err, "bound %q", bound)
 		assert.Equal(t, bound, m.Tools["go"].Supported.Min)
 	}
@@ -826,168 +527,92 @@ func TestDecodeToolsAcceptsAuthoredBoundForms(t *testing.T) {
 
 // An entry declaring nothing at all is dropped rather than kept as a tool magus knows
 // nothing about.
-func TestDecodeToolsDropsEmptyEntries(t *testing.T) {
-	m, err := Decode(mapObj{"name": "go", "tools": map[string]any{"gofmt": map[string]any{}}})
+func TestDescriptorToolsDropsEmptyEntries(t *testing.T) {
+	m, err := describe(Contract{Name: "go", Tools: map[string]spells.Tool{"gofmt": {}}})
 	require.NoError(t, err)
 	assert.Empty(t, m.Tools)
 }
 
 // A tool declaring only a diagnostics format is kept: the entry says something magus
 // acts on, so the drop-empty-entries rule must not treat it as saying nothing.
-func TestDecodeToolsCarriesDiagnosticsFormat(t *testing.T) {
-	m, err := Decode(mapObj{
-		"name": "docker",
-		"tools": map[string]any{
-			"hadolint": map[string]any{"diagnostics": "gnu"},
-		},
-	})
+func TestDescriptorToolsCarriesDiagnosticsFormat(t *testing.T) {
+	m, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
+		"hadolint": {Diagnostics: spells.DiagnosticGNU},
+	}})
 	require.NoError(t, err)
 	assert.Equal(t, spells.DiagnosticGNU, m.Tools["hadolint"].Diagnostics)
 }
 
-// An unrecognized format is a spell-authoring bug caught at decode, the same place a
-// bad key.upTo lands, not a silent fall back to scraping prose.
-func TestDecodeToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
-	_, err := Decode(mapObj{
-		"name": "docker",
-		"tools": map[string]any{
-			"hadolint": map[string]any{"diagnostics": "sarif"},
-		},
-	})
+// An unrecognized format is a spell-authoring bug caught at load, the same place a bad
+// key.upTo lands, not a silent fall back to scraping prose.
+func TestDescriptorToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
+	_, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
+		"hadolint": {Diagnostics: "sarif"},
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "diagnostics is sarif")
 	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
 }
 
-// TestDecodeCommandHints pins that failure hints survive decode in DECLARATION order (that
-// order is the precedence) and that a half-written rule is refused rather than dropped.
-func TestDecodeCommandHints(t *testing.T) {
-	t.Run("hints decode in declaration order", func(t *testing.T) {
-		cmd, err := decodeCommand("docker", "docker-buildx", mapObj{
-			"bin": "docker",
-			"hints": []any{
-				map[string]any{"contains": "denied: requested access", "advise": "specific"},
-				map[string]any{"contains": "denied", "advise": "general"},
-			},
-		})
-		require.NoError(t, err)
-		require.Len(t, cmd.Hints, 2)
-		assert.Equal(t, "specific", cmd.Hints[0].Advise, "order must not be sorted away - it is the precedence")
-		assert.Equal(t, "denied", cmd.Hints[1].Contains)
-	})
-	t.Run("no hints decodes to nil", func(t *testing.T) {
-		cmd, err := decodeCommand("docker", "docker-build", mapObj{"bin": "docker"})
-		require.NoError(t, err)
-		assert.Nil(t, cmd.Hints)
+// A half-written hint is refused rather than dropped: one with no contains would fire on
+// every failure of the command, and one with no advise would consume the match and
+// print nothing, reading as "magus had no idea".
+func TestValidateCommandHints(t *testing.T) {
+	t.Run("a whole hint passes", func(t *testing.T) {
+		cmd := spells.Command{Bin: "docker", Hints: []spells.Hint{{Contains: "denied", Advise: "docker login"}}}
+		require.NoError(t, validateCommand("docker", "docker-buildx", cmd))
 	})
 	t.Run("a hint with no contains is refused", func(t *testing.T) {
-		// Would otherwise fire on EVERY failure of this command.
-		_, err := decodeCommand("s", "o", mapObj{"hints": []any{map[string]any{"advise": "do the thing"}}})
+		err := validateCommand("s", "o", spells.Command{Hints: []spells.Hint{{Advise: "do the thing"}}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "both contains and advise are required")
 	})
 	t.Run("a contains with no advise is refused", func(t *testing.T) {
-		// Would otherwise consume the match and print nothing, reading as "no idea".
-		_, err := decodeCommand("s", "o", mapObj{"hints": []any{map[string]any{"contains": "denied"}}})
+		err := validateCommand("s", "o", spells.Command{Hints: []spells.Hint{{Contains: "denied"}}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "both contains and advise are required")
 	})
 }
 
-// TestDecodeCommandSources pins that Sources/SourcesEach decode from the Buzz
-// field names buzzgen derives for them (a plain lower-cased "sources" and the
-// camelCase "sourcesEach" for the two-word field; see FieldName in
-// libs/gopherbuzz/buzzgen/mirror.go), and that an ordinary Command with neither
-// key decodes to the unset default (nil, false): no behavior change for a
-// Command that does not declare Sources.
-func TestDecodeCommandSources(t *testing.T) {
-	t.Run("sources and sourcesEach decode", func(t *testing.T) {
-		cmd, err := decodeCommand("bash", "shellcheck", mapObj{
-			"bin":         "shellcheck",
-			"sources":     []string{"**/*.sh", "**/*.bash"},
-			"sourcesEach": true,
-		})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"**/*.sh", "**/*.bash"}, cmd.Sources)
-		assert.True(t, cmd.SourcesEach)
-	})
-	t.Run("neither key decodes to the unset default", func(t *testing.T) {
-		cmd, err := decodeCommand("bash", "shellcheck", mapObj{"bin": "shellcheck"})
-		require.NoError(t, err)
-		assert.Nil(t, cmd.Sources)
-		assert.False(t, cmd.SourcesEach)
-	})
-}
-
-// TestDecode_CommandExternal covers the op's declared relation to the world, both
-// directions. It decodes as a value the doctor check reads (MGS1033), and an unknown
-// value is a LOAD error rather than a lenient zero: an op that meant mutates-external and
-// misspelled it would otherwise decode as "declares nothing" and be silently exempt from
-// the one check it was opting into.
-func TestDecode_CommandExternal(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"scan": map[string]any{
-				"bin":      "trivy",
-				"args":     []string{"image"},
-				"external": "reads-external",
-			},
-			"push": map[string]any{
-				"bin":      "cosign",
-				"args":     []string{"sign"},
-				"external": "mutates-external",
-			},
-			"build": map[string]any{"bin": "go", "args": []string{"build"}},
-		},
-	}
-	m, err := Decode(src)
+// An unknown External is a LOAD error rather than a lenient zero: an op that meant
+// mutates-external and misspelled it would otherwise decode as "declares nothing" and
+// be silently exempt from the one check it was opting into.
+func TestDescriptor_CommandExternal(t *testing.T) {
+	m, err := describe(targets(map[string]spells.Command{
+		"scan":  {Bin: "trivy", Args: []string{"image"}, External: spells.ExternalReads},
+		"push":  {Bin: "cosign", Args: []string{"sign"}, External: spells.ExternalMutates},
+		"build": {Bin: "go", Args: []string{"build"}},
+	}))
 	require.NoError(t, err)
 	assert.Equal(t, spells.ExternalReads, m.Ops["scan"].External)
 	assert.Equal(t, spells.ExternalMutates, m.Ops["push"].External)
 	assert.Equal(t, spells.ExternalNone, m.Ops["build"].External,
 		"declaring nothing is the default and the honest answer for most ops")
 
-	bad := mapObj{
-		"name": "myspell",
-		"ops": map[string]any{
-			"scan": map[string]any{"bin": "trivy", "external": "reads-network"},
-		},
-	}
-	_, err = Decode(bad)
+	_, err = describe(targets(map[string]spells.Command{"scan": {Bin: "trivy", External: "reads-network"}}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reads-network")
 	assert.Contains(t, err.Error(), "reads-external", "the message must name what is accepted")
 }
 
-// TestDecode_ToolObserve covers the observation probe decoding beside the version probe,
-// and the emptiness rule they share: a tool entry declaring only an observe command is
-// still a tool magus knows something about, so it must survive the drop that removes
-// entries declaring nothing.
 // A lifecycle alone keeps the entry: it names the product a reader looks dates up by.
-func TestDecode_ToolLifecycle(t *testing.T) {
-	m, err := Decode(mapObj{
-		"name":  "ts",
-		"tools": map[string]any{"node": map[string]any{"lifecycle": "nodejs"}},
-	})
+func TestDescriptor_ToolLifecycle(t *testing.T) {
+	m, err := describe(Contract{Name: "ts", Tools: map[string]spells.Tool{"node": {Lifecycle: "nodejs"}}})
 	require.NoError(t, err)
 	assert.Equal(t, "nodejs", m.Tools["node"].Lifecycle)
 }
 
-func TestDecode_ToolObserve(t *testing.T) {
-	src := mapObj{
-		"name": "myspell",
-		"tools": map[string]any{
-			"trivy": map[string]any{
-				"probe":   map[string]any{"bin": "trivy", "args": []string{"version"}},
-				"observe": map[string]any{"bin": "trivy", "args": []string{"version", "--format", "json"}},
-			},
-			"feed": map[string]any{
-				"observe": map[string]any{"bin": "feedctl", "args": []string{"revision"}},
-			},
+// The observation probe decodes beside the version probe, and a tool entry declaring
+// only an observe command is still a tool magus knows something about, so it must
+// survive the drop that removes entries declaring nothing.
+func TestDescriptor_ToolObserve(t *testing.T) {
+	m, err := describe(Contract{Name: "myspell", Tools: map[string]spells.Tool{
+		"trivy": {
+			Probe:   spells.Command{Bin: "trivy", Args: []string{"version"}},
+			Observe: spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}},
 		},
-	}
-	m, err := Decode(src)
+		"feed": {Observe: spells.Command{Bin: "feedctl", Args: []string{"revision"}}},
+	}})
 	require.NoError(t, err)
 
 	trivy := m.Tools["trivy"]
@@ -1001,57 +626,62 @@ func TestDecode_ToolObserve(t *testing.T) {
 	assert.False(t, feed.HasProbe(), "an observation is not a version")
 }
 
-func stubSpell(stubs map[string]any) mapObj {
-	return mapObj{"name": "lang", "language": map[string]any{
-		"name":       "lang",
-		"extensions": []string{".l"},
-		"syntax":     map[string]any{"stubs": stubs},
+func stubSpell(stubs spells.StubSyntax) Contract {
+	return Contract{Name: "lang", Language: &spells.Language{
+		Name:       "lang",
+		Extensions: []string{".l"},
+		Syntax:     &spells.Syntax{Stubs: &stubs},
 	}}
 }
 
-func TestDecode_Stubs(t *testing.T) {
-	m, err := Decode(stubSpell(map[string]any{
-		"kinds":     []string{"Function", "Method"},
-		"bodyStyle": "brace",
-		"body":      "{ panic() }",
-	}))
+func TestDescriptor_Stubs(t *testing.T) {
+	want := spells.StubSyntax{Kinds: []string{"Function", "Method"}, BodyStyle: "brace", Body: "{ panic() }"}
+	m, err := describe(stubSpell(want))
 	require.NoError(t, err)
 	require.NotNil(t, m.Syntax)
-	assert.Equal(t, &spells.StubSyntax{Kinds: []string{"Function", "Method"}, BodyStyle: "brace", Body: "{ panic() }"}, m.Syntax.Stubs)
+	assert.Equal(t, &want, m.Syntax.Stubs)
 	assert.Nil(t, m.Syntax.Comments, "stubs alone declare no comment syntax")
 
-	m, err = Decode(mapObj{"name": "lang", "language": map[string]any{"name": "lang"}})
+	m, err = describe(Contract{Name: "lang", Language: &spells.Language{Name: "lang"}})
 	require.NoError(t, err)
 	assert.Nil(t, m.Syntax, "a language record without syntax declares none")
 }
 
-func TestDecode_StubsRefused(t *testing.T) {
-	valid := func() map[string]any {
-		return map[string]any{"kinds": []string{"Function"}, "bodyStyle": "indent", "body": "raise"}
+func TestDescriptor_StubsRefused(t *testing.T) {
+	valid := func() spells.StubSyntax {
+		return spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: "indent", Body: "raise"}
 	}
 	tests := []struct {
-		name  string
-		field string
-		value any
-		want  string
+		name   string
+		mutate func(*spells.StubSyntax)
+		want   string
 	}{
-		{"unknown body style", "bodyStyle", "curly", `language.syntax: stubs.bodyStyle is "curly", want "brace" or "indent"`},
-		{"missing body style", "bodyStyle", "", `stubs.bodyStyle is ""`},
-		{"no kinds", "kinds", []string{}, "stubs.kinds is empty"},
-		{"lowercase kind", "kinds", []string{"function"}, `stubs.kinds: "function" is not a SCIP symbol kind`},
-		{"unspecified kind", "kinds", []string{"UnspecifiedKind"}, `"UnspecifiedKind" is not a SCIP symbol kind`},
-		{"no body", "body", "", "stubs.body is required"},
+		{"unknown body style", func(s *spells.StubSyntax) { s.BodyStyle = "curly" }, `language.syntax: stubs.bodyStyle is "curly", want "brace" or "indent"`},
+		{"missing body style", func(s *spells.StubSyntax) { s.BodyStyle = "" }, `stubs.bodyStyle is ""`},
+		{"no kinds", func(s *spells.StubSyntax) { s.Kinds = nil }, "stubs.kinds is empty"},
+		{"lowercase kind", func(s *spells.StubSyntax) { s.Kinds = []string{"function"} }, `stubs.kinds: "function" is not a SCIP symbol kind`},
+		{"unspecified kind", func(s *spells.StubSyntax) { s.Kinds = []string{"UnspecifiedKind"} }, `"UnspecifiedKind" is not a SCIP symbol kind`},
+		{"no body", func(s *spells.StubSyntax) { s.Body = "" }, "stubs.body is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := valid()
-			rec[tt.field] = tt.value
-			_, err := Decode(stubSpell(rec))
+			stubs := valid()
+			tt.mutate(&stubs)
+			_, err := describe(stubSpell(stubs))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), `spell "lang"`, "the error names the spell")
 			assert.Contains(t, err.Error(), tt.want)
 		})
 	}
+}
+
+// Comment syntax without the extensions that scope it covers no files.
+func TestDescriptor_CommentsNeedExtensions(t *testing.T) {
+	_, err := describe(Contract{Name: "lang", Language: &spells.Language{
+		Name:   "lang",
+		Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{LineComments: []string{"//"}}},
+	}})
+	require.ErrorContains(t, err, "syntax.comments without extensions covers no files")
 }
 
 // TestBuiltinStubSyntax pins what each built-in declares: the splitter reads

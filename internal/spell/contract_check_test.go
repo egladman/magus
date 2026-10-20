@@ -80,9 +80,7 @@ export fun mgs_listClaimedGlobs() > [Path] { return []; }`)
 	})
 }
 
-// The check is off unless a caller passes WithContractCheck: the same source resolves
-// without it and is refused with it.
-func TestResolveRunsTheContractCheckOnlyWhenAsked(t *testing.T) {
+func TestResolveRefusesASpellThatBreaksTheContract(t *testing.T) {
 	const src = `export fun mgs_getName() > str { return "probe"; }
 export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`
 	ctx := context.Background()
@@ -91,22 +89,9 @@ export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`
 	sess.SetModuleDecls(SpellModulePath, SpellModuleSource)
 	require.NoError(t, sess.Exec(ctx, src))
 
-	spec, err := Resolve(ctx, sess)
-	require.NoError(t, err)
-	assert.Equal(t, "probe", spec.Name)
-
-	_, err = Resolve(ctx, sess, WithContractCheck(src))
+	_, err := Resolve(ctx, sess, src)
 	require.ErrorIs(t, err, types.SpellContractViolated)
 	assert.Contains(t, err.Error(), "mgs_getVersionProbe is not a spell contract function")
-}
-
-// shippedContractViolations are the shipped spells that do not conform yet, each with
-// why. An entry here fails once its spell conforms, so the list only shrinks; it is empty
-// when WithContractCheck can be passed on every load.
-var shippedContractViolations = map[string]string{
-	"typescript":      "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
-	"podman":          "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
-	"experimental/nx": "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
 }
 
 func TestShippedSpellsMatchTheContract(t *testing.T) {
@@ -119,13 +104,7 @@ func TestShippedSpellsMatchTheContract(t *testing.T) {
 		src, err := fs.ReadFile(spells.Shipped(), p)
 		require.NoError(t, err)
 		checked++
-		cerr := checkContract(string(src))
-		if why, known := shippedContractViolations[dir]; known {
-			assert.ErrorIs(t, cerr, types.SpellContractViolated,
-				"spells/%s conforms now; drop it from shippedContractViolations (%s)", dir, why)
-			return nil
-		}
-		require.NoError(t, cerr, "spells/%s", dir)
+		require.NoError(t, checkContract(string(src)), "spells/%s", dir)
 		return nil
 	})
 	require.NoError(t, err)
