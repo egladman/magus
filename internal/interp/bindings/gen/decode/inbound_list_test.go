@@ -5,12 +5,30 @@ package decode
 import (
 	"reflect"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 var inboundTypes = []inboundType{
+	{Name: "Path", Zero: types.Path{}, Encode: func(v any) vm.Value { return bindgen.ObjectPath(v.(types.Path)) }, Decode: func(v vm.Value) (any, error) { return DecodePath(v) }},
+	{Name: "Hint", Zero: spells.Hint{}, Encode: func(v any) vm.Value { return bindgen.ObjectHint(v.(spells.Hint)) }, Decode: func(v vm.Value) (any, error) { return DecodeHint(v) }},
+	{Name: "Command", Zero: spells.Command{}, Encode: func(v any) vm.Value { return bindgen.ObjectCommand(v.(spells.Command), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeCommand(v) }},
+	{Name: "Install", Zero: spells.Install{}, Encode: func(v any) vm.Value { return bindgen.ObjectInstall(v.(spells.Install), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeInstall(v) }},
+	{Name: "Manifest", Zero: spells.Manifest{}, Encode: func(v any) vm.Value { return bindgen.ObjectManifest(v.(spells.Manifest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeManifest(v) }},
+	{Name: "Service", Zero: spells.Service{}, Encode: func(v any) vm.Value { return bindgen.ObjectService(v.(spells.Service), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeService(v) }},
+	{Name: "SymbolIndexer", Zero: spells.SymbolIndexer{}, Encode: func(v any) vm.Value { return bindgen.ObjectSymbolIndexer(v.(spells.SymbolIndexer), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeSymbolIndexer(v) }},
+	{Name: "Charm", Zero: spells.Charm{}, Encode: func(v any) vm.Value { return bindgen.ObjectCharm(v.(spells.Charm), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeCharm(v) }},
+	{Name: "PatchOp", Zero: spells.PatchOp{}, Encode: func(v any) vm.Value { return bindgen.ObjectPatchOp(v.(spells.PatchOp), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodePatchOp(v) }},
+	{Name: "VersionKey", Zero: spells.VersionKey{}, Encode: func(v any) vm.Value { return bindgen.ObjectVersionKey(v.(spells.VersionKey), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeVersionKey(v) }},
+	{Name: "VersionBounds", Zero: spells.VersionBounds{}, Encode: func(v any) vm.Value { return bindgen.ObjectVersionBounds(v.(spells.VersionBounds)) }, Decode: func(v vm.Value) (any, error) { return DecodeVersionBounds(v) }},
+	{Name: "Tool", Zero: spells.Tool{}, Encode: func(v any) vm.Value { return bindgen.ObjectTool(v.(spells.Tool), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeTool(v) }},
+	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any) vm.Value { return bindgen.ObjectSandboxAllow(v.(spells.SandboxAllow), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeSandboxAllow(v) }},
+	{Name: "SandboxEnv", Zero: spells.SandboxEnv{}, Encode: func(v any) vm.Value { return bindgen.ObjectSandboxEnv(v.(spells.SandboxEnv)) }, Decode: func(v vm.Value) (any, error) { return DecodeSandboxEnv(v) }},
+	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any) vm.Value { return bindgen.ObjectSandboxCache(v.(spells.SandboxCache)) }, Decode: func(v vm.Value) (any, error) { return DecodeSandboxCache(v) }},
+	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any) vm.Value { return bindgen.ObjectSandbox(v.(spells.Sandbox), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return DecodeSandbox(v) }},
 	{Name: "CommentBlock", Zero: spells.CommentBlock{}, Encode: func(v any) vm.Value { return bindgen.ObjectCommentBlock(v.(spells.CommentBlock)) }, Decode: func(v vm.Value) (any, error) { return DecodeCommentBlock(v) }},
 	{Name: "Quote", Zero: spells.Quote{}, Encode: func(v any) vm.Value { return bindgen.ObjectQuote(v.(spells.Quote)) }, Decode: func(v vm.Value) (any, error) { return DecodeQuote(v) }},
 	{Name: "CommentSyntax", Zero: spells.CommentSyntax{}, Encode: func(v any) vm.Value { return bindgen.ObjectCommentSyntax(v.(spells.CommentSyntax)) }, Decode: func(v vm.Value) (any, error) { return DecodeCommentSyntax(v) }},
@@ -19,4 +37,11 @@ var inboundTypes = []inboundType{
 	{Name: "Language", Zero: spells.Language{}, Encode: func(v any) vm.Value { return bindgen.ObjectLanguage(v.(spells.Language)) }, Decode: func(v vm.Value) (any, error) { return DecodeLanguage(v) }},
 }
 
-var enumCases = map[reflect.Type][]string{}
+var enumCases = map[reflect.Type][]string{
+	reflect.TypeFor[spells.DiagnosticFormat](): {"", "gnu"},
+	reflect.TypeFor[spells.External]():         {"", "reads-external", "mutates-external"},
+	reflect.TypeFor[spells.PatchOpKind]():      {"", "add", "remove", "replace", "move", "copy", "test"},
+	reflect.TypeFor[spells.SandboxAccess]():    {"", "ro", "rx", "rw", "rwx"},
+	reflect.TypeFor[spells.SymbolFormat]():     {"", "scip"},
+	reflect.TypeFor[spells.VersionComponent](): {"", "major", "minor", "patch"},
+}

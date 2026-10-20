@@ -2,6 +2,14 @@
 
 package decode
 
+import (
+	"fmt"
+
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+)
+
 // ContractFunc is one load-time function of the spell contract, generated from a field
 // of internal/spell.Contract.
 type ContractFunc struct {
@@ -12,25 +20,287 @@ type ContractFunc struct {
 	// Returns is the return annotation the function must declare, as Buzz source spells
 	// it. A spell may space it differently.
 	Returns string
+	// Params is the parameter list the function must declare. A load-time function takes none.
+	Params string
 	// Required marks the function a module must export to be a spell at all.
 	Required bool
+	// Handler marks a {str: fun(Target) T} map: the caller invokes each handler once with a
+	// null Target and passes Decode the map of what they returned.
+	Handler bool
+	// Decode reads the function's result strictly into the Go type of the Contract field,
+	// naming the field path of any mismatch.
+	Decode func(v vm.Value) (any, error)
 }
 
 // ContractFuncs is every load-time function of the spell contract, in the order
 // internal/spell.Contract declares them.
 var ContractFuncs = []ContractFunc{
-	{Name: "mgs_getName", Field: "Name", Returns: "str", Required: true},
-	{Name: "mgs_listRequiredGlobs", Field: "RequiredGlobs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listProvidedGlobs", Field: "ProvidedGlobs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listIgnoreDirs", Field: "IgnoreDirs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listManifests", Field: "Manifests", Returns: "[Manifest]", Required: false},
-	{Name: "mgs_listScriptRunners", Field: "ScriptRunners", Returns: "[Command]", Required: false},
-	{Name: "mgs_getTools", Field: "Tools", Returns: "{str: Tool}", Required: false},
-	{Name: "mgs_getLanguage", Field: "Language", Returns: "Language", Required: false},
-	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false},
-	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false},
-	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false},
-	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false},
-	{Name: "mgs_listTargets", Field: "Targets", Returns: "{str: fun(Target) Command}", Required: false},
-	{Name: "mgs_listServices", Field: "Services", Returns: "{str: fun(Target) Service}", Required: false},
+	{Name: "mgs_getName", Field: "Name", Returns: "str", Required: true, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractName(v) }},
+	{Name: "mgs_listRequiredGlobs", Field: "RequiredGlobs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractRequiredGlobs(v) }},
+	{Name: "mgs_listProvidedGlobs", Field: "ProvidedGlobs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractProvidedGlobs(v) }},
+	{Name: "mgs_listIgnoreDirs", Field: "IgnoreDirs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractIgnoreDirs(v) }},
+	{Name: "mgs_listManifests", Field: "Manifests", Returns: "[Manifest]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractManifests(v) }},
+	{Name: "mgs_listScriptRunners", Field: "ScriptRunners", Returns: "[Command]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractScriptRunners(v) }},
+	{Name: "mgs_getTools", Field: "Tools", Returns: "{str: Tool}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractTools(v) }},
+	{Name: "mgs_getLanguage", Field: "Language", Returns: "Language", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractLanguage(v) }},
+	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSymbolIndexer(v) }},
+	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSandbox(v) }},
+	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractOpaque(v) }},
+	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractModeArgs(v) }},
+	{Name: "mgs_listTargets", Field: "Targets", Returns: "{str: fun(Target) Command}", Required: false, Handler: true, Decode: func(v vm.Value) (any, error) { return decodeContractTargets(v) }},
+	{Name: "mgs_listServices", Field: "Services", Returns: "{str: fun(Target) Service}", Required: false, Handler: true, Decode: func(v vm.Value) (any, error) { return decodeContractServices(v) }},
+}
+
+func decodeContractName(v vm.Value) (string, error) {
+	var out string
+	sName, err := decodeStr(v, "mgs_getName")
+	if err != nil {
+		return out, err
+	}
+	out = sName
+	return out, nil
+}
+
+func decodeContractRequiredGlobs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listRequiredGlobs, err := decodeList(v, "mgs_listRequiredGlobs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listRequiredGlobs) > 0 {
+		itemsRequiredGlobs := make([]types.Path, len(listRequiredGlobs))
+		for indexRequiredGlobs, itemRequiredGlobs := range listRequiredGlobs {
+			xRequiredGlobsItem, err := decodePath(itemRequiredGlobs, fmt.Sprintf("%s[%d]", "mgs_listRequiredGlobs", indexRequiredGlobs))
+			if err != nil {
+				return out, err
+			}
+			itemsRequiredGlobs[indexRequiredGlobs] = xRequiredGlobsItem
+		}
+		out = itemsRequiredGlobs
+	}
+	return out, nil
+}
+
+func decodeContractProvidedGlobs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listProvidedGlobs, err := decodeList(v, "mgs_listProvidedGlobs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listProvidedGlobs) > 0 {
+		itemsProvidedGlobs := make([]types.Path, len(listProvidedGlobs))
+		for indexProvidedGlobs, itemProvidedGlobs := range listProvidedGlobs {
+			xProvidedGlobsItem, err := decodePath(itemProvidedGlobs, fmt.Sprintf("%s[%d]", "mgs_listProvidedGlobs", indexProvidedGlobs))
+			if err != nil {
+				return out, err
+			}
+			itemsProvidedGlobs[indexProvidedGlobs] = xProvidedGlobsItem
+		}
+		out = itemsProvidedGlobs
+	}
+	return out, nil
+}
+
+func decodeContractIgnoreDirs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listIgnoreDirs, err := decodeList(v, "mgs_listIgnoreDirs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listIgnoreDirs) > 0 {
+		itemsIgnoreDirs := make([]types.Path, len(listIgnoreDirs))
+		for indexIgnoreDirs, itemIgnoreDirs := range listIgnoreDirs {
+			xIgnoreDirsItem, err := decodePath(itemIgnoreDirs, fmt.Sprintf("%s[%d]", "mgs_listIgnoreDirs", indexIgnoreDirs))
+			if err != nil {
+				return out, err
+			}
+			itemsIgnoreDirs[indexIgnoreDirs] = xIgnoreDirsItem
+		}
+		out = itemsIgnoreDirs
+	}
+	return out, nil
+}
+
+func decodeContractManifests(v vm.Value) ([]spells.Manifest, error) {
+	var out []spells.Manifest
+	listManifests, err := decodeList(v, "mgs_listManifests", "[Manifest]")
+	if err != nil {
+		return out, err
+	}
+	if len(listManifests) > 0 {
+		itemsManifests := make([]spells.Manifest, len(listManifests))
+		for indexManifests, itemManifests := range listManifests {
+			xManifestsItem, err := decodeManifest(itemManifests, fmt.Sprintf("%s[%d]", "mgs_listManifests", indexManifests))
+			if err != nil {
+				return out, err
+			}
+			itemsManifests[indexManifests] = xManifestsItem
+		}
+		out = itemsManifests
+	}
+	return out, nil
+}
+
+func decodeContractScriptRunners(v vm.Value) ([]spells.Command, error) {
+	var out []spells.Command
+	listScriptRunners, err := decodeList(v, "mgs_listScriptRunners", "[Command]")
+	if err != nil {
+		return out, err
+	}
+	if len(listScriptRunners) > 0 {
+		itemsScriptRunners := make([]spells.Command, len(listScriptRunners))
+		for indexScriptRunners, itemScriptRunners := range listScriptRunners {
+			xScriptRunnersItem, err := decodeCommand(itemScriptRunners, fmt.Sprintf("%s[%d]", "mgs_listScriptRunners", indexScriptRunners))
+			if err != nil {
+				return out, err
+			}
+			itemsScriptRunners[indexScriptRunners] = xScriptRunnersItem
+		}
+		out = itemsScriptRunners
+	}
+	return out, nil
+}
+
+func decodeContractTools(v vm.Value) (map[string]spells.Tool, error) {
+	var out map[string]spells.Tool
+	entriesTools, err := decodeMap(v, "mgs_getTools", "{str: Tool}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesTools.MapKeys(); len(keys) > 0 {
+		mappedTools := make(map[string]spells.Tool, len(keys))
+		for _, keyTools := range keys {
+			elemTools, _ := entriesTools.MapGet(keyTools)
+			var valueTools spells.Tool
+			xToolsValue, err := decodeTool(elemTools, fmt.Sprintf("%s[%q]", "mgs_getTools", keyTools))
+			if err != nil {
+				return out, err
+			}
+			valueTools = xToolsValue
+			mappedTools[keyTools] = valueTools
+		}
+		out = mappedTools
+	}
+	return out, nil
+}
+
+func decodeContractLanguage(v vm.Value) (*spells.Language, error) {
+	var out *spells.Language
+	if !v.IsNull() {
+		var optLanguage spells.Language
+		xLanguage, err := decodeLanguage(v, "mgs_getLanguage")
+		if err != nil {
+			return out, err
+		}
+		optLanguage = xLanguage
+		out = &optLanguage
+	}
+	return out, nil
+}
+
+func decodeContractSymbolIndexer(v vm.Value) (*spells.SymbolIndexer, error) {
+	var out *spells.SymbolIndexer
+	if !v.IsNull() {
+		var optSymbolIndexer spells.SymbolIndexer
+		xSymbolIndexer, err := decodeSymbolIndexer(v, "mgs_getSymbolIndexer")
+		if err != nil {
+			return out, err
+		}
+		optSymbolIndexer = xSymbolIndexer
+		out = &optSymbolIndexer
+	}
+	return out, nil
+}
+
+func decodeContractSandbox(v vm.Value) (*spells.Sandbox, error) {
+	var out *spells.Sandbox
+	if !v.IsNull() {
+		var optSandbox spells.Sandbox
+		xSandbox, err := decodeSandbox(v, "mgs_getSandbox")
+		if err != nil {
+			return out, err
+		}
+		optSandbox = xSandbox
+		out = &optSandbox
+	}
+	return out, nil
+}
+
+func decodeContractOpaque(v vm.Value) (bool, error) {
+	var out bool
+	bOpaque, err := decodeBool(v, "mgs_isOpaque")
+	if err != nil {
+		return out, err
+	}
+	out = bOpaque
+	return out, nil
+}
+
+func decodeContractModeArgs(v vm.Value) (map[string][]string, error) {
+	var out map[string][]string
+	entriesModeArgs, err := decodeMap(v, "mgs_getModeArgs", "{str: [str]}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesModeArgs.MapKeys(); len(keys) > 0 {
+		mappedModeArgs := make(map[string][]string, len(keys))
+		for _, keyModeArgs := range keys {
+			elemModeArgs, _ := entriesModeArgs.MapGet(keyModeArgs)
+			var valueModeArgs []string
+			strsModeArgsValue, err := decodeStrs(elemModeArgs, fmt.Sprintf("%s[%q]", "mgs_getModeArgs", keyModeArgs))
+			if err != nil {
+				return out, err
+			}
+			valueModeArgs = strsModeArgsValue
+			mappedModeArgs[keyModeArgs] = valueModeArgs
+		}
+		out = mappedModeArgs
+	}
+	return out, nil
+}
+
+func decodeContractTargets(v vm.Value) (map[string]spells.Command, error) {
+	var out map[string]spells.Command
+	entriesTargets, err := decodeMap(v, "mgs_listTargets", "{str: Command}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesTargets.MapKeys(); len(keys) > 0 {
+		mappedTargets := make(map[string]spells.Command, len(keys))
+		for _, keyTargets := range keys {
+			elemTargets, _ := entriesTargets.MapGet(keyTargets)
+			var valueTargets spells.Command
+			xTargetsValue, err := decodeCommand(elemTargets, fmt.Sprintf("%s[%q]", "mgs_listTargets", keyTargets))
+			if err != nil {
+				return out, err
+			}
+			valueTargets = xTargetsValue
+			mappedTargets[keyTargets] = valueTargets
+		}
+		out = mappedTargets
+	}
+	return out, nil
+}
+
+func decodeContractServices(v vm.Value) (map[string]spells.Service, error) {
+	var out map[string]spells.Service
+	entriesServices, err := decodeMap(v, "mgs_listServices", "{str: Service}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesServices.MapKeys(); len(keys) > 0 {
+		mappedServices := make(map[string]spells.Service, len(keys))
+		for _, keyServices := range keys {
+			elemServices, _ := entriesServices.MapGet(keyServices)
+			var valueServices spells.Service
+			xServicesValue, err := decodeService(elemServices, fmt.Sprintf("%s[%q]", "mgs_listServices", keyServices))
+			if err != nil {
+				return out, err
+			}
+			valueServices = xServicesValue
+			mappedServices[keyServices] = valueServices
+		}
+		out = mappedServices
+	}
+	return out, nil
 }

@@ -4067,6 +4067,83 @@ func ObjectTrailMark(v types.TrailMark) vm.Value {
 	return out
 }
 
+func ObjectInstall(v spells.Install, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("command", ObjectCommand(v.Command, enums))
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	out.MapSet("relocatable", vm.BoolValue(v.Relocatable))
+	itemsStamps := make([]vm.Value, len(v.Stamps))
+	for indexStamps := range v.Stamps {
+		itemsStamps[indexStamps] = vm.StrValue(v.Stamps[indexStamps])
+	}
+	out.MapSet("stamps", vm.ListValue(itemsStamps))
+	itemsInputs := make([]vm.Value, len(v.Inputs))
+	for indexInputs := range v.Inputs {
+		itemsInputs[indexInputs] = vm.StrValue(v.Inputs[indexInputs])
+	}
+	out.MapSet("inputs", vm.ListValue(itemsInputs))
+	itemsTools := make([]vm.Value, len(v.Tools))
+	for indexTools := range v.Tools {
+		itemsTools[indexTools] = vm.StrValue(v.Tools[indexTools])
+	}
+	out.MapSet("tools", vm.ListValue(itemsTools))
+	return out
+}
+
+func ObjectManifest(v spells.Manifest, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	itemsLockCandidates := make([]vm.Value, len(v.LockCandidates))
+	for indexLockCandidates := range v.LockCandidates {
+		itemsLockCandidates[indexLockCandidates] = vm.StrValue(v.LockCandidates[indexLockCandidates])
+	}
+	out.MapSet("lockCandidates", vm.ListValue(itemsLockCandidates))
+	mappedInstalls := vm.NewMap()
+	for keyInstalls, itemInstalls := range v.Installs {
+		mappedInstalls.MapSet(keyInstalls, ObjectInstall(itemInstalls, enums))
+	}
+	out.MapSet("installs", mappedInstalls)
+	return out
+}
+
+func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("command", ObjectCommand(v.Command, enums))
+	out.MapSet("start", ObjectCommand(v.Start, enums))
+	out.MapSet("readiness", ObjectCommand(v.Readiness, enums))
+	out.MapSet("stop", ObjectCommand(v.Stop, enums))
+	out.MapSet("distinct", vm.StrValue(v.Distinct))
+	out.MapSet("idle", vm.StrValue(v.Idle))
+	return out
+}
+
+func ObjectVersionKey(v spells.VersionKey, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("const", vm.StrValue(v.Const))
+	out.MapSet("upTo", enums.Case("VersionComponent", string(v.UpTo)))
+	return out
+}
+
+func ObjectVersionBounds(v spells.VersionBounds) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("min", vm.StrValue(v.Min))
+	out.MapSet("below", vm.StrValue(v.Below))
+	return out
+}
+
+func ObjectTool(v spells.Tool, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("probe", ObjectCommand(v.Probe, enums))
+	out.MapSet("key", ObjectVersionKey(v.Key, enums))
+	out.MapSet("observe", ObjectCommand(v.Observe, enums))
+	out.MapSet("ready", ObjectCommand(v.Ready, enums))
+	out.MapSet("supported", ObjectVersionBounds(v.Supported))
+	out.MapSet("diagnostics", enums.Case("DiagnosticFormat", string(v.Diagnostics)))
+	out.MapSet("lifecycle", vm.StrValue(v.Lifecycle))
+	return out
+}
+
 func ObjectLanguage(v spells.Language) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))

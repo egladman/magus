@@ -18,7 +18,866 @@ import (
 
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
+
+// DecodePath decodes a Buzz Path, an object instance or a map, into a types.Path.
+func DecodePath(v vm.Value) (types.Path, error) {
+	return decodePath(v, "path")
+}
+
+func decodePath(v vm.Value, path string) (types.Path, error) {
+	var out types.Path
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Path", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "value":
+			sValue, err := decodeStr(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = sValue
+		case "base":
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "isDir":
+			bIsDir, err := decodeBool(item, path+".isDir")
+			if err != nil {
+				return out, err
+			}
+			out.IsDir = bIsDir
+		default:
+			return out, unknownMember(path, "Path", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHint decodes a Buzz Hint, an object instance or a map, into a spells.Hint.
+func DecodeHint(v vm.Value) (spells.Hint, error) {
+	return decodeHint(v, "hint")
+}
+
+func decodeHint(v vm.Value, path string) (spells.Hint, error) {
+	var out spells.Hint
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Hint", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "contains":
+			sContains, err := decodeStr(item, path+".contains")
+			if err != nil {
+				return out, err
+			}
+			out.Contains = sContains
+		case "advise":
+			sAdvise, err := decodeStr(item, path+".advise")
+			if err != nil {
+				return out, err
+			}
+			out.Advise = sAdvise
+		default:
+			return out, unknownMember(path, "Hint", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeCommand decodes a Buzz Command, an object instance or a map, into a spells.Command.
+func DecodeCommand(v vm.Value) (spells.Command, error) {
+	return decodeCommand(v, "command")
+}
+
+func decodeCommand(v vm.Value, path string) (spells.Command, error) {
+	var out spells.Command
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Command", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "bin":
+			sBin, err := decodeStr(item, path+".bin")
+			if err != nil {
+				return out, err
+			}
+			out.Bin = sBin
+		case "args":
+			strsArgs, err := decodeStrs(item, path+".args")
+			if err != nil {
+				return out, err
+			}
+			out.Args = strsArgs
+		case "defaultArgs":
+			strsDefaultArgs, err := decodeStrs(item, path+".defaultArgs")
+			if err != nil {
+				return out, err
+			}
+			out.DefaultArgs = strsDefaultArgs
+		case "trailingArgs":
+			strsTrailingArgs, err := decodeStrs(item, path+".trailingArgs")
+			if err != nil {
+				return out, err
+			}
+			out.TrailingArgs = strsTrailingArgs
+		case "needsArgs":
+			sNeedsArgs, err := decodeStr(item, path+".needsArgs")
+			if err != nil {
+				return out, err
+			}
+			out.NeedsArgs = sNeedsArgs
+		case "charms":
+			entriesCharms, err := decodeMap(item, path+".charms", "{str: Charm}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesCharms.MapKeys(); len(keys) > 0 {
+				mappedCharms := make(map[string]spells.Charm, len(keys))
+				for _, keyCharms := range keys {
+					elemCharms, _ := entriesCharms.MapGet(keyCharms)
+					var valueCharms spells.Charm
+					xCharmsValue, err := decodeCharm(elemCharms, fmt.Sprintf("%s[%q]", path+".charms", keyCharms))
+					if err != nil {
+						return out, err
+					}
+					valueCharms = xCharmsValue
+					mappedCharms[keyCharms] = valueCharms
+				}
+				out.Charms = mappedCharms
+			}
+		case "sources":
+			strsSources, err := decodeStrs(item, path+".sources")
+			if err != nil {
+				return out, err
+			}
+			out.Sources = strsSources
+		case "external":
+			sExternal, err := decodeEnum(item, path+".external", "External", enumExternalValues)
+			if err != nil {
+				return out, err
+			}
+			out.External = spells.External(sExternal)
+		case "sourcesEach":
+			bSourcesEach, err := decodeBool(item, path+".sourcesEach")
+			if err != nil {
+				return out, err
+			}
+			out.SourcesEach = bSourcesEach
+		case "capture":
+			bCapture, err := decodeBool(item, path+".capture")
+			if err != nil {
+				return out, err
+			}
+			out.Capture = bCapture
+		case "quiet":
+			bQuiet, err := decodeBool(item, path+".quiet")
+			if err != nil {
+				return out, err
+			}
+			out.Quiet = bQuiet
+		case "secrets":
+			entriesSecrets, err := decodeMap(item, path+".secrets", "{str: str}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesSecrets.MapKeys(); len(keys) > 0 {
+				mappedSecrets := make(map[string]string, len(keys))
+				for _, keySecrets := range keys {
+					elemSecrets, _ := entriesSecrets.MapGet(keySecrets)
+					var valueSecrets string
+					sSecretsValue, err := decodeStr(elemSecrets, fmt.Sprintf("%s[%q]", path+".secrets", keySecrets))
+					if err != nil {
+						return out, err
+					}
+					valueSecrets = sSecretsValue
+					mappedSecrets[keySecrets] = valueSecrets
+				}
+				out.Secrets = mappedSecrets
+			}
+		case "envKeys":
+			strsEnvKeys, err := decodeStrs(item, path+".envKeys")
+			if err != nil {
+				return out, err
+			}
+			out.EnvKeys = strsEnvKeys
+		case "hints":
+			listHints, err := decodeList(item, path+".hints", "[Hint]")
+			if err != nil {
+				return out, err
+			}
+			if len(listHints) > 0 {
+				itemsHints := make([]spells.Hint, len(listHints))
+				for indexHints, itemHints := range listHints {
+					xHintsItem, err := decodeHint(itemHints, fmt.Sprintf("%s[%d]", path+".hints", indexHints))
+					if err != nil {
+						return out, err
+					}
+					itemsHints[indexHints] = xHintsItem
+				}
+				out.Hints = itemsHints
+			}
+		default:
+			return out, unknownMember(path, "Command", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeInstall decodes a Buzz Install, an object instance or a map, into a spells.Install.
+func DecodeInstall(v vm.Value) (spells.Install, error) {
+	return decodeInstall(v, "install")
+}
+
+func decodeInstall(v vm.Value, path string) (spells.Install, error) {
+	var out spells.Install
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Install", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "command":
+			xCommand, err := decodeCommand(item, path+".command")
+			if err != nil {
+				return out, err
+			}
+			out.Command = xCommand
+		case "dir":
+			sDir, err := decodeStr(item, path+".dir")
+			if err != nil {
+				return out, err
+			}
+			out.Dir = sDir
+		case "relocatable":
+			bRelocatable, err := decodeBool(item, path+".relocatable")
+			if err != nil {
+				return out, err
+			}
+			out.Relocatable = bRelocatable
+		case "stamps":
+			strsStamps, err := decodeStrs(item, path+".stamps")
+			if err != nil {
+				return out, err
+			}
+			out.Stamps = strsStamps
+		case "inputs":
+			strsInputs, err := decodeStrs(item, path+".inputs")
+			if err != nil {
+				return out, err
+			}
+			out.Inputs = strsInputs
+		case "tools":
+			strsTools, err := decodeStrs(item, path+".tools")
+			if err != nil {
+				return out, err
+			}
+			out.Tools = strsTools
+		default:
+			return out, unknownMember(path, "Install", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeManifest decodes a Buzz Manifest, an object instance or a map, into a spells.Manifest.
+func DecodeManifest(v vm.Value) (spells.Manifest, error) {
+	return decodeManifest(v, "manifest")
+}
+
+func decodeManifest(v vm.Value, path string) (spells.Manifest, error) {
+	var out spells.Manifest
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Manifest", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "value":
+			sValue, err := decodeStr(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = sValue
+		case "lockCandidates":
+			strsLockCandidates, err := decodeStrs(item, path+".lockCandidates")
+			if err != nil {
+				return out, err
+			}
+			out.LockCandidates = strsLockCandidates
+		case "installs":
+			entriesInstalls, err := decodeMap(item, path+".installs", "{str: Install}")
+			if err != nil {
+				return out, err
+			}
+			if keys := entriesInstalls.MapKeys(); len(keys) > 0 {
+				mappedInstalls := make(map[string]spells.Install, len(keys))
+				for _, keyInstalls := range keys {
+					elemInstalls, _ := entriesInstalls.MapGet(keyInstalls)
+					var valueInstalls spells.Install
+					xInstallsValue, err := decodeInstall(elemInstalls, fmt.Sprintf("%s[%q]", path+".installs", keyInstalls))
+					if err != nil {
+						return out, err
+					}
+					valueInstalls = xInstallsValue
+					mappedInstalls[keyInstalls] = valueInstalls
+				}
+				out.Installs = mappedInstalls
+			}
+		default:
+			return out, unknownMember(path, "Manifest", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeService decodes a Buzz Service, an object instance or a map, into a spells.Service.
+func DecodeService(v vm.Value) (spells.Service, error) {
+	return decodeService(v, "service")
+}
+
+func decodeService(v vm.Value, path string) (spells.Service, error) {
+	var out spells.Service
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Service", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "command":
+			xCommand, err := decodeCommand(item, path+".command")
+			if err != nil {
+				return out, err
+			}
+			out.Command = xCommand
+		case "start":
+			xStart, err := decodeCommand(item, path+".start")
+			if err != nil {
+				return out, err
+			}
+			out.Start = xStart
+		case "readiness":
+			xReadiness, err := decodeCommand(item, path+".readiness")
+			if err != nil {
+				return out, err
+			}
+			out.Readiness = xReadiness
+		case "stop":
+			xStop, err := decodeCommand(item, path+".stop")
+			if err != nil {
+				return out, err
+			}
+			out.Stop = xStop
+		case "distinct":
+			sDistinct, err := decodeStr(item, path+".distinct")
+			if err != nil {
+				return out, err
+			}
+			out.Distinct = sDistinct
+		case "idle":
+			sIdle, err := decodeStr(item, path+".idle")
+			if err != nil {
+				return out, err
+			}
+			out.Idle = sIdle
+		default:
+			return out, unknownMember(path, "Service", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSymbolIndexer decodes a Buzz SymbolIndexer, an object instance or a map, into a spells.SymbolIndexer.
+func DecodeSymbolIndexer(v vm.Value) (spells.SymbolIndexer, error) {
+	return decodeSymbolIndexer(v, "symbolIndexer")
+}
+
+func decodeSymbolIndexer(v vm.Value, path string) (spells.SymbolIndexer, error) {
+	var out spells.SymbolIndexer
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SymbolIndexer", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "format":
+			sFormat, err := decodeEnum(item, path+".format", "SymbolFormat", enumSymbolFormatValues)
+			if err != nil {
+				return out, err
+			}
+			out.Format = spells.SymbolFormat(sFormat)
+		case "op":
+			sOp, err := decodeStr(item, path+".op")
+			if err != nil {
+				return out, err
+			}
+			out.Op = sOp
+		case "command":
+			xCommand, err := decodeCommand(item, path+".command")
+			if err != nil {
+				return out, err
+			}
+			out.Command = xCommand
+		case "uses":
+			strsUses, err := decodeStrs(item, path+".uses")
+			if err != nil {
+				return out, err
+			}
+			out.Uses = strsUses
+		case "envs":
+			listEnvs, err := decodeList(item, path+".envs", "[{str: str}]")
+			if err != nil {
+				return out, err
+			}
+			if len(listEnvs) > 0 {
+				itemsEnvs := make([]map[string]string, len(listEnvs))
+				for indexEnvs, itemEnvs := range listEnvs {
+					entriesEnvsItem, err := decodeMap(itemEnvs, fmt.Sprintf("%s[%d]", path+".envs", indexEnvs), "{str: str}")
+					if err != nil {
+						return out, err
+					}
+					if keys := entriesEnvsItem.MapKeys(); len(keys) > 0 {
+						mappedEnvsItem := make(map[string]string, len(keys))
+						for _, keyEnvsItem := range keys {
+							elemEnvsItem, _ := entriesEnvsItem.MapGet(keyEnvsItem)
+							var valueEnvsItem string
+							sEnvsItemValue, err := decodeStr(elemEnvsItem, fmt.Sprintf("%s[%q]", fmt.Sprintf("%s[%d]", path+".envs", indexEnvs), keyEnvsItem))
+							if err != nil {
+								return out, err
+							}
+							valueEnvsItem = sEnvsItemValue
+							mappedEnvsItem[keyEnvsItem] = valueEnvsItem
+						}
+						itemsEnvs[indexEnvs] = mappedEnvsItem
+					}
+				}
+				out.Envs = itemsEnvs
+			}
+		default:
+			return out, unknownMember(path, "SymbolIndexer", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeCharm decodes a Buzz Charm, an object instance or a map, into a spells.Charm.
+func DecodeCharm(v vm.Value) (spells.Charm, error) {
+	return decodeCharm(v, "charm")
+}
+
+func decodeCharm(v vm.Value, path string) (spells.Charm, error) {
+	var out spells.Charm
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Charm", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "ops":
+			listOps, err := decodeList(item, path+".ops", "[PatchOp]")
+			if err != nil {
+				return out, err
+			}
+			if len(listOps) > 0 {
+				itemsOps := make([]spells.PatchOp, len(listOps))
+				for indexOps, itemOps := range listOps {
+					xOpsItem, err := decodePatchOp(itemOps, fmt.Sprintf("%s[%d]", path+".ops", indexOps))
+					if err != nil {
+						return out, err
+					}
+					itemsOps[indexOps] = xOpsItem
+				}
+				out.Ops = itemsOps
+			}
+		default:
+			return out, unknownMember(path, "Charm", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePatchOp decodes a Buzz PatchOp, an object instance or a map, into a spells.PatchOp.
+func DecodePatchOp(v vm.Value) (spells.PatchOp, error) {
+	return decodePatchOp(v, "patchOp")
+}
+
+func decodePatchOp(v vm.Value, path string) (spells.PatchOp, error) {
+	var out spells.PatchOp
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "PatchOp", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "op":
+			sOp, err := decodeEnum(item, path+".op", "PatchOpKind", enumPatchOpKindValues)
+			if err != nil {
+				return out, err
+			}
+			out.Op = spells.PatchOpKind(sOp)
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "value":
+			sValue, err := decodeStr(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = sValue
+		case "fromPtr":
+			sFrom, err := decodeStr(item, path+".fromPtr")
+			if err != nil {
+				return out, err
+			}
+			out.From = sFrom
+		default:
+			return out, unknownMember(path, "PatchOp", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeVersionKey decodes a Buzz VersionKey, an object instance or a map, into a spells.VersionKey.
+func DecodeVersionKey(v vm.Value) (spells.VersionKey, error) {
+	return decodeVersionKey(v, "versionKey")
+}
+
+func decodeVersionKey(v vm.Value, path string) (spells.VersionKey, error) {
+	var out spells.VersionKey
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "VersionKey", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "const":
+			sConst, err := decodeStr(item, path+".const")
+			if err != nil {
+				return out, err
+			}
+			out.Const = sConst
+		case "upTo":
+			sUpTo, err := decodeEnum(item, path+".upTo", "VersionComponent", enumVersionComponentValues)
+			if err != nil {
+				return out, err
+			}
+			out.UpTo = spells.VersionComponent(sUpTo)
+		default:
+			return out, unknownMember(path, "VersionKey", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeVersionBounds decodes a Buzz VersionBounds, an object instance or a map, into a spells.VersionBounds.
+func DecodeVersionBounds(v vm.Value) (spells.VersionBounds, error) {
+	return decodeVersionBounds(v, "versionBounds")
+}
+
+func decodeVersionBounds(v vm.Value, path string) (spells.VersionBounds, error) {
+	var out spells.VersionBounds
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "VersionBounds", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "min":
+			sMin, err := decodeStr(item, path+".min")
+			if err != nil {
+				return out, err
+			}
+			out.Min = sMin
+		case "below":
+			sBelow, err := decodeStr(item, path+".below")
+			if err != nil {
+				return out, err
+			}
+			out.Below = sBelow
+		default:
+			return out, unknownMember(path, "VersionBounds", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeTool decodes a Buzz Tool, an object instance or a map, into a spells.Tool.
+func DecodeTool(v vm.Value) (spells.Tool, error) {
+	return decodeTool(v, "tool")
+}
+
+func decodeTool(v vm.Value, path string) (spells.Tool, error) {
+	var out spells.Tool
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Tool", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "probe":
+			xProbe, err := decodeCommand(item, path+".probe")
+			if err != nil {
+				return out, err
+			}
+			out.Probe = xProbe
+		case "key":
+			xKey, err := decodeVersionKey(item, path+".key")
+			if err != nil {
+				return out, err
+			}
+			out.Key = xKey
+		case "observe":
+			xObserve, err := decodeCommand(item, path+".observe")
+			if err != nil {
+				return out, err
+			}
+			out.Observe = xObserve
+		case "ready":
+			xReady, err := decodeCommand(item, path+".ready")
+			if err != nil {
+				return out, err
+			}
+			out.Ready = xReady
+		case "supported":
+			xSupported, err := decodeVersionBounds(item, path+".supported")
+			if err != nil {
+				return out, err
+			}
+			out.Supported = xSupported
+		case "diagnostics":
+			sDiagnostics, err := decodeEnum(item, path+".diagnostics", "DiagnosticFormat", enumDiagnosticFormatValues)
+			if err != nil {
+				return out, err
+			}
+			out.Diagnostics = spells.DiagnosticFormat(sDiagnostics)
+		case "lifecycle":
+			sLifecycle, err := decodeStr(item, path+".lifecycle")
+			if err != nil {
+				return out, err
+			}
+			out.Lifecycle = sLifecycle
+		default:
+			return out, unknownMember(path, "Tool", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSandboxAllow decodes a Buzz SandboxAllow, an object instance or a map, into a spells.SandboxAllow.
+func DecodeSandboxAllow(v vm.Value) (spells.SandboxAllow, error) {
+	return decodeSandboxAllow(v, "sandboxAllow")
+}
+
+func decodeSandboxAllow(v vm.Value, path string) (spells.SandboxAllow, error) {
+	var out spells.SandboxAllow
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SandboxAllow", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeStr(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "env":
+			sEnv, err := decodeStr(item, path+".env")
+			if err != nil {
+				return out, err
+			}
+			out.Env = sEnv
+		case "base":
+			sBase, err := decodeStr(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = sBase
+		case "bin":
+			sBin, err := decodeStr(item, path+".bin")
+			if err != nil {
+				return out, err
+			}
+			out.Bin = sBin
+		case "path":
+			sPath, err := decodeStr(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "requires":
+			sRequires, err := decodeStr(item, path+".requires")
+			if err != nil {
+				return out, err
+			}
+			out.Requires = sRequires
+		case "mode":
+			sMode, err := decodeEnum(item, path+".mode", "SandboxAccess", enumSandboxAccessValues)
+			if err != nil {
+				return out, err
+			}
+			out.Mode = spells.SandboxAccess(sMode)
+		default:
+			return out, unknownMember(path, "SandboxAllow", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSandboxEnv decodes a Buzz SandboxEnv, an object instance or a map, into a spells.SandboxEnv.
+func DecodeSandboxEnv(v vm.Value) (spells.SandboxEnv, error) {
+	return decodeSandboxEnv(v, "sandboxEnv")
+}
+
+func decodeSandboxEnv(v vm.Value, path string) (spells.SandboxEnv, error) {
+	var out spells.SandboxEnv
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SandboxEnv", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "passthrough":
+			strsPassthrough, err := decodeStrs(item, path+".passthrough")
+			if err != nil {
+				return out, err
+			}
+			out.Passthrough = strsPassthrough
+		default:
+			return out, unknownMember(path, "SandboxEnv", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSandboxCache decodes a Buzz SandboxCache, an object instance or a map, into a spells.SandboxCache.
+func DecodeSandboxCache(v vm.Value) (spells.SandboxCache, error) {
+	return decodeSandboxCache(v, "sandboxCache")
+}
+
+func decodeSandboxCache(v vm.Value, path string) (spells.SandboxCache, error) {
+	var out spells.SandboxCache
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SandboxCache", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "env":
+			sEnv, err := decodeStr(item, path+".env")
+			if err != nil {
+				return out, err
+			}
+			out.Env = sEnv
+		case "stampsUse":
+			bStampsUse, err := decodeBool(item, path+".stampsUse")
+			if err != nil {
+				return out, err
+			}
+			out.StampsUse = bStampsUse
+		case "skip":
+			strsSkip, err := decodeStrs(item, path+".skip")
+			if err != nil {
+				return out, err
+			}
+			out.Skip = strsSkip
+		default:
+			return out, unknownMember(path, "SandboxCache", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSandbox decodes a Buzz Sandbox, an object instance or a map, into a spells.Sandbox.
+func DecodeSandbox(v vm.Value) (spells.Sandbox, error) {
+	return decodeSandbox(v, "sandbox")
+}
+
+func decodeSandbox(v vm.Value, path string) (spells.Sandbox, error) {
+	var out spells.Sandbox
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Sandbox", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "allow":
+			listAllow, err := decodeList(item, path+".allow", "[SandboxAllow]")
+			if err != nil {
+				return out, err
+			}
+			if len(listAllow) > 0 {
+				itemsAllow := make([]spells.SandboxAllow, len(listAllow))
+				for indexAllow, itemAllow := range listAllow {
+					xAllowItem, err := decodeSandboxAllow(itemAllow, fmt.Sprintf("%s[%d]", path+".allow", indexAllow))
+					if err != nil {
+						return out, err
+					}
+					itemsAllow[indexAllow] = xAllowItem
+				}
+				out.Allow = itemsAllow
+			}
+		case "env":
+			xEnv, err := decodeSandboxEnv(item, path+".env")
+			if err != nil {
+				return out, err
+			}
+			out.Env = xEnv
+		case "caches":
+			listCaches, err := decodeList(item, path+".caches", "[SandboxCache]")
+			if err != nil {
+				return out, err
+			}
+			if len(listCaches) > 0 {
+				itemsCaches := make([]spells.SandboxCache, len(listCaches))
+				for indexCaches, itemCaches := range listCaches {
+					xCachesItem, err := decodeSandboxCache(itemCaches, fmt.Sprintf("%s[%d]", path+".caches", indexCaches))
+					if err != nil {
+						return out, err
+					}
+					itemsCaches[indexCaches] = xCachesItem
+				}
+				out.Caches = itemsCaches
+			}
+		default:
+			return out, unknownMember(path, "Sandbox", key)
+		}
+	}
+	return out, nil
+}
 
 // DecodeCommentBlock decodes a Buzz CommentBlock, an object instance or a map, into a spells.CommentBlock.
 func DecodeCommentBlock(v vm.Value) (spells.CommentBlock, error) {
@@ -107,21 +966,11 @@ func decodeCommentSyntax(v vm.Value, path string) (spells.CommentSyntax, error) 
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "lineComments":
-			listLineComments, err := decodeList(item, path+".lineComments", "[str]")
+			strsLineComments, err := decodeStrs(item, path+".lineComments")
 			if err != nil {
 				return out, err
 			}
-			if len(listLineComments) > 0 {
-				itemsLineComments := make([]string, len(listLineComments))
-				for indexLineComments, itemLineComments := range listLineComments {
-					sLineCommentsItem, err := decodeStr(itemLineComments, fmt.Sprintf("%s[%d]", path+".lineComments", indexLineComments))
-					if err != nil {
-						return out, err
-					}
-					itemsLineComments[indexLineComments] = sLineCommentsItem
-				}
-				out.LineComments = itemsLineComments
-			}
+			out.LineComments = strsLineComments
 		case "blockComments":
 			listBlockComments, err := decodeList(item, path+".blockComments", "[CommentBlock]")
 			if err != nil {
@@ -161,21 +1010,11 @@ func decodeCommentSyntax(v vm.Value, path string) (spells.CommentSyntax, error) 
 				out.Quotes = itemsQuotes
 			}
 		case "directives":
-			listDirectives, err := decodeList(item, path+".directives", "[str]")
+			strsDirectives, err := decodeStrs(item, path+".directives")
 			if err != nil {
 				return out, err
 			}
-			if len(listDirectives) > 0 {
-				itemsDirectives := make([]string, len(listDirectives))
-				for indexDirectives, itemDirectives := range listDirectives {
-					sDirectivesItem, err := decodeStr(itemDirectives, fmt.Sprintf("%s[%d]", path+".directives", indexDirectives))
-					if err != nil {
-						return out, err
-					}
-					itemsDirectives[indexDirectives] = sDirectivesItem
-				}
-				out.Directives = itemsDirectives
-			}
+			out.Directives = strsDirectives
 		default:
 			return out, unknownMember(path, "CommentSyntax", key)
 		}
@@ -198,21 +1037,11 @@ func decodeStubSyntax(v vm.Value, path string) (spells.StubSyntax, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "kinds":
-			listKinds, err := decodeList(item, path+".kinds", "[str]")
+			strsKinds, err := decodeStrs(item, path+".kinds")
 			if err != nil {
 				return out, err
 			}
-			if len(listKinds) > 0 {
-				itemsKinds := make([]string, len(listKinds))
-				for indexKinds, itemKinds := range listKinds {
-					sKindsItem, err := decodeStr(itemKinds, fmt.Sprintf("%s[%d]", path+".kinds", indexKinds))
-					if err != nil {
-						return out, err
-					}
-					itemsKinds[indexKinds] = sKindsItem
-				}
-				out.Kinds = itemsKinds
-			}
+			out.Kinds = strsKinds
 		case "bodyStyle":
 			sBodyStyle, err := decodeStr(item, path+".bodyStyle")
 			if err != nil {
@@ -294,21 +1123,11 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 			}
 			out.Name = sName
 		case "extensions":
-			listExtensions, err := decodeList(item, path+".extensions", "[str]")
+			strsExtensions, err := decodeStrs(item, path+".extensions")
 			if err != nil {
 				return out, err
 			}
-			if len(listExtensions) > 0 {
-				itemsExtensions := make([]string, len(listExtensions))
-				for indexExtensions, itemExtensions := range listExtensions {
-					sExtensionsItem, err := decodeStr(itemExtensions, fmt.Sprintf("%s[%d]", path+".extensions", indexExtensions))
-					if err != nil {
-						return out, err
-					}
-					itemsExtensions[indexExtensions] = sExtensionsItem
-				}
-				out.Extensions = itemsExtensions
-			}
+			out.Extensions = strsExtensions
 		case "syntax":
 			if !item.IsNull() {
 				var optSyntax spells.Syntax
@@ -325,6 +1144,13 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 	}
 	return out, nil
 }
+
+var enumDiagnosticFormatValues = []string{"", "gnu"}
+var enumExternalValues = []string{"", "reads-external", "mutates-external"}
+var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
+var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
+var enumSymbolFormatValues = []string{"", "scip"}
+var enumVersionComponentValues = []string{"", "major", "minor", "patch"}
 
 // mismatch names an object by its type, which says more than "object".
 func mismatch(path, want string, got vm.Value) error {
@@ -398,6 +1224,26 @@ func decodeFloat(v vm.Value, path string) (float64, error) {
 		return float64(v.AsInt()), nil
 	}
 	return 0, mismatch(path, "double", v)
+}
+
+// decodeStrs decodes a [str]; an empty list is nil, like every other generated list.
+func decodeStrs(v vm.Value, path string) ([]string, error) {
+	items, err := decodeList(v, path, "[str]")
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		s, err := decodeStr(item, fmt.Sprintf("%s[%d]", path, i))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = s
+	}
+	return out, nil
 }
 
 func decodeList(v vm.Value, path, want string) ([]vm.Value, error) {
