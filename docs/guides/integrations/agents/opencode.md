@@ -978,7 +978,7 @@ is running read-only magus commands.
 
 ## Coverage and limits
 
-- Nothing in `harness_entries` is merged: OpenCode has no hook config, so the spell
+- No `mgs_listEntries` is merged: OpenCode has no hook config, so the spell
   writes the agent files and the push permission, and the plugin is the only hook.
   The plugin wires `tool.execute.before` and `.after`, `permission.ask`,
   `chat.message`, `shell.env`, `config` (to learn the magus MCP server's key) and

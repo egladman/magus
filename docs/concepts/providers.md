@@ -33,7 +33,7 @@ magus\lifecycle.provider(eol);
 | [Secrets](secrets.md)                | `magus\secret.provider`    | one      | `resolve_secret`                             |
 | [Review](review.md)                  | `magus\review.provider`    | one      | `find_review`, `review_threads`, ...         |
 | [Workspace](workspace/providers.md)  | `magus\workspace.provider` | many     | `list_projects`                              |
-| Agent harness                        | `magus\harness.provider`   | many     | `harness_config`, `harness_skills`, ...      |
+| Agent harness                        | `magus\harness.provider`   | many     | `mgs_getHarnessConfig`, `mgs_getMcp`, ...    |
 | [Lifecycle](#the-lifecycle-provider) | `magus\lifecycle.provider` | one      | `list_lifecycles`                            |
 
 There is one provider where two would disagree, and many where each answers a

@@ -884,7 +884,7 @@ guard judges the call by the shape of its input:
 What the shape cannot settle, the guard reads from the host's tool rows: each tool by
 the host's own name, with what it can do: run a command, read, write, spawn, reach the
 network, or touch nothing at all (a todo list, a plan, a web lookup, a read of a
-background task's output). The harness spell declares the rows (`harness_tools`), and
+background task's output). The harness spell declares the rows (`mgs_listTools`), and
 `magus agent harness install` writes them beside the host's config, one file per
 capability with one tool name per line and a version file. The hook names that directory
 with `--tool-rows`, so the guard reads them with no workspace load. A call to a tool that
