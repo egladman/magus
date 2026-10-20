@@ -2392,6 +2392,18 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Details: append(append([]string{}, problems...), advice...),
 		}
 	}
+	if len(advice) > 0 {
+		msg := fmt.Sprintf("%d personal plugin install(s) still open", len(advice))
+		if len(wired) > 0 {
+			msg = fmt.Sprintf("guard verified through %d harness config path(s); %s", len(wired), msg)
+		}
+		return types.Check{
+			Name:    name,
+			Status:  types.CheckAdvice,
+			Message: msg,
+			Details: append(append([]string{}, wired...), advice...),
+		}
+	}
 	if len(wired) == 0 {
 		return types.Check{
 			Name:    name,
@@ -2400,14 +2412,6 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Details: []string{
 				"wire magus\\harness.provider(<spell>) in the root magusfile (several hosts are fine)",
 			},
-		}
-	}
-	if len(advice) > 0 {
-		return types.Check{
-			Name:    name,
-			Status:  types.CheckAdvice,
-			Message: fmt.Sprintf("guard verified through %d harness config path(s); %d personal plugin install(s) still open", len(wired), len(advice)),
-			Details: append(append([]string{}, wired...), advice...),
 		}
 	}
 	return types.Check{
