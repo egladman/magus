@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -635,21 +636,40 @@ func TestDisplayPath(t *testing.T) {
 	})
 }
 
-// rootedWorkspace is a types.WorkspaceReader that answers Root() (and,
-// when set, Harnesses()) with a fixed value; every other method panics via the
-// embedded nil interface if exercised, which no path in TestDisplayPath does.
+// rootedWorkspace is a types.WorkspaceReader that answers Root() with a fixed value;
+// every other method panics via the embedded nil interface if exercised. Its harness
+// wiring is unknown unless boundWorkspace built it.
 type rootedWorkspace struct {
 	types.WorkspaceReader
-	root      string
-	harnesses []string
+	root string
 }
 
 func (r rootedWorkspace) Root() string { return r.root }
 
-// Harnesses satisfies the unexported interface workspaceHarnesses probes for; a
-// zero-value harnesses field means "nothing wired", matching every literal
-// that predates this field.
-func (r rootedWorkspace) Harnesses() []string { return r.harnesses }
+// boundWorkspace is a rootedWorkspace at root whose magusfile wired ids, bound the way a
+// load binds a workspace to its registry, until the test ends.
+func boundWorkspace(t testing.TB, root string, ids ...string) *rootedWorkspace {
+	t.Helper()
+	ws := &rootedWorkspace{root: root}
+	reg := workspace.NewWorkspaceRegistry()
+	for _, id := range ids {
+		reg.AddHarness(id)
+	}
+	workspace.BindRegistry(ws, reg)
+	t.Cleanup(func() { workspace.UnbindRegistry(ws) })
+	return ws
+}
+
+// A check that reads the wiring of a workspace no load bound reports it unknown, never
+// a pass over "nothing wired".
+func TestHarnessChecksReportUnknownWiring(t *testing.T) {
+	r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
+	for _, got := range []types.Check{r.checkGuardWiring(), r.checkCheckpointWiring(), r.checkMCPClient()} {
+		assert.Equal(t, types.CheckAdvice, got.Status, got.Name)
+		assert.Equal(t, types.EvidenceUnknown, got.Evidence, got.Name)
+		assert.Contains(t, got.Message, "the wired harnesses are unknown", got.Name)
+	}
+}
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
@@ -110,7 +111,11 @@ func rowNotesWith(ctx context.Context, m *magus.Magus, row types.Job, foreground
 // recorded run costs none of it.
 func hostForegroundMax(ctx context.Context, m *magus.Magus) func() (time.Duration, bool) {
 	return sync.OnceValues(func() (time.Duration, bool) {
-		wired := m.Harnesses()
+		wired, err := workspace.WiredHarnesses(m)
+		if err != nil {
+			slog.With(attr.Component("job fork")).WarnContext(ctx, "no host foreground limit is read", slog.String("error", err.Error()))
+			return 0, false
+		}
 		ctx := agent.ContextWithWiredHarnesses(ctx, wired)
 		var loaded []agent.HarnessDescriptor
 		for _, id := range wired {
