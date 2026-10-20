@@ -32,11 +32,11 @@ const (
 )
 
 var reviewChecks = []check{
-	{rule: RuleNonspecific, on: reviewText, advise: reviewText, judge: nonspecific},
-	{rule: RuleWhyOpener, on: reviewText, advise: reviewText, judge: whyOpener},
-	{rule: RuleBareImperative, on: reviewText, advise: reviewText, judge: bareImperative},
-	{rule: RuleAllCaps, on: reviewText, advise: reviewText, judge: allCaps},
-	{rule: RuleRepeatedMarks, on: reviewText, advise: reviewText, judge: repeatedMarks},
+	{rule: RuleNonspecific, on: reviewText, graded: true, judge: nonspecific},
+	{rule: RuleWhyOpener, on: reviewText, graded: true, judge: whyOpener},
+	{rule: RuleBareImperative, on: reviewText, graded: true, judge: bareImperative},
+	{rule: RuleAllCaps, on: reviewText, graded: true, judge: allCaps},
+	{rule: RuleRepeatedMarks, on: reviewText, graded: true, judge: repeatedMarks},
 }
 
 var reviewTexts = map[Rule]ruleText{
@@ -57,7 +57,7 @@ var reviewTexts = map[Rule]ruleText{
 			"of 11) after. Most firings named what they judged in a noun phrase (\"the indentation\", " +
 			"\"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), so only a " +
 			"verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the " +
-			"line they judge. It advises, and stays off until a fresh labeling round measures it. Labeling " +
+			"line they judge. It is graded. Labeling " +
 			"round 5 measured 32.5% (13 of 40, lower bound 0.20); seven of its wrong firings named a failure " +
 			"the reader can find (\"tests are failing\", \"CI failed\", a command that times out), which is " +
 			"the reason for the change asked, so such a reply is left alone. A retry asked with nothing " +
@@ -66,7 +66,8 @@ var reviewTexts = map[Rule]ruleText{
 			"referent as an inline comment's line is, so a reply holding one is left alone, and so is a " +
 			"judgment in single quotes. An apology owning the writer's fault (\"my bad\"), a fix the writer " +
 			"takes on (\"will fix it\"), and thanks or a conceded point that asks for nothing judge nobody's " +
-			"work. A reply an automated reviewer marks as auto-generated is not the author's.",
+			"work. A reply an automated reviewer marks as auto-generated is not the author's. Labeling " +
+			"round 7 measured 17 of 40, a lower bound of 0.29, which each graded finding weighs.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -91,7 +92,7 @@ var reviewTexts = map[Rule]ruleText{
 			"intended. Measured 2026-10-11 over the adjudicated labeling round: 37.2% precision (16 of " +
 			"43) before, 100% (16 of 16) after. Most firings followed a sentence stating the problem " +
 			"(\"Duplicate documentation. Remove it.\"), so only a reply made of bare commands is judged. " +
-			"It stays off until 30 labeled firings show it.",
+			"Labeling round 3 measured 29 of 40, a lower bound of 0.57, which each graded finding weighs.",
 	},
 	RuleAllCaps: {
 		code:      "PRF8013",
@@ -116,7 +117,8 @@ var reviewTexts = map[Rule]ruleText{
 			"Measured 2026-10-11 over the adjudicated labeling round: 46.5% precision (20 of 43) before, " +
 			"100% (20 of 20) after: every false positive was an operator or placeholder outside a code " +
 			"span, so a run set between spaces or brackets, or touching a word it opens (\"!!hit\", " +
-			"\"!!NAME!!\"), is left alone. It stays off until 30 labeled firings show it.",
+			"\"!!NAME!!\"), is left alone. Labeling round 3 measured 34 of 34, a lower bound of 0.90, which " +
+			"each graded finding weighs.",
 	},
 }
 

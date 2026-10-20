@@ -1,13 +1,13 @@
 ---
 title: "leak"
-description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
-tags: [proofread, rules, leak, deny]
+description: "An advisory by default: it explains, and blocks nothing, on residue of a tool or a template: a citation marker or an unfilled placeholder."
+tags: [proofread, rules, leak, advise]
 aliases: [reference/prose/leak]
 ---
 
 # leak
 
-A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-brief`, `agent-compact`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, `review-summary`, `review-inline`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
+An advisory by default: it explains, and blocks nothing, on residue of a tool or a template: a citation marker or an unfilled placeholder.
 
 ## What it catches
 
@@ -28,20 +28,20 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `doc-comment`        | deny    |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-brief`        | deny    |
-| `agent-compact`      | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `cli-help`           | deny    |
-| `review-summary`     | deny    |
-| `review-inline`      | deny    |
-| `review-reply`       | deny    |
+| `doc-comment`        | advise  |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-brief`        | advise  |
+| `agent-compact`      | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
+| `cli-help`           | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
 | `agent-reply`        | advise  |
 
 ## Changing it
@@ -52,7 +52,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"leak": "advise"},
+  "rules": {"leak": "deny"},
   "paths": {"blog/**": {"leak": "off"}}
 }
 ```
@@ -65,7 +65,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "leak", "code": "PRF4005", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/leak/"}
+{"rule": "leak", "code": "PRF4005", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/leak/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

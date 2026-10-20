@@ -1,13 +1,13 @@
 ---
 title: "claim"
-description: "A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on."
-tags: [proofread, rules, claim, off]
+description: "An advisory by default: it explains, and blocks nothing, on a measurement, a comparison or a completion with no evidence in its sentence or bullet."
+tags: [proofread, rules, claim, advise]
 aliases: [reference/prose/claim]
 ---
 
 # claim
 
-A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a measurement, a comparison or a completion with no evidence in its sentence or bullet.
 
 ## What it catches
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A claim a reader cannot check reads as boasting or as a guess. Evidence is a code span naming a test or command, a link, an issue or commit, or an output ref. It advises: over the last 200 merged pull requests it fired in 21, and about half of those state a setting ("a 300s bound") rather than measure. A sentence that states a limit ("Not measured on Linux") is exempt. Measured 2026-10-11 over the adjudicated labeling round 2: 51.1% precision (23 of 45) before, 74.2% (23 of 31) after. A figure after a determiner or a limit's noun ("a fixed 60ms", "a limit of 40%"), a supposed, quoted or confidence figure ("99% sure"), a ratio beside the line counts it comes from, a comparison stating a purpose or an aside ("to keep it smaller") and "fixes" before a preposition are left alone. It stays off until a fresh labeling round measures it.
+A claim a reader cannot check reads as boasting or as a guess. Evidence is a code span naming a test or command, a link, an issue or commit, or an output ref. It advises: over the last 200 merged pull requests it fired in 21, and about half of those state a setting ("a 300s bound") rather than measure. A sentence that states a limit ("Not measured on Linux") is exempt. Measured 2026-10-11 over the adjudicated labeling round 2: 51.1% precision (23 of 45) before, 74.2% (23 of 31) after. A figure after a determiner or a limit's noun ("a fixed 60ms", "a limit of 40%"), a supposed, quoted or confidence figure ("99% sure"), a ratio beside the line counts it comes from, a comparison stating a purpose or an aside ("to keep it smaller") and "fixes" before a preposition are left alone. Labeling round 4 measured 22 of 40, a lower bound of 0.40, which each graded finding weighs.
 
 ## Default decision
 
@@ -28,13 +28,13 @@ The code is `PRF3001`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
-| `commit-message`     | off     |
-| `issue`              | off     |
-| `agent-reply`        | off     |
+| `change-description` | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `agent-reply`        | advise  |
 
 ## Changing it
 
@@ -57,7 +57,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "claim", "code": "PRF3001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
+{"rule": "claim", "code": "PRF3001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -41,17 +41,17 @@ var (
 )
 
 // reviewKindChecks are the rules for one review text in particular: an inline
-// comment, a summary or a reply. Each advises until a labeling round measures
-// it.
+// comment, a summary or a reply. Each is graded, and ships off until a labeling
+// round measures it.
 var reviewKindChecks = []check{
-	{rule: RuleNoReason, on: inlineOnly, advise: inlineOnly, judge: ownWords(unexplainedRequest)},
-	{rule: RuleNitLabel, on: inlineOnly, advise: inlineOnly, judge: nitLabel},
-	{rule: RuleEmptyRequestChanges, on: summaryOnly, advise: summaryOnly, judge: emptyRequestChanges},
-	{rule: RuleApproveBlocker, on: summaryOnly, advise: summaryOnly, judge: ownWords(approveBlocker)},
-	{rule: RuleBareLGTM, on: summaryOnly, advise: summaryOnly, judge: bareLGTM},
-	{rule: RuleDeferralNoLink, on: replyOnly, advise: replyOnly, judge: ownWords(deferralNoLink)},
-	{rule: RuleDeclineNoReason, on: replyOnly, advise: replyOnly, judge: ownWords(declineNoReason)},
-	{rule: RuleImpatience, on: replyOnly, advise: replyOnly, judge: ownWords(impatience)},
+	{rule: RuleNoReason, on: inlineOnly, graded: true, judge: ownWords(unexplainedRequest)},
+	{rule: RuleNitLabel, on: inlineOnly, graded: true, judge: nitLabel},
+	{rule: RuleEmptyRequestChanges, on: summaryOnly, graded: true, judge: emptyRequestChanges},
+	{rule: RuleApproveBlocker, on: summaryOnly, graded: true, judge: ownWords(approveBlocker)},
+	{rule: RuleBareLGTM, on: summaryOnly, graded: true, judge: bareLGTM},
+	{rule: RuleDeferralNoLink, on: replyOnly, graded: true, judge: ownWords(deferralNoLink)},
+	{rule: RuleDeclineNoReason, on: replyOnly, graded: true, judge: ownWords(declineNoReason)},
+	{rule: RuleImpatience, on: replyOnly, graded: true, judge: ownWords(impatience)},
 }
 
 var reviewKindTexts = map[Rule]ruleText{

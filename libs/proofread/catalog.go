@@ -20,6 +20,9 @@ type RuleDoc struct {
 	// House marks a rule that encodes one repository's conventions rather than
 	// plain writing, so it runs only where a decisions table names it.
 	House bool `json:"house"`
+	// Weight is what one advise finding of the rule costs a text's [Grade], 0
+	// for a rule no labeling round measured.
+	Weight float64 `json:"weight"`
 	// Dimension is what the rule protects for the reader.
 	Dimension Dimension `json:"dimension"`
 	// Catches says in one line what the rule fires on.
@@ -43,7 +46,7 @@ func Catalog() []RuleDoc {
 
 		t := ruleTexts[c.rule]
 		out[i] = RuleDoc{
-			Name: c.rule, Code: t.code, Kinds: slices.Clone(c.on), Decisions: decisions, House: c.house,
+			Name: c.rule, Code: t.code, Kinds: slices.Clone(c.on), Decisions: decisions, House: c.house, Weight: weights[c.rule],
 			Catches: t.catches, Why: t.why, Dimension: t.dimension,
 		}
 	}
@@ -98,7 +101,7 @@ const (
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
 var ruleTexts = mergeTexts(coreTexts, cssTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, reviewKindTexts, suppressTexts,
-	agentReplyTexts, toolTexts, listTexts, voiceTexts, compactTexts, skillTexts)
+	agentReplyTexts, toolTexts, listTexts, voiceTexts, compactTexts, skillTexts, gradeTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
 	out := map[Rule]ruleText{}
@@ -169,8 +172,8 @@ var coreTexts = map[Rule]ruleText{
 			"the adjudicated labeling round: 52.0% precision (26 of 50) before, 92.9% (26 of 28) after. " +
 			"\"lazy\" is no longer read (all 7 labeled firings named evaluation on demand), and quoted " +
 			"words, a denied word (\"not crazy\", \"rather than sloppy\"), a fault the writer owns (\"on my " +
-			"part\") and a supposed one (\"if they forgot to\") are left alone. It stays off until 30 " +
-			"labeled firings show it.",
+			"part\") and a supposed one (\"if they forgot to\") are left alone. Labeling round 3 measured 34 " +
+			"of 37, a lower bound of 0.79, which each graded finding weighs.",
 	},
 	RuleVerdict: {
 		code:      "PRF2002",
@@ -183,7 +186,8 @@ var coreTexts = map[Rule]ruleText{
 			"behavior beside the word, so a verdict with a reason or cause in its sentence, or a later " +
 			"sentence in its paragraph, is left alone, as are quoted words, a broken test or link, a " +
 			"denied or supposed state (\"nothing was broken\", \"may be broken\"), and the verb senses " +
-			"(\"broken into lines\", \"mess with\"). It stays off until 30 labeled firings show it.",
+			"(\"broken into lines\", \"mess with\"). Labeling round 3 measured 16 of 40, a lower bound of " +
+			"0.26, which each graded finding weighs.",
 	},
 	RuleAbsolute: {
 		code:      "PRF2003",
@@ -197,7 +201,8 @@ var coreTexts = map[Rule]ruleText{
 			"code (\"never used\", \"never existed\"), a supposed or contrasted case (\"if it never fired\", " +
 			"\"created but never used\"), a \"when\" condition after it, a parenthetical note, the writer " +
 			"in the first person, quoted words and a \"nothing\" with no object (\"the flag nothing " +
-			"cleared\") are left alone. It stays off until a fresh labeling round measures it.",
+			"cleared\") are left alone. Labeling round 4 measured 6 of 40, a lower bound of 0.07, which " +
+			"each graded finding weighs.",
 	},
 	RuleIntent: {
 		code:      "PRF2004",
@@ -245,8 +250,8 @@ var coreTexts = map[Rule]ruleText{
 			"before, 74.2% (23 of 31) after. A figure after a determiner or a limit's noun (\"a fixed " +
 			"60ms\", \"a limit of 40%\"), a supposed, quoted or confidence figure (\"99% sure\"), a ratio " +
 			"beside the line counts it comes from, a comparison stating a purpose or an aside (\"to keep " +
-			"it smaller\") and \"fixes\" before a preposition are left alone. It stays off until a fresh " +
-			"labeling round measures it.",
+			"it smaller\") and \"fixes\" before a preposition are left alone. Labeling round 4 measured 22 " +
+			"of 40, a lower bound of 0.40, which each graded finding weighs.",
 	},
 	RuleHedge: {
 		code:      "PRF3002",
@@ -280,8 +285,7 @@ var coreTexts = map[Rule]ruleText{
 			"lowercase \"really\" meaning in fact (\"should really bind\"), \"Just\" before a determiner " +
 			"or \"not\", a selling word in a comparison (\"a more comprehensive check\"; this loses " +
 			"\"a more powerful parser\"), and a word mentioned after \"the filler\". On fresh text it " +
-			"held 32 of 40 (lower bound 0.65, validation round 3), under the advise gate, so it ships " +
-			"off until it clears 0.70.",
+			"held 32 of 40 (lower bound 0.65, validation round 3), which each graded finding weighs.",
 	},
 	RuleWordy: {
 		code:      "PRF4002",
@@ -520,7 +524,7 @@ var coreTexts = map[Rule]ruleText{
 			"over the adjudicated labeling round: 44.2% precision (19 of 43) before, 95.0% (19 of 20) " +
 			"after. \"Wrong\" counts only as an exclamation, not before a noun (\"Wrong indentation\"), " +
 			"and a \"No,\" answering the question the reply quotes, or conceding (\"good catch\"), is left " +
-			"alone. It stays off until 30 labeled firings show it.",
+			"alone. Labeling round 3 measured 21 of 40, a lower bound of 0.37, which each graded finding weighs.",
 	},
 	RuleJudgmentAsFact: {
 		code:      "PRF8002",

@@ -74,8 +74,8 @@ func TestRunJudgesACommitMessageOnStdinAsItWas(t *testing.T) {
 	var got []finding
 
 	code, out, errOut := runArgs(t, []string{"commit-message", "--stdin"}, "Fix the parser\n\nBody. "+stale+"\n")
-	if code != exitOK || errOut != "" {
-		t.Fatalf("run: code %d stderr %q", code, errOut)
+	if code != exitFindings || errOut != "" {
+		t.Fatalf("run: code %d stderr %q, want %d for the deny finding", code, errOut, exitFindings)
 	}
 
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
@@ -96,7 +96,7 @@ func TestRunJudgesNothingInAMessageOfOnlyComments(t *testing.T) {
 func TestRunFailsAHookOnADeniedCommitMessage(t *testing.T) {
 	dir := t.TempDir()
 	bad := writeFile(t, dir, "BAD", "# comment\nFix the parser\n\nBody. "+stale+"\n")
-	args := []string{"commit-message", "-o", "text", "-fail-on", "deny", bad}
+	args := []string{"commit-message", "-o", "text", bad}
 
 	code, out, errOut := runArgs(t, args, "")
 	if code != exitFindings || !strings.HasPrefix(out, bad+":4:") || !strings.Contains(out, "suppression-unused [deny]") ||
@@ -104,7 +104,7 @@ func TestRunFailsAHookOnADeniedCommitMessage(t *testing.T) {
 		t.Errorf("a denied message: code %d stdout %q stderr %q", code, out, errOut)
 	}
 
-	if code, _, _ := runArgs(t, []string{"commit-message", "-fail-on", "deny", dir + "/missing"}, ""); code != exitError {
+	if code, _, _ := runArgs(t, []string{"commit-message", dir + "/missing"}, ""); code != exitError {
 		t.Errorf("a missing message file: code %d, want %d", code, exitError)
 	}
 }

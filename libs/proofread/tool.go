@@ -30,9 +30,9 @@ const (
 var toolKind = []Kind{KindToolDescription}
 
 var toolChecks = []check{
-	{rule: RuleToolLead, on: toolKind, advise: toolKind, judge: toolLead},
-	{rule: RuleToolBoundary, on: toolKind, advise: toolKind, judge: toolBoundary},
-	{rule: RuleToolLength, on: toolKind, advise: toolKind, judge: toolLength},
+	{rule: RuleToolLead, on: toolKind, graded: true, judge: toolLead},
+	{rule: RuleToolBoundary, on: toolKind, graded: true, judge: toolBoundary},
+	{rule: RuleToolLength, on: toolKind, graded: true, judge: toolLength},
 	{rule: RuleToolSelling, on: toolKind, judge: tellJudge("Drop '%s': say what the tool does, not how good it is.", toolSelling...)},
 }
 

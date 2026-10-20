@@ -1,13 +1,13 @@
 ---
 title: "reply-voice"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
-tags: [proofread, rules, reply-voice, deny]
+description: "An advisory by default: it explains, and blocks nothing, on text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
+tags: [proofread, rules, reply-voice, advise]
 aliases: [reference/prose/reply-voice]
 ---
 
 # reply-voice
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
+An advisory by default: it explains, and blocks nothing, on text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
 
 ## What it catches
 
@@ -28,18 +28,18 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-brief`        | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `review-summary`     | deny    |
-| `review-inline`      | deny    |
-| `review-reply`       | deny    |
-| `agent-compact`      | deny    |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-brief`        | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
+| `agent-compact`      | advise  |
 | `stylesheet`         | advise  |
 
 ## Changing it
@@ -50,7 +50,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"reply-voice": "advise"},
+  "rules": {"reply-voice": "deny"},
   "paths": {"blog/**": {"reply-voice": "off"}}
 }
 ```
@@ -63,7 +63,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "reply-voice", "code": "PRF1002", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-voice/"}
+{"rule": "reply-voice", "code": "PRF1002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-voice/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -14,6 +14,20 @@ import (
 	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
+// labeledRules counts the rules a labeled case can judge: grade reads a text's
+// other findings, which a case's one rule cannot show.
+func labeledRules() int {
+	n := 0
+
+	for _, r := range proofread.Rules() {
+		if r != proofread.RuleGrade {
+			n++
+		}
+	}
+
+	return n
+}
+
 func TestCalibrateReplaysTheCasesItCarries(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"calibrate", "-o", "json"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
@@ -25,8 +39,8 @@ func TestCalibrateReplaysTheCasesItCarries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(scores) != len(proofread.Rules()) {
-		t.Errorf("%d scores, want one per rule (%d)", len(scores), len(proofread.Rules()))
+	if len(scores) != labeledRules() {
+		t.Errorf("%d scores, want one per labeled rule (%d)", len(scores), labeledRules())
 	}
 
 	for _, s := range scores {
@@ -68,8 +82,8 @@ func TestCalibrateGatesTheCasesItCarries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(gates) != len(proofread.Rules()) {
-		t.Errorf("%d gates, want one per rule (%d)", len(gates), len(proofread.Rules()))
+	if len(gates) != labeledRules() {
+		t.Errorf("%d gates, want one per labeled rule (%d)", len(gates), labeledRules())
 	}
 
 	for _, g := range gates {
@@ -116,17 +130,17 @@ func TestCalibrateGatesPassAndFail(t *testing.T) {
 		code        int
 		row         string
 	}{
-		"deny at 0 of 35 passes": {35, 0, 0, "wordy  economy    deny     deny      35       0      100.0%     90.1%  " +
+		"deny at 0 of 35 passes": {35, 0, 0, "buzzword  economy    deny     deny      35       0      100.0%     90.1%  " +
 			"100.0%              pass  -\n"},
-		"deny at 0 of 10 needs 25": {10, 0, 1, "wordy  economy    deny     off       10       0      100.0%     72.2%  " +
+		"deny at 0 of 10 needs 25": {10, 0, 1, "buzzword  economy    deny     off       10       0      100.0%     72.2%  " +
 			"100.0%              fail  +25\n"},
-		"deny at 1 of 10 cannot reach it": {9, 1, 1, "wordy  economy    deny     off       10       1      90.0%      " +
+		"deny at 1 of 10 cannot reach it": {9, 1, 1, "buzzword  economy    deny     off       10       1      90.0%      " +
 			"59.6%  100.0%              fail  unreachable\n"},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			dir := writeCases(t, "wordy", "reference", "Run it in order to replay %d.", "Read it prior to step %d.",
+			dir := writeCases(t, "buzzword", "reference", "Let me delve into replay %d.", "We delve into step %d.",
 				"The value may be empty.", tc.hits, tc.wrong)
 
 			var stdout, stderr bytes.Buffer

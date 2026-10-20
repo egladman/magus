@@ -48,21 +48,21 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 		want map[Kind]Decision
 	}{
 		{"a tell a reply carries too", RuleSignpost, "Make no mistake, the key sorts.", nil, map[Kind]Decision{
-			KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-			KindAgentBrief: DecisionDeny, KindReviewReply: DecisionDeny,
+			KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
+			KindAgentBrief: DecisionAdvise, KindReviewReply: DecisionAdvise,
 		}},
 		{"residue is judged in a doc comment too", RuleLeak, "The key sorts. TBD.", nil, map[Kind]Decision{
-			KindDocComment: DecisionDeny, KindReference: DecisionDeny, KindGuide: DecisionDeny,
-			KindChangeDescription: DecisionDeny, KindAgentBrief: DecisionDeny, KindReviewReply: DecisionDeny,
+			KindDocComment: DecisionAdvise, KindReference: DecisionAdvise, KindGuide: DecisionAdvise,
+			KindChangeDescription: DecisionAdvise, KindAgentBrief: DecisionAdvise, KindReviewReply: DecisionAdvise,
 		}},
-		{"a contrast denies only in a change description", RuleContrast,
+		{"a contrast is graded wherever it is judged", RuleContrast,
 			"It is not just a cache; it is the ledger.", nil, map[Kind]Decision{
-				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionDeny,
+				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
 				KindAgentBrief: DecisionAdvise,
 			}},
 		{"staccato leaves a guide and agent instructions their short imperatives", RuleStaccato,
 			"fix: pin the key\n\nIt is fast. It is small. It is stable.", nil,
-			map[Kind]Decision{KindReference: DecisionAdvise, KindChangeDescription: DecisionDeny}},
+			map[Kind]Decision{KindReference: DecisionAdvise, KindChangeDescription: DecisionAdvise}},
 		{"a weak buzzword always advises", RuleBuzzwordWeak, "The landscape is stable.", nil, map[Kind]Decision{
 			KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
 			KindAgentBrief: DecisionAdvise, KindReviewReply: DecisionAdvise,

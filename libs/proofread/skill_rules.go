@@ -25,9 +25,9 @@ var skillKind = []Kind{KindSkillTemplate}
 // No check here has a judge: each reads both renders of a skill body, which
 // only [judgeSkillSource] holds.
 var (
-	descriptionCheck    = check{rule: RuleSkillDescriptionBudget, on: skillKind, advise: skillKind}
-	setDescriptionCheck = check{rule: RuleSkillSetDescriptionBudget, on: skillKind, advise: skillKind}
-	positionCheck       = check{rule: RuleInstructionPosition, on: skillKind, advise: skillKind}
+	descriptionCheck    = check{rule: RuleSkillDescriptionBudget, on: skillKind, graded: true}
+	setDescriptionCheck = check{rule: RuleSkillSetDescriptionBudget, on: skillKind, graded: true}
+	positionCheck       = check{rule: RuleInstructionPosition, on: skillKind, graded: true}
 	skillChecks         = []check{descriptionCheck, setDescriptionCheck, positionCheck}
 )
 

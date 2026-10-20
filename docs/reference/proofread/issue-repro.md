@@ -1,13 +1,13 @@
 ---
 title: "issue-repro"
-description: "A rule that is off by default: it reports a bug report with neither what happened against what was expected, nor steps to reproduce it once a decisions table turns it on."
-tags: [proofread, rules, issue-repro, off]
+description: "An advisory by default: it explains, and blocks nothing, on a bug report with neither what happened against what was expected, nor steps to reproduce it."
+tags: [proofread, rules, issue-repro, advise]
 aliases: [reference/prose/issue-repro]
 ---
 
 # issue-repro
 
-A rule that is off by default: it reports a bug report with neither what happened against what was expected, nor steps to reproduce it once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a bug report with neither what happened against what was expected, nor steps to reproduce it.
 
 ## What it catches
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A maintainer cannot start on a defect they cannot see. A title with a defect word ("crash", "fails", "regression") that is followed by no "expected", "actual", "observed", "steps to reproduce" or "instead of" sends the first reply to asking for them. It advises: the title is read for the defect and the body for the cue, and either can be phrased another way. Neither of this repository's two issues has a defect title, so it measured no firing. Measured 2026-10-11 over the adjudicated labeling round 2, on pull requests read as issues: 26.2% precision (11 of 42) before, 84.6% (11 of 13) after. A title whose type or opening verb names other work ("test:", "Add a regression test"), whose defect word names a topic ("crash detection") or sits in code is no report, and a body that says what should happen, what happened in the past tense, numbered steps or a quote of the original report shows the defect. It stays off until a fresh labeling round measures it.
+A maintainer cannot start on a defect they cannot see. A title with a defect word ("crash", "fails", "regression") that is followed by no "expected", "actual", "observed", "steps to reproduce" or "instead of" sends the first reply to asking for them. It advises: the title is read for the defect and the body for the cue, and either can be phrased another way. Neither of this repository's two issues has a defect title, so it measured no firing. Measured 2026-10-11 over the adjudicated labeling round 2, on pull requests read as issues: 26.2% precision (11 of 42) before, 84.6% (11 of 13) after. A title whose type or opening verb names other work ("test:", "Add a regression test"), whose defect word names a topic ("crash detection") or sits in code is no report, and a body that says what should happen, what happened in the past tense, numbered steps or a quote of the original report shows the defect. Labeling round 4 measured 26 of 40, a lower bound of 0.50, which each graded finding weighs.
 
 ## Default decision
 
@@ -28,7 +28,7 @@ The code is `PRF1020`. The decision depends on the kind of text judged:
 
 | Kind    | Default |
 | ------- | ------- |
-| `issue` | off     |
+| `issue` | advise  |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "issue-repro", "code": "PRF1020", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/issue-repro/"}
+{"rule": "issue-repro", "code": "PRF1020", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/issue-repro/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

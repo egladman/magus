@@ -42,6 +42,8 @@ type finding struct {
 	Message  string `json:"message"`
 	Match    string `json:"match"`
 	URL      string `json:"url"`
+	// Weight is what the finding costs its text's grade, 0 on a deny finding.
+	Weight float64 `json:"weight"`
 	// Line, Column, EndLine and EndColumn place Match in its file, 1-based,
 	// the end just past it; each is omitted when it is not known.
 	Line         int      `json:"line,omitempty"`
@@ -137,7 +139,7 @@ func usage() string {
 	b.WriteString("  --anchored           with review-reply, judge as review-inline\n")
 	b.WriteString("  --voice FILE         judge with the voice file proofread voice build wrote\n")
 	b.WriteString("  -o FORMAT            write findings as json (default), sarif, rdjson or text\n")
-	b.WriteString("  --fail-on DECISION   exit 1 when a finding at or above deny, advise or never remains (default never)\n")
+	b.WriteString("  --minimum GRADE      the grade, 0 to 100, under which a text fails, when --decisions sets none for the kind\n")
 	b.WriteString("  --record             keep this run's findings on this machine, to count what later runs fix\n")
 	b.WriteString("  --baseline FILE      write only the findings past the counts FILE holds\n")
 	b.WriteString("  --prune              with --baseline, rewrite FILE to this run's counts and write no findings\n")
@@ -146,21 +148,23 @@ func usage() string {
 	b.WriteString("voice eval flags: --owner, --other, --kind, --field, --kind-field, -o, --pool, --seed\n")
 	b.WriteString("train flags: --model, --testdata, --iterations, --seed, --levels\n")
 	b.WriteString("\nA text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n")
-	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 judged with no finding at the --fail-on bar, 1 a finding at it, 2 unusable subcommand, flags, decisions or input.\n")
+	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 no deny finding; 1 a deny finding, a grade under its minimum included; ")
+	b.WriteString("2 unusable subcommand, flags, decisions or input.\n")
 
 	return b.String()
 }
 
-// The process exit codes: 0 for a run with no finding at the --fail-on bar, 1
-// for one with a finding at it, 2 for a run that could not judge.
+// The process exit codes: 0 for a run with no deny finding, 1 for one with a
+// deny finding, a grade under its minimum included, 2 for a run that could not
+// judge.
 const (
 	exitOK       = 0
 	exitFindings = 1
 	exitError    = 2
 )
 
-// run returns the process exit code. A finding fails the run only at the
-// --fail-on bar; the caller otherwise decides what one costs.
+// run returns the process exit code. A deny finding fails the run, a grade
+// under its kind's minimum among them; an advise finding only lowers the grade.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage())
@@ -221,23 +225,6 @@ func failure(stderr io.Writer, err error) int {
 	return exitError
 }
 
-// reachesBar reports whether a finding in out is at or above the failOn
-// decision: deny, advise or never.
-func reachesBar(failOn string, out []finding) bool {
-	for _, f := range out {
-		switch failOn {
-		case "deny":
-			if f.Decision == string(proofread.DecisionDeny) {
-				return true
-			}
-		case "advise":
-			return true
-		}
-	}
-
-	return false
-}
-
 func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("proofread "+string(kind), flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -249,7 +236,20 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
 	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
 	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
-	failOn := fs.String("fail-on", "never", "exit 1 when a finding at or above this `decision` remains: deny, advise or never")
+
+	var minimum *int
+
+	fs.Func("minimum", "the `grade`, 0 to 100, under which a text fails, for a decisions table with no minimum for the kind",
+		func(s string) error {
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 0 || n > 100 {
+				return fmt.Errorf("want a grade from 0 to 100, not %q", s)
+			}
+
+			minimum = &n
+
+			return nil
+		})
 	record := fs.Bool("record", false, "keep this run's findings on this machine to count what later runs fix")
 	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
 	prune := fs.Bool("prune", false, "with --baseline, rewrite the file to the counts this run found")
@@ -276,10 +276,6 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 
 	if !slices.Contains([]string{"", "APPROVE", "REQUEST_CHANGES", "COMMENT"}, *event) {
 		return failure(stderr, fmt.Errorf("unknown --event %q: want APPROVE, REQUEST_CHANGES or COMMENT", *event))
-	}
-
-	if !slices.Contains([]string{"deny", "advise", "never"}, *failOn) {
-		return failure(stderr, fmt.Errorf("unknown --fail-on %q: want deny, advise or never", *failOn))
 	}
 
 	if *record && !fromFiles(kind, fs.Args()) {
@@ -309,6 +305,22 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		opts = append(opts, proofread.WithVoice(v))
 	}
 
+	set, fromTable := t.minimums[kind]
+	grades := slices.Contains(proofread.KindRules(kind), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
+		(len(onlyRules) == 0 || slices.Contains(onlyRules, proofread.RuleGrade))
+
+	switch {
+	case minimum != nil && fromTable:
+		return failure(stderr, fmt.Errorf("--minimum and the decisions table both set the %s minimum: pass one", kind))
+	case minimum != nil:
+		opts = append(opts, proofread.WithMinimum(*minimum))
+	case fromTable:
+		opts = append(opts, proofread.WithMinimum(set))
+	case grades:
+		return failure(stderr, fmt.Errorf("no minimum grade for %s: set \"minimums\": {%q: N} in --decisions, or pass --minimum N",
+			kind, kind))
+	}
+
 	out, err := judge(kind, fs.Args(), stdin, t, opts)
 	if err != nil {
 		return failure(stderr, err)
@@ -333,7 +345,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		fmt.Fprint(stderr, textSummary(out))
 	}
 
-	if reachesBar(*failOn, out) {
+	if slices.ContainsFunc(out, func(f finding) bool { return f.Decision == string(proofread.DecisionDeny) }) {
 		return exitFindings
 	}
 
@@ -507,7 +519,7 @@ func sourceAt(name string, line int) string {
 func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) finding {
 	return finding{
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
-		Decision: string(f.Decision), Message: f.Message, Match: f.Match, URL: f.URL,
+		Decision: string(f.Decision), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight,
 		Line: f.Line, Column: f.Column, EndLine: f.EndLine, EndColumn: f.EndColumn, Replacements: f.Replacements,
 	}
 }
@@ -552,10 +564,12 @@ func decode(stdin io.Reader) ([]record, error) {
 }
 
 // table is a decisions file: decisions for every file, then decisions for the
-// files each glob matches, in the order the file lists them.
+// files each glob matches, in the order the file lists them, and the grade
+// each kind it names is held to.
 type table struct {
-	rules map[proofread.Rule]proofread.Decision
-	paths []scoped
+	rules    map[proofread.Rule]proofread.Decision
+	paths    []scoped
+	minimums map[proofread.Kind]int
 }
 
 type scoped struct {
@@ -642,11 +656,13 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 }
 
 // parseTable reads {"rules": {rule: decision}, "paths": {glob: {rule:
-// decision}}}, keeping the globs in the order the file lists them.
+// decision}}, "minimums": {kind: grade}}, keeping the globs in the order the
+// file lists them.
 func parseTable(data []byte) (table, error) {
 	var raw struct {
-		Rules map[string]string `json:"rules"`
-		Paths json.RawMessage   `json:"paths"`
+		Rules    map[string]string `json:"rules"`
+		Paths    json.RawMessage   `json:"paths"`
+		Minimums map[string]int    `json:"minimums"`
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -661,7 +677,20 @@ func parseTable(data []byte) (table, error) {
 		return table{}, err
 	}
 
-	t := table{rules: rules}
+	t := table{rules: rules, minimums: map[proofread.Kind]int{}}
+
+	for _, name := range slices.Sorted(maps.Keys(raw.Minimums)) {
+		kind, ok := proofread.ParseKind(name)
+		if !ok || string(kind) != name {
+			return table{}, fmt.Errorf("minimums: unknown kind %q", name)
+		}
+
+		if n := raw.Minimums[name]; n < 0 || n > 100 {
+			return table{}, fmt.Errorf("minimums: %s: want a grade from 0 to 100, not %d", name, n)
+		}
+
+		t.minimums[kind] = raw.Minimums[name]
+	}
 
 	if len(raw.Paths) == 0 || string(raw.Paths) == "null" {
 		return t, nil
