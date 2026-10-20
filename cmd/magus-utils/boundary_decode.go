@@ -25,6 +25,22 @@ import (
 // An inbound type also gets a Go-to-Buzz encoder (boundaryobjects reads this list), which
 // is what lets a test prove Decode(Object(v)) == v for every entry.
 var inboundTypes = []string{
+	"Path",
+	"Hint",
+	"Command",
+	"Install",
+	"Manifest",
+	"Service",
+	"SymbolIndexer",
+	"Charm",
+	"PatchOp",
+	"VersionKey",
+	"VersionBounds",
+	"Tool",
+	"SandboxAllow",
+	"SandboxEnv",
+	"SandboxCache",
+	"Sandbox",
 	"CommentBlock",
 	"Quote",
 	"CommentSyntax",
@@ -226,6 +242,12 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		want, err := e.buzzType(t)
 		if err != nil {
 			return err
+		}
+		if t == reflect.TypeFor[[]string]() {
+			strs := "strs" + name
+			fmt.Fprintf(w, "%s%s, err := decodeStrs(%s, %s)\n", indent, strs, src, path)
+			ret(strs)
+			return nil
 		}
 		list, items, index, item := "list"+name, "items"+name, "index"+name, "item"+name
 		fmt.Fprintf(w, "%s%s, err := decodeList(%s, %s, %q)\n", indent, list, src, path, want)
@@ -513,6 +535,26 @@ func decodeFloat(v vm.Value, path string) (float64, error) {
 		return float64(v.AsInt()), nil
 	}
 	return 0, mismatch(path, "double", v)
+}
+
+// decodeStrs decodes a [str]; an empty list is nil, like every other generated list.
+func decodeStrs(v vm.Value, path string) ([]string, error) {
+	items, err := decodeList(v, path, "[str]")
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		s, err := decodeStr(item, fmt.Sprintf("%s[%d]", path, i))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = s
+	}
+	return out, nil
 }
 
 func decodeList(v vm.Value, path, want string) ([]vm.Value, error) {
