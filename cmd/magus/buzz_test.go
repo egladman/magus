@@ -608,6 +608,24 @@ func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
 	}
 }
 
+func TestBuzzCheck_WarningFails(t *testing.T) {
+	dir := t.TempDir()
+	clean := filepath.Join(dir, "clean.buzz")
+	require.NoError(t, os.WriteFile(clean, []byte("fun main() > void {}\n"), 0o644))
+	warned := filepath.Join(dir, "warned.buzz")
+	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = s + p; } }\n"), 0o644))
+
+	diags, err := buzzCheckFile(t.Context(), warned, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, diags)
+	for _, d := range diags {
+		require.Equal(t, buzz.SeverityWarning, d.Severity, d.String())
+	}
+
+	require.NoError(t, buzzCheck(t.Context(), []string{clean}, false))
+	require.Error(t, buzzCheck(t.Context(), []string{warned}, false))
+}
+
 func TestBuzzReachesMagus(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	dir, write := w.Root(), w.Write
