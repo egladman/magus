@@ -47,7 +47,7 @@ fun ci(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "npx --no-install nx lint && npx --no-install nx test && npx --no-install nx build"]};
 }
 
-export fun mgs_listTargets() > any {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build, "test": test, "lint": lint, "ci": ci};
 }
 

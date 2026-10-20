@@ -12,8 +12,6 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/api.md"}]; }
 
-export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }
-
 fun noop(target: Target) > Command { return Command{bin = "true", args = []}; }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

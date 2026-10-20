@@ -77,9 +77,12 @@ fun podmanMachine(target: Target) > Service {
     };
 }
 
-// Typed `any` because machine returns a Service beside the Command ops.
-export fun mgs_listTargets() > any {
-    return {"podman-build": podmanBuild, "podman-push": podmanPush, "podman-manifest": podmanManifest, "podman-run": podmanRun, "machine": podmanMachine};
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"podman-build": podmanBuild, "podman-push": podmanPush, "podman-manifest": podmanManifest, "podman-run": podmanRun};
+}
+
+export fun mgs_listServices() > {str: fun(Target) Service} {
+    return {"machine": podmanMachine};
 }
 
 // `podman info` is the readiness probe rather than `--version`: podman is daemonless on
