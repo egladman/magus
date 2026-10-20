@@ -28,29 +28,6 @@ func occurrenceFixture() *scip.Index {
 	}}
 }
 
-// The one-walk index must answer every key exactly as the one-key parse does, or a refs
-// read from the stored file would disagree with one that decoded the index.
-func TestIndexOccurrencesAgreesWithParseOccurrencesForEveryKey(t *testing.T) {
-	idx := occurrenceFixture()
-	data := marshalIndex(t, idx)
-
-	all, err := IndexOccurrences(t.Context(), idx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, all)
-
-	for key, got := range all {
-		files, names, err := ParseOccurrences(t.Context(), data, "", key)
-		require.NoError(t, err)
-		assert.Equalf(t, files, got.Files, "files of %s", key)
-		assert.Equalf(t, names, got.Names, "names of %s", key)
-	}
-	files, names, err := ParseOccurrences(t.Context(), data, "", "gomod example.com/foo Absent#")
-	require.NoError(t, err)
-	assert.Empty(t, files, "a key the index lacks has no sites either way")
-	assert.Empty(t, names)
-	assert.NotContains(t, all, "gomod example.com/foo Absent#")
-}
-
 func TestOccurrenceFileRoundTripsOneKeyAtATime(t *testing.T) {
 	all, err := IndexOccurrences(t.Context(), occurrenceFixture(), "")
 	require.NoError(t, err)

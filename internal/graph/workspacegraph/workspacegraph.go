@@ -152,7 +152,7 @@ func ReaderContext(ctx context.Context, ws types.Inspector, root string) ([]stri
 type SymbolOccurrenceRead struct {
 	Files []types.SymbolOccurrenceFile
 	// Names are the spellings an occurrence may hold; Names[0] is the identifier a rename
-	// targets. See symbols.ParseOccurrences.
+	// targets. See symbols.IndexOccurrences.
 	Names      []string
 	Unreadable []types.KnowledgeSymbolGap
 }

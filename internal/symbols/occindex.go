@@ -19,21 +19,23 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// KeyOccurrences is what ParseOccurrences returns for one symbol key: every occurrence,
-// grouped by file, and the spellings an occurrence may hold.
+// KeyOccurrences is every occurrence of one symbol key, grouped by file, uncapped.
+//
+// Names are the spellings an occurrence may hold, checked by VerifyOccurrences. Names[0]
+// is the identifier a rename targets. A package has two: call sites hold the bare
+// `assert`, the import statement holds `github.com/stretchr/testify/assert`.
 type KeyOccurrences struct {
 	Files []types.SymbolOccurrenceFile
 	Names []string
 }
 
 // IndexOccurrences walks a decoded index once and returns, for every symbol key it names,
-// exactly what ParseOccurrences returns for that key alone. A key absent from the map has
-// no occurrence and no display name in the index, and ParseOccurrences would return nothing
-// for it either.
+// its KeyOccurrences. A key absent from the map has no occurrence and no display name.
 //
-// One walk for every key is what lets the result be persisted: ParseOccurrences decodes the
-// whole index to answer one key, and a lookup that read a stored answer instead would never
-// decode it at all.
+// Unlike ParseIndex it keeps every site with its full range: a rewrite cannot use a
+// MaxRefLines cap or a bare line number. That is affordable because the result is
+// persisted and a lookup reads one key's record. projectPath rebases document paths as
+// ParseIndex does; see workspacePath.
 func IndexOccurrences(ctx context.Context, idx *scip.Index, projectPath string) (map[string]KeyOccurrences, error) {
 	type acc struct {
 		ident, display string
@@ -53,7 +55,7 @@ func IndexOccurrences(ctx context.Context, idx *scip.Index, projectPath string) 
 			return nil, err
 		}
 		// Display names count from every document, including those outside the workspace,
-		// and the first one wins, as in ParseOccurrences.
+		// and the first one wins.
 		for _, si := range doc.Symbols {
 			if info, ok := parseMoniker(si.Symbol); ok && si.DisplayName != "" {
 				if a := get(info.Key); a.display == "" {
