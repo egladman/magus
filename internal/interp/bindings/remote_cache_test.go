@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/cache/remotetest"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
@@ -34,14 +35,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestImportedBuzzSpellInvokesExportedFunc is the generalization check: a Buzz
-// spell loaded via the ordinary import path (loadLocalBuzzSpell) can have its
-// exported functions invoked by name. It declares no ops (mgs_listTargets); the
-// invoker falls back to the exported function when the target isn't a command op.
-func TestImportedBuzzSpellInvokesExportedFunc(t *testing.T) {
-	src := `
+// TestImportedBuzzSpellAnswersCallOp is the generalization check: a Buzz spell loaded
+// via the ordinary import path (loadLocalBuzzSpell) and declaring no ops answers a
+// provider op through CallOp, from the source the registry holds for it.
+func TestImportedBuzzSpellAnswersCallOp(t *testing.T) {
+	src := `import "magus/spell";
 export fun mgs_getName() > str { return "echo-import"; }
-export fun echo(target: any, cb: fun(any)) > str { final p = {}; cb(p); return "yo " + p["x"]; }
+export fun resolve_secret(target: Target, req: SecretRef) > Secret { return Secret{ value = "yo {req.ref}" }; }
 `
 	path := filepath.Join(t.TempDir(), "echo-import.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
@@ -50,12 +50,11 @@ export fun echo(target: any, cb: fun(any)) > str { final p = {}; cb(p); return "
 	require.Equal(t, "echo-import", metadata.Name)
 	drv, found := project.DefaultSpellRegistry().Lookup("echo-import")
 	require.True(t, found, "import path did not register the spell")
-	resp, err := drv.Invoke(context.Background(), spells.InvokeRequest{
-		Target: "echo",
-		Params: map[string]any{"x": "there"},
-	})
+	op := providerops.ResolveSecret
+	got, exported, err := CallOp(context.Background(), drv, op, types.Target{Name: op.Name}, types.SecretRef{Ref: "there"})
 	require.NoError(t, err)
-	assert.Equal(t, "yo there", resp.Data, "function-op via import path")
+	assert.True(t, exported)
+	assert.Equal(t, spells.Secret{Value: "yo there"}, got)
 }
 
 // blobStore stands in for a remote cache provider: PUT /blob/<hash> stores a
@@ -180,26 +179,6 @@ export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { thr
 func TestResolveBackendSpellMissingName(t *testing.T) {
 	_, err := resolveBackendSpell(context.Background(), "no-such-spell-xyz")
 	assert.Error(t, err, "expected error for unregistered spell name")
-}
-
-// TestLoadSpellFileHandlerOp checks the direct-invoke machinery directly: a loaded
-// spell's exported function runs in the VM, receives Params, and returns Data. The
-// spell declares no ops.
-func TestLoadSpellFileHandlerOp(t *testing.T) {
-	src := `
-export fun mgs_getName() > str { return "echo-spell"; }
-export fun echo(target: any, cb: fun(any)) > str { final p = {}; cb(p); return "hi " + p["who"]; }
-`
-	path := filepath.Join(t.TempDir(), "echo-spell.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
-	sp, err := loadSpellFile(context.Background(), path)
-	require.NoError(t, err, "loadSpellFile")
-	resp, err := sp.Invoke(context.Background(), spells.InvokeRequest{
-		Target: "echo",
-		Params: map[string]any{"who": "magus"},
-	})
-	require.NoError(t, err, "Invoke")
-	assert.Equal(t, "hi magus", resp.Data)
 }
 
 func repoRoot(t *testing.T) string {
