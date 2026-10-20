@@ -187,7 +187,8 @@ fun judge(files: [str], base: str, module: str, kind: str) > [Finding] !> any {
     final run = proc\exec(bin, args: args, dir: if (base == "") "." else base,
         opts: {"quiet": true, "allow_failure": true}) catch null;
     fs\remove(table) catch void;
-    if (run == null or run!.code != 0) {
+    // Exit 1 is a deny finding, written to stdout like any other.
+    if (run == null or (run!.code != 0 and run!.code != 1)) {
         final why = if (run == null) "proofread did not start" else "it exited {run!.code}: " + run!.stderr.trim();
         return [Finding{ path = JUDGE, message = "proofread did not run, so no Markdown was judged; " + why, fix = fix }];
     }
@@ -589,8 +590,8 @@ test "proofread runs once over every hand-written file and reports at the file's
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]"],
-        message: "the table exempts blog/ from tense");
+    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]", "docs/page.md:0 [grade]"],
+        message: "the table exempts blog/ from tense, and the hedged page is under its minimum grade");
 }
 
 test "a judge that does not run is an error, not a pass" {

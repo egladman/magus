@@ -733,9 +733,10 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 
 // Fails a pull request whose title or description the guard's pull-request-text rule
 // would deny. It runs the same judgeText: proofread under this repository's
-// decisions table, the word budget the branch's diff earns and the title checks. Advice,
-// such as an area the branch touches that the description never names, is a warning,
-// which fails nothing. The output refs a description cites are not checked: this checkout
+// decisions table, a grade under the change-description minimum included, the word budget
+// the branch's diff earns and the title checks. The guard's advice, such as an area the
+// branch touches that the description never names, is told to the author when the text is
+// written, not here. The output refs a description cites are not checked: this checkout
 // holds none of the author's runs. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
@@ -748,9 +749,6 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
         body = parsed.values["--body"] ?? "" };
     final found = descriptions\judgeText(text, facts: fun () > descriptions\Facts => descriptions\branchDiff(".")(""),
         judge: descriptions\judgeRunner("."), cited: descriptions\skipCited);
-    foreach (note in found.advice) {
-        magus\log.warn("pr-description: {note}");
-    }
     if (found.denies.len() > 0) {
         throw "pr-description: the description breaks the proofread rules (docs/conventions.md):\n  " + found.denies.join("\n  ");
     }
