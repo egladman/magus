@@ -76,6 +76,13 @@ type scopeEntry struct {
 	// survives: deliberately narrow, and only consulted where a null would be a
 	// hard error rather than a value.
 	optional bool
+	// nonOptional records a declaration that PROVES the value is never null: a typed
+	// slot without `?`, or a literal initializer. Because optionality is erased from
+	// types, an inferred binding proves nothing and stays false.
+	nonOptional bool
+	// immutableObj marks a final bound straight from a plain (non-mut) object
+	// literal. Object types carry no mutability, so the binding is the only record.
+	immutableObj bool
 	// module marks the name an import binds to a module, whose members are
 	// reached as name\member and never name.member.
 	module bool
@@ -84,7 +91,10 @@ type scopeEntry struct {
 }
 
 type checker struct {
-	errors []typeError
+	// foreignStructs names the zdef `extern struct` types, whose instances are
+	// writable without `mut` (the compiler's rule; see compiler.foreignStructs).
+	foreignStructs map[string]bool
+	errors         []typeError
 	// warnings are non-fatal diagnostics; they never fail Exec/Compile. Kept apart from
 	// errors so a caller cannot mistake one for the other by length alone.
 	warnings []typeError
@@ -582,6 +592,10 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				for i, od := range structs {
 					nodes[i] = od
 					isStruct[od.Name] = true
+					if c.foreignStructs == nil {
+						c.foreignStructs = map[string]bool{}
+					}
+					c.foreignStructs[od.Name] = true
 				}
 				c.registerTypeDecls(nodes)
 			}
@@ -876,6 +890,15 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 		e.optional = true
 		c.scopes[len(c.scopes)-1][v.Name] = e
 	}
+	if v.Name != "_" {
+		e := c.scopes[len(c.scopes)-1][v.Name]
+		typed := v.TypeAnnot != "" && !strings.HasSuffix(v.TypeAnnot, "?") && declTyp != types.Any && declTyp != types.Unknown
+		e.nonOptional = typed || isScalarLiteral(v.Value)
+		if lit, ok := v.Value.(*ast.ObjectLit); ok && v.IsConst && !lit.Mut && v.TypeAnnot == "" && !c.foreignStructs[lit.TypeName] {
+			e.immutableObj = true
+		}
+		c.scopes[len(c.scopes)-1][v.Name] = e
+	}
 	if !v.IsConst && v.Name != "_" && len(c.scopes) > 1 {
 		e := c.scopes[len(c.scopes)-1][v.Name]
 		e.varDecl, e.pos, e.name = true, v.Pos, v.Name
@@ -913,6 +936,42 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 		c.markAssigned(root)
 	}
 	c.inferExpected(v.Value, c.infer(v.Target))
+	c.checkImmutableWrite(v.Target)
+}
+
+// checkImmutableWrite reports a write to a key or field of a map or object bound
+// without `mut`. Like checkCollectionMutator it fires only on a binding whose
+// immutability is KNOWN: a map by its type, an object by the plain literal that
+// built it. Anything it cannot see stays silent and fails at run time instead.
+func (c *checker) checkImmutableWrite(target ast.Node) {
+	switch t := target.(type) {
+	case *ast.IndexExpr:
+		id, ok := t.Object.(*ast.IdentExpr)
+		if !ok {
+			return
+		}
+		if e, found := c.lookup(id.Name); found {
+			if mt, isMap := e.typ.(*types.MapType); isMap && !mt.Mut {
+				c.errorfc(t.Pos, ImmutableWrite, "cannot mutate immutable map %q: declare it with `mut` to write a key", id.Name)
+			}
+		}
+	case *ast.MemberExpr:
+		id, ok := t.Object.(*ast.IdentExpr)
+		if !ok {
+			return
+		}
+		if e, found := c.lookup(id.Name); found && e.immutableObj {
+			c.errorfc(t.Pos, ImmutableWrite, "cannot mutate immutable object %q: declare it with `mut` to write field %q", id.Name, t.Name)
+		}
+	}
+}
+
+func isScalarLiteral(n ast.Node) bool {
+	switch n.(type) {
+	case *ast.IntLit, *ast.FloatLit, *ast.StringLit, *ast.BoolLit:
+		return true
+	}
+	return false
 }
 
 // rootIdentName returns the identifier a target writes through (`a.b[0].c` is a
@@ -1031,6 +1090,24 @@ func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
 		id.Name)
 }
 
+// flagRedundantUnwrap warns on `!` applied to an operand proven non-optional.
+// Optionality is erased from types, so only a scalar literal or a binding whose
+// declaration says so (scopeEntry.nonOptional) counts; an inferred or untyped
+// operand may be an optional the checker cannot see, and stays quiet.
+func (c *checker) flagRedundantUnwrap(v *ast.ForceExpr) {
+	if isScalarLiteral(v.Operand) {
+		c.warnfc(v.Pos, RedundantUnwrap, "force-unwrap `!` on a value that is not optional")
+		return
+	}
+	id, ok := v.Operand.(*ast.IdentExpr)
+	if !ok {
+		return
+	}
+	if e, found := c.lookup(id.Name); found && e.nonOptional && !e.optional {
+		c.warnfc(v.Pos, RedundantUnwrap, "force-unwrap `!` on %q, which is not optional", id.Name)
+	}
+}
+
 // concatSpineRefers reports whether n is a `+` chain carrying name as a direct operand.
 func concatSpineRefers(n ast.Node, name string) bool {
 	bin, ok := n.(*ast.BinaryExpr)
@@ -1130,6 +1207,10 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		if i < len(fd.ParamAnnots) && strings.HasSuffix(fd.ParamAnnots[i], "?") {
 			e := c.scopes[len(c.scopes)-1][name]
 			e.optional = true
+			c.scopes[len(c.scopes)-1][name] = e
+		} else if i < len(fd.ParamAnnots) && fd.ParamAnnots[i] != "" && pt != types.Any && pt != types.Unknown {
+			e := c.scopes[len(c.scopes)-1][name]
+			e.nonOptional = true
 			c.scopes[len(c.scopes)-1][name] = e
 		}
 	}
@@ -1510,6 +1591,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 	case *ast.ForceExpr:
 		// Optionals are erased to their base type in this checker, so force-unwrap
 		// reports the operand's type unchanged.
+		c.flagRedundantUnwrap(v)
 		return c.infer(v.Operand)
 	case *ast.PatLit:
 		return types.Pat
