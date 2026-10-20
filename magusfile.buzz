@@ -174,7 +174,7 @@ magus\project({
             "human_only": "launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
         },
         "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
-        "retrieval-eval": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
+        "retrieval-eval-test": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
         "hoste2e-test": {
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
@@ -2640,8 +2640,9 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
 // prints recall, MRR and nDCG per set; no score fails it. MAGUS_EVAL_CANDIDATE unseals
 // the judged holdout for one recorded read, MAGUS_EVAL_REPORT_ONLY=1 permits a further
 // read that chooses nothing, and MAGUS_RETRIEVAL_EVAL_BASELINE names a file to write the
-// report to for a person to review.
-export fun retrieval_eval(ctx: magus\Context, args: [str]) > void !> any {
+// report to for a person to review. Not a `test` charm: this reads the knowledge graph in
+// the cache and those three variables, and so cannot share test's cache entry.
+export fun retrieval_eval_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("testdata/retrieval/*");
     final env = mut {"GOEXPERIMENT": "jsonv2"};
     foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {
