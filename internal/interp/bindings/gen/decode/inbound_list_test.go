@@ -35,6 +35,13 @@ var inboundTypes = []inboundType{
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any) vm.Value { return bindgen.ObjectStubSyntax(v.(spells.StubSyntax)) }, Decode: func(v vm.Value) (any, error) { return DecodeStubSyntax(v) }},
 	{Name: "Syntax", Zero: spells.Syntax{}, Encode: func(v any) vm.Value { return bindgen.ObjectSyntax(v.(spells.Syntax)) }, Decode: func(v vm.Value) (any, error) { return DecodeSyntax(v) }},
 	{Name: "Language", Zero: spells.Language{}, Encode: func(v any) vm.Value { return bindgen.ObjectLanguage(v.(spells.Language)) }, Decode: func(v vm.Value) (any, error) { return DecodeLanguage(v) }},
+	{Name: "Ack", Zero: types.Ack{}, Encode: func(v any) vm.Value { return bindgen.ObjectAck(v.(types.Ack)) }, Decode: func(v vm.Value) (any, error) { return DecodeAck(v) }},
+	{Name: "GreenRun", Zero: types.GreenRun{}, Encode: func(v any) vm.Value { return bindgen.ObjectGreenRun(v.(types.GreenRun)) }, Decode: func(v vm.Value) (any, error) { return DecodeGreenRun(v) }},
+	{Name: "Strings", Zero: types.Strings{}, Encode: func(v any) vm.Value { return bindgen.ObjectStrings(v.(types.Strings)) }, Decode: func(v vm.Value) (any, error) { return DecodeStrings(v) }},
+	{Name: "PruneResult", Zero: types.PruneResult{}, Encode: func(v any) vm.Value { return bindgen.ObjectPruneResult(v.(types.PruneResult)) }, Decode: func(v vm.Value) (any, error) { return DecodePruneResult(v) }},
+	{Name: "Secret", Zero: spells.Secret{}, Encode: func(v any) vm.Value { return bindgen.ObjectSecret(v.(spells.Secret)) }, Decode: func(v vm.Value) (any, error) { return DecodeSecret(v) }},
+	{Name: "ReleaseCycle", Zero: spells.ReleaseCycle{}, Encode: func(v any) vm.Value { return bindgen.ObjectReleaseCycle(v.(spells.ReleaseCycle)) }, Decode: func(v vm.Value) (any, error) { return DecodeReleaseCycle(v) }},
+	{Name: "Lifecycle", Zero: spells.Lifecycle{}, Encode: func(v any) vm.Value { return bindgen.ObjectLifecycle(v.(spells.Lifecycle)) }, Decode: func(v vm.Value) (any, error) { return DecodeLifecycle(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{

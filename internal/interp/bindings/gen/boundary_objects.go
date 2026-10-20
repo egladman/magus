@@ -2143,6 +2143,71 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 	return out
 }
 
+func ObjectEmpty(v types.Empty) vm.Value {
+	out := vm.NewMap()
+	return out
+}
+
+func ObjectSecretRef(v types.SecretRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	return out
+}
+
+func ObjectCIGroup(v types.CIGroup) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("collapsed", vm.BoolValue(v.Collapsed))
+	return out
+}
+
+func ObjectCIGroupEnd(v types.CIGroupEnd) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	return out
+}
+
+func ObjectCIAnnotation(v types.CIAnnotation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("level", vm.StrValue(v.Level))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("file", vm.StrValue(v.File))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("endCol", vm.IntValue(int64(v.EndCol)))
+	return out
+}
+
+func ObjectArtifactRequest(v types.ArtifactRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("hash", vm.StrValue(v.Hash))
+	out.MapSet("path", vm.StrValue(v.Path))
+	return out
+}
+
+func ObjectPruneRequest(v types.PruneRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("olderThanSecs", vm.IntValue(int64(v.OlderThanSecs)))
+	out.MapSet("keepLast", vm.IntValue(int64(v.KeepLast)))
+	out.MapSet("dryRun", vm.BoolValue(v.DryRun))
+	return out
+}
+
+func ObjectLifecycleQuery(v types.LifecycleQuery) vm.Value {
+	out := vm.NewMap()
+	itemsKeys := make([]vm.Value, len(v.Keys))
+	for indexKeys := range v.Keys {
+		itemsKeys[indexKeys] = vm.StrValue(v.Keys[indexKeys])
+	}
+	out.MapSet("keys", vm.ListValue(itemsKeys))
+	return out
+}
+
 func ObjectCommitAuthor(v types.CommitAuthor) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -4157,5 +4222,63 @@ func ObjectLanguage(v spells.Language) vm.Value {
 		optSyntax = ObjectSyntax((*v.Syntax))
 	}
 	out.MapSet("syntax", optSyntax)
+	return out
+}
+
+func ObjectAck(v types.Ack) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ok", vm.BoolValue(v.OK))
+	return out
+}
+
+func ObjectGreenRun(v types.GreenRun) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("run", vm.StrValue(v.Run))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectStrings(v types.Strings) vm.Value {
+	out := vm.NewMap()
+	itemsItems := make([]vm.Value, len(v.Items))
+	for indexItems := range v.Items {
+		itemsItems[indexItems] = vm.StrValue(v.Items[indexItems])
+	}
+	out.MapSet("items", vm.ListValue(itemsItems))
+	return out
+}
+
+func ObjectPruneResult(v types.PruneResult) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("done", vm.BoolValue(v.Done))
+	return out
+}
+
+func ObjectSecret(v spells.Secret) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	return out
+}
+
+func ObjectReleaseCycle(v spells.ReleaseCycle) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("cycle", vm.StrValue(v.Cycle))
+	out.MapSet("released", vm.StrValue(v.Released))
+	out.MapSet("eol", vm.StrValue(v.EOL))
+	out.MapSet("lts", vm.BoolValue(v.LTS))
+	out.MapSet("latest", vm.StrValue(v.Latest))
+	return out
+}
+
+func ObjectLifecycle(v spells.Lifecycle) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", vm.StrValue(v.Key))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("asOf", vm.StrValue(v.AsOf))
+	itemsCycles := make([]vm.Value, len(v.Cycles))
+	for indexCycles := range v.Cycles {
+		itemsCycles[indexCycles] = ObjectReleaseCycle(v.Cycles[indexCycles])
+	}
+	out.MapSet("cycles", vm.ListValue(itemsCycles))
 	return out
 }

@@ -1145,6 +1145,412 @@ func decodeLanguage(v vm.Value, path string) (spells.Language, error) {
 	return out, nil
 }
 
+// DecodeAck decodes a Buzz Ack, an object instance or a map, into a types.Ack.
+func DecodeAck(v vm.Value) (types.Ack, error) {
+	return decodeAck(v, "ack")
+}
+
+func decodeAck(v vm.Value, path string) (types.Ack, error) {
+	var out types.Ack
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Ack", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "ok":
+			bOK, err := decodeBool(item, path+".ok")
+			if err != nil {
+				return out, err
+			}
+			out.OK = bOK
+		default:
+			return out, unknownMember(path, "Ack", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeGreenRun decodes a Buzz GreenRun, an object instance or a map, into a types.GreenRun.
+func DecodeGreenRun(v vm.Value) (types.GreenRun, error) {
+	return decodeGreenRun(v, "greenRun")
+}
+
+func decodeGreenRun(v vm.Value, path string) (types.GreenRun, error) {
+	var out types.GreenRun
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "GreenRun", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "run":
+			sRun, err := decodeStr(item, path+".run")
+			if err != nil {
+				return out, err
+			}
+			out.Run = sRun
+		case "commit":
+			sCommit, err := decodeStr(item, path+".commit")
+			if err != nil {
+				return out, err
+			}
+			out.Commit = sCommit
+		default:
+			return out, unknownMember(path, "GreenRun", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeStrings decodes a Buzz Strings, an object instance or a map, into a types.Strings.
+func DecodeStrings(v vm.Value) (types.Strings, error) {
+	return decodeStrings(v, "strings")
+}
+
+func decodeStrings(v vm.Value, path string) (types.Strings, error) {
+	var out types.Strings
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Strings", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "items":
+			strsItems, err := decodeStrs(item, path+".items")
+			if err != nil {
+				return out, err
+			}
+			out.Items = strsItems
+		default:
+			return out, unknownMember(path, "Strings", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePruneResult decodes a Buzz PruneResult, an object instance or a map, into a types.PruneResult.
+func DecodePruneResult(v vm.Value) (types.PruneResult, error) {
+	return decodePruneResult(v, "pruneResult")
+}
+
+func decodePruneResult(v vm.Value, path string) (types.PruneResult, error) {
+	var out types.PruneResult
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "PruneResult", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "done":
+			bDone, err := decodeBool(item, path+".done")
+			if err != nil {
+				return out, err
+			}
+			out.Done = bDone
+		default:
+			return out, unknownMember(path, "PruneResult", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSecret decodes a Buzz Secret, an object instance or a map, into a spells.Secret.
+func DecodeSecret(v vm.Value) (spells.Secret, error) {
+	return decodeSecret(v, "secret")
+}
+
+func decodeSecret(v vm.Value, path string) (spells.Secret, error) {
+	var out spells.Secret
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Secret", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "value":
+			sValue, err := decodeStr(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = sValue
+		default:
+			return out, unknownMember(path, "Secret", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeReleaseCycle decodes a Buzz ReleaseCycle, an object instance or a map, into a spells.ReleaseCycle.
+func DecodeReleaseCycle(v vm.Value) (spells.ReleaseCycle, error) {
+	return decodeReleaseCycle(v, "releaseCycle")
+}
+
+func decodeReleaseCycle(v vm.Value, path string) (spells.ReleaseCycle, error) {
+	var out spells.ReleaseCycle
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ReleaseCycle", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "cycle":
+			sCycle, err := decodeStr(item, path+".cycle")
+			if err != nil {
+				return out, err
+			}
+			out.Cycle = sCycle
+		case "released":
+			sReleased, err := decodeStr(item, path+".released")
+			if err != nil {
+				return out, err
+			}
+			out.Released = sReleased
+		case "eol":
+			sEOL, err := decodeStr(item, path+".eol")
+			if err != nil {
+				return out, err
+			}
+			out.EOL = sEOL
+		case "lts":
+			bLTS, err := decodeBool(item, path+".lts")
+			if err != nil {
+				return out, err
+			}
+			out.LTS = bLTS
+		case "latest":
+			sLatest, err := decodeStr(item, path+".latest")
+			if err != nil {
+				return out, err
+			}
+			out.Latest = sLatest
+		default:
+			return out, unknownMember(path, "ReleaseCycle", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeLifecycle decodes a Buzz Lifecycle, an object instance or a map, into a spells.Lifecycle.
+func DecodeLifecycle(v vm.Value) (spells.Lifecycle, error) {
+	return decodeLifecycle(v, "lifecycle")
+}
+
+func decodeLifecycle(v vm.Value, path string) (spells.Lifecycle, error) {
+	var out spells.Lifecycle
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Lifecycle", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "key":
+			sKey, err := decodeStr(item, path+".key")
+			if err != nil {
+				return out, err
+			}
+			out.Key = sKey
+		case "source":
+			sSource, err := decodeStr(item, path+".source")
+			if err != nil {
+				return out, err
+			}
+			out.Source = sSource
+		case "asOf":
+			sAsOf, err := decodeStr(item, path+".asOf")
+			if err != nil {
+				return out, err
+			}
+			out.AsOf = sAsOf
+		case "cycles":
+			listCycles, err := decodeList(item, path+".cycles", "[ReleaseCycle]")
+			if err != nil {
+				return out, err
+			}
+			if len(listCycles) > 0 {
+				itemsCycles := make([]spells.ReleaseCycle, len(listCycles))
+				for indexCycles, itemCycles := range listCycles {
+					xCyclesItem, err := decodeReleaseCycle(itemCycles, fmt.Sprintf("%s[%d]", path+".cycles", indexCycles))
+					if err != nil {
+						return out, err
+					}
+					itemsCycles[indexCycles] = xCyclesItem
+				}
+				out.Cycles = itemsCycles
+			}
+		default:
+			return out, unknownMember(path, "Lifecycle", key)
+		}
+	}
+	return out, nil
+}
+
+// ProviderFuncs is every provider op a spell may export, one row per
+// cmd/magus-utils providerOps entry and in its order. Required is false on every row:
+// which ops a provider needs is its family's to say.
+var ProviderFuncs = []ContractFunc{
+	{Name: "resolve_secret", Returns: "Secret", Params: "target: Target, req: SecretRef", Decode: func(v vm.Value) (any, error) { return decodeProviderResolveSecret(v) }},
+	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderCIEnabled(v) }},
+	{Name: "group_start", Returns: "Ack", Params: "target: Target, req: CIGroup", Decode: func(v vm.Value) (any, error) { return decodeProviderGroupStart(v) }},
+	{Name: "group_end", Returns: "Ack", Params: "target: Target, req: CIGroupEnd", Decode: func(v vm.Value) (any, error) { return decodeProviderGroupEnd(v) }},
+	{Name: "annotate", Returns: "Ack", Params: "target: Target, req: CIAnnotation", Decode: func(v vm.Value) (any, error) { return decodeProviderAnnotate(v) }},
+	{Name: "quote_prefixes", Returns: "Strings", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderQuotePrefixes(v) }},
+	{Name: "last_green_run", Returns: "GreenRun", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderLastGreenRun(v) }},
+	{Name: "enabled", Returns: "Ack", Params: "target: Target, req: Empty", Decode: func(v vm.Value) (any, error) { return decodeProviderCacheEnabled(v) }},
+	{Name: "get_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderGetArtifact(v) }},
+	{Name: "has_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderHasArtifact(v) }},
+	{Name: "put_artifact", Returns: "Ack", Params: "target: Target, req: ArtifactRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPutArtifact(v) }},
+	{Name: "prune", Returns: "PruneResult", Params: "target: Target, req: PruneRequest", Decode: func(v vm.Value) (any, error) { return decodeProviderPrune(v) }},
+	{Name: "list_lifecycles", Returns: "[Lifecycle]", Params: "target: Target, req: LifecycleQuery", Decode: func(v vm.Value) (any, error) { return decodeProviderListLifecycles(v) }},
+}
+
+func decodeProviderResolveSecret(v vm.Value) (spells.Secret, error) {
+	var out spells.Secret
+	xResolveSecret, err := decodeSecret(v, "resolve_secret")
+	if err != nil {
+		return out, err
+	}
+	out = xResolveSecret
+	return out, nil
+}
+
+func decodeProviderCIEnabled(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xCIEnabled, err := decodeAck(v, "enabled")
+	if err != nil {
+		return out, err
+	}
+	out = xCIEnabled
+	return out, nil
+}
+
+func decodeProviderGroupStart(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xGroupStart, err := decodeAck(v, "group_start")
+	if err != nil {
+		return out, err
+	}
+	out = xGroupStart
+	return out, nil
+}
+
+func decodeProviderGroupEnd(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xGroupEnd, err := decodeAck(v, "group_end")
+	if err != nil {
+		return out, err
+	}
+	out = xGroupEnd
+	return out, nil
+}
+
+func decodeProviderAnnotate(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xAnnotate, err := decodeAck(v, "annotate")
+	if err != nil {
+		return out, err
+	}
+	out = xAnnotate
+	return out, nil
+}
+
+func decodeProviderQuotePrefixes(v vm.Value) (types.Strings, error) {
+	var out types.Strings
+	xQuotePrefixes, err := decodeStrings(v, "quote_prefixes")
+	if err != nil {
+		return out, err
+	}
+	out = xQuotePrefixes
+	return out, nil
+}
+
+func decodeProviderLastGreenRun(v vm.Value) (types.GreenRun, error) {
+	var out types.GreenRun
+	xLastGreenRun, err := decodeGreenRun(v, "last_green_run")
+	if err != nil {
+		return out, err
+	}
+	out = xLastGreenRun
+	return out, nil
+}
+
+func decodeProviderCacheEnabled(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xCacheEnabled, err := decodeAck(v, "enabled")
+	if err != nil {
+		return out, err
+	}
+	out = xCacheEnabled
+	return out, nil
+}
+
+func decodeProviderGetArtifact(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xGetArtifact, err := decodeAck(v, "get_artifact")
+	if err != nil {
+		return out, err
+	}
+	out = xGetArtifact
+	return out, nil
+}
+
+func decodeProviderHasArtifact(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xHasArtifact, err := decodeAck(v, "has_artifact")
+	if err != nil {
+		return out, err
+	}
+	out = xHasArtifact
+	return out, nil
+}
+
+func decodeProviderPutArtifact(v vm.Value) (types.Ack, error) {
+	var out types.Ack
+	xPutArtifact, err := decodeAck(v, "put_artifact")
+	if err != nil {
+		return out, err
+	}
+	out = xPutArtifact
+	return out, nil
+}
+
+func decodeProviderPrune(v vm.Value) (types.PruneResult, error) {
+	var out types.PruneResult
+	xPrune, err := decodePruneResult(v, "prune")
+	if err != nil {
+		return out, err
+	}
+	out = xPrune
+	return out, nil
+}
+
+func decodeProviderListLifecycles(v vm.Value) ([]spells.Lifecycle, error) {
+	var out []spells.Lifecycle
+	listListLifecycles, err := decodeList(v, "list_lifecycles", "[Lifecycle]")
+	if err != nil {
+		return out, err
+	}
+	if len(listListLifecycles) > 0 {
+		itemsListLifecycles := make([]spells.Lifecycle, len(listListLifecycles))
+		for indexListLifecycles, itemListLifecycles := range listListLifecycles {
+			xListLifecyclesItem, err := decodeLifecycle(itemListLifecycles, fmt.Sprintf("%s[%d]", "list_lifecycles", indexListLifecycles))
+			if err != nil {
+				return out, err
+			}
+			itemsListLifecycles[indexListLifecycles] = xListLifecyclesItem
+		}
+		out = itemsListLifecycles
+	}
+	return out, nil
+}
+
 var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumExternalValues = []string{"", "reads-external", "mutates-external"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}

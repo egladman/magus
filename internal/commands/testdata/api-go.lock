@@ -736,6 +736,8 @@ github.com/egladman/magus/std.VcsRoot func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.VcsStatus func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Status, error)
 github.com/egladman/magus/std.VcsTags func(ctx context.Context, pattern string) ([]github.com/egladman/magus/types.VCSTag, error)
 github.com/egladman/magus/std.WithCwd func(ctx context.Context, dir string) context.Context
+github.com/egladman/magus/types.Ack type struct
+github.com/egladman/magus/types.Ack.OK field bool
 github.com/egladman/magus/types.ActiveDispatch type struct
 github.com/egladman/magus/types.ActiveDispatch.Has method(ptr) func(dir string) bool
 github.com/egladman/magus/types.ActiveDispatch.Mark method(ptr) func(dir string)
@@ -826,6 +828,10 @@ github.com/egladman/magus/types.ArchiveEntry type struct
 github.com/egladman/magus/types.ArchiveEntry.IsDir field bool "buzz:\"is_dir\""
 github.com/egladman/magus/types.ArchiveEntry.Name field string
 github.com/egladman/magus/types.ArchiveEntry.Size field int
+github.com/egladman/magus/types.ArtifactRequest type struct
+github.com/egladman/magus/types.ArtifactRequest.Hash field string
+github.com/egladman/magus/types.ArtifactRequest.Path field string
+github.com/egladman/magus/types.ArtifactRequest.Project field string
 github.com/egladman/magus/types.ArtifactVersion type struct
 github.com/egladman/magus/types.ArtifactVersion.Blob field string
 github.com/egladman/magus/types.ArtifactVersion.Created field string
@@ -899,6 +905,22 @@ github.com/egladman/magus/types.Bundler type interface
 github.com/egladman/magus/types.Bundler.Bundle imethod func(ctx context.Context, root string, file string, r BundleRange) error
 github.com/egladman/magus/types.Bundler.Unbundle imethod func(ctx context.Context, root string, file string) error
 github.com/egladman/magus/types.BuzzObject type map[string]any
+github.com/egladman/magus/types.CIAnnotation type struct
+github.com/egladman/magus/types.CIAnnotation.Code field string
+github.com/egladman/magus/types.CIAnnotation.Col field int
+github.com/egladman/magus/types.CIAnnotation.EndCol field int
+github.com/egladman/magus/types.CIAnnotation.EndLine field int
+github.com/egladman/magus/types.CIAnnotation.File field string
+github.com/egladman/magus/types.CIAnnotation.Level field string
+github.com/egladman/magus/types.CIAnnotation.Line field int
+github.com/egladman/magus/types.CIAnnotation.Message field string
+github.com/egladman/magus/types.CIAnnotation.Title field string
+github.com/egladman/magus/types.CIGroup type struct
+github.com/egladman/magus/types.CIGroup.Collapsed field bool
+github.com/egladman/magus/types.CIGroup.ID field string
+github.com/egladman/magus/types.CIGroup.Title field string
+github.com/egladman/magus/types.CIGroupEnd type struct
+github.com/egladman/magus/types.CIGroupEnd.ID field string
 github.com/egladman/magus/types.CPUMs func(ctx context.Context) int64
 github.com/egladman/magus/types.CacheBackend type interface
 github.com/egladman/magus/types.CacheBackend.Active imethod func(ctx context.Context) bool
@@ -1816,6 +1838,7 @@ github.com/egladman/magus/types.EditedFile.DigestAfter field string "json:\"dige
 github.com/egladman/magus/types.EditedFile.DigestBefore field string "json:\"digest_before\" yaml:\"digest_before\""
 github.com/egladman/magus/types.EditedFile.Path field string "json:\"path\"          yaml:\"path\""
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
+github.com/egladman/magus/types.Empty type struct
 github.com/egladman/magus/types.EndReasonSessionEnded const untyped string = "its holder's session ended"
 github.com/egladman/magus/types.EndedAncestor func(rows []Job, id string) (Job, bool)
 github.com/egladman/magus/types.EngineNotLinked const DiagnosticCode = "MGS1104"
@@ -2101,6 +2124,9 @@ github.com/egladman/magus/types.GraphView type struct
 github.com/egladman/magus/types.GraphView.BlastRadius field map[string]int
 github.com/egladman/magus/types.GraphView.DependsOn field map[string][]string
 github.com/egladman/magus/types.GraphView.Nodes field []string
+github.com/egladman/magus/types.GreenRun type struct
+github.com/egladman/magus/types.GreenRun.Commit field string
+github.com/egladman/magus/types.GreenRun.Run field string
 github.com/egladman/magus/types.GroupingChained const GroupingShape = "chained"
 github.com/egladman/magus/types.GroupingDefinition const untyped string = "Grouping reads job history, not git: each recorded job is chained (one worker whose write paths reach two or more projects), split (two or more jobs forked under one attempt of one parent) or solo. Per shape it sets the context a worker loaded before its first write and the context, wall time, denials and unattributed writes per group beside the pass rate. It is observational: jobs were not assigned to a shape at random, and bigger work is split more often, so it reports what each shape cost here and never which to choose; a person writes that rule. A shape with fewer than the minimum sample of groups, or with most trails rotated away, is unknown."
 github.com/egladman/magus/types.GroupingMeasured const GroupingVerdict = "measured"
@@ -3136,6 +3162,8 @@ github.com/egladman/magus/types.LevelWrite const Level = 2
 github.com/egladman/magus/types.LifecycleCached const untyped string = "cached"
 github.com/egladman/magus/types.LifecycleLive const untyped string = "live"
 github.com/egladman/magus/types.LifecycleOffline const untyped string = "offline"
+github.com/egladman/magus/types.LifecycleQuery type struct
+github.com/egladman/magus/types.LifecycleQuery.Keys field []string
 github.com/egladman/magus/types.LifecycleStatus type struct
 github.com/egladman/magus/types.LifecycleStatus.AsOf field string "json:\"as_of,omitempty\" yaml:\"as_of,omitempty\""
 github.com/egladman/magus/types.LifecycleStatus.Detail field string "json:\"detail,omitempty\" yaml:\"detail,omitempty\""
@@ -3768,6 +3796,12 @@ github.com/egladman/magus/types.ProjectsOutput.Workspace field string "json:\"wo
 github.com/egladman/magus/types.ProvidedBy func(spellName string) ProjectOrigin
 github.com/egladman/magus/types.ProviderPathRejected const DiagnosticCode = "MGS1023"
 github.com/egladman/magus/types.ProviderProjectShadowed const DiagnosticCode = "MGS1024"
+github.com/egladman/magus/types.PruneRequest type struct
+github.com/egladman/magus/types.PruneRequest.DryRun field bool
+github.com/egladman/magus/types.PruneRequest.KeepLast field int64
+github.com/egladman/magus/types.PruneRequest.OlderThanSecs field int64
+github.com/egladman/magus/types.PruneResult type struct
+github.com/egladman/magus/types.PruneResult.Done field bool
 github.com/egladman/magus/types.PublicSymbol type struct
 github.com/egladman/magus/types.PublicSymbol.Dir field string "json:\"dir\"                 yaml:\"dir\""
 github.com/egladman/magus/types.PublicSymbol.ID field string "json:\"id\"                  yaml:\"id\""
@@ -4028,6 +4062,8 @@ github.com/egladman/magus/types.SecretGrant.Normalize method func() (SecretGrant
 github.com/egladman/magus/types.SecretGrant.Prefix field string
 github.com/egladman/magus/types.SecretGrant.Ref field string
 github.com/egladman/magus/types.SecretGrantInvalid const DiagnosticCode = "MGS1027"
+github.com/egladman/magus/types.SecretRef type struct
+github.com/egladman/magus/types.SecretRef.Ref field string
 github.com/egladman/magus/types.SecretTooShortToMask const DiagnosticCode = "MGS2011"
 github.com/egladman/magus/types.SelfInvalidatingKey const DiagnosticCode = "MGS4010"
 github.com/egladman/magus/types.SelfStalingOutput const DiagnosticCode = "MGS1019"
@@ -4412,6 +4448,8 @@ github.com/egladman/magus/types.StreamTargetOutput const StreamEventType = "targ
 github.com/egladman/magus/types.StreamTargetResult const StreamEventType = "target.result"
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
+github.com/egladman/magus/types.Strings type struct
+github.com/egladman/magus/types.Strings.Items field []string
 github.com/egladman/magus/types.SuggestionAccepted const SuggestionStatus = "accepted"
 github.com/egladman/magus/types.SuggestionDeclined const SuggestionStatus = "declined"
 github.com/egladman/magus/types.SuggestionPending const SuggestionStatus = ""

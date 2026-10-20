@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-924-g41c6df104 (commit 41c6df104e7e4ef19747f4db943a4793cd53a76d, 2026-10-16T10:13:54-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus unknown (commit a423f2194d8cd1c05372bea111c8a034911dec15, 2026-10-20T09:06:43Z)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -134,9 +134,11 @@ internal/handler/mcp/gen/registry.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_objects.go merge=magus linguist-generated
+internal/interp/bindings/gen/boundary_ops.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/contract.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/decode.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/inbound_list_test.go merge=magus linguist-generated
+internal/interp/bindings/gen/providerops/providerops.go merge=magus linguist-generated
 internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
