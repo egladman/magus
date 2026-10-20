@@ -2353,15 +2353,18 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: "could not load harness descriptors", Details: []string{err.Error()}}
 	}
-	var wired, problems []string
+	var wired, problems, advice []string
 	for _, id := range ids {
 		verification, err := agent.VerifyHarness(ctx, root, id)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
 		}
+		// A per-person plugin install (claude-code-mod) cannot be fixed in the tree or
+		// on a CI runner: advise, and leave `magus agent harness verify` as the hard
+		// check a person runs at their keyboard. Tool rows and hook wiring stay Fail.
 		if verification.Plugin.Failing() {
-			problems = append(problems, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
+			advice = append(advice, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
 		}
 		if verification.Tool.Failing() {
 			problems = append(problems, fmt.Sprintf("%s tool rows are %s: %s", id, verification.Tool.Status, verification.Tool.Reason))
@@ -2386,7 +2389,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Name:    name,
 			Status:  types.CheckFail,
 			Message: "harness wiring is incomplete",
-			Details: problems,
+			Details: append(append([]string{}, problems...), advice...),
 		}
 	}
 	if len(wired) == 0 {
@@ -2397,6 +2400,14 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Details: []string{
 				"wire magus\\harness.provider(<spell>) in the root magusfile (several hosts are fine)",
 			},
+		}
+	}
+	if len(advice) > 0 {
+		return types.Check{
+			Name:    name,
+			Status:  types.CheckAdvice,
+			Message: fmt.Sprintf("guard verified through %d harness config path(s); %d personal plugin install(s) still open", len(wired), len(advice)),
+			Details: append(append([]string{}, wired...), advice...),
 		}
 	}
 	return types.Check{

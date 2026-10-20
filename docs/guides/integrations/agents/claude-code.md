@@ -609,9 +609,9 @@ reads the marketplace only once the person trusts the folder. The settings do no
 install the mod: each person runs the install line above once, and until they do
 the mod never appears. `magus agent harness verify claude-code-mod` and
 `magus doctor` read what Claude Code recorded in `installed_plugins.json` under
-`CLAUDE_CONFIG_DIR` (`~/.claude` by default) and report an error that names the
-install line while the workspace enables the mod and the person has not
-installed it. A workspace that does not enable the mod is not checked.
+`CLAUDE_CONFIG_DIR` (`~/.claude` by default). Verify fails naming the install
+line while the workspace enables the mod and the person has not installed it;
+doctor advises on that gap so CI is not red for a personal install. A workspace that does not enable the mod is not checked.
 
 ## Coverage and limits
 

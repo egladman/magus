@@ -2034,6 +2034,9 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
 
 // Tests with race detection and a coverage floor. The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
+    // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
+    ctx.needs(generate);
     ctx.needs(advice_test);
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
