@@ -1,0 +1,129 @@
+// magus Buzz check hook: runs `magus buzz --check` on a .buzz file the agent just wrote, so a
+// type error or a conflict marker comes back at edit time rather than at the next run.
+//
+// Run it as `magus buzz -s magus-buzz-check.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. Wire it after the tools that write a file (Claude Code's PostToolUse on
+// Write|Edit|MultiEdit, Codex's on apply_patch, Cursor's postToolUse on Write|StrReplace|Edit);
+// the harness spells declare it through magus/harness.buzzCheckHook.
+//
+// Contract: reads the host's event as JSON on stdin and takes the written path from
+// tool_input.file_path, else tool_input.path, else the Add File and Update File lines of an
+// apply_patch input. A path that is not a .buzz file is skipped. A magusfile.buzz, and
+// anything under magusfiles/, spells/ or hack/, is checked with --embedded, the mode the
+// engine loads it in; any other .buzz file is checked strict. A failure prints
+// {"decision":"block","reason":...} on stdout, which the host hands the agent as the reason
+// to fix the file; a pass prints nothing. It always exits 0.
+//
+// REQUIRED argument: `-- --agent-name <host>`, named like every glue entry. Without it the
+// check still runs, and MGS3024 goes to stderr.
+//
+// NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
+//
+// magus-guard-template: 31
+
+import "io";
+import "flags";
+import "encoding/json";
+import "proc";
+import "std";
+import "lib/hook" as hook;
+
+final AGENT_NAME_FLAG = "--agent-name";
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-buzz-check.buzz: {message}\n") catch void;
+}
+
+// readAgentName reads the host off this script's argv, "" when the entry names none.
+fun readAgentName(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. Fix the hook command in your host config.");
+    }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
+}
+
+// writtenPaths is every path the event says the tool wrote.
+fun writtenPaths(event: any?) > [str] {
+    final paths = mut [<str>];
+    foreach (key in ["tool_input.file_path", "tool_input.path"]) {
+        final value = hook\dig(event, dotPath: key);
+        if (value -> path) {
+            if ((path as? str) -> p) {
+                if (p != "") {
+                    paths.append(p);
+                    return paths;
+                }
+            }
+        }
+    }
+    foreach (key in ["tool_input.command", "tool_input.input", "tool_input.patch"]) {
+        final value = hook\dig(event, dotPath: key);
+        if (value == null) { continue; }
+        final text = (value as? str) ?? "";
+        foreach (line in text.split("\n")) {
+            foreach (marker in ["*** Add File: ", "*** Update File: "]) {
+                if (line.startsWith(marker)) { paths.append(line.sub(marker.len(), len: line.len() - marker.len()).trim()); }
+            }
+        }
+    }
+    return paths;
+}
+
+// relativeTo is path under root, or path itself when it is already relative or elsewhere.
+fun relativeTo(path: str, root: str) > str {
+    if (root != "" and path.startsWith(root + "/")) { return path.sub(root.len() + 1, len: path.len() - root.len() - 1); }
+    return path;
+}
+
+// embedded reports whether the engine loads rel in embedded mode: a magusfile and the
+// spells, magusfiles and hack scripts beside it.
+fun embedded(rel: str) > bool {
+    if (rel == "magusfile.buzz" or rel.endsWith("/magusfile.buzz")) { return true; }
+    foreach (prefix in ["magusfiles/", "spells/", "hack/"]) {
+        if (rel.startsWith(prefix)) { return true; }
+    }
+    return false;
+}
+
+fun main(args: [str]) > void {
+    if (readAgentName(args) == "") {
+        warn("[MGS3024] this hook was not given --agent-name. Merge what `magus describe harness` prints into the host's hook configuration.");
+    }
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final cwd = hook\field(event, dotPath: "cwd");
+    final root = hook\workspaceRootAt(if (cwd != "") cwd else ".");
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
+
+    final failures = mut [<str>];
+    foreach (path in writtenPaths(event)) {
+        if (!path.endsWith(".buzz")) { continue; }
+        final rel = relativeTo(path, root: root);
+        final check = mut ["buzz", "--check"];
+        if (embedded(rel)) { check.append("--embedded"); }
+        check.append(rel);
+        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: {"quiet": true, "allow_failure": true}) catch null;
+        if (result == null or result!.ok) { continue; }
+        failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim());
+    }
+    if (failures.len() == 0) { return; }
+    final reply = json\stringify({"decision": "block", "reason": failures.join("\n\n") + "\nFix the file before you go on."}) catch "";
+    if (reply != "") { io\stdout.write(reply + "\n") catch void; }
+}
+
+test "a written path comes from the field the host names it in" {
+    std\assert(writtenPaths({"tool_input": {"file_path": "/r/spells/x/spell.buzz"}}).join(",") == "/r/spells/x/spell.buzz", message: "Claude Code");
+    std\assert(writtenPaths({"tool_input": {"path": "a.buzz"}}).join(",") == "a.buzz", message: "Cursor");
+    std\assert(writtenPaths({"tool_input": {"command": "*** Begin Patch\n*** Update File: hack/a.buzz\n@@\n*** Add File: b.go\n"}}).join(",")
+        == "hack/a.buzz,b.go", message: "an apply_patch input");
+    std\assert(writtenPaths({"tool_input": {}}).len() == 0, message: "nothing written");
+}
+
+test "the engine's own Buzz is checked embedded and everything else strict" {
+    std\assert(embedded("magusfile.buzz") and embedded("libs/x/magusfile.buzz"), message: "magusfiles");
+    std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
+    std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
+    std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
+}
