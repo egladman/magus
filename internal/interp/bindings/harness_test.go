@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +22,12 @@ func TestBuildHarness(t *testing.T) {
 		assert.Equal(t, []string{"cursor"}, reg.Harnesses())
 	})
 
-	t.Run("provider returns the harness key", func(t *testing.T) {
+	t.Run("provider returns the harness id", func(t *testing.T) {
 		ctx := workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry())
 		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		t.Cleanup(func() { _ = sess.Close() })
 		registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-		id, err := sess.Eval(ctx, `import "magus"; return magus\harness.provider({"name": "cursor"}).id;`)
+		id, err := sess.Eval(ctx, `import "magus"; return magus\harness.provider({"name": "cursor"});`)
 		require.NoError(t, err)
 		assert.Equal(t, "cursor", id.AsString())
 	})
@@ -54,29 +54,21 @@ func TestBuildHarness(t *testing.T) {
 	})
 }
 
-// TestDecodeHarnessPrompts pins that a spell's harness_prompts list reaches the descriptor
-// field for field, in the shape a Buzz spell returns it: lists of any, maps of any.
-func TestDecodeHarnessJSONReadsPrompts(t *testing.T) {
-	t.Run("a whole file and a JSON key both decode", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		require.NoError(t, decodeHarnessJSON([]any{
-			map[string]any{"path": ".codex/rules/magus.rules", "content": "prefix_rule()\n"},
-			map[string]any{"path": "opencode.json", "key": []any{"permission", "bash", "git push *"}, "value": "ask"},
-		}, &d.Prompts))
-		assert.Equal(t, []agent.HarnessPrompt{
-			{Path: ".codex/rules/magus.rules", Content: "prefix_rule()\n"},
-			{Path: "opencode.json", Key: []string{"permission", "bash", "git push *"}, Value: "ask"},
-		}, d.Prompts)
-	})
-
-	t.Run("anything but a list is refused", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessJSON(map[string]any{"path": "opencode.json"}, &d.Prompts))
-		assert.Empty(t, d.Prompts)
-	})
-
-	t.Run("a field of the wrong type is refused", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessJSON([]any{map[string]any{"path": "x", "key": "not a list"}}, &d.Prompts))
-	})
+// A spell's mgs_renderPrompts list reaches the descriptor field for field: a whole file,
+// and one value inside a JSON document, its value opaque host JSON.
+func TestHarnessPromptsDecodeFieldForField(t *testing.T) {
+	id := harnessSource(t, "prompts-test", `export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return [
+        Prompt{path = ".codex/rules/magus.rules", content = "prefix_rule()\n"},
+        Prompt{path = "opencode.json", key = ["permission", "bash", "git push *"], value = "ask"},
+    ];
+}
+`)
+	d, _, ok, err := loadHarnessFromSpell(context.Background(), id)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, []types.Prompt{
+		{Path: ".codex/rules/magus.rules", Content: "prefix_rule()\n"},
+		{Path: "opencode.json", Key: []string{"permission", "bash", "git push *"}, Value: "ask"},
+	}, d.Prompts)
 }

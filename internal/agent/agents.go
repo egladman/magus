@@ -26,22 +26,6 @@ type Agent struct {
 	ReadOnly bool
 }
 
-// Params renders a as the map a harness spell receives for one agent. model is the host
-// alias of the cheapest model tier, which every agent magus ships runs on because their
-// work is bounded lookups; empty leaves the key out, and the spell renders no model line.
-func (a Agent) Params(model string) map[string]any {
-	params := map[string]any{
-		"name":         a.Name,
-		"description":  a.Description,
-		"instructions": a.Instructions,
-		"read_only":    a.ReadOnly,
-	}
-	if model != "" {
-		params["model"] = model
-	}
-	return params
-}
-
 // agentDefs holds what a Markdown body cannot: everything but the instructions.
 var agentDefs = []Agent{
 	{
@@ -64,18 +48,4 @@ func ShippedAgents() ([]Agent, error) {
 		out = append(out, a)
 	}
 	return out, nil
-}
-
-// ShippedAgentParams renders every shipped agent as the "agents" list a harness_agents
-// invocation carries, each with model as [Agent.Params] takes it.
-func ShippedAgentParams(model string) ([]any, error) {
-	agents, err := ShippedAgents()
-	if err != nil {
-		return nil, err
-	}
-	list := make([]any, len(agents))
-	for i, a := range agents {
-		list[i] = a.Params(model)
-	}
-	return list, nil
 }

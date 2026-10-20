@@ -18,70 +18,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ToolCapability is what a host tool can do to a workspace, in magus's own words. The shape
-// of a call's input decides how the guard judges it (a command field is a command line, a
-// file path is a read or a write); the capability settles what shape cannot, and says which
-// tools carry nothing to judge on purpose.
-type ToolCapability string
-
-const (
-	ToolRuns   ToolCapability = "runs"
-	ToolReads  ToolCapability = "reads"
-	ToolWrites ToolCapability = "writes"
-	ToolSpawns ToolCapability = "spawns"
-	// ToolNetwork reaches the network and touches no workspace file: a browser.
-	ToolNetwork ToolCapability = "network"
-	// ToolInert touches no workspace file and runs nothing: a plan, a todo list, a web
-	// lookup, a read of a background task's output.
-	ToolInert ToolCapability = "inert"
-)
-
-// ToolCapabilities is every capability, each the name of one file in a tool rows directory.
-var ToolCapabilities = []ToolCapability{ToolRuns, ToolReads, ToolWrites, ToolSpawns, ToolNetwork, ToolInert}
-
 // ToolRowsVersion is the layout of a tool rows directory this build writes and reads, kept in
 // the directory's version file. Bump it when the layout changes, so a directory written for
 // another layout is reported rather than misread.
 const ToolRowsVersion = 1
 
-// toolRowsVersionFile names the file holding a directory's ToolRowsVersion.
-const toolRowsVersionFile = "version"
-
-// modelRowsFile holds the harness's model rows, one JSON object a line; tierFile holds the
-// workspace's model-tier declaration as one JSON line, and is empty for none. They leave
-// ToolRowsVersion alone: a reader that predates them ignores them, and ToolRows.Models
-// reports a directory written before them, so no build misreads the other's directory.
-const (
-	modelRowsFile = "models"
-	tierFile      = "tiers"
-)
-
-// HarnessTools is the table of a host's own tools a harness spell declares, by its
-// harness_tools op: Dir is the workspace-relative directory the rows are installed in, and
-// the directory the spell's hook wiring names to the guard with --tool-rows.
-type HarnessTools struct {
-	Dir  string        `json:"dir"`
-	Rows []HarnessTool `json:"rows"`
-	// Models is what install writes beside the rows so a hook prices and tiers a call
-	// without loading the workspace; nil writes neither file. No spell declares it.
-	Models *ModelFacts `json:"-"`
-}
-
 // ModelFacts is what the guard prices and tiers a call by: the model rows the harness
-// publishes through harness_models, and the workspace's model-tier declaration, nil when it
+// publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
 // declares none or turned tiers off.
 type ModelFacts struct {
 	Rows  []types.ModelPricing
 	Tiers *types.ModelTierSet
 }
 
-// HarnessTool is one row: a tool by the host's own name, and what it can do.
-type HarnessTool struct {
-	Name       string         `json:"name"`
-	Capability ToolCapability `json:"capability"`
-}
-
-func validateHarnessTools(t HarnessTools) error {
+func validateHarnessTools(t types.HarnessTools) error {
 	if t.Dir == "" || filepath.IsAbs(t.Dir) || !isSafeRelativePath(t.Dir) {
 		return errors.New("dir must be a workspace-relative path")
 	}
@@ -90,8 +40,8 @@ func validateHarnessTools(t HarnessTools) error {
 		switch {
 		case r.Name == "" || strings.ContainsAny(r.Name, "\n\r"):
 			return fmt.Errorf("row %d: name must be one non-empty line", i+1)
-		case !slices.Contains(ToolCapabilities, r.Capability):
-			return fmt.Errorf("row %d (%s): capability %q is none of %s", i+1, r.Name, r.Capability, capabilityNames())
+		case r.Capability == "" || !r.Capability.Valid():
+			return fmt.Errorf("row %d (%s): capability %q is none of %s", i+1, r.Name, r.Capability, strings.Join(r.Capability.Values(), ", "))
 		case seen[r.Name]:
 			return fmt.Errorf("row %d: %s is declared twice", i+1, r.Name)
 		}
@@ -100,24 +50,18 @@ func validateHarnessTools(t HarnessTools) error {
 	return nil
 }
 
-func capabilityNames() string {
-	names := make([]string, len(ToolCapabilities))
-	for i, c := range ToolCapabilities {
-		names[i] = string(c)
-	}
-	return strings.Join(names, ", ")
-}
-
-// Files renders the rows as the files a tool rows directory holds: one per capability that
-// has a row, each tool name on its own line in sorted order, and the version file, which
-// is what tells an installed directory from none.
-func (t HarnessTools) Files() []HarnessAgentFile {
-	byCapability := map[ToolCapability][]string{}
+// ToolFiles renders t as the files a tool rows directory holds: one per capability that has
+// a row, each tool name on its own line in sorted order, the model facts install writes
+// beside them so a hook prices and tiers a call without loading the workspace (nil writes
+// neither file), and the version file, which is what tells an installed directory from none.
+func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
+	byCapability := map[types.ToolCapability][]string{}
 	for _, r := range t.Rows {
 		byCapability[r.Capability] = append(byCapability[r.Capability], r.Name)
 	}
-	files := make([]HarnessAgentFile, 0, len(ToolCapabilities)+1)
-	for _, c := range ToolCapabilities {
+	capabilities := types.ToolCapabilities()
+	files := make([]types.AgentFile, 0, len(capabilities)+3)
+	for _, c := range capabilities {
 		names := byCapability[c]
 		if len(names) == 0 {
 			continue
@@ -127,34 +71,22 @@ func (t HarnessTools) Files() []HarnessAgentFile {
 		for _, n := range names {
 			b.WriteString(n + "\n")
 		}
-		files = append(files, HarnessAgentFile{Path: path.Join(t.Dir, string(c)), Content: b.String()})
+		files = append(files, types.AgentFile{Path: path.Join(t.Dir, string(c)), Content: b.String()})
 	}
-	if t.Models != nil {
+	if models != nil {
 		files = append(files,
-			HarnessAgentFile{Path: path.Join(t.Dir, modelRowsFile), Content: encodeModelRows(t.Models.Rows)},
-			HarnessAgentFile{Path: path.Join(t.Dir, tierFile), Content: encodeTiers(t.Models.Tiers)})
+			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelRowsFile), Content: encodeModelRows(models.Rows)},
+			types.AgentFile{Path: path.Join(t.Dir, types.ToolTiersFile), Content: encodeTiers(models.Tiers)})
 	}
-	return append(files, HarnessAgentFile{Path: path.Join(t.Dir, toolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
-}
-
-// Holds reports whether rel, a slash-separated workspace-relative path, is a file install
-// writes into the rows directory: every name Files can emit, whether or not this table
-// currently has rows for it.
-func (t HarnessTools) Holds(rel string) bool {
-	dir, name := path.Split(rel)
-	if path.Clean(dir) != path.Clean(t.Dir) {
-		return false
-	}
-	return name == modelRowsFile || name == tierFile || name == toolRowsVersionFile ||
-		slices.Contains(ToolCapabilities, ToolCapability(name))
+	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
 }
 
 // toolFiles is d's tool rows directory as files, nil when d declares no tools.
-func (d HarnessDescriptor) toolFiles() []HarnessAgentFile {
+func (d HarnessDescriptor) toolFiles() []types.AgentFile {
 	if d.Tools == nil {
 		return nil
 	}
-	return d.Tools.Files()
+	return ToolFiles(*d.Tools, nil)
 }
 
 // InstallHarnessTools writes the tool rows directory harness id declares under root, with
@@ -175,10 +107,8 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 	if !ok {
 		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
 	}
-	tools := *d.Tools
-	tools.Models = &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}
 	var changed []string
-	for _, f := range tools.Files() {
+	for _, f := range ToolFiles(*d.Tools, &ModelFacts{Rows: d.Models, Tiers: ws.ModelTiers(ctx)}) {
 		planned, err := planWholeFile(root, f.Path, f.Content)
 		if err != nil {
 			return changed, err
@@ -207,7 +137,7 @@ type ToolRows struct {
 	// Dir is the directory as the wiring named it, "" when it named none.
 	Dir          string
 	abs          string
-	capabilities map[string]ToolCapability
+	capabilities map[string]types.ToolCapability
 	Err          error
 }
 
@@ -226,7 +156,7 @@ func ReadToolRows(root, dir string) ToolRows {
 		abs = filepath.Join(root, dir)
 	}
 	reinstall := "write it with `magus agent harness install`"
-	version, err := os.ReadFile(filepath.Join(abs, toolRowsVersionFile))
+	version, err := os.ReadFile(filepath.Join(abs, types.ToolRowsVersionFile))
 	if err != nil {
 		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
@@ -236,8 +166,8 @@ func ReadToolRows(root, dir string) ToolRows {
 		return rows
 	}
 	rows.abs = abs
-	rows.capabilities = map[string]ToolCapability{}
-	for _, c := range ToolCapabilities {
+	rows.capabilities = map[string]types.ToolCapability{}
+	for _, c := range types.ToolCapabilities() {
 		body, err := os.ReadFile(filepath.Join(abs, string(c)))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -256,7 +186,7 @@ func ReadToolRows(root, dir string) ToolRows {
 }
 
 // Capability is tool's capability, "" for a tool the rows do not list or when there are none.
-func (r ToolRows) Capability(tool string) ToolCapability {
+func (r ToolRows) Capability(tool string) types.ToolCapability {
 	return r.capabilities[tool]
 }
 
@@ -272,7 +202,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 		return ModelFacts{}, errors.New("no tool rows were read")
 	}
 	reinstall := "rewrite it with `magus agent harness install`"
-	body, err := os.ReadFile(filepath.Join(r.abs, modelRowsFile))
+	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolModelRowsFile))
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model rows at %s, %s: %w", r.Dir, reinstall, err)
 	}
@@ -280,7 +210,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("the model rows at %s do not read, %s: %w", r.Dir, reinstall, err)
 	}
-	body, err = os.ReadFile(filepath.Join(r.abs, tierFile))
+	body, err = os.ReadFile(filepath.Join(r.abs, types.ToolTiersFile))
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model tiers at %s, %s: %w", r.Dir, reinstall, err)
 	}
@@ -308,8 +238,8 @@ func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
 	return rows, ok
 }
 
-// modelRowLine is one model row as the models file keeps it, in harness_models' own keys;
-// types.ModelPricing carries no wire tags.
+// modelRowLine is one model row as the models file keeps it; types.ModelPricing carries no
+// wire tags.
 type modelRowLine struct {
 	ID           string  `json:"id"`
 	Tier         string  `json:"tier,omitzero"`
@@ -393,7 +323,7 @@ func encodeTiers(set *types.ModelTierSet) string {
 		for _, t := range tiers {
 			// A host the set lists maps every rank, so Alias cannot fail here.
 			alias, _ := set.Alias(host, t)
-			line.Hosts[host.ID] = append(line.Hosts[host.ID], alias)
+			line.Hosts[host] = append(line.Hosts[host], alias)
 		}
 	}
 	var b strings.Builder
@@ -414,10 +344,7 @@ func decodeTiers(lines [][]byte) (*types.ModelTierSet, error) {
 		decl.Bounds = append(decl.Bounds, types.ModelTierBounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
 	}
 	if len(line.Hosts) > 0 {
-		decl.Hosts = make(map[types.HarnessKey][]string, len(line.Hosts))
-		for id, aliases := range line.Hosts {
-			decl.Hosts[types.HarnessKey{ID: id}] = aliases
-		}
+		decl.Hosts = line.Hosts
 	}
 	return types.NewModelTierSet(decl)
 }

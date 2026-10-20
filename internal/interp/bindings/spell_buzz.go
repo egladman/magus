@@ -10,12 +10,9 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -94,7 +91,7 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 		return spells.Descriptor{}, nil, err
 	}
 	sp := spells.NewSpell(spec.Name, append(localSpellBaseOptions(spec),
-		spells.WithInvoker(newBuzzSpellInvoker(spec, src)), spells.WithFuncSource(src))...)
+		spells.WithInvoker(newBuzzSpellInvoker(spec)), spells.WithFuncSource(src))...)
 	return spec, sp, nil
 }
 
@@ -143,60 +140,16 @@ func spellSearchPaths(roots ...string) []string {
 	return paths
 }
 
-// newBuzzSpellInvoker dispatches a request against a Buzz spell. A declared command
-// op (from mgs_listTargets) runs its command through the shared bridge. Otherwise, if
-// the spell exports a function by that name, callBuzzSpellFunc calls it with req.Params.
-// An unknown name is a no-op (a fan-out skip). Provider ops do not come through here:
-// they go through CallOp.
-func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
+// newBuzzSpellInvoker dispatches a request against a Buzz spell: a declared command op
+// (from mgs_listTargets) runs its command through the shared bridge, and any other name is
+// a no-op, the fan-out skip of a target the spell does not declare. Provider ops and the
+// harness contract's functions do not come through here: they go through CallOp and
+// callHarness.
+func newBuzzSpellInvoker(spec spells.Descriptor) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
 			return dispatchOp(ctx, spec, req)
 		}
-		return callBuzzSpellFunc(ctx, src, req.Target, req)
+		return nil, nil //nolint:nilnil // documented no-op: an undeclared target, nil Data
 	}
-}
-
-// callBuzzSpellFunc calls the exported function fn of src as
-// fun(target: Target, cb: fun(any)): the function calls cb(io) with an empty map and
-// reads the inputs magus copies into it from req.Params, then returns its result,
-// marshaled back to a Go value.
-//
-// TODO: only the harness_* ops still use this; step 3 of the typed spell contract replaces
-// them with typed mgs_ functions, and then this and newBuzzSpellInvoker's fallback go.
-func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeRequest) (any, error) {
-	sess, err := execSpellSource(ctx, src, fmt.Sprintf("spell handler op %q", fn))
-	if err != nil {
-		return nil, err
-	}
-	defer sess.Close()
-	f, ok := sess.Exports()[fn]
-	if !ok {
-		// No such exported function: a no-op, not an error. This is the fan-out skip
-		// for an unknown target, and how an op a spell does not implement reports it:
-		// nil Data.
-		return nil, nil //nolint:nilnil // documented no-op: unknown function, nil Data
-	}
-	// cb delivers the op's inputs by copying req.Params into the map the handler
-	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
-	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := ffi.AnyToValue(req.Params)
-	tgt := bindgen.ObjectTarget(providerTarget(ctx, req.Target, req.Dir))
-	cb := vm.DirectValue("magus.cb", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
-			for _, k := range params.MapKeys() {
-				v, _ := params.MapGet(k)
-				args[0].MapSet(k, v)
-			}
-		}
-		return vm.Null, nil
-	})
-	args := []vm.Value{tgt, cb}
-	rv, err := interp.TimeCall(ctx, interp.ModeSpell, func() (vm.Value, error) {
-		return sess.CallValue(ctx, f, args)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("spell handler op %q: %w", fn, err)
-	}
-	return ffi.ValueToAny(rv), nil
 }

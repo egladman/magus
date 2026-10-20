@@ -37,30 +37,3 @@ func TestHarnessScoutIsReadOnly(t *testing.T) {
 	scout.Instructions = ""
 	assert.Equal(t, Agent{Name: "magus-scout", Description: agentDefs[0].Description, ReadOnly: true}, scout)
 }
-
-func TestHarnessAgentParamsCarryEveryField(t *testing.T) {
-	agents, err := ShippedAgents()
-	require.NoError(t, err)
-	require.Len(t, agents, 1)
-
-	params, err := ShippedAgentParams("small")
-	require.NoError(t, err)
-	require.Len(t, params, 1)
-	assert.Equal(t, map[string]any{
-		"name":         "magus-scout",
-		"description":  agents[0].Description,
-		"instructions": agents[0].Instructions,
-		"read_only":    true,
-		"model":        "small",
-	}, params[0])
-}
-
-// With no model mapped for the host the key is absent rather than empty, so a spell tests
-// for it and renders no model line instead of one that names nothing.
-func TestHarnessAgentParamsOmitTheModelWhenNoneIsMapped(t *testing.T) {
-	params, err := ShippedAgentParams("")
-	require.NoError(t, err)
-	require.Len(t, params, 1)
-	assert.NotContains(t, params[0], "model")
-	assert.NotContains(t, params[0], "class")
-}

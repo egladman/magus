@@ -30,6 +30,14 @@ func loadShippedHarness(t *testing.T, id string) agent.HarnessDescriptor {
 	return d
 }
 
+// harnessSource registers a harness spell under name whose Buzz source is the harness
+// contract functions in body, beside the config every harness exports.
+func harnessSource(t *testing.T, name, body string) string {
+	t.Helper()
+	return register.Spell(t, name, spells.WithFuncSource("import \"magus/spell\";\n"+
+		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n"+body))
+}
+
 func scoutInstructions(t *testing.T) string {
 	t.Helper()
 	agents, err := agent.ShippedAgents()
@@ -47,26 +55,26 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 
 	cases := []struct {
 		id   string
-		want agent.HarnessAgentFile
+		want types.AgentFile
 	}{
-		{"claude-code", agent.HarnessAgentFile{
+		{"claude-code", types.AgentFile{
 			Path: ".claude/agents/magus-scout.md",
 			Content: "---\nname: \"magus-scout\"\ndescription: " + quoted + "\n" +
 				"tools: Read, Grep, Glob, Bash\n---\n\n" + instructions,
 		}},
-		{"codex", agent.HarnessAgentFile{
+		{"codex", types.AgentFile{
 			Path: ".codex/agents/magus-scout.toml",
 			Content: "name = \"magus-scout\"\ndescription = " + quoted + "\n" +
 				"sandbox_mode = \"read-only\"\n" +
 				"developer_instructions = '''\n" + instructions + "'''\n",
 			Hint: "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
-		{"cursor", agent.HarnessAgentFile{
+		{"cursor", types.AgentFile{
 			Path: ".cursor/agents/magus-scout.md",
 			Content: "---\nname: \"magus-scout\"\ndescription: " + quoted + "\n" +
 				"model: inherit\nreadonly: true\n---\n\n" + instructions,
 		}},
-		{"opencode", agent.HarnessAgentFile{
+		{"opencode", types.AgentFile{
 			Path:    ".opencode/agents/magus-scout.md",
 			Content: "---\ndescription: " + quoted + "\nmode: subagent\npermission:\n  edit: deny\n---\n\n" + instructions,
 		}},
@@ -74,9 +82,54 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {
 			d := loadShippedHarness(t, tc.id)
-			assert.Equal(t, []agent.HarnessAgentFile{tc.want}, d.Agents)
+			assert.Equal(t, []types.AgentFile{tc.want}, d.Agents)
 		})
 	}
+}
+
+// Every shipped harness declares a stdio MCP server running the checkout's own binary.
+func TestHarnessSpellsDeclareAStdioMCPServer(t *testing.T) {
+	for _, id := range []string{"claude-code", "codex", "cursor", "opencode"} {
+		d := loadShippedHarness(t, id)
+		require.NotNil(t, d.MCP, id)
+		assert.Equal(t, types.McpStdio, d.MCP.Transport, id)
+		assert.Equal(t, []string{"./magus", "mcp"}, d.MCP.Command, id)
+	}
+	assert.Nil(t, loadShippedHarness(t, "claude-code-mod").MCP, "the mod declares no server")
+}
+
+// Every hook a shipped harness lists is rendered into its entries, the Buzz check among
+// them, so verify's drift check passes.
+func TestHarnessSpellsRenderEveryHookTheyList(t *testing.T) {
+	for _, id := range []string{"claude-code", "codex", "cursor"} {
+		d := loadShippedHarness(t, id)
+		assert.Equal(t, agent.HarnessVerified, agentHookCheck(d).Status, "%s: %s", id, agentHookCheck(d).Reason)
+		assert.True(t, strings.Contains(joinedScripts(d.Hooks), "magus-buzz-check"), id)
+	}
+	opencode := loadShippedHarness(t, "opencode")
+	assert.Equal(t, "skipped: opencode declares no config path", agentHookCheck(opencode).Reason)
+}
+
+// agentHookCheck runs verify's hook check through VerifyHarness's own entry point: a
+// descriptor wired as the only harness, against an empty workspace.
+func agentHookCheck(d agent.HarnessDescriptor) agent.HarnessCheck {
+	prev := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
+		return d, "spell:" + id, id == d.ID, nil
+	})
+	defer agent.RegisterHarnessSpellLoader(prev)
+	result, err := agent.VerifyHarness(context.Background(), "/nonexistent-root", d.ID)
+	if err != nil {
+		return agent.HarnessCheck{Status: agent.HarnessInvalid, Reason: err.Error()}
+	}
+	return result.Hooks
+}
+
+func joinedScripts(hooks []types.HookCommand) string {
+	scripts := make([]string, len(hooks))
+	for i, h := range hooks {
+		scripts[i] = h.Script
+	}
+	return strings.Join(scripts, " ")
 }
 
 // tieredWorkspace is a workspace that also answers the model tiers the render step asks for.
@@ -87,7 +140,7 @@ type tieredWorkspace struct {
 
 func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
 
-func tiersMapping(t *testing.T, hosts map[types.HarnessKey][]string) *types.ModelTierSet {
+func tiersMapping(t *testing.T, hosts map[string][]string) *types.ModelTierSet {
 	t.Helper()
 	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"small", "large"}, Default: 1,
@@ -106,74 +159,71 @@ func tieredContext(t *testing.T, set *types.ModelTierSet) context.Context {
 	return types.WithWorkspace(context.Background(), tieredWorkspace{WorkspaceRepository: ws, set: set})
 }
 
-// TestHarnessSpellsOfferTheCheapestTierModel pins what the render step hands harness_agents:
-// the alias the workspace's tiers map for THIS harness at rank 0, and no model key when no
-// alias resolves, so a spell never invents a model.
+// modelEcho renders each shipped agent as a file holding the model it was handed.
+const modelEcho = `export fun mgs_renderAgents(agents: [ShippedAgent]) > [AgentFile] {
+    return agents.map(fun (index: int, a: ShippedAgent) > AgentFile => AgentFile{path = "{a.name}.md", content = "model={a.model}"});
+}
+`
+
+// TestHarnessSpellsOfferTheCheapestTierModel pins what the render step hands
+// mgs_renderAgents: the alias the workspace's tiers map for THIS harness at rank 0, and no
+// model when no alias resolves, so a spell never invents a model.
 func TestHarnessSpellsOfferTheCheapestTierModel(t *testing.T) {
 	tests := []struct {
 		name string
 		ctx  func(t *testing.T, id string) context.Context
-		want any
+		want string
 	}{
 		{"the harness's alias for the cheapest tier", func(t *testing.T, id string) context.Context {
-			return tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: id}: {"tiny", "big"}, {ID: "other"}: {"mini", "max"}}))
+			return tieredContext(t, tiersMapping(t, map[string][]string{id: {"tiny", "big"}, "other": {"mini", "max"}}))
 		}, "tiny"},
-		{"no workspace", func(*testing.T, string) context.Context { return context.Background() }, nil},
-		{"tiers turned off", func(t *testing.T, _ string) context.Context { return tieredContext(t, nil) }, nil},
+		{"no workspace", func(*testing.T, string) context.Context { return context.Background() }, ""},
+		{"tiers turned off", func(t *testing.T, _ string) context.Context { return tieredContext(t, nil) }, ""},
 		{"a declaration that maps another harness", func(t *testing.T, _ string) context.Context {
-			return tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "other"}: {"mini", "max"}}))
-		}, nil},
+			return tieredContext(t, tiersMapping(t, map[string][]string{"other": {"mini", "max"}}))
+		}, ""},
 		{"a declaration that maps no harness", func(t *testing.T, _ string) context.Context {
 			return tieredContext(t, tiersMapping(t, nil))
-		}, nil},
+		}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var offered []any
-			id := register.Spell(t, "modelled-test", spells.WithInvoker(
-				func(_ context.Context, req spells.InvokeRequest) (any, error) {
-					switch req.Target {
-					case spells.HarnessConfigContract:
-						return map[string]any{"path": ""}, nil
-					case spells.HarnessAgentsContract:
-						offered, _ = req.Params["agents"].([]any)
-					}
-					return nil, nil
-				}))
-			_, _, ok, err := loadHarnessFromSpell(tt.ctx(t, id), id)
+			id := harnessSource(t, "modelled-test", modelEcho)
+			d, _, ok, err := loadHarnessFromSpell(tt.ctx(t, id), id)
 			require.NoError(t, err)
 			require.True(t, ok)
-			require.Len(t, offered, 1)
-			params := offered[0].(map[string]any)
-			assert.NotContains(t, params, "class")
-			if tt.want == nil {
-				assert.NotContains(t, params, "model")
-				return
-			}
-			assert.Equal(t, tt.want, params["model"])
+			assert.Equal(t, []types.AgentFile{{Path: "magus-scout.md", Content: "model=" + tt.want}}, d.Agents)
 		})
 	}
 }
 
-// TestHarnessSpellWithoutTheAgentsOpGetsNoAgents pins that harness_agents is optional: a spell
-// that does not export it loads, ships no agent files, and was still offered the shipped
-// agents in Params.
-func TestHarnessSpellWithoutTheAgentsOpGetsNoAgents(t *testing.T) {
-	var offered []any
-	id := register.Spell(t, "agentless-test", spells.WithInvoker(
-		func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.HarnessConfigContract:
-				return map[string]any{"path": ""}, nil
-			case spells.HarnessAgentsContract:
-				offered, _ = req.Params["agents"].([]any)
-			}
-			return nil, nil
-		}))
-	d := loadShippedHarness(t, id)
+// A spell that exports only the config loads as a harness whose host lacks every other
+// capability: no agents, no MCP, no tools, no prompts, no models.
+func TestHarnessSpellWithOnlyItsConfigLacksEveryOtherCapability(t *testing.T) {
+	d := loadShippedHarness(t, harnessSource(t, "bare-test", ""))
 	assert.Empty(t, d.Agents)
-	require.Len(t, offered, 1)
-	assert.Equal(t, "magus-scout", offered[0].(map[string]any)["name"])
+	assert.Empty(t, d.Prompts)
+	assert.Empty(t, d.Models)
+	assert.Nil(t, d.MCP)
+	assert.Nil(t, d.Tools)
+	assert.Zero(t, d.Limits)
+}
+
+// A spell that does not export mgs_getHarnessConfig is not a harness, and the loader says
+// so with a miss rather than an error.
+func TestASpellWithoutTheConfigIsNoHarness(t *testing.T) {
+	id := register.Spell(t, "not-a-harness-test", spells.WithFuncSource(`export fun mgs_getName() > str { return "x"; }`))
+	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+// An answer of the wrong shape is refused strictly, naming the function.
+func TestHarnessFunctionsDecodeStrictly(t *testing.T) {
+	id := register.Spell(t, "malformed-test", spells.WithFuncSource(`export fun mgs_getHarnessConfig() > any { return {"path": 3}; }`))
+	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
+	require.ErrorIs(t, err, errMalformedAnswer)
+	assert.Contains(t, err.Error(), "mgs_getHarnessConfig")
 }
 
 // TestHarnessPromptsAskBeforeAHumanOnlyRun pins that the native prompts of the hosts whose
@@ -217,47 +267,15 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 	assert.NotContains(t, bare.Prompts[0].Content, `"run"`, "no workspace on the context, no run prompt")
 }
 
-func TestDecodeHarnessJSONReadsAListFieldForField(t *testing.T) {
-	var d agent.HarnessDescriptor
-
-	require.NoError(t, decodeHarnessJSON([]any{
-		map[string]any{"path": ".cursor/agents/a.md", "content": "body\n"},
-	}, &d.Agents))
-
-	assert.Equal(t, []agent.HarnessAgentFile{{Path: ".cursor/agents/a.md", Content: "body\n"}}, d.Agents)
-}
-
-func TestDecodeHarnessJSONRefusesAMapForAListField(t *testing.T) {
-	var d agent.HarnessDescriptor
-
-	assert.Error(t, decodeHarnessJSON(map[string]any{"path": "a.md"}, &d.Agents))
-	assert.Empty(t, d.Agents)
-}
-
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
 // against, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000},
+	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000},
 		loadShippedHarness(t, "claude-code").Limits)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
 		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
 	}
-}
-
-func TestDecodeHarnessJSONReadsAMapField(t *testing.T) {
-	var d agent.HarnessDescriptor
-
-	require.NoError(t, decodeHarnessJSON(map[string]any{"foreground_default_ms": int64(1000), "foreground_max_ms": 2000.0}, &d.Limits))
-
-	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 1000, ForegroundMaxMs: 2000}, d.Limits)
-}
-
-func TestDecodeHarnessJSONRefusesAListForAMapField(t *testing.T) {
-	var d agent.HarnessDescriptor
-
-	assert.Error(t, decodeHarnessJSON([]any{}, &d.Limits))
-	assert.Zero(t, d.Limits)
 }
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
@@ -275,74 +293,46 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	}
 }
 
-func TestDecodeHarnessModelsReadsSnakeCaseRows(t *testing.T) {
-	got, err := decodeHarnessModels([]any{map[string]any{
-		"id": "m-1", "window": 200000.0, "input": 1.5, "cache_write_5m": 2.0, "cache_write_1h": 3.0,
-		"cache_read": 0.1, "output": 7.0, "price_step": 100000.0, "step_factor": 2.0,
+func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
+	got, tiers, err := validateModelRows([]types.ModelRow{{
+		ID: "m-1", Tier: "standard", Alias: "mid", Window: 200000,
+		Price: types.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7},
+		Step:  types.PriceStep{Above: 100000, Multiplier: 2},
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
+	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "standard", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
 		CacheRead: 0.1, Output: 7, LongContext: &types.PriceStep{Above: 100000, Multiplier: 2}}}, got)
-}
+	assert.Equal(t, map[string]string{"standard": "m-1"}, tiers)
 
-func TestDecodeHarnessModelsRefusesAHalfStep(t *testing.T) {
-	for name, row := range map[string]map[string]any{
-		"step without factor": {"id": "m-1", "price_step": 100000.0},
-		"factor without step": {"id": "m-1", "step_factor": 2.0},
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := decodeHarnessModels([]any{row})
-
-			assert.EqualError(t, err, "row 1 (m-1) sets one of price_step and step_factor without the other")
-		})
-	}
-}
-
-func TestDecodeHarnessModelsReadsATierAndItsAlias(t *testing.T) {
-	got, err := decodeHarnessModels([]any{map[string]any{"id": "m-1", "tier": "standard", "alias": "mid"}})
-
+	_, tiers, err = validateModelRows([]types.ModelRow{{ID: "m-1"}})
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "standard", Alias: "mid"}}, got)
+	assert.Nil(t, tiers, "no row names a tier")
 }
 
-func TestDecodeHarnessModelsRefusesABadAlias(t *testing.T) {
+func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 	tests := map[string]struct {
-		rows []any
+		rows []types.ModelRow
 		want string
 	}{
-		"alias without a tier": {
-			rows: []any{map[string]any{"id": "m-1", "alias": "mid"}},
-			want: "row 1 (m-1) sets alias mid without a tier, so the alias names no tier",
-		},
-		"one alias on two rows": {
-			rows: []any{
-				map[string]any{"id": "m-1", "tier": "standard", "alias": "mid"},
-				map[string]any{"id": "m-2", "tier": "economy", "alias": "mid"},
-			},
-			want: "rows m-1 and m-2 both declare alias mid",
-		},
+		"step without multiplier": {[]types.ModelRow{{ID: "m-1", Step: types.PriceStep{Above: 100000}}},
+			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
+		"multiplier without step": {[]types.ModelRow{{ID: "m-1", Step: types.PriceStep{Multiplier: 2}}},
+			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
+		"alias without a tier": {[]types.ModelRow{{ID: "m-1", Alias: "mid"}},
+			"row 1 (m-1) sets alias mid without a tier, so the alias names no tier"},
+		"one alias on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "standard", Alias: "mid"}, {ID: "m-2", Tier: "economy", Alias: "mid"}},
+			"rows m-1 and m-2 both declare alias mid"},
+		"one tier on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "economy"}, {ID: "m-2", Tier: "economy"}},
+			"rows m-1 and m-2 both declare tier economy"},
+		"a row without an id": {[]types.ModelRow{{Window: 1000}}, "row 1 has no id"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := decodeHarnessModels(tt.rows)
-
+			_, _, err := validateModelRows(tt.rows)
 			assert.EqualError(t, err, tt.want)
 		})
 	}
-}
-
-func TestDecodeHarnessModelsRefusesARowWithoutAnID(t *testing.T) {
-	_, err := decodeHarnessModels([]any{map[string]any{"window": 1000.0}})
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "row 1 has no id")
-}
-
-func TestDecodeHarnessModelsRefusesAMap(t *testing.T) {
-	_, err := decodeHarnessModels(map[string]any{"id": "m-1"})
-
-	assert.Error(t, err)
 }
 
 // The Claude Code rows name the exact model id each shipped tier runs on, and each is a row
@@ -351,9 +341,9 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	d := loadShippedHarness(t, "claude-code")
 	drv, ok := project.DefaultSpellRegistry().Lookup("claude-code")
 	require.True(t, ok)
-	resp, err := drv.Invoke(context.Background(), spells.InvokeRequest{Target: spells.HarnessModelsContract})
+	rows, _, err := callHarness[[]types.ModelRow](context.Background(), drv, "mgs_listModels")
 	require.NoError(t, err)
-	tiers, err := decodeHarnessTierModels(resp.Data)
+	_, tiers, err := validateModelRows(rows)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{
 		"economy": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "principal": "claude-opus-5-5",
@@ -371,7 +361,7 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 // that declare tiers without the cheapest one are an error naming the row to add, never a
 // render with no model.
 func TestCheapestTierModelReadsTheHarnessRows(t *testing.T) {
-	ctx := tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "other"}: {"mini", "max"}}))
+	ctx := tieredContext(t, tiersMapping(t, map[string][]string{"other": {"mini", "max"}}))
 
 	model, err := cheapestTierModel(ctx, "rowed", map[string]string{"small": "m-small-1", "large": "m-large-1"})
 	require.NoError(t, err)
@@ -383,19 +373,11 @@ func TestCheapestTierModelReadsTheHarnessRows(t *testing.T) {
 
 	_, err = cheapestTierModel(ctx, "rowed", map[string]string{"large": "m-large-1"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `add "tier": "small"`)
+	assert.Contains(t, err.Error(), `add tier = "small"`)
 	assert.Contains(t, err.Error(), "magusfile.buzz:3")
 
-	mapped := tieredContext(t, tiersMapping(t, map[types.HarnessKey][]string{{ID: "rowed"}: {"tiny", "big"}}))
+	mapped := tieredContext(t, tiersMapping(t, map[string][]string{"rowed": {"tiny", "big"}}))
 	model, err = cheapestTierModel(mapped, "rowed", map[string]string{"small": "m-small-1"})
 	require.NoError(t, err)
 	assert.Equal(t, "tiny", model, "the workspace's own mapping wins over the harness rows")
-}
-
-func TestDecodeHarnessTierModelsRefusesATierTwice(t *testing.T) {
-	_, err := decodeHarnessTierModels([]any{
-		map[string]any{"id": "m-1", "tier": "economy"},
-		map[string]any{"id": "m-2", "tier": "economy"},
-	})
-	assert.EqualError(t, err, "rows m-1 and m-2 both declare tier economy")
 }

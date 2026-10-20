@@ -255,8 +255,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
   "schema_version": 2,
   "id": "flat",
   "display": {"name": "Flat"},
-  "config": {"path": "flat/hooks.json"},
-  "config_defaults": {"version": 1},
+  "config": {"path": "flat/hooks.json", "defaults": {"version": 1}},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
     {"path": ["hooks", "beforeShell"], "entries": [{"command": "./magus buzz -s cursor-hook.buzz"}]},
@@ -293,8 +292,7 @@ func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
   "schema_version": 2,
   "id": "envhost",
   "display": {"name": "Env Host"},
-  "config": {"path": "envhost/settings.json"},
-  "config_defaults": {"env": {"MAGUS_LOG_SILENT": "true"}},
+  "config": {"path": "envhost/settings.json", "defaults": {"env": {"MAGUS_LOG_SILENT": "true"}}},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
     {"path": ["hooks"], "entries": [{"command": "magus buzz -s magus-command.buzz"}]}
@@ -681,9 +679,9 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			SchemaVersion: harnessSchemaVersion,
 			ID:            "test-host",
 			Display:       HarnessDisplay{Name: "Spell"},
-			Config:        HarnessConfig{Path: "spell/hooks.json"},
-			Skills:        HarnessSkills{Paths: []string{".agents/skills"}, Form: FormFull},
-			ManagedEntries: []HarnessEntries{{
+			Config:        types.HarnessConfig{Path: "spell/hooks.json"},
+			Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormFull},
+			ManagedEntries: []types.ManagedEntries{{
 				Path:    []string{"hooks", "before"},
 				Entries: []map[string]any{{"command": "magus shell # magus:harness"}},
 			}},
@@ -834,8 +832,8 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
 // body or a JSON key, inside the workspace.
 func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: HarnessSkills{Form: "both"}}
-	for name, prompt := range map[string]HarnessPrompt{
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	for name, prompt := range map[string]types.Prompt{
 		"no path":      {Content: "x"},
 		"escapes":      {Path: "../x", Content: "x"},
 		"neither body": {Path: "x"},
@@ -843,7 +841,7 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 		"key no value": {Path: "x", Key: []string{"k"}},
 	} {
 		d := base
-		d.Prompts = []HarnessPrompt{prompt}
+		d.Prompts = []types.Prompt{prompt}
 		assert.Error(t, validateHarnessDescriptor(d), name)
 	}
 }
@@ -1052,8 +1050,8 @@ func TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed(t *testing.T) {
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
 // inside a workspace file.
 func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: HarnessSkills{Form: "both"}}
-	for name, setting := range map[string]HarnessSetting{
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: types.HarnessSkills{Form: "both"}}
+	for name, setting := range map[string]types.Setting{
 		"no path":   {Key: []string{"k"}, Value: true},
 		"escapes":   {Path: "../x", Key: []string{"k"}, Value: true},
 		"no key":    {Path: "x", Value: true},
@@ -1061,7 +1059,7 @@ func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
 		"no value":  {Path: "x", Key: []string{"k"}},
 	} {
 		d := base
-		d.Settings = []HarnessSetting{setting}
+		d.Settings = []types.Setting{setting}
 		assert.Error(t, validateHarnessDescriptor(d), name)
 	}
 }
@@ -1466,8 +1464,8 @@ func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 }
 
 func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: HarnessSkills{Form: "both"}}
-	for name, file := range map[string]HarnessAgentFile{
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	for name, file := range map[string]types.AgentFile{
 		"no path":      {Content: "x"},
 		"absolute":     {Path: "/etc/agents/a.md", Content: "x"},
 		"escapes root": {Path: "../a.md", Content: "x"},
@@ -1475,17 +1473,17 @@ func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := base
-			d.Agents = []HarnessAgentFile{file}
+			d.Agents = []types.AgentFile{file}
 			assert.Error(t, validateHarnessDescriptor(d))
 		})
 	}
 	ok := base
-	ok.Agents = []HarnessAgentFile{{Path: ".a/agents/a.md", Content: "x"}}
+	ok.Agents = []types.AgentFile{{Path: ".a/agents/a.md", Content: "x"}}
 	assert.NoError(t, validateHarnessDescriptor(ok))
 }
 
 func foregroundLimits(ms int64) HarnessDescriptor {
-	return HarnessDescriptor{Limits: HarnessLimits{ForegroundMaxMs: ms}}
+	return HarnessDescriptor{Limits: types.Limits{ForegroundMaxMs: ms}}
 }
 
 func TestShortestForegroundMaxPicksTheShortestDeclared(t *testing.T) {
@@ -1634,4 +1632,29 @@ func TestHarnessScoutIsReadOnlyByConfigWhereTheHostHasAKnob(t *testing.T) {
 	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ntools: Read, Grep, Glob, Bash\n")
 	assert.NotContains(t, read(".opencode/agents/magus-scout.md"), "bash:",
 		"the scout runs read-only magus commands, so bash stays at the session's setting")
+}
+
+// The hooks a spell lists are checked against the entries it renders; a harness with no
+// config path has no entries, and says the check was skipped rather than passing it.
+func TestVerifyHarnessHooksHoldsTheHookListToTheEntries(t *testing.T) {
+	check := types.HookCommand{Event: "PostToolUse", Matcher: "Write", Script: "magus-buzz-check", Flags: []string{"--agent-name", "h"}}
+	entries := []types.ManagedEntries{{Path: []string{"hooks", "PostToolUse"}, Entries: []map[string]any{{
+		"matcher": "Write",
+		"hooks":   []any{map[string]any{"command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name h"}},
+	}}}}
+	wired := HarnessDescriptor{ID: "h", Config: types.HarnessConfig{Path: "h.json"}, ManagedEntries: entries, Hooks: []types.HookCommand{check}}
+	assert.Equal(t, HarnessCheck{Status: HarnessVerified}, verifyHarnessHooks(wired))
+
+	drifted := wired
+	drifted.Hooks = []types.HookCommand{check, {Event: "Stop", Script: "magus-checkpoint"}}
+	got := verifyHarnessHooks(drifted)
+	assert.Equal(t, HarnessInvalid, got.Status)
+	assert.Contains(t, got.Reason, "a Stop hook (no matcher) running magus-checkpoint.buzz")
+
+	skillsOnly := HarnessDescriptor{ID: "opencode", Hooks: []types.HookCommand{check}}
+	got = verifyHarnessHooks(skillsOnly)
+	assert.Equal(t, HarnessCheck{Status: HarnessSkipped, Reason: "skipped: opencode declares no config path"}, got)
+	assert.False(t, got.Failing(), "a skipped check did not run, so it fails nothing")
+
+	assert.Equal(t, HarnessCheck{}, verifyHarnessHooks(HarnessDescriptor{ID: "none"}), "no hooks, nothing to check")
 }

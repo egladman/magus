@@ -284,7 +284,7 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 // and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
 // bare imports. The result is one superset, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
-// handler op path (callBuzzSpellFunc), so both paths stay in lock-step.
+// function path (execSpellSource), so both paths stay in lock-step.
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterModules(ctx, sess)
 	RegisterSpellSourceModules(sess)
@@ -298,6 +298,7 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 //     modules because a plain script needs none of these until it imports a spell
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
+//   - magus/harness: the quoting and hook-command builders a harness spell renders with.
 //   - magus/lint: the Finding a Buzz lint rule returns.
 //   - magus: spell.MagusDeclSource, the declarations for the magus namespace itself. The
 //     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
