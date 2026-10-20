@@ -2360,9 +2360,9 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
 		}
-		// A per-person plugin install (claude-code-mod) cannot be fixed in the tree or
-		// on a CI runner: advise, and leave `magus agent harness verify` as the hard
-		// check a person runs at their keyboard. Tool rows and hook wiring stay Fail.
+		// A per-person plugin install cannot be fixed in the tree or on a CI runner:
+		// advise, and leave `magus agent harness verify` as the hard check a person
+		// runs at their keyboard. Tool rows and hook wiring stay Fail.
 		if verification.Plugin.Failing() {
 			advice = append(advice, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
 		}

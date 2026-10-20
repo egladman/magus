@@ -389,13 +389,14 @@ func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed 
 }
 
 func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T) {
-	t.Run("enabled and missing -> fail naming the install line", func(t *testing.T) {
+	t.Run("enabled and missing -> advice naming the install line", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.WriteExecutable("magus", denyingProbeScript)
 		writeModHarness(t, w, true, "")
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "mod-host")
-		require.Equal(t, types.CheckFail, c.Status)
+		// Personal plugin installs cannot be fixed in CI; doctor advises, verify still fails.
+		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, strings.Join(c.Details, "\n"), "/plugin install magus --marketplace egladman/magus")
 	})
 
