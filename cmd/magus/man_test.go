@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
@@ -27,7 +28,20 @@ func TestManInstallRejectsUnknownInput(t *testing.T) {
 
 func TestDefaultManDir(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/tmp/magus-data")
-	assert.Equal(t, "/tmp/magus-data/man/man1", defaultManDir())
+	got, err := defaultManDir()
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/magus-data/man/man1", got)
+}
+
+func TestManInstallFailsWithNoHome(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "plan9" {
+		t.Skip("the home directory is not read from HOME here")
+	}
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+	_, err := defaultManDir()
+	require.Error(t, err)
+	assert.ErrorContains(t, manCmd([]string{"install"}), "pass --dir")
 }
 
 func TestManUsage(t *testing.T) {
