@@ -7,6 +7,7 @@ import "../../../hack/magusfile/advisories" as advisories;
 import "sources";
 import "holdout";
 import "pairs";
+import "runlog";
 
 import "magus/spell/go";
 
@@ -28,7 +29,8 @@ magus\project({
 });
 
 // go-xla's PJRT binding is cgo; magus runs Go with cgo off unless a target turns it on.
-final cgo = {"CGO_ENABLED": "1"};
+// libs/embed decodes with encoding/json/v2, which needs GOEXPERIMENT=jsonv2.
+final cgo = {"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"};
 
 export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
 
@@ -47,7 +49,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // No XLA, no downloads.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["go-test"](ctx, {"args": ["./..."] + args});
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."] + args});
 }
 
 // Fails on a vulnerable symbol this module calls.
@@ -89,13 +91,15 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 // Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
 // figures, and CoRNStack rows) and the forced tokens under the cache root's training/, then
 // the vocabulary's token texts beside them. FineWeb-Edu is left out: the module has no
-// parquet reader. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
+// parquet reader. The texts run is appended to runs.jsonl. Args after -- go to `embed
+// vocab`, e.g. `-- -size 16000`.
 export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final dir = fs\join(cache, name: "training");
-    go["go-run"](ctx, {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
         "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
-    go["go-run"](ctx, {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
+    runlog\appendTexts(dir, target: "runs.jsonl");
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
         "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl")] + args});
 }
 
@@ -116,7 +120,7 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
     foreach (name in ["tokens.jsonl", "texts.jsonl"]) {
         final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "training", name), "-model", model];
         go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
-        go["go-run"](ctx, {"args": ["./cmd/embed", "record", "-out", "runs.jsonl"] + run});
+        runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "runs.jsonl");
     }
 }
 

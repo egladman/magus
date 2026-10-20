@@ -2,16 +2,13 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/hack/embed/teacher"
+	"github.com/egladman/magus/libs/embed/train/teacher"
 )
 
 func TestChunks(t *testing.T) {
@@ -123,76 +120,4 @@ func TestForcedReportCountsHoldoutOnlyWords(t *testing.T) {
 
 	_, err = countForced(map[string]bool{"--": true}, texts, holdout)
 	require.ErrorContains(t, err, "yields no token")
-}
-
-func TestRecord(t *testing.T) {
-	cache := t.TempDir()
-	texts := filepath.Join(cache, "training", "texts.jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(texts), 0o755))
-	require.NoError(t, os.WriteFile(texts, []byte(`{"id":"a","text":"x"}`+"\n"+`{"id":"b","text":"y"}`+"\n"+`{"id":"c","text":"z"}`+"\n"), 0o644))
-	digest, err := teacher.FileSHA256(texts)
-	require.NoError(t, err)
-
-	spec := teacher.RunSpec{Model: "M", Revision: "r1", MaxLen: 256, Dim: 4, ShardSize: 2, TextsSHA256: digest}
-	dir := filepath.Join(cache, "teacher", "M", spec.Key())
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	manifest := filepath.Join(dir, "manifest.jsonl")
-	writeRecords(t, manifest,
-		teacher.Record{Kind: "run", Spec: &spec},
-		teacher.Record{Kind: "shard", Shard: 0, Rows: 2, Tokens: 10, Seconds: 1.5},
-	)
-	out := filepath.Join(t.TempDir(), "runs.jsonl")
-	args := []string{"-cache", cache, "-model", "M", "-texts", texts, "-max-len", "256", "-out", out}
-
-	require.NoError(t, runRecord(args))
-	require.NoError(t, runRecord(args), "an unchanged manifest is not recorded twice")
-	lines := readRunLines(t, out)
-	require.Len(t, lines, 1)
-	require.Equal(t, runLine{
-		Kind: "teacher", Run: spec.Key(), Teacher: "M", Revision: "r1", TextsSHA256: digest,
-		TextsFile: "training/texts.jsonl", MaxLen: 256, ShardSize: 2, Shards: 1, Texts: 3, Rows: 2,
-		Tokens: 10, Seconds: 1.5, Manifest: "teacher/M/" + spec.Key() + "/manifest.jsonl",
-		ManifestSHA256: lines[0].ManifestSHA256,
-	}, lines[0])
-
-	writeRecords(t, manifest,
-		teacher.Record{Kind: "run", Spec: &spec},
-		teacher.Record{Kind: "shard", Shard: 0, Rows: 2, Tokens: 10, Seconds: 1.5},
-		teacher.Record{Kind: "shard", Shard: 1, Rows: 1, Tokens: 4, Seconds: 0.5},
-		teacher.Record{Kind: "shard", Shard: 1, Rows: 1, Tokens: 5, Seconds: 0.25},
-	)
-	require.NoError(t, runRecord(args))
-	lines = readRunLines(t, out)
-	require.Len(t, lines, 2)
-	last := lines[1]
-	require.True(t, last.Complete)
-	require.Equal(t, []int{2, 3, 15}, []int{last.Shards, last.Rows, last.Tokens}, "a re-encoded shard counts once, by its later record")
-	require.InDelta(t, 1.8, last.Seconds, 1e-9)
-
-	err = runRecord([]string{"-cache", cache, "-model", "M", "-texts", texts, "-max-len", "512", "-out", out})
-	require.ErrorContains(t, err, "0 M runs")
-}
-
-func writeRecords(t *testing.T, path string, records ...teacher.Record) {
-	t.Helper()
-	var b strings.Builder
-	for _, r := range records {
-		line, err := json.Marshal(r)
-		require.NoError(t, err)
-		b.Write(append(line, '\n'))
-	}
-	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0o644))
-}
-
-func readRunLines(t *testing.T, path string) []runLine {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var out []runLine
-	for line := range strings.Lines(string(b)) {
-		var r runLine
-		require.NoError(t, json.Unmarshal([]byte(line), &r))
-		out = append(out, r)
-	}
-	return out
 }

@@ -20,9 +20,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/hack/embed/distill"
-	"github.com/egladman/magus/hack/embed/teacher"
-	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/embed/train/distill"
+	"github.com/egladman/magus/libs/embed/train/teacher"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -34,7 +34,6 @@ commands:
   vocab           build the vocabulary and write its token texts for a teacher run
   teacher         embed a texts file with a teacher model into resumable, content-addressed shards
   teacher-parity  check the Go teacher against the reference vectors and report texts/s
-  record          append a teacher run's totals to runs.jsonl
   train           distill, train and quantize the table from finished teacher runs
   bench           write CodeRankEmbed's runs over a subset the external benchmark exported
 
@@ -57,8 +56,6 @@ func main() {
 		err = runTeacher(os.Args[2:])
 	case "teacher-parity":
 		err = runParity(os.Args[2:])
-	case "record":
-		err = runRecord(os.Args[2:])
 	case "train":
 		err = runTrain(os.Args[2:])
 	case "bench":
@@ -77,7 +74,7 @@ func main() {
 // mix and the first shard's rate projects the run.
 const textsSalt = "embed-texts/v1:"
 
-// sourceRecord is one line of hack/embed/gen/sources.jsonl, as far as texts reads it.
+// sourceRecord is one line of libs/embed/train/gen/sources.jsonl, as far as texts reads it.
 type sourceRecord struct {
 	Kind      string   `json:"kind"`
 	Path      string   `json:"path"`
@@ -117,7 +114,7 @@ func excludedReason(r sourceRecord) string {
 func runTexts(args []string) error {
 	fs := flag.NewFlagSet("texts", flag.ExitOnError)
 	sourcesPath := fs.String("sources", "gen/sources.jsonl", "embed-mine's source manifest")
-	root := fs.String("root", "../..", "the repository the manifest's paths are relative to")
+	root := fs.String("root", "../../..", "the repository the manifest's paths are relative to")
 	rev := fs.String("rev", "", "the commit to read files at; default: the last commit that changed -sources")
 	cache := fs.String("cache", cacheRoot(), "the cache root the manifest's input paths are relative to")
 	out := fs.String("out", "", "the directory to write texts.jsonl and forced.txt to; default <cache>/training")
@@ -127,7 +124,6 @@ func runTexts(args []string) error {
 	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>.jsonl of {\"id\", \"text\"} lines per set: every query and gold document")
 	noEval := fs.String("no-eval", "", "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl")
 	common := fs.Int("common", 10, "a 13-word window more eval texts than this hold is boilerplate and drops nothing")
-	runsPath := fs.String("runs", "runs.jsonl", "the runs log the decontamination counts are appended to")
 	_ = fs.Parse(args)
 	if *out == "" {
 		*out = filepath.Join(*cache, "training")
@@ -177,12 +173,13 @@ func runTexts(args []string) error {
 	if err := mix.addCornstack(*cache, skipped, *ratio, *maxBytes); err != nil {
 		return err
 	}
-	return writeTextsArtifacts(&mix, records, files, repo, *rev, *cache, *out, *runsPath)
+	return writeTextsArtifacts(&mix, records, files, repo, *rev, *cache, *out)
 }
 
-// writeTextsArtifacts persists a completed text mix and records the run after every input
-// text has passed decontamination.
-func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string][]byte, repo int, rev, cache, out, runsPath string) error {
+// writeTextsArtifacts persists a completed text mix after every input text has passed
+// decontamination, and writes the run's runs.jsonl line to texts-run.json beside it for
+// the vocab target to append.
+func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string][]byte, repo int, rev, cache, out string) error {
 	d := mix.decontam
 	sortByHash(mix.texts)
 	digest, err := mix.write(out)
@@ -206,7 +203,11 @@ func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string]
 		Kind: "texts", Rev: rev, TextsSHA256: digest, TextsFile: relativize(cache, filepath.Join(out, "texts.jsonl")),
 		Texts: len(mix.texts), Excluded: mix.excluded, Decontam: d.report, Forced: forced,
 	}
-	if err := appendLine(runsPath, line); err != nil {
+	b, err := json.Marshal(line)
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(filepath.Join(out, "texts-run.json"), append(b, '\n')); err != nil {
 		return err
 	}
 	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
@@ -218,7 +219,7 @@ func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string]
 	return nil
 }
 
-// textsLine is the line a texts run appends to runs.jsonl.
+// textsLine is the runs.jsonl line a texts run writes to texts-run.json.
 type textsLine struct {
 	Kind        string         `json:"kind"`
 	Rev         string         `json:"rev"`
@@ -270,7 +271,7 @@ func countForced(forced map[string]bool, texts []teacher.Text, holdout [][]byte)
 
 // markTokens sets found[tok] for every token of body that wanted holds.
 func markTokens(found, wanted map[string]bool, body string) {
-	for _, tok := range textrank.Tokens(body) {
+	for _, tok := range embed.Tokens(body) {
 		if wanted[tok] {
 			found[tok] = true
 		}
@@ -359,22 +360,6 @@ func writeDropped(path string, dropped []droppedText) error {
 		}
 	}
 	return writeAtomic(path, buf.Bytes())
-}
-
-func appendLine(path string, v any) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
 }
 
 // textMix is the training texts as texts assembles them, the forced tokens, and the
@@ -734,146 +719,6 @@ func readCornstack(path, name string, rows, maxBytes int, d *decontaminator) ([]
 			teacher.Text{ID: id + ":document", Text: doc[0].text})
 	}
 	return out, nil
-}
-
-// runLine is one teacher line of runs.jsonl. Seconds sums the encode time of the shards
-// the manifest holds, across every resume; model load and skipped shards are not in it.
-type runLine struct {
-	Kind           string  `json:"kind"`
-	Run            string  `json:"run"`
-	Teacher        string  `json:"teacher"`
-	Revision       string  `json:"revision"`
-	WeightsSHA256  string  `json:"weights_sha256"`
-	TextsSHA256    string  `json:"texts_sha256"`
-	TextsFile      string  `json:"texts_file"`
-	MaxLen         int     `json:"max_len"`
-	ShardSize      int     `json:"shard_size"`
-	Shards         int     `json:"shards"`
-	Texts          int     `json:"texts"`
-	Rows           int     `json:"rows"`
-	Complete       bool    `json:"complete"`
-	Tokens         int     `json:"tokens"`
-	Seconds        float64 `json:"seconds"`
-	Manifest       string  `json:"manifest"`
-	ManifestSHA256 string  `json:"manifest_sha256"`
-}
-
-// runRecord appends the state of the teacher run that embedded -texts at -max-len to
-// -out. A manifest already recorded byte for byte is not recorded again.
-func runRecord(args []string) error {
-	fs := flag.NewFlagSet("record", flag.ExitOnError)
-	cache := fs.String("cache", cacheRoot(), "the cache root teacher runs live under")
-	model := fs.String("model", "", "the teacher the run used")
-	texts := fs.String("texts", "", "the texts file the run embedded")
-	maxLen := fs.Int("max-len", 0, "the run's token cap")
-	out := fs.String("out", "runs.jsonl", "the runs log to append to")
-	_ = fs.Parse(args)
-	if *model == "" || *texts == "" || *maxLen == 0 {
-		return errors.New("-model, -texts and -max-len are required")
-	}
-	digest, err := teacher.FileSHA256(*texts)
-	if err != nil {
-		return err
-	}
-	n, err := countTexts(*texts)
-	if err != nil {
-		return err
-	}
-	manifests, _ := filepath.Glob(filepath.Join(*cache, "teacher", *model, "*", "manifest.jsonl"))
-	var found []string
-	var line runLine
-	for _, m := range manifests {
-		l, err := summarize(m)
-		if err != nil {
-			return err
-		}
-		if l.TextsSHA256 == digest && l.MaxLen == *maxLen {
-			found, line = append(found, m), l
-		}
-	}
-	if len(found) != 1 {
-		return fmt.Errorf("%d %s runs under %s embedded %s at max-len %d, want 1: %v", len(found), *model, *cache, *texts, *maxLen, found)
-	}
-	line.Texts = n
-	line.Complete = line.Rows == n
-	line.TextsFile = relativize(*cache, *texts)
-	line.Manifest = relativize(*cache, found[0])
-
-	prior, err := os.ReadFile(*out)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	for l := range bytes.Lines(prior) {
-		var r runLine
-		if json.Unmarshal(l, &r) == nil && r.ManifestSHA256 == line.ManifestSHA256 {
-			fmt.Printf("%s: already recorded\n", line.Manifest)
-			return nil
-		}
-	}
-	if err := appendLine(*out, line); err != nil {
-		return err
-	}
-	rate := 0.0
-	if line.Seconds > 0 {
-		rate = float64(line.Tokens) / line.Seconds
-	}
-	fmt.Printf("%s: %d of %d texts in %d shards, %d tokens, %.0fs encoding (%.0f tokens/s); manifest sha256 %s\n",
-		line.Manifest, line.Rows, line.Texts, line.Shards, line.Tokens, line.Seconds, rate, line.ManifestSHA256)
-	return nil
-}
-
-// summarize totals a manifest. A shard encoded twice counts once, by its later record,
-// as readTeacherRun reads it.
-func summarize(manifest string) (runLine, error) {
-	b, err := os.ReadFile(manifest)
-	if err != nil {
-		return runLine{}, err
-	}
-	var spec *teacher.RunSpec
-	shards := map[int]teacher.Record{}
-	for l := range bytes.Lines(b) {
-		var r teacher.Record
-		if err := json.Unmarshal(l, &r); err != nil {
-			return runLine{}, fmt.Errorf("%s: %w", manifest, err)
-		}
-		switch {
-		case spec == nil && r.Kind == "run" && r.Spec != nil:
-			spec = r.Spec
-		case spec != nil && r.Kind == "shard":
-			shards[r.Shard] = r
-		default:
-			return runLine{}, fmt.Errorf("%s: unexpected %q record", manifest, r.Kind)
-		}
-	}
-	if spec == nil {
-		return runLine{}, fmt.Errorf("%s holds no run record", manifest)
-	}
-	line := runLine{
-		Kind: "teacher", Run: spec.Key(), Teacher: spec.Model, Revision: spec.Revision,
-		WeightsSHA256: spec.WeightsSHA256, TextsSHA256: spec.TextsSHA256,
-		MaxLen: spec.MaxLen, ShardSize: spec.ShardSize, Shards: len(shards), ManifestSHA256: sha256Hex(b),
-	}
-	for _, r := range shards {
-		line.Rows += r.Rows
-		line.Tokens += r.Tokens
-		line.Seconds += r.Seconds
-	}
-	line.Seconds = math.Round(line.Seconds*10) / 10
-	return line, nil
-}
-
-func countTexts(path string) (int, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for l := range bytes.Lines(b) {
-		if len(bytes.TrimSpace(l)) > 0 {
-			n++
-		}
-	}
-	return n, nil
 }
 
 // relativize keeps machine paths out of the committed runs log: a path under the cache
