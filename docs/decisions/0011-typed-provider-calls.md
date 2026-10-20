@@ -1,7 +1,7 @@
 ---
 title: "ADR 0011: typed provider calls"
 order: 11
-description: A provider op is a row of one registry, {Op, Req, Resp}. A spell exports it as fun op(target, req) > Resp, the contract check holds it to that signature, and Go calls it through bindings.CallOp, which encodes the request and the Target with generated encoders and decodes the answer strictly. The secret, CI, cache and lifecycle families are on it; review, workspace and the merge queue are not yet.
+description: A provider op is a row of one registry, {Op, Req, Resp}. A spell exports it as fun op(target, req) > Resp, the contract check holds it to that signature, and Go calls it through bindings.CallOp, which encodes the request and the Target with generated encoders and decodes the answer strictly. Every provider family is on it, the merge queue's script included; only the harness ops are not.
 tags: [adr, decision, spells, providers, buzz, boundary, generated]
 status: accepted (in progress)
 date: 2026-10-20
@@ -78,15 +78,21 @@ cache and lifecycle adapters. `callBuzzSpellFunc` now builds its Target with
 
 ### Review, workspace and the merge queue
 
-_Planned._ The review and workspace-provider adapters stay on `Invoke` and `cb` because
-four tests outside this change fake them with Go invokers (`cmd/magus/server_test.go`,
-`internal/handler/diff/{reading,session}_test.go`, `internal/handler/mcp/diff_test.go`,
-`register_test.go`), and a Go invoker has no Buzz source to call. The harness ops stay
-there until the neutral harness contract moves them. The merge queue's script provider
-keeps `toValue`/`fromValue`/`record`: its types live in `internal/queue/types`, whose package
-name collides with `types` in the encoder generator (`buzzValueEmitter.qualify` and
-`markPkg` in `cmd/magus-utils/bindings.go` assume `types` or `spells`). Each moves onto
-`CallOp` (the queue onto `provider.call`, with no Target) once those files are in reach.
+_Done._ The review and workspace-provider adapters call `CallOp`; `decodeReviewTarget`,
+`decodeReviewComment`, `decodeProvidedProject` and the `strField` readers are gone. Their
+Go-invoker test fakes became Buzz sources, most through `register.ReviewSpell`. Only the
+harness ops still reach `callBuzzSpellFunc`, until the neutral harness contract moves
+them.
+
+The merge queue's script provider calls `provider.call`, with no Target, through
+`providerops.Queue*` values; `toValue`, `fromValue`, `record` and `field` are gone. The
+generator learned a second package named `types` by import path: `boundaryPackages` in
+`cmd/magus-utils/bindings.go` gives `internal/queue/types` the alias `queuetypes` and the
+prefix `Queue`, which its encoders, decoders and Buzz mirrors carry. Queue rows go to
+`decode.QueueFuncs`, never `ProviderFuncs`, so the spell contract check never holds a
+spell's own `describe` or `mark` to them. Where a zero value would admit what a provider
+meant to refuse (a change's `fork`, an approval count), the decoder requires the member
+(`requiredMembers` in `cmd/magus-utils/boundary_decode.go`).
 
 ### Doctrine checked
 
@@ -123,9 +129,9 @@ name collides with `types` in the encoder generator (`buzzValueEmitter.qualify` 
   encoders, decoders, ProviderOp values and the twelve `magus/spell` mirrors, and
   `./magus` is rebuilt to embed them.
 
-## Open questions
-
-- The review threads op returned the comments that decoded beside an error for the rows
-  that did not. A strict list decode is all or nothing. When review moves onto `CallOp`,
-  decide whether the per-row tolerance is still wanted now that the spell's signature is
-  typed.
+- The review threads op no longer returns the comments that decoded beside an error for
+  the rows that did not: a strict list decode is all or nothing, and one bad row fails the
+  read loudly. The check-review job still reports a merge then, with the count stated
+  unknown and the decode error named.
+- The queue script's answers stay `> any` maps in the GitHub provider; the Go side decodes
+  them strictly, but Buzz does not type-check what the script builds.

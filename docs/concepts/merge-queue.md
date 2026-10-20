@@ -1059,74 +1059,83 @@ the context elsewhere, or when the app was replaced.
 
 ## Providers
 
-A provider is a Buzz script run on an embedded gopherbuzz VM. It exports these
-functions, each taking one record:
+A provider is a Buzz script run on an embedded gopherbuzz VM. It imports
+`mergequeue/types` and exports these functions, each taking one typed request and
+returning one answer:
 
-| Function          | Receives                                                                                           | Returns                                                                                       |
-| ----------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `describe`        | `{base, remote_url, status_context, app, setup_steps}`                                             | `{stack_merge, linear_stacks, methods, required_approvals, queue_label?, committer?, setup?}` |
-| `list_changes`    | `{base, remote_url}`                                                                               | `{changes, merged, unqueued, closed?}`                                                        |
-| `approval_at`     | the change plus `{commit}`                                                                         | `{approved, head, base, method, queued, shared_with, reason?, approved_commit?}`              |
-| `list_green`      | `{base, remote_url, context}`                                                                      | `{changes: [{id, repo, head}]}`                                                               |
-| `post_status`     | the change plus `{commit, context, state, description}`                                            | `true` when recorded                                                                          |
-| `retarget`        | the change plus `{base}`                                                                           | `true` once the change targets `base`                                                         |
-| `merge_change`    | the change plus `{commit, message, app, through}`                                                  | `{merged, by_provider?, reason?}`                                                             |
-| `kick_back`       | the change plus `{commit, code, report, claim, paths, with, candidate_commit, source, reproduce?}` | `true` when both the comment and the removal happened                                         |
-| `mark`            | the change plus `{mark}`: `queued`, `kicked_back`, `needs_regeneration`, or empty for none         | `true` once the change shows that mark and no other                                           |
-| `list_artifacts`  | `{source}`                                                                                         | `{run, complete, artifacts: [{name, url}], headers?}`                                         |
-| `required_checks` | the change plus `{commit}`                                                                         | `{checks: [{name, state}]}`, `state` one of `pending`, `success`, `failure`                   |
+| Function          | Receives                     | Returns                                                                 |
+| ----------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| `describe`        | `QueueDescribeRequest`       | `QueueDescribeResult`: `capabilities` or `refused`, exactly one         |
+| `list_changes`    | `QueueListChangesRequest`    | `QueueChanges`: `changes`, `merged`, `unqueued` and `closed`            |
+| `approval_at`     | `QueueApprovalRequest`       | `QueueApproval`                                                         |
+| `list_green`      | `QueueListGreenRequest`      | `[QueueGreenChange]`                                                    |
+| `post_status`     | `QueueStatusRequest`         | `Ack`, ok when recorded                                                 |
+| `retarget`        | `QueueRetargetRequest`       | `Ack`, ok once the change targets `to`                                  |
+| `merge_change`    | `QueueMergeRequest`          | `QueueMergeAnswer`                                                      |
+| `kick_back`       | `QueueKickBackRequest`       | `Ack`, ok when both the comment and the removal happened                |
+| `mark`            | `QueueMarkRequest`           | `Ack`, ok once the change shows that mark and no other                  |
+| `list_artifacts`  | `QueueListArtifactsRequest`  | `QueueArtifactListing`                                                  |
+| `required_checks` | `QueueRequiredChecksRequest` | `[QueueCheck]`, `state` one of `pending`, `success`, `failure`          |
+| `reviews`         | `QueueReviewsRequest`        | `QueueReviews`: the head and the approving reviews                      |
+| `dismiss_review`  | `QueueDismissReviewRequest`  | `Ack`, ok once the review is dismissed                                  |
 
-All but `list_artifacts` and `required_checks` are required, and a script missing one
-is refused when it opens; `list_artifacts` is required of a provider `apply` follows
-through a run, and without `required_checks` apply reads no required check. Every
-returned key without a `?` is required: a missing one is an error, never a zero value,
-since a missing `fork` or `queued` read as false would admit what the provider meant to
-refuse. `stack_merge` is `sequential` or `atomic`, `methods` the merge methods the
-repository allows, and a change with any other method is refused. `required_approvals`
-is how many approvals the base requires, which `magus queue describe` prints, zero
-included. `queue_label` is the
-prefix of the label that queues a change, followed by its method, for a provider whose
-merge intent is a label; `magus queue describe` prints it for tools such as the pull
-request advisor. `committer` is `{name, email}`, the identity the provider's automation
-pushes as, which commits every update commit unless `--committer` overrides it.
-`setup` is asked for with a `status_context`: `{status_context, credential: {id, name?},
-required_checks: [{context, integration?, events?}], settings: [{name, value, want}],
-app?, steps: [{title, command? or url?}]}`. `credential` is the integration the write
-credential posts statuses as (the `app` named; GitHub's provider requires one),
-`required_checks` what the base requires and the integration each is pinned to, and
-`steps` only when `setup_steps` is true, since they cost reads a job's token may not be
-allowed. A provider that returns no `setup` skips apply's credential check. The `app`
-that `describe` and `merge_change` receive is `--app` exactly as a person gave it, in
-the provider's own notation, which the queue never reads (GitHub's: the app's slug,
-with `:<App ID>` where GitHub hides the app). A `describe` that cannot describe a setup
-for that app returns `{refused: {reason, url, app}}` instead of the capabilities: what
-is missing, where the provider shows it, and the `--app` to ask again with,
-placeholders included (`<slug>`, `q:<id>`). All three are required and non-empty.
-`magus queue describe` prints it with the command that runs it again, that `app` in
-place of the `--app` it was given, and `apply` stops on it.
-`list_artifacts`' `run` is `{repo, head_repo, head_branch, event, branch_event,
-definition}`: the repository the run belongs to and the one whose commit it ran, the
-branch it ran on, what started it, whether that event runs the branch's own copy of the
-definition (`branch_event`; on GitHub only `push` and `workflow_dispatch` do), and the
-definition it ran. `approval_at` must
-name the change's current head, base and merge method, whether it still carries merge
-intent (`queued`), and the other open changes whose head branch is its branch
-(`shared_with`); `approved_commit` names an older commit its approvals stand at, which
-the queue carries over only across a rebase that changed nothing. `list_green` names
-every open change, whatever it targets, whose head carries the status `context` at
-success. `through` lists the changes beneath a stack's top that merge in the same call,
-lowest first, each with the commit it must still be at. `app` is apply's `--app`, the
-app the merge is made as. `merge_change` sets
-`by_provider` when the provider merged the change on its own rather than on this call;
+Each record mirrors a Go type of `internal/queue/types`, and its Buzz declaration, every
+member and its default, is generated into `internal/queue/provider/gen/types/`: read the
+members there. A request that acts on a change carries the change's own members (`id`,
+`repo`, `head`, `base`, `method`, `fork`, ...) beside its own.
+
+All but `list_artifacts`, `required_checks`, `reviews` and `dismiss_review` are required,
+and a script missing one is refused when it opens; `list_artifacts` is required of a
+provider `apply` follows through a run, and without `required_checks` apply reads no
+required check. An answer decodes strictly: a member its type does not declare, or one of
+the wrong kind, is an error naming it. Some members are required as well, and a missing
+one is an error, never a zero value, since a missing `fork` or `queued` read as false
+would admit what the provider meant to refuse: a change's `id`, `repo`, `head`, `base`,
+`method` and `fork`, an approval's `approved`, `head`, `base`, `method`, `queued` and
+`branchSharedWith`, the capabilities' `stackMerge`, `linearStacks`, `methods` and
+`requiredApprovals`, among others (`requiredMembers` in
+`cmd/magus-utils/boundary_decode.go` lists them). An `Ack` that is not ok is a refusal.
+
+`stackMerge` is `sequential` or `atomic`, `methods` the merge methods the repository
+allows, and a change with any other method is refused. `requiredApprovals` is how many
+approvals the base requires, which `magus queue describe` prints, zero included.
+`queueLabel` is the prefix of the label that queues a change, followed by its method, for
+a provider whose merge intent is a label; `magus queue describe` prints it for tools such
+as the pull request advisor. `committer` is the identity the provider's automation pushes
+as, which commits every update commit unless `--committer` overrides it. `setup` is asked
+for with a `statusContext`: `credential` is the integration the write credential posts
+statuses as (the `app` named; GitHub's provider requires one), `requiredChecks` what the
+base requires and the integration each is pinned to, and `steps` only when `setupSteps`
+is true, since they cost reads a job's token may not be allowed. A provider that returns
+no `setup` skips apply's credential check. The `app` that `describe` and `merge_change`
+receive is `--app` exactly as a person gave it, in the provider's own notation, which the
+queue never reads (GitHub's: the app's slug, with `:<App ID>` where GitHub hides the
+app). A `describe` that cannot describe a setup for that app answers `refused` instead of
+the capabilities: what is missing (`reason`), where the provider shows it (`url`), and the
+`--app` to ask again with (`app`), placeholders included (`<slug>`, `q:<id>`). All three
+are required and non-empty. `magus queue describe` prints it with the command that runs
+it again, that `app` in place of the `--app` it was given, and `apply` stops on it.
+`list_artifacts`' `run` names the repository the run belongs to and the one whose commit
+it ran, the branch it ran on, what started it, whether that event runs the branch's own
+copy of the definition (`branchEvent`; on GitHub only `push` and `workflow_dispatch`
+do), and the definition it ran. `approval_at` must name the change's current head, base
+and merge method, whether it still carries merge intent (`queued`), and the other open
+changes whose head branch is its branch (`branchSharedWith`); `approvedCommit` names an
+older commit its approvals stand at, which the queue carries over only across a rebase
+that changed nothing. `list_green` names every open change, whatever it targets, whose
+head carries the status `context` at success. `through` lists the changes beneath a
+stack's top that merge in the same call, lowest first, each with the commit it must still
+be at. `app` is apply's `--app`, the app the merge is made as. `merge_change` sets
+`byProvider` when the provider merged the change on its own rather than on this call;
 left out, it reads as the call's merge. `kick_back`'s `report` is Markdown in the
 queue's own words, every file name in it a code span. `claim` is what the verdict said
 went wrong, at most 4 KiB, and `paths` and `with` may come from a verdict too, whose
 writer ran the change's code: a provider shows these as text only, never as markup.
-`source` is the validation run apply followed, empty for a directory, and `reproduce`,
-`{gate, regenerate}`, is there only when validation decided the kick and apply was given
-`--reproduce-gate`: the hook lines that validate the change again.
-`list_changes`' `unqueued` records carry `repo?` and `mark?`, the mark the change shows
-now, and its `closed` records `{id, repo?}`. Apply marks `queued` every change the plan
+`source` is the validation run apply followed, empty for a directory, and `reproduce` is
+set only when validation decided the kick and apply was given `--reproduce-gate`: the
+hook lines that validate the change again. A `mark` is `queued`, `kicked_back`,
+`needs_regeneration`, or empty for none. `list_changes`' `unqueued` changes carry the mark
+the change shows now. Apply marks `queued` every change the plan
 admitted when it starts, clears that mark from an unqueued change still showing it,
 marks `needs_regeneration` after a `KICK_REGENERATION` kick-back and `kicked_back` after
 any other, and marks none after a merge and on every closed change. Marking none clears
@@ -1145,8 +1154,7 @@ Scripts see Buzz's standard library and a `mergequeue` module whose
 over 32 MiB is an error, never a shorter answer. Its `codeSpan(text)` and
 `codeBlock(text)` return Markdown showing `text` as it is: a code span, Go-quoted when
 `text` holds a character that is not printable, and a fenced block whose fence is longer
-than any run of backticks in `text`. The records a script receives hold
-strings, bools, lists of strings, records and lists of records. `--provider github` is built in;
+than any run of backticks in `text`. `--provider github` is built in;
 `--provider path/to/provider.buzz` loads any other. The GitHub provider reads
 `GITHUB_TOKEN` or `MERGEQUEUE_TOKEN` for its reads and only `MERGEQUEUE_TOKEN` for its
 writes, so the read-only job cannot write by accident. Its listings page to completion or
