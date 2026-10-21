@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -106,43 +107,71 @@ func TestJudgeStopNamesLiveBackgroundTasks(t *testing.T) {
 	off := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleBackgroundLeft): {Decision: builtin.Off}}}
 
 	t.Run("a subagent with a live task is refused, the task named", func(t *testing.T) {
-		v, ok := judgeStop(Dependencies{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(4*time.Hour))
+		v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(4*time.Hour))
 		require.True(t, ok)
 		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
 		assert.Contains(t, v.Reason, "bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE")
 	})
 	t.Run("set to advise, a subagent is advised", func(t *testing.T) {
-		v, ok := judgeStop(advise, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
+		v, ok := judgeStop(advise, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
 		require.True(t, ok)
 		assert.Equal(t, decisionAdvise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("set off, nothing is said", func(t *testing.T) {
-		_, ok := judgeStop(off, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
+		_, ok := judgeStop(off, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
 		assert.False(t, ok)
 	})
 	t.Run("a subagent whose tasks ended stops", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)), started.Add(time.Hour))
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)), started.Add(time.Hour))
 		assert.False(t, ok)
 	})
 	t.Run("a root is advised of an old task, never refused", func(t *testing.T) {
-		v, ok := judgeStop(Dependencies{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge))
+		v, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge))
 		require.True(t, ok)
 		assert.Equal(t, decisionAdvise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("a root's young task is one it waits on", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge-time.Second))
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge-time.Second))
 		assert.False(t, ok)
 	})
 	t.Run("a tool call is not a stop", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, finishedSpawn(t, "scout", "", "", "", "a1b2c3"), started)
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, finishedSpawn(t, "scout", "", "", "", "a1b2c3"), started)
 		assert.False(t, ok)
 	})
 	t.Run("a stop with no readable transcript says nothing", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, subagentStop(t, "a05d44b006f8f68af", "/nonexistent/agent.jsonl"), started)
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", "/nonexistent/agent.jsonl"), started)
 		assert.False(t, ok)
 	})
+}
+
+func TestJudgeStopAdvisesARootOncePerTask(t *testing.T) {
+	searchStarted := bgTime(t, "2026-10-13T11:37:41.120Z")
+	now := searchStarted.Add(4 * time.Hour)
+	said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
+	stop := func(lines ...string) (types.GuardJudgment, bool) {
+		return judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, lines...)), now)
+	}
+
+	_, ok := judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, bgSearchCall, bgSearchResult)), searchStarted.Add(rootBackgroundAge-time.Second))
+	require.False(t, ok, "a young task is not advised")
+
+	v, ok := stop(bgSearchCall, bgSearchResult)
+	require.True(t, ok, "a young task's silence spent nothing")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
+	assert.Equal(t, "magus workspace: a shell command this session ran in the background is still running; stop any nothing waits on:\n"+
+		"  bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c\n"+
+		`    stop it: TaskStop {"task_id": "bc0m5o2bg"}`, v.Context)
+
+	_, ok = stop(bgSearchCall, bgSearchResult)
+	assert.False(t, ok, "the second stop says nothing of the same task")
+
+	v, ok = stop(bgSearchCall, bgSearchResult, movedCall, movedResult)
+	require.True(t, ok, "a task started after the first advice is named")
+	assert.Equal(t, "magus workspace: a shell command this session ran in the background is still running; stop any nothing waits on:\n"+
+		"  bwu4rorj7  started 11:42:00Z, 3h55m41s ago: grep -rhoE 'git (rm|mv)' --include='*.jsonl' .\n"+
+		`    stop it: TaskStop {"task_id": "bwu4rorj7"}`, v.Context)
 }
 
 func TestDenyUnboundedBackground(t *testing.T) {

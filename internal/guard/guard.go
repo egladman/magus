@@ -694,7 +694,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
-			if v, ok := judgeStop(deps, input, time.Now()); ok {
+			if v, ok := judgeStop(deps, hint.NewGate(hookLocation(ctx, deps).cacheDir, who.callerKey()), input, time.Now()); ok {
 				return v
 			}
 			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}

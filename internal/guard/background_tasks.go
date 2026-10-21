@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -57,14 +60,21 @@ func decodeStop(raw string) (stopEnvelope, bool) {
 	return env, true
 }
 
+// advisoryBackgroundLeft holds a root's background-left advice to one firing per task per
+// session; see backgroundAdvisedKey.
+const advisoryBackgroundLeft hint.MarkerKind = "background-left"
+
 // judgeStop answers an agent's stop event from the background tasks its transcript leaves
 // running, false when it has nothing to say. A subagent with any task still running is
-// refused, since no notice of the task reaches anyone once it ends; a root session is
+// refused, since no notice of the task reaches anyone once it ends. A root session is
 // advised of tasks older than rootBackgroundAge, since the person is there to decide.
+//
+// A root hears of each task once per session, held on said: a task whose end never
+// reached the transcript would otherwise be named after every turn.
 //
 // The transcript is the host's record, read by shape; a host whose transcript records no
 // background task in that shape gets no answer, never a refusal.
-func judgeStop(deps Dependencies, raw string, now time.Time) (types.GuardJudgment, bool) {
+func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (types.GuardJudgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
 		return types.GuardJudgment{}, false
@@ -85,13 +95,19 @@ func judgeStop(deps Dependencies, raw string, now time.Time) (types.GuardJudgmen
 	if err != nil {
 		return types.GuardJudgment{}, false
 	}
-	if !subagent {
-		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return now.Sub(t.Started) < rootBackgroundAge })
+	var listing string
+	if subagent {
+		listing = describeTasks(tasks, now)
+	} else {
+		// Age is checked first, so a young task never spends its one firing.
+		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
+			return now.Sub(t.Started) < rootBackgroundAge || said.MarkFired(backgroundAdvisedKey(t))
+		})
+		listing = stoppableTasks(tasks, now)
 	}
 	if len(tasks) == 0 {
 		return types.GuardJudgment{}, false
 	}
-	listing := describeTasks(tasks, now)
 	if subagent && setting.Decision == builtin.Deny {
 		return types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
@@ -158,6 +174,32 @@ func describeTasks(tasks []backgroundTask, now time.Time) string {
 			cmp.Or(t.ID, "(no id)"), t.Started.UTC().Format("15:04:05Z"), now.Sub(t.Started).Round(time.Second), command)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// stoppableTasks lists tasks as describeTasks does, each followed by the call that stops
+// it, so one reply clears them all. The call is the stop tool's shape the transcript
+// reader recognizes (see stoppedTask); a task with no id has none to name.
+func stoppableTasks(tasks []backgroundTask, now time.Time) string {
+	lines := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		line := describeTasks([]backgroundTask{t}, now)
+		if t.ID != "" {
+			line += fmt.Sprintf("\n    stop it: TaskStop {\"task_id\": %q}", t.ID)
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// backgroundAdvisedKey names t's background-left marker: its id, or its start and command
+// when the transcript never named one, hashed so the file name holds no command text.
+func backgroundAdvisedKey(t backgroundTask) hint.MarkerKind {
+	subject := t.ID
+	if subject == "" {
+		subject = t.Started.UTC().Format(time.RFC3339Nano) + "\x00" + t.Command
+	}
+	sum := sha256.Sum256([]byte(subject))
+	return advisoryBackgroundLeft + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
 }
 
 // backgroundTask is one shell command a host runs in the background for an agent: a

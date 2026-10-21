@@ -215,6 +215,7 @@
 {"group":"file:changes/unreleased/spells-can-be-imported-from-registry.md","path":"changes/unreleased/spells-can-be-imported-from-registry.md"}
 {"group":"file:changes/unreleased/stale-binary-advisory-go-c-deny.md","path":"changes/unreleased/stale-binary-advisory-go-c-deny.md"}
 {"group":"file:changes/unreleased/std-api-lock.md","path":"changes/unreleased/std-api-lock.md"}
+{"group":"file:changes/unreleased/stop-advice-said-once.md","path":"changes/unreleased/stop-advice-said-once.md"}
 {"group":"file:changes/unreleased/stores-helpers-session-load.md","path":"changes/unreleased/stores-helpers-session-load.md"}
 {"group":"file:changes/unreleased/stores-migrate-fs-remote.md","path":"changes/unreleased/stores-migrate-fs-remote.md"}
 {"group":"file:changes/unreleased/surface-names.md","path":"changes/unreleased/surface-names.md"}
