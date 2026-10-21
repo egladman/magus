@@ -398,6 +398,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = float64(3)
 		case "timeout":
 			value = "30m"
+		case "brief_format":
+			value = "buzz"
 		case "check":
 			value = "test internal/job"
 		case "validation":

@@ -34,20 +34,17 @@ type procTaskInfo struct {
 // a procTaskInfo.
 const procPidTaskInfo = 4
 
-// TreeBytes sums the resident memory of pid and every descendant, or 0 when the
-// tree cannot be read.
+// TreeBytes sums, for each pid, the resident memory of pid and every descendant, in
+// the order given; an entry is 0 when that tree cannot be read.
 //
-// One sysctl for the whole process table rather than a listchildpids call per node:
-// the table is what makes parentage knowable, and asking once is cheaper than
-// asking per process on a machine running hundreds.
-//
-// The sizes come from procRSS, which is split across two files by build tag: the
-// process table gives parentage but no sizes, because kinfo_proc's Vmspace has
-// every field zeroed by Apple.
-func TreeBytes(pid int) int64 {
+// One sysctl reads the whole process table per call, however many roots it answers:
+// the table is what makes parentage knowable. Sizes come from procRSS, split across
+// two files by build tag, because kinfo_proc's Vmspace has every field zeroed by Apple.
+func TreeBytes(pids ...int) []int64 {
+	out := make([]int64, len(pids))
 	procs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
 	if err != nil || len(procs) == 0 {
-		return 0
+		return out
 	}
 	children := make(map[int32][]int32, len(procs))
 	for i := range procs {
@@ -55,6 +52,13 @@ func TreeBytes(pid int) int64 {
 		parent := procs[i].Eproc.Ppid
 		children[parent] = append(children[parent], self)
 	}
+	for i, pid := range pids {
+		out[i] = walkTree(pid, children)
+	}
+	return out
+}
+
+func walkTree(pid int, children map[int32][]int32) int64 {
 	var total int64
 	// Iterative, because a pid table read live can in principle contain a cycle
 	// (a pid reused as its own ancestor between the read and the walk), and a

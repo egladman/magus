@@ -209,7 +209,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "manifest.webmanifest", "sw.js", "scripts/**/*.mjs", "package.json",
                    "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs",
                    "src/assets/**", "src/apps/diff/demo.patch",
-                   "../libs/proofread/gen/proofread.inputs", "../hack/policy/proofread-decisions.json");
+                   "../libs/proofread/gen/proofread.inputs", "../hack/policy/gen/proofread-decisions.json");
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
@@ -222,7 +222,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // under this repository's decisions table (the comment budget, a comment that repeats its
 // code, banned words and the writing rules of docs/conventions.md) and fails on a deny.
 fun judgeCssComments() > void !> any {
-    final args = mut ["stylesheet", "--decisions","../hack/policy/proofread-decisions.json"];
+    final args = mut ["stylesheet", "--decisions","../hack/policy/gen/proofread-decisions.json"];
     foreach (f in fs\glob("src/**/*.css")) {
         args.append(f.value);
     }

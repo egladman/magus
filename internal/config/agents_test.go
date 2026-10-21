@@ -49,6 +49,7 @@ func TestAgentsMisconfigurationIsAnError(t *testing.T) {
 	}{
 		{"unknown billing", "agents:\n  billing: oauth\n", "oauth"},
 		{"unknown profile", "agents:\n  profile: max\n", "max"},
+		{"unknown brief format", "agents:\n  brief_format: json\n", "json"},
 		{"unknown key", "agents:\n  budget: 5\n", "budget"},
 		{"unknown model key", "agents:\n  models:\n    m: {window: 1000, aliases: [x]}\n", "aliases"},
 		{"window missing", "agents:\n  models:\n    m: {cache_read: 0.1}\n", "agents.models[m].window: must be >= 1 (got 0)"},
@@ -131,6 +132,16 @@ func TestLoadAgentsLayersTiers(t *testing.T) {
 	got, err = LoadAgents(empty)
 	require.NoError(t, err)
 	assert.Empty(t, got.Profile, "no tier stating a level leaves it unset")
+
+	writeYAML(t, filepath.Join(home, "magus"), "agents:\n  brief_format: buzz\n")
+	writeYAML(t, root, "agents:\n  profile: off\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Empty(t, got.BriefFormat, "only the workspace sets the brief format")
+	writeYAML(t, root, "agents:\n  brief_format: buzz\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, types.BriefFormatBuzz, got.BriefFormat)
 
 	writeYAML(t, root, "agents:\n  billing: oauth\n")
 	_, err = LoadAgents(root)

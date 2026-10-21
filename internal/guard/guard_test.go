@@ -371,7 +371,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Build it. Run one plain command per call.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
 			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
@@ -382,7 +382,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed. Run plain commands.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: decisionDeny, reason: "a worker does not build magus"},
@@ -552,13 +552,45 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		// and all; the root test target needs proofread-build. It is not the checkout itself, whose
 		// branch diff would add advice about the areas it touches to every verdict.
 		proofreadMod := filepath.Join(root, "libs", "proofread")
-		ws := t.TempDir()
-		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
-		require.NoError(t, os.Symlink(proofreadMod, filepath.Join(ws, "libs", "proofread")))
+		linkJudge := func(ws string) {
+			require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
+			require.NoError(t, os.Symlink(proofreadMod, filepath.Join(ws, "libs", "proofread")))
+		}
+
+		// The rule reads the branch's diff and denies one it cannot read, so the workspace is
+		// a repository whose branch adds a shipped file and the changelog fragment its fix
+		// title owes. The judge's link is untracked and stays out of the diff.
+		branchRepo := func() (string, string) {
+			repo := testkit.NewRepo(t, map[string]string{"README.md": "# key\n"})
+			repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
+			repo.Git("switch", "-q", "-c", "trim-key")
+			head := repo.Commit("sort the key", map[string]string{
+				"internal/cache/key.go":          "package cache\n",
+				"changes/unreleased/trim-key.md": "### Fixed\n\n- **Warm builds hit the cache again.** The key sorts its inputs before hashing.\n",
+			})
+			return repo.Root(), head
+		}
+		ws, head := branchRepo()
+		linkJudge(ws)
+		// gh edit reads the pull request's head and base from gh, which a test has no login for.
+		bin := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(bin, "gh"),
+			[]byte("#!/bin/sh\nprintf '{\"headRefOid\":\"%s\",\"baseRefName\":\"main\"}' "+head+"\n"), 0o755))
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
 		assert.Equal(t, decisionPass, v.Decision, "judged, not failed open: "+v.Reason+v.Context)
+
+		// A workspace that is no repository has no diff to read: the description is denied
+		// with the fetch that would make it readable, never judged on facts nobody read.
+		bare := t.TempDir()
+		linkJudge(bare)
+		unread, _ := shellAt(t, "trim-key", bare)
+		v = unread(describe)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "the diff of this pull request cannot be read")
+		assert.Contains(t, v.Reason, "run `git fetch origin main`, then retry")
 
 		// A cited ref is looked up in the store of the checkout being judged.
 		store := cache.NewOutputStore(cacheDir)
@@ -597,7 +629,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Contains(t, v.Reason, "[buzzword]")
 
 		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
-		unbuilt := t.TempDir()
+		unbuilt, _ := branchRepo()
 		mod := filepath.Join(unbuilt, "libs", "proofread")
 		require.NoError(t, os.MkdirAll(mod, 0o755))
 		entries, err := os.ReadDir(proofreadMod)

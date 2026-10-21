@@ -14,6 +14,7 @@ import "./hack/magusfile/conformance-ratchet" as ratchet;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
+import "./hack/policy/proofread" as decisions;
 magus\guard.builtins(agentbuiltins\BUILTINS);
 magus\guard.profile("strict");
 magus\guard.command(agentpolicy\judge);
@@ -985,6 +986,18 @@ export fun symbol_digest_generate(ctx: magus\Context, args: [str]) > void !> any
     final path = fs\join("gen", "symbol-index.json");
     if (fs\exists(path) and fs\readFile(path) == body) { return; }
     fs\mkdirAll("gen");
+    fs\writeFile(path, body);
+}
+
+// Writes hack/policy/gen/proofread-decisions.json, RULES and MINIMUMS alone: a stdin run
+// has no files, and proofread refuses a PATHS glob that matches no argument.
+export fun proofread_decisions_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("hack/policy/proofread.buzz");
+    ctx.writesFiles("hack/policy/gen/proofread-decisions.json");
+    final body = json\stringify(decisions\table([<str>]), "  ") + "\n";
+    final path = fs\join("hack", "policy", "gen", "proofread-decisions.json");
+    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    fs\mkdirAll(fs\join("hack", "policy", "gen"));
     fs\writeFile(path, body);
 }
 
@@ -2197,10 +2210,10 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links.
-    ctx.needs(proofreadlib\proofread_build);
+    ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate);
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
-        "releases/*.yaml");
+        "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");

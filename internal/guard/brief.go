@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -49,6 +50,13 @@ type briefInput struct {
 	title string
 	// isolated is a spawn whose worker runs in a worktree of its own.
 	isolated bool
+	// bound is a continuation to a worker already bound to a live row. worker-check-only
+	// grades that worker's own runs, so its message is not graded against the row.
+	bound bool
+	// format is the brief's format and formatFrom where it came from (job.ResolveBriefFormat).
+	// Zero is markdown with nothing to name.
+	format     types.BriefFormat
+	formatFrom string
 }
 
 // lazyProducers finds, once and on demand, whether a target regenerates a row's write
@@ -84,24 +92,33 @@ func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
 	if v := judgeBriefPlainCommands(brief); v.Deny != "" {
 		return v
 	}
-	return judgeBriefOffCheck(deps, brief)
+	named := string(brief.format) + ", " + brief.formatFrom
+	if brief.format == types.BriefFormatBuzz {
+		if v := judgeBriefBuzz(context.Background(), brief.text, magusDecls(), named); v.Deny != "" {
+			return v
+		}
+	}
+	v := ShellVerdict{}
+	if !brief.bound {
+		v = judgeBriefOffCheck(deps, brief)
+	}
+	if brief.formatFrom != "" && brief.formatFrom != job.BriefFormatUnset && v.Deny == "" {
+		v.Context = strings.TrimSpace("brief format: " + named + ". " + v.Context)
+		if v.Rule.Name == "" {
+			v.Rule = denyRule{Name: denyRuleBriefCommand, Arg: "brief-format"}
+		}
+	}
+	return v
 }
 
-// denyRuleBriefPlainCommands is a brief for an isolated worker that does not hold it to
-// plain commands.
+// denyRuleBriefPlainCommands is a brief for an isolated worker that teaches a compound command.
 const denyRuleBriefPlainCommands denyRuleName = "brief-plain-commands"
 
-// briefPlainLineRe is a brief saying its worker runs one plain command per call, in the
-// words a brief would use.
-var briefPlainLineRe = regexp.MustCompile(`(?i)\bone\s+(?:plain\s+|simple\s+)?command\s+(?:per|a|each)\s+(?:tool\s+)?call\b|\bplain\s+commands?\b`)
-
-const briefPlainLine = "one plain command per call; no `$()`, loops or exec"
-
 // judgeBriefPlainCommands refuses a brief for a worker in its own worktree that teaches a
-// compound command, or that never says to run one plain command per call. A host that
-// isolates a worker refuses the commands it cannot prove stay inside the worktree, and a
-// worker copies the style of the commands its brief shows. Briefs for a shared checkout
-// pass.
+// compound command. A host that isolates a worker refuses the commands it cannot prove stay
+// inside the worktree, and a worker copies the style of the commands its brief shows. A
+// brief need not say how to write commands: the host's refusal already teaches that. Briefs
+// for a shared checkout pass.
 func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
 	if !brief.isolated {
 		return ShellVerdict{}
@@ -117,14 +134,7 @@ func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
 			}
 		}
 	}
-	if briefPlainLineRe.MatchString(brief.text) {
-		return ShellVerdict{}
-	}
-	return ShellVerdict{
-		Deny: "this brief, for a worker in its own worktree, never says how to write its commands; add: \"" + briefPlainLine + "\".",
-		Why:  why,
-		Rule: denyRule{Name: denyRuleBriefPlainCommands},
-	}
+	return ShellVerdict{}
 }
 
 // compoundCommand reports a command line holding a substitution, a loop or an exec: the

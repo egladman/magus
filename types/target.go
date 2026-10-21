@@ -510,6 +510,9 @@ type MemorySizing struct {
 	// Slots is where the same claim's slot count came from. It rides here because this
 	// is the one provenance record a claim carries from sizing to a refusal.
 	Slots SlotSizing `json:"slots,omitzero" yaml:"slots,omitempty"`
+	// Fallback is why the claim is a peak held flat rather than a measured curve, empty
+	// when nothing fell back.
+	Fallback string `json:"fallback,omitempty" yaml:"fallback,omitempty"`
 }
 
 // SlotSource is where a claim's slot count came from.
@@ -557,28 +560,37 @@ func (s SlotSizing) String() string {
 func (s MemorySizing) Measured() bool { return s.Samples > 0 }
 
 // String renders the provenance for a person: "declared", or how many runs it was
-// measured over.
+// measured over, followed by the reason it fell back to a peak when it did.
 func (s MemorySizing) String() string {
+	var from string
 	switch {
 	case !s.Measured():
-		return "declared"
+		from = "declared"
 	case s.AnyShape:
-		return fmt.Sprintf("measured over %d runs of any shape", s.Samples)
+		from = fmt.Sprintf("measured over %d runs of any shape", s.Samples)
 	default:
-		return fmt.Sprintf("measured over %d runs", s.Samples)
+		from = fmt.Sprintf("measured over %d runs", s.Samples)
 	}
+	if s.Fallback == "" {
+		return from
+	}
+	return from + "; " + s.Fallback
 }
 
 // MemorySizer turns one target's own memory declaration, 0 when it declares none, into
-// the figure it claims. It must not return more than a positive declaredMB.
-type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing)
+// the figure it claims and the curve that figure peaks over. It must not return more
+// than a positive declaredMB. A zero profile (Runs 0) is a claim held flat at mb.
+type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing, profile MemoryProfile)
 
 // ChainMemory is a folded memory claim: the figure, the target whose declaration it
-// came from, and how that declaration was sized.
+// came from, and how that declaration was sized. Profile is the curve MB peaks over:
+// one run's, or one call's members composed; it is zero when the claim folds calls
+// that run in turn, or fell back to a peak.
 type ChainMemory struct {
 	MB         int
 	DeclaredBy string
 	Sizing     MemorySizing
+	Profile    MemoryProfile
 }
 
 // SizedChainMemory is ChainMemoryMB with every member of the chain passed through size
@@ -586,6 +598,8 @@ type ChainMemory struct {
 // than their declarations, and a member declaring nothing claims what its runs
 // measured. A nil size folds the declarations as written.
 //
+// The members of one call fold by curve when each has a profile (see composeCall), and
+// by summed peaks otherwise, with Sizing.Fallback naming the member that had none.
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
 func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
 	seen := map[string]bool{}
@@ -604,19 +618,24 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		declared := proj.TargetPolicies[name].MemoryMB
 		peak := ChainMemory{MB: declared, DeclaredBy: name}
 		if size != nil {
-			peak.MB, peak.Sizing = size(proj, name, declared)
+			peak.MB, peak.Sizing, peak.Profile = size(proj, name, declared)
 		}
+		contributors := 1
 		if peak.MB <= 0 {
-			peak = ChainMemory{}
+			peak, contributors = ChainMemory{}, 0
 		}
-		// One sum per call; a call's members run together, and the calls run in turn.
-		var call, top ChainMemory
+		// One fold per call; a call's members run together, and the calls run in turn.
+		var members []ChainMemory
+		var names []string
 		callIndex := 0
 		close := func() {
-			if call.MB > peak.MB {
-				peak = ChainMemory{MB: call.MB, DeclaredBy: top.DeclaredBy, Sizing: top.Sizing}
+			if len(members) > 0 {
+				contributors++
+				if call := foldCall(members, names); call.MB > peak.MB {
+					peak = call
+				}
 			}
-			call, top = ChainMemory{}, ChainMemory{}
+			members, names = nil, nil
 		}
 		for _, step := range proj.TargetChains[name] {
 			if step.CallIndex != callIndex {
@@ -630,13 +649,15 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 				}
 				next = lookup(step.Project)
 			}
-			member := walk(next, step.Target)
-			call.MB += member.MB
-			if member.MB > top.MB {
-				top = member
+			if member := walk(next, step.Target); member.MB > 0 {
+				members, names = append(members, member), append(names, step.Target)
 			}
 		}
 		close()
+		// Calls in turn, or a body and its call, compose no one curve: the larger peak is held flat.
+		if contributors > 1 {
+			peak.Profile = MemoryProfile{}
+		}
 		return peak
 	}
 	return walk(p, target)

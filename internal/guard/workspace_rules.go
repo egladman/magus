@@ -1242,6 +1242,11 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		Binary:          w.Binary,
 		RuleLoad:        loaded,
 	}
+	// LoadAgents, not w.Config: only the workspace tier sets the brief format. A load that
+	// fails is reported by the builtins, which read the same section.
+	if agents, err := config.LoadAgents(w.Root); err == nil {
+		deps.BriefFormat = agents.BriefFormat
+	}
 	if rules != nil {
 		rules.cacheDir = w.CacheDir
 		deps.ShellRules, deps.ShellDialect = rules.ShellRules()

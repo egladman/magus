@@ -1,8 +1,11 @@
 package broker
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,4 +71,71 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the release made during the re-assert never reached the new broker")
 	}
+}
+
+// An overrun reaches the broker by the id that broker granted, and a broker that
+// predates the frame is said once, not failed on.
+func TestOverrunRoundTripAndAnOlderBroker(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	addr := testAddr(t)
+	ln, err := Listen(t.Context(), addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	overruns := make(chan string, 4)
+	go func() {
+		nc, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = nc.Close() }()
+		r, w := newFrameReader(nc), &frameWriter{w: nc}
+		seen := 0
+		for {
+			f, err := r.read()
+			if err != nil {
+				return
+			}
+			switch f.Type {
+			case typeHello:
+				_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion})
+			case typeClaim:
+				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, Fits: true, ID: "remote-1"}})
+			case typeOverrun:
+				var req overrunRequest
+				if decodeBody(f, &req) == nil {
+					overruns <- req.ClaimID
+				}
+				// The first is answered as this build's broker, the rest as an older one.
+				seen++
+				if seen == 1 {
+					_ = w.write(typeOverrunReply, f.ID, nil)
+				} else {
+					_ = w.write(typeError, f.ID, errorReply{Code: CodeUnknownType, Message: `broker: unknown frame type "overrun"`})
+				}
+			default:
+				_ = w.write(typeError, f.ID, errorReply{Code: CodeUnknownType, Message: "unknown"})
+			}
+		}
+	}()
+
+	c := dial(t, addr)
+	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	c.Overrun(t.Context(), v.ID)
+	assert.Equal(t, "remote-1", <-overruns)
+	assert.Empty(t, logged.String(), "a broker that knows the frame is not remarked on")
+
+	c.Overrun(t.Context(), v.ID)
+	c.Overrun(t.Context(), v.ID)
+	assert.Equal(t, "remote-1", <-overruns)
+	assert.Equal(t, 1, strings.Count(logged.String(), "the broker predates memory overruns"), "an older broker is said once")
+
+	c.Overrun(t.Context(), "never-granted")
+	assert.Len(t, overruns, 1, "an id this client does not hold is never sent")
 }

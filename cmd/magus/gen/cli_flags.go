@@ -295,6 +295,8 @@ const (
 	FlagJobExitSchema = "schema"
 	// job exit: --stdin
 	FlagJobExitStdin = "stdin"
+	// job fork: --brief-format
+	FlagJobForkBriefFormat = "brief-format"
 	// job fork: --check
 	FlagJobForkCheck = "check"
 	// job fork: --checkout
@@ -1360,16 +1362,17 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
-	Schema     bool          // --schema
-	Stdin      bool          // --stdin
-	Criteria   string        // --criteria
-	Timeout    time.Duration // --timeout
-	Parent     string        // --parent
-	Checkpoint string        // --checkpoint
-	Check      string        // --check
-	Model      string        // --model
-	ReadOnly   bool          // --read-only
-	Checkout   string        // --checkout
+	Schema      bool          // --schema
+	Stdin       bool          // --stdin
+	Criteria    string        // --criteria
+	Timeout     time.Duration // --timeout
+	Parent      string        // --parent
+	Checkpoint  string        // --checkpoint
+	Check       string        // --check
+	Model       string        // --model
+	BriefFormat string        // --brief-format
+	ReadOnly    bool          // --read-only
+	Checkout    string        // --checkout
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1383,6 +1386,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
+	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 	return &f

@@ -984,6 +984,19 @@ func (m *Magus) unreadWriteGrants(p *types.Project, target string) []string {
 	return slices.DeleteFunc(grants, func(c string) bool { return read[c] })
 }
 
+// chainReadsCharm reports whether target or any target its ctx.needs closure reaches
+// readsCharm: whether charm can change the work the step does, and so its peak.
+func (m *Magus) chainReadsCharm(p *types.Project, target, charm string) bool {
+	found := errors.New("reads the charm")
+	err := types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
+		if m.readsCharm(v.Project, v.Target, charm) {
+			return found
+		}
+		return nil
+	})
+	return errors.Is(err, found)
+}
+
 // readsCharm reports whether target's own body or ops on p can behave differently under
 // charm; see unreadWriteGrants for what counts.
 func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
@@ -2012,7 +2025,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
 	// Joined here rather than beside the volatility runtime below: every step's claim is
 	// sized from it, and the probes above already overlapped most of the decode.
-	sizeClaims := newClaimSizer(m.measuredRuns(history), forecast.NewShape(charmKey, opts.ExtraArgs))
+	sizeClaims := newClaimSizer(m.measuredRuns(history), forecast.NewShape(charmKey, opts.ExtraArgs), m.chainReadsCharm)
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
 	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
@@ -2796,6 +2809,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		MaxRSSBytes:    peakRSS,
 		CPUMs:          cpuMs,
 		Slots:          cache.SlotsHeld(ctx),
+		Curve:          types.Curve(ctx),
 		Charms:         shape.Charms,
 		ArgsHash:       shape.ArgsHash,
 	})

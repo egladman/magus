@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28022
-skill_short_bytes: 20822
+skill_full_bytes: 28337
+skill_short_bytes: 21290
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `143` |
+| `agent-skill-version` | `144` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `17abb40ac9f5` |
+| `skill-content` | `41471c24c49b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -371,6 +371,13 @@ down.
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn. A line that names a command to forbid it ("never ...") is not graded.
 
+### What a brief leaves out
+
+Brief carries only: JOB ID, goal and why, decisions made, evidence refs.
+Leave out: skill loads, command style, `BAGGAGE` export, write paths, check, how to commit and push, attribution; guard, harness, `magus describe job` supply or enforce each.
+Restated guard rule costs every worker tokens, goes stale. Worker keeps missing something -> fix guard rule or its message, never brief.
+Follow-up message to bound worker: only what changed.
+
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
@@ -386,7 +393,6 @@ it reports back. A brief that leaves it out gets a prose report and a row that n
 moves. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
 `changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
 `unresolved_risks`; `magus job exit --schema` prints the shape.
-
 Keep unresolved risks mandatory.
 
 A worker writes only its own row and the children it forks. Every other store write
@@ -859,6 +865,16 @@ The guard grades every command a brief presents in a shell fence or a code span.
 it would deny refuses the spawn, since the worker runs a brief's
 commands as written. A line that names a command to forbid it ("never ...") is not graded.
 
+### What a brief leaves out
+
+A brief carries the JOB ID, the goal and why, the decisions made, and evidence refs.
+It leaves out skill loads, command style, the `BAGGAGE` export, write paths, the check,
+how to commit and push, and attribution: the guard, the harness and `magus describe job`
+supply or enforce each, and a refusal says what to do. Restated, a guard rule costs every
+worker tokens, goes stale, and crowds out the model's own judgment. When a worker keeps
+missing something, fix the guard rule or its message, not the brief. A follow-up message
+to a bound worker carries only what changed.
+
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
@@ -880,18 +896,8 @@ moves: the store keeps the write paths held, `magus job wait`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
 `changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
-`unresolved_risks`; `magus job exit --schema` prints the shape.
-
-```sh
-magus job exit <job> --stdin <<'EOF'
-{"schema_version": 2, "job": "<job>",
- "changed_paths": ["api/store.go", "api/store_test.go"],
- "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
- "descendants": [],
- "unresolved_risks": ["what is left, or what the worker could not verify"]}
-EOF
-```
-
+`unresolved_risks`; `magus job exit --schema` prints the shape, and
+[reference.md](reference.md) shows a record.
 A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
 

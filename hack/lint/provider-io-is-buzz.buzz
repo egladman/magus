@@ -30,6 +30,7 @@ export final ALLOWED_FILES = {
     // prove the check fires and passes; they are not real calls, but this rule reads
     // its own source text like any other file and cannot tell the difference.
     "hack/lint/provider-io-is-buzz.buzz": "its test fixtures ARE gh/curl/http call shapes, written to be scanned, not run",
+    "hack/policy/pull_requests.buzz": "pullRequestDiff reads a pull request's head and base with gh pr view; no allowed file exports that read, and the policy module cannot import a hack/ci script",
 };
 
 // OUT_OF_SCOPE are trees this rule does not report on even if a future reads() widens
@@ -124,12 +125,13 @@ export fun check(files: [Path]) > [Finding] !> any {
     return found;
 }
 
-// namedStubs stands in, in a test's fixture, for the two files ALLOWED_FILES names: a
+// namedStubs stands in, in a test's fixture, for the files ALLOWED_FILES names: a
 // test that is not about them would otherwise trip the stale-entry check by omission.
 final namedStubs = {
     "internal/queue/provider/github.buzz": "namespace github;\n",
     "magusfile.buzz": "namespace root;\n",
     "hack/lint/provider-io-is-buzz.buzz": "namespace providerio;\n",
+    "hack/policy/pull_requests.buzz": "namespace agentpolicy\\pullRequests;\n",
 };
 
 // withNamedStubs merges extra over namedStubs, so a test naming its own magusfile.buzz
@@ -232,7 +234,8 @@ fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
 test "a stale ALLOWED_FILES entry is reported" {
     assert\equal(support\messages(check([<Path>])),
         want: ["ALLOWED_FILES names hack/lint/provider-io-is-buzz.buzz, which is not in the tree",
+               "ALLOWED_FILES names hack/policy/pull_requests.buzz, which is not in the tree",
                "ALLOWED_FILES names internal/queue/provider/github.buzz, which is not in the tree",
                "ALLOWED_FILES names magusfile.buzz, which is not in the tree"],
-        message: "all three entries are stale when the tree carries none of the files");
+        message: "all four entries are stale when the tree carries none of the files");
 }

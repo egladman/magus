@@ -140,6 +140,49 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	assert.Empty(t, holders(t, addr), "a release frees the claim")
 }
 
+// curvedClaim is a claim over a 100s run holding early for its first half and late for
+// its second, claiming its peak.
+func curvedClaim(target string, pid int, early, late uint32) types.MachineClaim {
+	p := types.MemoryProfile{D10Ms: 100_000, D90Ms: 100_000, Runs: 3}
+	for i := range p.Curve {
+		p.Curve[i] = early
+		if i >= types.MemoryCurveBuckets/2 {
+			p.Curve[i] = late
+		}
+	}
+	return types.MachineClaim{Project: ".", Target: target, MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
+}
+
+func TestOverrunFrameChargesThePeak(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(10_000, 8))
+	c := dial(t, addr)
+	held, err := c.Request(t.Context(), curvedClaim("test", 100, 7000, 1000))
+	require.NoError(t, err)
+	require.True(t, held.Granted)
+
+	other := dial(t, addr)
+	late := curvedClaim("lint", 200, 1000, 7000)
+	packed, err := other.Request(t.Context(), late)
+	require.NoError(t, err)
+	require.True(t, packed.Granted, "an early peak and a late one pack")
+	other.Release(t.Context(), packed.ID)
+
+	cn, err := other.connect(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, cn.roundTrip(t.Context(), other.next(), typeOverrun, overrunRequest{ClaimID: held.ID}, typeOverrunReply, nil, nil))
+	v, err := other.Request(t.Context(), late)
+	require.NoError(t, err)
+	require.True(t, v.Granted, "an overrun from a connection that does not hold the claim is ignored")
+	other.Release(t.Context(), v.ID)
+
+	c.Overrun(t.Context(), held.ID)
+	v, err = other.Request(t.Context(), late)
+	require.NoError(t, err)
+	assert.False(t, v.Granted, "the overrun claim is charged its 7000 peak beside the late 7000")
+	assert.True(t, v.Fits)
+}
+
 // TestClosingTheConnectionReleasesItsClaims is the whole reason claims ride a
 // connection: a holder that never says release still gives everything back.
 func TestClosingTheConnectionReleasesItsClaims(t *testing.T) {
@@ -280,6 +323,38 @@ func TestHoldersReassertOnANewBroker(t *testing.T) {
 	c.Release(t.Context(), v.ID)
 	assert.Eventually(t, func() bool { return len(holders(t, addr)) == 0 }, 2*time.Second, 10*time.Millisecond,
 		"the id the holder kept still releases the claim on the new broker")
+}
+
+// TestAnOverrunSurvivesABrokerRestart: the step that overran is still running past its
+// curve, so the successor must charge it the full peak, not pack against the curve.
+func TestAnOverrunSurvivesABrokerRestart(t *testing.T) {
+	old := redialEvery
+	redialEvery = 20 * time.Millisecond
+	t.Cleanup(func() { redialEvery = old })
+
+	addr := testAddr(t)
+	stopFirst, _ := serve(t, addr, WithCapacity(10_000, 8))
+	c := dial(t, addr)
+	held, err := c.Request(t.Context(), curvedClaim("test", 100, 7000, 1000))
+	require.NoError(t, err)
+	require.True(t, held.Granted)
+	c.Overrun(t.Context(), held.ID)
+
+	stopFirst()
+	serve(t, addr, WithCapacity(10_000, 8))
+	assert.Eventually(t, func() bool {
+		return len(holders(t, addr)) == 1 && c.live() != nil
+	}, 3*time.Second, 20*time.Millisecond, "the holder re-asserts its claim on the new broker")
+
+	stranger := dial(t, addr)
+	v, err := stranger.Request(t.Context(), curvedClaim("lint", 200, 1000, 7000))
+	require.NoError(t, err)
+	assert.False(t, v.Granted, "the new broker charges the re-asserted overrun its 7000 peak beside the late 7000")
+	assert.True(t, v.Fits)
+
+	// Holding nothing when the broker stops at cleanup keeps the client from redialing
+	// while redialEvery is restored.
+	c.Release(t.Context(), held.ID)
 }
 
 // replyGate forwards connections from its own socket to a broker, and on every

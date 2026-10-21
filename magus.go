@@ -167,7 +167,7 @@ type Magus struct {
 	// import resolver after; see SpellImports.
 	spellImports *remotespell.Imports
 
-	// hostMemBytes caches the machine's memory for slotsForPolicy; see hostTotalBytes.
+	// hostMemBytes caches the memory this process may commit; see hostUsableBytes.
 	hostMemOnce  sync.Once
 	hostMemBytes int64
 

@@ -127,6 +127,12 @@ var allChecks = []checkDef{
 		run:            (*runner).checkModelTierFit,
 	},
 	{
+		Name:     "brief-format",
+		Doc:      "the format a spawn brief takes when its job row names none, and whether magus.yaml chose it",
+		Evidence: types.EvidenceDeclared,
+		run:      (*runner).checkBriefFormat,
+	},
+	{
 		Name:           "conformance-ratchet",
 		Doc:            "committed conformance thresholds the code now measures tighter than, and known entries that no longer violate",
 		Evidence:       types.EvidenceMeasured,

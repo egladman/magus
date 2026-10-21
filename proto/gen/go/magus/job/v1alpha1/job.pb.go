@@ -292,9 +292,11 @@ type Job struct {
 	// declared no model tiers. rework_rounds counts continuations sent to the job's worker
 	// after it handed back, and widenings the times write paths were added to the job after
 	// it was taken. All three are store-computed.
-	ModelTier     *JobModelTier `protobuf:"bytes,41,opt,name=model_tier,json=modelTier,proto3" json:"model_tier,omitempty"`
-	ReworkRounds  int32         `protobuf:"varint,42,opt,name=rework_rounds,json=reworkRounds,proto3" json:"rework_rounds,omitempty"`
-	Widenings     int32         `protobuf:"varint,43,opt,name=widenings,proto3" json:"widenings,omitempty"`
+	ModelTier    *JobModelTier `protobuf:"bytes,41,opt,name=model_tier,json=modelTier,proto3" json:"model_tier,omitempty"`
+	ReworkRounds int32         `protobuf:"varint,42,opt,name=rework_rounds,json=reworkRounds,proto3" json:"rework_rounds,omitempty"`
+	Widenings    int32         `protobuf:"varint,43,opt,name=widenings,proto3" json:"widenings,omitempty"`
+	// brief_format is markdown or buzz; empty defers to magus.yaml's agents.brief_format.
+	BriefFormat   string `protobuf:"bytes,44,opt,name=brief_format,json=briefFormat,proto3" json:"brief_format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -628,6 +630,13 @@ func (x *Job) GetWidenings() int32 {
 		return x.Widenings
 	}
 	return 0
+}
+
+func (x *Job) GetBriefFormat() string {
+	if x != nil {
+		return x.BriefFormat
+	}
+	return ""
 }
 
 // JobModelTier is the model tier recorded on a job when it was assigned. skills is the
@@ -2254,7 +2263,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xc7\r\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xea\r\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2310,7 +2319,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\n" +
 	"model_tier\x18) \x01(\v2 .magus.job.v1alpha1.JobModelTierR\tmodelTier\x12#\n" +
 	"\rrework_rounds\x18* \x01(\x05R\freworkRounds\x12\x1c\n" +
-	"\twidenings\x18+ \x01(\x05R\twidenings\"\xa8\x01\n" +
+	"\twidenings\x18+ \x01(\x05R\twidenings\x12!\n" +
+	"\fbrief_format\x18, \x01(\tR\vbriefFormat\"\xa8\x01\n" +
 	"\fJobModelTier\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04rank\x18\x02 \x01(\x05R\x04rank\x12\x16\n" +

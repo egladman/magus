@@ -66,8 +66,7 @@ func (m *Magus) ConcurrencyNudge() string {
 // consults it per target, and the answer cannot change while the process runs.
 //
 // Usable rather than total: in a memory-limited container the machine's own figure
-// is memory this build can never have, and both readers below size real work
-// against it.
+// is memory this build can never have, and sizeClaim sizes real work against it.
 func (m *Magus) hostUsableBytes() int64 {
 	m.hostMemOnce.Do(func() { m.hostMemBytes = mem.UsableBytes(context.Background()) })
 	return m.hostMemBytes
@@ -81,13 +80,14 @@ func (m *Magus) hostUsableBytes() int64 {
 // types.SizedChainMemory, supplied the workspace's cross-project lookup), each
 // declaration narrowed by what its runs measured and each member declaring nothing
 // sized from its measured peak. Slots are the target's declaration,
-// else its measured width, else one, raised to what the memory is worth on this host
-// (see slotsForPolicy).
+// else its measured width, else one. With no machine broker they are raised to what
+// the memory is worth in the local pool; a broker holds memory in megabytes, so under
+// it they stay CPU (see slotsForPolicy).
 //
-// The claim is held for the whole step, including the phases that do not need it,
-// which is conservative in the direction the machine survives: the alternative is
-// admitting the chain and refusing it twenty minutes in, when the work already done
-// is wasted.
+// A claim with a measured curve carries it as step.MemoryProfile, and one call's
+// members fold by curve rather than by summed peaks. A claim without one is its peak
+// held for the whole step, conservative in the direction the machine survives: the
+// alternative is admitting the chain and refusing it twenty minutes in.
 //
 // size is nil to claim the declarations as written, or newClaimSizer's answer to claim
 // what this shape of run has measured.
@@ -104,12 +104,13 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 			slots, slotSizing = size.slots(p, target, m.limiter().Capacity())
 		}
 	}
-	step.Slots = slotsForPolicy(slots, c.MB, m.limiter().Capacity(), m.hostUsableBytes())
+	budgetMB := mem.BudgetMB(m.hostUsableBytes(), m.cfg.ConcurrencyProfile)
+	step.Slots = slotsForPolicy(slots, c.MB, m.limiter().Capacity(), budgetMB, m.cache.MachineArbitrated())
 	if step.Slots > max(slots, 1) {
 		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
 	}
 	c.Sizing.Slots = slotSizing
-	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing = c.MB, c.DeclaredBy, c.Sizing
+	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing, step.MemoryProfile = c.MB, c.DeclaredBy, c.Sizing, c.Profile
 	return c.Sizing
 }
 
@@ -127,31 +128,53 @@ const (
 )
 
 // claimSizer sizes claims from the measured runs of one shape: the charms and forwarded
-// args an invocation runs every target with.
+// args an invocation runs every target with. reads says which of those charms a target's
+// chain reads; each target is sized with only those, so a charm it never reads does not
+// split its runs.
 type claimSizer struct {
 	runs  *forecast.MeasuredRuns
 	shape forecast.Shape
+	reads func(p *types.Project, target, charm string) bool
 }
 
 // newClaimSizer is nil when there is no history to read, which leaves every claim at
 // its declaration.
-func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape) *claimSizer {
+func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape, reads func(p *types.Project, target, charm string) bool) *claimSizer {
 	if runs == nil {
 		return nil
 	}
-	return &claimSizer{runs: runs, shape: shape}
+	return &claimSizer{runs: runs, shape: shape, reads: reads}
+}
+
+// readShape is the sizer's shape keeping the charms target's chain reads. The predicate
+// also filters every recorded run's charms, so each answer is walked once.
+func (s *claimSizer) readShape(proj *types.Project, target string) forecast.Shape {
+	read := map[string]bool{}
+	return s.shape.Reading(func(charm string) bool {
+		r, ok := read[charm]
+		if !ok {
+			r = s.reads(proj, target, charm)
+			read[charm] = r
+		}
+		return r
+	})
 }
 
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See
 // sizeMemoryClaim.
-func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing) {
-	same, all := s.runs.Peak(proj.Path, target, s.shape)
-	return sizeMemoryClaim(declaredMB, same, all)
+func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing, types.MemoryProfile) {
+	shape := s.readShape(proj, target)
+	same, all := s.runs.Peak(proj.Path, target, shape)
+	var full forecast.Measurement
+	if shape.Narrowed {
+		full, _, _ = trustedMeasurement(s.runs.Peak(proj.Path, target, shape.Full()))
+	}
+	return sizeMemoryClaim(target, declaredMB, same, all, full, s.runs.Profile(proj.Path, target, shape))
 }
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
 func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
-	same, all := s.runs.Width(proj.Path, target, s.shape)
+	same, all := s.runs.Width(proj.Path, target, s.readShape(proj, target))
 	return sizeSlotClaim(same, all, capacity)
 }
 
@@ -172,16 +195,39 @@ func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Meas
 // declaration, which is 0 for a target that declares none. The declaration stays the
 // ceiling: it is a human's statement of the worst case, and a measurement only ever
 // narrows it.
-func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.Measurement) (int, types.MemorySizing) {
+//
+// fullPeak is the trusted peak of full runs when the shape is narrowed, and zero
+// otherwise. Narrowed runs pool across args only to lower a claim, so a narrowed shape's
+// own peak is capped by it; a narrowed shape sized from every run already includes it.
+//
+// profile is the shape's measured curve. With minMeasuredRuns runs behind it, it is
+// returned with peakMargin on every bucket and the same declaration ceiling; with fewer,
+// the claim is its peak held flat and sizing's Fallback says so.
+func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement, profile types.MemoryProfile) (int, types.MemorySizing, types.MemoryProfile) {
 	peak, sizing, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
-		return declaredMB, types.MemorySizing{}
+		return declaredMB, types.MemorySizing{}, types.MemoryProfile{}
+	}
+	if !sizing.AnyShape && fullPeak.Runs > 0 {
+		peak.Value = min(peak.Value, fullPeak.Value)
 	}
 	mb := int(math.Ceil(float64(peak.Value) * peakMargin / (1 << 20)))
 	if declaredMB > 0 && mb >= declaredMB {
-		return declaredMB, types.MemorySizing{}
+		mb, sizing = declaredMB, types.MemorySizing{}
 	}
-	return mb, sizing
+	if profile.Runs < minMeasuredRuns {
+		sizing.Fallback = fmt.Sprintf("%s: no memory curve for this shape (%d of %d runs); claimed the %s peak",
+			target, profile.Runs, minMeasuredRuns, cache.FormatMB(mb))
+		return mb, sizing, types.MemoryProfile{}
+	}
+	for i, bucket := range profile.Curve {
+		held := int(math.Ceil(float64(bucket) * peakMargin))
+		if declaredMB > 0 {
+			held = min(held, declaredMB)
+		}
+		profile.Curve[i] = uint32(held)
+	}
+	return mb, sizing, profile
 }
 
 // sizeSlotClaim is the measured width (forecast.MeasuredRuns.Width), capped at capacity
@@ -203,31 +249,27 @@ func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) (int,
 // slotsForPolicy resolves a target's declared policy to the number of concurrency
 // slots it holds.
 //
-// Slots and MemoryMB are two spellings of one claim, so both land on the limiter and a
-// target's author states whichever they know. See types.Target.MemoryMB for why memory
-// is usually that one. The larger spelling wins when both are given: they describe the
-// same resource, and the safe reading of a disagreement is the more conservative one.
+// With no broker the local pool is the only arbiter, so memory is converted at
+// budgetMB (mem.BudgetMB) over the pool's width per slot and the larger spelling wins:
+// they describe the same resource, and the safe reading of a disagreement is the more
+// conservative one. See types.Target.MemoryMB for why memory is usually the one known.
 //
-// The MACHINE budget reads the megabytes directly rather than this conversion, which
-// divides by a per-process budget and so cannot be inverted.
-//
-// Pure, with hostTotalBytes passed in. It reads /proc on Linux and forks sysctl on
-// darwin, and buildStep calls this per target, so a describe over a large
-// workspace would otherwise pay that per target for a machine constant.
+// A brokered claim keeps slots as given: the broker holds megabytes and slots apart,
+// and converting would count the memory twice in two units.
 //
 // Returns slots unchanged when memory is undeclared, when the host is
-// unmeasurable, or when the budget is unlimited.
-func slotsForPolicy(slots, memoryMB, slotBudget int, hostTotalBytes int64) int {
-	if memoryMB <= 0 || slotBudget <= 0 || hostTotalBytes <= 0 {
+// unmeasurable (budgetMB 0), or when the slot budget is unlimited.
+func slotsForPolicy(slots, memoryMB, slotBudget, budgetMB int, brokered bool) int {
+	if brokered || memoryMB <= 0 || slotBudget <= 0 || budgetMB <= 0 {
 		return slots
 	}
-	perSlotMB := hostTotalBytes / int64(slotBudget) / (1 << 20)
+	perSlotMB := budgetMB / slotBudget
 	if perSlotMB <= 0 {
 		return slots
 	}
 	// Round up: rounding down would admit a peer against memory this target has
 	// already claimed.
-	need := int((int64(memoryMB) + perSlotMB - 1) / perSlotMB)
+	need := (memoryMB + perSlotMB - 1) / perSlotMB
 	if need > slots {
 		return need
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/types"
 )
 
 // treeSampleEvery is how often a running command's process tree is measured.
@@ -15,76 +16,125 @@ import (
 // but only sees the instants it looks at. Neither is complete, which is why the
 // two are combined rather than one replacing the other.
 //
-// 200ms because the cost is per sample and the whole process table is read to find
-// the tree: measured at roughly 1.5ms for every process on a busy machine, so this
-// is under 1% of one core, and a command shorter than one tick pays nothing at all
-// because the first sample lands after the first tick.
+// 200ms because the cost is per tick and, on darwin, the whole process table is
+// read once for every followed tree: roughly 1.5ms on a busy machine, under 1% of
+// one core. A command shorter than one tick pays nothing, because the first sample
+// lands after the first tick.
 const treeSampleEvery = 200 * time.Millisecond
 
-// treeSampler follows a running command's process tree and remembers the largest
-// total it saw.
-//
-// It exists because a build step is a TREE and the kernel will not total one for
-// us: `go test` runs package binaries concurrently, `make -j` runs recipes
-// concurrently, and for both the interesting number is what was resident at once.
+// processSampler is the one sampler every exec in this process shares, so ten
+// concurrent execs wake on one ticker and one table read rather than ten.
+var processSampler = newTreeSampler(mem.TreeBytes, newTicker)
+
+func newTicker() (<-chan time.Time, func()) {
+	t := time.NewTicker(treeSampleEvery)
+	return t.C, t.Stop
+}
+
+// treeSampler keeps every sample of each followed process tree, because the
+// kernel will not total a tree: `go test` and `make -j` run children at once. One
+// goroutine runs while any root is followed and owns the samples; stop asks it for
+// them, so a tick it already received is recorded first.
 type treeSampler struct {
-	done chan struct{}
-	wg   sync.WaitGroup
+	// read answers every followed root from one read of the process table per tick.
+	read  func(pids ...int) []int64
+	ticks func() (<-chan time.Time, func())
+	leave chan *sampledRoot
 
-	mu   sync.Mutex
-	peak int64
+	mu      sync.Mutex
+	roots   map[*sampledRoot]struct{}
+	running bool
 }
 
-// newTreeSampler creates a sampler that is not yet following anything. stop is
-// safe on one that never was, which is the path a command that failed to start
-// takes.
-func newTreeSampler() *treeSampler {
-	return &treeSampler{done: make(chan struct{})}
+// sampledRoot is one followed tree. A pointer rather than the pid keys it, because
+// a pid can be reused while an earlier holder is still being stopped.
+type sampledRoot struct {
+	pid     int
+	start   time.Time
+	samples []types.MemorySample
+	record  func(types.MemorySample)
+	done    chan []types.MemorySample
 }
 
-// follow begins sampling the tree rooted at pid.
-//
-// A pid by value rather than the *exec.Cmd, because reading c.Process from another
-// goroutine races with the Start that writes it. That is not theoretical: the
-// first version of this file did exactly that and the race detector caught it on
-// every -race run.
-func (s *treeSampler) follow(pid int) {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		tick := time.NewTicker(treeSampleEvery)
-		defer tick.Stop()
-		for {
-			select {
-			case <-s.done:
-				return
-			case <-tick.C:
-				if n := mem.TreeBytes(pid); n > s.peakSoFar() {
-					s.record(n)
-				}
-			}
-		}
-	}()
-}
-
-// stop ends sampling and returns the largest tree total observed, or 0 when the
-// command was too short to sample or the host cannot report one.
-func (s *treeSampler) stop() int64 {
-	close(s.done)
-	s.wg.Wait()
-	return s.peakSoFar()
-}
-
-func (s *treeSampler) record(n int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if n > s.peak {
-		s.peak = n
+func newTreeSampler(read func(pids ...int) []int64, ticks func() (<-chan time.Time, func())) *treeSampler {
+	return &treeSampler{
+		read:  read,
+		ticks: ticks,
+		leave: make(chan *sampledRoot),
+		roots: map[*sampledRoot]struct{}{},
 	}
 }
 
-func (s *treeSampler) peakSoFar() int64 {
+// follow begins sampling the tree rooted at pid, timing samples from start, and hands
+// each sample to record, when non-nil, on the sampler's goroutine as it is taken. A pid
+// by value rather than the *exec.Cmd, because reading c.Process from another
+// goroutine races with the Start that writes it.
+func (s *treeSampler) follow(pid int, start time.Time, record func(types.MemorySample)) *sampledRoot {
+	r := &sampledRoot{pid: pid, start: start, record: record, done: make(chan []types.MemorySample, 1)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.peak
+	s.roots[r] = struct{}{}
+	if !s.running {
+		s.running = true
+		go s.loop()
+	}
+	return r
+}
+
+// stop ends sampling r and returns its samples: none when the command was shorter
+// than a tick, the host cannot read a tree, or r is nil because it never started.
+func (s *treeSampler) stop(r *sampledRoot) []types.MemorySample {
+	if r == nil {
+		return nil
+	}
+	s.leave <- r
+	return <-r.done
+}
+
+func (s *treeSampler) loop() {
+	tick, stopTicker := s.ticks()
+	defer stopTicker()
+	for {
+		select {
+		case now := <-tick:
+			s.mu.Lock()
+			roots := make([]*sampledRoot, 0, len(s.roots))
+			pids := make([]int, 0, len(s.roots))
+			for r := range s.roots {
+				roots = append(roots, r)
+				pids = append(pids, r.pid)
+			}
+			s.mu.Unlock()
+			sizes := s.read(pids...)
+			for i, r := range roots {
+				if n := sizes[i]; n > 0 {
+					sample := types.MemorySample{At: max(now.Sub(r.start), 0), Bytes: n}
+					r.samples = append(r.samples, sample)
+					if r.record != nil {
+						r.record(sample)
+					}
+				}
+			}
+		case r := <-s.leave:
+			r.done <- r.samples
+			s.mu.Lock()
+			delete(s.roots, r)
+			idle := len(s.roots) == 0
+			if idle {
+				s.running = false
+			}
+			s.mu.Unlock()
+			if idle {
+				return
+			}
+		}
+	}
+}
+
+func samplePeak(samples []types.MemorySample) int64 {
+	var peak int64
+	for _, s := range samples {
+		peak = max(peak, s.Bytes)
+	}
+	return peak
 }

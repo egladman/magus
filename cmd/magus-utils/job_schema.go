@@ -79,9 +79,10 @@ const (
 // name a field is declared with. The values come from the package that owns the set, so
 // a state added there reaches the schema with nothing here to change.
 var closedSets = map[string][]string{
-	"JobState":   leaseStateNames(),
-	"GoalKind":   goalKindNames(),
-	"GoalExpect": goalExpectNames(),
+	"JobState":    leaseStateNames(),
+	"GoalKind":    goalKindNames(),
+	"GoalExpect":  goalExpectNames(),
+	"BriefFormat": types.BriefFormat("").Values(),
 	// The only DiagnosticCode a record declares is JobWaiver.Code, so the set is the codes a
 	// waiver may name: a waiver on any other code fails the schema as it fails the decoder.
 	"DiagnosticCode": waivableCodeNames(),

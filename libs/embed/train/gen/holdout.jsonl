@@ -145,6 +145,7 @@
 {"group":"file:changes/unreleased/mcp-job-actor.md","path":"changes/unreleased/mcp-job-actor.md"}
 {"group":"file:changes/unreleased/measured-claims-go-width.md","path":"changes/unreleased/measured-claims-go-width.md"}
 {"group":"file:changes/unreleased/measured-claims.md","path":"changes/unreleased/measured-claims.md"}
+{"group":"file:changes/unreleased/memory-claims-pool-runs-by-charms-read.md","path":"changes/unreleased/memory-claims-pool-runs-by-charms-read.md"}
 {"group":"file:changes/unreleased/merge-job-branches.md","path":"changes/unreleased/merge-job-branches.md"}
 {"group":"file:changes/unreleased/merge-queue-dashboard.md","path":"changes/unreleased/merge-queue-dashboard.md"}
 {"group":"file:changes/unreleased/metrics-histogram-counters-removed.md","path":"changes/unreleased/metrics-histogram-counters-removed.md"}
@@ -164,6 +165,7 @@
 {"group":"file:changes/unreleased/parity-guard-claude-code-mod-install.md","path":"changes/unreleased/parity-guard-claude-code-mod-install.md"}
 {"group":"file:changes/unreleased/parity-guard-codex-and-patch-writes.md","path":"changes/unreleased/parity-guard-codex-and-patch-writes.md"}
 {"group":"file:changes/unreleased/parity-guard-opencode-plugin.md","path":"changes/unreleased/parity-guard-opencode-plugin.md"}
+{"group":"file:changes/unreleased/pr-checks-run-locally.md","path":"changes/unreleased/pr-checks-run-locally.md"}
 {"group":"file:changes/unreleased/probe-failure-quotes-the-error.md","path":"changes/unreleased/probe-failure-quotes-the-error.md"}
 {"group":"file:changes/unreleased/proofread-fix6-round5.md","path":"changes/unreleased/proofread-fix6-round5.md"}
 {"group":"file:changes/unreleased/proofread-fix8-adjectives.md","path":"changes/unreleased/proofread-fix8-adjectives.md"}
@@ -875,6 +877,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/bootstrap.go"}
 {"group":"dir:internal/guard","path":"internal/guard/bootstrap_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/brief.go"}
+{"group":"dir:internal/guard","path":"internal/guard/brief_buzz.go"}
+{"group":"dir:internal/guard","path":"internal/guard/brief_buzz_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/brief_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz_read.go"}

@@ -879,6 +879,35 @@ github.com/egladman/magus/types.BranchChange.Ref field string "json:\"ref\""
 github.com/egladman/magus/types.BranchChangeReporter type interface
 github.com/egladman/magus/types.BranchChangeReporter.BranchChanges imethod func(ctx context.Context, dir string, base string, limit int) ([]BranchChange, error)
 github.com/egladman/magus/types.BranchIdents func(lines [][]byte, start int, end int, language string) []string
+github.com/egladman/magus/types.Brief type struct
+github.com/egladman/magus/types.Brief.Decisions field []BriefDecision "json:\"decisions,omitempty\""
+github.com/egladman/magus/types.Brief.Evidence field []BriefRef "json:\"evidence,omitempty\""
+github.com/egladman/magus/types.Brief.Goal field string "json:\"goal\""
+github.com/egladman/magus/types.Brief.Job field string "json:\"job\""
+github.com/egladman/magus/types.Brief.Why field string "json:\"why,omitempty\""
+github.com/egladman/magus/types.BriefDecision type struct
+github.com/egladman/magus/types.BriefDecision.What field string "json:\"what\""
+github.com/egladman/magus/types.BriefDecision.Why field string "json:\"why,omitempty\""
+github.com/egladman/magus/types.BriefFormat type string
+github.com/egladman/magus/types.BriefFormat.String method func() string
+github.com/egladman/magus/types.BriefFormat.Valid method func() bool
+github.com/egladman/magus/types.BriefFormat.Values method func() []string
+github.com/egladman/magus/types.BriefFormatBuzz const BriefFormat = "buzz"
+github.com/egladman/magus/types.BriefFormatMarkdown const BriefFormat = "markdown"
+github.com/egladman/magus/types.BriefRef type struct
+github.com/egladman/magus/types.BriefRef.ID field string "json:\"id\""
+github.com/egladman/magus/types.BriefRef.Kind field BriefRefKind "json:\"kind\""
+github.com/egladman/magus/types.BriefRef.Says field string "json:\"says,omitempty\""
+github.com/egladman/magus/types.BriefRefCommit const BriefRefKind = "commit"
+github.com/egladman/magus/types.BriefRefFile const BriefRefKind = "file"
+github.com/egladman/magus/types.BriefRefInvocation const BriefRefKind = "invocation"
+github.com/egladman/magus/types.BriefRefKind type string
+github.com/egladman/magus/types.BriefRefKind.String method func() string
+github.com/egladman/magus/types.BriefRefKind.Valid method func() bool
+github.com/egladman/magus/types.BriefRefKind.Values method func() []string
+github.com/egladman/magus/types.BriefRefOutput const BriefRefKind = "output"
+github.com/egladman/magus/types.BriefRefPlan const BriefRefKind = "plan"
+github.com/egladman/magus/types.BriefRefVerdict const BriefRefKind = "verdict"
 github.com/egladman/magus/types.BrokerBestEffort const BrokerPolicy = "best-effort"
 github.com/egladman/magus/types.BrokerOff const BrokerPolicy = "off"
 github.com/egladman/magus/types.BrokerPolicy type string
@@ -983,6 +1012,7 @@ github.com/egladman/magus/types.Chain.String method func() string
 github.com/egladman/magus/types.ChainMemory type struct
 github.com/egladman/magus/types.ChainMemory.DeclaredBy field string
 github.com/egladman/magus/types.ChainMemory.MB field int
+github.com/egladman/magus/types.ChainMemory.Profile field MemoryProfile
 github.com/egladman/magus/types.ChainMemory.Sizing field MemorySizing
 github.com/egladman/magus/types.ChainMemoryMB func(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string)
 github.com/egladman/magus/types.ChainSkipCacheOutputs func(p *Project, target string, lookup func(path string) *Project) []Glob
@@ -1354,12 +1384,14 @@ github.com/egladman/magus/types.CrossTargetRef.Target field string "json:\"targe
 github.com/egladman/magus/types.Culprit type struct
 github.com/egladman/magus/types.Culprit.ID field string
 github.com/egladman/magus/types.Culprit.Info field string
+github.com/egladman/magus/types.Curve func(ctx context.Context) MemoryCurve
 github.com/egladman/magus/types.DanglingDocReference const DiagnosticCode = "MGS7002"
 github.com/egladman/magus/types.DeadOutputGlob const DiagnosticCode = "MGS1018"
 github.com/egladman/magus/types.Declaration type struct
 github.com/egladman/magus/types.Declaration.Apply method func(u *Job)
 github.com/egladman/magus/types.Declaration.ApplySpec method func(u *Job)
 github.com/egladman/magus/types.Declaration.Breaks field []string "json:\"breaks,omitempty\""
+github.com/egladman/magus/types.Declaration.BriefFormat field BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.Declaration.Checkout field string "json:\"checkout,omitempty\" schema:\"abspath\""
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
@@ -2446,6 +2478,7 @@ github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,om
 github.com/egladman/magus/types.Job.Attempts field int "json:\"attempts,omitempty\"  yaml:\"attempts,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
 github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
+github.com/egladman/magus/types.Job.BriefFormat field BriefFormat "json:\"brief_format,omitempty\" yaml:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Job.Check field *LeaseCheck "json:\"check,omitempty\" yaml:\"check,omitempty\""
 github.com/egladman/magus/types.Job.CheckoutRoot field string "json:\"checkout_root,omitempty\" yaml:\"checkout_root,omitempty\""
 github.com/egladman/magus/types.Job.Checkpoint field string "json:\"checkpoint,omitempty\" yaml:\"checkpoint,omitempty\""
@@ -2626,6 +2659,7 @@ github.com/egladman/magus/types.JobProblems.Err method func() error
 github.com/egladman/magus/types.JobProblems.Waive method func(ws []JobWaiver) (kept JobProblems, waived JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Breaks field *[]string "json:\"breaks,omitempty\""
+github.com/egladman/magus/types.JobPut.BriefFormat field *BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.JobPut.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.JobPut.Checkpoint field *string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.JobPut.Criteria field *string "json:\"criteria,omitempty\""
@@ -3253,6 +3287,7 @@ github.com/egladman/magus/types.MachineClaim.Dir field string "json:\"dir,omitem
 github.com/egladman/magus/types.MachineClaim.Invocation field string "json:\"invocation,omitempty\" yaml:\"invocation,omitempty\""
 github.com/egladman/magus/types.MachineClaim.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
 github.com/egladman/magus/types.MachineClaim.PID field int "json:\"pid\" yaml:\"pid\""
+github.com/egladman/magus/types.MachineClaim.Profile field MemoryProfile "json:\"profile,omitzero\" yaml:\"profile,omitempty\""
 github.com/egladman/magus/types.MachineClaim.Project field string "json:\"project\" yaml:\"project\""
 github.com/egladman/magus/types.MachineClaim.Run method func() string
 github.com/egladman/magus/types.MachineClaim.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
@@ -3263,6 +3298,7 @@ github.com/egladman/magus/types.MachineClaimant.Command field string "json:\"com
 github.com/egladman/magus/types.MachineClaimant.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.PID field int "json:\"pid,omitzero\" yaml:\"pid,omitempty\""
+github.com/egladman/magus/types.MachineClaimant.Profile field MemoryProfile "json:\"profile,omitzero\" yaml:\"profile,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Project field string "json:\"project\" yaml:\"project\""
 github.com/egladman/magus/types.MachineClaimant.Reserved field bool "json:\"reserved,omitzero\" yaml:\"reserved,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Since field time.Time "json:\"since,omitempty\" yaml:\"since,omitempty\""
@@ -3285,6 +3321,7 @@ github.com/egladman/magus/types.MachineVerdict.HeldSlots field int "json:\"held_
 github.com/egladman/magus/types.MachineVerdict.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.ID field string "json:\"id,omitempty\" yaml:\"id,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.OwnRun field bool "json:\"own_run,omitzero\" yaml:\"own_run,omitempty\""
+github.com/egladman/magus/types.MachineVerdict.Packed field bool "json:\"packed,omitempty\" yaml:\"packed,omitempty\""
 github.com/egladman/magus/types.MagusBuild type struct
 github.com/egladman/magus/types.MagusBuild.Commit field string
 github.com/egladman/magus/types.MagusBuild.Date field string
@@ -3333,10 +3370,25 @@ github.com/egladman/magus/types.McpTransport type string
 github.com/egladman/magus/types.McpTransport.String method func() string
 github.com/egladman/magus/types.McpTransport.Valid method func() bool
 github.com/egladman/magus/types.McpTransport.Values method func() []string
+github.com/egladman/magus/types.MemoryCurve type [20]uint32
+github.com/egladman/magus/types.MemoryCurve.MarshalJSON method(ptr) func() ([]byte, error)
+github.com/egladman/magus/types.MemoryCurve.PeakMB method func() int
+github.com/egladman/magus/types.MemoryCurve.UnmarshalJSON method(ptr) func(b []byte) error
+github.com/egladman/magus/types.MemoryCurveBuckets const untyped int = 20
 github.com/egladman/magus/types.MemoryDeclarationDrift const DiagnosticCode = "MGS1030"
-github.com/egladman/magus/types.MemorySizer type func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing)
+github.com/egladman/magus/types.MemoryProfile type struct
+github.com/egladman/magus/types.MemoryProfile.Curve field MemoryCurve "json:\"curve\""
+github.com/egladman/magus/types.MemoryProfile.D10Ms field int64 "json:\"d10_ms\""
+github.com/egladman/magus/types.MemoryProfile.D90Ms field int64 "json:\"d90_ms\""
+github.com/egladman/magus/types.MemoryProfile.HeldMB method func(elapsed time.Duration) int
+github.com/egladman/magus/types.MemoryProfile.Runs field int "json:\"runs\""
+github.com/egladman/magus/types.MemorySample type struct
+github.com/egladman/magus/types.MemorySample.At field time.Duration
+github.com/egladman/magus/types.MemorySample.Bytes field int64
+github.com/egladman/magus/types.MemorySizer type func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing, profile MemoryProfile)
 github.com/egladman/magus/types.MemorySizing type struct
 github.com/egladman/magus/types.MemorySizing.AnyShape field bool "json:\"any_shape,omitzero\" yaml:\"any_shape,omitempty\""
+github.com/egladman/magus/types.MemorySizing.Fallback field string "json:\"fallback,omitempty\" yaml:\"fallback,omitempty\""
 github.com/egladman/magus/types.MemorySizing.Measured method func() bool
 github.com/egladman/magus/types.MemorySizing.Samples field int "json:\"samples,omitzero\" yaml:\"samples,omitempty\""
 github.com/egladman/magus/types.MemorySizing.Slots field SlotSizing "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
@@ -3552,6 +3604,7 @@ github.com/egladman/magus/types.NotableRankCutoff const untyped int = 50
 github.com/egladman/magus/types.ObservationKeyedAsVersion const DiagnosticCode = "MGS1037"
 github.com/egladman/magus/types.Observer type interface
 github.com/egladman/magus/types.Observer.Observe imethod func(GraphEvent)
+github.com/egladman/magus/types.OnRSSSample func(ctx context.Context, fn func(at time.Duration, bytes int64))
 github.com/egladman/magus/types.OperationCherryPick const untyped string = "cherry-pick"
 github.com/egladman/magus/types.OperationMerge const untyped string = "merge"
 github.com/egladman/magus/types.OperationRebase const untyped string = "rebase"
@@ -3922,6 +3975,7 @@ github.com/egladman/magus/types.ReasonIndexStale const KnowledgeUnknownReason = 
 github.com/egladman/magus/types.ReasonSymbolIndexMissing const KnowledgeUnknownReason = "symbol-index-missing"
 github.com/egladman/magus/types.ReasonSymbolsNotLoaded const KnowledgeUnknownReason = "symbols-not-loaded"
 github.com/egladman/magus/types.RecordCPUMs func(ctx context.Context, ms int64)
+github.com/egladman/magus/types.RecordCurve func(ctx context.Context, start time.Time) (record func(MemorySample), end func())
 github.com/egladman/magus/types.RecordPeakRSS func(ctx context.Context, bytes int64)
 github.com/egladman/magus/types.RecordReturn func(ctx context.Context, project string, target string, v any)
 github.com/egladman/magus/types.RecordedReturn func(ctx context.Context, project string, target string) (any, bool)
