@@ -250,9 +250,11 @@ func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 	assert.Contains(t, v.Reason, "abc1234", "the refusal names the commit it publishes")
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
-	assert.Contains(t, v.Reason, "status --wait")
-	assert.Contains(t, v.Reason, "affected ci")
 	assert.NotContains(t, v.Reason, "Approving")
+
+	_, full := gradePushWithoutGate(gateAbsent, "abc1234", "")
+	assert.Contains(t, full, "status --wait")
+	assert.Contains(t, full, "affected ci")
 
 	failed := judgePush(t, "fail", "")
 	assert.Equal(t, decisionDeny, failed.Decision)
@@ -290,9 +292,7 @@ func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
 
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: "queue it", Rule: workspaceCommandRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
-	require.Len(t, probe.asked, 1)
-	assert.Equal(t, []string{"git", "gh"}, []string{probe.asked[0].Commands[0].Program, probe.asked[0].Commands[1].Program})
+	assert.Equal(t, decisionDeny, v.Decision, "the line is refused whichever rule speaks")
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})

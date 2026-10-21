@@ -301,7 +301,7 @@ var ruleDocArchitectureUnbriefed = types.RuleDoc{
 
 var ruleDocPushUngated = types.RuleDoc{
 	Name:    string(denyRulePushUngated),
-	Catches: "a push or `gh pr create` at a commit with no green gate, refused for the orchestrator and a leased worker alike",
+	Catches: "a push or `gh pr create` at a commit with no green gate; refused for every session",
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
@@ -931,7 +931,7 @@ var ruleDocSpawnNestedWaiter = types.RuleDoc{
 
 var ruleDocPushGate = types.RuleDoc{
 	Name:    string(advisoryPushGate),
-	Catches: "a push or `gh pr create` the run log does not prove ungated, which names the gate and lets it through",
+	Catches: "a push or `gh pr create` the run log cannot prove ungated; names the gate",
 }
 
 var ruleDocRegenSource = types.RuleDoc{

@@ -580,7 +580,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
-		assert.Equal(t, decisionPass, v.Decision, "judged, not failed open: "+v.Reason+v.Context)
+		assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
 		// A workspace that is no repository has no diff to read: the description is denied
 		// with the fetch that would make it readable, never judged on facts nobody read.

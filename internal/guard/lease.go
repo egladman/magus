@@ -2855,7 +2855,8 @@ func isPRCreate(c hint.Invocation) bool {
 			words = append(words, a)
 		}
 	}
-	return len(words) >= 2 && words[0] == "pr" && words[1] == "create"
+	i := slices.Index(words, "pr")
+	return i >= 0 && i+1 < len(words) && words[i+1] == "create"
 }
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.
