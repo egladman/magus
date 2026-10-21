@@ -93,6 +93,21 @@ export enum<str> ModelTierSource {
     default = "default",
 }
 
+export enum<str> BriefFormat {
+    none = "",
+    markdown = "markdown",
+    buzz = "buzz",
+}
+
+export enum<str> BriefRefKind {
+    output = "output",
+    verdict = "verdict",
+    invocation = "invocation",
+    file = "file",
+    plan = "plan",
+    commit = "commit",
+}
+
 export object Affected {
     base: str = "",
     changed: [str] = [],
@@ -1169,6 +1184,7 @@ export object Job {
     breaks: [str] = [],
     model: str = "",
     modelTier: JobModelTier? = null,
+    briefFormat: BriefFormat = BriefFormat.none,
     reworkRounds: int = 0,
     widenings: int = 0,
     generation: int = 0,
@@ -1301,6 +1317,25 @@ export object WriteRequest {
     content: str = "",
     oldText: str = "",
     newText: str = "",
+}
+
+export object BriefDecision {
+    what: str = "",
+    why: str = "",
+}
+
+export object BriefRef {
+    kind: BriefRefKind = BriefRefKind.output,
+    id: str = "",
+    says: str = "",
+}
+
+export object Brief {
+    job: str = "",
+    goal: str = "",
+    why: str = "",
+    decisions: [BriefDecision] = [],
+    evidence: [BriefRef] = [],
 }
 
 export object HarnessKey {

@@ -512,6 +512,11 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"chained", "chained"}, {"split", "split"}, {"solo", "solo"}},
 	},
 	{
+		Name:  "BriefFormat",
+		Type:  reflect.TypeFor[types.BriefFormat](),
+		Cases: []enumCase{{"none", ""}, {"markdown", "markdown"}, {"buzz", "buzz"}},
+	},
+	{
 		Name: "BriefRefKind",
 		Type: reflect.TypeFor[types.BriefRefKind](),
 		Cases: []enumCase{{"output", "output"}, {"verdict", "verdict"}, {"invocation", "invocation"},
