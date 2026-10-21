@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
@@ -72,7 +73,7 @@ func (s *Service) QueryNodes(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	out := g.QueryPage(query, int(req.Msg.GetBudget()), int(req.Msg.GetOffset()), int(req.Msg.GetPageSize()))
+	out := g.QueryPage(query, int(req.Msg.GetBudget()), int(req.Msg.GetOffset()), int(req.Msg.GetPageSize()), embedtable.Cached)
 	resp := &graphv1.QueryNodesResponse{
 		Query:      out.Query,
 		Budget:     int32(out.Budget),

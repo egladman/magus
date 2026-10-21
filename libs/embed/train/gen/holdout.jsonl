@@ -310,6 +310,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_link.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_link_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_registry.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/graph_registry_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_source.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_source_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_test.go"}
@@ -843,6 +844,8 @@
 {"group":"dir:internal/edit","path":"internal/edit/edit_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename_test.go"}
+{"group":"dir:internal/embedtable","path":"internal/embedtable/embedtable.go"}
+{"group":"dir:internal/embedtable","path":"internal/embedtable/embedtable_test.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/eventstream.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/eventstream_test.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/follow.go"}
@@ -1329,6 +1332,8 @@
 {"group":"dir:libs/embed","path":"libs/embed/index.go"}
 {"group":"dir:libs/embed","path":"libs/embed/index_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/magusfile.buzz"}
+{"group":"dir:libs/embed","path":"libs/embed/pin.go"}
+{"group":"dir:libs/embed","path":"libs/embed/pin_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/table.go"}
@@ -1337,6 +1342,8 @@
 {"group":"dir:libs/embed","path":"libs/embed/tokens_test.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/bench.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/bench_test.go"}
+{"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/convert.go"}
+{"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/convert_test.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/datasets.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/decontam.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/decontam_test.go"}
@@ -1344,6 +1351,7 @@
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/main_test.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/teacher.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/train.go"}
+{"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/vocab.go"}
 {"group":"dir:libs/embed/train/distill","path":"libs/embed/train/distill/contrastive.go"}
 {"group":"dir:libs/embed/train/distill","path":"libs/embed/train/distill/contrastive_test.go"}
 {"group":"dir:libs/embed/train/distill","path":"libs/embed/train/distill/pca.go"}

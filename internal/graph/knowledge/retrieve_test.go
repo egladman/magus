@@ -1,6 +1,8 @@
 package knowledge
 
 import (
+	"bytes"
+	"errors"
 	"slices"
 	"testing"
 
@@ -8,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,6 +23,81 @@ func retrieveIDs(ms []types.KnowledgeMatch) []string {
 }
 
 func shipped() RetrieveOptions { return RetrieveOptions{Weights: ShippedWeights()} }
+
+var noTableSkipped = listEmbed + ": no table loaded: run `" + pullTable + "`"
+
+// fixtureTable holds parse and config on axis 0 and yaml on axis 1, so a text of parse
+// and config points where the query parse does and one of parse and yaml at 45 degrees.
+func fixtureTable(t *testing.T) func() (*embed.Table, error) {
+	t.Helper()
+	row := func(axis int) []int8 {
+		r := make([]int8, 64)
+		r[axis] = 127
+		return r
+	}
+	var buf bytes.Buffer
+	require.NoError(t, embed.EncodeTable(&buf, embed.TableSpec{
+		Tokens:  []string{"config", "parse", "yaml"},
+		Weights: []uint16{1, 1, 1},
+		Rows:    [][]int8{row(0), row(0), row(1)},
+		Prov: embed.Provenance{Teacher: "fixture", TeacherRevision: "1", TextsDigest: "t", PairsDigest: "p",
+			Pipeline: "fixture", Run: "fixture", GOARCH: "any"},
+	}))
+	table, err := embed.ReadTable(buf.Bytes())
+	require.NoError(t, err)
+	return func() (*embed.Table, error) { return table, nil }
+}
+
+// embedFixture holds six nodes that score the same for "parse", so lexical order is id
+// order and symbol:z comes last, and only symbol:z's doc points where parse does.
+func embedFixture() *Graph {
+	g := NewGraph()
+	for _, id := range []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5"} {
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: "parse", Doc: "yaml"})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "symbol:z", Kind: types.KindSymbol, Label: "parse", Doc: "config"})
+	return g
+}
+
+func TestRetrieveWhyNamesTheEmbedList(t *testing.T) {
+	opts := shipped()
+	opts.Table = fixtureTable(t)
+	ms, ranking, err := embedFixture().Retrieve("parse", opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{listGraph + ": no reader path names a node"}, ranking.Skipped)
+	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listEmbed, Rank: 1}}, z.Why.Lists)
+}
+
+func TestRetrieveEmbedListMovesTheRanking(t *testing.T) {
+	g := embedFixture()
+	cold, _, err := g.Retrieve("parse", shipped())
+	require.NoError(t, err)
+	require.Equal(t, "symbol:z", cold[len(cold)-1].ID)
+
+	opts := shipped()
+	opts.Table = fixtureTable(t)
+	warm, _, err := g.Retrieve("parse", opts)
+	require.NoError(t, err)
+	assert.Less(t, slices.Index(retrieveIDs(warm), "symbol:z"), len(warm)-1, "the match the query's embedding points at rises")
+	assert.ElementsMatch(t, retrieveIDs(cold), retrieveIDs(warm), "the embed list reorders; it adds no match")
+}
+
+func TestRetrieveSkipsTheEmbedListWhenTheTableFailsToLoad(t *testing.T) {
+	for _, tc := range []struct{ loadErr, skipped string }{
+		{"table.bin is missing, run `" + pullTable + "`", listEmbed + ": table.bin is missing, run `" + pullTable + "`"},
+		{"table.bin hashes to sha256:0", listEmbed + ": table.bin hashes to sha256:0: run `" + pullTable + "` to replace it"},
+	} {
+		opts := shipped()
+		opts.Table = func() (*embed.Table, error) { return nil, errors.New(tc.loadErr) }
+		ms, ranking, err := embedFixture().Retrieve("parse", opts)
+		require.NoError(t, err)
+		require.Len(t, ranking.Skipped, 2)
+		assert.Equal(t, tc.skipped, ranking.Skipped[1])
+		assert.Equal(t, []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5", "symbol:z"}, retrieveIDs(ms), "the lexical and exact lists still rank")
+		assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
+	}
+}
 
 // A partial match that scores higher outranks a full one, and both say how many of the
 // query's tokens they hold: ranking matched terms first lost to score order everywhere it
@@ -150,7 +228,7 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	opts.Reader = readerPaths
 	ms, ranking, err := g.Retrieve("parse", opts)
 	require.NoError(t, err)
-	assert.Empty(t, ranking.Skipped)
+	assert.Equal(t, []string{noTableSkipped}, ranking.Skipped)
 	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
 	why := *z.Why
 	why.Seeds = slices.Clone(why.Seeds)
@@ -168,7 +246,7 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	ms, ranking, err = g.Retrieve("parse", shipped())
 	require.NoError(t, err)
 	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
-	assert.Equal(t, []string{listGraph + ": no reader path names a node"}, ranking.Skipped)
+	assert.Equal(t, []string{listGraph + ": no reader path names a node", noTableSkipped}, ranking.Skipped)
 
 	ms, _, err = g.Retrieve("parse x.go", shipped())
 	require.NoError(t, err)

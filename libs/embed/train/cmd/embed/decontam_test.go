@@ -65,18 +65,24 @@ func TestDecontamWindowHashesRollLikeFreshOnes(t *testing.T) {
 
 func TestDecontamRefusesAMissingEvalSet(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "cosqa.jsonl"), []byte(`{"id":"q1","text":"sort a map by value"}`+"\n"), 0o644))
+	writeSet := func(name, queries, corpus string) {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name, "queries.jsonl"), []byte(queries), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name, "corpus.jsonl"), []byte(corpus), 0o644))
+	}
+	writeSet("cosqa", `{"id":"q1","text":"sort a map by value"}`+"\n", `{"id":"d1","text":"sorted(m.items())"}`+"\n")
 	err := readEvalSets(&evalCorpus{}, dir, map[string]bool{})
-	require.ErrorContains(t, err, "eval set csn-go: no csn-go.jsonl")
+	require.ErrorContains(t, err, "eval set csn-go: no csn-go/queries.jsonl")
 
 	e := &evalCorpus{}
 	require.NoError(t, readEvalSets(e, dir, map[string]bool{"csn-go": true, "stackoverflow-qa": true}))
 	require.Equal(t, []string{"cosqa"}, e.sets)
-	require.Equal(t, []string{"sort a map by value"}, e.texts["cosqa"])
-	require.Len(t, e.files["cosqa"], 64)
+	require.Equal(t, []string{"sort a map by value", "sorted(m.items())"}, e.texts["cosqa"])
+	require.Len(t, e.files["cosqa/queries.jsonl"], 64)
+	require.Len(t, e.files["cosqa/corpus.jsonl"], 64)
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "csn-go.jsonl"), []byte(`{"text":"no id"}`+"\n"), 0o644))
-	require.ErrorContains(t, readEvalSets(&evalCorpus{}, dir, map[string]bool{}), "csn-go.jsonl:1: no id")
+	writeSet("csn-go", `{"id":"q1","text":"open a file"}`+"\n", `{"text":"no id"}`+"\n")
+	require.ErrorContains(t, readEvalSets(&evalCorpus{}, dir, map[string]bool{}), "corpus.jsonl:1: no id")
 
 	_, err = newDecontaminator(&evalCorpus{}, 0)
 	require.ErrorContains(t, err, "-common 0 must be at least 1")

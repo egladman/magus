@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/gomlx/core/tensors"
 )
@@ -298,7 +299,11 @@ func writeSafetensors(t *testing.T, path string, cfg Config, w map[string][]floa
 	for _, p := range cfg.params() {
 		start := len(data)
 		for _, v := range w[p.name] {
-			data = binary.LittleEndian.AppendUint32(data, math.Float32bits(v))
+			if dtype == "F16" {
+				data = binary.LittleEndian.AppendUint16(data, float16.FromFloat32(v).Bits())
+			} else {
+				data = binary.LittleEndian.AppendUint32(data, math.Float32bits(v))
+			}
 		}
 		hdr[p.name] = map[string]any{"dtype": dtype, "shape": p.dims, "data_offsets": []int{start, len(data)}}
 	}
@@ -336,29 +341,35 @@ func TestLoadModelReadsSafetensors(t *testing.T) {
 	dir := writeModelDir(t, tinyConfigJSON, `{"pooling_mode_cls_token": true, "pooling_mode_mean_tokens": false}`)
 	cfg := tinyConfig(PoolCLS)
 	w := tinyWeights(cfg, 11)
-	writeSafetensors(t, filepath.Join(dir, "model.safetensors"), cfg, w, "F32")
-	m, err := LoadModel(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if m.Config != cfg {
-		t.Errorf("config = %+v, want %+v", m.Config, cfg)
-	}
-	for i, p := range cfg.params() {
-		got, err := tensors.CopyFlatData[float32](m.params[i])
+	for _, dtype := range []string{"F32", "F16"} {
+		writeSafetensors(t, filepath.Join(dir, "model.safetensors"), cfg, w, dtype)
+		m, err := LoadModel(dir)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%s: %v", dtype, err)
 		}
-		for j := range got {
-			if got[j] != w[p.name][j] {
-				t.Fatalf("%s[%d] = %g, want %g", p.name, j, got[j], w[p.name][j])
+		if m.Config != cfg {
+			t.Errorf("%s: config = %+v, want %+v", dtype, m.Config, cfg)
+		}
+		for i, p := range cfg.params() {
+			got, err := tensors.CopyFlatData[float32](m.params[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+			for j := range got {
+				want := w[p.name][j]
+				if dtype == "F16" {
+					want = float16.FromFloat32(want).Float32()
+				}
+				if got[j] != want {
+					t.Fatalf("%s: %s[%d] = %g, want %g", dtype, p.name, j, got[j], want)
+				}
 			}
 		}
 	}
 
-	writeSafetensors(t, filepath.Join(dir, "model.safetensors"), cfg, w, "F16")
-	if _, err := LoadModel(dir); err == nil || !strings.Contains(err.Error(), "want F32") {
-		t.Errorf("an F16 tensor loaded: %v", err)
+	writeSafetensors(t, filepath.Join(dir, "model.safetensors"), cfg, w, "BF16")
+	if _, err := LoadModel(dir); err == nil || !strings.Contains(err.Error(), "want F32 or F16") {
+		t.Errorf("a BF16 tensor loaded: %v", err)
 	}
 }
 

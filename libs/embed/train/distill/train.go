@@ -594,7 +594,9 @@ func (a *adam) step(m *Model, g *grads, lr float64) {
 func dot(a, b []float64) float64 {
 	var s float64
 	for i, x := range a {
-		s += x * b[i]
+		// The explicit conversion rounds the product, so no architecture fuses it
+		// into the add and the table's bytes match everywhere.
+		s = float64(x*b[i]) + s
 	}
 	return s
 }

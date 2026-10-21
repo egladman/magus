@@ -69,10 +69,13 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 ### graph push options
 
 **--ref** *string*
-: The artifact to push to, as \<registry\>/\<repository\>:\<tag\> (required; never derived)
+: The artifact to push to, as \<registry\>/\<repository\>:\<tag\> (required; never derived); with --table, a \<registry\>/\<repository\> defaulting to ghcr.io/egladman/magus-embed
 
 **--refresh**
 : Rebuild the graph before pushing instead of exporting what is cached
+
+**--table**
+: Publish the embedding table from the cache instead of the graph, tagged with its pin, write-once
 
 **--username** *string*
 : The registry username; the token is read from stdin, the way docker login --password-stdin takes one
@@ -83,7 +86,10 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 : Write the graph here instead of stdout
 
 **--ref** *string*
-: The artifact to pull (default: derived from the repository's origin remote)
+: The artifact to pull (default: derived from the repository's origin remote); with --table, a \<registry\>/\<repository\> defaulting to ghcr.io/egladman/magus-embed
+
+**--table**
+: Fetch the embedding table the binary pins into the cache instead of the graph
 
 ### graph deps options
 

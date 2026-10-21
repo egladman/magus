@@ -1,6 +1,7 @@
 import "std";
 import "fs";
 import "env";
+import "crypto";
 import "magus";
 import "project/../../.." as workspace;
 import "../../../hack/magusfile/advisories" as advisories;
@@ -21,10 +22,12 @@ magus\project({
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
         "fetch": {"skip_cache": "downloads the pinned inputs into the cache root, outside the tree"},
-        "vocab": {"skip_cache": "writes the training texts and token texts into the cache root, outside the tree"},
+        "vocab": {"skip_cache": "reads the datasets and writes the training texts and token texts into the cache root, outside the tree"},
         "teacher": {"skip_cache": "writes teacher shards into the cache root, outside the tree"},
         "train": {"skip_cache": "reads teacher runs from the cache root, outside the tree"},
         "teacher-parity": {"skip_cache": "reads reference vectors from the cache root, outside the tree"},
+        "convert": {"skip_cache": "reads potion from the cache root and writes the table there, outside the tree"},
+        "table": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
     },
 });
 
@@ -89,18 +92,24 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
-// figures, and CoRNStack rows) and the forced tokens under the cache root's training/, then
-// the vocabulary's token texts beside them. FineWeb-Edu is left out: the module has no
-// parquet reader. The texts run is appended to runs.jsonl. Args after -- go to `embed
-// vocab`, e.g. `-- -size 16000`.
+// figures, and CoRNStack rows), decontaminated against the eval sets embed bench reads
+// from the cache root's bench/ (testdata/retrieval has no queries.jsonl, so judged-queries
+// is left out), and the forced tokens under the cache root's training/, then
+// the vocabulary's token texts beside them and its counts to gen/vocab.jsonl, which convert
+// reads. FineWeb-Edu is left out: the module has no parquet reader. The texts run is
+// appended to runs.jsonl. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
+// Manual, never part of ci: rewriting gen/vocab.jsonl moves the table's pin.
 export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen/vocab.jsonl");
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final dir = fs\join(cache, name: "training");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
-        "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
+        "-eval", fs\join(cache, name: "bench"), "-no-eval", "judged-queries", "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
     runlog\appendTexts(dir, target: "runs.jsonl");
+    fs\mkdirAll("gen");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
-        "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl")] + args});
+        "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl"),
+        "-vocab", fs\join("gen", name: "vocab.jsonl")] + args});
 }
 
 // Embeds the vocabulary's token texts, then the training texts, each into resumable,
@@ -135,6 +144,30 @@ export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
 // -h` lists after --; manual, never part of ci.
 export fun train(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "train"] + args});
+}
+
+// Writes potion-code-16M-v2 over gen/vocab.jsonl as the cache root's
+// potion-code-16M-v2.table. The table depends on nothing but the committed vocabulary and
+// the pinned potion files, so its bytes, and the pin, hold at any commit.
+export fun convert(ctx: magus\Context, args: [str]) > void !> any {
+    fetch(ctx, args: ["potion-code-16M-v2/"]);
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "convert", "-cache", cache,
+        "-vocab", fs\join("gen", name: "vocab.jsonl"), "-run", "convert",
+        "-out", fs\join(cache, name: "potion-code-16M-v2.table")] + args});
+}
+
+// Pins the converted table in libs/embed/gen/table.digest by its sha256, the digest its
+// OCI artifact's layer and tag carry, so the release publishes the artifact without
+// reading the pin off a registry. It lives here, not in libs/embed, because libs/embed
+// importing this project closes a cycle through the root. Manual, never part of ci.
+export fun table(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(convert);
+    ctx.writesFiles("../gen/table.digest");
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    final digest = crypto\sha256File(fs\join(cache, name: "potion-code-16M-v2.table"));
+    fs\mkdirAll(fs\join("..", name: "gen"));
+    fs\writeFile(fs\join("..", "gen", "table.digest"), content: digest + "\n");
 }
 
 // The anchor `magus affected ci` keys off.

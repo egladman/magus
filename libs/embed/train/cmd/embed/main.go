@@ -31,10 +31,11 @@ const usage = `usage: embed <command> [flags]
 commands:
   fetch           download the pinned inputs named in inputs.jsonl and verify their sha256
   texts           write the training texts and forced tokens from embed-mine's source manifest
-  vocab           build the vocabulary and write its token texts for a teacher run
+  vocab           build the vocabulary; write its token texts for a teacher run and its counts for convert
   teacher         embed a texts file with a teacher model into resumable, content-addressed shards
   teacher-parity  check the Go teacher against the reference vectors and report texts/s
   train           distill, train and quantize the table from finished teacher runs
+  convert         write potion-code-16M-v2 as a table over the vocabulary, mean of each token's word pieces
   bench           write CodeRankEmbed's runs over a subset the external benchmark exported
 
 run "embed <command> -h" for a command's flags`
@@ -58,6 +59,8 @@ func main() {
 		err = runParity(os.Args[2:])
 	case "train":
 		err = runTrain(os.Args[2:])
+	case "convert":
+		err = runConvert(os.Args[2:])
 	case "bench":
 		err = runBench(os.Args[2:])
 	default:
@@ -121,7 +124,7 @@ func runTexts(args []string) error {
 	maxBytes := fs.Int("chunk-bytes", 512, "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it")
 	ratio := fs.Float64("cornstack", 1, "CoRNStack rows per in-repo text; each row adds two texts")
 	skip := fs.String("skip", "", "comma-separated input names left out; an input with no reader must be named here")
-	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>.jsonl of {\"id\", \"text\"} lines per set: every query and gold document")
+	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>/ per set whose queries.jsonl and corpus.jsonl hold {\"id\", \"text\"} lines, the layout embed bench reads")
 	noEval := fs.String("no-eval", "", "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl")
 	common := fs.Int("common", 10, "a 13-word window more eval texts than this hold is boilerplate and drops nothing")
 	_ = fs.Parse(args)

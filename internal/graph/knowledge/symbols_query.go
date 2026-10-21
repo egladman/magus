@@ -144,7 +144,8 @@ func (s *Store) readSymbolNames(man *manifest) *symbolNames {
 // walk asks for nothing new. At that point every node the walk visited carries exactly the
 // content and edges the full graph gives it, so the walk, and the answer, are the full
 // graph's. A query that ranks on edges (a relation filter with no free text), or a store
-// with no current index file, merges every shard instead. g is consumed.
+// with no current index file, merges every shard instead. It ranks under the reader paths
+// and table loader ctx carries (WithReader, WithTable). g is consumed.
 func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget int) (types.KnowledgeQueryOutput, *Graph, error) {
 	man := s.readManifestOrNil()
 	q := parseQuery(input)
@@ -158,7 +159,7 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 	}
 	// Ranked over the in-memory index, as Graph.Query over the fully merged graph is, so the
 	// two answers stay byte for byte the same.
-	opts := RetrieveOptions{Reader: readersOn(ctx), Weights: ShippedWeights()}
+	opts := RetrieveOptions{Reader: readersOn(ctx), Weights: ShippedWeights(), Table: tableOn(ctx)}
 	if names == nil || (relationOnly && len(q.terms) == 0) {
 		if err := s.MergeSymbolShards(ctx, g); err != nil {
 			return types.KnowledgeQueryOutput{}, nil, err

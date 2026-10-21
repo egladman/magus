@@ -13,6 +13,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 )
@@ -190,7 +191,11 @@ type safetensorsEntry struct {
 	Offsets [2]int64 `json:"data_offsets"`
 }
 
-// ReadSafetensors loads every F32 tensor of a safetensors file. Any other dtype is an error.
+// elemSize is the byte width of each safetensors dtype ReadSafetensors reads.
+var elemSize = map[string]int{"F32": 4, "F16": 2}
+
+// ReadSafetensors loads every tensor of a safetensors file as float32. F16 widens
+// exactly. Any dtype other than F32 or F16 is an error.
 func ReadSafetensors(path string) (map[string]*tensors.Tensor, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -220,27 +225,37 @@ func ReadSafetensors(path string) (map[string]*tensors.Tensor, error) {
 		if err := json.Unmarshal(raw, &e); err != nil {
 			return nil, fmt.Errorf("%s: %s: %w", path, name, err)
 		}
-		if e.DType != "F32" {
-			return nil, fmt.Errorf("%s: %s is %s, want F32", path, name, e.DType)
+		size, ok := elemSize[e.DType]
+		if !ok {
+			return nil, fmt.Errorf("%s: %s is %s, want F32 or F16", path, name, e.DType)
 		}
 		count := 1
 		for _, d := range e.Shape {
 			count *= d
 		}
-		if e.Offsets[1]-e.Offsets[0] != int64(4*count) {
+		if e.Offsets[1]-e.Offsets[0] != int64(size*count) {
 			return nil, fmt.Errorf("%s: %s spans %d bytes for shape %v", path, name, e.Offsets[1]-e.Offsets[0], e.Shape)
 		}
-		buf := make([]byte, 4*count)
+		buf := make([]byte, size*count)
 		if _, err := f.ReadAt(buf, base+e.Offsets[0]); err != nil {
 			return nil, fmt.Errorf("%s: %s: %w", path, name, err)
 		}
-		vals := make([]float32, count)
-		for i := range vals {
-			vals[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
-		}
-		out[name] = tensors.FromFlatDataAndDimensions(vals, e.Shape...)
+		out[name] = tensors.FromFlatDataAndDimensions(decodeFloats(buf, size), e.Shape...)
 	}
 	return out, nil
+}
+
+// decodeFloats widens little-endian elements of size bytes, 2 for F16 and 4 for F32.
+func decodeFloats(buf []byte, size int) []float32 {
+	vals := make([]float32, len(buf)/size)
+	for i := range vals {
+		if size == 2 {
+			vals[i] = float16.FromBits(binary.LittleEndian.Uint16(buf[2*i:])).Float32()
+		} else {
+			vals[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
+		}
+	}
+	return vals
 }
 
 // forward builds the encoder over ids [B, L] int32 and mask [B, L] float32 (1 for a token,

@@ -26,3 +26,34 @@ The per-language comment and string syntax declarations in spells/comments.go
 adopt the schema of, and seed their values from, languages.json in scc
 (github.com/boyter/scc), copyright Ben Boyter, licensed under the MIT License.
 Only the entries for languages magus ships spells for are included.
+
+The embedding table libs/embed pins in gen/table.digest is converted from
+potion-code-16M-v2 (huggingface.co/minishlab/potion-code-16M-v2, revision
+e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b), published by MinishLab under the
+MIT License per its model card, which names no copyright holder. MinishLab
+built potion with model2vec (github.com/MinishLab/model2vec), whose MIT License
+follows, distilling it from nomic-ai/CodeRankEmbed, itself MIT-licensed, and
+training it on the CornStack code corpus. The table is redistributed through an
+OCI artifact, not in the magus binary.
+
+MIT License
+
+Copyright (c) 2024 Thomas van Dongen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

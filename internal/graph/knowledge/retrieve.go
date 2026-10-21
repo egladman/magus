@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -19,21 +20,45 @@ const (
 	listLexical = "lexical"
 	listExact   = "exact"
 	listGraph   = "graph"
+	listEmbed   = "embed"
 )
+
+// pullTable is the command that fills the cache embedtable.Load reads.
+const pullTable = "magus graph pull -table"
 
 // RetrieveOptions are everything a ranked answer depends on besides the graph and the
 // query. Reader is the reader's context as workspace paths (changed files, a lease's write
 // paths); each one that names a file or dir node seeds the graph list. Lexical is the
 // stored lexical index; nil ranks over one built in memory from the graph's nodes, which
-// the ranking's Note says. Limit truncates the matches; 0 keeps every one.
+// the ranking's Note says. Table loads the embedding table the embed list ranks by; nil
+// means no table. A nil Table or a Table error skips the embed list, which the ranking's
+// Skipped says; Retrieve reads no file of its own and never pulls.
+// Limit truncates the matches; 0 keeps every one.
 type RetrieveOptions struct {
 	Reader  []string
 	Weights textrank.Weights
 	Lexical *textrank.Index
+	Table   func() (*embed.Table, error)
 	Limit   int
 }
 
-type readerKey struct{}
+type (
+	readerKey struct{}
+	tableKey  struct{}
+)
+
+// WithTable returns ctx carrying the loader Store.QuerySymbols passes as
+// RetrieveOptions.Table. Its callers' signatures carry no RetrieveOptions, so the loader
+// rides ctx the way WithReader's paths do.
+func WithTable(ctx context.Context, load func() (*embed.Table, error)) context.Context {
+	return context.WithValue(ctx, tableKey{}, load)
+}
+
+// tableOn returns the loader WithTable put on ctx, nil when there is none.
+func tableOn(ctx context.Context) func() (*embed.Table, error) {
+	load, _ := ctx.Value(tableKey{}).(func() (*embed.Table, error))
+	return load
+}
 
 // WithReader returns ctx carrying the reader's context paths, which Store.QuerySymbols
 // ranks under. Its callers' signatures carry no RetrieveOptions, so the paths ride ctx.
@@ -62,7 +87,8 @@ var ShippedWeights = sync.OnceValue(func() textrank.Weights {
 // matching (ranked OR): a match holding fewer of the query's tokens than it has is
 // labeled partial by Why.Matched and Why.Of, never dropped. The lexical score is scaled
 // by the node kind's prior. A personalized PageRank seeded by the top lexical hits and the
-// reader's paths reranks the same matches, and the two lists fuse by weighted reciprocal
+// reader's paths reranks the same matches, and so does the cosine of each match's
+// embedding with the query's under opts.Table. The lists fuse by weighted reciprocal
 // rank. Ties break by kindRank, then id, so the answer is a pure function of the graph,
 // input and opts.
 //
@@ -222,7 +248,11 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 	matches := make([]types.KnowledgeMatch, 0, len(cands))
 	lexWeight := listWeight(opts.Weights, listLexical)
 	exact := exactList(ix, cands, phrase, opts.Weights)
-	if graph == nil && exact == nil {
+	emb, skipped := embedList(ix, cands, tokens, opts)
+	if emb == nil {
+		ranking.Skipped = append(ranking.Skipped, listEmbed+": "+skipped)
+	}
+	if graph == nil && exact == nil && emb == nil {
 		// One list fuses to its own order; the score is its reciprocal rank term.
 		for i := range cands {
 			c := &cands[i]
@@ -240,7 +270,7 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 		byID[cands[i].hit.ID] = &cands[i]
 	}
 	lists := []textrank.RankedList{{Name: listLexical, Weight: lexWeight, IDs: lexical}}
-	for _, l := range []*textrank.RankedList{exact, graph} {
+	for _, l := range []*textrank.RankedList{exact, graph, emb} {
 		if l != nil {
 			lists = append(lists, *l)
 		}
@@ -282,6 +312,43 @@ func exactList(ix *searchIndex, cands []candidate, phrase string, w textrank.Wei
 		return nil
 	}
 	return &textrank.RankedList{Name: listExact, Weight: listWeight(w, listExact), IDs: ids}
+}
+
+// embedList is the cands with an embedding under opts.Table, by its cosine with the
+// query's embedding of tokens, ties in lexical order. With no list it returns why: the
+// table is nil or did not load, or the query or every cand holds no token of its vocabulary.
+func embedList(ix *searchIndex, cands []candidate, tokens []string, opts RetrieveOptions) (*textrank.RankedList, string) {
+	if opts.Table == nil {
+		return nil, "no table loaded: run `" + pullTable + "`"
+	}
+	table, err := opts.Table()
+	if err != nil {
+		reason := err.Error()
+		if !strings.Contains(reason, pullTable) {
+			reason += ": run `" + pullTable + "` to replace it"
+		}
+		return nil, reason
+	}
+	q, ok := table.Embed([]embed.Field{{Tokens: tokens, Weight: 1}})
+	if !ok {
+		return nil, "no query token is in the table's vocabulary"
+	}
+	docs := make([][]embed.Field, len(cands))
+	for i, c := range cands {
+		fields := lexicalDocument(ix.entries[c.pos].node, "").Fields
+		for _, name := range slices.Sorted(maps.Keys(fields)) {
+			docs[i] = append(docs[i], embed.Field{Tokens: fields[name], Weight: 1})
+		}
+	}
+	hits := embed.NewIndex(table, docs).Search(q, embed.SearchOptions{Depth: len(cands)})
+	if len(hits) == 0 {
+		return nil, "no match holds a token of the table's vocabulary"
+	}
+	list := &textrank.RankedList{Name: listEmbed, Weight: listWeight(opts.Weights, listEmbed), IDs: make([]string, len(hits))}
+	for i, h := range hits {
+		list.IDs[i] = cands[h.Doc].hit.ID
+	}
+	return list, ""
 }
 
 // exactPhrase is the query's plain free-text terms, lowercased and joined by a space, ""

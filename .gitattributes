@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-78-g3dee95822 (commit 3dee95822edf3779c3cbc3a578e74e5630eb14d2, 2026-10-21T04:29:19-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-70-g9e74268fa (commit 9e74268fa65d34de3508699a6bcc64ef80b1e647, 2026-10-21T10:26:07-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -149,9 +149,11 @@ libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
+libs/embed/gen/table.digest merge=magus linguist-generated
 libs/embed/train/gen/holdout.jsonl merge=magus linguist-generated
 libs/embed/train/gen/pairs.jsonl merge=magus linguist-generated
 libs/embed/train/gen/sources.jsonl merge=magus linguist-generated
+libs/embed/train/gen/vocab.jsonl merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/token/testdata/fuzz/** merge=magus linguist-generated

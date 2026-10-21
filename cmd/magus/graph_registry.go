@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/interactive"
@@ -97,11 +99,12 @@ func readToken() (string, error) {
 
 func graphPush(ctx context.Context, root string, args []string) error {
 	var ref, user string
-	var refresh bool
+	var refresh, table bool
 	_, err := cmdParse("graph push", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required)")
+		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
+		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -129,6 +132,17 @@ func graphPush(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	if table {
+		if refresh {
+			return errors.New("graph push: -refresh rebuilds the graph, and -table publishes no graph")
+		}
+		return tablePush(ctx, ref, user)
+	}
+	return pushGraph(ctx, root, ref, user, refresh)
+}
+
+// pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
+func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error {
 	if ref == "" {
 		return errNoGraphDestination("push")
 	}
@@ -250,9 +264,11 @@ func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
 
 func graphPull(ctx context.Context, root string, args []string) error {
 	var ref, out string
+	var table bool
 	_, err := cmdParse("graph pull", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required)")
+		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
+		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -270,6 +286,12 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	if table {
+		if out != "" {
+			return errors.New("graph pull: -table writes the table to the cache, so --out names nothing")
+		}
+		return tablePull(ctx, ref)
+	}
 	if ref == "" {
 		return errNoGraphDestination("pull")
 	}
@@ -307,6 +329,59 @@ func graphReference(ref, tag string) (oci.Reference, error) {
 		ref += ":" + tag
 	}
 	return oci.ParseReference(ref)
+}
+
+// tablePush publishes the cached embedding table under its pin. The release runs it
+// after `magus run table libs/embed/train`; a table that does not hash to the pin is
+// refused, never published under a tag of its own.
+func tablePush(ctx context.Context, repo, user string) error {
+	dest, err := embedtable.Reference(repo)
+	if err != nil {
+		return fmt.Errorf("graph push -table: %w", err)
+	}
+	path, err := embedtable.Options{}.Path()
+	if err != nil {
+		return fmt.Errorf("graph push -table: %w", err)
+	}
+	pass, err := readToken()
+	if err != nil {
+		return fmt.Errorf("graph push -table: %w", err)
+	}
+	client := &oci.Client{HTTP: registryHTTP(), Username: user, Password: pass}
+	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	defer cancel()
+	pushed, err := embedtable.Publish(ctx, client, dest, path)
+	if err != nil {
+		return fmt.Errorf("graph push -table: %w", err)
+	}
+	if !pushed {
+		slog.InfoContext(ctx, fmt.Sprintf("kept %s, already published with the pinned table", dest), attr.Notice(""))
+		return nil
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("pushed %s from %s", dest, path), attr.Notice(""))
+	return nil
+}
+
+// tablePull fetches the pinned embedding table into the cache, anonymously for the
+// reason graphPull is.
+func tablePull(ctx context.Context, repo string) error {
+	src, err := embedtable.Reference(repo)
+	if err != nil {
+		return fmt.Errorf("graph pull -table: %w", err)
+	}
+	opts := embedtable.Options{}
+	path, err := opts.Path()
+	if err != nil {
+		return fmt.Errorf("graph pull -table: %w", err)
+	}
+	client := &oci.Client{HTTP: registryHTTP()}
+	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	defer cancel()
+	if err := embedtable.Pull(ctx, client, src, opts); err != nil {
+		return fmt.Errorf("graph pull -table: %w", err)
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s", src, path), attr.Notice(""))
+	return nil
 }
 
 // pullMergedGraph fetches every shard the artifact names and merges them into the

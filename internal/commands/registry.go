@@ -624,17 +624,19 @@ Subcommands (the first argument):
 			Name:  "push",
 			Short: "Push the knowledge graph to a container registry as an OCI artifact",
 			Flags: []cmdline.Flag{
-				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived)"},
+				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed"},
 				{Name: "username", Kind: cmdline.String, Doc: "The registry username; the token is read from stdin, the way docker login --password-stdin takes one"},
 				{Name: "refresh", Kind: cmdline.Bool, Doc: "Rebuild the graph before pushing instead of exporting what is cached"},
+				{Name: "table", Kind: cmdline.Bool, Doc: "Publish the embedding table from the cache instead of the graph, tagged with its pin, write-once"},
 			},
 		},
 		{
 			Name:  "pull",
 			Short: "Fetch a published knowledge graph; reads public artifacts with no credentials",
 			Flags: []cmdline.Flag{
-				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to pull (default: derived from the repository's origin remote)"},
+				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to pull (default: derived from the repository's origin remote); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed"},
 				{Name: "out", Kind: cmdline.String, Doc: "Write the graph here instead of stdout"},
+				{Name: "table", Kind: cmdline.Bool, Doc: "Fetch the embedding table the binary pins into the cache instead of the graph"},
 			},
 		},
 		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, tree)", Flags: []cmdline.Flag{
