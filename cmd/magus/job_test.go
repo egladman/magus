@@ -712,6 +712,31 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	}
 }
 
+// A fork naming a model takes the tier of the harness row that names it: the row is what
+// the wired harness publishes, and the host's own mapping of opus would give principal.
+func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
+		Config:        types.HarnessConfig{Path: "hooks.json"},
+		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
+	})
+	resetWorkspaceMemo(t)
+	root, _ := execFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
+	writeStdin(t, `{"schema_version": 12, "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
+		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin"}))
+	})
+	assert.Contains(t, out, "model tier: economy (rank 0)")
+}
+
 // The tool rows a wired harness installs in a checkout are magus's, so ending its job
 // removes the checkout; a harness that fails to load keeps it and names the failure,
 // since its rows would otherwise read as work.

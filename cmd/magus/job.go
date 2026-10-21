@@ -215,6 +215,10 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 			floor, why := table().PriceContext(calls)
 			return floor.Tokens, floor.USD, why == ""
 		}
+		// Lazy: the harness spells load only when a row names a model.
+		loc.ModelRows = harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+			return inspectWorkspace(ctx, root)
+		})
 	}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
