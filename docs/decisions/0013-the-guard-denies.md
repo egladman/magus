@@ -141,15 +141,14 @@ rule reads the remedy's effect.
   names its remedy; a workspace that disagrees sets the rule to advise by name.
 - The tests that pinned advice set advise explicitly and so test the opt-out, and each
   renamed `...ByDefault` test now reads `...WhenSetToAdvise`.
-- A bound worker running a raw tool is refused by raw-tool before worker-check-only can
-  name its check. The worker still learns to run through magus, but not which target.
+- A bound worker running a raw tool is judged by worker-check-only first, so the refusal
+  names the job's check rather than `magus run <target> <project>`. raw-tool answers only
+  when the worker has no check naming that tool.
 - The generated rule pages (docs/reference/rules) and the guard guide's tables change with
   the defaults; they are regenerated, never edited.
 
 ## Open questions
 
-- Should worker-check-only outrank raw-tool for a bound worker, so the refusal names the
-  check rather than `magus run <target> <project>`?
 - dependency-update names `magus run <target>:update <project>`. A workspace with no
   update charm on a covering target has no remedy; should the rule stand down there?
 - Which notices can read their remedy's effect (push-gate from the run log, skill-source
