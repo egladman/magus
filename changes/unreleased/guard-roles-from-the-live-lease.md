@@ -1,10 +1,9 @@
 ### Changed
 
 - **The guard reads a root's role from its live rows, not its history.** A session is
-  judged as an orchestrator only while a row it handed out is declared, running or
-  exited. A root can take one row with `magus job exec` and returns to orchestrating on
-  `magus job exit`. Loading the multi-agent skill or spawning a worker with no row no
-  longer marks a session as an orchestrator.
+  an orchestrator only while a row it handed out is declared, running or exited. A root
+  can take one row with `magus job exec` and returns on `magus job exit`. A loaded skill
+  or a spawn with no row no longer counts.
 - **Integration is one class for orchestrator-groundwork.** merge, rebase, pull, am,
   reset, stash, restore, checkout and `switch -c` join cherry-pick, add and commit.
 - **A root holding a parentless row may run the gate.**
