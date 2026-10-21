@@ -15,6 +15,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/xdg"
@@ -135,26 +136,7 @@ func pull(ctx context.Context, client *oci.Client, ref oci.Reference, path, pin 
 	if err != nil {
 		return err
 	}
-	return writeByRename(path, data)
-}
-
-func writeByRename(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("embedtable: %w", err)
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("embedtable: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("embedtable: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("embedtable: %w", err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("embedtable: %w", err)
 	}
 	return nil
