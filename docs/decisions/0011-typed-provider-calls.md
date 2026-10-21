@@ -112,7 +112,7 @@ meant to refuse (a change's `fork`, an approval count), the decoder requires the
   whose parameter is `fun(any)`. Reopen if a provider needs a streaming input that one
   request record cannot carry.
 - **Declare the ProviderOp values in bindgen, as first planned.** It lost to an import
-  cycle in tests: `decode/inbound_list_test.go` (package decode) imports bindgen. Reopen
+  cycle in tests: `internal/interp/bindings/gen/decode/inbound_list_test.go` (package decode) imports bindgen. Reopen
   if that test moves to package `decode_test`.
 - **Have `CallOp` fall back to `Invoke` for a Go driver.** It lost because it would keep
   `Params` and `Data` on the provider path with a second, untyped encoding, which is the

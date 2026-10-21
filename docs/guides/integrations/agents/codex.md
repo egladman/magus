@@ -170,6 +170,16 @@ shown here:
             "statusMessage": "magus: recording the subagent"
           }
         ]
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name codex",
+            "statusMessage": "magus: checking the Buzz it wrote"
+          }
+        ]
       }
     ],
     "SubagentStart": [
