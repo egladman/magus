@@ -25,6 +25,19 @@ func TestMemoryCurveRoundTrips(t *testing.T) {
 	assert.Equal(t, 1900, back.PeakMB())
 }
 
+func TestMemoryProfileRoundTrips(t *testing.T) {
+	t.Parallel()
+	p := MemoryProfile{D10Ms: 40_000, D90Ms: 400_000, Runs: 3}
+	p.Curve[0], p.Curve[19] = 512, 5800
+	raw, err := json.Marshal(p)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"curve":[512,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5800],"d10_ms":40000,"d90_ms":400000,"runs":3}`, string(raw))
+
+	var back MemoryProfile
+	require.NoError(t, json.Unmarshal(raw, &back))
+	assert.Equal(t, p, back)
+}
+
 func TestMemoryCurveRefusesWrongLength(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{`[1,2,3]`, `[]`, `[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]`} {

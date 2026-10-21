@@ -83,7 +83,8 @@ import (
 // v6 adds Outcome.Charms and Outcome.ArgsHash, the shape of the run an outcome records.
 // v7 adds Jobs, the log of terminal job outcomes the model-tier lens reads.
 // v8 adds each job outcome's parent, projects and work profile, which the grouping lens reads.
-const HistoryVersion = 8
+// v9 adds Outcome.Curve, the run's memory over its own duration.
+const HistoryVersion = 9
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -268,6 +269,10 @@ type Outcome struct {
 	// it says the claim held the run back rather than what the run needed. Omitted, and
 	// UNKNOWN, when zero: such a run's width cannot be read either way.
 	Slots int `json:"slots,omitzero"`
+	// Curve is the run's memory over its own duration (types.Curve). The zero curve,
+	// omitted, is UNMEASURED: a fully replayed run, a platform that cannot sample, or
+	// an outcome written before v9.
+	Curve types.MemoryCurve `json:"curve,omitzero"`
 	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
 	// filed under. Two runs of one target reach different peaks when their shapes
 	// differ (`-- -run TestOne` against the whole suite).
@@ -291,10 +296,9 @@ type Shape struct {
 	ArgsHash string
 	Narrowed bool
 
-	// read is the charm set Reading kept, and filtered whether Reading set it; an
-	// outcome's charms are filtered to it before they compare.
-	read     []string
-	filtered bool
+	// reads is the predicate Reading set, nil until then; an outcome's charms pass
+	// through it before they compare, as the shape's own did.
+	reads func(charm string) bool
 }
 
 // NewShape normalizes a run's active charms and forwarded args into its Shape. Charm
@@ -308,18 +312,16 @@ func NewShape(charms, args []string) Shape {
 	return s
 }
 
-// Reading is s keeping only the charms that appear in charms, the ones a target reads.
-// An outcome then matches it when its own charms, filtered to that set, equal what s
-// kept, so a charm nothing reads never forks a shape.
-func (s Shape) Reading(charms []string) Shape {
-	read := normalizeCharms(charms)
-	var kept []string
-	for _, c := range s.Charms {
-		if slices.Contains(read, c) {
-			kept = append(kept, c)
-		}
+// Reading is s keeping only the charms reads accepts, the ones a target's chain reads.
+// An outcome then matches it when its own charms, through the same predicate, equal what
+// s kept, so a charm nothing reads never forks a shape and a read charm the outcome
+// carries forks it whether or not this run carries it.
+func (s Shape) Reading(reads func(charm string) bool) Shape {
+	s.Charms = slices.DeleteFunc(slices.Clone(s.Charms), func(c string) bool { return !reads(c) })
+	if len(s.Charms) == 0 {
+		s.Charms = nil
 	}
-	s.Charms, s.read, s.filtered = kept, read, true
+	s.reads = reads
 	return s
 }
 
@@ -363,8 +365,8 @@ func (s Shape) matches(o Outcome) bool {
 		return false
 	}
 	charms := o.Charms
-	if s.filtered {
-		charms = slices.DeleteFunc(slices.Clone(charms), func(c string) bool { return !slices.Contains(s.read, c) })
+	if s.reads != nil {
+		charms = slices.DeleteFunc(slices.Clone(charms), func(c string) bool { return !s.reads(c) })
 	}
 	return slices.Equal(s.Charms, charms)
 }
@@ -1153,10 +1155,10 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 		for key, st := range targets {
 			var kept []Outcome
 			for _, o := range st.RecentOutcomes {
-				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o)) {
+				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o) || o.Curve != (types.MemoryCurve{})) {
 					kept = append(kept, Outcome{
 						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
-						Slots: o.Slots, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
+						Slots: o.Slots, Curve: o.Curve, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
 					})
 				}
 			}
@@ -1200,6 +1202,58 @@ func (x MeasuredRuns) Peak(project, target string, shape Shape) (sameShape, anyS
 // saturatedMilli is the width, in thousandths of each slot a run held, at which the
 // claim rather than the run set that width.
 const saturatedMilli = 900
+
+// Profile returns the memory profile of target's runs in project that recorded shape
+// and a curve: the p90 of each bucket, the p10 and p90 of their durations, and how many
+// runs it was taken over. It applies no margin and no run threshold; Runs 0 is no
+// profile. target resolves as [History.PredictPeakRSS] does, and spells serving one
+// target fold as [Measurement] folds: the larger bucket, the wider duration band, the
+// fewer runs.
+func (x MeasuredRuns) Profile(project, target string, shape Shape) types.MemoryProfile {
+	var out types.MemoryProfile
+	for _, s := range targetHistories(x.projects[project], target) {
+		p := curveProfile(s.RecentOutcomes, shape)
+		switch {
+		case p.Runs == 0:
+			continue
+		case out.Runs == 0:
+			out = p
+			continue
+		}
+		for i := range out.Curve {
+			out.Curve[i] = max(out.Curve[i], p.Curve[i])
+		}
+		out.D10Ms, out.D90Ms = min(out.D10Ms, p.D10Ms), max(out.D90Ms, p.D90Ms)
+		out.Runs = min(out.Runs, p.Runs)
+	}
+	return out
+}
+
+// curveProfile is [MeasuredRuns.Profile] over one spell's outcomes.
+func curveProfile(outcomes []Outcome, shape Shape) types.MemoryProfile {
+	var runs []Outcome
+	for _, o := range outcomes {
+		if o.Curve != (types.MemoryCurve{}) && shape.matches(o) {
+			runs = append(runs, o)
+		}
+	}
+	if len(runs) == 0 {
+		return types.MemoryProfile{}
+	}
+	out := types.MemoryProfile{Runs: len(runs)}
+	column := make([]int64, len(runs))
+	for i := range out.Curve {
+		for j, o := range runs {
+			column[j] = int64(o.Curve[i])
+		}
+		out.Curve[i] = uint32(percentile(column, 0.9))
+	}
+	for j, o := range runs {
+		column[j] = o.DurationMs
+	}
+	out.D10Ms, out.D90Ms = percentile(column, 0.1), percentile(column, 0.9)
+	return out
+}
 
 // Width returns how many slots target's runs in project should claim, split by shape as
 // [MeasuredRuns.Peak] splits it.

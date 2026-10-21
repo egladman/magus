@@ -146,15 +146,18 @@ func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape, reads func
 	return &claimSizer{runs: runs, shape: shape, reads: reads}
 }
 
-// shapeFor is the sizer's shape keeping the charms target's chain reads.
+// shapeFor is the sizer's shape keeping the charms target's chain reads. The predicate
+// also filters every recorded run's charms, so each answer is walked once.
 func (s *claimSizer) shapeFor(proj *types.Project, target string) forecast.Shape {
-	var read []string
-	for _, c := range s.shape.Charms {
-		if s.reads(proj, target, c) {
-			read = append(read, c)
+	read := map[string]bool{}
+	return s.shape.Reading(func(charm string) bool {
+		r, ok := read[charm]
+		if !ok {
+			r = s.reads(proj, target, charm)
+			read[charm] = r
 		}
-	}
-	return s.shape.Reading(read)
+		return r
+	})
 }
 
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See

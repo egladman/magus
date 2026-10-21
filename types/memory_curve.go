@@ -46,6 +46,18 @@ func (c *MemoryCurve) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// MemoryProfile is what a target's recorded runs of one shape say about its memory
+// over time: Curve is the p90 of each bucket across Runs runs, and D10Ms and D90Ms
+// are the p10 and p90 of their durations, the band the curve is stretched over.
+// It carries no margin. Runs 0 means no run recorded a curve, so there is no
+// profile and the other fields are zero.
+type MemoryProfile struct {
+	Curve MemoryCurve `json:"curve"`
+	D10Ms int64       `json:"d10_ms"`
+	D90Ms int64       `json:"d90_ms"`
+	Runs  int         `json:"runs"`
+}
+
 // MemorySample is one reading of a process tree's resident memory, taken At after
 // the exec started.
 type MemorySample struct {

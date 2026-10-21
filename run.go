@@ -2809,6 +2809,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		MaxRSSBytes:    peakRSS,
 		CPUMs:          cpuMs,
 		Slots:          cache.SlotsHeld(ctx),
+		Curve:          types.Curve(ctx),
 		Charms:         shape.Charms,
 		ArgsHash:       shape.ArgsHash,
 	})

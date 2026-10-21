@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,8 @@ func TestHistorySchemaLockIsStructural(t *testing.T) {
 		},
 		reflect.TypeOf(Outcome{}): {
 			"result": true, "affected": true, "duration_ms": true, "at": true,
-			"attempts": true, "max_rss_bytes": true, "cpu_ms": true, "slots": true, "charms": true, "args_hash": true,
+			"attempts": true, "max_rss_bytes": true, "cpu_ms": true, "slots": true, "curve": true,
+			"charms": true, "args_hash": true,
 		},
 	}
 	for typ, keys := range allowed {
@@ -133,7 +135,8 @@ func TestHistorySchemaLock(t *testing.T) {
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
-							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
+							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Curve: types.MemoryCurve{19: 1024},
+							Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
 			},
@@ -249,6 +252,9 @@ func TestHistorySchemaLock(t *testing.T) {
 		// int: the slots the run's claim held. A count magus sized, the same safety
 		// profile as attempts.
 		"slots": true,
+		// [20]uint32: MiB the target's processes held in each twentieth of the run.
+		// Magnitudes about the run, the same safety profile as max_rss_bytes.
+		"curve": true,
 		// []string: the run's active charms. Names a workspace declares, the same
 		// safety profile as the target names this history is already keyed by.
 		"charms": true,
@@ -1364,17 +1370,40 @@ func TestShapeForksOnlyOnReadCharms(t *testing.T) {
 	shape := NewShape([]string{"rw", "extended"}, nil)
 	assert.False(t, shape.matches(run("extended")), "unfiltered, every charm forks")
 
-	reading := shape.Reading([]string{"extended"})
+	reading := shape.Reading(readsOnly("extended"))
 	assert.Equal(t, []string{"extended"}, reading.Charms)
 	assert.True(t, reading.matches(run("extended", "rw")))
 	assert.True(t, reading.matches(run("extended")), "rw is never read, so a run without it pools")
 	assert.True(t, reading.matches(run("extended", "update")))
 	assert.False(t, reading.matches(run("rw")), "extended is read, so a run without it does not")
 
-	none := NewShape([]string{"rw"}, nil).Reading(nil)
+	none := NewShape([]string{"rw"}, nil).Reading(readsOnly())
+	assert.Nil(t, none.Charms)
 	assert.True(t, none.matches(run()), "reading no charm pools every charm set")
 	assert.True(t, none.matches(run("extended", "rw")))
 	assert.False(t, none.matches(Outcome{}), "an outcome from before v6 still matches nothing")
+}
+
+// TestShapeKeepsAPastRunsReadCharm pins that a charm the chain reads forks a past run
+// that carried it from a current run that does not: the outcome's charms are filtered by
+// what the chain reads, not by what the current run carries.
+func TestShapeKeepsAPastRunsReadCharm(t *testing.T) {
+	t.Parallel()
+
+	run := func(charms ...string) Outcome {
+		s := NewShape(charms, nil)
+		return Outcome{Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
+	current := NewShape([]string{"rw"}, nil).Reading(readsOnly("extended"))
+	assert.Nil(t, current.Charms)
+	assert.False(t, current.matches(run("extended")), "an extended run does different work")
+	assert.False(t, current.matches(run("extended", "rw")))
+	assert.True(t, current.matches(run("rw")))
+	assert.True(t, current.matches(run()))
+}
+
+func readsOnly(charms ...string) func(string) bool {
+	return func(c string) bool { return slices.Contains(charms, c) }
 }
 
 // TestShapePoolsNarrowedRunsAcrossArgs pins that a shape compares whether args were
@@ -1527,6 +1556,122 @@ func TestMeasuredRunsWidthSaturation(t *testing.T) {
 		"a single-threaded target granted two slots used one, so it settles back at one")
 	assert.Equal(t, Measurement{Value: 8, Runs: 2}, width(run(4, 2), run(4, 3.8)),
 		"saturated and unsaturated at one claim: the claim grows")
+}
+
+// TestCurveRoundTripsThroughJSONL pins that an outcome's curve survives the store as 20
+// numbers, and that an outcome without one writes no key.
+func TestCurveRoundTripsThroughJSONL(t *testing.T) {
+	t.Parallel()
+
+	var curve types.MemoryCurve
+	for i := range curve {
+		curve[i] = uint32(100 * (i + 1))
+	}
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	seedHistory(t, path, History{Version: HistoryVersion, Projects: map[string]map[string]Stats{
+		"svc": {"go-test": {RecentOutcomes: []Outcome{
+			{Result: OutcomePass, DurationMs: 1_000, Curve: curve},
+			{Result: OutcomePass, DurationMs: 20},
+		}}},
+	}})
+
+	lines := readLines(t, path)
+	require.Len(t, lines, 2)
+	var keys struct {
+		Stats struct {
+			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+		} `json:"stats"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	written := keys.Stats.RecentOutcomes
+	require.Len(t, written, 2)
+	assert.JSONEq(t, `[100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000]`, string(written[0]["curve"]))
+	assert.NotContains(t, written[1], "curve", "an unmeasured outcome carries no key")
+
+	var got History
+	require.NoError(t, got.Load(t.Context(), path))
+	outcomes := got.Projects["svc"]["go-test"].RecentOutcomes
+	require.Len(t, outcomes, 2)
+	assert.Equal(t, curve, outcomes[0].Curve)
+	assert.Zero(t, outcomes[1].Curve)
+}
+
+// TestProfileIsP90PerBucket pins that a profile takes each bucket's p90 across runs on
+// its own, the duration band's p10 and p90, and no margin.
+func TestProfileIsP90PerBucket(t *testing.T) {
+	t.Parallel()
+
+	full := NewShape(nil, nil)
+	run := func(ms int64, first, last uint32) Outcome {
+		var c types.MemoryCurve
+		c[0], c[19] = first, last
+		return Outcome{Result: OutcomePass, DurationMs: ms, MaxRSSBytes: int64(max(first, last)) << 20, Curve: c,
+			Charms: full.Charms, ArgsHash: full.ArgsHash}
+	}
+	h := History{Projects: map[string]map[string]Stats{".": {"magusfile/test": {RecentOutcomes: []Outcome{
+		run(10_000, 100, 5000),
+		run(20_000, 200, 4000),
+		run(30_000, 300, 3000),
+		run(40_000, 400, 2000),
+		run(50_000, 5000, 1000),
+	}}}}}
+
+	got := h.MeasuredRuns().Profile(".", "test", full)
+	want := types.MemoryProfile{D10Ms: 14_000, D90Ms: 46_000, Runs: 5}
+	want.Curve[0], want.Curve[19] = 3160, 4600
+	assert.Equal(t, want, got, "each bucket is its own p90: the first's and the last's come from different runs")
+	assert.Less(t, got.Curve.PeakMB(), 5000, "below every run's peak, which a summed peak would claim")
+}
+
+// TestProfileCountsOnlyRunsWithACurve pins which runs a profile is taken over: successful
+// ones of the same shape that recorded a curve. A failed run, a run of another shape and
+// a run that measured only a peak are left out.
+func TestProfileCountsOnlyRunsWithACurve(t *testing.T) {
+	t.Parallel()
+
+	full, extended := NewShape(nil, nil), NewShape([]string{"extended"}, nil)
+	curve := types.MemoryCurve{0: 700}
+	o := func(r OutcomeResult, c types.MemoryCurve, s Shape) Outcome {
+		return Outcome{Result: r, DurationMs: 1_000, MaxRSSBytes: 900 << 20, Curve: c, Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
+	h := History{Projects: map[string]map[string]Stats{".": {"magusfile/test": {RecentOutcomes: []Outcome{
+		o(OutcomePass, curve, full),
+		o(OutcomeVolatile, curve, full),
+		o(OutcomeFail, types.MemoryCurve{0: 9000}, full),
+		o(OutcomePass, types.MemoryCurve{}, full),
+		o(OutcomePass, types.MemoryCurve{0: 8000}, extended),
+	}}}}}
+	x := h.MeasuredRuns()
+
+	got := x.Profile(".", "test", full)
+	assert.Equal(t, 2, got.Runs)
+	assert.Equal(t, uint32(700), got.Curve[0])
+
+	got = x.Profile(".", "test", extended)
+	assert.Equal(t, 1, got.Runs, "a shape's profile reads its own runs only")
+	assert.Equal(t, uint32(8000), got.Curve[0])
+
+	assert.Zero(t, x.Profile(".", "lint", full))
+}
+
+// TestOutcomeWithoutCurveIsUnprofiled pins that a v8 history, whose outcomes predate the
+// curve, still loads and yields no profile rather than a zero curve read as free.
+func TestOutcomeWithoutCurveIsUnprofiled(t *testing.T) {
+	t.Parallel()
+
+	full := NewShape(nil, nil)
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	lines := `{"workspace":{"version":8}}` + "\n" +
+		`{"stats":{"project":".","target":"magusfile/test","recent_outcomes":[` +
+		`{"result":"pass","affected":false,"duration_ms":5000,"at":"2026-10-20T00:00:00Z","max_rss_bytes":1073741824,"args_hash":"` + full.ArgsHash + `"}]}}` + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))
+
+	var h History
+	require.NoError(t, h.Load(t.Context(), path))
+	x := h.MeasuredRuns()
+	same, _ := x.Peak(".", "test", full)
+	assert.Equal(t, 1, same.Runs, "the v8 outcome still sizes a peak")
+	assert.Zero(t, x.Profile(".", "test", full))
 }
 
 // syntheticHistory builds a History with n projects × 2 targets, each with
