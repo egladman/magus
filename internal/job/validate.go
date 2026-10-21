@@ -118,7 +118,9 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 
 // ExtendFootprint is the write paths row's change reaches that it did not declare, and a
 // note saying why for each: the test files beside a written file that reference what the
-// write paths define ([ReferencedOutside]). A read-only row reaches none.
+// write paths define ([ReferencedOutside]). Only a non-test write path extends: a written
+// test file would pull in every test that merely shares its helpers. A read-only row reaches
+// none.
 //
 // The caller skips it for a holder, whose own fork may not widen its boundary.
 func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
@@ -129,7 +131,16 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 	for _, f := range writtenFiles(root, row) {
 		beside[path.Dir(f)] = true
 	}
-	for _, f := range ReferencedOutside(root, row, projects, referrers) {
+	var fromSource func(file, declaration string) map[string]int
+	if referrers != nil {
+		fromSource = func(file, declaration string) map[string]int {
+			if types.IsTestPath(file) {
+				return nil
+			}
+			return referrers(file, declaration)
+		}
+	}
+	for _, f := range ReferencedOutside(root, row, projects, fromSource) {
 		if types.IsTestPath(f.File) && beside[path.Dir(f.File)] {
 			paths = append(paths, f.File)
 			notes = append(notes, fmt.Sprintf("%s added to the write paths: it tests what %s defines", f.File, strings.Join(f.Uses, ", ")))

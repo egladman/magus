@@ -2,6 +2,8 @@ package job
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -290,4 +292,50 @@ func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *test
 	require.Len(t, ps, 1, "a present goal names what the job will write, and a bare name may be a graph without an index")
 	assert.Equal(t, "goals[0].symbols[1]", ps[0].Field)
 	assert.Contains(t, ps[0].Message, `"job.Typo"`)
+}
+
+func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, rel := range []string{
+		"docs/gen/a.md", "docs/gen/sub/b.md",
+		"docs/mixed/c.md", "docs/mixed/hand.txt",
+		"docs/src/page.buzz",
+	} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(rel), 0o644))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs", "empty"), 0o755))
+	projects := []*types.Project{{
+		Path: "docs",
+		TargetOutputs: map[string][]types.OutputRef{
+			"site-generate": {{Glob: "gen/**"}, {Glob: "mixed/*.md"}, {Glob: "empty/*.md"}},
+		},
+	}}
+	store := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
+	problems := func(paths ...string) types.JobProblems {
+		return directoryWritePathProblems(store, types.Job{WritePaths: paths})
+	}
+
+	assert.Empty(t, problems("docs/gen"), "every file under it is a declared output")
+	assert.Empty(t, problems("docs/gen/**"), "a wildcard subtree reads as the directory")
+
+	ps := problems("docs/mixed")
+	require.Len(t, ps, 1)
+	assert.Equal(t, types.WritePathIsDirectory, ps[0].Code)
+	assert.Contains(t, ps[0].Message, "docs/mixed/hand.txt is not a declared output", "the message names the file that keeps the refusal")
+
+	assert.Len(t, problems("docs/src"), 1, "a source file keeps the refusal")
+	assert.Len(t, problems("docs/empty"), 1, "a directory with no file shows nothing generated")
+	assert.Len(t, problems("**"), 1, "a bare ** stays refused")
+	assert.Len(t, problems("."), 1)
+
+	bare := NewStore(tempLocation(t, root))
+	assert.Len(t, directoryWritePathProblems(bare, types.Job{WritePaths: []string{"docs/gen"}}), 1, "with no workspace nothing is known to be generated")
+
+	row := types.Job{WritePaths: []string{"docs/gen"}}
+	assert.True(t, outputInside(row, types.Glob{Pattern: "docs/gen/*.md"}), "the directory claim holds an output glob under it (MGS3044)")
+	assert.False(t, outputInside(row, types.Glob{Pattern: "docs/mixed/*.md"}))
 }

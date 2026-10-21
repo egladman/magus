@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -466,6 +467,11 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 // under its directory, so it is judged as that directory, each match when the directory
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
+// A directory whose every file the workspace declares an output (the role `magus describe
+// file` reports) passes too: nobody edits a generated tree by hand, so claiming it overlaps
+// no one. One other file keeps the refusal and the message names it. The workspace root
+// never passes.
+//
 // A nil store, or one with no workspace root, has no tree to read and finds nothing.
 func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
@@ -474,9 +480,17 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	var ps types.JobProblems
 	for i, decl := range row.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
+			stray, generated := nonOutputFile(store, dir)
+			if generated {
+				continue
+			}
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
 				named = fmt.Sprintf("%q (matching the directory %q)", decl, dir)
+			}
+			why := ""
+			if stray != "" {
+				why = fmt.Sprintf("; %s is not a declared output", stray)
 			}
 			switch {
 			case dir == ".":
@@ -490,12 +504,48 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 				Code:  types.WritePathIsDirectory,
 				Field: fmt.Sprintf("write_paths[%d]", i),
 				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
-					" so the job would overlap every job editing anything there",
+					" so the job would overlap every job editing anything there" + why,
 				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}
 	return ps
+}
+
+// nonOutputFile reports whether every file under dir is a declared output. When it is not,
+// stray is the first file that is not, empty for a directory with no file at all, which
+// shows nothing generated. The workspace root is never generated.
+func nonOutputFile(store *Store, dir string) (stray string, generated bool) {
+	if dir == "." || store.workspace == nil {
+		return "", false
+	}
+	var outputs []types.Glob
+	for _, p := range store.workspace.Projects {
+		for _, g := range p.AllOutputs() {
+			outputs = append(outputs, g.Root(p.Path))
+		}
+	}
+	var (
+		found bool
+		files int
+	)
+	tree := os.DirFS(store.root)
+	_ = fs.WalkDir(tree, dir, func(rel string, d fs.DirEntry, err error) error {
+		// An unreadable entry cannot be shown generated, so it counts as the stray.
+		if err == nil && d.IsDir() {
+			return nil
+		}
+		files++
+		if err != nil || !types.MatchGlobs(outputs, rel) {
+			stray, found = rel, true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if found {
+		return stray, false
+	}
+	return "", files > 0
 }
 
 // claimedDirs returns the existing directories, workspace-relative, that the write path
