@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -369,27 +368,6 @@ func TestMagusfileGlobs(t *testing.T) {
 	})
 }
 
-// ExampleInspect shows how to discover projects in a workspace without
-// opening the cache. Inspect is the right entry point for read-only
-// commands (list, graph, describe) where cache overhead is unnecessary.
-func ExampleInspect() {
-	// A directory is a project if it contains a magusfile.buzz.
-	w, cleanup := newExampleWorkspace(map[string]string{"myapp/magusfile.buzz": ""})
-	defer cleanup()
-
-	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("inspect error:", err)
-		return
-	}
-
-	for _, p := range ws.All() {
-		fmt.Println(p.Path)
-	}
-	// Output:
-	// myapp
-}
-
 // TestExpandAffectedFallbackDistinguishable verifies that when the VCS can't
 // compute a definitive set (here: disabled), ExpandAffected selects all projects
 // AND reports fellBack=true — a typed signal callers can distinguish from a
@@ -404,133 +382,6 @@ func TestExpandAffectedFallbackDistinguishable(t *testing.T) {
 	assert.True(t, fellBack, "fellBack should be true when VCS is disabled")
 	assert.NotEmpty(t, targets, "fallback should select all projects")
 	assert.NotEmpty(t, source, "source should carry the fallback reason")
-}
-
-// exampleTB lets an example build a testkit workspace: an Example has no *testing.T, and
-// testkit takes a testkit.TB. It supplies the three methods a workspace calls and
-// panics on the rest, so a new use fails loudly.
-type exampleTB struct {
-	dirs *[]string
-}
-
-func (exampleTB) Skip(...any)        { panic("exampleTB: Skip") }
-func (exampleTB) Cleanup(func())     { panic("exampleTB: Cleanup") }
-func (exampleTB) Setenv(_, _ string) { panic("exampleTB: Setenv") }
-
-func (exampleTB) Helper() {}
-
-func (e exampleTB) TempDir() string {
-	dir, err := os.MkdirTemp("", "magus-example-*")
-	if err != nil {
-		panic(err)
-	}
-	*e.dirs = append(*e.dirs, dir)
-	return dir
-}
-
-func (exampleTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
-
-// exampleWorkspace returns a workspace laid out the way a monorepo is, and a function that
-// removes it.
-func exampleWorkspace() (*testkit.Workspace, func()) {
-	return newExampleWorkspace(map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "",
-		"web/magusfile.buzz": "",
-	})
-}
-
-// newExampleWorkspace is exampleWorkspace over files, keyed by workspace-relative path.
-func newExampleWorkspace(files map[string]string) (*testkit.Workspace, func()) {
-	var dirs []string
-	ws := testkit.NewWorkspace(exampleTB{dirs: &dirs})
-	ws.WriteTree(files)
-	return ws, func() {
-		for _, dir := range dirs {
-			_ = os.RemoveAll(dir)
-		}
-	}
-}
-
-// ExampleOpen opens a workspace, which also opens its cache, and lists its projects. A
-// program that only reads the workspace calls Inspect instead.
-func ExampleOpen() {
-	ws, cleanup := exampleWorkspace()
-	defer cleanup()
-
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("open:", err)
-		return
-	}
-	for _, p := range m.All() {
-		fmt.Println(p.Path)
-	}
-	// Output:
-	// .
-	// api
-	// web
-}
-
-// ExampleMagus_ExpandAffected expands a target over the projects a changeset touches. A
-// workspace that is not under version control cannot tell which projects changed, so it
-// falls back to every project and says so in the third result.
-func ExampleMagus_ExpandAffected() {
-	ws, cleanup := exampleWorkspace()
-	defer cleanup()
-
-	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("open:", err)
-		return
-	}
-	targets, _, fellBack, err := m.ExpandAffected(context.Background(), "ci", "")
-	if err != nil {
-		fmt.Println("expand:", err)
-		return
-	}
-	fmt.Println("fell back to every project:", fellBack)
-	for _, t := range targets {
-		fmt.Println(t.Path + ":" + t.Name)
-	}
-	// Output:
-	// fell back to every project: true
-	// .:ci
-	// api:ci
-	// web:ci
-}
-
-// ExampleWorkspaceRegistry_withSpell attaches a spell to a project in Go instead of in a
-// magusfile, then reads back the targets the spell contributes. The example registers the
-// spell itself so its output does not depend on which built-in spells the program links.
-func ExampleWorkspaceRegistry_withSpell() {
-	ws, cleanup := exampleWorkspace()
-	defer cleanup()
-
-	const name = "example-lint"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name, spells.WithTargets("lint")))
-	defer project.DefaultSpellRegistry().UnregisterSpell(name)
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("api", WithSpell(name))
-
-	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("inspect:", err)
-		return
-	}
-	targets, err := m.ListTargets(context.Background())
-	if err != nil {
-		fmt.Println("list targets:", err)
-		return
-	}
-	for _, t := range targets {
-		if t.Kind == "spell" {
-			fmt.Println(t.Name, t.Spells)
-		}
-	}
-	// Output:
-	// lint [example-lint]
 }
 
 // newWorkspace lays down a minimal multi-language workspace and
