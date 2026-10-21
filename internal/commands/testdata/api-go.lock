@@ -25,21 +25,21 @@ github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.Drif
 github.com/egladman/magus.DurationPredictor type interface
 github.com/egladman/magus.DurationPredictor.PredictDuration imethod func(project string, target string, tags []string) time.Duration
 github.com/egladman/magus.Event type struct
-github.com/egladman/magus.Event.Command field *Command
-github.com/egladman/magus.Event.DiagnosticCode field string
-github.com/egladman/magus.Event.Duration field time.Duration
-github.com/egladman/magus.Event.Invocation field string
-github.com/egladman/magus.Event.Kind field string
-github.com/egladman/magus.Event.Level field string
-github.com/egladman/magus.Event.MagusVersion field string
+github.com/egladman/magus.Event.Command field *Command "json:\"command,omitempty\""
+github.com/egladman/magus.Event.DiagnosticCode field string "json:\"diagnostic_code,omitempty\""
+github.com/egladman/magus.Event.Duration field time.Duration "json:\"-\""
+github.com/egladman/magus.Event.Invocation field string "json:\"inv,omitempty\""
+github.com/egladman/magus.Event.Kind field string "json:\"kind\""
+github.com/egladman/magus.Event.Level field string "json:\"level,omitempty\""
+github.com/egladman/magus.Event.MagusVersion field string "json:\"magus_version,omitempty\""
 github.com/egladman/magus.Event.MarshalJSON method func() ([]byte, error)
-github.com/egladman/magus.Event.Project field string
-github.com/egladman/magus.Event.Ref field string
-github.com/egladman/magus.Event.Status field string
-github.com/egladman/magus.Event.Stream field string
-github.com/egladman/magus.Event.Target field string
-github.com/egladman/magus.Event.Text field string
-github.com/egladman/magus.Event.Timestamp field int64
+github.com/egladman/magus.Event.Project field string "json:\"project,omitempty\""
+github.com/egladman/magus.Event.Ref field string "json:\"ref,omitempty\""
+github.com/egladman/magus.Event.Status field string "json:\"status,omitempty\""
+github.com/egladman/magus.Event.Stream field string "json:\"stream,omitempty\""
+github.com/egladman/magus.Event.Target field string "json:\"target,omitempty\""
+github.com/egladman/magus.Event.Text field string "json:\"text,omitempty\""
+github.com/egladman/magus.Event.Timestamp field int64 "json:\"ts\""
 github.com/egladman/magus.Event.UnmarshalJSON method(ptr) func(data []byte) error
 github.com/egladman/magus.FindRoot func(dir string) (string, error)
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption

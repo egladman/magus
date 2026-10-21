@@ -129,50 +129,36 @@ func newInvocation(inv journal.Invocation) Invocation {
 // caller-facing projection of [journal.Event]. The JSON form is journal.Event's wire form:
 // keys ts, inv and duration_ms (integer milliseconds).
 type Event struct {
-	Timestamp      int64         // unix milliseconds
-	Invocation     string        // invocation id (one per run command)
-	Project        string        // repo-relative project path
-	Target         string        // target name (with charms, as the CLI spells it)
-	Kind           string        // one of the journal.Kind* constants
-	Stream         string        // stdout|stderr, for output events
-	Level          string        // info|warn|error, for magus events
-	Status         string        // pass|fail|cached, for result events
-	Ref            string        // target-output ref, for result events
-	Duration       time.Duration // wall-clock duration, for result events; the wire form truncates to milliseconds
-	Text           string        // output line or message
-	DiagnosticCode string        // MGS code of a failed result that never ran
+	Timestamp      int64         `json:"ts"`                        // unix milliseconds
+	Invocation     string        `json:"inv,omitempty"`             // invocation id (one per run command)
+	Project        string        `json:"project,omitempty"`         // repo-relative project path
+	Target         string        `json:"target,omitempty"`          // target name (with charms, as the CLI spells it)
+	Kind           string        `json:"kind"`                      // one of the journal.Kind* constants
+	Stream         string        `json:"stream,omitempty"`          // stdout|stderr, for output events
+	Level          string        `json:"level,omitempty"`           // info|warn|error, for magus events
+	Status         string        `json:"status,omitempty"`          // pass|fail|cached, for result events
+	Ref            string        `json:"ref,omitempty"`             // target-output ref, for result events
+	Duration       time.Duration `json:"-"`                         // wall-clock duration, for result events; the wire form is duration_ms
+	Text           string        `json:"text,omitempty"`            // output line or message
+	DiagnosticCode string        `json:"diagnostic_code,omitempty"` // MGS code of a failed result that never ran
 
 	// Set only on the started event (Kind==journal.KindStarted): the run's identity.
-	Command      *Command
-	MagusVersion string
+	Command      *Command `json:"command,omitempty"`
+	MagusVersion string   `json:"magus_version,omitempty"`
 }
 
-// eventWire carries the JSON tags Event does not, so the wire form stays journal.Event's.
+// eventFields is Event without its JSON methods, so eventWire can embed the tagged fields.
+type eventFields Event
+
+// eventWire adds the duration_ms conversion to Event's tagged fields.
 type eventWire struct {
-	Timestamp      int64    `json:"ts"`
-	Invocation     string   `json:"inv,omitempty"`
-	Project        string   `json:"project,omitempty"`
-	Target         string   `json:"target,omitempty"`
-	Kind           string   `json:"kind"`
-	Stream         string   `json:"stream,omitempty"`
-	Level          string   `json:"level,omitempty"`
-	Status         string   `json:"status,omitempty"`
-	Ref            string   `json:"ref,omitempty"`
-	DurationMs     int64    `json:"duration_ms,omitempty"`
-	Text           string   `json:"text,omitempty"`
-	DiagnosticCode string   `json:"diagnostic_code,omitempty"`
-	Command        *Command `json:"command,omitempty"`
-	MagusVersion   string   `json:"magus_version,omitempty"`
+	eventFields
+	DurationMs int64 `json:"duration_ms,omitempty"`
 }
 
 // MarshalJSON encodes e in journal.Event's wire form.
 func (e Event) MarshalJSON() ([]byte, error) {
-	return json.Marshal(eventWire{
-		Timestamp: e.Timestamp, Invocation: e.Invocation, Project: e.Project, Target: e.Target,
-		Kind: e.Kind, Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref,
-		DurationMs: e.Duration.Milliseconds(), Text: e.Text, DiagnosticCode: e.DiagnosticCode,
-		Command: e.Command, MagusVersion: e.MagusVersion,
-	})
+	return json.Marshal(eventWire{eventFields: eventFields(e), DurationMs: e.Duration.Milliseconds()})
 }
 
 // UnmarshalJSON decodes journal.Event's wire form into e.
@@ -181,12 +167,8 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &w); err != nil {
 		return err
 	}
-	*e = Event{
-		Timestamp: w.Timestamp, Invocation: w.Invocation, Project: w.Project, Target: w.Target,
-		Kind: w.Kind, Stream: w.Stream, Level: w.Level, Status: w.Status, Ref: w.Ref,
-		Duration: time.Duration(w.DurationMs) * time.Millisecond, Text: w.Text,
-		DiagnosticCode: w.DiagnosticCode, Command: w.Command, MagusVersion: w.MagusVersion,
-	}
+	*e = Event(w.eventFields)
+	e.Duration = time.Duration(w.DurationMs) * time.Millisecond
 	return nil
 }
 
@@ -194,8 +176,8 @@ func newEvent(e journal.Event) Event {
 	ev := Event{
 		Timestamp: e.Ts, Invocation: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
 		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref,
-		Duration: time.Duration(e.DurationMs) * time.Millisecond,
-		Text: e.Text, DiagnosticCode: e.DiagnosticCode, MagusVersion: e.MagusVersion,
+		Duration: time.Duration(e.DurationMs) * time.Millisecond, Text: e.Text,
+		DiagnosticCode: e.DiagnosticCode, MagusVersion: e.MagusVersion,
 	}
 	if e.Command != nil {
 		ev.Command = &Command{

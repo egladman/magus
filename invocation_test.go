@@ -252,7 +252,7 @@ func TestNewEventCarriesEveryField(t *testing.T) {
 // TestEventJSONKeepsTheWireForm: older readers (the CI jq step, saved query output)
 // depend on the keys ts, inv and duration_ms.
 func TestEventJSONKeepsTheWireForm(t *testing.T) {
-	const line = `{"ts":1700000000000,"inv":"inv1","project":"api","target":"build:rw","kind":"result","status":"cached","ref":"outdeadbe","duration_ms":42,"text":"done"}`
+	const line = `{"ts":1700000000000,"inv":"inv1","project":"api","target":"build:rw","kind":"result","status":"cached","ref":"outdeadbe","text":"done","duration_ms":42}`
 
 	var got Event
 	require.NoError(t, json.Unmarshal([]byte(line), &got))
