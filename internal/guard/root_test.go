@@ -459,12 +459,11 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
 		Bounds: []types.ModelTierBounds{{}, {}, {}},
 		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
-		Hosts:  map[types.HarnessKey][]string{{ID: "claude-code"}: {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
 	})
 	require.NoError(t, err)
 	tools := *descriptor.Tools
-	tools.Models = &agent.ModelFacts{Rows: descriptor.Models, Tiers: set}
-	for _, f := range tools.Files() {
+	for _, f := range agent.ToolFiles(tools, &agent.ModelFacts{Rows: descriptor.Models, Tiers: set}) {
 		path := filepath.Join(root, f.Path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
