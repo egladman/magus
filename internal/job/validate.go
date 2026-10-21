@@ -138,8 +138,8 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 	return paths, notes
 }
 
-// IntegratorRegenerates is the reason a record gives for an output the integrator owns.
-const IntegratorRegenerates = "the integrator regenerates it"
+// integratorRegenerates is the reason a record gives for an output the integrator owns.
+const integratorRegenerates = "the integrator regenerates it"
 
 // IntegratorWaivers is one waiver per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
@@ -153,7 +153,7 @@ func IntegratorWaivers(root string, row types.Job, projects []*types.Project, ig
 		if accepted || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
 			continue
 		}
-		waivers = append(waivers, types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: IntegratorRegenerates})
+		waivers = append(waivers, types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
 	}
 	return waivers
 }

@@ -238,7 +238,7 @@ func TestIntegratorWaiversAcceptEveryOutputButADeniedOne(t *testing.T) {
 	subjects := make([]string, len(got))
 	for i, w := range got {
 		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
-		assert.Equal(t, IntegratorRegenerates, w.Reason)
+		assert.Equal(t, integratorRegenerates, w.Reason)
 		subjects[i] = w.Subject
 	}
 	assert.Contains(t, subjects, "docs/manpage/*.md")

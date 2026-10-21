@@ -13,6 +13,7 @@ ReadMcpResourceTool
 ScheduleWakeup
 SearchPlugins
 SearchSkills
+SendUserFile
 Skill
 SubagentHandback
 TaskOutput
@@ -68,6 +69,8 @@ mcp__ccd_sidebar__rename_section
 mcp__ccd_sidebar__set_pinned
 mcp__ccd_sidebar__set_unread
 mcp__ccd_sidebar__set_view
+mcp__ccd_turn__update_plan
+mcp__ccd_turn__wrap_up
 mcp__ccd_view__close_pane
 mcp__ccd_view__get_layout
 mcp__ccd_view__set_transcript_view

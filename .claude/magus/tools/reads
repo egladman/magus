@@ -3,6 +3,7 @@ Grep
 LS
 NotebookRead
 Read
+ReadNotifications
 mcp__ccd_connectors__session_connectors_status
 mcp__ccd_host__get_storage_usage
 mcp__ccd_pr__get_status
