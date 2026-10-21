@@ -1,7 +1,7 @@
 ### Changed
 
 - **A run that uses more memory than its curve predicted is charged its full peak.**
-  The broker charges that run its full peak from the moment its own process tree goes
-  over the predicted value, until the claim is released. Nothing is paused or killed,
-  and host free memory is never read. A broker older than the client ignores the report
-  and the client says so once.
+  The charge starts when its process tree goes over the prediction, lasts until the
+  claim is released, and carries over to a restarted broker. Nothing is paused or
+  killed. A broker older than the client ignores the report, and the client says so
+  once.
