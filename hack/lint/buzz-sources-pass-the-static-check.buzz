@@ -4,7 +4,7 @@
 //
 // Magusfiles, spells, hack/, docs/, std/examples/, cmd/, console/ and internal/queue/ check with
 // --embedded, the mode their host loads them in; everything else checks strict. docs/ checks from
-// docs/, where its `lib/...` and `engine/...` imports resolve.
+// docs/, where its `lib/...` and `engine/...` imports resolve, except docs/magusfile.buzz.
 //
 // A BZZ2001 for an import of magus/spell/*, project/* or mergequeue is ignored: the host binds
 // those at load, so --check cannot resolve them. Skipped: testdata, the docs figures (the figure
@@ -24,6 +24,10 @@ import "hack/lint/support" as support;
 final DIAGNOSTIC = std\pattern(`(\[BZZ\d+\] )?buzz: (\S+?\.buzz):(\d+):(\d+): (.*)`);
 
 final DOCS = "docs/";
+
+// DOCS_MAGUSFILE checks from the root: workspace loading resolves the root-relative imports of the
+// hack/ modules it pulls in from there, and from docs/ they do not resolve.
+final DOCS_MAGUSFILE = "docs/magusfile.buzz";
 
 final SKIPPED = ["docs/site/diagrams/", "internal/spell/gen/", "libs/gopherbuzz/examples/"];
 
@@ -129,7 +133,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             continue;
         }
         base = f.base;
-        if (f.value.startsWith(DOCS)) {
+        if (f.value.startsWith(DOCS) and f.value != DOCS_MAGUSFILE) {
             docs.append(f.value.sub(DOCS.len()));
         } else if (embedded(f.value)) {
             root.append(f.value);
