@@ -321,7 +321,7 @@ order and stop at the first yes.
 | the rule is                                                       | home                                                        | example here                                                                                                                                                           |
 | ----------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | a call that cannot be undone                                      | compiled guard rule that denies                             | a whole-tree `git reset --hard` destroys a concurrent agent's work ([The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)) |
-| a call that wastes time, where a command that answers it exists   | compiled guard rule that advises                            | `adviseNewSourceDir` in `internal/guard/dir.go` explains a new source directory and denies nothing                                                                     |
+| a call a later command can redo, where a command answers it       | compiled guard rule that denies and serves that command     | `stage-all` refuses `git add -A` and serves `magus vcs add`                                                                                                            |
 | a call this repository refuses and a user's task runner would not | a rule in `hack/policy/*.buzz`, wired in the root magusfile | `brief-builds-magus` and `worker-builds-magus` in `hack/policy/builds.buzz`                                                                                            |
 | a property of files, checked at the gate                          | a lint rule in `hack/lint/` or a test                       | `banned-words` and `provider-io-is-buzz` in `hack/lint/`; `adr-template` in `docs/lib/adr.buzz`                                                                        |
 | a name that must keep resolving                                   | a drift test                                                | every command path in a hint is walked against the registry ([Hints belong in `hint`](#hints-belong-in-hint))                                                          |
@@ -330,8 +330,9 @@ order and stop at the first yes.
 
 Choosing among them:
 
-- Deny only what cannot be undone. Anything recoverable advises, and the advice
-  carries the command that answers the call.
+- Deny, and name a remedy the caller can take now
+  ([ADR 0013](https://github.com/egladman/magus/blob/main/docs/decisions/0013-the-guard-denies.md)). A rule whose remedy does
+  not clear it is a notice, which states the fact and never refuses.
 - A guard fires at the moment of the edit; a lint or test fires at the gate. Use
   the guard when the author must not finish the wrong work, and the lint when
   finding it at CI is soon enough.
@@ -387,7 +388,7 @@ kind and must never be annoyed by it, so a shipped rule needs all of:
 - a case for it that does not depend on magus's own data;
 - a correctness property or a documented tool norm, not a taste;
 - near-zero false positives on three repositories that are not this one;
-- advice rather than denial, unless the action cannot be undone;
+- a denial that names a remedy the caller can take now, or a notice when there is none;
 - a default that a workspace can change by name with `magus\guard.builtins`.
 
 A rule that fails any of these is repository policy: write it in `hack/lint`,

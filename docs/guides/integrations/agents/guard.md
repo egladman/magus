@@ -1,6 +1,6 @@
 ---
 title: The guard
-description: "What magus session hook denies, what it advises by default, and why: the five deny grounds, how a workspace sets a built-in rule, the file-write rules, the verdict contract a host wires into, and the observations magus records."
+description: "What magus session hook denies, what it only notes, and why: the five deny grounds, how a workspace sets a built-in rule, the file-write rules, the verdict contract a host wires into, and the observations magus records."
 tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ---
 
@@ -38,25 +38,24 @@ Wiring is per host: [Claude Code](claude-code.md), [Codex](codex.md),
 [any host that can run a command](any-host.md). The rules below are the same
 everywhere, because they come from one binary.
 
-## Deny only what cannot be undone
+## Deny with a remedy
 
-magus explains everything else. Say that plainly, because the temptation runs
-the other way: a guard that can prove something is wrong wants to block it.
+A rule worth having denies, and its refusal names a command the caller can run
+now. An agent disregards advice that only prints, repeatedly, so the guard does
+not ship advice as a default ([ADR 0013](../../../decisions/0013-the-guard-denies.md)).
 
 A whole-tree `git reset --hard` destroys uncommitted and untracked work,
-including a concurrent agent's, and nothing brings it back. magus denies that.
-A hand-edited generated file only wastes your time, because regenerating erases
-it, so magus explains instead, even though it knows from the target's own
-declarations that the file is generated. Blocking there would treat you as
-unable to learn something one `magus describe file` away. An agent told why an
-edit was futile does not repeat it; an agent whose call was rejected has only
-lost a turn.
+including a concurrent agent's, and nothing brings it back. A raw `go test`,
+`git add -A` or a pipe on magus's output can be redone, but the replacement
+answers what the refused call asked, and the refusal serves it. Both deny.
 
-The same holds for a raw `go test`, `git add -A` or a pipe on magus's output.
-Each refuses nothing a later command cannot redo, and the replacement answers
-what the refused call asked, so the guard advises and serves that command. A
-workspace that wants one of them refused says so by name, with
-[`magus\guard.builtins`](#setting-a-built-in-rule); this repository does.
+A rule whose remedy does not clear it is a notice: it states a fact, such as
+which lease owns a path or why a graph-backed rule stood down, and never
+refuses. A refusal that every retry meets again teaches the caller to route
+around the guard.
+
+A workspace that disagrees with a deny sets that rule to `advise` or `off` by
+name, with [`magus\guard.builtins`](#setting-a-built-in-rule).
 
 ## The deny triggers
 
@@ -284,15 +283,15 @@ Every file a patch writes is judged, not only the first: a multi-file
 `apply_patch` is held to what a write of each file alone would meet, and a refusal
 names the file it is about.
 
-## What magus advises by default
+## What magus denies with a served command
 
-These rules match a call the guard could refuse and does not. Each serves the
-command that answers what the call asked, in the same verdict, so the caller loses
-no turn. They are the compiled defaults of `magus describe rules`, and a
-workspace sets any of them to `deny` or `off` with
+These rules match a call that a later command can redo. Each refusal serves the
+command that answers what the call asked. They deny by default, and a workspace
+sets any of them to `advise`, which serves the same command once a session and
+lets the call run, or to `off`, with
 [`magus\guard.builtins`](#setting-a-built-in-rule).
 
-| rule                                                                           | advises on                                                             |
+| rule                                                                           | denies                                                                 |
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
 | [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
@@ -326,12 +325,12 @@ workspace sets any of them to `deny` or `off` with
 | [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                   | a tool call whose input no rule reads, from a tool the guard lacks     |
 | [`unknown-env`](../../../reference/rules/unknown-env.md)                       | a retired or misspelled `MAGUS_*` variable                             |
 
-The rules that explain from the start, such as `capture-filter`, `graph-pipe` and
-`split-run`, are in [What magus explains](#what-magus-explains). What follows
-says what each rule matches; a workspace that set `deny` gets a refusal carrying the
-same served command.
+The notices, such as `split-run` and `leased-path`, are in
+[What magus explains](#what-magus-explains), beside `capture-filter` and
+`graph-pipe`, which also deny by default. What follows says what each rule
+matches; a workspace that set `advise` gets the same served command as advice.
 
-- Raw language tools draw advice: `go test`, `go build`, `go mod tidy`, `cargo build`,
+- Raw language tools are refused: `go test`, `go build`, `go mod tidy`, `cargo build`,
   `gofmt -w`, `prettier --write`, and the rest. The match is the base PROGRAM a
   registered spell op renders plus the leading argv it renders with it, so the
   matched spelling is the one a spell would launch. A tool a spell
@@ -344,11 +343,11 @@ same served command.
   magus, and `--dry-run` to see the exact command either would run. Read-only
   invocations pass: `gofmt -l` and `gofmt -d` report without writing, so they
   bypass nothing.
-- Staging everything draws advice: `git add -A`, `git add .`, `git add -u`. A magus
+- Staging everything is refused: `git add -A`, `git add .`, `git add -u`. A magus
   target writes its declared outputs as it runs, so a tree is routinely dirty
   with generated files you did not edit; sweeping them into a commit about
   something else is how a focused change becomes unreviewable.
-- Piping or redirecting magus's own output draws advice: `| tail`, `> file`, `>> file`,
+- Piping or redirecting magus's own output is refused: `| tail`, `> file`, `>> file`,
   `2>&1`. The equivalent is exact: `-o name|json|template=` returns the field
   the filter was reaching for, and every run persists its full log, so a failure
   prints that path with the ref. A pipe additionally replaces the exit status
@@ -356,7 +355,7 @@ same served command.
   and a failing gate reads as exit 0. `magus query output <ref>` is the one
   exemption: a raw captured tool log has no schema to project.
 
-  A text filter aimed at the file a BACKGROUNDED run was captured to is advised on
+  A text filter aimed at the file a BACKGROUNDED run was captured to is refused on
   the same ground (`capture-filter`), and it is the shape that gets past the rule above: nothing on
   `grep -n cause: <capture> | head -8` is a magus invocation. The files are the
   host's task capture (`<id>.output`) and a persisted run log
@@ -367,7 +366,7 @@ same served command.
   whole does not: `cat <capture>` and an editor tool's read are both fine.
   Backgrounding the run as `-o jsonl --tee <file>` makes the capture a contract,
   after which `jq` over it is composition.
-- In-place stream edits draw advice: `sed -i`, `sed --in-place`. The flag is not
+- In-place stream edits are refused: `sed -i`, `sed --in-place`. The flag is not
   portable and the two spellings destroy each other's work: GNU reads
   `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the
   backup suffix, and the portable-looking `sed -i '' ...` makes GNU edit
@@ -376,7 +375,7 @@ same served command.
   Every host driving this guard has a structured editor tool that applies an
   exact replacement and reports what changed. Reading with sed is untouched.
   A **scripted substitute-and-write** is the same edit by another route and
-  is advised with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
+  is refused with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
   one-liner whose substitution (`re.sub`, `.replace(`) is followed on the line
   by a `.write(`. Deliberately narrow (an interpreter that only WRITES a file
   is ordinary authoring and passes), so a one-liner that writes before it
@@ -388,13 +387,13 @@ same served command.
   sources trip MGS1002. To work on a different workspace, pass `--root <path>`.
   A magus command relocated into a SIBLING CHECKOUT of this repository (a `cd`
   into a linked worktree, or into the main checkout reached from inside one) is
-  advised on the same ground, recognized by reading the shared git directory
+  refused on the same ground, recognized by reading the shared git directory
   rather than by the path's name: that tree's `./magus` was linked from ITS
   sources and its cache is keyed to ITS tree, so the verdict describes neither
   checkout. Magus takes the project as an argument, and a host shell tool that
   needs a different directory for one call has a working_directory (or cwd)
   field.
-- **Waiting by hand draws advice.** Work you start in the background is
+- **Waiting by hand is refused.** Work you start in the background is
   announced when it ends, so the waiter rules point every wait back at that
   notice, at `magus job wait <job>` for another agent's job, or at
   `magus status --watch=15s` for the project lock. `sleep-poll` matches a
@@ -415,29 +414,30 @@ same served command.
   `monitor-pile` counts each agent's live waiters, watchers, timers and endless
   watches together, from when each is armed to its timeout, and advises at the
   third and refuses at the fifth. Re-arming a watcher that expired passes.
-- **A spawn that only waits draws advice** (`spawn-waiter`): a title or brief
+- **A spawn that only waits is refused** (`spawn-waiter`): a title or brief
   opening on wait, poll, monitor, watch or babysit, or saying to wait for, on or
   until an agent, worker or job. A subagent spawning a helper that speaks of
-  waiting is told once a session to hand the wait back to its parent
+  waiting is refused and told to hand the wait back to its parent
   (`spawn-nested-waiter`, in [What magus explains](#what-magus-explains)).
-- **Paging through a mapped file draws advice** (`read-paging`): the third
+- **Paging through a mapped file is refused** (`read-paging`): the third
   distinct `sed -n` window of one Go, Buzz or Markdown file by one caller,
   counting a host read tool's offset and limit, with the file's map. A window
   inside one declaration or heading is a targeted read and never counts.
-- **A brief for a worker in its own worktree draws advice** when it shows a
+- **A brief for a worker in its own worktree is refused** when it shows a
   command with a `$()`, a loop or an exec (`brief-plain-commands`). A host that
   isolates the worker refuses each command it cannot prove stays in the
   worktree, and a worker copies the commands its brief shows.
 
 ## Setting a built-in rule
 
-Every compiled rule has a default decision: `deny`, `advise` or `off`. The two
-lists above are that table. A workspace sets any rule by name with
+Every compiled rule has a default decision: `deny`, `advise` or `off`. Every rule
+with a remedy defaults to `deny`; a notice defaults to `advise` and refuses a
+`deny`, and the cost rules default to `off` until a level turns them on. A workspace sets any rule by name with
 `magus\guard.builtins` in its root magusfile:
 
 ```buzz
 magus\guard.builtins({
-    "stage-all": "deny",
+    "stage-all": "advise",
     "unknown-env": "off",
     "read-navigation": {"decision": "deny", "lines": 120},
 })
@@ -452,8 +452,8 @@ names the nearest rule. `magus describe rules` shows each default.
 The declaration follows the other workspace rules. A tightening applies at once;
 a loosening waits until it is committed, because the guard runs the committed copy
 of the magusfile beside the working tree's and keeps the stricter answer. This repository's own
-declaration is `hack/policy/builtins.buzz`: it sets every rule in the table above
-back to `deny`, with the figures that justified each beside it.
+declaration is `hack/policy/builtins.buzz`: it sets read-navigation's line limit,
+with the figures that justified each deny beside it.
 
 ## Workspace rules
 
@@ -533,6 +533,12 @@ gating event, so the explanation rides the post-tool event instead and lands wit
 the call's result. Codex used to be sent nothing at all, on a reading of its hook
 contract its own current reference contradicts; the keys that make Codex mark a
 hook run failed are `continue`, `stopReason` and `suppressOutput`.
+
+The advisories below whose text names a command deny by default and explain only
+where a workspace set them to `advise`: `capture-filter`, `check-timeout`,
+`checkpoint-state`, `dependency-install`, `dependency-update`, `generated-write`,
+`graph-pipe`, `installed-skill`, `lease-invalid`, `model-tier-context-cap` and
+`spawn-nested-waiter`. The rest are notices, which never refuse.
 
 - `git commit` and `git add <paths>`: classify the dirty tree first. Deliberate
   staging is the replacement the rule above points at, so it is never denied.

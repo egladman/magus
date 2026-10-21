@@ -85,9 +85,9 @@ standard from one tree leaked into the product.
 
 | Item                                                                                                                                                                                                                                                                          | State                        |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Built-in rules that deny a recoverable action (a whole read, a pipe, an in-place edit, staging everything, a raw tool) advise by default, once per session                                                                                                                    | done (#550)                  |
+| Built-in rules that deny a recoverable action (a whole read, a pipe, an in-place edit, staging everything, a raw tool) advise by default, once per session                                                                                                                    | not built (ADR 0013)         |
 | Every built-in rule can be set by name in the root magusfile: `magus\guard.builtins({name: "deny" \| "advise" \| "off" \| {decision, lines}})`; an unknown name is an error; the stricter of the committed and working-tree settings applies, so loosening waits for a commit | done (#550)                  |
-| No number measured on this repository ships in the binary; this repository restores its stricter settings, with the evidence, in its own guard policy                                                                                                                         | done (#550)                  |
+| No number measured on this repository ships in the binary; this repository sets read-navigation's line limit, with the evidence for every rule, in its own guard policy                                                                                                       | done (#550, ADR 0013)        |
 | A rule that guards destroyed work, publication, provenance, credentials, the guard's own authority, or a boundary a job declared keeps denying by default                                                                                                                     | done (#550)                  |
 | A guard rule that denies an agent enabling auto-merge on its own pull request (`gh pr merge --auto` and equivalents); the denial hands the person the command to run, and it lives in this repository's guard policy                                                          | done (`hack/policy/gh.buzz`) |
 
@@ -260,3 +260,12 @@ The exit codes keep their meaning: 0 passes, 1 is a deny finding (a low grade am
 - Whether a minimum of 100, which agent-brief, skill-template, cli-help, tool-description
   and review-reply hold, should stay: on those kinds any graded finding fails, as a deny
   would.
+
+### 2026-10-21: the guard denies by default
+
+Section 2 is reversed by [ADR 0013](0013-the-guard-denies.md). Eli decided on 2026-10-21
+that advice an agent can route around is routed around: the recoverable rules, and every
+advisory whose text names a command, deny by default in the binary. A rule whose remedy
+does not clear it is a notice, which never refuses. A workspace still lowers any deny by
+name, and loosening still waits for a commit. The section's State rows above are updated
+to match; the reasoning stays as written.
