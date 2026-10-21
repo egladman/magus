@@ -1,14 +1,18 @@
 package magus
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,17 +48,13 @@ func TestSlotPressureNudge(t *testing.T) {
 	}, got)
 }
 
-// gbTest is the host total these tests pin. slotsForPolicy takes it as an
-// argument, so nothing here depends on the machine running the suite: the same
-// trap the forecaster tests had to be fixed for.
-const gbTest = int64(1) << 30
-
-// perSlot is what one slot is worth at the pinned total and budget: 16GB over 4
-// slots is 4096MB.
+// The memory budget and slot width these tests pin. slotsForPolicy takes both as
+// arguments, so nothing here depends on the machine running the suite: 16384 MiB over
+// 4 slots is 4096 MiB a slot.
 const (
-	testBudget = 4
-	testTotal  = 16 * gbTest
-	perSlotMB  = 4096
+	testBudget   = 4
+	testBudgetMB = 16384
+	perSlotMB    = 4096
 )
 
 // The cases that must behave exactly as they did before memory was declarable.
@@ -62,35 +62,51 @@ const (
 // where someone opted in: an undeclared target, an unmeasurable host, and an
 // unlimited budget all keep the caller's own Slots untouched.
 func TestSlotsForPolicyIsInertWithoutADeclaration(t *testing.T) {
-	assert.Equal(t, 0, slotsForPolicy(0, 0, testBudget, testTotal), "nothing declared")
-	assert.Equal(t, 3, slotsForPolicy(3, 0, testBudget, testTotal), "slots declared, memory not")
-	assert.Equal(t, 2, slotsForPolicy(2, 8192, 0, testTotal), "unlimited budget has nothing to throttle against")
-	assert.Equal(t, 2, slotsForPolicy(2, -1, testBudget, testTotal), "a negative declaration is not a claim")
-	assert.Equal(t, 2, slotsForPolicy(2, 8192, testBudget, 0), "an unmeasurable host is not a budget")
+	assert.Equal(t, 0, slotsForPolicy(0, 0, testBudget, testBudgetMB, false), "nothing declared")
+	assert.Equal(t, 3, slotsForPolicy(3, 0, testBudget, testBudgetMB, false), "slots declared, memory not")
+	assert.Equal(t, 2, slotsForPolicy(2, 8192, 0, testBudgetMB, false), "unlimited budget has nothing to throttle against")
+	assert.Equal(t, 2, slotsForPolicy(2, -1, testBudget, testBudgetMB, false), "a negative declaration is not a claim")
+	assert.Equal(t, 2, slotsForPolicy(2, 8192, testBudget, 0, false), "an unmeasurable host is not a budget")
 }
 
-// The conversion itself, against a pinned host.
+// The broker holds memory in megabytes beside its own slots, so a brokered claim's
+// slots are its CPU and never grow with its memory.
+func TestSlotsForPolicyLeavesSlotsAloneUnderTheBroker(t *testing.T) {
+	assert.Equal(t, 0, slotsForPolicy(0, perSlotMB*3, testBudget, testBudgetMB, true), "memory alone takes one slot")
+	assert.Equal(t, 2, slotsForPolicy(2, 160_000, testBudget, testBudgetMB, true), "declared slots stand")
+}
+
+// One slot is worth the memory budget over the width, not the host over the width:
+// 24 GiB usable is an 18432 MiB balanced budget, 2304 MiB a slot at width 8, where the
+// host would make it 3072.
+func TestSlotsForPolicyDividesTheBudgetNotTheHost(t *testing.T) {
+	budgetMB := mem.BudgetMB(24<<30, types.ProfileBalanced)
+	assert.Equal(t, 2, slotsForPolicy(0, 3072, 8, budgetMB, false))
+	assert.Equal(t, 1, slotsForPolicy(0, 2304, 8, budgetMB, false))
+}
+
+// The conversion itself, against a pinned budget.
 func TestSlotsForPolicyConvertsMemoryToShares(t *testing.T) {
-	assert.Equal(t, 1, slotsForPolicy(0, perSlotMB, testBudget, testTotal), "exactly one share")
-	assert.Equal(t, 2, slotsForPolicy(0, perSlotMB*2, testBudget, testTotal), "exactly two shares")
-	assert.Equal(t, 3, slotsForPolicy(0, perSlotMB*2+1, testBudget, testTotal),
-		"a share and a byte must round UP: rounding down admits a peer against memory already claimed")
-	assert.Equal(t, 1, slotsForPolicy(0, 1, testBudget, testTotal), "a small claim is still one slot")
+	assert.Equal(t, 1, slotsForPolicy(0, perSlotMB, testBudget, testBudgetMB, false), "exactly one share")
+	assert.Equal(t, 2, slotsForPolicy(0, perSlotMB*2, testBudget, testBudgetMB, false), "exactly two shares")
+	assert.Equal(t, 3, slotsForPolicy(0, perSlotMB*2+1, testBudget, testBudgetMB, false),
+		"a share and a megabyte must round UP: rounding down admits a peer against memory already claimed")
+	assert.Equal(t, 1, slotsForPolicy(0, 1, testBudget, testBudgetMB, false), "a small claim is still one slot")
 }
 
 // Both spellings given: the larger wins, because they are claims about the same
 // resource and the safe reading of a disagreement is the conservative one.
 func TestSlotsForPolicyTakesTheLargerClaim(t *testing.T) {
-	assert.Equal(t, 3, slotsForPolicy(3, perSlotMB, testBudget, testTotal), "slots=3 beats memory worth 1")
-	assert.Equal(t, 3, slotsForPolicy(1, perSlotMB*3, testBudget, testTotal), "memory worth 3 beats slots=1")
+	assert.Equal(t, 3, slotsForPolicy(3, perSlotMB, testBudget, testBudgetMB, false), "slots=3 beats memory worth 1")
+	assert.Equal(t, 3, slotsForPolicy(1, perSlotMB*3, testBudget, testBudgetMB, false), "memory worth 3 beats slots=1")
 }
 
-// A declaration larger than the whole machine resolves to more slots than exist.
+// A declaration larger than the whole budget resolves to more slots than exist.
 // Deliberately not clamped here: the limiter already clamps to its capacity, and
 // clamping twice would hide a target that cannot fit at all.
 func TestSlotsForPolicyDoesNotClampAnImpossibleClaim(t *testing.T) {
-	assert.Greater(t, slotsForPolicy(0, 160_000, testBudget, testTotal), testBudget,
-		"a claim bigger than the host must not silently look satisfiable")
+	assert.Greater(t, slotsForPolicy(0, 160_000, testBudget, testBudgetMB, false), testBudget,
+		"a claim bigger than the budget must not silently look satisfiable")
 }
 
 // chainProject builds a project whose targets carry policies and ctx.needs chains.
@@ -320,15 +336,26 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 }
 
 // A memory claim worth more slots than the target's own count says so, since a reader
-// sent to its slots or its runs would find nothing that explains the figure.
+// sent to its slots or its runs would find nothing that explains the figure. Under the
+// broker the claim keeps its declared slots, so there is nothing to name.
 func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	m := &Magus{}
 	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
-	m.hostMemOnce.Do(func() { m.hostMemBytes = 8 << 30 }) // 1 GiB a slot
+	m.hostMemOnce.Do(func() { m.hostMemBytes = 12 << 30 }) // a 9216 MiB budget, 1152 MiB a slot
+	p := chainProject(".", map[string]types.Target{"test": {MemoryMB: 3072, Slots: 2}}, nil)
 	var step cache.Step
-	sizing := m.sizeClaim(&step, chainProject(".", map[string]types.Target{"test": {MemoryMB: 3072, Slots: 2}}, nil), "test", nil)
+	sizing := m.sizeClaim(&step, p, "test", nil)
 	assert.Equal(t, 3, step.Slots)
 	assert.Equal(t, types.SlotSizing{Source: types.SlotsForMemory}, sizing.Slots)
+
+	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+		cache.WithMachineAdmission(broker.NewClient("unix:///nonexistent/broker.sock")))
+	require.NoError(t, err)
+	m.cache = c
+	step = cache.Step{}
+	sizing = m.sizeClaim(&step, p, "test", nil)
+	assert.Equal(t, 2, step.Slots)
+	assert.Equal(t, types.SlotSizing{Source: types.SlotsDeclared}, sizing.Slots)
 }
 
 // A Go target runs only as wide as its claim, so a claim its runs saturate doubles, up

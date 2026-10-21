@@ -564,6 +564,10 @@ func (c *Cache) Stats() Stats {
 // it, so those artifacts stay out of the working tree.
 func (c *Cache) Dir() string { return c.dir }
 
+// MachineArbitrated reports whether a machine admitter (WithMachineAdmission) decides
+// each step's claim. False on a nil Cache.
+func (c *Cache) MachineArbitrated() bool { return c != nil && c.machine != nil }
+
 // RunningTargets names what this process has in flight right now, as "project:target".
 //
 // The stall report is the caller that needs it: a wedged invocation's last transition
