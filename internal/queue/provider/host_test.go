@@ -10,7 +10,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/testkit"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // retargetCalling is script with retarget replaced by body, which calls the mergequeue
 // host module. It fails the test when script no longer holds the retarget it replaces,
