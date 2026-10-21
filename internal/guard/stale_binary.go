@@ -351,8 +351,10 @@ func scoutRecord(args []string) bool {
 // mid-pick links no binary at all. Each stands alone on its line. builds is whether the
 // caller builds this checkout's binary: the root, or the checkout's integrator. Any other
 // leased worker's binary fixes are the placement of its base's, and the fast-forward of its
-// branch to the commit its placed binary was built at (see fastForward): a worker building
-// a second is the thing the deny exists to prevent.
+// branch to the commit its placed binary was built at (see fastForward). The placement and
+// the bootstrap pass for every caller, lease or none: a worker runs the placement before its
+// lease is bound, and a judge that cannot load the tree must not deny the line it names.
+// Whether a worker may build is the raw-tool rule's to say.
 func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	call, ok := soleCall(command, d)
 	if !ok {
@@ -366,16 +368,19 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 		return true
 	}
 	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
-	if lease != "" && (placement || !builds) {
-		return placement
+	if placement {
+		return true
 	}
+	workerOnly := lease != "" && !builds
 	switch prog := path.Base(words[0]); {
 	case words[0] == "go":
 		g, ok := readGoCall(hint.Invocation{Name: "go", Args: words[1:]})
-		if !ok {
+		if !ok || !soleGoCommand(command, d) {
 			return false
 		}
-		return soleGoCommand(command, d) && (g.recoversMagus() || (g.bootstrapsMagus() && bootstrapLine(command, d)))
+		return (g.bootstrapsMagus() && bootstrapLine(command, d)) || (!workerOnly && g.recoversMagus())
+	case workerOnly:
+		return false
 	case prog == "magus" && len(call.Assigns) == 0:
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
 			return r.verb == "run" && targetName(r.target) == "go-build" && len(r.projects) <= 1 && (len(r.projects) == 0 || r.projects[0] == ".")

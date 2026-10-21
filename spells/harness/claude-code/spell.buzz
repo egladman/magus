@@ -25,8 +25,11 @@ export fun mgs_getName() > str { return "claude-code"; }
 // directory first, so the root-relative script path resolves wherever the session is; the
 // glue reads the session's own directory off the event.
 //
-// With no magus on PATH the command exits 127, which Claude Code reports and does not
-// treat as a block: the guard is open until one resolves.
+// The command runs the checkout's own ./magus when it is executable, so the binary that
+// built the tree judges it; an older magus on PATH cannot load a policy that reads a newer
+// field. Only a checkout without one falls back to PATH's magus. With neither the command
+// exits 127, which Claude Code reports and does not treat as a block: the guard is open
+// until one resolves.
 final HOOK_DIR = "\"$CLAUDE_PROJECT_DIR\"";
 
 // Declared on every entry that judges, because THIS config wires every tool, the Skill tool
@@ -122,31 +125,35 @@ export fun mgs_listHooks() > [HookCommand] {
 }
 
 fun claude_command(hook: HookCommand) > str {
-    return buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    return claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
 }
 
 fun claude_guard_command() > str {
-    return namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [OBSERVES_SKILL_LOADS]);
+    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-command", flags: [OBSERVES_SKILL_LOADS]));
 }
 
 fun claude_call_command() > str {
-    return buzzCommand(HOOK_DIR, script: "magus-command", flags: claude_call_flags());
+    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-command", flags: claude_call_flags()));
 }
 
 fun claude_observe_command() > str {
-    return namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>]);
+    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-observe", flags: [<str>]));
 }
 
 fun claude_rehydrate_command() > str {
-    return buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: [<str>]);
+    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: [<str>]));
 }
 
 fun claude_checkpoint_command() > str {
-    return namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]);
+    return claude_checkout(namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]));
 }
 
 fun claude_session_command() > str {
-    return buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]);
+    return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]));
+}
+
+fun claude_checkout(plain: str) > str {
+    return "m={HOOK_DIR}/magus; [ -x \"$m\" ] || m=magus; \"$m\" " + plain.sub("magus ".len(), len: plain.len() - "magus ".len());
 }
 
 // claude_entry renders one hook as Claude Code's settings entry: its matcher, when the
@@ -472,12 +479,16 @@ test "every tool call reaches the guard through one entry" {
 }
 
 test "the glue commands are the plain argv every machine shares" {
-    final head = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
+    final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
     foreach (cmd in claude_commands()) {
-        assert\isTrue(cmd.startsWith(head), "the same string on every machine: {cmd}");
+        assert\isTrue(cmd.startsWith(head), "the same string on every machine, checkout binary first: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null and cmd.indexOf("#") == null, "a shipped Buzz template, no marker: {cmd}");
-        foreach (meta in [";", "&&", "||", "|", ">", "$("]) {
-            assert\isTrue(cmd.indexOf(meta) == null, "one plain command, no shell around it: {cmd}");
+        foreach (meta in ["&&", "|", ">", "$(", "`", "bash"]) {
+            if (meta == "|") {
+                assert\equal(cmd.replace("||", with: "").indexOf("|"), null, "no pipe, only the binary fallback: {cmd}");
+            } else {
+                assert\isTrue(cmd.indexOf(meta) == null, "POSIX sh only, no bashism: {cmd}");
+            }
         }
         assert\isTrue(cmd.indexOf("proofread") == null, "the reply check is opt-in, never shipped: {cmd}");
     }
