@@ -285,6 +285,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		Prompt:      env.Value,
 		Background:  env.Spawn.Background,
 		Isolated:    spawnIsolated(env, titled),
+		Checkout:    at.workspace,
 		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 	}

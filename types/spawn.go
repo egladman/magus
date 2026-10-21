@@ -80,6 +80,8 @@ type SpawnRequest struct {
 	// Isolated is true when the caller asked for the agent to run outside this checkout,
 	// such as in its own worktree.
 	Isolated bool
+	// Checkout is the workspace root the spawn was judged in.
+	Checkout string
 	// Agent is the subagent id the host reported for the CALLER, empty for the session's
 	// main agent, as on CommandRequest.
 	Agent string

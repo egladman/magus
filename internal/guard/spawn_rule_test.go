@@ -130,6 +130,8 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: tc.event, Host: tc.host})
 			assert.Equal(t, "pass", v.Decision)
 			require.Len(t, probe.asked, 1, "the rule is asked once per event")
+			at, _ := ctx.Value(locationKey{}).(location)
+			tc.want.Checkout = at.workspace
 			assert.Equal(t, tc.want, probe.asked[0])
 			assert.Equal(t, FactsKey(tc.host, tc.want.Session), probe.gates[0].Session(),
 				"once and count are keyed on the calling session")
@@ -500,6 +502,7 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 		Kind:       types.SpawnKindSpawn,
 		Host:       "claude-code",
 		Session:    probe.asked[1].Session,
+		Checkout:   probe.asked[1].Checkout,
 		Prompt:     "x",
 		Agent:      "never-seen",
 		Role:       types.AgentRoleRoot,
@@ -544,6 +547,16 @@ func TestSpawnRuleCountsARowsOwnCheckoutAsIsolation(t *testing.T) {
 	require.Len(t, probe.asked, 2)
 	assert.True(t, probe.asked[0].Isolated, "the title names a row with a checkout of its own")
 	assert.False(t, probe.asked[1].Isolated, "a row with none still needs the host's isolation")
+}
+
+func TestSpawnRuleSeesTheCheckoutItWasJudgedIn(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	at, _ := ctx.Value(locationKey{}).(location)
+	probe := &spawnRuleProbe{}
+	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	require.Len(t, probe.asked, 1)
+	assert.NotEmpty(t, at.workspace)
+	assert.Equal(t, at.workspace, probe.asked[0].Checkout)
 }
 
 // trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
