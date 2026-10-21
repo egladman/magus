@@ -208,28 +208,48 @@ fun claude_tools() > [HarnessTool] {
     foreach (tool in ["run_in_terminal", "read_terminal", "list_terminal_tabs", "open_terminal_tab", "stop_terminal_tab"]) {
         rows.append(HarnessTool{name = "mcp__terminal__{tool}", capability = ToolCapability.runs});
     }
-    // The desktop app's own session, view, sidebar, settings and window controls.
-    foreach (tool in ["mark_chapter", "spawn_task", "dismiss_task", "read_widget_context"]) {
-        rows.append(HarnessTool{name = "mcp__ccd_session__{tool}", capability = ToolCapability.inert});
-    }
-    foreach (tool in [
-        "archive_session", "clear_session", "delete_session", "detach_session", "export_transcript", "get_session",
-        "get_usage", "list_events", "list_sessions", "search_session_transcripts", "send_message", "set_remote_control",
-        "set_session_effort", "set_session_fast_mode", "set_session_model", "set_session_output_style",
-        "set_session_permission_mode", "set_session_title", "stop_session", "unarchive_session",
-    ]) { rows.append(HarnessTool{name = "mcp__ccd_session_mgmt__{tool}", capability = ToolCapability.inert}); }
-    foreach (tool in ["close_pane", "get_layout", "set_transcript_view", "show_pane"]) {
-        rows.append(HarnessTool{name = "mcp__ccd_view__{tool}", capability = ToolCapability.inert});
-    }
-    foreach (tool in [
-        "create_group", "create_section", "delete_group", "delete_section", "list_groups", "list_sections",
-        "mark_completed", "move_sessions", "rename_group", "rename_section", "set_pinned", "set_unread", "set_view",
-    ]) { rows.append(HarnessTool{name = "mcp__ccd_sidebar__{tool}", capability = ToolCapability.inert}); }
-    foreach (tool in ["get_settings", "set_setting"]) {
-        rows.append(HarnessTool{name = "mcp__ccd_settings__{tool}", capability = ToolCapability.inert});
-    }
-    foreach (tool in ["close_split", "get_window_layout", "open_session_in", "set_sidebar_collapsed"]) {
-        rows.append(HarnessTool{name = "mcp__ccd_window__{tool}", capability = ToolCapability.inert});
+    foreach (row in claude_desktop_tools()) { rows.append(row); }
+    return rows;
+}
+
+fun ccd_rows(family: str, tools: [str], capability: ToolCapability) > [HarnessTool] {
+    return tools.map(fun (index: int, tool: str) > HarnessTool => HarnessTool{name = "mcp__ccd_{family}__{tool}", capability = capability});
+}
+
+// The desktop app's own controls, mcp__ccd_<family>__<tool>. mcp__ccd_pr__set_auto_merge
+// has no row on purpose: a person enables auto-merge, so unjudged-tool refuses it.
+fun claude_desktop_tools() > [HarnessTool] {
+    final groups = [
+        ccd_rows("session", tools: ["start_session", "hand_off_to_session", "move_to_cloud"], capability: ToolCapability.spawns),
+        ccd_rows("session", tools: ["list_start_targets"], capability: ToolCapability.reads),
+        ccd_rows("session", tools: ["mark_chapter", "spawn_task", "dismiss_task", "read_widget_context"], capability: ToolCapability.inert),
+        ccd_rows("session_mgmt", tools: ["list_events", "list_sessions"], capability: ToolCapability.reads),
+        ccd_rows("session_mgmt", tools: [
+            "archive_session", "clear_session", "delete_session", "detach_session", "export_transcript", "get_session",
+            "get_usage", "search_session_transcripts", "send_message", "set_remote_control",
+            "set_session_effort", "set_session_fast_mode", "set_session_model", "set_session_output_style",
+            "set_session_permission_mode", "set_session_title", "stop_session", "unarchive_session",
+        ], capability: ToolCapability.inert),
+        // sync_with_base_branch moves the checkout's branch; the other two remove worktrees.
+        ccd_rows("host", tools: ["sync_with_base_branch", "clean_up_worktrees", "discard_kept_worktree"], capability: ToolCapability.writes),
+        ccd_rows("host", tools: ["get_storage_usage"], capability: ToolCapability.reads),
+        ccd_rows("host", tools: ["open_in_editor", "request_keep_awake", "reveal_path"], capability: ToolCapability.inert),
+        ccd_rows("pr", tools: ["get_status"], capability: ToolCapability.reads),
+        ccd_rows("pr", tools: ["bind_pr", "unbind_pr", "set_monitor"], capability: ToolCapability.inert),
+        ccd_rows("directory", tools: ["change_directory", "request_directory"], capability: ToolCapability.inert),
+        ccd_rows("connectors", tools: ["session_connectors_status"], capability: ToolCapability.reads),
+        ccd_rows("connectors", tools: ["reconnect_session_connector", "set_session_connector_enabled"], capability: ToolCapability.inert),
+        ccd_rows("view", tools: ["close_pane", "get_layout", "set_transcript_view", "show_pane"], capability: ToolCapability.inert),
+        ccd_rows("sidebar", tools: [
+            "create_group", "create_section", "delete_group", "delete_section", "list_groups", "list_sections",
+            "mark_completed", "move_sessions", "rename_group", "rename_section", "set_pinned", "set_unread", "set_view",
+        ], capability: ToolCapability.inert),
+        ccd_rows("settings", tools: ["get_settings", "set_setting"], capability: ToolCapability.inert),
+        ccd_rows("window", tools: ["close_split", "get_window_layout", "open_session_in", "set_sidebar_collapsed"], capability: ToolCapability.inert),
+    ];
+    final rows = mut [<HarnessTool>];
+    foreach (group in groups) {
+        foreach (row in group) { rows.append(row); }
     }
     return rows;
 }
@@ -537,6 +557,29 @@ test "mgs_listTools names each tool once" {
     }
     assert\isTrue(seen["Read"] ?? false, "the read tool is known");
     assert\isTrue(seen["mcp__terminal__run_in_terminal"] ?? false, "the terminal panel is known");
+}
+
+test "the desktop app's tools carry what each can do, and auto-merge has no row" {
+    final capability = mut {<str: str>};
+    foreach (row in mgs_listTools().rows) { capability[row.name] = row.capability.value; }
+    foreach (name, want in {
+        "mcp__ccd_session__start_session": "spawns",
+        "mcp__ccd_session__hand_off_to_session": "spawns",
+        "mcp__ccd_host__sync_with_base_branch": "writes",
+        "mcp__ccd_host__clean_up_worktrees": "writes",
+        "mcp__ccd_host__discard_kept_worktree": "writes",
+        "mcp__ccd_pr__get_status": "reads",
+        "mcp__ccd_pr__bind_pr": "inert",
+        "mcp__ccd_session_mgmt__list_sessions": "reads",
+        "mcp__ccd_view__show_pane": "inert",
+        "mcp__ccd_window__close_split": "inert",
+        "mcp__ccd_sidebar__list_groups": "inert",
+        "mcp__ccd_directory__request_directory": "inert",
+        "mcp__ccd_connectors__session_connectors_status": "reads",
+    }) {
+        assert\equal(capability[name] ?? "(no row)", want, name);
+    }
+    assert\isTrue(capability["mcp__ccd_pr__set_auto_merge"] == null, "a person enables auto-merge, so unjudged-tool refuses the call");
 }
 
 test "mgs_getMcp registers a per-checkout stdio server" {
