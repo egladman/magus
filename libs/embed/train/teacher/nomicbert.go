@@ -240,17 +240,22 @@ func ReadSafetensors(path string) (map[string]*tensors.Tensor, error) {
 		if _, err := f.ReadAt(buf, base+e.Offsets[0]); err != nil {
 			return nil, fmt.Errorf("%s: %s: %w", path, name, err)
 		}
-		vals := make([]float32, count)
-		for i := range vals {
-			if size == 2 {
-				vals[i] = float16.FromBits(binary.LittleEndian.Uint16(buf[2*i:])).Float32()
-			} else {
-				vals[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
-			}
-		}
-		out[name] = tensors.FromFlatDataAndDimensions(vals, e.Shape...)
+		out[name] = tensors.FromFlatDataAndDimensions(decodeFloats(buf, size), e.Shape...)
 	}
 	return out, nil
+}
+
+// decodeFloats widens little-endian elements of size bytes, 2 for F16 and 4 for F32.
+func decodeFloats(buf []byte, size int) []float32 {
+	vals := make([]float32, len(buf)/size)
+	for i := range vals {
+		if size == 2 {
+			vals[i] = float16.FromBits(binary.LittleEndian.Uint16(buf[2*i:])).Float32()
+		} else {
+			vals[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
+		}
+	}
+	return vals
 }
 
 // forward builds the encoder over ids [B, L] int32 and mask [B, L] float32 (1 for a token,

@@ -126,7 +126,7 @@ func testTable(t *testing.T, dir string) (string, []byte, string) {
 	spec.Rows[1][0] = 9
 	var buf bytes.Buffer
 	require.NoError(t, embed.EncodeTable(&buf, spec))
-	path := filepath.Join(dir, FileName)
+	path := filepath.Join(dir, fileName)
 	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o644))
 	return path, buf.Bytes(), sum(buf.Bytes())
 }
@@ -143,17 +143,17 @@ func TestEmbedTableReferenceIsTaggedWithThePin(t *testing.T) {
 }
 
 func TestEmbedTableLoadReportsErrAbsentWithTheCommand(t *testing.T) {
-	_, err := Load(context.Background(), Options{Dir: t.TempDir()})
-	require.ErrorIs(t, err, ErrAbsent)
+	_, err := load(Options{Dir: t.TempDir()})
+	require.ErrorIs(t, err, errAbsent)
 	assert.Contains(t, err.Error(), "magus graph pull -table")
 }
 
 func TestEmbedTableLoadRefusesBytesOtherThanThePin(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, FileName), []byte("not the table"), 0o644))
-	_, err := Load(context.Background(), Options{Dir: dir})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, fileName), []byte("not the table"), 0o644))
+	_, err := load(Options{Dir: dir})
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, ErrAbsent)
+	assert.NotErrorIs(t, err, errAbsent)
 	assert.Contains(t, err.Error(), "the pin is")
 }
 
@@ -166,12 +166,12 @@ func TestEmbedTablePublishThenPullThenLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, pushed)
 
-	dst := filepath.Join(t.TempDir(), "magus-embed", FileName)
+	dst := filepath.Join(t.TempDir(), "magus-embed", fileName)
 	require.NoError(t, pull(ctx, r.client(), r.ref(pin), dst, pin))
-	tab, err := load(dst, pin)
+	tab, err := readPinned(dst, pin)
 	require.NoError(t, err)
 	assert.Equal(t, 2, tab.Len())
-	leftovers, err := filepath.Glob(filepath.Join(filepath.Dir(dst), FileName+".*"))
+	leftovers, err := filepath.Glob(filepath.Join(filepath.Dir(dst), fileName+".*"))
 	require.NoError(t, err)
 	assert.Empty(t, leftovers, "the temporary file is renamed into place")
 }
@@ -180,11 +180,11 @@ func TestEmbedTablePullRefusesALayerOtherThanThePin(t *testing.T) {
 	r := newRegistry(t)
 	_, _, pin := testTable(t, t.TempDir())
 	ctx := context.Background()
-	wrong := oci.Content{ArtifactType: ArtifactType, Layers: []oci.Layer{{Name: FileName, MediaType: LayerMediaType, Payload: []byte("other bytes")}}}
+	wrong := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: []byte("other bytes")}}}
 	_, err := r.client().Push(ctx, r.ref(pin), wrong)
 	require.NoError(t, err)
 
-	dst := filepath.Join(t.TempDir(), FileName)
+	dst := filepath.Join(t.TempDir(), fileName)
 	err = pull(ctx, r.client(), r.ref(pin), dst, pin)
 	require.ErrorContains(t, err, "the pin is sha256:"+pin)
 	assert.Zero(t, r.blobGets, "the layer is refused before it is fetched")
@@ -212,7 +212,7 @@ func TestEmbedTablePublishRefusesATagHoldingAnotherLayer(t *testing.T) {
 	r := newRegistry(t)
 	src, _, pin := testTable(t, t.TempDir())
 	ctx := context.Background()
-	wrong := oci.Content{ArtifactType: ArtifactType, Layers: []oci.Layer{{Name: FileName, MediaType: LayerMediaType, Payload: []byte("other bytes")}}}
+	wrong := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: []byte("other bytes")}}}
 	_, err := r.client().Push(ctx, r.ref(pin), wrong)
 	require.NoError(t, err)
 	uploads := r.uploads
@@ -233,7 +233,7 @@ func TestEmbedTablePublishRefusesAFileThatMissesThePin(t *testing.T) {
 	require.ErrorContains(t, err, "never published under another tag")
 	assert.Zero(t, r.uploads)
 
-	_, err = publish(ctx, r.client(), r.ref(pin), filepath.Join(t.TempDir(), FileName), pin)
-	require.ErrorIs(t, err, ErrAbsent)
+	_, err = publish(ctx, r.client(), r.ref(pin), filepath.Join(t.TempDir(), fileName), pin)
+	require.ErrorIs(t, err, errAbsent)
 	assert.Contains(t, err.Error(), "magus run table libs/embed/train")
 }

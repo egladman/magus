@@ -138,6 +138,11 @@ func graphPush(ctx context.Context, root string, args []string) error {
 		}
 		return tablePush(ctx, ref, user)
 	}
+	return pushGraph(ctx, root, ref, user, refresh)
+}
+
+// pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
+func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error {
 	if ref == "" {
 		return errNoGraphDestination("push")
 	}

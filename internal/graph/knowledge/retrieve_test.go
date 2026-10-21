@@ -2,16 +2,13 @@ package knowledge
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
+	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/textrank"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
@@ -86,33 +83,20 @@ func TestRetrieveEmbedListMovesTheRanking(t *testing.T) {
 	assert.ElementsMatch(t, retrieveIDs(cold), retrieveIDs(warm), "the embed list reorders; it adds no match")
 }
 
-func TestRetrieveSkipsTheEmbedListWithNoTable(t *testing.T) {
-	opts := shipped()
-	opts.Table = func() (*embed.Table, error) {
-		return embedtable.Load(t.Context(), embedtable.Options{Dir: t.TempDir()})
+func TestRetrieveSkipsTheEmbedListWhenTheTableFailsToLoad(t *testing.T) {
+	for _, tc := range []struct{ loadErr, skipped string }{
+		{"table.bin is missing, run `" + pullTable + "`", listEmbed + ": table.bin is missing, run `" + pullTable + "`"},
+		{"table.bin hashes to sha256:0", listEmbed + ": table.bin hashes to sha256:0: run `" + pullTable + "` to replace it"},
+	} {
+		opts := shipped()
+		opts.Table = func() (*embed.Table, error) { return nil, errors.New(tc.loadErr) }
+		ms, ranking, err := embedFixture().Retrieve("parse", opts)
+		require.NoError(t, err)
+		require.Len(t, ranking.Skipped, 2)
+		assert.Equal(t, tc.skipped, ranking.Skipped[1])
+		assert.Equal(t, []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5", "symbol:z"}, retrieveIDs(ms), "the lexical and exact lists still rank")
+		assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
 	}
-	ms, ranking, err := embedFixture().Retrieve("parse", opts)
-	require.NoError(t, err)
-	require.Len(t, ranking.Skipped, 2)
-	assert.True(t, strings.HasPrefix(ranking.Skipped[1], listEmbed+": embedtable: no embedding table in the cache"), ranking.Skipped[1])
-	assert.Contains(t, ranking.Skipped[1], "run `"+pullTable+"`")
-	assert.Equal(t, []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5", "symbol:z"}, retrieveIDs(ms), "the lexical and exact lists still rank")
-	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
-}
-
-func TestRetrieveSkipsATableThatIsNotThePin(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, embedtable.FileName), []byte("not the pinned table"), 0o600))
-	opts := shipped()
-	opts.Table = func() (*embed.Table, error) {
-		return embedtable.Load(t.Context(), embedtable.Options{Dir: dir})
-	}
-	ms, ranking, err := embedFixture().Retrieve("parse", opts)
-	require.NoError(t, err)
-	require.Len(t, ranking.Skipped, 2)
-	assert.Contains(t, ranking.Skipped[1], "hashes to")
-	assert.Contains(t, ranking.Skipped[1], "run `"+pullTable+"` to replace it")
-	assert.Len(t, ms, 6)
 }
 
 // A partial match that scores higher outranks a full one, and both say how many of the

@@ -25,23 +25,23 @@ import (
 const (
 	// Repository is where the release publishes the table, one tag per pin.
 	Repository = "ghcr.io/egladman/magus-embed"
-	// ArtifactType is what the table's manifest says it is; a pull refuses any other.
-	ArtifactType = "application/vnd.magus.embed-table.v1"
-	// LayerMediaType is the table layer's media type: the bytes embed.ReadTable decodes.
-	LayerMediaType = "application/vnd.magus.embed-table.layer.v1"
-	// FileName is the table's name in the cache root and its layer's title, the file
+	// artifactType is what the table's manifest says it is; a pull refuses any other.
+	artifactType = "application/vnd.magus.embed-table.v1"
+	// layerMediaType is the table layer's media type: the bytes embed.ReadTable decodes.
+	layerMediaType = "application/vnd.magus.embed-table.layer.v1"
+	// fileName is the table's name in the cache root and its layer's title, the file
 	// `magus run table libs/embed/train` hashes.
-	FileName = "potion-code-16M-v2.table"
+	fileName = "potion-code-16M-v2.table"
 )
 
-// ErrAbsent reports that the cache holds no table. It is a normal state, never one
-// Load recovers from by pulling: the error wrapping it names the command that fills
+// errAbsent reports that the cache holds no table. It is a normal state, never one
+// load recovers from by pulling: the error wrapping it names the command that fills
 // the cache.
-var ErrAbsent = errors.New("embedtable: no embedding table in the cache")
+var errAbsent = errors.New("embedtable: no embedding table in the cache")
 
 // Options locates the cache root.
 type Options struct {
-	// Dir is the cache root holding FileName. Empty means the magus-embed directory
+	// Dir is the cache root holding the table file. Empty means the magus-embed directory
 	// under xdg.CacheDir, the root `magus run table libs/embed/train` writes.
 	Dir string
 }
@@ -56,7 +56,7 @@ func (o Options) Path() (string, error) {
 		}
 		dir = filepath.Join(cache, "magus-embed")
 	}
-	return filepath.Join(dir, FileName), nil
+	return filepath.Join(dir, fileName), nil
 }
 
 // Reference returns the table's reference in repository, tagged with the pin so no
@@ -77,13 +77,17 @@ func Reference(repository string) (oci.Reference, error) {
 	return ref, nil
 }
 
-// Load reads the cached table and decodes it once its sha256 equals embed.Pin(). A
-// missing file returns an error wrapping ErrAbsent; a file of other bytes returns a
-// different error and is not decoded. Load never reaches a registry.
-func Load(ctx context.Context, opts Options) (*embed.Table, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+// Cached reads the table under the default cache root and decodes it once its sha256
+// equals embed.Pin(), never reaching a registry. A missing file is an error naming
+// `magus graph pull -table`; a file of other bytes is an error and is not decoded.
+// It runs once per process: every later call returns the first call's table or error,
+// so a query never rereads or rehashes the file, and a table pulled after the first
+// call takes effect in the next process. It is safe for concurrent use.
+var Cached = sync.OnceValues(func() (*embed.Table, error) {
+	return load(Options{})
+})
+
+func load(opts Options) (*embed.Table, error) {
 	pin, err := embed.Pin()
 	if err != nil {
 		return nil, err
@@ -92,21 +96,13 @@ func Load(ctx context.Context, opts Options) (*embed.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return load(path, pin)
+	return readPinned(path, pin)
 }
 
-// Cached is Load under the default cache root, run once per process: every later call
-// returns the first call's table or error, so a query never rereads or rehashes the
-// file, and a table pulled after the first call takes effect in the next process.
-// It is safe for concurrent use.
-var Cached = sync.OnceValues(func() (*embed.Table, error) {
-	return Load(context.Background(), Options{})
-})
-
-func load(path, pin string) (*embed.Table, error) {
+func readPinned(path, pin string) (*embed.Table, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("%w: %s is missing, run `magus graph pull -table`", ErrAbsent, path)
+		return nil, fmt.Errorf("%w: %s is missing, run `magus graph pull -table`", errAbsent, path)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("embedtable: %w", err)
@@ -133,7 +129,7 @@ func Pull(ctx context.Context, client *oci.Client, ref oci.Reference, opts Optio
 }
 
 func pull(ctx context.Context, client *oci.Client, ref oci.Reference, path, pin string) error {
-	art, err := client.Artifact(ctx, ref, ArtifactType)
+	art, err := client.Artifact(ctx, ref, artifactType)
 	if err != nil {
 		return err
 	}
@@ -169,7 +165,7 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 	}
 	data, err := os.ReadFile(tablePath)
 	if errors.Is(err, fs.ErrNotExist) {
-		return false, fmt.Errorf("%w: %s is missing, run `magus run table libs/embed/train`", ErrAbsent, tablePath)
+		return false, fmt.Errorf("%w: %s is missing, run `magus run table libs/embed/train`", errAbsent, tablePath)
 	}
 	if err != nil {
 		return false, fmt.Errorf("embedtable: %w", err)
@@ -182,16 +178,16 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 		return false, err
 	}
 	if published {
-		art, err := client.Artifact(ctx, ref, ArtifactType)
+		art, err := client.Artifact(ctx, ref, artifactType)
 		if err != nil {
 			return false, err
 		}
 		if _, err := pinnedLayer(art, ref, pin); err != nil {
-			return false, fmt.Errorf("%w; a published tag is never overwritten", err)
+			return false, fmt.Errorf("embedtable: a published tag is never overwritten: %w", err)
 		}
 		return false, nil
 	}
-	content := oci.Content{ArtifactType: ArtifactType, Layers: []oci.Layer{{Name: FileName, MediaType: LayerMediaType, Payload: data}}}
+	content := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: data}}}
 	if _, err := client.Push(ctx, ref, content); err != nil {
 		return false, err
 	}
@@ -199,9 +195,9 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 }
 
 func pinnedLayer(art *oci.Artifact, ref oci.Reference, pin string) (ocispec.Descriptor, error) {
-	desc, ok := art.Find(FileName)
+	desc, ok := art.Find(fileName)
 	if !ok {
-		return desc, fmt.Errorf("%s: %s: %w", ref, FileName, oci.ErrLayerMiss)
+		return desc, fmt.Errorf("%s: %s: %w", ref, fileName, oci.ErrLayerMiss)
 	}
 	if want := digest.NewDigestFromEncoded(digest.SHA256, pin); desc.Digest != want {
 		return desc, fmt.Errorf("embedtable: %s carries layer %s, the pin is %s", ref, desc.Digest, want)

@@ -31,8 +31,8 @@ func TestGraphTablePullRefusesALayerOtherThanThePin(t *testing.T) {
 	pin, err := embed.Pin()
 	require.NoError(t, err)
 	ref := oci.Reference{Registry: reg.host(), Repository: "egladman/magus-embed", Tag: pin}
-	wrong := oci.Content{ArtifactType: embedtable.ArtifactType, Layers: []oci.Layer{
-		{Name: embedtable.FileName, MediaType: embedtable.LayerMediaType, Payload: []byte("other bytes")},
+	wrong := oci.Content{ArtifactType: "application/vnd.magus.embed-table.v1", Layers: []oci.Layer{
+		{Name: filepath.Base(path), MediaType: "application/vnd.magus.embed-table.layer.v1", Payload: []byte("other bytes")},
 	}}
 	_, err = (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), ref, wrong)
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestGraphTablePushWithoutATableNamesTheCommand(t *testing.T) {
 	withStdin(t, "token", func() {
 		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
 	})
-	require.ErrorIs(t, err, embedtable.ErrAbsent)
+	require.ErrorContains(t, err, "no embedding table in the cache")
 	assert.Contains(t, err.Error(), "magus run table libs/embed/train")
 	assert.Zero(t, reg.uploads)
 }
