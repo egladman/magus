@@ -207,9 +207,15 @@ func TestWorktreeRemoveRequiresLandedCommitsWhateverTheJobState(t *testing.T) {
 	}
 
 	v := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt})
-	assertRemovalDenied(t, v, "job w (exited)")
+	assertRemovalDenied(t, v, "1 commit(s) on it")
+	assert.Contains(t, v.Lead, "job w exited without filing a result")
 	require.Len(t, v.Next, 1)
-	assert.Equal(t, hint.JobWait.Argv("w"), v.Next[0].Argv, "an exited job's denial waits for its grade")
+	assert.Equal(t, hint.JobExit.Argv("w"), v.Next[0].Argv, "an exited job with no result is told to file one")
+
+	filed := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt, Result: &types.JobResult{}})
+	assertRemovalDenied(t, filed, "job w (exited)")
+	require.Len(t, filed.Next, 1)
+	assert.Equal(t, hint.JobWait.Argv("w"), filed.Next[0].Argv, "an exited job with a filed result waits for its grade")
 }
 
 // Your session's finished worker's worktree is locked by its host for as long as the host
@@ -292,6 +298,16 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 	t.Run("an exited job", func(t *testing.T) {
 		r := newWorktreeRepo(t)
 		wt, row := r.workerWorktree(types.StateExited)
+		v := r.judgeWith(rootSession(t, spawnedW1), r.main, removeFF(wt), row)
+		assertRemovalDenied(t, v, "it is locked (claude agent")
+		assert.Contains(t, v.Lead, "job w1 exited without filing a result")
+		require.Len(t, v.Next, 1)
+		assert.Equal(t, hint.JobExit.Argv("w1"), v.Next[0].Argv)
+	})
+	t.Run("an exited job with a filed result", func(t *testing.T) {
+		r := newWorktreeRepo(t)
+		wt, row := r.workerWorktree(types.StateExited)
+		row.Result = &types.JobResult{}
 		v := r.judgeWith(rootSession(t, spawnedW1), r.main, removeFF(wt), row)
 		assertRemovalDenied(t, v, "job w1 (exited) was taken in it", "it is locked (claude agent")
 		require.Len(t, v.Next, 1)

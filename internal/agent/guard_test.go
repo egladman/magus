@@ -633,9 +633,9 @@ func TestTransportCasesCoverTheContract(t *testing.T) {
 // unreachableCases records an input-and-decision cell the cases cannot execute,
 // and why. Every other cell owes a real case.
 var unreachableCases = map[string]string{
-	"path/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about a write. " +
+	"path/ask": "the push gate denies and the human_only target ask reads a shell command; no rule asks about a write. " +
 		"The arm is rendered and graded by TestRenderedGuardVerdictsValidateAgainstTheirHostSchema instead",
-	"mcp/ask": "the push gate is the only rule that asks, and it reads a shell command; no rule asks about an MCP call. " +
+	"mcp/ask": "the push gate denies and the human_only target ask reads a shell command; no rule asks about an MCP call. " +
 		"The arm is rendered and graded by TestRenderedGuardVerdictsValidateAgainstTheirHostSchema instead",
 }
 
