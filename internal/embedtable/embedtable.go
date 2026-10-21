@@ -183,7 +183,7 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 			return false, err
 		}
 		if _, err := pinnedLayer(art, ref, pin); err != nil {
-			return false, fmt.Errorf("embedtable: a published tag is never overwritten: %w", err)
+			return false, fmt.Errorf("publish over a published tag, which is never overwritten: %w", err)
 		}
 		return false, nil
 	}
