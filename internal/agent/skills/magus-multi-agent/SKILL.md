@@ -384,6 +384,19 @@ The guard grades every command a brief presents in a shell fence or a code span.
 it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
 commands as written{{end}}. A line that names a command to forbid it ("never ...") is not graded.
 
+### What a brief leaves out
+
+{{if .Full}}A brief carries the JOB ID, the goal and why, the decisions made, and evidence refs.
+It leaves out skill loads, command style, the `BAGGAGE` export, write paths, the check,
+how to commit and push, and attribution: the guard, the harness and `{{cmd "describe job"}}`
+supply or enforce each, and a refusal says what to do. Restated, a guard rule costs every
+worker tokens, goes stale, and crowds out the model's own judgment. When a worker keeps
+missing something, fix the guard rule or its message, not the brief. A follow-up message
+to a bound worker carries only what changed.{{else}}Brief carries only: JOB ID, goal and why, decisions made, evidence refs.
+Leave out: skill loads, command style, `BAGGAGE` export, write paths, check, how to commit and push, attribution; guard, harness, `{{cmd "describe job"}}` supply or enforce each.
+Restated guard rule costs every worker tokens, goes stale. Worker keeps missing something -> fix guard rule or its message, never brief.
+Follow-up message to bound worker: only what changed.{{end}}
+
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
@@ -406,18 +419,8 @@ moves{{if .Full}}: the store keeps the write paths held, `{{cmd "job wait"}}`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs{{end}}. The step: `{{cmd "job exit"}} <job> --stdin` with a record of `schema_version` 2, `job`,
 `changed_paths`, `validation` (`command` and `output_ref`), `descendants` and
-`unresolved_risks`; `{{cmd "job exit"}} --schema` prints the shape.
-{{if .Full}}
-```sh
-magus job exit <job> --stdin <<'EOF'
-{"schema_version": 2, "job": "<job>",
- "changed_paths": ["api/store.go", "api/store_test.go"],
- "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
- "descendants": [],
- "unresolved_risks": ["what is left, or what the worker could not verify"]}
-EOF
-```
-{{end}}
+`unresolved_risks`; `{{cmd "job exit"}} --schema` prints the shape{{if .Full}}, and
+[reference.md](reference.md) shows a record{{end}}.
 {{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a
 mis-scoped worker can say so instead of widening silently{{end}}.
 
