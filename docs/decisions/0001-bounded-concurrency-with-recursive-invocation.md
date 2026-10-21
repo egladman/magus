@@ -276,3 +276,11 @@ that, and the cycle named in the refusal. Pair it with stage 1 regardless.
   reach no drift or vcs call, `console:build`'s gate is documented as inert, and two measure
   anything at all. Stage 0's census is rewritten above, and its prescribed replacement
   region is withdrawn: the stage is a delete.
+
+### 2026-10-20: a call's members fold by curve
+
+Consequences said the machine claim keeps the chain fold at its fan-out's summed peak. That
+assumed every member of one call peaks at once, which nothing measured; ci claimed 12.3 GiB
+from it. [ADR 0012](0012-memory-claims-follow-a-measured-curve.md) replaces the sum with the
+peak of the members' curves summed over time, never above the summed peak, and falls back to
+the sum when a member has no curve. Leaf weight is unchanged.
