@@ -1224,7 +1224,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	reader := graphSymbolReader(graph.load)
 	row, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
 	for _, n := range notes {
-		fmt.Fprintf(os.Stderr, "note: %s\n", n)
+		slog.InfoContext(ctx, n, attr.Notice("note"))
 	}
 	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	opts, err := outputOptionsOrDefault()
@@ -2415,7 +2415,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		var notes []string
 		records[i], notes = extendedFootprint(ctx, store, graph, root, records[i], jobWS)
 		for _, n := range notes {
-			fmt.Fprintf(os.Stderr, "note: %s: %s\n", records[i].ID, n)
+			slog.InfoContext(ctx, records[i].ID+": "+n, attr.Notice("note"))
 		}
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)

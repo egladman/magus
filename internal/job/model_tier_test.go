@@ -255,14 +255,14 @@ func TestResolveModelTierReadsHarnessModelRowAliases(t *testing.T) {
 			req := newModelTierRequest(row, nil, set, models, nil)
 			got, err := resolveModelTier(t.Context(), set, models, nil, req, row)
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantTier, got.Name)
-			assert.Equal(t, tt.wantRank, got.Rank)
-			assert.Equal(t, tt.model, got.Model)
+			reason := got.Reason
+			got.Reason = ""
+			assert.Equal(t, types.JobModelTier{Name: tt.wantTier, Rank: tt.wantRank, Model: tt.model, Skills: got.Skills, Source: got.Source, Site: got.Site}, got)
 			assert.Equal(t, tt.wantRow, req.DeclaredRank != nil)
 			if tt.wantRow {
-				assert.NotContains(t, got.Reason, "no model tier maps")
+				assert.NotContains(t, reason, "no model tier maps")
 			} else {
-				assert.Contains(t, got.Reason, "no model tier maps")
+				assert.Contains(t, reason, "no model tier maps")
 			}
 		})
 	}
