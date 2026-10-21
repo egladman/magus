@@ -608,10 +608,10 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 	type pair struct{ peer, file string }
 	shared := map[pair]bool{}
 	for _, peer := range rows {
-		if peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 || peer.CheckoutRoot != "" && peer.CheckoutRoot != here {
+		if peer.ID == row.ID || !Editing(peer) || len(peer.HardPaths()) == 0 || peer.CheckoutRoot != "" && peer.CheckoutRoot != here {
 			continue
 		}
-		for _, mine := range row.WritePaths {
+		for _, mine := range row.HardPaths() {
 			file, ok := literalClaimableFile(store.root, mine)
 			if !ok || shared[pair{peer.ID, file}] {
 				continue
@@ -619,7 +619,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 			if _, driven := types.MatchDiffDriver(file); !driven {
 				continue
 			}
-			for _, theirs := range peer.WritePaths {
+			for _, theirs := range peer.HardPaths() {
 				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file || !types.PathsIntersect(mine, theirs) {
 					continue
 				}

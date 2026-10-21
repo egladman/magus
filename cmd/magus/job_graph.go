@@ -549,6 +549,7 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	}
 	paths, notes := job.ExtendFootprint(root, declared, ws.Projects, referrers)
 	rec.WritePaths = append(rec.WritePaths, paths...)
+	rec.SoftPaths = append(rec.SoftPaths, paths...)
 	declared.WritePaths = append(declared.WritePaths, paths...)
 	waivers := job.IntegratorWaivers(root, declared, ws.Projects, ws.Ignored)
 	rec.Waivers = append(rec.Waivers, waivers...)

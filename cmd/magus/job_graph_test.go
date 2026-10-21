@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,6 +64,36 @@ func TestJobGraphReadsUnderAStaleIndexOnlyWhenItsChangesMissTheWritePaths(t *tes
 			}
 		})
 	}
+}
+
+// The sibling tests a fork adds to a row are recorded as write paths and as soft paths, so
+// they overlap no other row until their holder writes one.
+func TestExtendedFootprintRecordsSiblingTestsAsSoftPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, rel := range []string{"cli/registry.go", "cli/registry_test.go"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "cli"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+	}
+	g := knowledge.NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "file:cli/registry.go", Kind: types.KindFile, Label: "cli/registry.go"})
+	g.AddNode(types.KnowledgeNode{ID: "symbol:cli.Registry", Kind: types.KindSymbol, Label: "Registry", Source: "cli/registry.go:3"})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:cli/registry.go", Target: "symbol:cli.Registry", Relation: types.RelationDefines})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:cli/registry_test.go", Target: "symbol:cli.Registry", Relation: types.RelationReferences, Provenance: "scip count=2"})
+	graph := &jobGraph{
+		rebuild: true,
+		build:   func(context.Context) (*knowledge.Graph, error) { return g, nil },
+	}
+	store := job.NewStore(job.Location{Root: root, StateBase: t.TempDir(), CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	ws := job.Workspace{Projects: []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}}
+
+	rec, notes := extendedFootprint(t.Context(), store, graph, root,
+		types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}}, ws)
+
+	assert.Equal(t, []string{"cli/registry.go", "cli/registry_test.go"}, rec.WritePaths)
+	assert.Equal(t, []string{"cli/registry_test.go"}, rec.SoftPaths)
+	assert.Len(t, notes, 1)
 }
 
 // A lazy graph builds at most once per command: a load, a failed one and a skipped one
