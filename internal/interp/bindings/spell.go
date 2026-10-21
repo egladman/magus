@@ -723,17 +723,11 @@ func loadSpellFile(ctx context.Context, path string) (spells.Driver, error) {
 	return sp, nil
 }
 
-// loadLocalBuzzSpell compiles a workspace-local Buzz spell at path, returning its
-// spec and ok=false on any failure. Extract routes through the same spell.Decode
-// a built-in uses, so a .buzz workspace spell and a built-in are read and validated
-// identically. Errors are logged, not raised, since discovery paths cannot route an
-// error back to the caller. Registration is deferred to magus.project; the handle
-// the caller builds carries the resolved spec so it registers by value there.
+// loadLocalBuzzSpell compiles a workspace-local Buzz spell at path and registers it,
+// returning its spec and ok=false on any failure. It resolves through the same
+// contract a built-in does, so the two are read and validated identically. Errors are
+// logged, not raised, since discovery paths cannot route an error back to the caller.
 func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bool) {
-	// loadBuzzSpell registers the spell with the function-op invoker (capturing its
-	// source), so an imported Buzz spell carries function-ops whether it is later
-	// bound to a project or wired as the remote cache backend. project bind finds
-	// it already registered and binds it by name.
 	m, _, err := loadBuzzSpell(ctx, path)
 	if err != nil {
 		// A plain Buzz library imported by name (not a spell) is expected here:
@@ -787,16 +781,6 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts
-}
-
-// registerLocalSpell registers a decoded fork-only workspace-local spell into the
-// default registry. The shared spell.Decode produces m for the imported Buzz
-// spell by-value path, so this is the single deferred registration point (called at
-// magus.project bind time). A function-op spell instead registers eagerly at load
-// via loadBuzzSpell.
-func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m)))
-	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
 // commonSpellAliases maps a name a user might reach for to the spell that actually

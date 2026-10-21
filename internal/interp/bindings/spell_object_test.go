@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -46,88 +45,35 @@ func TestSpellOptionsApplied(t *testing.T) {
 		"WithOpaque(",
 	}
 
-	// Every file that constructs a spell from a descriptor. A new construction path
-	// added outside this list is itself the regression, so keep it current.
-	buildFiles := []string{
-		"spell.go",      // built-in registration and the magusfile-declared path
-		"spell_buzz.go", // workspace-local spells/<name>/spell.buzz
-	}
-
-	for _, file := range buildFiles {
-		data, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatalf("read %s: %v", file, err)
-		}
-		src := string(data)
-		for _, opt := range wantOptions {
-			if !strings.Contains(src, opt) {
-				t.Errorf("%s never applies types.%s\n"+
-					"A descriptor carrying that hook would have it silently dropped here: the spell "+
-					"registers, the hook decodes, and nothing downstream can tell it was lost.", file, opt)
-			}
+	// localSpellBaseOptions is the one list every workspace-local construction path
+	// builds from, so it is the file that must name each hook, and a path that builds
+	// elsewhere is itself the regression.
+	data, err := os.ReadFile("spell.go")
+	require.NoError(t, err)
+	for _, opt := range wantOptions {
+		if !strings.Contains(string(data), opt) {
+			t.Errorf("spell.go never applies types.%s\n"+
+				"A descriptor carrying that hook would have it silently dropped here: the spell "+
+				"registers, the hook decodes, and nothing downstream can tell it was lost.", opt)
 		}
 	}
+	data, err = os.ReadFile("spell_buzz.go")
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "localSpellBaseOptions(", "spell_buzz.go builds its spell from the shared option list")
 }
 
-// TestSpellHandleRoundTripKeepsDefaultArgs pins the by-value handle round trip for
-// Command.DefaultArgs: targetsToMap must write back every field Decode reads, or a
-// workspace-local spell's declaration is silently dropped at bind time and its ops run
-// without their default scope (see the warning on targetsToMap's secrets write-back).
-func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
-	declared := spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}
+// A workspace-local spell's handle carries what a magusfile can use and no more: the
+// descriptor stays behind in the registry, where the import registered the spell.
+func TestSpellHandleCarriesNameGlobsAndOps(t *testing.T) {
 	h := spellHandleFromMeta(spells.Descriptor{
-		Name: "myspell",
-		Ops:  map[string]spells.Op{"test": declared},
+		Name:     "myspell",
+		Needs:    []string{"**/*.go"},
+		Provides: []string{"gen/**"},
+		Ops:      map[string]spells.Op{"test": {Command: spells.Command{Bin: "go", Args: []string{"test"}}}},
 	})
-	got, err := spell.DecodeHandle(h)
-	require.NoError(t, err)
-	op, ok := got.Ops["test"]
-	require.True(t, ok)
-	assert.Equal(t, declared, op, "defaultArgs must survive the bind-time handle round trip")
-}
-
-// A workspace-local spell's symbol indexer survives the by-value handle round trip whole:
-// its op, the tools it uses (which must arrive with their probes, or the decode refuses
-// them) and its envs.
-func TestSpellHandleRoundTripKeepsTheSymbolIndexer(t *testing.T) {
-	indexer := &spells.SymbolIndexer{
-		Format:  spells.SymbolFormatSCIP,
-		Op:      "scip-mine",
-		Command: spells.Command{Bin: "scip-mine", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
-		Uses:    []string{"go"},
-		Envs:    []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows"}},
-	}
-	tools := map[string]spells.Tool{"go": {
-		Probe:     spells.Command{Bin: "go", Args: []string{"version"}},
-		Key:       spells.VersionKey{UpTo: spells.VersionMinor},
-		Supported: spells.VersionBounds{Min: "1.22"},
-	}}
-	h := spellHandleFromMeta(spells.Descriptor{Name: "myspell", SymbolIndexer: indexer, Tools: tools})
-
-	got, err := spell.DecodeHandle(h)
-	require.NoError(t, err)
-	// Decoding registers the indexer as the spell's symbol-index op under its own name.
-	assert.Equal(t, spells.Descriptor{
-		Name:          "myspell",
-		Ops:           map[string]spells.Op{"scip-mine": {Kind: spells.OpKindSymbolIndex, Command: indexer.Command}},
-		SymbolIndexer: indexer,
-		Tools:         tools,
-	}, got)
-}
-
-// A workspace-local spell's sandbox survives the by-value handle round trip with each
-// entry's access mode, which crosses as its backing str (ffi.EnumBacking) because the
-// handle is built with no session to intern a case in.
-func TestSpellHandleRoundTripKeepsTheSandbox(t *testing.T) {
-	sandbox := &spells.Sandbox{Allow: []spells.SandboxAllow{
-		{Base: spells.SandboxBaseUserCache, Path: "go-build", Mode: spells.SandboxAccessRW},
-		{Base: spells.SandboxBaseHome, Path: "sdk", Mode: spells.SandboxAccessRX},
-	}}
-	h := spellHandleFromMeta(spells.Descriptor{Name: "myspell", Sandbox: sandbox})
-
-	got, err := spell.DecodeHandle(h)
-	require.NoError(t, err)
-	assert.Equal(t, sandbox, got.Sandbox)
+	assert.ElementsMatch(t, []string{"name", "needs", "provides", "listTargets", "test"}, h.MapKeys())
+	name, _ := h.MapGet("name")
+	assert.Equal(t, "myspell", name.AsString())
 }
 
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only

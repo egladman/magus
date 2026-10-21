@@ -116,6 +116,36 @@ Steps below: what it automates, fallback:{{end}}
    and after committing confirms HEAD builds; a partial commit that drops a
    rename or an importer update leaves HEAD non-building.{{else}}5. `{{cmd "affected"}} ci` before calling work done: reaches projects you never edited; after commit, confirms HEAD builds.{{end}}
 
+{{if .Full}}### The commit message
+
+magus ships no commit style. The repository already has one: its log. Learn the subject
+style from the recent subjects before you write yours.{{else}}### Commit message
+
+magus ships no commit style; the log is the style. Learn subject style from recent subjects.{{end}}
+
+{{if .Full}}1. Read the log: `git log --no-merges --format=%s -n 30`. Mercurial or Sapling:
+   `hg log -l 30 -T '{desc|firstline}\n'`. Jujutsu:
+   `jj log --no-graph -n 30 -T 'description.first_line() ++ "\n"'`.
+2. From the majority of those subjects, note the first-letter case, a `type:` or
+   `type(scope):` prefix or none, imperative or past tense, the usual length, and a
+   trailing period or none.
+3. Write the subject in that shape. Name the change, not the session: "encode buildUrl
+   query keys", never a note on the editing session.
+4. With no clear majority, or fewer than 10 subjects, write a plain imperative with no
+   prefix, under 72 characters, lowercase unless the log capitalizes. Say which you chose.
+5. A CONTRIBUTING file or a commit-msg hook that states a requirement wins over the log. A hook's
+   refusal is the answer: read it and fix the message.
+6. Add a body only when the subject cannot say why. Wrap it at 72.{{else}}1. Read log: `git log --no-merges --format=%s -n 30`; hg or sl: `hg log -l 30 -T '{desc|firstline}\n'`; jj: `jj log --no-graph -n 30 -T 'description.first_line() ++ "\n"'`.
+2. From majority of subjects note: first-letter case, `type:` or `type(scope):` prefix or none, tense, usual length, trailing period or none.
+3. Subject in that shape. Name change, not session.
+4. No clear majority, or under 10 subjects: plain imperative, no prefix, under 72 characters, lowercase unless log capitalizes; say which chosen.
+5. CONTRIBUTING file or commit-msg hook stating requirement wins over log. Hook refusal is the answer: read it, fix message.
+6. Body only when subject cannot say why; wrap at 72.{{end}}
+
+WRONG: `Refactor: Cache lookup improvements.` in a log of `drop the unused retry flag` and
+`rename Cache.get to Cache.lookup`.
+CORRECT: `skip expired entries in Cache.lookup`.
+
 {{if .Full}}Read the change before you stage it. `{{cmd "diff"}} --impact` orders the uncommitted
 changeset by what it can BREAK and folds the generated files away. It appends what
 landing it costs:{{else}}Read change before staging.

@@ -41,7 +41,7 @@ func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testi
 	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}).checkGuardBinary()
+	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary()
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "cannot launch in a live session")
@@ -56,7 +56,7 @@ func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T)
 	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}).checkGuardBinary()
+	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary()
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "no ./magus built")
@@ -69,7 +69,7 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T)
 	bin := testkit.NewWorkspace(t)
 	stale := versionedMagus(bin, "v0.4.3")
 	t.Setenv("PATH", bin.Root())
-	r := &runner{ws: rootedWorkspace{root: t.TempDir()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: boundWorkspace(t, t.TempDir()), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinary()
 
@@ -86,7 +86,7 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T
 	w := testkit.NewWorkspace(t)
 	bin := w.WriteExecutable("magus", "#!/bin/sh\nexit 3\n")
 	withoutPathMagus(t)
-	r := &runner{ws: rootedWorkspace{root: w.Root()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: boundWorkspace(t, w.Root()), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinary()
 
@@ -152,7 +152,7 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 	require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
 	pathBin := versionedMagus(testkit.NewWorkspace(t), "v0.5.0")
 	t.Setenv("PATH", filepath.Dir(pathBin))
-	r := &runner{ws: rootedWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinaryEverywhere(nil)
 
@@ -186,7 +186,7 @@ func TestCheckGuardBinaryFailsWhenAProjectResolvesAnotherBuild(t *testing.T) {
 	stray := strayWS.Root()
 	stale := versionedMagus(testkit.NewWorkspace(t), "v0.4.3")
 	t.Setenv("PATH", filepath.Dir(stale))
-	r := &runner{ws: rootedWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 	projects := []*types.Project{{Path: ".", Dir: root}, {Path: "stray", Dir: stray}}
 
 	got := r.checkGuardBinaryEverywhere(projects)
@@ -208,7 +208,7 @@ func TestCheckGuardBinaryFailsWhenAProjectResolvesNoBinary(t *testing.T) {
 	strayWS.Write("magus.yaml", "{}\n")
 	stray := strayWS.Root()
 	withoutPathMagus(t)
-	r := &runner{ws: rootedWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinaryEverywhere([]*types.Project{{Path: "stray", Dir: stray}})
 

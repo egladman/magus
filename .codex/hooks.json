@@ -22,6 +22,16 @@
           }
         ],
         "matcher": "spawn_agent|collaborationspawn_agent|Agent"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name codex",
+            "statusMessage": "magus: checking the Buzz it wrote",
+            "type": "command"
+          }
+        ],
+        "matcher": "apply_patch"
       }
     ],
     "PreToolUse": [

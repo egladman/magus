@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
@@ -64,7 +66,7 @@ fun skills(level: Level) > magus\SkillVariant {
 func TestModelTiersDeclareTheWorkspacesOwnEnum(t *testing.T) {
 	reg, err := loadModelTiers(t, levelsDecl+`
 magus\job.modelTiers(Level, default: Level.high,
-    hosts: {magus\HarnessKey{ id = "claude-code" }: model},
+    hosts: {"claude-code": model},
     bounds: bounds, skills: skills);
 `, "claude-code")
 	require.NoError(t, err)
@@ -87,10 +89,10 @@ magus\job.modelTiers(Level, default: Level.high,
 	assert.Equal(t, types.SkillVariantFull, set.Skills(low))
 	assert.Equal(t, types.SkillVariantShort, set.Skills(high))
 
-	alias, err := set.Alias(types.HarnessKey{ID: "claude-code"}, high)
+	alias, err := set.Alias("claude-code", high)
 	require.NoError(t, err)
 	assert.Equal(t, "big", alias)
-	alias, err = set.Alias(types.HarnessKey{ID: "claude-code"}, low)
+	alias, err = set.Alias("claude-code", low)
 	require.NoError(t, err)
 	assert.Equal(t, "small", alias)
 }
@@ -106,10 +108,10 @@ magus\job.modelTiers(Level, default: Level.low,
 	assert.Equal(t, []string{"cursor", "claude-code"}, reg.Harnesses())
 
 	set := reg.ModelTiers(t.Context())
-	alias, err := set.Alias(types.HarnessKey{ID: "claude-code"}, set.Default())
+	alias, err := set.Alias("claude-code", set.Default())
 	require.NoError(t, err)
 	assert.Equal(t, "small", alias)
-	_, err = set.Alias(types.HarnessKey{ID: "cursor"}, set.Default())
+	_, err = set.Alias("cursor", set.Default())
 	require.ErrorContains(t, err, "hosts are claude-code", "the discarded key maps nothing")
 }
 
@@ -118,7 +120,7 @@ func TestModelTiersWithoutAHostsMapMapNoHarness(t *testing.T) {
 magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
 `)
 	require.NoError(t, err)
-	_, err = reg.ModelTiers(t.Context()).Alias(types.HarnessKey{ID: "claude-code"}, reg.ModelTiers(t.Context()).Default())
+	_, err = reg.ModelTiers(t.Context()).Alias("claude-code", reg.ModelTiers(t.Context()).Default())
 	require.ErrorContains(t, err, "maps no model for harness claude-code")
 }
 
@@ -179,20 +181,20 @@ magus\job.modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);
 		{"no skills", `magus\job.modelTiers(Level, default: Level.low, bounds: bounds);`,
 			"skills must be a function", nil},
 		{"a host that is not wired", `magus\job.modelTiers(Level, default: Level.low,
-    hosts: {magus\HarnessKey{ id = "codex" }: model}, bounds: bounds, skills: skills);`,
+    hosts: {"codex": model}, bounds: bounds, skills: skills);`,
 			"has not wired", []string{"claude-code"}},
-		{"a host keyed by a string", `magus\job.modelTiers(Level, default: Level.low,
-    hosts: {"claude-code": model}, bounds: bounds, skills: skills);`,
-			"must be the magus\\HarnessKey", []string{"claude-code"}},
+		{"a host keyed by something other than an id", `magus\job.modelTiers(Level, default: Level.low,
+    hosts: {3: model}, bounds: bounds, skills: skills);`,
+			"must be the harness id", []string{"claude-code"}},
 		{"two tiers with one alias", `
 fun same(level: Level) > str { return "one"; }
 magus\job.modelTiers(Level, default: Level.low,
-    hosts: {magus\HarnessKey{ id = "claude-code" }: same}, bounds: bounds, skills: skills);`,
+    hosts: {"claude-code": same}, bounds: bounds, skills: skills);`,
 			"maps two cases", []string{"claude-code"}},
 		{"an empty alias", `
 fun none(level: Level) > str { return ""; }
 magus\job.modelTiers(Level, default: Level.low,
-    hosts: {magus\HarnessKey{ id = "claude-code" }: none}, bounds: bounds, skills: skills);`,
+    hosts: {"claude-code": none}, bounds: bounds, skills: skills);`,
 			"empty alias", []string{"claude-code"}},
 		{"a negative bound", `
 fun negative(level: Level) > magus\ModelTierBounds { return magus\ModelTierBounds{ maxLive = -1 }; }
@@ -244,7 +246,7 @@ const matrixDecl = levelsDecl + `
 object Choice { tier: Level, skills: magus\SkillVariant, reason: str }
 
 magus\job.modelTiers(Level, default: Level.low,
-    hosts: {magus\HarnessKey{ id = "claude-code" }: model}, bounds: bounds, skills: skills);
+    hosts: {"claude-code": model}, bounds: bounds, skills: skills);
 `
 
 func TestModelTierMatrixChoosesAfterTheLoadCloses(t *testing.T) {
@@ -341,16 +343,11 @@ func TestModelTierMatrixMisdeclarationIsCoded(t *testing.T) {
 // own model rows, by the exact ids they name, so a spawn's model resolves to a tier.
 func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 	rows := func(tiers ...string) spells.Option {
-		return spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			if req.Target != spells.HarnessModelsContract {
-				return nil, nil
-			}
-			list := []any{}
-			for _, tier := range tiers {
-				list = append(list, map[string]any{"id": "m-" + tier, "tier": tier})
-			}
-			return list, nil
-		})
+		list := make([]string, len(tiers))
+		for i, tier := range tiers {
+			list[i] = fmt.Sprintf("ModelRow{id = %q, tier = %q}", "m-"+tier, tier)
+		}
+		return spells.WithFuncSource("import \"magus/spell\";\nexport fun mgs_listModels() > [ModelRow] { return [" + strings.Join(list, ", ") + "]; }\n")
 	}
 	full := register.Spell(t, "tiered-test", rows("economy", "standard", "principal"))
 	reg, err := loadModelTiers(t, `import "magus";`, full)
@@ -359,15 +356,15 @@ func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 	require.NotNil(t, set)
 	economy, err := set.Parse("economy")
 	require.NoError(t, err)
-	alias, err := set.Alias(types.HarnessKey{ID: full}, economy)
+	alias, err := set.Alias(full, economy)
 	require.NoError(t, err)
 	assert.Equal(t, "m-economy", alias)
-	resolved, ok := set.Resolve(types.HarnessKey{ID: full}, "m-principal")
+	resolved, ok := set.Resolve(full, "m-principal")
 	require.True(t, ok)
 	assert.Equal(t, "principal", resolved.Name())
 
 	partial := register.Spell(t, "half-tiered-test", rows("economy"))
 	_, err = defaultModelTierSet(t.Context(), []string{partial})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `add "tier": "standard"`)
+	assert.Contains(t, err.Error(), `add tier = "standard"`)
 }

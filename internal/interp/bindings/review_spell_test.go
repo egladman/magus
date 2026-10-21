@@ -2,7 +2,6 @@ package bindings
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -14,38 +13,49 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// withReviewSpell registers a fake provider and selects it, restoring the selection afterwards.
-//
-// The name is derived from the test because the registry panics on a duplicate and every
-// case here needs its own answer. `answer` receives the op, so one provider can
-// succeed on a lookup and refuse a publish, which no real spell can be made to do on demand.
-func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
+// withReviewSpell registers a review provider backed by src and selects it, restoring the
+// selection afterwards. The name is derived from the test because the registry panics on a
+// duplicate and every case here needs its own answer.
+func withReviewSpell(t *testing.T, src string) {
 	t.Helper()
-	name := register.Spell(t, "fake-review",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			return answer(req.Target)
-		}))
+	name := register.Spell(t, "fake-review", spells.WithFuncSource(`import "magus/spell";
+`+src))
 	prev := ReviewProvider()
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })
 }
 
+// openReview answers find_review with review 482 on acme/acme.
+const openReview = `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme" };
+}
+`
+
 func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-	})
+	withReviewSpell(t, openReview)
 	at := FindReview(context.Background(), "feat/x", "git@github.com:acme/acme.git")
 	assert.True(t, at.Open())
 	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
+}
+
+func TestFindReviewHandsTheBranchAndRemoteThrough(t *testing.T) {
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "1", repo = req.branch + "@" + req.remote };
+}`)
+	at := FindReview(context.Background(), "feat/x", "origin")
+	assert.Equal(t, "feat/x@origin", at.Repo)
 }
 
 // A mistyped field becomes a REASON, never a zero target: those two render identically to the
 // reader and mean opposite things. Silently emptying the id would say "no pull request for this
 // branch", sending them to look at their branch when the fault is in their spell.
 func TestFindReviewReportsAMalformedAnswerRatherThanReadingItAsNoReview(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return map[string]any{"id": 482}, nil
-	})
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > any {
+    return {"id": 482};
+}`)
 	at := FindReview(context.Background(), "feat/x", "")
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "want str")
@@ -55,96 +65,82 @@ func TestFindReviewReportsAMalformedAnswerRatherThanReadingItAsNoReview(t *testi
 // A spell that fails outright is the same answer as a branch with no review: a reason, not an
 // error. A diff that refused to open because a lookup failed would be a worse tool.
 func TestFindReviewTurnsASpellFailureIntoAReason(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) { return nil, errors.New("boom") })
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any {
+    throw "boom";
+}`)
 	at := FindReview(context.Background(), "feat/x", "")
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "boom")
 }
 
+func TestFindReviewNamesAProviderThatDoesNotExportIt(t *testing.T) {
+	withReviewSpell(t, `export fun mgs_getName() > str { return "x"; }`)
+	at := FindReview(context.Background(), "feat/x", "")
+	assert.False(t, at.Open())
+	assert.Contains(t, at.Reason, "find_review")
+}
+
 func TestReviewCommentsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{map[string]any{
-			"id": "t1", "path": "a.go", "line": float64(12),
-			"author": "priya", "body": "why",
-		}}, nil
-	})
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{ id = "t1", path = "a.go", line = 12, author = "priya", body = "why" }];
+}`)
 	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, types.ReviewComment{
-		ID: "t1", Path: "a.go", Line: 12, Hunk: -1, Author: "priya", Body: "why",
-	}, got[0])
 	// -1, not 0. The zero value is a VALID hunk index, so a thread nothing placed would
 	// otherwise render against the first hunk of its file: the wrong code, stated confidently.
-	assert.Equal(t, -1, got[0].Hunk)
+	assert.Equal(t, []types.ReviewComment{{
+		ID: "t1", Path: "a.go", Line: 12, Hunk: -1, Author: "priya", Body: "why",
+	}}, got)
 }
 
 func TestReviewCommentsDecodesReplyOutdatedAndHunk(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{map[string]any{
-			"id": "t2", "root": "t1", "path": "a.go", "line": float64(0),
-			"author": "eli", "body": "because", "outdated": true,
-			"diff_hunk": "@@ -1,2 +1,3 @@\n x",
-		}}, nil
-	})
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{
+        id = "t2", root = "t1", path = "a.go", author = "eli", body = "because",
+        outdated = true, diffHunk = "@@ -1,2 +1,3 @@",
+    }];
+}`)
 	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, types.ReviewComment{
+	assert.Equal(t, []types.ReviewComment{{
 		ID: "t2", Root: "t1", Path: "a.go", Hunk: -1, Author: "eli", Body: "because",
-		Outdated: true, DiffHunk: "@@ -1,2 +1,3 @@\n x",
-	}, got[0])
+		Outdated: true, DiffHunk: "@@ -1,2 +1,3 @@",
+	}}, got)
 }
 
-// A spell written before these fields existed still decodes, and what it leaves out reads as a
-// root comment on a live line with no hunk text.
-func TestReviewCommentsDecodesASpellThatOmitsTheReplyFields(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{map[string]any{
-			"id": "t1", "path": "a.go", "line": float64(3), "author": "priya", "body": "why",
-			"root": nil, "outdated": nil, "diff_hunk": nil,
-		}}, nil
-	})
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
+func TestReviewCommentsHandsTheReviewThrough(t *testing.T) {
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{ id = req.repo + "#" + req.id }];
+}`)
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Empty(t, got[0].Root)
-	assert.False(t, got[0].Outdated)
-	assert.Empty(t, got[0].DiffHunk)
+	assert.Equal(t, "acme/acme#482", got[0].ID)
 }
 
-func TestReviewCommentsNamesAMistypedOutdatedFlag(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{map[string]any{"id": "t1", "path": "a.go", "outdated": "yes"}}, nil
-	})
-	_, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `field "outdated"`)
-}
-
-// Absent reads as the zero value, not as an error: the posture spell_decode.go states for this
-// whole layer. A review with no threads is not a malformed provider.
-func TestReviewCommentsTreatsNothingAsNoComments(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) { return nil, nil })
+// The list decodes strictly: one malformed row fails the whole answer, loudly and by path,
+// rather than a provider bug passing as a review with fewer comments on it.
+func TestReviewCommentsFailsLoudlyOnAMalformedRow(t *testing.T) {
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > any {
+    return [{"id": "t1", "path": "a.go", "body": "readable"}, {"id": "t2", "line": "not a number"}];
+}`)
 	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "review_threads")
+	assert.ErrorContains(t, err, "[1].line")
 	assert.Empty(t, got)
 }
 
-// A malformed thread does not take the readable ones down with it. Returning only the error
-// would leave the client saying a colleague said nothing, which is the worst thing it can say.
-func TestReviewCommentsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{
-			map[string]any{"id": "t1", "path": "a.go", "body": "readable"},
-			map[string]any{"id": "t2", "line": "not a number"},
-		}, nil
-	})
+func TestReviewCommentsTreatsAMissingOpAsNoComments(t *testing.T) {
+	withReviewSpell(t, openReview)
 	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "want int")
-	require.Len(t, got, 1, "the thread that decoded still travels")
-	assert.Equal(t, "readable", got[0].Body)
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 // The unreachable host is the fact ReviewComments swallows on purpose, and a caller that reports
@@ -152,22 +148,25 @@ func TestReviewCommentsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
 // review nobody could read produce the same number. Reported here so the count can refuse to be
 // taken.
 func TestReviewCommentsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) { return nil, errors.New("dial: connection refused") })
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any {
+    throw "dial: connection refused";
+}`)
 	comments, reached, err := ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err, "an unreachable host is still not this call's failure")
 	assert.Empty(t, comments)
 	assert.False(t, reached)
 
-	withReviewSpell(t, func(string) (any, error) { return []any{}, nil })
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] { return [<ReviewComment>]; }`)
 	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	assert.True(t, reached, "a review with no threads is a host that answered")
 
 	// A malformed remark is a host that answered badly, not one that failed to answer. Reading it
 	// as unreachable is what made a merge with one bad thread report nothing at all.
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{map[string]any{"id": "t2", "line": "not a number"}}, nil
-	})
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > any { return [{"id": "t2", "line": "not a number"}]; }`)
 	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.True(t, reached)
@@ -176,12 +175,10 @@ func TestReviewCommentsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing
 // OriginReviewComments is the lookup every transport makes: the review for a branch, then its
 // comments, and a review that is not there says why instead of reading as an empty one.
 func TestOriginReviewCommentsFindsTheReviewThenReadsItsComments(t *testing.T) {
-	withReviewSpell(t, func(op string) (any, error) {
-		if op == spells.FindReviewContract {
-			return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-		}
-		return []any{map[string]any{"id": "t1", "path": "a.go", "body": "why"}}, nil
-	})
+	withReviewSpell(t, openReview+`
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{ id = "t1", path = "a.go", body = "why" }];
+}`)
 
 	at, comments, err := OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 
@@ -190,73 +187,75 @@ func TestOriginReviewCommentsFindsTheReviewThenReadsItsComments(t *testing.T) {
 	require.Len(t, comments, 1)
 	assert.Equal(t, "t1", comments[0].ID)
 
-	withReviewSpell(t, func(op string) (any, error) {
-		if op == spells.FindReviewContract {
-			return nil, errors.New("boom")
-		}
-		t.Fatal("no comments are asked for when no review is open")
-		return nil, nil
-	})
+	// review_threads throws if it is asked, so a comment list here means it was.
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any {
+    throw "boom";
+}
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{ id = "asked" }];
+}`)
 	at, comments, err = OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 	require.NoError(t, err)
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "boom")
-	assert.Empty(t, comments)
+	assert.Empty(t, comments, "no comments are asked for when no review is open")
 }
 
 // A closed target consults no provider at all: there is nothing to ask about.
 func TestReviewCommentsAsksNothingWithoutAnOpenReview(t *testing.T) {
-	asked := false
-	withReviewSpell(t, func(string) (any, error) { asked = true; return nil, nil })
+	withReviewSpell(t, `
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return [ReviewComment{ id = "asked" }];
+}`)
 	got, err := ReviewComments(context.Background(), types.ReviewTarget{})
 	require.NoError(t, err)
-	assert.Empty(t, got)
-	assert.False(t, asked, "a closed target must not reach the provider")
+	assert.Empty(t, got, "a closed target must not reach the provider")
 }
 
-func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
-	var sent []any
-	name := register.Spell(t, "fake-capture",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			sent, _ = req.Params["drafts"].([]any)
-			return map[string]any{}, nil
-		}))
-	prev := ReviewProvider()
-	SetReviewProvider(name)
-	t.Cleanup(func() { SetReviewProvider(prev) })
-
+// The spell accepts only the exact request it should have been sent, so a nil error proves
+// what crossed: the review, the summary and each draft's path, line and body.
+func TestPublishReviewCarriesTheDrafts(t *testing.T) {
+	withReviewSpell(t, `
+export fun publish_review(target: Target, req: PublishReviewRequest) > Ack {
+    return Ack{ ok = req.repo == "acme/acme" and req.id == "482" and req.summary == "pass"
+        and req.drafts.len() == 1 and req.drafts[0].path == "a.go"
+        and req.drafts[0].line == 4 and req.drafts[0].body == "why" };
+}`)
 	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
 		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.NoError(t, err)
-	require.Len(t, sent, 1)
-	assert.Equal(t, map[string]any{"path": "a.go", "line": 4, "body": "why"}, sent[0])
 }
 
-// State is optional, and a spell that says nothing about it reads as open, which is what keeps
-// a provider written before the field existed working unchanged. Merged is separate from Open on
-// purpose: a review that landed still has a conversation worth reading.
+func TestPublishReviewReportsARefusal(t *testing.T) {
+	withReviewSpell(t, `
+export fun publish_review(target: Target, req: PublishReviewRequest) > Ack { return Ack{}; }`)
+	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482"}, "pass", types.VerdictComment, nil)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "publish_review")
+}
+
+// State is optional, and a spell that says nothing about it reads as open. Merged is separate
+// from Open on purpose: a review that landed still has a conversation worth reading.
 func TestFindReviewCarriesTheStateAndTreatsSilenceAsOpen(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return map[string]any{"id": "482", "repo": "acme/acme", "state": "merged"}, nil
-	})
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme", state = "merged" };
+}`)
 	merged := FindReview(context.Background(), "feat/x", "")
 	assert.True(t, merged.Open(), "a merged review is still readable")
 	assert.True(t, merged.Merged())
 
-	withReviewSpell(t, func(string) (any, error) {
-		return map[string]any{"id": "9", "repo": "acme/acme"}, nil
-	})
+	withReviewSpell(t, openReview)
 	quiet := FindReview(context.Background(), "feat/x", "")
 	assert.True(t, quiet.Open())
 	assert.False(t, quiet.Merged(), "silence about state is not a claim that it merged")
 }
 
-// A spell that exports no publish_review answers nil without failing, which the handler reads as
-// "the host took the batch": it marks every draft published, and publish only ever considers
-// unpublished drafts, so the remarks can never go again. A capability the provider lacks has to
-// refuse.
+// The handler marks every draft published on a nil error, and publish only ever considers
+// unpublished drafts, so a provider that cannot publish has to refuse or the remarks are lost.
 func TestPublishReviewRefusesAProviderThatCannotPublish(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) { return nil, nil })
+	withReviewSpell(t, openReview)
 
 	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
 		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
@@ -274,35 +273,23 @@ func TestPublishAndReplyRefuseWithNoProviderWired(t *testing.T) {
 	assert.ErrorIs(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "1"}, "t1", "ok"), errNoReviewProvider)
 }
 
-// A spell that answers anything but true is a REFUSAL. Reporting success on an unrecognized
-// answer is how a reply nobody sent gets treated as delivered.
-func TestReplyReviewTreatsAnyNonTrueAnswerAsARefusal(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) { return true, nil })
-	require.NoError(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "482"}, "t1", "agreed"))
+// A spell that answers false is a REFUSAL, and one that exports no reply_review cannot have
+// sent it. Reporting success on either is how a reply nobody sent gets treated as delivered.
+func TestReplyReviewTreatsAnythingButAcceptanceAsARefusal(t *testing.T) {
+	withReviewSpell(t, `
+export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack {
+    return Ack{ ok = req.repo == "acme/acme" and req.id == "482" and req.thread == "t1" and req.body == "agreed" };
+}`)
+	require.NoError(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "agreed"))
 
-	withReviewSpell(t, func(string) (any, error) { return "sure", nil })
-	err := ReplyReview(context.Background(), types.ReviewTarget{ID: "482"}, "t1", "agreed")
+	err := ReplyReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "not this")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "t1", "the error names the thread that did not take it")
-}
 
-// Every row is attempted. Returning at the first malformed one drops the threads AFTER it, so
-// a provider with one bad remark near the top renders as a conversation nobody had, and the
-// reader has no way to tell that from silence.
-func TestReviewCommentsKeepsReadingPastAMalformedRow(t *testing.T) {
-	withReviewSpell(t, func(string) (any, error) {
-		return []any{
-			map[string]any{"id": "t1", "path": "a.go", "body": "before"},
-			map[string]any{"id": "t2", "line": "not a number"},
-			map[string]any{"id": "t3", "path": "b.go", "body": "after"},
-		}, nil
-	})
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
-
+	withReviewSpell(t, openReview)
+	err = ReplyReview(context.Background(), types.ReviewTarget{ID: "482"}, "t1", "agreed")
 	require.Error(t, err)
-	require.Len(t, got, 2, "the readable threads on BOTH sides of the bad one survive")
-	assert.Equal(t, "before", got[0].Body)
-	assert.Equal(t, "after", got[1].Body, "a thread after the malformed row is not dropped")
+	assert.Contains(t, err.Error(), spells.ReplyReviewContract)
 }
 
 // The credential owner is asked for ONCE per process and reused after.
@@ -317,24 +304,25 @@ func TestFindReviewAsksWhoTheCredentialIsOnlyOnce(t *testing.T) {
 	rememberViewer("")
 	t.Cleanup(func() { rememberViewer("") })
 
-	var asked []bool
-	name := register.Spell(t, "fake-viewer",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			asked = append(asked, req.Params["want_viewer"] == true)
-			return map[string]any{"id": "482", "author": "priya", "viewer": "eli"}, nil
-		}))
-	prev := ReviewProvider()
-	SetReviewProvider(name)
-	t.Cleanup(func() { SetReviewProvider(prev) })
+	// The spell reports in reason whether it was asked, and names the viewer only then.
+	withReviewSpell(t, `
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{
+        id = "482", author = "priya",
+        viewer = if (req.wantViewer) "eli" else "",
+        reason = if (req.wantViewer) "asked" else "not asked",
+    };
+}`)
 
 	first := FindReview(context.Background(), "feat/x", "")
+	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "asked"}, first)
 	opened, known := first.OpenedByViewer()
 	assert.True(t, known, "both names present means the question is answerable")
 	assert.False(t, opened, "priya's review is not eli's")
 
+	// Asked once, then never again, and the cached owner rides along on every later answer.
 	second := FindReview(context.Background(), "feat/x", "")
-	assert.Equal(t, "eli", second.Viewer, "the cached owner rides along on every later answer")
-	assert.Equal(t, []bool{true, false}, asked, "asked once, then never again")
+	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "not asked"}, second)
 }
 
 // A provider that names neither party leaves the question UNANSWERED, which is not the same as
@@ -352,35 +340,26 @@ func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
 	}
 }
 
-// capturedVerdict publishes to a throwaway spell and returns the verdict that actually reached
-// it. What the resolver decided matters only if that decision is what gets SENT.
-func capturedVerdict(t *testing.T, at types.ReviewTarget, want types.ReviewVerdict) (sent string, published types.ReviewVerdict) {
-	t.Helper()
-	var got string
-	name := register.Spell(t, "fake-verdict",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			got, _ = req.Params["verdict"].(string)
-			return map[string]any{}, nil
-		}))
-	prev := ReviewProvider()
-	SetReviewProvider(name)
-	t.Cleanup(func() { SetReviewProvider(prev) })
-
-	pub, err := PublishReview(context.Background(), at, "s", want,
-		[]types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
-	require.NoError(t, err)
-	return got, pub
-}
-
 // TestPublishSendsTheResolvedVerdictNotTheRequestedOne. The resolver could be perfectly correct
-// and the feature still broken, if the requested verdict were the one that travelled, so this
-// asserts on what the provider received rather than on what the resolver returned.
+// and the feature still broken, if the requested verdict were the one that travelled, so the
+// spell accepts only the verdict it should have received.
 func TestPublishSendsTheResolvedVerdictNotTheRequestedOne(t *testing.T) {
-	sent, published := capturedVerdict(t, types.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, types.VerdictApprove)
-	assert.Equal(t, string(types.VerdictComment), sent, "a change must not approve itself at the wire")
+	accepting := func(verdict types.ReviewVerdict) {
+		withReviewSpell(t, `
+export fun publish_review(target: Target, req: PublishReviewRequest) > Ack {
+    return Ack{ ok = req.verdict == "`+string(verdict)+`" };
+}`)
+	}
+
+	accepting(types.VerdictComment)
+	published, err := PublishReview(context.Background(), types.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, "s",
+		types.VerdictApprove, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	require.NoError(t, err, "a change must not approve itself at the wire")
 	assert.Equal(t, types.VerdictComment, published, "and the caller is told what actually went")
 
-	sent, published = capturedVerdict(t, types.ReviewTarget{ID: "1", Author: "grace", Viewer: "ada"}, types.VerdictApprove)
-	assert.Equal(t, string(types.VerdictApprove), sent, "a colleague's change may be approved")
+	accepting(types.VerdictApprove)
+	published, err = PublishReview(context.Background(), types.ReviewTarget{ID: "1", Author: "grace", Viewer: "ada"}, "s",
+		types.VerdictApprove, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	require.NoError(t, err, "a colleague's change may be approved")
 	assert.Equal(t, types.VerdictApprove, published)
 }

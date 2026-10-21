@@ -22,21 +22,14 @@
 // on the laptop where reviews happen. A workspace wanting both imports both.
 //
 // magus knows nothing about GitHub Actions: it speaks only the generic spell
-// contract. It exports the cache contract, functions typed fun(Target, fun(any))
-// bool that the remote-cache subsystem detects by name and invokes with the
-// work-unit Target and an input callback cb, reading the boolean result of:
+// contract. It exports the cache contract, provider ops the remote-cache subsystem
+// detects by name and calls with the work-unit Target and an ArtifactRequest:
 //
-//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit, false=miss
-//   has_artifact(target, cb) -> bool   stored? without downloading
-//   put_artifact(target, cb) -> bool   upload artifact at src; true=uploaded, false=already present
+//   get_artifact(target, req) > Ack   download the artifact into req.path; ok=hit, !ok=miss
+//   has_artifact(target, req) > Ack   stored? without downloading
+//   put_artifact(target, req) > Ack   upload the artifact at req.path; ok=uploaded, !ok=already present
 //
 // A request that fails throws: the cache counts it as a failure, never as a miss.
-//
-// A contract function reads its inputs by calling cb(io) with an empty map: the
-// host writes the cache inputs ({project, hash, dest/src}) into io, which the
-// function then reads. The input shape varies per function (and one may skip cb
-// entirely), so io is typed `any`. Command ops do not use cb - they return a
-// Command; cb survives only here, where the work happens in-VM.
 //
 // This targets the GitHub Actions Cache service **v2** — the Twirp API at
 // ACTIONS_RESULTS_URL that replaced the v1 _apis/artifactcache REST service GitHub
@@ -187,53 +180,46 @@ fun download_url(hash: str) > str !> any {
     return loc;
 }
 
-// get_artifact downloads the cache artifact for payload.hash into payload.dest: true on
-// a hit (dest written), false on a miss or when the step exports no cache service. A
+// get_artifact downloads the cache artifact for req.hash into req.path: ok on a hit
+// (the path written), not ok on a miss or when the step exports no cache service. A
 // failed request throws.
-export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or !has_token()) { return false; }
-    final io = {};
-    cb(io);
-    final loc = download_url("{io["hash"]}");
-    if (loc == "") { return false; }
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    if (base() == "" or !has_token()) { return Ack{ ok = false }; }
+    final loc = download_url(req.hash);
+    if (loc == "") { return Ack{ ok = false }; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    final dcode = http\download(loc, "{io["dest"]}", {}, {"timeout": BLOB_TIMEOUT_SECS});
+    final dcode = http\download(loc, req.path, {}, {"timeout": BLOB_TIMEOUT_SECS});
     if (dcode != 200) {
         cache_fail("blob GET", "status {dcode}");
     }
-    return true;
+    return Ack{ ok = true };
 }
 
-// has_artifact reports whether the service holds payload.hash, without downloading it:
+// has_artifact reports whether the service holds req.hash, without downloading it:
 // the lookup half of get_artifact.
-export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or !has_token()) { return false; }
-    final io = {};
-    cb(io);
-    return download_url("{io["hash"]}") != "";
+export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    if (base() == "" or !has_token()) { return Ack{ ok = false }; }
+    return Ack{ ok = download_url(req.hash) != "" };
 }
 
-// put_artifact uploads the artifact at payload.src for payload.hash: true once
-// uploaded, false when the entry is already stored (a 409) or another job holds the
-// reservation (ok=false), neither of which is a failure. A failed request throws.
-export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+// put_artifact uploads the artifact at req.path for req.hash: ok once uploaded, not ok
+// when the entry is already stored (a 409) or another job holds the reservation
+// (ok=false), neither of which is a failure. A failed request throws.
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
     if (base() == "" or !has_token()) {
         cache_fail("put_artifact", "this step exports no ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN");
     }
-    final io = {};
-    cb(io);
-    final hash = "{io["hash"]}";
-    final src = "{io["src"]}";
-    final key = cache_key(hash);
+    final src = req.path;
+    final key = cache_key(req.hash);
 
     // 1. Reserve the entry → pre-signed Azure upload URL.
     final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
-    if (cres["status"] == 409) { return false; }
+    if (cres["status"] == 409) { return Ack{ ok = false }; }
     if (cres["status"] != 200) {
         cache_fail("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
     }
     final created = serialize\jsonDecode(cres["body"]);
-    if (!created.q("ok").booleanValue()) { return false; }
+    if (!created.q("ok").booleanValue()) { return Ack{ ok = false }; }
     final upload = url_field(created, "signed_upload_url", "signedUploadUrl");
     if (upload == "") {
         cache_fail("CreateCacheEntry", "ok=true but no upload URL: {snippet("{cres["body"]}")}");
@@ -257,7 +243,7 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!serialize\jsonDecode(fres["body"]).q("ok").booleanValue()) {
         cache_fail("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}");
     }
-    return true;
+    return Ack{ ok = true };
 }
 
 // --- CI provider contract ----------------------------------------------------
@@ -291,31 +277,25 @@ fun escapeProp(s: str) > str {
 // starts collapsed. A caller asking for an expanded one wants output the reader
 // must not have to click for, so the group is skipped and the content stays
 // inline. Folding it anyway would be worse - a hidden failure is one nobody sees.
-export fun group_start(target: Target, cb: fun(any)) > bool {
-    final io = {<str: any>};
-    cb(io);
-    final collapsed = io["collapsed"];
-    if (collapsed != true) { return true; }
-    std\print("::group::" + escapeData("{io["title"]}"));
-    return true;
+export fun group_start(target: Target, req: CIGroup) > Ack {
+    if (!req.collapsed) { return Ack{ ok = true }; }
+    std\print("::group::" + escapeData(req.title));
+    return Ack{ ok = true };
 }
 
 // group_end closes the current fold. Actions tracks a single open group, so the
 // id is unused; it is in the contract for providers keyed by section name.
-export fun group_end(target: Target, cb: fun(any)) > bool {
+export fun group_end(target: Target, req: CIGroupEnd) > Ack {
     std\print("::endgroup::");
-    return true;
+    return Ack{ ok = true };
 }
 
 // annotate raises a message that surfaces on the pull request, not just the log.
 // Actions has no dedicated code field, so a diagnostic code leads the title where
 // it stays greppable in the annotations list.
-export fun annotate(target: Target, cb: fun(any)) > bool {
-    final io = {<str: any>};
-    cb(io);
-
-    var title = "{io["title"]}";
-    final code = "{io["code"]}";
+export fun annotate(target: Target, req: CIAnnotation) > Ack {
+    var title = req.title;
+    final code = req.code;
     if (code != "") {
         if (title == "") { title = code; } else { title = code + " " + title; }
     }
@@ -326,25 +306,23 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
         if (props != "") { props = props + ","; }
         props = props + k + "=" + escapeProp(v);
     }
-    fun addNum(k: str, v: any) > void {
-        if (v == null) { return; }
-        final n = "{v}";
-        if (n == "0" or n == "") { return; }
+    fun addNum(k: str, v: int) > void {
+        if (v == 0) { return; }
         if (props != "") { props = props + ","; }
-        props = props + k + "=" + n;
+        props = props + k + "=" + "{v}";
     }
 
-    addProp("file", "{io["file"]}");
-    addNum("line", io["line"]);
-    addNum("endLine", io["end_line"]);
-    addNum("col", io["col"]);
-    addNum("endColumn", io["end_col"]);
-    addProp("title", title);
+    addProp("file", v: req.file);
+    addNum("line", v: req.line);
+    addNum("endLine", v: req.endLine);
+    addNum("col", v: req.col);
+    addNum("endColumn", v: req.endCol);
+    addProp("title", v: title);
 
-    var line = "::{io["level"]}";
+    var line = "::{req.level}";
     if (props != "") { line = line + " " + props; }
-    std\print(line + "::" + escapeData("{io["message"]}"));
-    return true;
+    std\print(line + "::" + escapeData(req.message));
+    return Ack{ ok = true };
 }
 
 // last_green_run answers the verdict-inheritance question behind the same CI
@@ -353,18 +331,18 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
 // internal/ci/annotate.RunSource) and everything GitHub-shaped - the runs
 // API, the event and workflow environment - stays here.
 //
-// null, never an error, whenever the question has no answer: on a non-PR
-// event, without the run's workflow and repository, without a token (the
+// An empty GreenRun, never an error, whenever the question has no answer: on a
+// non-PR event, without the run's workflow and repository, without a token (the
 // workflow must export GITHUB_TOKEN and grant actions: read), or when no green
 // run of this workflow exists for the branch. The plan then fans out normally.
-export fun last_green_run(target: Target, cb: fun(any)) > any !> any {
-    if (getenv("GITHUB_EVENT_NAME") != "pull_request") { return null; }
+export fun last_green_run(target: Target, req: Empty) > GreenRun !> any {
+    if (getenv("GITHUB_EVENT_NAME") != "pull_request") { return GreenRun{}; }
     final branch = getenv("GITHUB_HEAD_REF");
     final api = getenv("GITHUB_API_URL");
     final repo = getenv("GITHUB_REPOSITORY");
     final wf = workflow_path(getenv("GITHUB_WORKFLOW_REF"), repo);
-    if (branch == "" or api == "" or repo == "" or wf == "") { return null; }
-    if (getenv("GITHUB_TOKEN") == "") { return null; }
+    if (branch == "" or api == "" or repo == "" or wf == "") { return GreenRun{}; }
+    if (getenv("GITHUB_TOKEN") == "") { return GreenRun{}; }
     // The runs API names each run's workflow by file path, which is how the
     // answer stays scoped to THIS pipeline: a green run of some other workflow
     // vouches for nothing this one checks.
@@ -372,17 +350,17 @@ export fun last_green_run(target: Target, cb: fun(any)) > any !> any {
             + "/actions/runs?event=pull_request&status=success&per_page=20&branch=" + url\encode(branch),
         mut {"Authorization": "Bearer " + magus\secret.read("GITHUB_TOKEN"),
              "Accept": "application/vnd.github+json"});
-    if (res["status"] != 200) { return null; }
+    if (res["status"] != 200) { return GreenRun{}; }
     foreach (r in serialize\jsonDecode(res["body"]).q("workflow_runs").listValue()) {
         if (r.q("path").stringValue() == wf) {
             final run = r.q("html_url").stringValue();
             final commit = r.q("head_sha").stringValue();
             if (run != "" and commit != "") {
-                return {"run": run, "commit": commit};
+                return GreenRun{ run = run, commit = commit };
             }
         }
     }
-    return null;
+    return GreenRun{};
 }
 
 // workflow_path extracts the workflow file path from GITHUB_WORKFLOW_REF
@@ -401,8 +379,8 @@ fun workflow_path(ref: str, repo: str) > str {
 // magus captures subprocess output and replays it, so a dependency printing
 // "::error::" would otherwise have the runner execute it and forge annotations.
 // Returned once per run; magus does the per-line matching itself.
-export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
-    return ["::"];
+export fun quote_prefixes(target: Target, req: Empty) > Strings {
+    return Strings{ items = ["::"] };
 }
 
 // --- Secret provider contract ------------------------------------------------
@@ -435,15 +413,10 @@ export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
 
 final OIDC_PREFIX = "oidc:";
 
-// resolve_secret is the secret-provider contract, detected by name and invoked by
-// magus\secret.read(). It receives the reference as payload.ref and returns a Secret.
-//
-// `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the
-// wrong shape fails to load rather than failing at the first read.
-export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
-    final io = {<str: any>};
-    cb(io);
-    final ref = "{io["ref"]}";
+// resolve_secret is the secret-provider contract, detected by name and called by
+// magus\secret.read(). It receives the reference as req.ref and returns a Secret.
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+    final ref = req.ref;
     if (ref == "") {
         throw "github-actions: no reference given";
     }

@@ -52,7 +52,7 @@ magus\project({
                 "../libs/**/go.mod", "../libs/**/go.sum",
                 "../go.mod", "../go.sum", "../go.work", "../go.work.sum",
                 "../spells/**", "../std/lib/*.buzz", "../internal/spell/**/*.buzz",
-                "../internal/job/gen/*.json", "../internal/queue/provider/*.buzz",
+                "../internal/queue/provider/*.buzz",
                 "../internal/selfupdate/release-keys.json", "../internal/textrank/weights.json",
                 "../libs/embed/testdata/probe.txt", "../internal/agent/agents/**",
                 "../internal/agent/agents-section.md", "../internal/agent/skills/**",
@@ -62,7 +62,7 @@ magus\project({
                 "../cmd/magus-configdocs/**/*.go", "../cmd/magus-manpage/**/*.go", "../cmd/magus-skilldocs/**/*.go",
                 "../cmd/magus/**/*.go", "../cmd/magus-examples/**/*.go", "../cmd/magus-protodocs/**/*.go",
                 "../cmd/magus/starter/*.buzz", "../cmd/magus/completions/*",
-                "../proto/gen/descriptor.binpb", "../proto/gen/**/*.go", "../hack/magusfile/ruledocs.buzz",
+                "../proto/gen/descriptor.binpb", "../hack/magusfile/ruledocs.buzz",
                 "../benchmarks/agent/reports/**/*.md", "../benchmarks/BENCHMARKS.md"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
@@ -112,7 +112,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("go.mod"), workspace\file("go.sum"), workspace\file("go.work"), workspace\file("go.work.sum"),
         workspace\file("spells/**"),
         workspace\file("std/lib/*.buzz"), workspace\file("internal/spell/**/*.buzz"),
-        workspace\file("internal/job/gen/*.json"), workspace\file("internal/queue/provider/*.buzz"),
+        workspace\file("internal/queue/provider/*.buzz"),
         workspace\file("internal/selfupdate/release-keys.json"), workspace\file("internal/textrank/weights.json"),
         workspace\file("libs/embed/testdata/probe.txt"), workspace\file("internal/agent/agents/**"),
         workspace\file("internal/agent/agents-section.md"), workspace\file("internal/agent/skills/**"),
@@ -124,7 +124,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-skilldocs/**/*.go"),
         workspace\file("cmd/magus/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
         workspace\file("cmd/magus/starter/*.buzz"), workspace\file("cmd/magus/completions/*"),
-        workspace\file("proto/gen/**/*.go"), workspace\file("hack/magusfile/ruledocs.buzz"),
+        workspace\file("hack/magusfile/ruledocs.buzz"),
         "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
         "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go");

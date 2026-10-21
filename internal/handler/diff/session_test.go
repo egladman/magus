@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/egladman/magus/internal/changeset"
@@ -542,21 +544,14 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 // withReviewProvider registers a canned provider for the whole review path, so the handler's
 // SUCCESS branches can be exercised. Without one, these routes could only ever be tested
 // failing, which left the reply and publish paths, where the real bugs were, uncovered.
-func withReviewProvider(t *testing.T, threads []any) {
+func withReviewProvider(t *testing.T, threads []types.ReviewComment) {
 	t.Helper()
-	name := register.Spell(t, "canned-status-review",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-			case spells.ReviewThreadsContract:
-				return threads, nil
-			case spells.ReplyReviewContract:
-				return true, nil
-			default: // publish
-				return map[string]any{}, nil
-			}
-		}))
+	selectReviewProvider(t, register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads))
+}
+
+// selectReviewProvider makes the registered spell name the review provider for this test.
+func selectReviewProvider(t *testing.T, name string) {
+	t.Helper()
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
@@ -635,22 +630,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 // A reply is addressed to a conversation by its first comment. Root names it, so a client holding
 // a reply need not find the root first, and it wins over ID when both arrive.
 func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
-	var threads []string
-	name := register.Spell(t, "reply-recorder",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-			case spells.ReplyReviewContract:
-				threads = append(threads, req.Params["thread"].(string))
-				return true, nil
-			default:
-				return nil, nil
-			}
-		}))
-	prev := bindings.ReviewProvider()
-	bindings.SetReviewProvider(name)
-	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+	threads := recordReplies(t, "")
 
 	root := t.TempDir()
 	h := NewReviewHandler(ReviewOptions{
@@ -664,40 +644,58 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 	} {
 		require.Equal(t, http.StatusOK, post(t, h, body).Code, body)
 	}
-	assert.Equal(t, []string{"th1", "th1", "th1"}, threads,
+	assert.Equal(t, []string{"th1", "th1", "th1"}, threads(),
 		"no root answers the thread addressed; a root answers its thread, with or without an id")
 
 	empty := post(t, h, `{"op":"reply","body":"agreed"}`)
 	assert.Equal(t, http.StatusBadRequest, empty.Code, "neither an id nor a root names no thread")
-	assert.Len(t, threads, 3, "and the host was not asked")
+	assert.Len(t, threads(), 3, "and the host was not asked")
+}
+
+// recordReplies selects a provider whose review 482 holds the threads the Buzz expression
+// threadsBody returns ("" for none) and whose reply_review reports each thread it is asked to
+// answer to a local host. It returns the threads asked, in order.
+func recordReplies(t *testing.T, threadsBody string) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var asked []string
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked = append(asked, r.URL.Query().Get("thread"))
+	}))
+	t.Cleanup(host.Close)
+	if threadsBody == "" {
+		threadsBody = "[<ReviewComment>]"
+	}
+	selectReviewProvider(t, register.Spell(t, "reply-recorder", spells.WithFuncSource(`import "magus/spell";
+import "http";
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme" };
+}
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
+    return `+threadsBody+`;
+}
+export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any {
+    http\get("`+host.URL+`/?thread=" + req.thread);
+    return Ack{ ok = true };
+}`)))
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(asked)
+	}
 }
 
 // A client holding only the id of a reply it was shown can answer it: the review is read and the
 // id resolved to its thread's, because a host attaches a reply to a thread by its top-level
 // comment and answering a reply's own id would open nothing.
 func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
-	var asked []string
-	name := register.Spell(t, "reply-resolver",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-			case spells.ReviewThreadsContract:
-				return []any{
-					map[string]any{"id": "th1", "path": "a.go", "body": "why"},
-					map[string]any{"id": "th2", "root": "th1", "body": "because"},
-					map[string]any{"id": "x", "root": "x", "body": "self-rooted"},
-				}, nil
-			case spells.ReplyReviewContract:
-				asked = append(asked, req.Params["thread"].(string))
-				return true, nil
-			default:
-				return nil, nil
-			}
-		}))
-	prev := bindings.ReviewProvider()
-	bindings.SetReviewProvider(name)
-	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+	asked := recordReplies(t, `[
+        ReviewComment{ id = "th1", path = "a.go", body = "why" },
+        ReviewComment{ id = "th2", root = "th1", body = "because" },
+        ReviewComment{ id = "x", root = "x", body = "self-rooted" },
+    ]`)
 	h := NewReviewHandler(ReviewOptions{
 		Sessions: changeset.NewStore(""), Workspace: cleanBranchReview{}, Root: t.TempDir(),
 	}, nil)
@@ -711,16 +709,16 @@ func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 		require.Equal(t, http.StatusOK, post(t, h, body).Code, body)
 	}
 
-	assert.Equal(t, []string{"th1", "th1", "x", "unknown"}, asked,
+	assert.Equal(t, []string{"th1", "th1", "x", "unknown"}, asked(),
 		"a reply resolves to its thread, a self-rooted comment is its own, and what the review does not hold goes through for the host to refuse")
 }
 
 // The whole route, end to end: the provider's threads come back placed against the working
 // patch, so the client renders them beside the code rather than working the anchors out itself.
 func TestReviewRouteServesPlacedThreads(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why"},
-		map[string]any{"id": "t2", "path": "a.go", "line": float64(900), "author": "marcus", "body": "moved"},
+	withReviewProvider(t, []types.ReviewComment{
+		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why"},
+		{ID: "t2", Path: "a.go", Line: 900, Author: "marcus", Body: "moved"},
 	})
 	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n@@ -10,3 +10,3 @@\n ten\n-old\n+new\n"}, nil)
@@ -747,13 +745,16 @@ func TestReviewRouteServesPlacedThreads(t *testing.T) {
 	assert.Empty(t, got.Reason, "a clean read carries no reason")
 }
 
-// A malformed thread does not hide the readable ones, and does not pass unmentioned: the
-// threads that decoded travel, and the reason rides beside them on the same 200.
-func TestReviewRouteCarriesAReasonBesideTheThreadsItCouldRead(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "body": "readable"},
-		map[string]any{"id": "t2", "line": "not a number"},
-	})
+// A malformed thread does not pass unmentioned: the reason rides on the same 200, so the diff
+// still opens.
+func TestReviewRouteCarriesTheReasonAThreadCouldNotBeRead(t *testing.T) {
+	selectReviewProvider(t, register.Spell(t, "malformed-review", spells.WithFuncSource(`import "magus/spell";
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme" };
+}
+export fun review_threads(target: Target, req: ReviewRef) > any {
+    return [{"id": "t1", "path": "a.go", "line": 11, "body": "readable"}, {"id": "t2", "line": "not a number"}];
+}`)))
 	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: ""}, nil)
 
 	w := httptest.NewRecorder()
@@ -762,8 +763,9 @@ func TestReviewRouteCarriesAReasonBesideTheThreadsItCouldRead(t *testing.T) {
 
 	var got diffReviewResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	require.Len(t, got.Comments, 1, "what could be read still reaches the reader")
-	assert.Contains(t, got.Reason, "want int", "and what could not is stated")
+	// Strict: one bad row fails the read, never a review with a remark silently missing.
+	assert.Empty(t, got.Comments)
+	assert.Contains(t, got.Reason, "want int", "what could not be read is stated")
 }
 
 // The reader is told WHERE a publish would go before anything leaves, and an appliance is a
@@ -859,9 +861,7 @@ func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 // that raises it compares against the same watermark. The client says when it has drawn them,
 // through the session's `seen` op.
 func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
-	withReviewProvider(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": 1, "body": "first", "author": "priya"},
-	})
+	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 1, Body: "first", Author: "priya"}})
 	root := t.TempDir()
 	store := changeset.NewStore(t.TempDir())
 	store.Attach(root, "", types.Diff{}, "")

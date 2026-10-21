@@ -349,14 +349,15 @@ fun devServer(target: Target) > Service {
         needsArgs = "dev-server runs the command you name; pass it as args: typescript[\"dev-server\"](ctx, \{\"args\": [\"vite\"]})",
     }};
 }
-// mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
-// dev-server mixes in a Service-returning op alongside the Command-returning ones.
-export fun mgs_listTargets() > any {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
-            "esbuild": esbuild, "node-test": nodeTest,
-            "dev-server": devServer};
+            "esbuild": esbuild, "node-test": nodeTest};
+}
+
+export fun mgs_listServices() > {str: fun(Target) Service} {
+    return {"dev-server": devServer};
 }
 
 // The indexer is a PATH binary (install it with mise, not as a project dep), so it is

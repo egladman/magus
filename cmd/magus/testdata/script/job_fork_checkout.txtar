@@ -69,20 +69,16 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "rows-host"; }
 
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return {"path": "host/hooks.json"};
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = "host/hooks.json"};
 }
 
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return {"paths": [".agents/skills"], "form": "both"};
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
 }
 
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [];
-}
-
-export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
-    return {"dir": "host/tools", "rows": [{"name": "Shell", "capability": "runs"}]};
+export fun mgs_listTools() > HarnessTools {
+    return HarnessTools{dir = "host/tools", rows = [HarnessTool{name = "Shell", capability = ToolCapability.runs}]};
 }
 -- shop/magusfile.buzz --
 import "magus";

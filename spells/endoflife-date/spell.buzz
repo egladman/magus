@@ -30,12 +30,9 @@ final API = "https://endoflife.date/api/v1/products/";
 // list_lifecycles is the lifecycle contract. A product endoflife.date does not know (404) is
 // left out of the answer, which magus reads as unknown; any other failure throws, which magus
 // reads as unreached, never as a build failure.
-export fun list_lifecycles(target: Target, cb: fun(any)) > [Lifecycle] !> any {
-    final io = {<str: any>};
-    cb(io);
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] !> any {
     final answers = mut [<Lifecycle>];
-    foreach (key in (io["keys"] as? [any]) ?? [<any>]) {
-        final product = (key as? str) ?? "";
+    foreach (product in req.keys) {
         if (product == "") {
             continue;
         }

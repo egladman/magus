@@ -47,9 +47,9 @@ func denyUnjudgedTool(tool string, tools agent.ToolRows) denial {
 		}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and %s is in no tool row: use a tool the guard judges, or ask a person to add a row for %s to harness_tools.", tool, tool, tool),
+		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and no tool row names it: use a tool the guard judges, or ask a person to add a %s row to mgs_listTools.", tool, tool),
 		Why: "Every tool call reaches the guard, and the guard judges a call by the shape of its input: a command, file path, search, prompt or skill. A tool whose input has none of the shapes it reads " +
-			"could do anything a rule exists to stop, and nothing would say so. A shell command or a file read or write is judged; a row for the tool in the harness spell's harness_tools says what it does. " +
+			"could do anything a rule exists to stop, and nothing would say so. A shell command or a file read or write is judged; a row for the tool in the harness spell's mgs_listTools says what it does. " +
 			"Setting unjudged-tool to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
 	}
 }

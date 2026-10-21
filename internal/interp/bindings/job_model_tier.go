@@ -25,7 +25,6 @@ const (
 
 	tierEnumGlobal   = "__magusModelTierEnum"
 	skillVariantEnum = "SkillVariant"
-	harnessKeyObject = "HarnessKey"
 )
 
 // defaultModelTiersSource makes the call a magusfile makes, so the shipped declaration
@@ -153,9 +152,9 @@ func modelTierSite(ctx context.Context) string {
 // magus\harness.provider calls it maps.
 func checkWiredHarnesses(decl types.ModelTierDeclaration, wired []string) error {
 	var missing []string
-	for key := range decl.Hosts {
-		if !slices.Contains(wired, key.ID) {
-			missing = append(missing, key.ID)
+	for id := range decl.Hosts {
+		if !slices.Contains(wired, id) {
+			missing = append(missing, id)
 		}
 	}
 	if len(missing) == 0 {
@@ -172,8 +171,8 @@ func checkWiredHarnesses(decl types.ModelTierDeclaration, wired []string) error 
 }
 
 // declareModelTiers calls hosts, bounds and skills once per case and checks identity,
-// never a name: tiers is an enum definition, default one of its cases, each hosts key a
-// magus\HarnessKey. Every problem is MGS1052. The caller sets Site.
+// never a name: tiers is an enum definition, default one of its cases, each hosts key the
+// id magus\harness.provider returned. Every problem is MGS1052. The caller sets Site.
 func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, hosts, bounds, skills vm.Value) (types.ModelTierDeclaration, error) {
 	enum, cases, ok := tiers.EnumDef()
 	if !ok {
@@ -233,34 +232,34 @@ func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, host
 }
 
 // declareTierHosts reads a declared hosts map; the caller skips a declaration with none.
-func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, cases []string, caseValues []vm.Value, hosts vm.Value) (map[types.HarnessKey][]string, error) {
+func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, cases []string, caseValues []vm.Value, hosts vm.Value) (map[string][]string, error) {
 	if !hosts.IsMap() {
 		return nil, modelTierUnusable(modelTiersMember,
-			"hosts must be a map from a magus\\HarnessKey to a function from a %s to a model alias, got %s", enum, hosts.Kind())
+			"hosts must be a map from the harness id magus\\harness.provider returns to a function from a %s to a model alias, got %s", enum, hosts.Kind())
 	}
 	keys, fns := hosts.MapKeyValues(), hosts.MapValues()
-	out := make(map[types.HarnessKey][]string, len(keys))
+	out := make(map[string][]string, len(keys))
 	for i, keyValue := range keys {
-		key, err := decodeHarnessKey(keyValue)
+		key, err := decodeHarnessID(keyValue)
 		if err != nil {
 			return nil, err
 		}
 		if _, dup := out[key]; dup {
-			return nil, modelTierUnusable(modelTiersMember, "hosts maps harness %s twice", key.ID)
+			return nil, modelTierUnusable(modelTiersMember, "hosts maps harness %s twice", key)
 		}
 		if !fns[i].IsFun() {
 			return nil, modelTierUnusable(modelTiersMember,
-				"hosts for %s must be a function from a %s to a model alias, got %s", key.ID, enum, fns[i].Kind())
+				"hosts for %s must be a function from a %s to a model alias, got %s", key, enum, fns[i].Kind())
 		}
 		aliases := make([]string, len(cases))
 		for j, tier := range caseValues {
 			rv, err := sess.CallValue(ctx, fns[i], []vm.Value{tier})
 			if err != nil {
-				return nil, modelTierUnusable(modelTiersMember, "hosts for %s raised for %s.%s: %v", key.ID, enum, cases[j], err)
+				return nil, modelTierUnusable(modelTiersMember, "hosts for %s raised for %s.%s: %v", key, enum, cases[j], err)
 			}
 			if !rv.IsStr() {
 				return nil, modelTierUnusable(modelTiersMember,
-					"hosts for %s answered %s for %s.%s, and a model alias is a str", key.ID, rv.Kind(), enum, cases[j])
+					"hosts for %s answered %s for %s.%s, and a model alias is a str", key, rv.Kind(), enum, cases[j])
 			}
 			aliases[j] = rv.AsString()
 		}
@@ -269,19 +268,16 @@ func declareTierHosts(ctx context.Context, sess *buzz.Session, enum string, case
 	return out, nil
 }
 
-// decodeHarnessKey reads a HarnessKey as magus\harness.provider returns it (a map with an
-// id) or as a magusfile writes it (an instance).
-func decodeHarnessKey(v vm.Value) (types.HarnessKey, error) {
-	if v.ObjectTypeName() != harnessKeyObject && !v.IsMap() {
-		return types.HarnessKey{}, modelTierUnusable(modelTiersMember,
-			"a hosts key must be the magus\\HarnessKey magus\\harness.provider returns, got %s", describeValue(v))
+// decodeHarnessID reads a hosts key: the harness id magus\harness.provider returns.
+func decodeHarnessID(v vm.Value) (string, error) {
+	if !v.IsStr() {
+		return "", modelTierUnusable(modelTiersMember,
+			"a hosts key must be the harness id magus\\harness.provider returns, got %s", describeValue(v))
 	}
-	fields, _ := v.MapView()
-	id, _ := fields.MapGet("id")
-	if !id.IsStr() || strings.TrimSpace(id.AsString()) == "" {
-		return types.HarnessKey{}, modelTierUnusable(modelTiersMember, "a magus\\HarnessKey in hosts names no harness: its id is empty")
+	if strings.TrimSpace(v.AsString()) == "" {
+		return "", modelTierUnusable(modelTiersMember, "a hosts key names no harness: the id is empty")
 	}
-	return types.HarnessKey{ID: id.AsString()}, nil
+	return v.AsString(), nil
 }
 
 func decodeTierBounds(enum, tier string, v vm.Value) (types.ModelTierBounds, error) {

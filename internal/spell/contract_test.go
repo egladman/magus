@@ -19,13 +19,28 @@ func TestContractFuncsMatchTheContract(t *testing.T) {
 		f := rt.Field(i)
 		name, opts, _ := strings.Cut(f.Tag.Get("mgs"), ",")
 		got := decode.ContractFuncs[i]
-		// Returns is the generator's own reading of the source, which the tag does not carry.
-		assert.Equal(t, decode.ContractFunc{
-			Name:     name,
-			Field:    f.Name,
-			Returns:  got.Returns,
-			Required: strings.Contains(opts, "required"),
-		}, got, "Contract.%s", f.Name)
+		assert.Equal(t, name, got.Name, "Contract.%s", f.Name)
+		assert.Equal(t, f.Name, got.Field, "Contract.%s", f.Name)
+		assert.Equal(t, strings.Contains(opts, "required"), got.Required, "Contract.%s", f.Name)
+		assert.Equal(t, strings.Contains(opts, "handler"), got.Handler, "Contract.%s", f.Name)
+		assert.Empty(t, got.Params, "Contract.%s: a load-time function takes no parameters", f.Name)
+		assert.NotEmpty(t, got.Returns, "Contract.%s", f.Name)
+		assert.NotNil(t, got.Decode, "Contract.%s", f.Name)
+	}
+}
+
+func TestHarnessFuncsMatchTheHarnessContract(t *testing.T) {
+	rt := reflect.TypeFor[harnessContract]()
+	require.Len(t, decode.HarnessFuncs, rt.NumField(), "decode.HarnessFuncs is stale; regenerate with magus run types-generate")
+	for i := range rt.NumField() {
+		f := rt.Field(i)
+		name, opts, _ := strings.Cut(f.Tag.Get("mgs"), ",")
+		got := decode.HarnessFuncs[i]
+		assert.Equal(t, name, got.Name, "harnessContract.%s", f.Name)
+		assert.Equal(t, f.Name, got.Field, "harnessContract.%s", f.Name)
+		assert.Equal(t, strings.Contains(opts, "required"), got.Required, "harnessContract.%s", f.Name)
+		assert.Equal(t, f.Type.Kind() == reflect.Func, got.Params != "", "harnessContract.%s: only a func field takes parameters", f.Name)
+		assert.NotNil(t, got.Decode, "harnessContract.%s", f.Name)
 	}
 }
 

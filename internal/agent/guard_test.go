@@ -45,6 +45,8 @@ var hookTemplates = []string{
 	"magus-session.buzz",
 	// Advises on the reply a turn ends with and never denies, so it too declares no coverage.
 	"proofread-reply.buzz",
+	// Judges a .buzz file the agent already wrote, not a call, so it declares no coverage.
+	"magus-buzz-check.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	"opencode-plugin.ts",

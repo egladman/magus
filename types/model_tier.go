@@ -77,7 +77,7 @@ type ModelTierSet struct {
 	def        int
 	bounds     []ModelTierBounds
 	skills     []SkillVariant
-	hosts      map[HarnessKey][]string
+	hosts      map[string][]string
 }
 
 // ModelTierDeclaration is the raw declaration a magusfile's Buzz enum and its mapping
@@ -91,8 +91,8 @@ type ModelTierDeclaration struct {
 	Default int
 	Bounds  []ModelTierBounds
 	Skills  []SkillVariant
-	// Hosts maps a harness to its model alias for each case.
-	Hosts map[HarnessKey][]string
+	// Hosts maps a harness id to its model alias for each case.
+	Hosts map[string][]string
 }
 
 // ModelTierBounds caps the jobs at one model tier. A zero field is no cap.
@@ -101,12 +101,6 @@ type ModelTierBounds struct {
 	MaxLive int
 	// MaxContext is the context, in tokens, a leased worker at the tier may reach.
 	MaxContext int64
-}
-
-// HarnessKey is the typed key a harness spell exports to name itself in a
-// declaration's host mapping.
-type HarnessKey struct {
-	ID string
 }
 
 // NewModelTierSet validates decl and builds the set. Every problem is reported at
@@ -156,22 +150,22 @@ func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 			fail("skills for rank %d is %s, and the variants are %s", i, s, strings.Join(s.Values(), ", "))
 		}
 	}
-	for _, host := range slices.SortedFunc(maps.Keys(decl.Hosts), func(a, b HarnessKey) int { return strings.Compare(a.ID, b.ID) }) {
+	for _, host := range slices.Sorted(maps.Keys(decl.Hosts)) {
 		aliases := decl.Hosts[host]
-		if host.ID == "" {
+		if host == "" {
 			fail("a host mapping has no harness id")
 			continue
 		}
 		if len(aliases) != n {
-			fail("host %s maps %d cases and the enum declares %d", host.ID, len(aliases), n)
+			fail("host %s maps %d cases and the enum declares %d", host, len(aliases), n)
 			continue
 		}
 		seen := map[string]bool{}
 		for i, a := range aliases {
 			if a == "" {
-				fail("host %s maps rank %d to an empty alias", host.ID, i)
+				fail("host %s maps rank %d to an empty alias", host, i)
 			} else if seen[a] {
-				fail("host %s maps two cases to %q, so a spawn of it names no one tier", host.ID, a)
+				fail("host %s maps two cases to %q, so a spawn of it names no one tier", host, a)
 			}
 			seen[a] = true
 		}
@@ -179,7 +173,7 @@ func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
-	hosts := make(map[HarnessKey][]string, len(decl.Hosts))
+	hosts := make(map[string][]string, len(decl.Hosts))
 	for k, v := range decl.Hosts {
 		hosts[k] = slices.Clone(v)
 	}
@@ -241,20 +235,20 @@ func (s *ModelTierSet) Skills(t ModelTier) SkillVariant {
 
 // Alias returns the model host spawns for t. It errors for a tier from another set and
 // for a host the declaration does not map, naming the hosts it does.
-func (s *ModelTierSet) Alias(host HarnessKey, t ModelTier) (string, error) {
+func (s *ModelTierSet) Alias(host string, t ModelTier) (string, error) {
 	if t.set != s {
 		return "", fmt.Errorf("model tier %q is not a case of enum %s", t.Name(), s.enum)
 	}
 	aliases, ok := s.hosts[host]
 	if !ok {
-		return "", fmt.Errorf("enum %s at %s maps no model for harness %s: its hosts are %s", s.enum, s.site, host.ID, s.hostIDs())
+		return "", fmt.Errorf("enum %s at %s maps no model for harness %s: its hosts are %s", s.enum, s.site, host, s.hostIDs())
 	}
 	return aliases[t.rank], nil
 }
 
 // Resolve returns the tier host's alias names, and false when host is unmapped or no
 // case maps to alias.
-func (s *ModelTierSet) Resolve(host HarnessKey, alias string) (ModelTier, bool) {
+func (s *ModelTierSet) Resolve(host, alias string) (ModelTier, bool) {
 	i := slices.Index(s.hosts[host], alias)
 	if i < 0 {
 		return ModelTier{}, false
@@ -268,21 +262,16 @@ func (s *ModelTierSet) Enum() string { return s.enum }
 // Site is the file:line, or module name, of the declaration.
 func (s *ModelTierSet) Site() string { return s.site }
 
-// Hosts lists the harnesses the declaration maps to models, ordered by id.
-func (s *ModelTierSet) Hosts() []HarnessKey {
-	return slices.SortedFunc(maps.Keys(s.hosts), func(a, b HarnessKey) int { return strings.Compare(a.ID, b.ID) })
+// Hosts lists the ids of the harnesses the declaration maps to models, in order.
+func (s *ModelTierSet) Hosts() []string {
+	return slices.Sorted(maps.Keys(s.hosts))
 }
 
 func (s *ModelTierSet) hostIDs() string {
 	if len(s.hosts) == 0 {
 		return "none"
 	}
-	ids := make([]string, 0, len(s.hosts))
-	for k := range s.hosts {
-		ids = append(ids, k.ID)
-	}
-	slices.Sort(ids)
-	return strings.Join(ids, ", ")
+	return strings.Join(s.Hosts(), ", ")
 }
 
 // SkillVariant is which body of a magus skill a reader loads. Both come from one

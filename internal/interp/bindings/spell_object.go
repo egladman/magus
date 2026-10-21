@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -14,56 +12,14 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// spellHandleFromMeta builds the MagusSpell handle a workspace-local spell import
-// returns. It marshals the resolved spec back as native data so
-// magus.project can decode and register the spell by value at bind time, needed
-// because the spell is evaluated in a throwaway session whose functions are gone by
-// then.
+// spellHandleFromMeta builds the handle a workspace-local spell import returns. The
+// spell is already registered by name when this runs, so the handle carries only what a
+// magusfile can use: the name, the globs, and a callable per op.
 func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h := vm.NewMap()
 	h.MapSet("name", vm.StrValue(m.Name))
 	h.MapSet("needs", strSliceToBuzzList(m.Needs))
 	h.MapSet("provides", strSliceToBuzzList(m.Provides))
-	h.MapSet("language", vm.StrValue(m.Language))
-	h.MapSet("opaque", vm.BoolValue(m.Opaque))
-	h.MapSet("ops", targetsToMap(m.Ops))
-	// The indexer's uses must name a probed tool, so a handle without its tools would
-	// refuse to decode the moment it carried uses.
-	if len(m.Tools) > 0 {
-		h.MapSet("tools", toolsToMap(m.Tools))
-	}
-	// The symbol indexer round-trips as the DECLARATION it was decoded from, not as the op
-	// magus synthesized out of it. targetsToMap cannot carry it: the synthesized op lands
-	// in m.Ops under the reserved name, and re-decoding that reads as a spell declaring
-	// the reserved op by hand, which Decode refuses and tells the author to use
-	// mgs_getSymbolIndexer, which is exactly what they did. Emitting the declaration lets
-	// DecodeHandle synthesize the op again on the other side.
-	if si := m.SymbolIndexer; si != nil {
-		rec := vm.NewMap()
-		rec.MapSet("format", vm.StrValue(string(si.Format)))
-		rec.MapSet("command", commandToMap(si.Command))
-		if si.Op != "" {
-			rec.MapSet("op", vm.StrValue(si.Op))
-		}
-		if len(si.Uses) > 0 {
-			rec.MapSet("uses", strSliceToBuzzList(si.Uses))
-		}
-		if len(si.Envs) > 0 {
-			envs := make([]vm.Value, len(si.Envs))
-			for i, env := range si.Envs {
-				m := vm.NewMap()
-				for k, v := range env {
-					m.MapSet(k, vm.StrValue(v))
-				}
-				envs[i] = m
-			}
-			rec.MapSet("envs", vm.ListValue(envs))
-		}
-		h.MapSet("symbol_indexer", rec)
-	}
-	if m.Sandbox != nil {
-		h.MapSet("sandbox", bindgen.ObjectSandbox(*m.Sandbox, ffi.EnumBacking))
-	}
 	bindBuzzTargetDispatch(h, m.Name, m.Ops)
 	return h
 }
@@ -218,117 +174,6 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 		opts.stdin = sv.AsString()
 	}
 	return opts, nil
-}
-
-// targetsToMap marshals resolved targets back to the nested ops map shape
-// spell.Decode reads (a fork target unless it declares fn).
-func targetsToMap(targets map[string]spells.Op) vm.Value {
-	ops := vm.NewMap()
-	for name, t := range targets {
-		// A synthesized op is magus's own product, not something the author wrote, and
-		// writing it back would re-present it to Decode as an authored declaration.
-		if t.Kind == spells.OpKindSymbolIndex || t.Kind == spells.OpKindInstall {
-			continue
-		}
-		ops.MapSet(name, commandToMap(t.Command))
-	}
-	return ops
-}
-
-// commandToMap marshals one resolved command, the half an op shares with a symbol
-// indexer's declaration. Every field Decode reads must be written back here, or the
-// by-value handle round trip (DecodeHandle -> registerLocalSpell) silently drops it: the
-// exact resolves-nothing-at-spawn failure the decode-side type errors exist to prevent.
-func commandToMap(t spells.Command) vm.Value {
-	op := vm.NewMap()
-	if t.Bin != "" {
-		op.MapSet("bin", vm.StrValue(t.Bin))
-	}
-	if len(t.Args) > 0 {
-		op.MapSet("args", strSliceToBuzzList(t.Args))
-	}
-	if len(t.DefaultArgs) > 0 {
-		op.MapSet("defaultArgs", strSliceToBuzzList(t.DefaultArgs))
-	}
-	if len(t.TrailingArgs) > 0 {
-		op.MapSet("trailingArgs", strSliceToBuzzList(t.TrailingArgs))
-	}
-	if t.NeedsArgs != "" {
-		op.MapSet("needsArgs", vm.StrValue(t.NeedsArgs))
-	}
-	if len(t.Charms) > 0 {
-		charms := vm.NewMap()
-		for cn, c := range t.Charms {
-			ce := vm.NewMap()
-			ce.MapSet("ops", patchOpsToBuzzList(c.Ops))
-			charms.MapSet(cn, ce)
-		}
-		op.MapSet("charms", charms)
-	}
-	if len(t.Secrets) > 0 {
-		secrets := vm.NewMap()
-		for envName, ref := range t.Secrets {
-			secrets.MapSet(envName, vm.StrValue(ref))
-		}
-		op.MapSet("secrets", secrets)
-	}
-	if len(t.EnvKeys) > 0 {
-		op.MapSet("envKeys", strSliceToBuzzList(t.EnvKeys))
-	}
-	return op
-}
-
-// toolsToMap marshals the spell's tools back to the shape decodeTools reads, writing
-// only the parts each tool declares.
-func toolsToMap(tools map[string]spells.Tool) vm.Value {
-	out := vm.NewMap()
-	for name, t := range tools {
-		rec := vm.NewMap()
-		for field, cmd := range map[string]spells.Command{"probe": t.Probe, "ready": t.Ready, "observe": t.Observe} {
-			if cmd.Bin != "" {
-				rec.MapSet(field, commandToMap(cmd))
-			}
-		}
-		if !t.Key.IsZero() {
-			key := vm.NewMap()
-			key.MapSet("const", vm.StrValue(t.Key.Const))
-			key.MapSet("upTo", vm.StrValue(string(t.Key.UpTo)))
-			rec.MapSet("key", key)
-		}
-		if !t.Supported.IsZero() {
-			bounds := vm.NewMap()
-			bounds.MapSet("min", vm.StrValue(t.Supported.Min))
-			bounds.MapSet("below", vm.StrValue(t.Supported.Below))
-			rec.MapSet("supported", bounds)
-		}
-		if t.Diagnostics != spells.DiagnosticNone {
-			rec.MapSet("diagnostics", vm.StrValue(string(t.Diagnostics)))
-		}
-		if t.Lifecycle != "" {
-			rec.MapSet("lifecycle", vm.StrValue(t.Lifecycle))
-		}
-		out.MapSet(name, rec)
-	}
-	return out
-}
-
-// patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records
-// list shape spell.Decode reads.
-func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
-	items := make([]vm.Value, len(ops))
-	for i, po := range ops {
-		m := vm.NewMap()
-		m.MapSet("op", vm.StrValue(string(po.Op)))
-		m.MapSet("path", vm.StrValue(po.Path))
-		if po.Value != "" {
-			m.MapSet("value", vm.StrValue(po.Value))
-		}
-		if po.From != "" {
-			m.MapSet("fromPtr", vm.StrValue(po.From))
-		}
-		items[i] = m
-	}
-	return vm.ListValue(items)
 }
 
 // buzzSpellObject returns a spell handle map with the spell's full spec:

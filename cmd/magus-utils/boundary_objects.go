@@ -84,12 +84,7 @@ func runBoundaryObjects(args []string) error {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `import (`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if e.usesSpells {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
-	if e.usesTypes {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
+	b.WriteString(importLines(e.pkgs))
 	if e.usesTime {
 		fmt.Fprintln(&b, `	"time"`)
 	}

@@ -30,7 +30,7 @@ func declaredTiers(t *testing.T) *types.ModelTierSet {
 		Default: 1,
 		Bounds:  []types.ModelTierBounds{{}, {}},
 		Skills:  []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
-		Hosts:   map[types.HarnessKey][]string{{ID: "claude-code"}: {"haiku", "sonnet"}},
+		Hosts:   map[string][]string{"claude-code": {"haiku", "sonnet"}},
 	})
 	require.NoError(t, err)
 	return set

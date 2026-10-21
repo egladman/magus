@@ -50,16 +50,12 @@ import "time";
 import "strings";
 import "encoding/json";
 import "lib/hook" as hook;
+import "lib/session" as shared;
 
 final HOST = "cursor";
 final STDOUT_FLAG = "--stdout";
 final TIMESTAMP_OPEN = "<timestamp>";
 final TIMESTAMP_CLOSE = "</timestamp>";
-
-// warn says why nothing was extracted; see the Claude Code adapter.
-fun warn(message: str) > void {
-    io\stderr.write("magus session load: {message}\n") catch void;
-}
 
 // render writes the contract's fields in the contract's order, which a map would not.
 fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, transcript: str) > str {
@@ -102,10 +98,6 @@ fun turnTime(text: str) > int {
     final parsed = time\parse("Monday, Jan 2, 2006, 3:04 PM", value: local) catch -1.0;
     if (parsed < 0.0) { return 0; }
     return std\toInt(parsed) - offsetMs(zone);
-}
-
-fun inScope(path: str, root: str) > bool {
-    return path == root or path.startsWith(root + "/");
 }
 
 // skillName is the <name> of a .../skills/<name>/SKILL.md path, "" for any other path.
@@ -194,24 +186,6 @@ fun extract(lines: [str], first: int, session: str, cwd: str, transcript: str, f
     return emitted;
 }
 
-// wholeLines is the prefix of chunk that ends at its last line break, so a record
-// the host is still appending is read whole on the next run.
-fun wholeLines(chunk: str) > str {
-    var end = chunk.len();
-    while (end > 0) {
-        final b = chunk.byte(end - 1) catch -1;
-        if (b == 10) { break; }
-        end = end - 1;
-    }
-    return chunk.sub(0, len: end);
-}
-
-fun parseOffset(mark: str) > int {
-    final text = (fs\readFile(mark) catch "").trim();
-    if (text == "") { return 0; }
-    return std\parseInt(text) ?? 0;
-}
-
 // encodeRoot names a project directory the way Cursor does: each run of bytes outside
 // [A-Za-z0-9] becomes one dash, with none leading.
 fun encodeRoot(root: str) > str {
@@ -260,7 +234,7 @@ fun projects(store: str, root: str) > [Project] {
         final dir = "{store}/{name}";
         if (!(fs\isDir(dir) catch false)) { continue; }
         final workspace = workspaceOf(dir);
-        if (workspace != "" and inScope(workspace, root: root)) {
+        if (workspace != "" and shared\inScope(workspace, root: root)) {
             found.append(Project{ dir = dir, cwd = workspace });
         } else if (workspace == "" and name == encoded) {
             found.append(Project{ dir = dir, cwd = root });
@@ -269,37 +243,18 @@ fun projects(store: str, root: str) > [Project] {
     return found;
 }
 
-fun transcripts(dir: str) > [str] {
-    final found = mut [<str>];
-    fs\walk("{dir}/agent-transcripts", callback: fun (path: str, isDir: bool) > bool {
-        if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
-        return false;
-    }) catch void;
-    return found;
-}
-
-fun repoRoot(bin: str) > str {
-    final declared = env\get("HOST_REPO_ROOT") catch "";
-    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
-    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
-        "quiet": true,
-        "allow_failure": true,
-    }) catch null;
-    if (result == null or result!.code != 0) { return ""; }
-    return hook\trimTrailingNewlines(result!.stdout);
-}
 
 fun main(args: [str]) > int {
     final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
     final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
     final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
-    final root = repoRoot(bin);
+    final root = shared\repoRoot(bin);
     if (root == "") {
-        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        shared\warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
         return 0;
     }
     if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
-        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        shared\warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
         return 0;
     }
 
@@ -311,13 +266,13 @@ fun main(args: [str]) > int {
     final events = mut [<str>];
     final marks = mut {<str: int>};
     foreach (project in projects(store, root: root)) {
-        foreach (transcript in transcripts(project.dir)) {
+        foreach (transcript in shared\transcripts("{project.dir}/agent-transcripts")) {
             final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
             final content = fs\readFile(transcript) catch null;
             if (content == null) { continue; }
-            var offset = parseOffset(mark);
+            var offset = shared\parseOffset(mark);
             if (content!.len() < offset) { offset = 0; }
-            final whole = wholeLines(content!);
+            final whole = shared\wholeLines(content!);
             if (whole.len() <= offset) { continue; }
             // The checkpoint is a byte offset; the lines before it were emitted already.
             final first = whole.sub(0, len: offset).split("\n").len() - 1;

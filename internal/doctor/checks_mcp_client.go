@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -13,7 +14,10 @@ import (
 func (r *runner) checkMCPClient() types.Check {
 	const name = "mcp-client"
 	root := r.ws.Root()
-	wired := workspaceHarnesses(r.ws)
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring(name, err)
+	}
 	ctx := agent.ContextWithWiredHarnesses(r.runCtx(), wired)
 	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
@@ -33,7 +37,7 @@ func (r *runner) checkMCPClient() types.Check {
 			details = append(details, fmt.Sprintf("%s: load failed: %s", id, err.Error()))
 			continue
 		}
-		if !d.MCP.GuidanceEnabled() {
+		if d.MCP == nil {
 			details = append(details, fmt.Sprintf("%s: no MCP setup guidance (wire MCP yourself via host docs)", id))
 			continue
 		}

@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-85-g3e1140277 (commit 3e1140277111640087eba9208a01727620268844, 2026-10-20T15:10:56-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-106-g4717772bc (commit 4717772bc0be8847b2f3ff658e75211bdfa46a4d, 2026-10-20T22:11:19-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -131,12 +131,15 @@ internal/handler/mcp/gen/registry.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_list.go merge=magus linguist-generated
 internal/interp/bindings/gen/boundary_objects.go merge=magus linguist-generated
+internal/interp/bindings/gen/boundary_ops.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/contract.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/decode.go merge=magus linguist-generated
 internal/interp/bindings/gen/decode/inbound_list_test.go merge=magus linguist-generated
+internal/interp/bindings/gen/providerops/providerops.go merge=magus linguist-generated
 internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
+internal/queue/provider/gen/types/*.buzz merge=magus linguist-generated
 internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
 libs/cmdline/MAGUS.md merge=magus linguist-generated

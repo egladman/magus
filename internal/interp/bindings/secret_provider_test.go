@@ -2,63 +2,49 @@ package bindings
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/spells/gen/spellstest"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
-	d := spellstest.NewMockDriver(t)
+func TestSpellSecretProviderHandsTheReferenceThroughVerbatim(t *testing.T) {
 	// The reference is passed through verbatim; magus never parses it.
-	d.EXPECT().
-		Invoke(mock.Anything, spells.InvokeRequest{Target: "resolve_secret", Params: map[string]any{"ref": "Private/DockerHub/token"}}).
-		Return(spells.InvokeResponse{Text: "value-from-spell"}, nil).
-		Once()
-	v, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "Private/DockerHub/token")
+	drv := buzzProvider(t, `
+export fun resolve_secret(target: Target, req: SecretRef) > Secret {
+    return Secret{ value = "value-for:" + req.ref };
+}`)
+	v, err := spellSecretProvider{drv: drv, name: "vault"}.Fetch(context.Background(), "Private/DockerHub/token")
 	require.NoError(t, err)
-	assert.Equal(t, "value-from-spell", v.Reveal())
+	assert.Equal(t, "value-for:Private/DockerHub/token", v.Reveal())
 }
 
-func TestSpellSecretProviderAcceptsAStringInData(t *testing.T) {
-	// A spell whose op returns a value rather than printing it lands in Data. Documented
-	// alongside the Text form in the adapter's contract.
-	d := spellstest.NewMockDriver(t)
-	d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{Data: "value-in-data"}, nil).Once()
-	v, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
-	require.NoError(t, err)
-	assert.Equal(t, "value-in-data", v.Reveal())
-}
-
-func TestSpellSecretProviderRejectsAnEmptyOrWrongTypedResult(t *testing.T) {
-	for name, resp := range map[string]spells.InvokeResponse{
-		"nothing at all":  {},
-		"non-string data": {Data: 42},
-		"empty text":      {Text: ""},
+func TestSpellSecretProviderRejectsAMissingOrEmptySecret(t *testing.T) {
+	for name, src := range map[string]string{
+		"no resolve_secret": `export fun mgs_getName() > str { return "vault"; }`,
+		"an empty value": `
+export fun resolve_secret(target: Target, req: SecretRef) > Secret { return Secret{}; }`,
+		"a bare string": `
+export fun resolve_secret(target: Target, req: SecretRef) > any { return "value"; }`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			d := spellstest.NewMockDriver(t)
-			d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(resp, nil).Once()
-			_, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
+			_, err := spellSecretProvider{drv: buzzProvider(t, src), name: "vault"}.Fetch(context.Background(), "ref")
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "resolve_secret",
-				"the error must name the op the spell got wrong")
+			assert.Contains(t, err.Error(), "resolve_secret", "the error must name the op the spell got wrong")
 		})
 	}
 }
 
 func TestSpellSecretProviderPropagatesTheSpellError(t *testing.T) {
-	want := errors.New("vault is sealed")
-	d := spellstest.NewMockDriver(t)
-	d.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{}, want).Once()
-	_, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
-	require.ErrorIs(t, err, want)
+	drv := buzzProvider(t, `
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+    throw "vault is sealed";
+}`)
+	_, err := spellSecretProvider{drv: drv, name: "vault"}.Fetch(context.Background(), "ref")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vault is sealed")
 }
 
 func TestOpenSpellSecretProviderRejectsAnUnregisteredSpell(t *testing.T) {
@@ -67,17 +53,6 @@ func TestOpenSpellSecretProviderRejectsAnUnregisteredSpell(t *testing.T) {
 	assert.Contains(t, err.Error(), "no-such-spell-here")
 	assert.Contains(t, err.Error(), "import it in the magusfile",
 		"the error carries the remediation, since a missing import is the usual cause")
-}
-
-// slowDriver blocks until its context is cancelled, standing in for a provider waiting on
-// an unlock nobody is there to complete.
-type slowDriver struct{}
-
-func (*slowDriver) Name() string { return "slow" }
-
-func (d *slowDriver) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
-	<-ctx.Done()
-	return spells.InvokeResponse{}, ctx.Err()
 }
 
 // TestSpellSecretProviderFailsFastWithoutATerminal pins the policy that matters most in
@@ -89,10 +64,19 @@ func (d *slowDriver) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells
 func TestSpellSecretProviderFailsFastWithoutATerminal(t *testing.T) {
 	r := secret.New(secret.WithTimeouts(secret.Timeouts{Interactive: 2 * time.Second, Unattended: 50 * time.Millisecond}))
 	ctx := secret.ContextWithResolver(context.Background(), r)
+	// Spins until the deadline cancels the VM, standing in for a provider waiting on an
+	// unlock nobody is there to complete.
+	drv := buzzProvider(t, `
+export fun resolve_secret(target: Target, req: SecretRef) > Secret {
+    var n = 0;
+    while (n >= 0) {
+        n = n + 1;
+    }
+    return Secret{};
+}`)
 
 	start := time.Now()
-	_, err := spellSecretProvider{drv: &slowDriver{}, name: "onepassword"}.
-		Fetch(ctx, "Private/Thing/token")
+	_, err := spellSecretProvider{drv: drv, name: "onepassword"}.Fetch(ctx, "Private/Thing/token")
 	elapsed := time.Since(start)
 
 	require.Error(t, err)
