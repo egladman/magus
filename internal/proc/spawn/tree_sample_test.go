@@ -5,9 +5,12 @@ package spawn
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // The sampler must not shrink a figure. It contributes a tree total when it sees
@@ -24,6 +27,30 @@ func TestSamplerNeverReportsLessThanTheKernel(t *testing.T) {
 	require.True(t, res.Started)
 	assert.Positive(t, res.MaxRSSBytes,
 		"a command outliving several sample ticks still reports a figure")
+}
+
+func TestSamplerKeepsEverySampleOffset(t *testing.T) {
+	t.Parallel()
+	sizes := map[int]int64{10: 100 << 20, 20: 0}
+	tick := make(chan time.Time)
+	s := newTreeSampler(func(pid int) int64 { return sizes[pid] },
+		func() (<-chan time.Time, func()) { return tick, func() {} })
+
+	start := time.Unix(1000, 0)
+	a := s.follow(10, start)
+	b := s.follow(20, start.Add(time.Second))
+
+	tick <- start.Add(200 * time.Millisecond)
+	tick <- start.Add(400 * time.Millisecond)
+	tick <- start.Add(1400 * time.Millisecond)
+
+	assert.Equal(t, []types.MemorySample{
+		{At: 200 * time.Millisecond, Bytes: 100 << 20},
+		{At: 400 * time.Millisecond, Bytes: 100 << 20},
+		{At: 1400 * time.Millisecond, Bytes: 100 << 20},
+	}, s.stop(a), "every tick is kept, timed from the root's own start")
+	assert.Empty(t, s.stop(b), "a reading of 0 is unknown, not a sample")
+	assert.Nil(t, s.stop(nil), "a command that never started has no samples")
 }
 
 // A command shorter than one sample tick still reports the kernel's figure: the

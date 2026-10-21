@@ -1,0 +1,54 @@
+package types
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/egladman/magus/internal/json"
+)
+
+// MemoryCurveBuckets is how many equal slices of a run's duration a MemoryCurve
+// holds, 5% each. Buckets are fractions of the run, not seconds, so a slow run
+// and a fast one of the same work line up phase by phase.
+const MemoryCurveBuckets = 20
+
+// MemoryCurve is a run's resident memory over its own duration: each bucket is
+// the largest total sampled in that slice of the run, in MiB.
+type MemoryCurve [MemoryCurveBuckets]uint32
+
+// PeakMB returns the largest bucket, in MiB.
+func (c MemoryCurve) PeakMB() int {
+	peak := uint32(0)
+	for _, mb := range c {
+		peak = max(peak, mb)
+	}
+	return int(peak)
+}
+
+// MarshalJSON encodes the curve as a JSON array of exactly MemoryCurveBuckets
+// numbers.
+func (c *MemoryCurve) MarshalJSON() ([]byte, error) {
+	return json.Marshal([MemoryCurveBuckets]uint32(*c))
+}
+
+// UnmarshalJSON decodes a JSON array of exactly MemoryCurveBuckets numbers. Any
+// other length is an error naming it: a short array padded with zeros would read
+// as a run that used nothing for its last slices.
+func (c *MemoryCurve) UnmarshalJSON(b []byte) error {
+	var buckets []uint32
+	if err := json.Unmarshal(b, &buckets); err != nil {
+		return fmt.Errorf("decode memory curve: %w", err)
+	}
+	if len(buckets) != MemoryCurveBuckets {
+		return fmt.Errorf("memory curve has %d buckets, want %d", len(buckets), MemoryCurveBuckets)
+	}
+	copy(c[:], buckets)
+	return nil
+}
+
+// MemorySample is one reading of a process tree's resident memory, taken At after
+// the exec started.
+type MemorySample struct {
+	At    time.Duration
+	Bytes int64
+}

@@ -267,16 +267,19 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	// Start and Wait rather than Run, so the pid is known to THIS goroutine before
 	// the sampler is handed it. Behaviorally identical (Run is Start plus Wait);
 	// the split exists only so nothing reads c.Process concurrently.
-	sampler := newTreeSampler()
-	started := sampler.follow
-	if ruleset != nil {
-		// This process's copy of the ruleset serves nothing once the launcher holds its
-		// own; the defer covers a Start that failed.
-		defer ruleset.Close()
-		started = func(pid int) {
+	var root *sampledRoot
+	var startedAt time.Time
+	started := func(pid int) {
+		if ruleset != nil {
+			// This process's copy of the ruleset serves nothing once the launcher holds
+			// its own; the defer below covers a Start that failed.
 			_ = ruleset.Close()
-			sampler.follow(pid)
 		}
+		startedAt = time.Now()
+		root = processSampler.follow(pid, startedAt)
+	}
+	if ruleset != nil {
+		defer ruleset.Close()
 	}
 	var runErr error
 	if opts.TTY {
@@ -291,7 +294,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			runErr = group.wait()
 		}
 	}
-	treePeak := sampler.stop()
+	samples := processSampler.stop(root)
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 
 	res := ExecResult{}
@@ -303,13 +306,13 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// a subtree as a maximum; the sampler sums the whole tree but only at the
 		// instants it looked. Taking the max is strictly better than either alone
 		// and cannot report less than magus reported before sampling existed.
-		res.MaxRSSBytes = max(maxRSSBytes(c.ProcessState), treePeak)
-		// Report it upward as well as returning it. The caller that wants this
-		// number is the shard planner, which is several layers away and has no
-		// path to an individual ExecResult; the context collector is what
-		// carries a target's high-water mark to it. A no-op when nothing
-		// installed a collector, which is every call outside a target run.
-		types.RecordPeakRSS(ctx, res.MaxRSSBytes)
+		kernelPeak := maxRSSBytes(c.ProcessState)
+		res.MaxRSSBytes = max(kernelPeak, samplePeak(samples))
+		// Report both upward as well as returning the peak. The shard planner wants
+		// them and has no path to an ExecResult; the context collector folds the
+		// series into the step's curve, floored by the kernel figure.
+		types.RecordPeakRSS(ctx, kernelPeak)
+		types.RecordCurve(ctx, startedAt, samples)
 		res.CPUMs = (c.ProcessState.UserTime() + c.ProcessState.SystemTime()).Milliseconds()
 		types.RecordCPUMs(ctx, res.CPUMs)
 	} else {

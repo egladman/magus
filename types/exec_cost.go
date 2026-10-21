@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Peak resident memory and CPU time, collected per target execution.
@@ -15,10 +16,12 @@ import (
 // return capture above it in this package: a context-scoped collector written
 // by code far below the orchestrator and read once by the orchestrator.
 //
-// The aggregate ACROSS EXECS is a maximum, never a sum: a target that forks a
-// compiler, then a linker, then a test binary reached its high-water mark in
-// whichever one peaked, and adding those would describe a machine that never
-// existed.
+// The aggregate ACROSS EXECS follows time. Each exec hands over its sampled series,
+// and the step's curve is, per bin, the sum of each exec's largest sample in that
+// bin: a compiler then a linker never add, because their samples land in different
+// bins, while two commands the step runs at once do, because they held memory
+// together. The step's peak is that curve's largest bin, floored by the largest
+// kernel figure any one exec reported.
 //
 // What each exec contributes is a different question, and one this package used to
 // get wrong. It is not one process: `go test` runs package binaries concurrently
@@ -41,23 +44,29 @@ type execCostKey struct{}
 
 type execCost struct {
 	mu    sync.Mutex
-	max   int64
-	cpuMs int64
+	start time.Time
+	now   func() time.Time
+	// kernelPeak is the largest ru_maxrss any one exec reported: exact for that
+	// process, so the step's peak never reads below it.
+	kernelPeak int64
+	// series holds each exec's samples, offset from the step's start.
+	series [][]MemorySample
+	cpuMs  int64
 }
 
-// WithExecCost returns a context that collects the peak resident memory and the
-// CPU time of every process executed under it. Install it once per unit of work
-// you want figures for; nested installs are independent, so an inner one does not
-// feed its outer.
+// WithExecCost returns a context that collects the memory curve, the peak resident
+// memory and the CPU time of every process executed under it, timed from now.
+// Install it once per unit of work you want figures for; nested installs are
+// independent, so an inner one does not feed its outer.
 func WithExecCost(ctx context.Context) context.Context {
-	return context.WithValue(ctx, execCostKey{}, &execCost{})
+	return context.WithValue(ctx, execCostKey{}, &execCost{start: time.Now(), now: time.Now})
 }
 
-// RecordPeakRSS reports one process's peak resident memory in bytes. Calls with
-// a non-positive value are ignored: the platforms that cannot report this
-// (windows, wasm) and a process that never started both yield zero, and zero
-// means UNKNOWN rather than "used nothing": a planner that averaged it in
-// would read an unmeasurable target as a free one.
+// RecordPeakRSS reports one process's kernel peak resident memory in bytes, the
+// floor under PeakRSS. Calls with a non-positive value are ignored: the platforms
+// that cannot report this (windows, wasm) and a process that never started both
+// yield zero, and zero means UNKNOWN rather than "used nothing": a planner that
+// averaged it in would read an unmeasurable target as a free one.
 func RecordPeakRSS(ctx context.Context, bytes int64) {
 	if bytes <= 0 {
 		return
@@ -68,14 +77,68 @@ func RecordPeakRSS(ctx context.Context, bytes int64) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if bytes > c.max {
-		c.max = bytes
-	}
+	c.kernelPeak = max(c.kernelPeak, bytes)
 }
 
-// PeakRSS returns the highest peak reported under ctx, or 0 when nothing was
-// collected. RecordPeakRSS drops non-positive figures, so 0 already means "no
-// process reported one" and a second return value would distinguish nothing.
+// RecordCurve adds one exec's sampled series. start is when the exec began and
+// each sample's At is its offset from that. A no-op without a collector or
+// without samples.
+func RecordCurve(ctx context.Context, start time.Time, samples []MemorySample) {
+	if len(samples) == 0 {
+		return
+	}
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
+	if !ok {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	shift := start.Sub(c.start)
+	series := make([]MemorySample, len(samples))
+	for i, s := range samples {
+		series[i] = MemorySample{At: shift + s.At, Bytes: s.Bytes}
+	}
+	c.series = append(c.series, series)
+}
+
+// Curve folds every series recorded under ctx into one curve over the step's
+// elapsed time at the call: each bucket sums, across execs, each exec's largest
+// sample in that bucket. A sample past the elapsed time lands in the last bucket.
+// The zero curve means nothing was sampled.
+func Curve(ctx context.Context) MemoryCurve {
+	var out MemoryCurve
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
+	if !ok {
+		return out
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, bytes := range c.binSums() {
+		out[i] = uint32((bytes + 1<<20 - 1) >> 20)
+	}
+	return out
+}
+
+// binSums returns the curve in bytes. Callers hold c.mu.
+func (c *execCost) binSums() [MemoryCurveBuckets]int64 {
+	var sums [MemoryCurveBuckets]int64
+	width := max(c.now().Sub(c.start)/MemoryCurveBuckets, 1)
+	for _, series := range c.series {
+		var peaks [MemoryCurveBuckets]int64
+		for _, s := range series {
+			bin := min(max(int(s.At/width), 0), MemoryCurveBuckets-1)
+			peaks[bin] = max(peaks[bin], s.Bytes)
+		}
+		for i, p := range peaks {
+			sums[i] += p
+		}
+	}
+	return sums
+}
+
+// PeakRSS returns the step's peak resident memory in bytes: the largest bucket of
+// its curve, floored by the largest RecordPeakRSS figure. 0 means no process
+// reported one, so a second return value would distinguish nothing.
 func PeakRSS(ctx context.Context) int64 {
 	c, ok := ctx.Value(execCostKey{}).(*execCost)
 	if !ok {
@@ -83,7 +146,11 @@ func PeakRSS(ctx context.Context) int64 {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.max
+	peak := c.kernelPeak
+	for _, bytes := range c.binSums() {
+		peak = max(peak, bytes)
+	}
+	return peak
 }
 
 // RecordCPUMs adds one process's CPU time, user plus system, in milliseconds.
