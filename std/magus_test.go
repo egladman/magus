@@ -982,3 +982,36 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 	assert.Equal(t, want, got)
 	assert.Contains(t, got, "properties")
 }
+
+type ratedWorkspace struct {
+	ledgerWorkspace
+	tiers *types.ModelTierSet
+	rows  []types.ModelPricing
+}
+
+func (w *ratedWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.tiers }
+func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
+func (w *ratedWorkspace) ModelRows(context.Context) func() []types.ModelPricing {
+	return func() []types.ModelPricing { return w.rows }
+}
+
+func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
+	testkit.Isolate(t)
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{}, {}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+	})
+	require.NoError(t, err)
+	ws := &ratedWorkspace{
+		ledgerWorkspace: ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()},
+		tiers:           set,
+		rows:            []types.ModelPricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
+	}
+
+	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
+	require.NoError(t, err)
+	require.NotNil(t, got.ModelTier)
+	assert.Equal(t, "principal", got.ModelTier.Name)
+	assert.Equal(t, 2, got.ModelTier.Rank)
+}

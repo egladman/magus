@@ -1836,6 +1836,13 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
 	}
+	// std cannot import internal/agent, which loads the harness spells, so the workspace
+	// supplies the reader.
+	if rows, ok := ws.(interface {
+		ModelRows(ctx context.Context) func() []types.ModelPricing
+	}); ok {
+		loc.ModelRows = rows.ModelRows(ctx)
+	}
 	if owned, ok := ws.(interface {
 		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)
 	}); ok {
