@@ -1179,6 +1179,7 @@ export object Job {
     checkpoint: str = "",
     writePaths: [str] = [],
     denyPaths: [str] = [],
+    softPaths: [str] = [],
     readPaths: [str] = [],
     dependsOn: [str] = [],
     breaks: [str] = [],

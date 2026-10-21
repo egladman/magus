@@ -131,6 +131,7 @@ github.com/egladman/magus.Magus.ListTargets method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.MachineClaims method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, charms []string, extraArgs []string) []github.com/egladman/magus/types.MachineClaim
 github.com/egladman/magus.Magus.MetricsCollector method(ptr) func() (*MetricsCollector, bool)
 github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Context) ([]byte, error)
+github.com/egladman/magus.Magus.ModelRows method(ptr) func(ctx context.Context) func() []github.com/egladman/magus/types.ModelPricing
 github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTierOutput, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
@@ -1413,6 +1414,7 @@ github.com/egladman/magus/types.Declaration.Problems method func() JobProblems
 github.com/egladman/magus/types.Declaration.ReadOnly field bool "json:\"read_only,omitempty\""
 github.com/egladman/magus/types.Declaration.ReadPaths field []string "json:\"read_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.Declaration.Schema embedded Schema
+github.com/egladman/magus/types.Declaration.SoftPaths field []string "json:\"soft_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.Declaration.State field JobState "json:\"state,omitempty\""
 github.com/egladman/magus/types.Declaration.Timeout field string "json:\"timeout,omitempty\" schema:\"duration\""
 github.com/egladman/magus/types.Declaration.Unmet method func(known []string) []string
@@ -2495,6 +2497,7 @@ github.com/egladman/magus/types.Job.Entries field []JobEntry "json:\"entries,omi
 github.com/egladman/magus/types.Job.GateAttempts field []JobGateAttempt "json:\"gate_attempts,omitempty\" yaml:\"gate_attempts,omitempty\""
 github.com/egladman/magus/types.Job.Generation field int "json:\"generation,omitempty\" yaml:\"generation,omitempty\""
 github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\" yaml:\"goals,omitempty\""
+github.com/egladman/magus/types.Job.HardPaths method func() []string
 github.com/egladman/magus/types.Job.Holder field JobHolder "json:\"holder,omitempty\" yaml:\"holder,omitempty\""
 github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.Job.Integration field *JobIntegration "json:\"integration,omitempty\" yaml:\"integration,omitempty\""
@@ -2515,6 +2518,7 @@ github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_b
 github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
 github.com/egladman/magus/types.Job.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
 github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
+github.com/egladman/magus/types.Job.SoftPaths field []string "json:\"soft_paths,omitempty\" yaml:\"soft_paths,omitempty\""
 github.com/egladman/magus/types.Job.StaleAt method func(observed int) bool
 github.com/egladman/magus/types.Job.State field JobState "json:\"state,omitempty\" yaml:\"state,omitempty\""
 github.com/egladman/magus/types.Job.Unattributed field []JobUnattributedWrite "json:\"unattributed,omitempty\" yaml:\"unattributed,omitempty\""

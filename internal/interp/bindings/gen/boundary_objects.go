@@ -3848,6 +3848,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 		itemsDenyPaths[indexDenyPaths] = vm.StrValue(v.DenyPaths[indexDenyPaths])
 	}
 	out.MapSet("denyPaths", vm.ListValue(itemsDenyPaths))
+	itemsSoftPaths := make([]vm.Value, len(v.SoftPaths))
+	for indexSoftPaths := range v.SoftPaths {
+		itemsSoftPaths[indexSoftPaths] = vm.StrValue(v.SoftPaths[indexSoftPaths])
+	}
+	out.MapSet("softPaths", vm.ListValue(itemsSoftPaths))
 	itemsReadPaths := make([]vm.Value, len(v.ReadPaths))
 	for indexReadPaths := range v.ReadPaths {
 		itemsReadPaths[indexReadPaths] = vm.StrValue(v.ReadPaths[indexReadPaths])
