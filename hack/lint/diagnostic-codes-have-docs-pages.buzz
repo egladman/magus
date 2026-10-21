@@ -1,0 +1,104 @@
+// diagnostic-codes-have-docs-pages reports a BZZ or MGS code a .buzz or .go file names that has no
+// docs page, because a diagnostic's `see:` link would then point nowhere. A BZZ code needs
+// libs/gopherbuzz/docs/codes/<code>.md; an MGS code needs docs/reference/codes/<group>/<code>.md,
+// with the group directories listed from the tree. The rule creates no page.
+//
+// Skipped: _test.go and testdata, where a code is a deliberate example, the pages themselves,
+// and this file, whose tests name codes that have no page on purpose. A comment line is skipped
+// too: the page-less codes in the tree today are retired ones (MGS3015, MGS5004, MGS3020, MGS3021)
+// and made-up examples (MGS9999, BZZ0003) named only in comments, and a retired code keeps no page.
+//
+// Tier 1, mechanical: the fix is a docs page for the code.
+namespace codepages;
+
+import "assert";
+import "fs";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final CODE = std\pattern(`\b(?:BZZ|MGS)\d\d\d\d\b`);
+
+final BZZ_PAGES = "libs/gopherbuzz/docs/codes/";
+final MGS_PAGES = "docs/reference/codes/";
+final SELF = "hack/lint/diagnostic-codes-have-docs-pages.buzz";
+
+export fun reads() > [str] {
+    return ["**/*.buzz", "**/*.go"];
+}
+
+// skipped reports whether path p is one whose codes the rule does not judge.
+export fun skipped(p: str) > bool {
+    return p.endsWith("_test.go") or p == SELF or ("/" + p).indexOf("/testdata/") != null
+        or p.startsWith(BZZ_PAGES) or p.startsWith(MGS_PAGES);
+}
+
+// hasPage reports whether code has its docs page under base.
+export fun hasPage(code: str, base: str) > bool !> any {
+    final root = if (base == "") "" else base + "/";
+    if (code.startsWith("BZZ")) {
+        return fs\exists(root + BZZ_PAGES + code + ".md");
+    }
+    final dir = root + MGS_PAGES;
+    if (!fs\isDir(dir)) {
+        return false;
+    }
+    foreach (group in fs\listDir(dir)) {
+        if (fs\exists(dir + group + "/" + code + ".md")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final known = mut {<str: bool>};
+    foreach (f in files) {
+        if (skipped(f.value)) {
+            continue;
+        }
+        var n = 0;
+        foreach (line in support\read(f).split("\n")) {
+            n = n + 1;
+            if (line.trim().startsWith("//")) {
+                continue;
+            }
+            foreach (m in CODE.matchAll(line) ?? [<[str]>]) {
+                final code = m[0];
+                var documented = known[code] ?? false;
+                if (known[code] == null) {
+                    documented = hasPage(code, base: f.base);
+                    known[code] = documented;
+                }
+                if (!documented) {
+                    found.append(Finding{ path = f.value, line = n, message = "{code} has no docs page",
+                        fix = "Add the page for {code}; a diagnostic's see: link points at it." });
+                }
+            }
+        }
+    }
+    return found;
+}
+
+test "a code with a page passes and one without is reported" {
+    final got = check(support\fixture({
+        "libs/gopherbuzz/docs/codes/BZZ3002.md": "# BZZ3002\n",
+        "docs/reference/codes/auth/MGS1001.md": "# MGS1001\n",
+        "a.buzz": "// BZZ3002 and MGS1001 have pages\n",
+        "b.go": "package b\n\nconst x = \"BZZ9999\"\nconst y = \"MGS9998\"\n",
+    }));
+    assert\equal(got.len(), want: 2, message: "two findings: {support\messages(got)}");
+    assert\equal(got[0].message, want: "BZZ9999 has no docs page", message: "the BZZ code");
+    assert\equal(got[0].line, want: 3, message: "its line");
+    assert\equal(got[1].message, want: "MGS9998 has no docs page", message: "the MGS code");
+}
+
+test "tests, testdata and the pages are skipped" {
+    final got = check(support\fixture({
+        "x_test.go": "package x\n\nconst c = \"BZZ9999\"\n",
+        "internal/testdata/a.buzz": "// MGS9999\n",
+        "libs/gopherbuzz/docs/codes/BZZ1.buzz": "BZZ9999\n",
+    }));
+    assert\equal(got.len(), want: 0, message: "nothing judged: {support\messages(got)}");
+}

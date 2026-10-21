@@ -26,10 +26,12 @@ import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/banned-words" as bannedwords;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
+import "hack/lint/buzz-sources-pass-the-static-check" as buzzcheck;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/code-stays-within-the-conformance-ratchet" as conformanceratchet;
+import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
@@ -90,6 +92,8 @@ export fun rules() > [Rule] {
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
+        Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },
+        Rule{ name = "diagnostic-codes-have-docs-pages", reads = codepages\reads(), check = codepages\check },
         Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },

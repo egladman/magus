@@ -3,8 +3,8 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12809
-skill_short_bytes: 9898
+skill_full_bytes: 12801
+skill_short_bytes: 9843
 ---
 
 # magus-buzz-lang
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `142` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `5ca4cd98c615` |
+| `skill-content` | `6f9445108bce` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -71,9 +71,8 @@ magus buzz -t script.buzz         # run its test "..." {} blocks
 
 1. Run `--check` after every edit. Fix FIRST error, then check again;
    later errors often echoes of it.
-2. clean check not working script. checker does NOT see missing method
-   on str, list or map, or free function like `len(xs)`. Nor does it see write
-   into map declared without `mut`. Those fail only when run, with no line number. Run
+2. clean check not working script. checker reports unknown method and `len(xs)`, but not
+   write into map or object declared without `mut`: fails only when run, no line number. Run
    script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called method or function that
    does not exist. Look it up in Built-in methods table below.
@@ -328,9 +327,9 @@ magus buzz -t script.buzz         # run its test "..." {} blocks
 
 1. Run `--check` after every edit. Fix the FIRST error, then check again:
    a parse error early in a file produces later errors that are only echoes of it.
-2. A clean check is not a working script. The checker does NOT see a missing method
-   on a str, list or map, or a free function like `len(xs)`. Nor does it see a write
-   into a map declared without `mut`. Those fail only when run, with no line number. Run the
+2. A clean check is not a working script. The checker reports an unknown method and a
+   free function like `len(xs)`, but it does not yet see a write into a map or object
+   declared without `mut`. That fails only when run, with no line number. Run the
    script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
    does not exist. Look it up in the Built-in methods table below.
