@@ -319,12 +319,15 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 // an empty field is an undeclared boundary, but a bound worker is a worker either way and
 // the gate is still the orchestrator's; the empty field says nobody wrote down what this
 // unit should run, which is a reason to ask rather than a licence to run everything.
+//
+// A root session holding a parentless row is still the root, whose gate it is, as
+// lease-vcs and the push gate read it (workerRole).
 func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" || !commandRunsGate(command) {
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) {
+	if !ok || actingIntegrator(ctx, deps, me) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
 	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands."

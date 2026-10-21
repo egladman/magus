@@ -357,12 +357,12 @@ func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	assert.Equal(t, 1, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a refused call never ran")
 	observeCall(ctx, at, "/r/a.go", who, hookToolWrite, "", types.GuardJudgment{Decision: decisionPass})
 	assert.Empty(t, readCostState(hint.NewGate(cache, who.factsKey())).Repeats, "a write starts the repeats over")
-	noteMainSpawn(at, who, "", false)
+	noteMainSpawn(at, who, "", "")
 	assert.Zero(t, readCostState(hint.NewGate(cache, who.factsKey())).Streak, "a spawn starts the streak over")
 }
 
-// Each record a session leaves proves or suggests that it orchestrates; proof counts only
-// on a main thread its host reported, and the record only rises.
+// Proof counts only on a main thread its host reported; elsewhere the same record is
+// inferred.
 func TestOrchestrationByEvidence(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -372,21 +372,16 @@ func TestOrchestrationByEvidence(t *testing.T) {
 		want types.Orchestration
 	}{
 		{"no record", costState{Streak: 9}, types.ThreadReported, ""},
-		{"a spawn bound to no row", costState{Orchestrates: types.OrchestrationInferred}, types.ThreadReported, types.OrchestrationInferred},
-		{"a bound spawn or a confirmed fork", costState{Orchestrates: types.OrchestrationProven}, types.ThreadReported, types.OrchestrationProven},
+		{"a live row handed out", costState{Orchestrates: types.OrchestrationProven}, types.ThreadReported, types.OrchestrationProven},
 		{"proof on a thread the host did not report", costState{Orchestrates: types.OrchestrationProven}, types.ThreadInferred, types.OrchestrationInferred},
 		{"a fork the store has not shown", costState{Forks: map[string]int64{"a1": 1}}, types.ThreadReported, ""},
 	} {
 		assert.Equal(t, tc.want, orchestration(tc.st, tc.from), tc.name)
 	}
-
-	st := costState{Orchestrates: types.OrchestrationProven}
-	st.raise(types.OrchestrationInferred)
-	assert.Equal(t, types.OrchestrationProven, st.Orchestrates, "proof is never lowered")
 }
 
-// A spawn bound to a live row proves the session orchestrates, one bound to none suggests
-// it, and either starts the streak over. A leased caller and a subagent record nothing.
+// A spawn bound to a live row files that row as handed out, and any spawn starts the streak
+// over; one bound to none hands out nothing. A leased caller and a subagent record nothing.
 func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
@@ -394,22 +389,21 @@ func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
 	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
 	facts := hint.NewGate(cache, who.factsKey())
 
-	noteMainSpawn(at, who, "", false)
-	assert.Equal(t, types.OrchestrationInferred, readCostState(facts).Orchestrates)
-	writeCostState(facts, costState{Streak: 4, Orchestrates: types.OrchestrationInferred})
-	noteMainSpawn(at, who, "", true)
+	noteMainSpawn(at, who, "", "")
+	assert.Empty(t, readCostState(facts).Forked)
+	writeCostState(facts, costState{Streak: 4})
+	noteMainSpawn(at, who, "", "a1")
+	noteMainSpawn(at, who, "", "a1")
 	st := readCostState(facts)
-	assert.Equal(t, types.OrchestrationProven, st.Orchestrates)
+	assert.Equal(t, []string{"a1"}, st.Forked)
 	assert.Zero(t, st.Streak)
-	noteMainSpawn(at, who, "", false)
-	assert.Equal(t, types.OrchestrationProven, readCostState(facts).Orchestrates, "proof lasts the session")
 
 	worker := hookAttribution{Host: "claude-code", Session: "w"}
-	noteMainSpawn(at, worker, "job-a", true)
-	assert.Empty(t, readCostState(hint.NewGate(cache, worker.factsKey())).Orchestrates, "a leased caller is a worker")
+	noteMainSpawn(at, worker, "job-a", "a1")
+	assert.Empty(t, readCostState(hint.NewGate(cache, worker.factsKey())).Forked, "a leased caller is a worker")
 	sub := hookAttribution{Host: "claude-code", Session: "u", Agent: "a1"}
-	noteMainSpawn(at, sub, "", true)
-	assert.Empty(t, readCostState(hint.NewGate(cache, sub.factsKey())).Orchestrates, "a subagent is never an orchestrator")
+	noteMainSpawn(at, sub, "", "a1")
+	assert.Empty(t, readCostState(hint.NewGate(cache, sub.factsKey())).Forked, "a subagent is never an orchestrator")
 }
 
 // A fork is filed from each shape that writes a row: the CLI verb, its record on stdin, a
@@ -455,14 +449,14 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	st := costState{Forks: map[string]int64{"a1": judged.UnixNano(), "old": judged.UnixNano()}}
 
 	confirmForks(&st, live, judged.Add(time.Second))
-	assert.Empty(t, st.Orchestrates, "the store shows no row yet")
+	assert.Empty(t, st.Forked, "the store shows no row yet")
 	assert.Len(t, st.Forks, 2)
 
 	rows["old"] = types.Job{ID: "old", State: types.StateRunning, Created: judged.Unix() - 60}
 	rows["a1"] = types.Job{ID: "a1", State: types.StateDeclared, Created: judged.Unix()}
 	confirmForks(&st, live, judged.Add(2*time.Second))
 	assert.Equal(t, costState{
-		Orchestrates: types.OrchestrationProven, Forked: []string{"a1"},
+		Forked: []string{"a1"},
 		Forks: map[string]int64{"old": judged.UnixNano()}, // a row created before the fork was not this fork's
 	}, st)
 
@@ -471,12 +465,13 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	assert.Equal(t, []string{"a1"}, st.Forked)
 }
 
-// orchestratorFixture is a checkout of a git repository and a notes directory outside it,
-// located at the checkout.
+// orchestratorFixture is a checkout of a git repository holding a current ./magus, and a
+// notes directory outside it, located at the checkout.
 func orchestratorFixture(t *testing.T) (at location, notes string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
 	return location{cacheDir: t.TempDir(), workspace: root, dir: root}, t.TempDir()
 }
 
@@ -557,6 +552,17 @@ var groundworkLines = []struct {
 	{"git cherry-pick --continue", delegableIntegrate},
 	{"git add internal/guard/root.go", delegableIntegrate},
 	{"git commit -m x", delegableIntegrate},
+	{"git merge origin/main", delegableIntegrate},
+	{"git rebase main", delegableIntegrate},
+	{"git pull --ff-only", delegableIntegrate},
+	{"git am < p.patch", delegableIntegrate},
+	{"git reset --hard HEAD~1", delegableIntegrate},
+	{"git stash push -m x", delegableIntegrate},
+	{"git restore internal/guard/root.go", delegableIntegrate},
+	{"git checkout -- internal/guard/root.go", delegableIntegrate},
+	{"git switch -c x", delegableIntegrate},
+	{"git switch --create x", delegableIntegrate},
+	{"./magus vcs commit -m x", delegableIntegrate},
 }
 
 func TestRootWorkClass(t *testing.T) {

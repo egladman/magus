@@ -174,22 +174,28 @@ type costState struct {
 	// Pending maps a tool call the transcript shows started to its tool and delegable
 	// class, until its result arrives.
 	Pending map[string]pendingCall `json:"pending,omitempty"`
-	// Orchestrates is how surely the thread hands its work to workers. It only rises, so
-	// it lasts the session.
+	// Orchestrates is whether the thread hands its work to workers as of the last call:
+	// proven while a row in Forked is live, and "" once every one has ended or been taken
+	// back. sessionCostState derives it from the job store on every read.
 	Orchestrates types.Orchestration `json:"orchestrates,omitempty"`
 	// Forks maps each job id the thread ran a fork of to when that call was judged, in
 	// unix nanoseconds, until the store shows the row or forkConfirmWindow passes.
 	Forks map[string]int64 `json:"forks,omitempty"`
-	// Forked are the ids the store confirmed the thread forked: the rows whose check it
-	// may run itself.
+	// Forked are the rows the thread handed out: forks the store confirmed and rows a
+	// titled spawn bound. A row the thread then takes itself with `magus job exec` leaves.
 	Forked []string `json:"forked,omitempty"`
 }
 
-// raise lifts Orchestrates to o when o is the surer of the two.
-func (st *costState) raise(o types.Orchestration) {
-	if slices.Index(o.Values(), string(o)) > slices.Index(o.Values(), string(st.Orchestrates)) {
-		st.Orchestrates = o
+// forget drops id from the rows the thread handed out, reporting whether it was there.
+func (st *costState) forget(id string) bool {
+	_, pending := st.Forks[id]
+	delete(st.Forks, id)
+	if len(st.Forks) == 0 {
+		st.Forks = nil
 	}
+	n := len(st.Forked)
+	st.Forked = slices.DeleteFunc(st.Forked, func(f string) bool { return f == id })
+	return pending || len(st.Forked) != n
 }
 
 type pendingCall struct {
@@ -692,9 +698,9 @@ func recordAgentCalls(ctx context.Context, f types.AgentFacts, results []toolRes
 }
 
 // noteMainSpawn restarts the main thread's streak of delegable calls, since it handed work
-// out, and records that as orchestration: proven when the spawn's title bound it to a live
-// job row, inferred otherwise.
-func noteMainSpawn(at location, who hookAttribution, lease string, bound bool) {
+// out, and files row, the live job row the spawn's title bound, among the rows the thread
+// handed out. A spawn bound to no row hands out nothing the store can show.
+func noteMainSpawn(at location, who hookAttribution, lease, row string) {
 	if lease != "" || at.cacheDir == "" {
 		return
 	}
@@ -703,14 +709,13 @@ func noteMainSpawn(at location, who hookAttribution, lease string, bound bool) {
 		return
 	}
 	st := readCostState(facts)
-	streak, was := st.Streak, st.Orchestrates
+	streak := st.Streak
 	st.Streak = 0
-	if bound {
-		st.raise(types.OrchestrationProven)
-	} else {
-		st.raise(types.OrchestrationInferred)
+	added := row != "" && !slices.Contains(st.Forked, row)
+	if added {
+		st.Forked = append(st.Forked, row)
 	}
-	if streak == 0 && st.Orchestrates == was {
+	if streak == 0 && !added {
 		return
 	}
 	writeCostState(facts, st)
@@ -729,27 +734,30 @@ func orchestration(st costState, from types.ThreadSource) types.Orchestration {
 	return ""
 }
 
-// sessionCostState is who's main-thread record as of now: each fork the store has shown
-// since confirmed, and a loaded multi-agent skill counted as inferred orchestration. A nil
-// live confirms nothing. It writes nothing; observeCall files what it returns.
+// sessionCostState is who's main-thread record as of now: forks the store has shown since
+// confirmed, and Orchestrates proven while a row the thread handed out is live (an exited
+// row waits on its `job wait`). The role is the live lease, never history: once every row
+// ends it orchestrates nothing. It writes nothing; observeCall files what it returns.
 func sessionCostState(at location, who hookAttribution, live func(id string) (types.Job, bool), now time.Time) costState {
 	st := readCostState(hint.NewGate(at.cacheDir, who.factsKey()))
-	if live != nil && len(st.Forks) > 0 {
+	if len(st.Forks) > 0 {
 		confirmForks(&st, live, now)
 	}
-	if skillLoaded(hint.NewGate(at.cacheDir, who.skillsKey()), multiAgentSkill) {
-		st.raise(types.OrchestrationInferred)
+	st.Orchestrates = ""
+	if slices.ContainsFunc(st.Forked, func(id string) bool { _, ok := live(id); return ok }) {
+		st.Orchestrates = types.OrchestrationProven
 	}
 	return st
 }
 
 // callerOrchestration is orchestration for a rule request's caller, "" for any caller but
-// an unleased main thread.
+// an unleased main thread. Its callers carry no pinned job store, so the store is read
+// here, and only when the thread handed a row out.
 func callerOrchestration(at location, who hookAttribution, thread types.AgentThread, from types.ThreadSource, lease string) types.Orchestration {
 	if thread != types.AgentThreadMain || lease != "" || at.cacheDir == "" {
 		return ""
 	}
-	return orchestration(sessionCostState(at, who, nil, time.Now()), from)
+	return orchestration(sessionCostState(at, who, liveRowLookup(context.Background(), at), time.Now()), from)
 }
 
 // forkConfirmWindow is how long a fork the thread ran waits for the store to show its row.
@@ -805,13 +813,12 @@ func forkedIDs(line string) []string {
 }
 
 // confirmForks moves to st.Forked each fork the store now shows live, created no earlier
-// than the call that ran it, and raises st to proven for it. A fork older than
-// forkConfirmWindow that the store never showed is dropped.
+// than the call that ran it. A fork older than forkConfirmWindow that the store never
+// showed is dropped.
 func confirmForks(st *costState, live func(id string) (types.Job, bool), now time.Time) {
 	for id, judged := range st.Forks {
 		at := time.Unix(0, judged)
 		if row, ok := live(id); ok && row.Created >= at.Unix() {
-			st.raise(types.OrchestrationProven)
 			if !slices.Contains(st.Forked, id) {
 				st.Forked = append(st.Forked, id)
 			}
@@ -849,13 +856,14 @@ func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job,
 
 // rootWorkClass is the groundwork a shell line does, judged for a session that hands its
 // work out, "" for orchestration work: moving jobs, planning from the graph, reading a
-// guard verdict, the notes. Integration is the checkout's integrator's, never the root's. Unlike delegableClass, a silent run is still a run,
+// guard verdict, the notes, and rebuilding a stale or absent ./magus (replacesStaleMagus).
+// Other integration is the checkout's integrator's. Unlike delegableClass, a silent run is still a run,
 // and Markdown inside a checkout is still a read; only the instruction files, and a read or a
 // search of nothing but paths outside every checkout, are notes.
 // The checks of the rows a thread forked are mainWork's to clear.
 func rootWorkClass(line string, at location) types.DelegableClass {
 	f, err := parseFile(line, DialectBash)
-	if err != nil {
+	if err != nil || replacesStaleMagus(line, at.workspace) {
 		return ""
 	}
 	// A relative path is read from where the line's cds have moved the call, so a root that
@@ -897,7 +905,7 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 		return ""
 	}
 	if !isMagusInvocation(c) {
-		if v := vcsInvocation(c); v != nil && integrationVerbs[v.Subcommand] {
+		if v := vcsInvocation(c); v != nil && integratesVCS(v.Subcommand, v.Args) {
 			return delegableIntegrate
 		}
 		class := invocationClass(c)
@@ -924,7 +932,7 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 			return types.DelegableRun
 		}
 	case "vcs":
-		if len(words) > 1 && integrationVerbs[words[1]] {
+		if len(words) > 1 && integratesVCS(words[1], words[2:]) {
 			return delegableIntegrate
 		}
 	case "buzz":
@@ -949,9 +957,26 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 // is declared beside that rule rather than in types.
 const delegableIntegrate types.DelegableClass = "integrate"
 
-// integrationVerbs are the VCS subcommands that land work in a checkout, which its
-// integrator runs and an orchestrator never does.
-var integrationVerbs = map[string]bool{"add": true, "commit": true, "cherry-pick": true, "graft": true}
+// integrationVerbs are the VCS subcommands that land work in a checkout or move its tree,
+// which its integrator runs and an orchestrator never does. They are one class: a root
+// allowed to merge but not commit integrated half a branch and left the rest.
+var integrationVerbs = map[string]bool{
+	"add": true, "am": true, "checkout": true, "cherry-pick": true, "commit": true, "graft": true,
+	"merge": true, "pull": true, "rebase": true, "reset": true, "restore": true, "stash": true,
+}
+
+// integratesVCS reports a VCS subcommand that integrates: one of integrationVerbs, or a
+// switch that creates the branch it moves to. A plain switch, a branch, a worktree add and
+// a push are orchestration.
+func integratesVCS(sub string, args []string) bool {
+	if sub == "switch" {
+		return slices.ContainsFunc(args, func(a string) bool {
+			return strings.HasPrefix(a, "-c") || strings.HasPrefix(a, "-C") ||
+				strings.HasPrefix(a, "--create") || strings.HasPrefix(a, "--force-create")
+		})
+	}
+	return integrationVerbs[sub]
+}
 
 // integrationTarget reports a target a checkout's integrator runs to integrate work: the
 // build of ./magus, and regeneration.

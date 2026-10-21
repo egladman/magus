@@ -202,11 +202,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordRework(ctx, at, facts, env.Target)
 		}
 		markAgentSeen(facts, env)
-		bound := false
+		handed := ""
 		if env.IsSpawn {
-			_, bound = titled()
+			if row, bound := titled(); bound {
+				handed = row.ID
+			}
 		}
-		noteMainSpawn(at, who, actingLease, bound)
+		noteMainSpawn(at, who, actingLease, handed)
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
@@ -651,6 +653,14 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	store := job.NewStore(at.jobs())
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
+	}
+	// A row the caller takes itself is no longer one it handed out, so its `job exit`
+	// leaves the caller orchestrating only what others still hold.
+	if at.cacheDir != "" {
+		facts := hint.NewGate(at.cacheDir, who.factsKey())
+		if st := readCostState(facts); st.forget(id) {
+			writeCostState(facts, st)
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -565,4 +566,60 @@ func soleCall(command string, d Dialect) (*syntax.CallExpr, bool) {
 		return nil, false
 	}
 	return call, true
+}
+
+// stampGlobs are the sources go-build stamps into ./magus. A copy of stampGlobs in
+// hack/policy/stale.buzz: the guard cannot load the policy whose staleness it judges.
+var stampGlobs = []string{
+	"internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
+	"cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
+	"internal/spell/gen/decls/*.buzz", "spells/*/*.buzz",
+}
+
+// staleOwnBinary reports a ./magus at root older than a source it is stamped from, the Go
+// twin of stale.buzz's hookBinary and movedSince by modification time alone: with no
+// digest, a touched but unchanged file counts, which only lets an unneeded rebuild through.
+func staleOwnBinary(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "magus"))
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	for _, pattern := range stampGlobs {
+		matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern)))
+		for _, m := range matches {
+			if strings.HasSuffix(m, "_test.go") {
+				continue
+			}
+			if src, err := os.Stat(m); err == nil && src.ModTime().After(info.ModTime()) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// replacesStaleMagus reports the line that gets root a current ./magus, alone on its line:
+// `./magus run go-build .`, or the bootstrap, while ./magus is stale or absent. Either is
+// the root's own to run then, since no worker builds magus and nothing else replaces it.
+func replacesStaleMagus(command string, root string) bool {
+	if root == "" || (hasMagusBinary(root) && !staleOwnBinary(root)) {
+		return false
+	}
+	call, ok := soleCall(command, DialectBash)
+	if !ok {
+		return false
+	}
+	words := literalWords(call.Args)
+	if len(words) == 0 {
+		return false
+	}
+	if words[0] == "go" {
+		g, ok := readGoCall(hint.Invocation{Name: "go", Args: words[1:]})
+		return ok && g.bootstrapsMagus() && bootstrapLine(command, DialectBash)
+	}
+	if path.Base(words[0]) != "magus" || len(call.Assigns) > 0 {
+		return false
+	}
+	r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
+	return ok && r.verb == "run" && targetName(r.target) == "go-build" && slices.Equal(r.projects, []string{"."})
 }

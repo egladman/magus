@@ -386,6 +386,7 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 	for _, command := range refused {
 		assert.True(t, denyLeaseScopedGate(ctx, root, row.ID, command).refused(), "the root holding the integrator's lease never builds: %s", command)
 	}
+	assert.Empty(t, denyLeaseGate(ctx, root, row.ID, "./magus affected ci"), "the gate is still the root's while it holds a parentless row")
 
 	for name, title := range map[string]string{
 		"a change-role worker":                  "root/feat " + row.ID,

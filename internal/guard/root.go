@@ -111,6 +111,8 @@ type mainCall struct {
 	// work is the groundwork the call does as an orchestrator is judged for it, "" for
 	// orchestration work.
 	work types.DelegableClass
+	// spawnBroken is why no worker spawn would pass the spawn rules, "" when one would.
+	spawnBroken string
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -180,19 +182,42 @@ var groundworkWork = map[types.DelegableClass]string{
 }
 
 // groundworkFinding is orchestrator-groundwork's finding on c: groundwork by a session
-// with a record of handing its work out. Proof under a deny setting refuses; an inferred
-// record, or an advise setting, advises once per class. A session with no record is never
-// judged, at any context size or level.
+// with a live row it handed out. Proof under a deny setting refuses; an inferred record,
+// or an advise setting, advises once per class. A session with no live row is never
+// judged. Where no spawn would pass, the remedy is holding a row, never a dead end.
 func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	if c.work == "" || c.orchestration == "" || (s.Decision != builtin.Advise && s.Decision != builtin.Deny) {
 		return costFinding{}, false
+	}
+	work := cmp.Or(groundworkWork[c.work], string(c.work))
+	say := fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork: fork a job for it (a read-only scout for a question) and spawn a worker on it.", work)
+	if c.spawnBroken != "" {
+		say = fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork, but spawning is broken: %s; take a row with `./magus job exec <row>` and do it as its holder.", work, c.spawnBroken)
 	}
 	return costFinding{
 		rule: denyRuleOrchestratorGroundwork,
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
-		say:  fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork: fork a job for it (a read-only scout for a question) and spawn a worker on it.", cmp.Or(groundworkWork[c.work], string(c.work))),
+		say:  say,
 	}, true
+}
+
+// spawnBroken is why a spawn by host would be refused whatever its brief: at a deny
+// setting, spawn-names-model refuses every bound spawn from a harness the model-tier
+// declaration maps no model for. Asked only for a finding, since the declaration opens
+// the workspace.
+func spawnBroken(deps Dependencies, host string) string {
+	if deps.ModelTiers == nil || deps.settingLookup(string(denyRuleSpawnNamesModel)).Decision != builtin.Deny {
+		return ""
+	}
+	set := deps.ModelTiers()
+	if set == nil {
+		return ""
+	}
+	if _, err := set.Alias(host, set.Default()); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // kTokens renders a token count in thousands.
@@ -251,6 +276,9 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)
 	}
+	if call.work != "" {
+		call.spawnBroken = spawnBroken(deps, who.Host)
+	}
 	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
 }
 
@@ -266,9 +294,12 @@ func gradeMainWrite(deps Dependencies, verdict types.GuardJudgment, path string,
 	if thread != types.AgentThreadMain {
 		return verdict
 	}
-	st := sessionCostState(at, who, nil, time.Now())
-	f, ok := groundworkFinding(deps.settingLookup(string(denyRuleOrchestratorGroundwork)),
-		mainCall{from: from, line: path, orchestration: orchestration(st, from), work: types.DelegableEdit})
+	st := sessionCostState(at, who, liveRowLookup(context.Background(), at), time.Now())
+	call := mainCall{from: from, line: path, orchestration: orchestration(st, from), work: types.DelegableEdit}
+	if call.orchestration != "" {
+		call.spawnBroken = spawnBroken(deps, who.Host)
+	}
+	f, ok := groundworkFinding(deps.settingLookup(string(denyRuleOrchestratorGroundwork)), call)
 	if !ok {
 		return verdict
 	}

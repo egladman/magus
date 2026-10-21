@@ -395,7 +395,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
-	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && cannotLoad(ctx, deps, root)
+	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && (staleOwnBinary(root) || cannotLoad(ctx, deps, root))
 	lease := deps.lease
 	if me, ok := actingLiveLease(ctx, deps, lease); ok && actingIntegrator(ctx, deps, me) {
 		lease = ""
@@ -423,8 +423,8 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		}, workspaceShell),
 		staleBootstrap: staleBootstrap,
 		staleBootstrapAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than the tree and cannot load it (MGS1021): the bootstrap replaces it.",
-			Why:     "A binary that cannot load the tree cannot rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
+			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than its sources or cannot load it: the bootstrap replaces it.",
+			Why:     "A binary older than its sources may not load the tree or rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 	}

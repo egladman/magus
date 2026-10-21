@@ -3,8 +3,10 @@ package guard
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
@@ -343,5 +345,36 @@ func TestJudgeAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
 	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "older than the tree")
+	assert.Contains(t, v.Context, "cannot load it")
+}
+
+// A ./magus older than a source it is stamped from lets the bootstrap through though it
+// still loads the tree. A touched test file is not linked into it and changes nothing.
+func TestRankOwnBuildAllowsTheBootstrapOverAStaleBinaryThatLoads(t *testing.T) {
+	built := checkoutFixture(t, ownModule, true)
+	ageBinary(t, built)
+	writeSource(t, built, "internal/guard/x_test.go")
+	loads := 0
+	assert.Contains(t, judgeOwnBuildWith(loadingAs(nil, &loads), built, ward.BootstrapCommand).Deny, "already has a magus binary")
+
+	writeSource(t, built, "internal/guard/x.go")
+	loads = 0
+	v := judgeOwnBuildWith(loadingAs(nil, &loads), built, ward.BootstrapCommand)
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "older than its sources")
+	assert.Zero(t, loads, "staleness is read off the files, before any load")
+}
+
+// ageBinary dates root's ./magus an hour back, so a source written now is newer.
+func ageBinary(t *testing.T, root string) {
+	t.Helper()
+	old := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(filepath.Join(root, "magus"), old, old))
+}
+
+func writeSource(t *testing.T, root, rel string) {
+	t.Helper()
+	p := filepath.Join(root, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte("package guard\n"), 0o644))
 }
