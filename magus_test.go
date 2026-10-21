@@ -1535,3 +1535,121 @@ func TestPublicThroughCrossesPackagesAndProjects(t *testing.T) {
 		{ID: public, Qualified: "Public", Boundary: types.DiffBoundaryPackage},
 	}, impact.PublicThrough(cg, helper))
 }
+
+// exampleTB lets an example build a testkit workspace: an Example has no *testing.T, and
+// testkit takes a testkit.TB. It panics on the methods no example calls, so a new use
+// fails loudly. TestMain already isolates the environment, so nothing calls Setenv.
+type exampleTB struct {
+	cleanups []func()
+}
+
+func (*exampleTB) Skip(...any)        { panic("exampleTB: Skip") }
+func (*exampleTB) Setenv(_, _ string) { panic("exampleTB: Setenv") }
+func (*exampleTB) Helper()            {}
+
+func (e *exampleTB) Cleanup(f func()) { e.cleanups = append(e.cleanups, f) }
+
+func (e *exampleTB) TempDir() string {
+	dir, err := os.MkdirTemp("", "magus-example-*")
+	if err != nil {
+		panic(err)
+	}
+	e.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+func (*exampleTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, args...)) }
+
+// close runs the cleanups last in, first out, as testing.T does.
+func (e *exampleTB) close() {
+	for i := len(e.cleanups) - 1; i >= 0; i-- {
+		e.cleanups[i]()
+	}
+}
+
+// newExample returns a workspace holding files, keyed by workspace-relative path, and the
+// exampleTB that owns it. The caller defers close.
+func newExample(files map[string]string) (*exampleTB, *testkit.Workspace) {
+	tb := &exampleTB{}
+	ws := testkit.NewWorkspace(tb)
+	ws.WriteTree(files)
+	return tb, ws
+}
+
+// monorepo is a workspace laid out the way a monorepo is.
+func monorepo() (*exampleTB, *testkit.Workspace) {
+	return newExample(map[string]string{
+		"magusfile.buzz":     "",
+		"api/magusfile.buzz": "",
+		"web/magusfile.buzz": "",
+	})
+}
+
+// ExampleInspect shows how to discover projects in a workspace without
+// opening the cache. Inspect is the right entry point for read-only
+// commands (list, graph, describe) where cache overhead is unnecessary.
+func ExampleInspect() {
+	// A directory is a project if it contains a magusfile.buzz.
+	tb, w := newExample(map[string]string{"myapp/magusfile.buzz": ""})
+	defer tb.close()
+
+	ws, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("inspect error:", err)
+		return
+	}
+
+	for _, p := range ws.All() {
+		fmt.Println(p.Path)
+	}
+	// Output:
+	// myapp
+}
+
+// ExampleOpen opens a workspace, which also opens its cache, and lists its projects. A
+// program that only reads the workspace calls Inspect instead.
+func ExampleOpen() {
+	tb, ws := monorepo()
+	defer tb.close()
+
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	for _, p := range m.All() {
+		fmt.Println(p.Path)
+	}
+	// Output:
+	// .
+	// api
+	// web
+}
+
+// ExampleMagus_ExpandAffected expands a target over the projects a changeset touches. A
+// workspace that is not under version control cannot tell which projects changed, so it
+// falls back to every project and says so in the third result.
+func ExampleMagus_ExpandAffected() {
+	tb, ws := monorepo()
+	defer tb.close()
+
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	targets, _, fellBack, err := m.ExpandAffected(context.Background(), "ci", "")
+	if err != nil {
+		fmt.Println("expand:", err)
+		return
+	}
+	fmt.Println("fell back to every project:", fellBack)
+	for _, t := range targets {
+		fmt.Println(t.Path + ":" + t.Name)
+	}
+	// Output:
+	// fell back to every project: true
+	// .:ci
+	// api:ci
+	// web:ci
+}
