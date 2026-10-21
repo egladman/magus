@@ -1089,7 +1089,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // for declared generated directories.
     final before = drift\vcsHashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
-    ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
+    // symbol-digest-generate writes a gitignored file, so it has no drift to gate, and it
+    // builds the full symbol index; the targets reading that file need it themselves.
+    ctx.needs(ctx.glob("*-generate", "!deploy-generate", "!symbol-digest-generate"));
     if (ctx.hasCharm("rw")) { return; }
 
     // Not diagnoseDrift: that classifies against one target's declarations.

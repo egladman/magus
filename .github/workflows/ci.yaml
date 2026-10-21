@@ -188,6 +188,13 @@ jobs:
       # projects are checked: index-generate output that is a function of the whole
       # knowledge graph is not regenerated for a change affected scopes elsewhere.
       #
+      # The promise covers every generator but the symbol index's readers. Root generate
+      # leaves out symbol-digest-generate, whose gen/symbol-index.json is gitignored and so
+      # has no drift to check, and this step leaves out libs/embed/train, whose generate
+      # needs it. Building the full index cost the plan 7m30s-12m45s, so those drift
+      # gates run in the shard that holds them, and drifted embed training data fails there.
+      # The step names what it dropped and fails if the filter drops anything else.
+      #
       - id: plan
         name: Compute shard matrix
         env:
@@ -203,7 +210,22 @@ jobs:
         # partial file.
         shell: bash
         run: |
-          magus affected generate --no-default-charms --concurrency-profile aggressive | magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+          magus affected list -o name > "$RUNNER_TEMP/affected"
+          grep -vxF libs/embed/train "$RUNNER_TEMP/affected" > "$RUNNER_TEMP/pregate" || true
+          dropped=$(grep -vxF -f "$RUNNER_TEMP/pregate" "$RUNNER_TEMP/affected" || true)
+          if [ -n "$dropped" ] && [ "$dropped" != libs/embed/train ]; then
+            echo "::error::the pre-gate filter dropped more than libs/embed/train: ${dropped//$'\n'/ }"
+            exit 1
+          fi
+          if [ -n "$dropped" ]; then
+            echo "::notice::pre-gate generate skips libs/embed/train: it needs the full symbol index; its shard gates it"
+          fi
+          mapfile -t projects < "$RUNNER_TEMP/pregate"
+          if [ "${#projects[@]}" -gt 0 ]; then
+            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}" | magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+          else
+            magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+          fi
           magus run --stdin --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
           magus run --stdin --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
 
@@ -219,14 +241,19 @@ jobs:
       # generator rewrites a committed file, before the replay compares anything. The no-rw
       # gate above and the shard gates are what keep the drift question answered.
       #
-      # Scoped to the affected projects, the set the gate above checked: audit.yaml's cron
-      # keeps the whole-tree replay for the ambient case - a tool upgrade destabilising a
-      # generator no diff touched. Replay under rw answers byte-stability only; drift
-      # against HEAD is decided here and in the shards, nowhere else.
+      # Scoped to the projects the gate above checked: audit.yaml's cron keeps the
+      # whole-tree replay for the ambient case - a tool upgrade destabilising a generator
+      # no diff touched. Replay under rw answers byte-stability only; drift against HEAD is
+      # decided here and in the shards, nowhere else.
       - name: Replay the affected generators and compare declared outputs
-        env:
-          MAGUS_VCS_BASE_REF: ${{ github.event_name != 'pull_request' && 'last-passed' || '' }}
-        run: magus affected generate:rw --race=replay --concurrency-profile aggressive
+        shell: bash
+        run: |
+          mapfile -t projects < "$RUNNER_TEMP/pregate"
+          if [ "${#projects[@]}" -eq 0 ]; then
+            echo "no affected project to replay"
+            exit 0
+          fi
+          magus run generate:rw --race=replay --concurrency-profile aggressive "${projects[@]}"
 
   ci:
     name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
