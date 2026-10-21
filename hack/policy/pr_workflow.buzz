@@ -1,0 +1,73 @@
+// Holds .github/workflows/pr.yaml's hygiene job to pullRequests.HYGIENE_TARGETS, the targets
+// the guard runs before a pull request opens. A step the list omits is a check CI makes that
+// the guard does not; a listed target with no step is one the guard makes that CI does not.
+namespace agentpolicy\prWorkflow;
+
+import "std";
+import "magus";
+import "fs";
+import "encoding/yaml";
+import "./hack/policy/pull_requests" as prs;
+
+final workflowPath = ".github/workflows/pr.yaml";
+
+// The canonical target each `magus run <target>[:charm]` names, in step order: magus runs
+// pr_changelog as pr-changelog, so the list is compared in that form.
+fun stepTargets(workflow: str) > [str] !> any {
+    final doc = yaml\parse(workflow);
+    final targets = mut [<str>];
+    foreach (step in doc["jobs"]["hygiene"]["steps"] ?? []) {
+        final run: str = step["run"] ?? "";
+        final words = run.split(" ").filter(fun (index: int, w: str) > bool => w != "");
+        foreach (i, word in words) {
+            if (word == "run" and i > 0 and words[i - 1] == "magus" and i + 1 < words.len()) {
+                targets.append(magus\canonicalName(words[i + 1].split(":")[0]));
+            }
+        }
+    }
+    return targets;
+}
+
+fun problems(workflow: str, listed: [str]) > [str] !> any {
+    final found = stepTargets(workflow);
+    final result = mut [<str>];
+    foreach (target in found) {
+        if (listed.indexOf(target) == null) {
+            result.append("{workflowPath} runs `magus run {target}`, which pullRequests.HYGIENE_TARGETS omits");
+        }
+    }
+    foreach (target in listed) {
+        if (found.indexOf(target) == null) {
+            result.append("pullRequests.HYGIENE_TARGETS lists {target}, which no step in {workflowPath} runs");
+        }
+    }
+    return result;
+}
+
+final fixture = `jobs:
+  hygiene:
+    steps:
+      - uses: actions/checkout@v7
+      - run: magus run pr-description . -- "--title=$PR_TITLE"
+      - run: magus run pr_changelog:gha .
+`;
+
+test "a workflow matching the list has no problems" {
+    final got = problems(fixture, listed: ["pr-description", "pr-changelog"]);
+    std\assert(got.len() == 0, message: "got {got}");
+}
+
+test "a step the list omits is a problem" {
+    final got = problems(fixture, listed: ["pr-description"]);
+    std\assert(got.len() == 1 and got[0].indexOf("runs `magus run pr-changelog`") != null, message: "got {got}");
+}
+
+test "a listed target with no step is a problem" {
+    final got = problems(fixture, listed: ["pr-description", "pr-changelog", "pr-title"]);
+    std\assert(got.len() == 1 and got[0].indexOf("lists pr-title") != null, message: "got {got}");
+}
+
+test "pr.yaml runs exactly the targets the guard runs" {
+    final got = problems(fs\readFile(workflowPath), listed: prs\HYGIENE_TARGETS);
+    std\assert(got.len() == 0, message: got.join("; "));
+}

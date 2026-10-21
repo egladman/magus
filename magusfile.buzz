@@ -2206,7 +2206,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(proofreadlib\proofread_build);
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
-        "releases/*.yaml");
+        "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
