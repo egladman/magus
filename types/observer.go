@@ -27,6 +27,7 @@ type GraphEvent struct {
 // NoopObserver discards every event.
 type NoopObserver struct{}
 
+// Observe drops the event, so a caller with no interest in events need not nil-check an Observer.
 func (NoopObserver) Observe(GraphEvent) {}
 
 // Direction is the traversal direction for dependency-graph rendering.
