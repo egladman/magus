@@ -28,7 +28,7 @@
   },
   "fusion": {
     "k": 60,
-    "lists": {}
+    "lists": {"embed": 1}
   },
   "context": {
     "floor": 0,

@@ -1,13 +1,20 @@
 package knowledge
 
 import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,7 +26,103 @@ func retrieveIDs(ms []types.KnowledgeMatch) []string {
 	return ids
 }
 
-func shipped() RetrieveOptions { return RetrieveOptions{Weights: ShippedWeights()} }
+// The package's tests never read the developer's cached table, which would move every
+// ranking they pin once `magus graph pull -table` ran.
+func init() { cachedTable = noTable }
+
+func noTable() (*embed.Table, error) {
+	return nil, fmt.Errorf("%w: the test binds none", embedtable.ErrAbsent)
+}
+
+func shipped() RetrieveOptions { return RetrieveOptions{Weights: ShippedWeights(), Table: noTable} }
+
+var noTableSkipped = listEmbed + ": embedtable: no embedding table in the cache: the test binds none: run `" + pullTable + "` to replace it"
+
+// fixtureTable holds parse and config on axis 0 and yaml on axis 1, so a text of parse
+// and config points where the query parse does and one of parse and yaml at 45 degrees.
+func fixtureTable(t *testing.T) func() (*embed.Table, error) {
+	t.Helper()
+	row := func(axis int) []int8 {
+		r := make([]int8, 64)
+		r[axis] = 127
+		return r
+	}
+	var buf bytes.Buffer
+	require.NoError(t, embed.EncodeTable(&buf, embed.TableSpec{
+		Tokens:  []string{"config", "parse", "yaml"},
+		Weights: []uint16{1, 1, 1},
+		Rows:    [][]int8{row(0), row(0), row(1)},
+		Prov: embed.Provenance{Teacher: "fixture", TeacherRevision: "1", TextsDigest: "t", PairsDigest: "p",
+			Pipeline: "fixture", Run: "fixture", GOARCH: "any"},
+	}))
+	table, err := embed.ReadTable(buf.Bytes())
+	require.NoError(t, err)
+	return func() (*embed.Table, error) { return table, nil }
+}
+
+// embedFixture holds six nodes that score the same for "parse", so lexical order is id
+// order and symbol:z comes last, and only symbol:z's doc points where parse does.
+func embedFixture() *Graph {
+	g := NewGraph()
+	for _, id := range []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5"} {
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: "parse", Doc: "yaml"})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "symbol:z", Kind: types.KindSymbol, Label: "parse", Doc: "config"})
+	return g
+}
+
+func TestRetrieveWhyNamesTheEmbedList(t *testing.T) {
+	opts := shipped()
+	opts.Table = fixtureTable(t)
+	ms, ranking, err := embedFixture().Retrieve("parse", opts)
+	require.NoError(t, err)
+	assert.Equal(t, []string{listGraph + ": no reader path names a node"}, ranking.Skipped)
+	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 6}, {List: listExact, Rank: 6}, {List: listEmbed, Rank: 1}}, z.Why.Lists)
+}
+
+func TestRetrieveEmbedListMovesTheRanking(t *testing.T) {
+	g := embedFixture()
+	cold, _, err := g.Retrieve("parse", shipped())
+	require.NoError(t, err)
+	require.Equal(t, "symbol:z", cold[len(cold)-1].ID)
+
+	opts := shipped()
+	opts.Table = fixtureTable(t)
+	warm, _, err := g.Retrieve("parse", opts)
+	require.NoError(t, err)
+	assert.Less(t, slices.Index(retrieveIDs(warm), "symbol:z"), len(warm)-1, "the match the query's embedding points at rises")
+	assert.ElementsMatch(t, retrieveIDs(cold), retrieveIDs(warm), "the embed list reorders; it adds no match")
+}
+
+func TestRetrieveSkipsTheEmbedListWithNoTable(t *testing.T) {
+	opts := shipped()
+	opts.Table = func() (*embed.Table, error) {
+		return embedtable.Load(t.Context(), embedtable.Options{Dir: t.TempDir()})
+	}
+	ms, ranking, err := embedFixture().Retrieve("parse", opts)
+	require.NoError(t, err)
+	require.Len(t, ranking.Skipped, 2)
+	assert.True(t, strings.HasPrefix(ranking.Skipped[1], listEmbed+": embedtable: no embedding table in the cache"), ranking.Skipped[1])
+	assert.Contains(t, ranking.Skipped[1], "run `"+pullTable+"`")
+	assert.Equal(t, []string{"symbol:a1", "symbol:a2", "symbol:a3", "symbol:a4", "symbol:a5", "symbol:z"}, retrieveIDs(ms), "the lexical and exact lists still rank")
+	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
+}
+
+func TestRetrieveSkipsATableThatIsNotThePin(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, embedtable.FileName), []byte("not the pinned table"), 0o600))
+	opts := shipped()
+	opts.Table = func() (*embed.Table, error) {
+		return embedtable.Load(t.Context(), embedtable.Options{Dir: dir})
+	}
+	ms, ranking, err := embedFixture().Retrieve("parse", opts)
+	require.NoError(t, err)
+	require.Len(t, ranking.Skipped, 2)
+	assert.Contains(t, ranking.Skipped[1], "hashes to")
+	assert.Contains(t, ranking.Skipped[1], "run `"+pullTable+"` to replace it")
+	assert.Len(t, ms, 6)
+}
 
 // A partial match that scores higher outranks a full one, and both say how many of the
 // query's tokens they hold: ranking matched terms first lost to score order everywhere it
@@ -150,7 +253,7 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	opts.Reader = readerPaths
 	ms, ranking, err := g.Retrieve("parse", opts)
 	require.NoError(t, err)
-	assert.Empty(t, ranking.Skipped)
+	assert.Equal(t, []string{noTableSkipped}, ranking.Skipped)
 	z := ms[slices.Index(retrieveIDs(ms), "symbol:z")]
 	why := *z.Why
 	why.Seeds = slices.Clone(why.Seeds)
@@ -168,7 +271,7 @@ func TestRetrieveWhyNamesEveryList(t *testing.T) {
 	ms, ranking, err = g.Retrieve("parse", shipped())
 	require.NoError(t, err)
 	assert.Equal(t, []types.KnowledgeListRank{{List: listLexical, Rank: 1}, {List: listExact, Rank: 1}}, ms[0].Why.Lists)
-	assert.Equal(t, []string{listGraph + ": no reader path names a node"}, ranking.Skipped)
+	assert.Equal(t, []string{listGraph + ": no reader path names a node", noTableSkipped}, ranking.Skipped)
 
 	ms, _, err = g.Retrieve("parse x.go", shipped())
 	require.NoError(t, err)

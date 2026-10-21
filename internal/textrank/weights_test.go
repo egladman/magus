@@ -47,7 +47,7 @@ func TestLoadWeightsShippedFile(t *testing.T) {
 				"documents":  0.5,
 			},
 		},
-		Fusion:  FusionWeights{K: 60, Lists: map[string]float64{}},
+		Fusion:  FusionWeights{K: 60, Lists: map[string]float64{"embed": 1}},
 		Context: ContextWeights{Floor: 0, TaskLimit: 8},
 	}, w)
 }
@@ -71,9 +71,9 @@ func TestLoadWeightsFreeFormMaps(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, map[string]float64{"function": 1.5}, w.KindPrior)
 
-	w, err = decodeWeights(shipped(t, `"lists": {}`, `"lists": {"bm25f": 2}`))
+	w, err = decodeWeights(shipped(t, `"lists": {"embed": 1}`, `"lists": {"embed": 1, "bm25f": 2}`))
 	require.NoError(t, err)
-	assert.Equal(t, map[string]float64{"bm25f": 2}, w.Fusion.Lists)
+	assert.Equal(t, map[string]float64{"embed": 1, "bm25f": 2}, w.Fusion.Lists)
 }
 
 func TestLoadWeightsRejects(t *testing.T) {
@@ -98,7 +98,7 @@ func TestLoadWeightsRejects(t *testing.T) {
 		{"b above 1", shipped(t, `"name": {"weight": 5, "b": 0.75`, `"name": {"weight": 5, "b": 1.5`), "bm25f.fields.name.b"},
 		{"negative kind prior", shipped(t, `"kind_prior": {}`, `"kind_prior": {"function": -1}`), "kind_prior.function"},
 		{"negative edge", shipped(t, `"calls": 1`, `"calls": -1`), "ppr.edges.calls"},
-		{"negative list weight", shipped(t, `"lists": {}`, `"lists": {"bm25f": -1}`), "fusion.lists.bm25f"},
+		{"negative list weight", shipped(t, `"lists": {"embed": 1}`, `"lists": {"embed": 1, "bm25f": -1}`), "fusion.lists.bm25f"},
 		{"negative fusion k", shipped(t, `"k": 60`, `"k": -60`), "fusion.k"},
 		{"negative floor", shipped(t, `"floor": 0`, `"floor": -1`), "context.floor"},
 		{"restart zero", shipped(t, `"restart": 0.15`, `"restart": 0`), "ppr.restart"},
