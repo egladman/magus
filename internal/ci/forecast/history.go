@@ -279,26 +279,63 @@ type Outcome struct {
 }
 
 // Shape is what separates two runs of one target that can reach different peaks: the
-// active charms, normalized and sorted, and [ArgsHash] of the args forwarded after
-// `--`. Build it with [NewShape]; the zero Shape matches no outcome.
+// active charms, normalized and sorted, and whether any args were forwarded after `--`.
+// Build it with [NewShape]; the zero Shape matches no outcome.
+//
+// ArgsHash is what an outcome records, never what a shape compares: one hash per diff
+// would split a target's runs so that no shape reaches the runs a claim trusts. Narrowed
+// runs pool across args instead. Charms compare all as recorded until [Shape.Reading]
+// limits them to the ones the target reads.
 type Shape struct {
 	Charms   []string
 	ArgsHash string
+	Narrowed bool
+
+	// read is the charm set Reading kept, and filtered whether Reading set it; an
+	// outcome's charms are filtered to it before they compare.
+	read     []string
+	filtered bool
 }
 
 // NewShape normalizes a run's active charms and forwarded args into its Shape. Charm
 // order and spelling never fork a shape: the cache key sorts charms too, and
 // types.NormalizeCharm is how every consumer compares them.
 func NewShape(charms, args []string) Shape {
-	if len(charms) == 0 {
-		return Shape{ArgsHash: ArgsHash(args)}
+	s := Shape{ArgsHash: ArgsHash(args), Narrowed: len(args) > 0}
+	if len(charms) > 0 {
+		s.Charms = normalizeCharms(charms)
 	}
+	return s
+}
+
+// Reading is s keeping only the charms that appear in charms, the ones a target reads.
+// An outcome then matches it when its own charms, filtered to that set, equal what s
+// kept, so a charm nothing reads never forks a shape.
+func (s Shape) Reading(charms []string) Shape {
+	read := normalizeCharms(charms)
+	var kept []string
+	for _, c := range s.Charms {
+		if slices.Contains(read, c) {
+			kept = append(kept, c)
+		}
+	}
+	s.Charms, s.read, s.filtered = kept, read, true
+	return s
+}
+
+// Full is s as a run with no args forwarded: the shape whose peak caps a narrowed one.
+func (s Shape) Full() Shape {
+	s.Narrowed = false
+	return s
+}
+
+func normalizeCharms(charms []string) []string {
 	norm := make([]string, 0, len(charms))
 	for _, c := range charms {
 		norm = append(norm, types.NormalizeCharm(c))
 	}
 	slices.Sort(norm)
-	return Shape{Charms: slices.Compact(norm), ArgsHash: ArgsHash(args)}
+	return slices.Compact(norm)
 }
 
 // ArgsHash is the first 32 bits of a SHA-256 over args, hex encoded. nil and empty args
@@ -306,13 +343,11 @@ func NewShape(charms, args []string) Shape {
 //
 // Order matters. magus cannot know an op's grammar: `-count 1 -run X` commutes for go
 // test, a script's positional args do not. The cache key hashes forwarded args in order
-// for the same reason, so two runs it treats as different work are different shapes
-// here too. Each arg is length-prefixed so ["a b"] and ["a", "b"] differ.
+// for the same reason. Each arg is length-prefixed so ["a b"] and ["a", "b"] differ.
 //
 // 32 bits because the history travels through a CI cache and an argument can carry a
-// secret. Equality is all a shape needs; 32 bits cannot identify a secret with more
-// entropy than that, and two shapes of one target colliding costs only a claim sized
-// from both.
+// secret. Equality is all an outcome needs; 32 bits cannot identify a secret with more
+// entropy than that.
 func ArgsHash(args []string) string {
 	h := sha256.New()
 	for _, a := range args {
@@ -321,10 +356,29 @@ func ArgsHash(args []string) string {
 	return hex.EncodeToString(h.Sum(nil)[:4])
 }
 
-// matches reports whether o recorded shape s. An outcome from before v6 matches none.
+// matches reports whether o recorded shape s: both narrowed or both full, and the same
+// charms of those s reads. An outcome from before v6 matches none.
 func (s Shape) matches(o Outcome) bool {
-	return s.ArgsHash != "" && s.ArgsHash == o.ArgsHash && slices.Equal(s.Charms, o.Charms)
+	if s.ArgsHash == "" || o.ArgsHash == "" || s.Narrowed != o.narrowed() {
+		return false
+	}
+	charms := o.Charms
+	if s.filtered {
+		charms = slices.DeleteFunc(slices.Clone(charms), func(c string) bool { return !slices.Contains(s.read, c) })
+	}
+	return slices.Equal(s.Charms, charms)
 }
+
+// counts reports whether o is part of s's any-shape measurement: a full shape counts
+// full runs only, so a narrowed run never sizes a full one, and a narrowed shape counts
+// every run.
+func (s Shape) counts(o Outcome) bool { return s.Narrowed || !o.narrowed() }
+
+// narrowed reports whether o's run forwarded args. An outcome from before v6 recorded
+// none and counts as narrowed, since nothing says it ran the whole target.
+func (o Outcome) narrowed() bool { return o.ArgsHash != fullArgsHash }
+
+var fullArgsHash = ArgsHash(nil)
 
 // PredictDuration returns the predicted runtime for (project, target, tags), scaled by cache-hit probability.
 // Resolution: subdir bucket → generic bucket → project p75 → workspace p75 → DefaultDurationMs.
@@ -1123,14 +1177,14 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 func measuredWidth(o Outcome) bool { return o.CPUMs > 0 && o.DurationMs > 0 && o.Slots > 0 }
 
 // Peak returns the highest peak resident memory, in bytes, of target's runs in project
-// that recorded shape, and of every run of target whatever its shape, which includes the
-// runs from before shapes were recorded. target resolves as [History.PredictPeakRSS]
-// does.
+// that recorded shape, and of the runs of target whatever their charms: every full run
+// for a full shape, and every run, those from before shapes were recorded included, for
+// a narrowed one. target resolves as [History.PredictPeakRSS] does.
 func (x MeasuredRuns) Peak(project, target string, shape Shape) (sameShape, anyShape Measurement) {
 	for _, s := range targetHistories(x.projects[project], target) {
 		var same, all Measurement
 		for _, o := range s.RecentOutcomes {
-			if o.MaxRSSBytes <= 0 {
+			if o.MaxRSSBytes <= 0 || !shape.counts(o) {
 				continue
 			}
 			all.Value, all.Runs = max(all.Value, o.MaxRSSBytes), all.Runs+1
@@ -1161,7 +1215,7 @@ func (x MeasuredRuns) Width(project, target string, shape Shape) (sameShape, any
 	for _, s := range targetHistories(x.projects[project], target) {
 		var same, all []Outcome
 		for _, o := range s.RecentOutcomes {
-			if !measuredWidth(o) {
+			if !measuredWidth(o) || !shape.counts(o) {
 				continue
 			}
 			all = append(all, o)

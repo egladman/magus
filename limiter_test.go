@@ -241,7 +241,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mb, sizing := sizeMemoryClaim(tc.declaredMB, tc.same, tc.all)
+			mb, sizing := sizeMemoryClaim(tc.declaredMB, tc.same, tc.all, forecast.Measurement{})
 			assert.Equal(t, tc.wantMB, mb)
 			assert.Equal(t, tc.wantSizing, sizing)
 		})
@@ -274,13 +274,13 @@ func TestSizeClaimFoldsSizedFigures(t *testing.T) {
 	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
 	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
 	var step cache.Step
-	sizing := m.sizeClaim(&step, p, "ci", newClaimSizer(&x, shape))
+	sizing := m.sizeClaim(&step, p, "ci", newClaimSizer(&x, shape, m.chainReadsCharm))
 	// test is sized to 1.25 x 4000; lint has no runs, so its declaration stands.
 	want := types.MemorySizing{Samples: 3, Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}
 	assert.Equal(t, cache.Step{MemoryMB: 5000 + 1024, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1}, step)
 	assert.Equal(t, want, sizing)
 
-	assert.Nil(t, newClaimSizer(nil, shape), "no history, no sizer: declarations fold as written")
+	assert.Nil(t, newClaimSizer(nil, shape, m.chainReadsCharm), "no history, no sizer: declarations fold as written")
 }
 
 // A target that declares neither memory nor slots claims what its runs measured once it
@@ -304,7 +304,7 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
 	claim := func(policy types.Target, runs int) cache.Step {
 		var step cache.Step
-		m.sizeClaim(&step, chainProject(".", map[string]types.Target{"scip": policy}, nil), "scip", newClaimSizer(history(runs), shape))
+		m.sizeClaim(&step, chainProject(".", map[string]types.Target{"scip": policy}, nil), "scip", newClaimSizer(history(runs), shape, m.chainReadsCharm))
 		return step
 	}
 
@@ -345,12 +345,66 @@ func TestSizeClaimGrowsASaturatedClaim(t *testing.T) {
 		}}
 		x := h.MeasuredRuns()
 		var step cache.Step
-		m.sizeClaim(&step, chainProject(".", map[string]types.Target{"test": {}}, nil), "test", newClaimSizer(&x, shape))
+		m.sizeClaim(&step, chainProject(".", map[string]types.Target{"test": {}}, nil), "test", newClaimSizer(&x, shape, m.chainReadsCharm))
 		return step.Slots
 	}
 	assert.Equal(t, 2, slots(1), "one slot kept busy claims two")
 	assert.Equal(t, 8, slots(4), "four slots kept busy claim eight")
 	assert.Equal(t, 8, slots(8), "the budget caps the doubling")
+}
+
+// shapedRun is a passing run of shape that peaked at peakMB.
+func shapedRun(shape forecast.Shape, peakMB int64) forecast.Outcome {
+	return forecast.Outcome{Result: forecast.OutcomePass, MaxRSSBytes: peakMB * mib, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
+}
+
+// readsNoCharm is a chain that no charm changes.
+func readsNoCharm(*types.Project, string, string) bool { return false }
+
+// Narrowed runs of any args pool to size a narrowed run, and only ever lower its claim:
+// the full runs' trusted peak caps it, and with too few full runs to trust, the
+// narrowed peak stands.
+func TestNarrowedClaimIsCappedByTheFullRunPeak(t *testing.T) {
+	p := chainProject(".", map[string]types.Target{"test": {}}, nil)
+	narrowed := func(arg string) forecast.Shape {
+		return forecast.NewShape([]string{types.CharmReadWrite}, []string{"-run", arg})
+	}
+	full := forecast.NewShape(nil, nil)
+	claim := func(runs ...forecast.Outcome) (int, types.MemorySizing) {
+		h := forecast.History{Projects: map[string]map[string]forecast.Stats{".": {"go/test": {RecentOutcomes: runs}}}}
+		x := h.MeasuredRuns()
+		return newClaimSizer(&x, narrowed("X"), readsNoCharm).memory(p, "test", 0)
+	}
+
+	mb, sizing := claim(shapedRun(narrowed("A"), 6000), shapedRun(narrowed("B"), 6000), shapedRun(narrowed("C"), 6000),
+		shapedRun(full, 4000), shapedRun(full, 4000), shapedRun(full, 4000))
+	assert.Equal(t, 5000, mb, "ceil(1.25 x the 4000 MiB full-run peak), not the 6000 MiB narrowed one")
+	assert.Equal(t, types.MemorySizing{Samples: 3}, sizing, "sized from the narrowed runs, across three arg hashes")
+
+	mb, _ = claim(shapedRun(narrowed("A"), 2000), shapedRun(narrowed("B"), 2000), shapedRun(narrowed("C"), 2000),
+		shapedRun(full, 4000), shapedRun(full, 4000), shapedRun(full, 4000))
+	assert.Equal(t, 2500, mb, "a narrowed peak below the full one lowers the claim")
+
+	mb, _ = claim(shapedRun(narrowed("A"), 6000), shapedRun(narrowed("B"), 6000), shapedRun(narrowed("C"), 6000),
+		shapedRun(full, 4000), shapedRun(full, 4000))
+	assert.Equal(t, 7500, mb, "two full runs are too few to cap anything")
+}
+
+// A full run is sized from full runs only. Narrowed runs, however many, neither make its
+// own shape trusted nor reach its any-shape fallback.
+func TestNarrowedRunsNeverSizeAFullRun(t *testing.T) {
+	p := chainProject(".", map[string]types.Target{"test": {MemoryMB: 10240}}, nil)
+	full := forecast.NewShape(nil, nil)
+	narrowed := forecast.NewShape(nil, []string{"-run", "TestOne"})
+	h := forecast.History{Projects: map[string]map[string]forecast.Stats{".": {"go/test": {RecentOutcomes: []forecast.Outcome{
+		shapedRun(narrowed, 300), shapedRun(narrowed, 300), shapedRun(narrowed, 300), shapedRun(narrowed, 300),
+		shapedRun(full, 4000), shapedRun(full, 4000),
+	}}}}}
+	x := h.MeasuredRuns()
+
+	mb, sizing := newClaimSizer(&x, full, readsNoCharm).memory(p, "test", 10240)
+	assert.Equal(t, 10240, mb, "two full runs are too few, and the narrowed runs do not make up the count")
+	assert.Equal(t, types.MemorySizing{}, sizing)
 }
 
 func TestSizeSlotClaim(t *testing.T) {

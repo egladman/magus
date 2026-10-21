@@ -127,31 +127,50 @@ const (
 )
 
 // claimSizer sizes claims from the measured runs of one shape: the charms and forwarded
-// args an invocation runs every target with.
+// args an invocation runs every target with. reads says which of those charms a target's
+// chain reads; each target is sized with only those, so a charm it never reads does not
+// split its runs.
 type claimSizer struct {
 	runs  *forecast.MeasuredRuns
 	shape forecast.Shape
+	reads func(p *types.Project, target, charm string) bool
 }
 
 // newClaimSizer is nil when there is no history to read, which leaves every claim at
 // its declaration.
-func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape) *claimSizer {
+func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape, reads func(p *types.Project, target, charm string) bool) *claimSizer {
 	if runs == nil {
 		return nil
 	}
-	return &claimSizer{runs: runs, shape: shape}
+	return &claimSizer{runs: runs, shape: shape, reads: reads}
+}
+
+// shapeFor is the sizer's shape keeping the charms target's chain reads.
+func (s *claimSizer) shapeFor(proj *types.Project, target string) forecast.Shape {
+	var read []string
+	for _, c := range s.shape.Charms {
+		if s.reads(proj, target, c) {
+			read = append(read, c)
+		}
+	}
+	return s.shape.Reading(read)
 }
 
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See
 // sizeMemoryClaim.
 func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing) {
-	same, all := s.runs.Peak(proj.Path, target, s.shape)
-	return sizeMemoryClaim(declaredMB, same, all)
+	shape := s.shapeFor(proj, target)
+	same, all := s.runs.Peak(proj.Path, target, shape)
+	var full forecast.Measurement
+	if shape.Narrowed {
+		full, _, _ = trustedMeasurement(s.runs.Peak(proj.Path, target, shape.Full()))
+	}
+	return sizeMemoryClaim(declaredMB, same, all, full)
 }
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
 func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
-	same, all := s.runs.Width(proj.Path, target, s.shape)
+	same, all := s.runs.Width(proj.Path, target, s.shapeFor(proj, target))
 	return sizeSlotClaim(same, all, capacity)
 }
 
@@ -172,10 +191,17 @@ func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Meas
 // declaration, which is 0 for a target that declares none. The declaration stays the
 // ceiling: it is a human's statement of the worst case, and a measurement only ever
 // narrows it.
-func sizeMemoryClaim(declaredMB int, sameShape, anyShape forecast.Measurement) (int, types.MemorySizing) {
+//
+// fullPeak is the trusted peak of full runs when the shape is narrowed, and zero
+// otherwise. Narrowed runs pool across args only to lower a claim, so a narrowed shape's
+// own peak is capped by it; a narrowed shape sized from every run already includes it.
+func sizeMemoryClaim(declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement) (int, types.MemorySizing) {
 	peak, sizing, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
 		return declaredMB, types.MemorySizing{}
+	}
+	if !sizing.AnyShape && fullPeak.Runs > 0 {
+		peak.Value = min(peak.Value, fullPeak.Value)
 	}
 	mb := int(math.Ceil(float64(peak.Value) * peakMargin / (1 << 20)))
 	if declaredMB > 0 && mb >= declaredMB {

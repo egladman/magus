@@ -1332,8 +1332,9 @@ func TestFoldTargetHistoriesCombinesEverySpellServingATarget(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// TestNewShape pins what separates two shapes: charm order and spelling never do,
-// forwarded-arg order and word boundaries always do, since the op's grammar is opaque.
+// TestNewShape pins what separates two shapes: charm order and spelling never do, and of
+// the forwarded args only whether there were any does. The recorded args hash still
+// tells arg order and word boundaries apart, since the op's grammar is opaque.
 func TestNewShape(t *testing.T) {
 	t.Parallel()
 
@@ -1341,6 +1342,8 @@ func TestNewShape(t *testing.T) {
 	assert.Equal(t, NewShape(nil, nil), NewShape([]string{}, []string{}))
 	assert.Nil(t, NewShape(nil, nil).Charms, "no charms records no key at all")
 	assert.Len(t, NewShape(nil, nil).ArgsHash, 8, "never empty, which is what marks a pre-v6 outcome")
+	assert.False(t, NewShape(nil, []string{}).Narrowed, "no args forwarded is a full run")
+	assert.True(t, NewShape(nil, []string{""}).Narrowed, "an empty arg is still an arg")
 
 	runX := ArgsHash([]string{"-run", "X", "-count", "1"})
 	assert.Equal(t, runX, ArgsHash([]string{"-run", "X", "-count", "1"}), "stable")
@@ -1349,9 +1352,54 @@ func TestNewShape(t *testing.T) {
 	assert.NotEqual(t, ArgsHash(nil), ArgsHash([]string{""}))
 }
 
+// TestShapeForksOnlyOnReadCharms pins that once a shape keeps the charms its target
+// reads, a charm nothing reads never separates two runs, and a read one still does.
+func TestShapeForksOnlyOnReadCharms(t *testing.T) {
+	t.Parallel()
+
+	run := func(charms ...string) Outcome {
+		s := NewShape(charms, nil)
+		return Outcome{Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
+	shape := NewShape([]string{"rw", "extended"}, nil)
+	assert.False(t, shape.matches(run("extended")), "unfiltered, every charm forks")
+
+	reading := shape.Reading([]string{"extended"})
+	assert.Equal(t, []string{"extended"}, reading.Charms)
+	assert.True(t, reading.matches(run("extended", "rw")))
+	assert.True(t, reading.matches(run("extended")), "rw is never read, so a run without it pools")
+	assert.True(t, reading.matches(run("extended", "update")))
+	assert.False(t, reading.matches(run("rw")), "extended is read, so a run without it does not")
+
+	none := NewShape([]string{"rw"}, nil).Reading(nil)
+	assert.True(t, none.matches(run()), "reading no charm pools every charm set")
+	assert.True(t, none.matches(run("extended", "rw")))
+	assert.False(t, none.matches(Outcome{}), "an outcome from before v6 still matches nothing")
+}
+
+// TestShapePoolsNarrowedRunsAcrossArgs pins that a shape compares whether args were
+// forwarded, never which: narrowed runs pool whatever their args, and never with a full
+// run.
+func TestShapePoolsNarrowedRunsAcrossArgs(t *testing.T) {
+	t.Parallel()
+
+	run := func(args ...string) Outcome {
+		return Outcome{ArgsHash: NewShape(nil, args).ArgsHash}
+	}
+	narrowed := NewShape(nil, []string{"-run", "X"})
+	assert.True(t, narrowed.matches(run("-run", "Y")))
+	assert.True(t, narrowed.matches(run("./internal/...")))
+	assert.False(t, narrowed.matches(run()), "a full run is not a narrowed one")
+
+	full := narrowed.Full()
+	assert.True(t, full.matches(run()))
+	assert.False(t, full.matches(run("-run", "X")))
+	assert.Equal(t, narrowed.ArgsHash, full.ArgsHash, "Full changes what the shape compares, not what it records")
+}
+
 // TestMeasuredRunsPeak pins which runs a memory claim may be sized from: successful
 // ones that measured a peak, split by shape, with every spell serving the target folded
-// in.
+// in. A full shape's fallback counts full runs only; a narrowed one's counts every run.
 func TestMeasuredRunsPeak(t *testing.T) {
 	t.Parallel()
 
@@ -1378,18 +1426,19 @@ func TestMeasuredRunsPeak(t *testing.T) {
 	same, all := x.Peak(".", "test", full)
 	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 1}, same,
 		"the larger spell's peak, over the least-observed spell's run count")
-	assert.Equal(t, Measurement{Value: 5000 * mb, Runs: 2}, all, "every shape, the unshaped run included")
+	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 1}, all, "full runs only: neither the narrowed nor the unshaped run")
 
-	same, _ = x.Peak(".", "test", narrow)
+	same, all = x.Peak(".", "test", narrow)
 	assert.Equal(t, Measurement{Value: 2100 * mb, Runs: 1}, same)
+	assert.Equal(t, Measurement{Value: 5000 * mb, Runs: 2}, all, "every run, the full and unshaped ones included")
 
 	same, all = x.Peak(".", "magusfile/test", full)
 	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 2}, same, "an exact key answers alone")
-	assert.Equal(t, Measurement{Value: 5000 * mb, Runs: 4}, all)
+	assert.Equal(t, Measurement{Value: 4500 * mb, Runs: 2}, all)
 
 	same, all = x.Peak(".", "test", Shape{})
 	assert.Zero(t, same, "the zero Shape matches nothing, not the unshaped runs")
-	assert.Equal(t, 2, all.Runs)
+	assert.Equal(t, 1, all.Runs)
 
 	same, all = x.Peak(".", "lint", full)
 	assert.Zero(t, same)
@@ -1400,7 +1449,7 @@ func TestMeasuredRunsPeak(t *testing.T) {
 	st.RecentOutcomes = append(st.RecentOutcomes, o(OutcomePass, 8000, full))
 	h.Projects["."]["go/test"] = st
 	_, all = x.Peak(".", "test", full)
-	assert.Equal(t, 5000*mb, all.Value)
+	assert.Equal(t, 4500*mb, all.Value)
 }
 
 // TestMeasuredRunsWidth pins how a slot claim is sized from unsaturated runs: the p75 of
@@ -1434,11 +1483,12 @@ func TestMeasuredRunsWidth(t *testing.T) {
 	same, all := x.Width(".", "scip", full)
 	// p75 of [2.0 3.0 3.4 9.0] interpolates to 4.8, which takes 5 slots.
 	assert.Equal(t, Measurement{Value: 5, Runs: 4}, same)
-	// With the narrow run, p75 of [0.05 2.0 3.0 3.4 9.0] is 3.4.
-	assert.Equal(t, Measurement{Value: 4, Runs: 5}, all, "every shape, the narrow run included")
+	assert.Equal(t, Measurement{Value: 5, Runs: 4}, all, "full runs only: the narrow run never sizes a full claim")
 
-	same, _ = x.Width(".", "scip", narrow)
+	same, all = x.Width(".", "scip", narrow)
 	assert.Equal(t, Measurement{Value: 1, Runs: 1}, same)
+	// With the narrow run, p75 of [0.05 2.0 3.0 3.4 9.0] is 3.4.
+	assert.Equal(t, Measurement{Value: 4, Runs: 5}, all, "every run, the full ones included")
 
 	same, _ = x.Width(".", "lint", full)
 	assert.Equal(t, Measurement{Value: 5, Runs: 1}, same, "the wider spell, over the least-observed spell's run count")
