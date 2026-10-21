@@ -252,6 +252,20 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 	return
 }
 
+// HarnessModelRows is the model rows the wired harnesses publish through mgs_listModels.
+// A harness that does not load contributes none, which the guard reads as no facts about
+// a model rather than an error. ctx must carry the workspace the harness spells load in.
+func HarnessModelRows(ctx context.Context, root string, wired []string) []types.ModelPricing {
+	ctx = ContextWithWiredHarnesses(ctx, wired)
+	var rows []types.ModelPricing
+	for _, id := range wired {
+		if d, _, err := LoadHarness(ctx, root, id); err == nil {
+			rows = append(rows, d.Models...)
+		}
+	}
+	return rows
+}
+
 // harnessMissingError explains a miss: no spell is wired for id (or none is
 // registered at all). There is no compat JSON fallback left to check.
 func harnessMissingError(id string) error {

@@ -409,7 +409,11 @@ func onceInspected[T any](ctx context.Context, inspect func(context.Context) (ty
 // rather than an error.
 func harnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelPricing {
 	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []types.ModelPricing {
-		return magus.HarnessModelRows(ctx, root, ws)
+		wired, err := workspace.WiredHarnesses(ws)
+		if err != nil {
+			return nil
+		}
+		return agent.HarnessModelRows(types.WithWorkspace(ctx, ws), root, wired)
 	})
 }
 
