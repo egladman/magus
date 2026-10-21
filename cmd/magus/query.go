@@ -627,7 +627,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 			if e.Target != "" {
 				where += " " + e.Target
 			}
-			fmt.Printf("  %s  %-28s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), where, e.Text)
+			fmt.Printf("  %s  %-28s %s\n", time.UnixMilli(e.Timestamp).Format("15:04:05"), where, e.Text)
 		}
 	}
 	if secretsOnly {
@@ -649,7 +649,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 		} else if e.Status != "" {
 			detail = strings.TrimSpace(e.Status + " " + detail)
 		}
-		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), e.Kind, detail)
+		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Timestamp).Format("15:04:05"), e.Kind, detail)
 	}
 	return nil
 }
