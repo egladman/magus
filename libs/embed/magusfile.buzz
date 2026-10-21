@@ -1,4 +1,8 @@
 import "magus";
+import "fs";
+import "env";
+import "crypto";
+import "project/train";
 import "../../hack/magusfile/advisories" as advisories;
 
 import "magus/spell/go";
@@ -10,6 +14,7 @@ magus\project({
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
+        "generate": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
     },
 });
 
@@ -20,25 +25,36 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }
-// testdata/probe.txt is embedded in the package, and the go spell claims only Go files.
+// testdata/probe.txt and gen/table.digest are embedded in the package, and the go spell claims only Go files.
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("testdata/*");
+    ctx.readsFiles("testdata/*", "gen/table.digest");
     go["go-vet"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
 }
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("testdata/*");
+    ctx.readsFiles("testdata/*", "gen/table.digest");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."]});
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("testdata/*");
+    ctx.readsFiles("testdata/*", "gen/table.digest");
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."] + args});
 }
 
 // Fails on a vulnerable symbol this module calls.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     final inheritedFatal = advisories\inheritedFatal(args);
-    ctx.readsFiles("testdata/*");
+    ctx.readsFiles("testdata/*", "gen/table.digest");
     advisories\govulncheck(ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), go: go, inheritedFatal: inheritedFatal);
+}
+
+// Pins the converted table by its sha256, the digest its OCI artifact's layer and tag
+// carry, so the release publishes the artifact without reading the pin off a registry.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(train\convert);
+    ctx.writesFiles("gen/table.digest");
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    final digest = crypto\sha256File(fs\join(cache, name: "potion-code-16M-v2.table"));
+    fs\mkdirAll("gen");
+    fs\writeFile(fs\join("gen", name: "table.digest"), content: digest + "\n");
 }
 
 // The anchor `magus affected ci` keys off.
