@@ -53,19 +53,18 @@ stdin checkout-merge-head.txt
 ! exec magus shell
 stdout 'deny \[[a-z-]+\]: restoring a path from MERGE_HEAD discards the other side.*magus vcs resolve'
 
-# Staging everything can be undone, so with no workspace setting it advises rather than
-# refuses, and still names the command to run instead. With no cache dir to store it in,
-# a demoted deny advises with its whole text, rationale included.
+# Staging everything is refused with no workspace setting, naming the command to run
+# instead. With no cache dir to store it in, the refusal prints whole, rationale included.
 stdin add-all.txt
-exec magus shell
-stdout 'advise \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
+! exec magus shell
+stdout 'deny \[stage-all\]: `git add` of everything sweeps outputs'
 stdout 'magus vcs add'
 
 # `git add .` stages the working directory's subtree, which no vcs add spelling equals, so
 # it gets the prose and both deliberate forms instead.
 stdin add-dot.txt
-exec magus shell
-stdout 'advise \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
+! exec magus shell
+stdout 'deny \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
 stdout 'magus vcs add --dry-run'
 stdout 'git add -- <paths>'
 
