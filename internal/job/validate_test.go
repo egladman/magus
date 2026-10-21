@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -221,8 +222,8 @@ func TestValidateMergeWaivesEveryRegeneratedOutputByGlob(t *testing.T) {
 		types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
 		types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
 	), config.Jobs{}, nil)
-	assert.Empty(t, both.Problems)
-	assert.Len(t, both.Waived, len(bare.Problems))
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot waive")
+	assert.Len(t, both.Waived, len(bare.Problems)-1)
 
 	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
 	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob waives only the subjects it matches")
@@ -270,6 +271,61 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 
 	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers)
 	assert.Empty(t, none)
+}
+
+func TestValidateMergeWaivesLintOnlyByItsExactSubject(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+		return func(u *types.Job) {
+			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+		}
+	}
+	glob := types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
+	got := validateMerge(t.Context(), s, nil, "w", declare(glob), config.Jobs{}, nil)
+	lint := problemAt(t, got.Problems, types.GateNotRun)
+	assert.Equal(t, "lint .", lint.Subject, "a glob leaves the lint gate standing")
+
+	exact := types.JobWaiver{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
+	got = validateMerge(t.Context(), s, nil, "w", declare(glob, exact), config.Jobs{}, nil)
+	assert.NotContains(t, codes(got.Problems), types.GateNotRun)
+	assert.Contains(t, codes(got.Waived), types.GateNotRun)
+}
+
+func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(paths ...string) func(*types.Job) {
+		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+	}
+	resolve := func(merge func(*types.Job)) (types.Job, string) {
+		var notes bytes.Buffer
+		s.notices = &notes
+		merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
+		require.NoError(t, err)
+		var row types.Job
+		merged(&row)
+		return row, notes.String()
+	}
+
+	row, note := resolve(declare("cli/registry.go"))
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true}, row.Goals[i].Check)
+	assert.Contains(t, note, `added the goal "lint"`)
+
+	row, note = resolve(func(u *types.Job) {
+		declare("cli/registry.go")(u)
+		u.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	})
+	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
+	assert.Empty(t, note)
+
+	row, note = resolve(declare("docs/notes.md"))
+	assert.Empty(t, row.Goals, "no Go source, no lint goal")
+	assert.Empty(t, note)
 }
 
 func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *testing.T) {

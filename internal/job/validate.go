@@ -113,8 +113,54 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
-	v.Problems, v.Waived = ps.Waive(merged.Waivers)
+	v.Problems, v.Waived = waiveBut(ps, merged.Waivers)
 	return v
+}
+
+// lintTarget is the ci target whose findings a worker must meet itself: the root meets them
+// otherwise, one integration late.
+const lintTarget = "lint"
+
+// waiveBut is ps.Waive with lint exempted from globs: a gate on lint is waived only by a
+// waiver naming its exact subject, so `**` cannot hide the findings a go-test check never
+// shows.
+func waiveBut(ps types.JobProblems, waivers []types.JobWaiver) (kept, waived types.JobProblems) {
+	isLint := func(p types.JobProblem) bool {
+		return p.Code == types.GateNotRun && strings.HasPrefix(p.Subject, lintTarget+" ")
+	}
+	var lint, rest types.JobProblems
+	for _, p := range ps {
+		if isLint(p) {
+			lint = append(lint, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	exact := slices.DeleteFunc(slices.Clone(waivers), func(w types.JobWaiver) bool { return types.IsGlobMeta(w.Subject) })
+	kept, waived = rest.Waive(waivers)
+	lintKept, lintWaived := lint.Waive(exact)
+	return append(kept, lintKept...), append(waived, lintWaived...)
+}
+
+// lintGoals is a lint goal per project whose lint reads Go source the row writes and which
+// nothing runs: a worker checking only go-test leaves lint findings for the integrator.
+// The goal skips default charms so lint reports instead of rewriting the worker's tree.
+func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
+	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
+		return nil
+	}
+	if !slices.ContainsFunc(writtenFiles(root, row), func(f string) bool { return path.Ext(f) == ".go" }) {
+		return nil
+	}
+	var goals []types.Goal
+	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
+		if g.Target == lintTarget {
+			goal := g.Goal
+			goal.Check.NoDefaultCharms = true
+			goals = append(goals, goal)
+		}
+	}
+	return goals
 }
 
 // ExtendFootprint is the write paths row's change reaches that it did not declare, and a
