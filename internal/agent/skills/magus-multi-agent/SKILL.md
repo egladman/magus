@@ -39,10 +39,10 @@ verification, and never hands those out. Above the root is the human in the loop
 lands, what is published and what a round may spend are the person's calls: the root
 reports to them and does not decide them.
 
-From its first call the root does no groundwork: no reading, searching or editing of
-source, no test or lint runs of its own. It plans from the graph and moves jobs.
-Groundwork it needs, a read-only scout included, is a job, and so is integration.
-The guard enforces this by role.
+While a row it handed out is live, the root does no groundwork: no reading, searching or editing
+of source, no runs of its own. It plans from the graph and moves jobs; a scout and integration are jobs.
+The guard enforces this by role, and the role is the live lease: the root may take ONE row with
+`{{cmd "job exec"}} <row>` until `{{cmd "job exit"}} <row>` ([the root's role](reference.md#the-roots-role)).
 
 ## Coalesce what the write sets allow
 

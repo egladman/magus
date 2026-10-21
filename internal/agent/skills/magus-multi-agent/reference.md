@@ -85,6 +85,26 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
+## The root's role
+
+The guard judges the root by the live lease, never by the session's history. The root
+orchestrates while a row it handed out (a fork the job store showed, or a row a titled
+spawn bound) is declared, running or exited; once every one has passed or failed, it is
+judged as any session is.
+
+- Integration is one class: merge, rebase, pull, am, reset, stash, restore, checkout,
+  `switch -c`, cherry-pick, add and commit. A plain switch, a branch, `worktree add`,
+  a push and the job verbs are orchestration.
+- The root may take ONE row: `{{cmd "job exec"}} <row>` makes it that row's holder,
+  under the row's write paths and check. It spawns nothing while it holds the row, and
+  `{{cmd "job exit"}} <row>` returns it to orchestrating whatever other rows still hold.
+- A root holding a parentless row may still run the gate.
+- When no spawn can pass, such as a harness the model-tier declaration maps no model
+  for, the groundwork refusal names `{{cmd "job exec"}} <row>` instead of a spawn.
+- While ./magus is older than its sources or absent, the root rebuilds it itself:
+  `./magus run go-build .` or the bootstrap, alone on its line.
+- A refusal repeated after a role change or a rebuild prints its new remedy in full.
+
 ## After the spawn
 
 The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a
