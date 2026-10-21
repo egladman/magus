@@ -1,12 +1,12 @@
 ---
 title: "dependency-install: a raw package install that the cached install target already runs"
-description: "An advisory by default: it explains, and blocks nothing, on a raw package install that the cached install target already runs."
-tags: [guard, rules, dependency-install, advise]
+description: "A deny rule by default: it refuses a raw package install that the cached install target already runs, and names what to run instead."
+tags: [guard, rules, dependency-install, deny]
 ---
 
 # dependency-install
 
-An advisory by default: it explains, and blocks nothing, on a raw package install that the cached install target already runs.
+A deny rule by default: it refuses a raw package install that the cached install target already runs, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A raw package install that the cached install target already runs.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"dependency-install": "deny"})
+magus\guard.builtins({"dependency-install": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [dependency-install]: ...
+deny [dependency-install]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [dependency-install]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [dependency-install]: ...` instead.
 
 `magus describe rule dependency-install` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

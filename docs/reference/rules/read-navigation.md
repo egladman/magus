@@ -1,12 +1,12 @@
 ---
 title: "read-navigation: a whole read of a Go, Buzz or Markdown file past the workspace's line limit"
-description: "An advisory by default: it explains, and blocks nothing, on a whole read of a Go, Buzz or Markdown file past the workspace's line limit."
-tags: [guard, rules, read-navigation, advise]
+description: "A deny rule by default: it refuses a whole read of a Go, Buzz or Markdown file past the workspace's line limit, and names what to run instead."
+tags: [guard, rules, read-navigation, deny]
 ---
 
 # read-navigation
 
-An advisory by default: it explains, and blocks nothing, on a whole read of a Go, Buzz or Markdown file past the workspace's line limit.
+A deny rule by default: it refuses a whole read of a Go, Buzz or Markdown file past the workspace's line limit, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ The deny carries the file's declarations or headings with their lines, and the c
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"read-navigation": "deny"})
+magus\guard.builtins({"read-navigation": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [read-navigation]: ...
+deny [read-navigation]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [read-navigation]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [read-navigation]: ...` instead.
 
 `magus describe rule read-navigation` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

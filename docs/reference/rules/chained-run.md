@@ -1,12 +1,12 @@
 ---
 title: "chained-run: magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast"
-description: "An advisory by default: it explains, and blocks nothing, on magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast."
-tags: [guard, rules, chained-run, advise]
+description: "A deny rule by default: it refuses magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast, and names what to run instead."
+tags: [guard, rules, chained-run, deny]
 ---
 
 # chained-run
 
-An advisory by default: it explains, and blocks nothing, on magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast.
+A deny rule by default: it refuses magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A pipe of magus runs keeps what the chain was for: stages whose projects overlap
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"chained-run": "deny"})
+magus\guard.builtins({"chained-run": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [chained-run]: ...
+deny [chained-run]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [chained-run]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [chained-run]: ...` instead.
 
 `magus describe rule chained-run` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

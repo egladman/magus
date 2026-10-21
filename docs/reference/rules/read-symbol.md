@@ -19,10 +19,10 @@ Silent inside a method: refs resolves bare names, so its command would print eve
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"read-symbol": "deny"})
+magus\guard.builtins({"read-symbol": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -34,8 +34,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [read-symbol]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [read-symbol]: ...` instead.
 
 `magus describe rule read-symbol` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

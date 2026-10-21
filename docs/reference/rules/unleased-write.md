@@ -15,10 +15,10 @@ A write magus cannot attribute while a fleet is running.
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"unleased-write": "deny"})
+magus\guard.builtins({"unleased-write": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -30,8 +30,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [unleased-write]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [unleased-write]: ...` instead.
 
 `magus describe rule unleased-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

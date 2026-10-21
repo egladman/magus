@@ -1,12 +1,12 @@
 ---
 title: "read-paging: a mapped file read window by window, past two windows of it"
-description: "An advisory by default: it explains, and blocks nothing, on a mapped file read window by window, past two windows of it."
-tags: [guard, rules, read-paging, advise]
+description: "A deny rule by default: it refuses a mapped file read window by window, past two windows of it, and names what to run instead."
+tags: [guard, rules, read-paging, deny]
 ---
 
 # read-paging
 
-An advisory by default: it explains, and blocks nothing, on a mapped file read window by window, past two windows of it.
+A deny rule by default: it refuses a mapped file read window by window, past two windows of it, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ read-navigation refuses a whole read and serves the file's map; paging through t
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"read-paging": "deny"})
+magus\guard.builtins({"read-paging": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [read-paging]: ...
+deny [read-paging]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [read-paging]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [read-paging]: ...` instead.
 
 `magus describe rule read-paging` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -1,12 +1,12 @@
 ---
 title: "unknown-env: a retired or misspelled MAGUS_* variable handed to a command"
-description: "An advisory by default: it explains, and blocks nothing, on a retired or misspelled MAGUS_* variable handed to a command."
-tags: [guard, rules, unknown-env, advise]
+description: "A deny rule by default: it refuses a retired or misspelled MAGUS_* variable handed to a command, and names what to run instead."
+tags: [guard, rules, unknown-env, deny]
 ---
 
 # unknown-env
 
-An advisory by default: it explains, and blocks nothing, on a retired or misspelled MAGUS_* variable handed to a command.
+A deny rule by default: it refuses a retired or misspelled MAGUS_* variable handed to a command, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A retired or misspelled name is ignored without a word, so the setting the calle
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"unknown-env": "deny"})
+magus\guard.builtins({"unknown-env": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [unknown-env]: ...
+deny [unknown-env]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [unknown-env]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [unknown-env]: ...` instead.
 
 `magus describe rule unknown-env` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

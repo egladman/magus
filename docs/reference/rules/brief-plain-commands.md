@@ -1,12 +1,12 @@
 ---
 title: "brief-plain-commands: a brief for an isolated worker that teaches a substitution, a loop or an exec"
-description: "An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that teaches a substitution, a loop or an exec."
-tags: [guard, rules, brief-plain-commands, advise]
+description: "A deny rule by default: it refuses a brief for an isolated worker that teaches a substitution, a loop or an exec, and names what to run instead."
+tags: [guard, rules, brief-plain-commands, deny]
 ---
 
 # brief-plain-commands
 
-An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that teaches a substitution, a loop or an exec.
+A deny rule by default: it refuses a brief for an isolated worker that teaches a substitution, a loop or an exec, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A host that runs a worker in a worktree of its own refuses each command it canno
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"brief-plain-commands": "deny"})
+magus\guard.builtins({"brief-plain-commands": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [brief-plain-commands]: ...
+deny [brief-plain-commands]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [brief-plain-commands]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [brief-plain-commands]: ...` instead.
 
 `magus describe rule brief-plain-commands` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -2760,6 +2760,7 @@ github.com/egladman/magus/types.JobWaiver type struct
 github.com/egladman/magus/types.JobWaiver.Code field DiagnosticCode "json:\"code\""
 github.com/egladman/magus/types.JobWaiver.Reason field string "json:\"reason\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobWaiver.Subject field string "json:\"subject\""
+github.com/egladman/magus/types.JobWaiver.Waives method func(p JobProblem) bool
 github.com/egladman/magus/types.JobWork type struct
 github.com/egladman/magus/types.JobWork.Calls field int "json:\"calls\"  yaml:\"calls\""
 github.com/egladman/magus/types.JobWork.ContextTokens field *int64 "json:\"context_tokens,omitempty\" yaml:\"context_tokens,omitempty\""

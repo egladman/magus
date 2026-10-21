@@ -1,12 +1,12 @@
 ---
 title: "architecture-unbriefed: an agent's next call after a structure question, or a new directory, before the architecture skill"
-description: "An advisory by default: it explains, and blocks nothing, on an agent's next call after a structure question, or a new directory, before the architecture skill."
-tags: [guard, rules, architecture-unbriefed, advise]
+description: "A deny rule by default: it refuses an agent's next call after a structure question, or a new directory, before the architecture skill, and names what to run instead."
+tags: [guard, rules, architecture-unbriefed, deny]
 ---
 
 # architecture-unbriefed
 
-An advisory by default: it explains, and blocks nothing, on an agent's next call after a structure question, or a new directory, before the architecture skill.
+A deny rule by default: it refuses an agent's next call after a structure question, or a new directory, before the architecture skill, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A structure question is answered from the workspace's own edges: what imports wh
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"architecture-unbriefed": "deny"})
+magus\guard.builtins({"architecture-unbriefed": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [architecture-unbriefed]: ...
+deny [architecture-unbriefed]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [architecture-unbriefed]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [architecture-unbriefed]: ...` instead.
 
 `magus describe rule architecture-unbriefed` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -1,12 +1,12 @@
 ---
 title: "capture-filter: a filter over a run capture or log, which cuts the failure block apart"
-description: "An advisory by default: it explains, and blocks nothing, on a filter over a run capture or log, which cuts the failure block apart."
-tags: [guard, rules, capture-filter, advise]
+description: "A deny rule by default: it refuses a filter over a run capture or log, which cuts the failure block apart, and names what to run instead."
+tags: [guard, rules, capture-filter, deny]
 ---
 
 # capture-filter
 
-An advisory by default: it explains, and blocks nothing, on a filter over a run capture or log, which cuts the failure block apart.
+A deny rule by default: it refuses a filter over a run capture or log, which cuts the failure block apart, and names what to run instead.
 
 ## What it catches
 
@@ -14,15 +14,15 @@ A filter over a run capture or log, which cuts the failure block apart.
 
 ## Why
 
-A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. It ADVISES rather than refuses: most such filters are a search the reader needs, and a refused reader then reads the whole file into context. It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\.output' cmd/`, is not a capture.
+A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting. A workspace whose readers need such searches sets it to advise. It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\.output' cmd/`, is not a capture.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"capture-filter": "deny"})
+magus\guard.builtins({"capture-filter": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [capture-filter]: ...
+deny [capture-filter]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [capture-filter]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [capture-filter]: ...` instead.
 
 `magus describe rule capture-filter` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

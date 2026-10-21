@@ -19,10 +19,10 @@ The same target run again on a different project set, as a separate call.
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"split-run": "deny"})
+magus\guard.builtins({"split-run": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -34,8 +34,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [split-run]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [split-run]: ...` instead.
 
 `magus describe rule split-run` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

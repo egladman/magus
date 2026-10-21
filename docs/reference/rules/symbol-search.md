@@ -1,12 +1,12 @@
 ---
 title: "symbol-search: a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers"
-description: "An advisory by default: it explains, and blocks nothing, on a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers."
-tags: [guard, rules, symbol-search, advise]
+description: "A deny rule by default: it refuses a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers, and names what to run instead."
+tags: [guard, rules, symbol-search, deny]
 ---
 
 # symbol-search
 
-An advisory by default: it explains, and blocks nothing, on a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers.
+A deny rule by default: it refuses a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ Each alternative of the pattern is classified by what it looks for, and the deny
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"symbol-search": "deny"})
+magus\guard.builtins({"symbol-search": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [symbol-search]: ...
+deny [symbol-search]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [symbol-search]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [symbol-search]: ...` instead.
 
 `magus describe rule symbol-search` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

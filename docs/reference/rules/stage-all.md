@@ -1,12 +1,12 @@
 ---
 title: "stage-all: a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output"
-description: "An advisory by default: it explains, and blocks nothing, on a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output."
-tags: [guard, rules, stage-all, advise]
+description: "A deny rule by default: it refuses a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output, and names what to run instead."
+tags: [guard, rules, stage-all, deny]
 ---
 
 # stage-all
 
-An advisory by default: it explains, and blocks nothing, on a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output.
+A deny rule by default: it refuses a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A magus target writes its declared outputs as it runs, so the tree here is routi
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"stage-all": "deny"})
+magus\guard.builtins({"stage-all": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [stage-all]: ...
+deny [stage-all]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [stage-all]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [stage-all]: ...` instead.
 
 `magus describe rule stage-all` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

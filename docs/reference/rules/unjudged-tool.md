@@ -1,12 +1,12 @@
 ---
 title: "unjudged-tool: a tool call whose input carries nothing any rule reads, from a tool the guard does not know"
-description: "An advisory by default: it explains, and blocks nothing, on a tool call whose input carries nothing any rule reads, from a tool the guard does not know."
-tags: [guard, rules, unjudged-tool, advise]
+description: "A deny rule by default: it refuses a tool call whose input carries nothing any rule reads, from a tool the guard does not know, and names what to run instead."
+tags: [guard, rules, unjudged-tool, deny]
 ---
 
 # unjudged-tool
 
-An advisory by default: it explains, and blocks nothing, on a tool call whose input carries nothing any rule reads, from a tool the guard does not know.
+A deny rule by default: it refuses a tool call whose input carries nothing any rule reads, from a tool the guard does not know, and names what to run instead.
 
 ## What it catches
 
@@ -14,15 +14,15 @@ A tool call whose input carries nothing any rule reads, from a tool the guard do
 
 ## Why
 
-Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.
+Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"unjudged-tool": "deny"})
+magus\guard.builtins({"unjudged-tool": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [unjudged-tool]: ...
+deny [unjudged-tool]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [unjudged-tool]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [unjudged-tool]: ...` instead.
 
 `magus describe rule unjudged-tool` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

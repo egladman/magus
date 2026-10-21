@@ -1,12 +1,12 @@
 ---
 title: "grep-reader: a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body"
-description: "An advisory by default: it explains, and blocks nothing, on a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body."
-tags: [guard, rules, grep-reader, advise]
+description: "A deny rule by default: it refuses a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body, and names what to run instead."
+tags: [guard, rules, grep-reader, deny]
 ---
 
 # grep-reader
 
-An advisory by default: it explains, and blocks nothing, on a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body.
+A deny rule by default: it refuses a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A context count guesses at a declaration's length: too short cuts the body off a
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"grep-reader": "deny"})
+magus\guard.builtins({"grep-reader": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [grep-reader]: ...
+deny [grep-reader]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [grep-reader]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [grep-reader]: ...` instead.
 
 `magus describe rule grep-reader` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

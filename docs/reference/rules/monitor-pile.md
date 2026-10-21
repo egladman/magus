@@ -1,12 +1,12 @@
 ---
 title: "monitor-pile: an agent arming a waiter while several of its own are already live"
-description: "An advisory by default: it explains, and blocks nothing, on an agent arming a waiter while several of its own are already live."
-tags: [guard, rules, monitor-pile, advise]
+description: "A deny rule by default: it refuses an agent arming a waiter while several of its own are already live, and names what to run instead."
+tags: [guard, rules, monitor-pile, deny]
 ---
 
 # monitor-pile
 
-An advisory by default: it explains, and blocks nothing, on an agent arming a waiter while several of its own are already live.
+A deny rule by default: it refuses an agent arming a waiter while several of its own are already live, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ Every live waiter, a watcher, a backgrounded sleep or an endless backgrounded wa
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"monitor-pile": "deny"})
+magus\guard.builtins({"monitor-pile": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [monitor-pile]: ...
+deny [monitor-pile]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [monitor-pile]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [monitor-pile]: ...` instead.
 
 `magus describe rule monitor-pile` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
