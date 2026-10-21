@@ -333,9 +333,7 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 // conversation, an outline, is bounded to a few short topics and refused past that: a paragraph
 // there would be a reply wearing another name.
 func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
-	withReviewThreads(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": float64(1), "author": "priya", "body": "why?"},
-	})
+	withReviewThreads(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 1, Author: "priya", Body: "why?"}})
 	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	for _, op := range []string{"reply", "publish", "approve", "viewed", "read", "mark", "ack", "seen", "cursor", "reading"} {
@@ -375,27 +373,17 @@ func TestTheAgentDiffToolDoesNotOfferReading(t *testing.T) {
 
 // withReviewThreads wires a review provider whose review holds threads, so the tool's forge reads
 // have something to answer with.
-func withReviewThreads(t *testing.T, threads []any) {
+func withReviewThreads(t *testing.T, threads []types.ReviewComment) {
 	t.Helper()
-	name := register.Spell(t, "canned-mcp-review",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-			case spells.ReviewThreadsContract:
-				return threads, nil
-			default:
-				return nil, nil
-			}
-		}))
+	name := register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads)
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 }
 
-var reviewThreads = []any{
-	map[string]any{"id": "t1", "path": "a.go", "line": float64(9), "author": "priya", "body": "why added?"},
-	map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "for the cache"},
+var reviewThreads = []types.ReviewComment{
+	{ID: "t1", Path: "a.go", Line: 9, Author: "priya", Body: "why added?"},
+	{ID: "t2", Root: "t1", Author: "marcus", Body: "for the cache"},
 }
 
 // TestThreadOpReturnsTheThreadRecordAndNoSession. op=thread answers with the record

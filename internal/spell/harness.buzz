@@ -1,0 +1,80 @@
+// The builders every harness spell renders its host's files with, shipped as the
+// magus/harness module. `import "magus/harness"` brings them into scope as bare names, the
+// flat-import idiom magus/charm uses; magus/spell is imported for HookCommand.
+//
+// A spell keeps only its host's data: the paths, events, matchers and file formats.
+// Quoting and the glue command line live here once, so every host renders them alike.
+import "magus/spell";
+
+// The directory every shipped glue script lives in, relative to the workspace root.
+final GLUE_DIR = "docs/guides/integrations/agents";
+
+// yamlQuote renders text as a YAML double-quoted scalar, so a colon, a quote or a newline
+// in a description cannot change what the frontmatter means.
+export fun yamlQuote(text: str) > str {
+    return "\"" + escapeBasic(text) + "\"";
+}
+
+// tomlBasic renders text as a TOML basic string on one line. Starlark reads the same
+// escapes, so a Codex rules file quotes with it too.
+export fun tomlBasic(text: str) > str {
+    return "\"" + escapeBasic(text) + "\"";
+}
+
+// tomlMultiline renders text as a TOML multiline literal string, which reads every
+// character as written. The one thing a literal cannot hold is its own delimiter, so text
+// carrying it is an escaped basic string instead.
+export fun tomlMultiline(text: str) > str {
+    if (text.indexOf("'''") != null) { return tomlBasic(text); }
+    return "'''\n" + text + "'''";
+}
+
+fun escapeBasic(text: str) > str {
+    return text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+}
+
+// buzzCommand is one glue script as a plain argv: PATH's magus, so the string is the same
+// on every machine and a workspace that builds its own magus is still judged by it (magus
+// re-execs into the ./magus of the tree -C names). host is the directory the host's hook
+// commands start in, as the host spells it ("$CLAUDE_PROJECT_DIR", "."), or "" for a host
+// that starts them in the workspace root. `-s` keeps the interpreter's advisories off
+// stderr, which a host shows as a hook error. flags ride after `--`, which `magus buzz`
+// forwards to the script as its own argv.
+export fun buzzCommand(host: str, script: str, flags: [str]) > str {
+    final words = mut ["magus", "buzz"];
+    if (host != "") {
+        words.append("-C");
+        words.append(host);
+    }
+    words.append("-s");
+    words.append("{GLUE_DIR}/{script}.buzz");
+    if (flags.len() > 0) {
+        words.append("--");
+        foreach (flag in flags) { words.append(flag); }
+    }
+    return words.join(" ");
+}
+
+// namedCommand is a glue command that names its host with `--agent-name`, the one
+// identity the glue acts on; the glue refuses a call without it (MGS3024) rather than
+// guessing a host. A spell passes its own mgs_getName(), so the name cannot drift from
+// the harness it belongs to.
+export fun namedCommand(host: str, agentName: str, script: str, flags: [str]) > str {
+    final named = mut ["--agent-name", agentName];
+    foreach (flag in flags) { named.append(flag); }
+    return buzzCommand(host, script: script, flags: named);
+}
+
+// buzzCheckHook is the hook that runs `magus buzz --check` on a .buzz file the agent just
+// wrote, so a type error or a conflict marker comes back at edit time rather than at the
+// next run. It rides PostToolUse with no matcher; a spell sets the event and matcher its
+// host spells for the tools that write a file. The check reads its file, so it waits
+// longer than a hook that only forwards an event.
+export fun buzzCheckHook(host: str) > HookCommand {
+    return HookCommand{
+        event = "PostToolUse",
+        script = "magus-buzz-check",
+        flags = ["--agent-name", host],
+        timeoutS = 30,
+    };
+}

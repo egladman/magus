@@ -1105,10 +1105,10 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// said" and "I could not ask" are opposite facts, and this is the one place that can still
 	// tell them apart.
 	//
-	// The error is a MALFORMED remark and never the unreachable host, so it is dropped rather
-	// than read: the comments that decoded are in hand, and one unreadable record must not blank
-	// the only report this merge will get.
-	comments, reached, _ := bindings.ReviewCommentsReached(ctx, at)
+	// The error is a MALFORMED answer, never the unreachable host, and no comment comes with it.
+	// The merge is still reported, its count stated unknown and the decode error named: one bad
+	// record must not blank the only report this merge will get.
+	comments, reached, malformed := bindings.ReviewCommentsReached(ctx, at)
 	if !reached {
 		// Not the job's failure to report: a forge that could not be reached is a fact about the
 		// network, and raising it would mark this job failed on the trail every fifteen minutes
@@ -1141,11 +1141,15 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// middle of it. The mark must have been set against THIS review; one left over from a branch
 	// that has since moved to another pull request says nothing about this merge.
 	underReader := reading.Matches(at)
-	if said == 0 && !underReader {
+	if said == 0 && !underReader && malformed == nil {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
 		// would train the reader to ignore the ones that matter. A forge that could not be
 		// reached returned above rather than landing here, so this really is "nothing was said".
 		return nil
+	}
+	preview := fmt.Sprintf("%s: %d", at.Repo, said)
+	if malformed != nil {
+		preview = fmt.Sprintf("%s: unknown, the review's comments could not be read: %v", at.Repo, malformed)
 	}
 	// Recorded before the mark is cleared: a crash between the two repeats the event on the next
 	// tick, where clearing first would lose it for good.
@@ -1156,7 +1160,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,
-		Preview:   fmt.Sprintf("%s: %d", at.Repo, said),
+		Preview:   preview,
 	})
 	if !underReader {
 		return nil

@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
@@ -56,11 +57,9 @@ func magusSkills(ctx context.Context, opts map[string]any) ([]types.Skill, error
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
 			"magus\\skills: no workspace on the context; it reads the workspace's skill directories, so run it from a magusfile target or a `magus buzz` script inside a workspace")
 	}
-	// Structural, as doctor reads it: the workspace value is the root *magus.Magus,
-	// which bindings cannot import.
-	var wired []string
-	if h, ok := ws.(interface{ Harnesses() []string }); ok {
-		wired = h.Harnesses()
+	wired, err := workspace.WiredHarnesses(ws)
+	if err != nil {
+		return nil, fmt.Errorf("magus\\skills: %w", err)
 	}
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
 	return skillCatalog().Offered(ctx, ws.Root(), wired, q)

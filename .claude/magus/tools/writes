@@ -2,3 +2,6 @@ Edit
 MultiEdit
 NotebookEdit
 Write
+mcp__ccd_host__clean_up_worktrees
+mcp__ccd_host__discard_kept_worktree
+mcp__ccd_host__sync_with_base_branch

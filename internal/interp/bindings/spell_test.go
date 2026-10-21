@@ -137,9 +137,8 @@ func parseMagusfile(t *testing.T, dir string) error {
 }
 
 // TestBuzzLocalSpellImport verifies a workspace-local Buzz spell is importable by
-// path — `import "spells/widget"` resolves ./spells/widget.buzz, binds the handle
-// under the basename (widget), and binding it via magus.project registers
-// the spell by value.
+// path — `import "spells/widget"` resolves ./spells/widget.buzz, registers the spell
+// and binds the handle under the basename (widget), which magus.project binds by name.
 func TestBuzzLocalSpellImport(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	dir := w.Root()
@@ -148,9 +147,8 @@ func TestBuzzLocalSpellImport(t *testing.T) {
 	w.Write("spells/widget.buzz", `import "magus/spell";
 export fun mgs_getName() > str { return "widgetimport"; }
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.ts"}]; }
-export fun mgs_listTargets() > any {
-    return {"build": {"bin": "npm", "args": ["run", "build"]}};
-}
+fun build(t: Target) > Command { return Command{bin = "npm", args = ["run", "build"]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"build": build}; }
 `)
 	w.Magusfile(`import "magus";
 import "spells/widget";
@@ -219,10 +217,12 @@ func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
 
 	// The "capture" target writes its forwarded args ($@) into captured.txt in the
 	// process cwd, so the test can assert both the args and the working directory.
-	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "optswidget"; }
-export fun mgs_listTargets() > any {
-    return {"capture": {"bin": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
+	w.Write("spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "optswidget"; }
+fun captureOp(t: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]};
 }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"capture": captureOp}; }
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	w.Magusfile(`import "magus";
@@ -254,10 +254,12 @@ func TestBuzzSpellMethodEnv(t *testing.T) {
 	dir := w.Root()
 	t.Chdir(dir)
 
-	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "envwidget"; }
-export fun mgs_listTargets() > any {
-    return {"capture": {"bin": "sh", "args": ["-c", "printf \"$MYVAR\" > out.txt"]}};
+	w.Write("spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "envwidget"; }
+fun captureOp(t: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "printf \"$MYVAR\" > out.txt"]};
 }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"capture": captureOp}; }
 `)
 	w.Magusfile(`import "magus";
 import "spells/widget";
@@ -281,10 +283,10 @@ func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
 	dir := w.Root()
 	t.Chdir(dir)
 
-	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
-export fun mgs_listTargets() > any {
-    return {"hash": {"bin": "sh", "args": ["-c", "printf abc123"], "capture": true}};
-}
+	w.Write("spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "capbuzzwidget"; }
+fun hashOp(t: Target) > Command { return Command{bin = "sh", args = ["-c", "printf abc123"], capture = true}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"hash": hashOp}; }
 `)
 	w.Magusfile(`import "magus";
 import "spells/widget";
@@ -331,10 +333,10 @@ func TestBuzzSpellQuietWithoutCaptureFailsToLoad(t *testing.T) {
 	dir := w.Root()
 	t.Chdir(dir)
 
-	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "quietnocapturewidget"; }
-export fun mgs_listTargets() > any {
-    return {"mod-json": {"bin": "go", "args": ["mod", "edit", "-json"], "quiet": true}};
-}
+	w.Write("spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "quietnocapturewidget"; }
+fun modJSON(target: Target) > Command { return Command{bin = "go", args = ["mod", "edit", "-json"], quiet = true}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"mod-json": modJSON}; }
 `)
 
 	_, err := loadSpellFile(t.Context(), filepath.Join(dir, "spells", "widget.buzz"))
@@ -350,13 +352,11 @@ func TestBuzzSpellPipeStdin(t *testing.T) {
 	dir := w.Root()
 	t.Chdir(dir)
 
-	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "pipewidget"; }
-export fun mgs_listTargets() > any {
-    return {
-        "emit": {"bin": "sh", "args": ["-c", "printf alpha"], "capture": true},
-        "shout": {"bin": "tr", "args": ["a-z", "A-Z"], "capture": true}
-    };
-}
+	w.Write("spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "pipewidget"; }
+fun emit(t: Target) > Command { return Command{bin = "sh", args = ["-c", "printf alpha"], capture = true}; }
+fun shout(t: Target) > Command { return Command{bin = "tr", args = ["a-z", "A-Z"], capture = true}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"emit": emit, "shout": shout}; }
 `)
 	w.Magusfile(`import "magus";
 import "spells/widget";
@@ -427,19 +427,16 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
-// declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Descriptor. It guards the resolver (internal/spell/resolve.go)
-// against dropping fields.
+// declaring every optional mgs_ function resolves to the expected Descriptor. It guards
+// the resolver (internal/spell/resolve.go) against dropping fields.
 func TestEngineDescriptorParity(t *testing.T) {
 	buzzSrc := `import "magus/spell";
 export fun mgs_getName() > str { return "parity_buzz"; }
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.rb"}, Path{value = "Gemfile.lock"}]; }
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**"}]; }
-export fun mgs_getVersionProbe() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
-export fun mgs_listTargets() > any {
-    return {"rspec": {"bin": "bundle", "args": ["exec", "rspec"]}};
-}
+fun rspec(t: Target) > Command { return Command{bin = "bundle", args = ["exec", "rspec"]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"rspec": rspec}; }
 `
 
 	bindBuzzSpell := func(t *testing.T, src string) {
@@ -696,10 +693,10 @@ func TestSpellModuleRequireLocal(t *testing.T) {
 	dir := w.Root()
 	t.Chdir(dir)
 	w.Write("spells/locreq.buzz", `
+import "magus/spell";
 export fun mgs_getName() > str { return "locreq"; }
-export fun mgs_listTargets() > any {
-    return {"build": {"bin": "true"}};
-}
+fun build(t: Target) > Command { return Command{bin = "true"}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"build": build}; }
 `)
 	w.Magusfile(`
 import "magus";
@@ -1152,24 +1149,23 @@ func TestCauseLinePrefersTheErrorOverTheFooter(t *testing.T) {
 	assert.Empty(t, causeLine(""))
 }
 
-// TestRegisterLocalSpellKeepsItsSymbolIndexer registers a spell by value, as magus.project
-// does for a handle the registry does not hold yet. The indexer's op alone is not enough:
-// the auto-indexer and index status find a spell's index through SymbolIndexer.
-func TestRegisterLocalSpellKeepsItsSymbolIndexer(t *testing.T) {
-	const name = "register-local-spell-indexer"
-	m, err := spell.DecodeHandle(spellHandleFromMeta(spells.Descriptor{
-		Name: name,
-		SymbolIndexer: &spells.SymbolIndexer{
-			Format:  spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-test", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
-		},
-	}))
+// A workspace-local spell reaches the registry through its import with its symbol
+// indexer whole: the indexer's op alone is not enough, since the auto-indexer and index
+// status find a spell's index through SymbolIndexer.
+func TestLocalSpellKeepsItsSymbolIndexer(t *testing.T) {
+	const name = "local-spell-indexer"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spell.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`import "magus/spell";
+export fun mgs_getName() > str { return "`+name+`"; }
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{format = SymbolFormat.scip, command = Command{bin = "scip-test", args = ["--output", "$MAGUS_SYMBOL_INDEX"]}};
+}
+`), 0o644))
+	_, sp, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: dir}), path)
 	require.NoError(t, err)
-	registerLocalSpell(m)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
 
-	sp, ok := project.DefaultSpellRegistry().Lookup(name)
-	require.True(t, ok)
 	require.NotNil(t, sp.SymbolIndexer())
 	assert.Equal(t, "scip-test", sp.SymbolIndexer().Command.Bin)
 	assert.Equal(t, spells.DefaultSymbolIndexOp, sp.SymbolIndexOp())

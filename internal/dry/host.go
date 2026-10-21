@@ -73,6 +73,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// type (ExecResult, Commit, ...) is reached through its owning module, as there.
 	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.HarnessModulePath, spell.HarnessModuleSource)
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 	for _, sm := range std.AllSource() {
 		sess.SetModuleDecls(sm.ImportPath(), sm.Source)

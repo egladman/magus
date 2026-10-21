@@ -704,7 +704,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("nothing installed -> advice naming the install command", func(t *testing.T) {
-		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
+		r := &runner{ws: boundWorkspace(t, t.TempDir())}
 		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
 
 		got := r.checkAgentSkills()
@@ -718,7 +718,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
 		w.Write(".agents/skills/magus-query/SKILL.md", "---\nname: magus-query\n---\nold generated body\n")
-		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
 
 		got := r.checkAgentSkills()
@@ -736,11 +736,11 @@ func TestCheckAgentSkills(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
 		catalog := agent.Default(types.KnowledgeSchemaVersion)
-		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
+		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
 			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort)))
-		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -760,10 +760,10 @@ func TestCheckAgentSkills(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
 		catalog := agent.Default(types.KnowledgeSchemaVersion)
-		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
+		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(w.Path(".agents/skills/magus-retired"), 0o755))
-		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -1410,7 +1410,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now.Add(-time.Hour))
 
-		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
@@ -1425,7 +1425,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now)
 
-		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
@@ -1437,7 +1437,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
-		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
 		assert.Contains(t, got.Message, onPath)
@@ -1445,7 +1445,7 @@ func TestCheckGuardBinary(t *testing.T) {
 
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
-		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary()
 		assert.Equal(t, types.Check{
 			Status:  types.CheckFail,
 			Details: []string{"build one: magus run build ."},
@@ -1460,7 +1460,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.Write("magus", "not a binary\n")
 
-		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})

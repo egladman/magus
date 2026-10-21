@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run . boundarydecode -out ../../internal/interp/bindings/gen/decode/decode.go -list ../../internal/interp/bindings/gen/decode/inbound_list_test.go -bindings-pkg bindgen
+//go:generate go run . boundarydecode -out ../../internal/interp/bindings/gen/decode/decode.go -list ../../internal/interp/bindings/gen/decode/inbound_list_test.go -bindings-pkg bindgen -ops ../../internal/interp/bindings/gen/boundary_ops.go -op-vars ../../internal/interp/bindings/gen/providerops/providerops.go
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/format"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"time"
@@ -25,16 +26,112 @@ import (
 // An inbound type also gets a Go-to-Buzz encoder (boundaryobjects reads this list), which
 // is what lets a test prove Decode(Object(v)) == v for every entry.
 var inboundTypes = []string{
+	"Path",
+	"Hint",
+	"Command",
+	"Install",
+	"Manifest",
+	"Service",
+	"SymbolIndexer",
+	"Charm",
+	"PatchOp",
+	"VersionKey",
+	"VersionBounds",
+	"Tool",
+	"SandboxAllow",
+	"SandboxEnv",
+	"SandboxCache",
+	"Sandbox",
 	"CommentBlock",
 	"Quote",
 	"CommentSyntax",
 	"StubSyntax",
 	"Syntax",
 	"Language",
+	// Provider op responses (provider_ops.go), leaf first: Lifecycle.cycles is [ReleaseCycle].
+	"Ack",
+	"GreenRun",
+	"Strings",
+	"PruneResult",
+	"Secret",
+	"ReleaseCycle",
+	"Lifecycle",
+	"ReviewTarget",
+	"ReviewComment",
+	"Project",
+	// The queue script's answers, leaf first.
+	"Person",
+	"QueueIntegration",
+	"QueueRequiredCheck",
+	"QueueSetting",
+	"QueueApp",
+	"QueueSetupStep",
+	"QueueSetup",
+	"QueueSetupRefusal",
+	"QueueCapabilities",
+	"QueueDescribeResult",
+	"QueueChange",
+	"QueueMergedChange",
+	"QueueUnqueuedChange",
+	"QueueClosedChange",
+	"QueueChanges",
+	"QueueApproval",
+	"QueueCheck",
+	"QueueGreenChange",
+	"QueueMergeAnswer",
+	"QueueRunOrigin",
+	"QueueArtifact",
+	"QueueArtifactListing",
+	"QueueReview",
+	"QueueReviews",
+	// The harness contract's answers (internal/spell/contract.go), leaf first.
+	"HarnessConfig",
+	"HarnessSkills",
+	"HookCommand",
+	"ManagedEntries",
+	"McpServer",
+	"Price",
+	"PriceStep",
+	"ModelRow",
+	"HarnessTool",
+	"HarnessTools",
+	"AgentFile",
+	"Prompt",
+	"Setting",
+	"Limits",
+}
+
+// requiredMembers names, per inbound type, the members its decoder refuses an answer
+// without. Absent otherwise decodes as the zero value, and for these a zero would admit
+// what the provider meant to refuse: a change missing "fork" read as one from this
+// repository, a missing approval count as a base requiring no review.
+var requiredMembers = map[string][]string{
+	"QueueCapabilities":    {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
+	"QueueSetup":           {"statusContext", "credential"},
+	"QueueSetupRefusal":    {"reason", "url", "app"},
+	"QueueChange":          {"id", "repo", "head", "base", "method", "fork"},
+	"QueueMergedChange":    {"id", "head", "commit", "method"},
+	"QueueUnqueuedChange":  {"id", "head"},
+	"QueueClosedChange":    {"id"},
+	"QueueChanges":         {"changes", "merged", "unqueued"},
+	"QueueApproval":        {"approved", "head", "base", "method", "queued", "branchSharedWith"},
+	"QueueCheck":           {"name", "state"},
+	"QueueGreenChange":     {"id", "repo", "head"},
+	"QueueMergeAnswer":     {"merged"},
+	"QueueRunOrigin":       {"repo", "headRepo", "headBranch", "event", "branchEvent", "definition"},
+	"QueueArtifact":        {"name", "url"},
+	"QueueArtifactListing": {"run", "complete", "artifacts"},
+	"QueueReview":          {"id", "reviewer", "commit"},
+	"QueueReviews":         {"head", "approving"},
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.
 func inboundBoundaryTypes() ([]boundaryType, error) {
+	for name := range requiredMembers {
+		if !slices.Contains(inboundTypes, name) {
+			return nil, fmt.Errorf("requiredMembers names %s, which inboundTypes does not list", name)
+		}
+	}
 	out := make([]boundaryType, 0, len(inboundTypes))
 	for _, name := range inboundTypes {
 		entry, ok := boundaryTypeNamed(name)
@@ -48,24 +145,27 @@ func inboundBoundaryTypes() ([]boundaryType, error) {
 
 // runBoundaryDecode emits a strict Buzz-to-Go decoder per inbound type into
 // internal/interp/bindings/gen/decode, plus the list of inbound types its round-trip
-// test iterates.
+// test iterates and the provider op table. -ops and -op-vars, given together, also emit
+// the ProviderOp type into bindgen and its values into package providerops.
 //
 // The decoders replace walking string keys by hand, where a wrong-typed scalar read as
 // absent and decoded to a silent default. Generated from the same registry the mirror
 // and the encoder read, a decoder cannot accept a field the mirror does not declare or
 // miss one it does.
 //
-// The decode package imports only vm, spells and types, so internal/spell can import it.
+// The decode package imports only vm and the boundaryPackages, so internal/spell can import it.
 func runBoundaryDecode(args []string) error {
 	fs := flag.NewFlagSet("boundarydecode", flag.ExitOnError)
 	outPath := fs.String("out", "", "output Go file path for the decoders")
 	listPath := fs.String("list", "", "output Go test file path for the inbound type list")
 	bindingsPkg := fs.String("bindings-pkg", "", "package clause of internal/interp/bindings/gen, whose encoders the list calls")
+	opsPath := fs.String("ops", "", "output Go file path for the ProviderOp type, in the bindings package")
+	opVarsPath := fs.String("op-vars", "", "output Go file path for package providerops")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *outPath == "" || *listPath == "" || *bindingsPkg == "" {
-		return fmt.Errorf("usage: magus-utils boundarydecode -out <decode.go> -list <inbound_list_test.go> -bindings-pkg <package>")
+	if *outPath == "" || *listPath == "" || *bindingsPkg == "" || (*opsPath == "") != (*opVarsPath == "") {
+		return fmt.Errorf("usage: magus-utils boundarydecode -out <decode.go> -list <inbound_list_test.go> -bindings-pkg <package> [-ops <boundary_ops.go> -op-vars <providerops.go>]")
 	}
 	entries, err := inboundBoundaryTypes()
 	if err != nil {
@@ -78,6 +178,9 @@ func runBoundaryDecode(args []string) error {
 			return fmt.Errorf("inbound type %s: %w", entry.Name, err)
 		}
 	}
+	if err := emitProviderFuncs(e); err != nil {
+		return err
+	}
 	src, err := e.file()
 	if err != nil {
 		return err
@@ -89,7 +192,28 @@ func runBoundaryDecode(args []string) error {
 	if err != nil {
 		return err
 	}
-	return emit.File(*listPath, list)
+	if err := emit.File(*listPath, list); err != nil {
+		return err
+	}
+	if *opsPath == "" {
+		return nil
+	}
+	opType, err := renderProviderOpType(*bindingsPkg)
+	if err != nil {
+		return err
+	}
+	if err := emit.File(*opsPath, opType); err != nil {
+		return err
+	}
+	opVars, err := renderProviderOpVars(*bindingsPkg)
+	if err != nil {
+		return err
+	}
+	// providerops is its own package, so a fresh checkout may not hold its directory yet.
+	if err := os.MkdirAll(filepath.Dir(*opVarsPath), 0o755); err != nil {
+		return err
+	}
+	return emit.File(*opVarsPath, opVars)
 }
 
 // decodeEmitter renders decoders the way buzzValueEmitter renders encoders: plain field
@@ -110,25 +234,35 @@ func newDecodeEmitter(entries []boundaryType) *decodeEmitter {
 }
 
 func (e *decodeEmitter) qualify(t reflect.Type) string {
-	pkg := t.PkgPath()[len("github.com/egladman/magus/"):]
-	e.pkgs[pkg] = true
-	return pkg + "." + t.Name()
+	e.pkgs[typePackage(t).alias] = true
+	return qualifyType(t)
 }
 
 func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	t := entry.Type
 	goType := e.qualify(t)
 	var body bytes.Buffer
-	fmt.Fprintf(&body, "// Decode%s decodes a Buzz %s, an object instance or a map, into a %s.\n", t.Name(), entry.Name, goType)
-	fmt.Fprintf(&body, "func Decode%s(v vm.Value) (%s, error) {\n", t.Name(), goType)
-	fmt.Fprintf(&body, "\treturn decode%s(v, %q)\n}\n\n", t.Name(), buzzgen.LowerFirstWord(entry.Name))
+	fmt.Fprintf(&body, "// Decode%s decodes a Buzz %s, an object instance or a map, into a %s.\n", typeIdent(t), entry.Name, goType)
+	fmt.Fprintf(&body, "func Decode%s(v vm.Value) (%s, error) {\n", typeIdent(t), goType)
+	fmt.Fprintf(&body, "\treturn decode%s(v, %q)\n}\n\n", typeIdent(t), buzzgen.LowerFirstWord(entry.Name))
 
-	fmt.Fprintf(&body, "func decode%s(v vm.Value, path string) (%s, error) {\n", t.Name(), goType)
+	fmt.Fprintf(&body, "func decode%s(v vm.Value, path string) (%s, error) {\n", typeIdent(t), goType)
 	fmt.Fprintf(&body, "\tvar out %s\n", goType)
 	fmt.Fprintln(&body, "\tfields, ok := v.MapView()")
 	fmt.Fprintln(&body, "\tif !ok {")
 	fmt.Fprintf(&body, "\t\treturn out, mismatch(path, %q, v)\n", entry.Name)
 	fmt.Fprintln(&body, "\t}")
+	required := requiredMembers[entry.Name]
+	declared := map[string]bool{}
+	for _, bf := range boundaryFields(t) {
+		declared[buzzVMFieldName(bf.StructField)] = true
+	}
+	for _, key := range required {
+		if !declared[key] {
+			return fmt.Errorf("requiredMembers names %q, which %s does not declare", key, entry.Name)
+		}
+		fmt.Fprintf(&body, "\thas%s := false\n", goCase(key))
+	}
 	fmt.Fprintln(&body, "\tfor _, key := range fields.MapKeys() {")
 	fmt.Fprintln(&body, "\t\titem, _ := fields.MapGet(key)")
 	fmt.Fprintln(&body, "\t\tswitch key {")
@@ -136,6 +270,9 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 		f := bf.StructField
 		key := buzzVMFieldName(f)
 		fmt.Fprintf(&body, "\t\tcase %q:\n", key)
+		if slices.Contains(required, key) {
+			fmt.Fprintf(&body, "\t\t\thas%s = true\n", goCase(key))
+		}
 		if err := e.assign(&body, "item", fmt.Sprintf("path+%q", "."+key), "out."+bf.selector, f.Name, f.Type, "\t\t\t"); err != nil {
 			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 		}
@@ -144,6 +281,9 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintf(&body, "\t\t\treturn out, unknownMember(path, %q, key)\n", entry.Name)
 	fmt.Fprintln(&body, "\t\t}")
 	fmt.Fprintln(&body, "\t}")
+	for _, key := range required {
+		fmt.Fprintf(&body, "\tif !has%s {\n\t\treturn out, missingMember(path, %q, %q)\n\t}\n", goCase(key), entry.Name, key)
+	}
 	fmt.Fprintln(&body, "\treturn out, nil")
 	fmt.Fprintln(&body, "}")
 	fmt.Fprintln(&body)
@@ -182,6 +322,13 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		return nil
 	}
 	switch t.Kind() {
+	case reflect.Interface:
+		if t != reflect.TypeFor[any]() {
+			return fmt.Errorf("interface %s has no decoder: only any decodes, as opaque host JSON", t)
+		}
+		a := "a" + name
+		fmt.Fprintf(w, "%s%s, err := decodeAny(%s, %s)\n", indent, a, src, path)
+		ret(a)
 	case reflect.String:
 		s := "s" + name
 		fmt.Fprintf(w, "%s%s, err := decodeStr(%s, %s)\n", indent, s, src, path)
@@ -211,7 +358,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 			return fmt.Errorf("%s is not inbound: add %s to inboundTypes (cmd/magus-utils/boundary_decode.go)", t, buzzName(t))
 		}
 		x := "x" + name
-		fmt.Fprintf(w, "%s%s, err := decode%s(%s, %s)\n", indent, x, t.Name(), src, path)
+		fmt.Fprintf(w, "%s%s, err := decode%s(%s, %s)\n", indent, x, typeIdent(t), src, path)
 		ret(x)
 	case reflect.Pointer:
 		x := "opt" + name
@@ -226,6 +373,12 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		want, err := e.buzzType(t)
 		if err != nil {
 			return err
+		}
+		if t == reflect.TypeFor[[]string]() {
+			strs := "strs" + name
+			fmt.Fprintf(w, "%s%s, err := decodeStrs(%s, %s)\n", indent, strs, src, path)
+			ret(strs)
+			return nil
 		}
 		list, items, index, item := "list"+name, "items"+name, "index"+name, "item"+name
 		fmt.Fprintf(w, "%s%s, err := decodeList(%s, %s, %q)\n", indent, list, src, path, want)
@@ -323,7 +476,7 @@ func (e *decodeEmitter) file() ([]byte, error) {
 	fmt.Fprintln(&b, "// its zero value, a null optional stays nil, and an empty list or map decodes to nil, so")
 	fmt.Fprintln(&b, "// Decode(Object(v)) == v holds for every value, zero included.")
 	fmt.Fprintln(&b, "//")
-	fmt.Fprintln(&b, "// It imports only vm, spells and types, so internal/spell can import it.")
+	fmt.Fprintln(&b, "// It imports only vm and the boundary type packages, so internal/spell can import it.")
 	fmt.Fprintln(&b, "package decode")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "import (")
@@ -333,12 +486,7 @@ func (e *decodeEmitter) file() ([]byte, error) {
 	}
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if e.pkgs["spells"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
-	if e.pkgs["types"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
+	b.WriteString(importLines(e.pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	b.Write(e.funcs.Bytes())
@@ -390,14 +538,9 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 	}
 	fmt.Fprintf(&b, "\t%s \"github.com/egladman/magus/internal/interp/bindings/gen\"\n", bindingsPkg)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if e.pkgs["spells"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
 	// e.pkgs is exact here as well: every struct the decoders reach is an inbound entry,
 	// and every enum they reach is listed below.
-	if e.pkgs["types"] {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
+	b.WriteString(importLines(e.pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "var inboundTypes = []inboundType{")
@@ -411,7 +554,7 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 			enums = ", ffi.EnumBacking"
 		}
 		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return %s.Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return Decode%s(v) }},\n",
-			entry.Name, q, bindingsPkg, t.Name(), q, enums, t.Name())
+			entry.Name, q, bindingsPkg, typeIdent(t), q, enums, typeIdent(t))
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
@@ -452,6 +595,10 @@ func mismatch(path, want string, got vm.Value) error {
 
 func unknownMember(path, typ, key string) error {
 	return fmt.Errorf("%s: %s has no member %q", path, typ, key)
+}
+
+func missingMember(path, typ, key string) error {
+	return fmt.Errorf("%s: field %q is missing, and a %s requires it", path, key, typ)
 }
 
 func decodeStr(v vm.Value, path string) (string, error) {
@@ -515,6 +662,26 @@ func decodeFloat(v vm.Value, path string) (float64, error) {
 	return 0, mismatch(path, "double", v)
 }
 
+// decodeStrs decodes a [str]; an empty list is nil, like every other generated list.
+func decodeStrs(v vm.Value, path string) ([]string, error) {
+	items, err := decodeList(v, path, "[str]")
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	out := make([]string, len(items))
+	for i, item := range items {
+		s, err := decodeStr(item, fmt.Sprintf("%s[%d]", path, i))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = s
+	}
+	return out, nil
+}
+
 func decodeList(v vm.Value, path, want string) ([]vm.Value, error) {
 	if !v.IsList() {
 		return nil, mismatch(path, want, v)
@@ -529,5 +696,53 @@ func decodeMap(v vm.Value, path, want string) (vm.Value, error) {
 		return vm.Null, mismatch(path, want, v)
 	}
 	return v, nil
+}
+
+// decodeAny reads an any field as the plain Go value JSON would give it: null, bool,
+// int64, float64, string, []any or map[string]any, an enum case as its backing value and
+// an object instance as its members. A function or any other value JSON cannot hold is an
+// error, since the field is opaque host JSON.
+func decodeAny(v vm.Value, path string) (any, error) {
+	if backing, ok := v.EnumValue(); ok {
+		v = backing
+	}
+	switch {
+	case v.IsNull():
+		return nil, nil
+	case v.IsBool():
+		return v.AsBool(), nil
+	case v.IsInt():
+		return v.AsInt(), nil
+	case v.IsFloat():
+		return v.AsFloat(), nil
+	case v.IsStr():
+		return v.AsString(), nil
+	case v.IsList():
+		items := v.ListItems()
+		out := make([]any, len(items))
+		for i, item := range items {
+			x, err := decodeAny(item, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return nil, err
+			}
+			out[i] = x
+		}
+		return out, nil
+	}
+	fields, ok := v.MapView()
+	if !ok {
+		return nil, mismatch(path, "any JSON value", v)
+	}
+	keys := fields.MapKeys()
+	out := make(map[string]any, len(keys))
+	for _, key := range keys {
+		item, _ := fields.MapGet(key)
+		x, err := decodeAny(item, fmt.Sprintf("%s[%q]", path, key))
+		if err != nil {
+			return nil, err
+		}
+		out[key] = x
+	}
+	return out, nil
 }
 `

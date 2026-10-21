@@ -55,10 +55,8 @@ fun has(haystack: str, needle: str) > bool {
 // reference is the item's service name on every platform; an account is never part of
 // it, because the CLIs find the item by service alone and an account in the reference
 // would make one machine's entry unreadable on another.
-export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
-    final io = {};
-    cb(io);
-    final ref = "{io["ref"]}";
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+    final ref = req.ref;
     if (ref == "") {
         throw "system-keychain: no reference given";
     }

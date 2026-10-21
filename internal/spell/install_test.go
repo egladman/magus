@@ -15,32 +15,32 @@ import (
 
 // installSpell is a spell declaring one pnpm install, the shape the typescript spell
 // ships, with overrides applied to the install record.
-func installSpell(override func(in map[string]any)) mapObj {
-	in := map[string]any{
-		"name":        "pnpm-install",
-		"command":     map[string]any{"bin": "pnpm", "args": []string{"install", "--frozen-lockfile"}},
-		"dir":         "node_modules",
-		"relocatable": true,
-		"stamps":      []string{"node_modules/.pnpm/lock.yaml"},
-		"inputs":      []string{".npmrc"},
-		"tools":       []string{"pnpm"},
+func installSpell(override func(in *spells.Install)) Contract {
+	in := spells.Install{
+		Name:        "pnpm-install",
+		Command:     spells.Command{Bin: "pnpm", Args: []string{"install", "--frozen-lockfile"}},
+		Dir:         "node_modules",
+		Relocatable: true,
+		Stamps:      []string{"node_modules/.pnpm/lock.yaml"},
+		Inputs:      []string{".npmrc"},
+		Tools:       []string{"pnpm"},
 	}
 	if override != nil {
-		override(in)
+		override(&in)
 	}
-	return mapObj{
-		"name":  "ts",
-		"tools": map[string]any{"pnpm": map[string]any{"probe": map[string]any{"bin": "pnpm", "args": []string{"--version"}}}},
-		"manifests": []any{map[string]any{
-			"value":          "package.json",
-			"lockCandidates": []string{"pnpm-lock.yaml", "package-lock.json"},
-			"installs":       map[string]any{"pnpm-lock.yaml": in},
+	return Contract{
+		Name:  "ts",
+		Tools: map[string]spells.Tool{"pnpm": {Probe: spells.Command{Bin: "pnpm", Args: []string{"--version"}}}},
+		Manifests: []spells.Manifest{{
+			Value:          "package.json",
+			LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json"},
+			Installs:       map[string]spells.Install{"pnpm-lock.yaml": in},
 		}},
 	}
 }
 
-func TestDecode_InstallSynthesizesTheOp(t *testing.T) {
-	m, err := Decode(installSpell(nil))
+func TestDescriptor_InstallSynthesizesTheOp(t *testing.T) {
+	m, err := describe(installSpell(nil))
 	require.NoError(t, err)
 
 	op, ok := m.Ops["pnpm-install"]
@@ -67,32 +67,32 @@ func TestDecode_InstallSynthesizesTheOp(t *testing.T) {
 
 // Each rule is a declaration bug knowable at load, so each fails the spell rather than
 // one project's install later.
-func TestDecode_InstallMisdeclarationsAreErrors(t *testing.T) {
+func TestDescriptor_InstallMisdeclarationsAreErrors(t *testing.T) {
 	cases := []struct {
 		name string
-		src  mapObj
+		src  Contract
 		want string
 	}{
-		{"lock not a candidate", func() mapObj {
+		{"lock not a candidate", func() Contract {
 			s := installSpell(nil)
-			man := s["manifests"].([]any)[0].(map[string]any)
-			man["installs"] = map[string]any{"yarn.lock": man["installs"].(map[string]any)["pnpm-lock.yaml"]}
+			man := &s.Manifests[0]
+			man.Installs = map[string]spells.Install{"yarn.lock": man.Installs["pnpm-lock.yaml"]}
 			return s
 		}(), `"yarn.lock" is not one of this manifest's lockCandidates`},
-		{"relocatable without dir", installSpell(func(in map[string]any) { delete(in, "dir") }), "relocatable names no dir"},
-		{"stamp outside the project", installSpell(func(in map[string]any) { in["stamps"] = []string{"../x"} }), "must be a path inside the project"},
-		{"undeclared tool", installSpell(func(in map[string]any) { in["tools"] = []string{"node"} }), `tool "node" is not declared`},
-		{"no command", installSpell(func(in map[string]any) { delete(in, "command") }), "command is required"},
-		{"no name", installSpell(func(in map[string]any) { delete(in, "name") }), "name is required"},
-		{"authored op collides", func() mapObj {
+		{"relocatable without dir", installSpell(func(in *spells.Install) { in.Dir = "" }), "relocatable names no dir"},
+		{"stamp outside the project", installSpell(func(in *spells.Install) { in.Stamps = []string{"../x"} }), "must be a path inside the project"},
+		{"undeclared tool", installSpell(func(in *spells.Install) { in.Tools = []string{"node"} }), `tool "node" is not declared`},
+		{"no command", installSpell(func(in *spells.Install) { in.Command = spells.Command{} }), "command has no bin"},
+		{"no name", installSpell(func(in *spells.Install) { in.Name = "" }), "name is required"},
+		{"authored op collides", func() Contract {
 			s := installSpell(nil)
-			s["ops"] = map[string]any{"pnpm-install": map[string]any{"bin": "pnpm"}}
+			s.Targets = map[string]spells.Command{"pnpm-install": {Bin: "pnpm"}}
 			return s
 		}(), "drop the op"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Decode(tc.src)
+			_, err := describe(tc.src)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)
 		})
@@ -195,23 +195,18 @@ func TestBuiltinTypescriptInstallSplitsByBinary(t *testing.T) {
 	}
 }
 
-// TestDecode_InstallGroupsSharedNameOneOp pins the grouping rule two lock candidates
+// TestDescriptor_InstallGroupsSharedNameOneOp pins the grouping rule two lock candidates
 // declaring the same Name (a shape only typescript's npm-ci exercises today) register
 // as ONE op scoped to both their lock candidates, not two.
-func TestDecode_InstallGroupsSharedNameOneOp(t *testing.T) {
+func TestDescriptor_InstallGroupsSharedNameOneOp(t *testing.T) {
 	s := installSpell(nil)
-	man := s["manifests"].([]any)[0].(map[string]any)
-	man["lockCandidates"] = []string{"pnpm-lock.yaml", "npm-lock.json"}
-	installs := man["installs"].(map[string]any)
-	other := map[string]any{}
-	for k, v := range installs["pnpm-lock.yaml"].(map[string]any) {
-		other[k] = v
-	}
-	other["name"] = "pnpm-install"
-	other["command"] = map[string]any{"bin": "npm-alias-of-pnpm", "args": []string{"install"}}
-	installs["npm-lock.json"] = other
+	man := &s.Manifests[0]
+	man.LockCandidates = []string{"pnpm-lock.yaml", "npm-lock.json"}
+	other := man.Installs["pnpm-lock.yaml"]
+	other.Command = spells.Command{Bin: "npm-alias-of-pnpm", Args: []string{"install"}}
+	man.Installs["npm-lock.json"] = other
 
-	m, err := Decode(s)
+	m, err := describe(s)
 	require.NoError(t, err)
 	require.Len(t, m.Ops, 1, "both lock candidates share a name and register as one op")
 	op, ok := m.Ops["pnpm-install"]

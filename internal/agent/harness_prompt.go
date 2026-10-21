@@ -11,23 +11,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// HarnessPrompt is one host-native approval setting a harness keeps in place, so a guard
-// verdict of ask reaches the person through the host's own prompt.
-//
-// A host whose hooks cannot prompt still asks where its own rules or config say to. The
-// hook then ANSWERS that prompt from the verdict. Without the setting nothing asks, and the
-// templates refuse the call instead of letting it through unasked.
-//
-// Exactly one body: Content is a whole file the descriptor owns, or Key and Value set one
-// value inside a JSON document the person also edits.
-type HarnessPrompt struct {
-	Path    string   `json:"path"`
-	Content string   `json:"content,omitempty"`
-	Key     []string `json:"key,omitempty"`
-	Value   any      `json:"value,omitempty"`
-}
-
-func validateHarnessPrompt(p HarnessPrompt) error {
+// validateHarnessPrompt holds p to one body. A host whose hooks cannot prompt still asks
+// where its own rules or config say to, and the hook then answers that prompt from the
+// verdict; without the setting nothing asks, and the templates refuse the call instead.
+func validateHarnessPrompt(p types.Prompt) error {
 	if p.Path == "" || filepath.IsAbs(p.Path) || !isSafeRelativePath(p.Path) {
 		return fmt.Errorf("path must be a workspace-relative path")
 	}
@@ -48,18 +35,7 @@ func validateHarnessPrompt(p HarnessPrompt) error {
 	return nil
 }
 
-// HarnessAgentFile is one subagent file a harness spell rendered in its host's format. The
-// descriptor owns the whole file, so a plan rewrites it whenever the bytes differ.
-type HarnessAgentFile struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-	// Hint is the person-owned setting that picks this agent's model, printed with the plan
-	// when the spell could not pick one itself. Editing the file instead would be undone by
-	// the next plan, which rewrites any byte that differs.
-	Hint string `json:"hint,omitempty"`
-}
-
-func validateHarnessAgentFile(f HarnessAgentFile) error {
+func validateHarnessAgentFile(f types.AgentFile) error {
 	if f.Path == "" || filepath.IsAbs(f.Path) || !isSafeRelativePath(f.Path) {
 		return fmt.Errorf("path must be a workspace-relative path")
 	}
@@ -89,7 +65,7 @@ func planWholeFile(root, rel, content string) (types.HarnessFile, error) {
 }
 
 // promptLocation renders a prompt for a message: the file, and the key inside it.
-func promptLocation(p HarnessPrompt) string {
+func promptLocation(p types.Prompt) string {
 	if len(p.Key) == 0 {
 		return p.Path
 	}
@@ -99,7 +75,7 @@ func promptLocation(p HarnessPrompt) string {
 // planHarnessPrompt reports what p's file needs, with no Changes when it is in place. A key
 // already holding another value is an error: it was someone's choice, and no plan
 // overwrites it.
-func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) {
+func planHarnessPrompt(root string, p types.Prompt) (types.HarnessFile, error) {
 	if p.Content != "" {
 		return planWholeFile(root, p.Path, p.Content)
 	}
@@ -177,16 +153,7 @@ func sameJSON(a, b any) bool {
 	return errA == nil && errB == nil && bytes.Equal(ea, eb)
 }
 
-// HarnessSetting is one plain value a harness keeps in a host's JSON config, read by the host
-// as configuration rather than run as a hook: a plugin to enable, a marketplace to know. Key
-// and Value set it inside a document the person also edits.
-type HarnessSetting struct {
-	Path  string   `json:"path"`
-	Key   []string `json:"key"`
-	Value any      `json:"value"`
-}
-
-func validateHarnessSetting(s HarnessSetting) error {
+func validateHarnessSetting(s types.Setting) error {
 	if s.Path == "" || filepath.IsAbs(s.Path) || !isSafeRelativePath(s.Path) {
 		return fmt.Errorf("path must be a workspace-relative path")
 	}
@@ -205,12 +172,12 @@ func validateHarnessSetting(s HarnessSetting) error {
 }
 
 // settingLocation renders a setting for a message: the file, and the key inside it.
-func settingLocation(s HarnessSetting) string {
+func settingLocation(s types.Setting) string {
 	return s.Path + " " + strings.Join(s.Key, ".")
 }
 
 // planHarnessSetting reports what s's file needs, with no Changes when it is in place.
-func planHarnessSetting(root string, s HarnessSetting) (types.HarnessFile, error) {
+func planHarnessSetting(root string, s types.Setting) (types.HarnessFile, error) {
 	return planJSONKey(root, s.Path, s.Key, s.Value, func(got any) error {
 		return fmt.Errorf("%s holds %v, not %v, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
 			settingLocation(s), got, s.Value)

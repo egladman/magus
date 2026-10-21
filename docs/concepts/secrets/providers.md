@@ -51,22 +51,16 @@ final token = magus\secret.read("Private/DockerHub/token");
 // spells/onepassword/spell.buzz
 export fun mgs_getName() > str { return "onepassword"; }
 
-export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
-    var io = {};
-    cb(io);
-    final v = proc\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
+export fun resolve_secret(target: Target, req: SecretRef) > Secret {
+    final v = proc\exec("op", args: ["read", "op://" + req.ref]).stdout;
     return Secret{ value = v };
 }
 ```
 
-`Secret` comes from `magus/spell`, alongside `Target` and `Command`. The return is typed
-because Buzz checks function signatures: a provider returning the wrong shape fails to
-load rather than failing at the first read. That is worth having here and not on
-`magus\secret.read`, which hands a magusfile a plain `str`; Buzz does not check
-host-call results, so a type there would be decoration rather than a constraint.
-
-A provider that returns a bare string still works, so an older spell keeps loading, but
-write new ones with the typed return.
+`SecretRef` and `Secret` come from `magus/spell`, alongside `Target` and `Command`. The
+signature is checked when the spell loads: a provider that declares another one, a bare
+`> str` among them, is [MGS1051](../../reference/codes/magusfile/MGS1051.md), and an answer
+of the wrong shape is an error naming the field.
 
 A declared provider wins over the built-in, so selecting one is how a laptop avoids
 exporting tokens into a shell while CI keeps using the environment.
@@ -259,10 +253,8 @@ provider's job**:
 
 ```buzz
 // spells/onepassword/spell.buzz - a house convention, expressed in one place
-export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
-    var io = {};
-    cb(io);
-    final ref = "" + io["ref"];               // "dockerhub-token"
+export fun resolve_secret(target: Target, req: SecretRef) > Secret {
+    final ref = req.ref;                      // "dockerhub-token"
     final v = proc\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
         dir: ".", opts: {}).stdout;
     return Secret{ value = v };

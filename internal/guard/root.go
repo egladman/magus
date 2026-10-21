@@ -355,7 +355,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 	if bound && at.models != nil {
 		forked.rows = at.models()
 	}
-	host := types.HarnessKey{ID: who.Host}
+	host := who.Host
 	var findings []costFinding
 	switch s := deps.settingLookup(string(denyRuleSpawnNamesModel)); {
 	case s.Decision == builtin.Off:
@@ -382,7 +382,7 @@ type forkedTier struct {
 	record types.JobModelTier
 	tier   types.ModelTier
 	set    *types.ModelTierSet
-	// rows are the harness_models rows: their aliases name the short model a host's spawn
+	// rows are the mgs_listModels rows: their aliases name the short model a host's spawn
 	// tool takes where the declaration maps only full ids.
 	rows []types.ModelPricing
 }
@@ -425,24 +425,24 @@ func (f forkedTier) line(alias string) string {
 }
 
 // refusal is spawn-names-model's refusal at strict of a spawn of model from host, "" when
-// model resolves to a tier of the forked rank, through the declaration or a harness_models
+// model resolves to a tier of the forked rank, through the declaration or a mgs_listModels
 // row's id or alias, or is the model the row itself named. A host
 // the declaration maps no model for is refused too, naming the hosts entry that would map
 // one.
-func (f forkedTier) refusal(host types.HarnessKey, model string) string {
+func (f forkedTier) refusal(host, model string) string {
 	if f.record.Model != "" && model == f.record.Model {
 		return ""
 	}
 	alias, err := f.set.Alias(host, f.tier)
 	if err != nil {
 		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\job.modelTiers declares, or spawn the job from a harness it maps.",
-			f.job, f.record.Name, err, host.ID)
+			f.job, f.record.Name, err, host)
 	}
 	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
 	if ok && spawned.Rank() == f.tier.Rank() {
 		return ""
 	}
-	runs := fmt.Sprintf("%s, which harness %s maps to no model tier", model, host.ID)
+	runs := fmt.Sprintf("%s, which harness %s maps to no model tier", model, host)
 	if ok {
 		runs = fmt.Sprintf("%s, model tier %s (rank %d)", model, spawned.Name(), spawned.Rank())
 	}
@@ -452,7 +452,7 @@ func (f forkedTier) refusal(host types.HarnessKey, model string) string {
 
 // rankedAbove is spawn-above-model-tier's advice for a spawn of model from host, "" unless
 // model resolves to a tier ranking above the forked one.
-func (f forkedTier) rankedAbove(host types.HarnessKey, model string) string {
+func (f forkedTier) rankedAbove(host, model string) string {
 	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
 	if !ok {
 		return ""

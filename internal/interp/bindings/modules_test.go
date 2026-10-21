@@ -696,8 +696,10 @@ export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
 // cwd — the workspace-preload case that used to fail with "module not found"
 // (Teal) / "undefined variable" (Buzz) because local-spell lookup was cwd-relative.
 func TestParseLocalSpellFromOtherDir(t *testing.T) {
-	spell := `export fun mgs_getName() > str { return "hello"; }
-export fun mgs_listTargets() > any { return {"build": {"bin": "echo", "args": ["hi"]}}; }`
+	spell := `import "magus/spell";
+export fun mgs_getName() > str { return "hello"; }
+fun build(t: Target) > Command { return Command{bin = "echo", args = ["hi"]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"build": build}; }`
 	magusfile := `import "magus";
 import "spells/hello";
 export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`

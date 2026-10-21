@@ -576,6 +576,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	} else {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
+	workspace.BindRegistry(m, m.wsReg)
 	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
 		Unattended:  m.cfg.Secret.Unattended,
@@ -970,15 +971,6 @@ func (m *Magus) Root() string                   { return m.ws.Root }
 func (m *Magus) All() []*types.Project          { return m.ws.All() }
 func (m *Magus) Get(path string) *types.Project { return m.ws.Get(path) }
 func (m *Magus) Graph() (*types.Graph, error)   { return dependency.Build(m.ws) }
-
-// Harnesses returns agent-harness spell names the root magusfile wired via
-// magus\harness.provider, or nil.
-func (m *Magus) Harnesses() []string {
-	if m.wsReg == nil {
-		return nil
-	}
-	return m.wsReg.Harnesses()
-}
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
@@ -2139,6 +2131,7 @@ func (m *Magus) Close() error {
 		}
 	}
 	if m.wsReg != nil {
+		workspace.UnbindRegistry(m)
 		if err := m.wsReg.Close(); err != nil {
 			errs = append(errs, err)
 		}

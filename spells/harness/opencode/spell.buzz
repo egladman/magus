@@ -1,66 +1,47 @@
-// OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook
-// config file Magus can merge. The guard rides a TypeScript plugin
+// OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook config file
+// Magus can merge. The guard rides a TypeScript plugin
 // (docs/guides/integrations/agents/opencode-plugin.ts), not a merged hook config.
 //
 //   import "spells/harness/opencode" as opencode
 //   magus\harness.provider(opencode)
 //
-// To adapt without modifying Magus source: copy this spell into the workspace,
-// change only the import path (keep provider), edit Buzz. `magus describe harness
-// opencode` prints no hook config when config path is empty, only the push and human-only run permissions in opencode.json
-// (harness_prompts); verify does not claim guard coverage from a missing config. See magus-workspace-rules "Adapting a Buzz harness".
+// To adapt without modifying Magus source: copy this spell into the workspace, change only
+// the import path (keep provider), edit Buzz. `magus describe harness opencode` prints no
+// hook config, since the config path is empty, only the push and human-only run
+// permissions in opencode.json (mgs_renderPrompts); verify does not claim guard coverage
+// from a missing config, and reports the hook drift check skipped. See
+// magus-workspace-rules "Adapting a Buzz harness".
 
 import "magus/spell";
+import "magus/harness";
 import "assert";
 
 export fun mgs_getName() > str { return "opencode"; }
 
-fun opencode_skills_form() > str { return "both"; }
-
-fun opencode_skills_paths() > [str] {
-    return [".opencode/skills"];
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = ""};
 }
 
-fun opencode_config() > {str: any} {
-    return {
-        "path": "",
-    };
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{paths = [".opencode/skills"], form = SkillForm.both};
 }
 
-fun opencode_skills() > {str: any} {
-    return {
-        "paths": opencode_skills_paths(),
-        "form": opencode_skills_form(),
-    };
-}
-
-fun opencode_entries() > [any] {
-    return [];
-}
-
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return opencode_config();
+// The hooks the guard plugin would run were they wired through a config. With no config
+// path magus has no entries to hold them to, and says the check was skipped.
+export fun mgs_listHooks() > [HookCommand] {
+    return [buzzCheckHook(mgs_getName())];
 }
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to
 // the directory the plugin names to `magus shell --tool-rows`. A tool missing here is one
 // the guard cannot judge (unjudged-tool).
-export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
-    final rows = mut [<any>];
-    rows.append({"name": "bash", "capability": "runs"});
-    foreach (name in ["read", "glob", "grep", "list"]) { rows.append({"name": name, "capability": "reads"}); }
-    foreach (name in ["write", "edit", "patch"]) { rows.append({"name": name, "capability": "writes"}); }
-    rows.append({"name": "task", "capability": "spawns"});
-    foreach (name in ["todowrite", "todoread", "webfetch", "skill"]) { rows.append({"name": name, "capability": "inert"}); }
-    return {"dir": ".opencode/magus/tools", "rows": rows};
-}
-
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return opencode_skills();
-}
-
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return opencode_entries();
+export fun mgs_listTools() > HarnessTools {
+    final rows = mut [HarnessTool{name = "bash", capability = ToolCapability.runs}];
+    foreach (name in ["read", "glob", "grep", "list"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
+    foreach (name in ["write", "edit", "patch"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
+    rows.append(HarnessTool{name = "task", capability = ToolCapability.spawns});
+    foreach (name in ["todowrite", "todoread", "webfetch", "skill"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }
+    return HarnessTools{dir = ".opencode/magus/tools", rows = rows};
 }
 
 // opencode_env_hint is what the printed config says about MAGUS_LOG_SILENT. opencode.json
@@ -70,18 +51,16 @@ fun opencode_env_hint() > str {
     return "OpenCode's config documents no setting for the environment of the commands its agent runs, so this config sets none: the guard plugin's shell.env hook exports MAGUS_LOG_SILENT=true into them unless you already set it in the environment you start OpenCode from.";
 }
 
-fun opencode_mcp() > {str: any} {
-    // User owns OpenCode MCP client settings. Magus points at docs only.
-    // Guard remains the TypeScript plugin.
-    return {
-        "hint": "Configure Magus MCP in the project's opencode.json under mcp.magus as a local server: type local, command [\"./magus\", \"mcp\"]. Magus does not write OpenCode MCP config.\n"
+// User owns OpenCode MCP client settings. Magus points at docs only; the guard remains the
+// TypeScript plugin.
+export fun mgs_getMcp() > McpServer {
+    return McpServer{
+        transport = McpTransport.stdio,
+        command = ["./magus", "mcp"],
+        hint = "Configure Magus MCP in the project's opencode.json under mcp.magus as a local server: type local, command [\"./magus\", \"mcp\"]. Magus does not write OpenCode MCP config.\n"
             + opencode_env_hint(),
-        "docs": "docs/guides/integrations/mcp.md",
+        docs = "docs/guides/integrations/mcp.md",
     };
-}
-
-export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
-    return opencode_mcp();
 }
 
 // opencode_prompts makes OpenCode ask before every git push. A plugin cannot ask (throwing
@@ -90,7 +69,7 @@ export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
 // ungated one, deny for a leased worker. Both keys, because "git push *" does not match a
 // bare "git push". Then the same pair for each spelling of a run of a target the workspace
 // declares human_only, whose names humanOnly holds.
-fun opencode_prompts(humanOnly: [str]) > [any] {
+fun opencode_prompts(humanOnly: [str]) > [Prompt] {
     final verbs = mut ["git push", "hg push", "sl push", "jj git push"];
     final names = humanOnly.cloneMutable();
     names.sort(fun (left: str, right: str) > bool => left < right);
@@ -100,37 +79,18 @@ fun opencode_prompts(humanOnly: [str]) > [any] {
             verbs.append("{bin} affected {name}");
         }
     }
-    final prompts: mut [any] = mut [];
+    final prompts = mut [<Prompt>];
     foreach (verb in verbs) {
-        prompts.append({
-            "path": "opencode.json",
-            "key": ["permission", "bash", verb],
-            "value": "ask",
-        });
-        prompts.append({
-            "path": "opencode.json",
-            "key": ["permission", "bash", verb + " *"],
-            "value": "ask",
-        });
+        prompts.append(Prompt{path = "opencode.json", key = ["permission", "bash", verb], value = "ask"});
+        prompts.append(Prompt{path = "opencode.json", key = ["permission", "bash", verb + " *"], value = "ask"});
     }
     return prompts;
 }
 
-// The request's human_only maps each target the workspace declares human_only to its
-// reason; OpenCode's permission has no place for the reason, so only the names are read.
-export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
-    final req = {<str: any>};
-    cb(req);
-    final humanOnly = req["human_only"];
-    if (humanOnly == null) { return opencode_prompts([<str>]); }
-    return opencode_prompts((humanOnly as {str: any}).keys());
-}
-
-// opencode_yaml_quote renders text as a YAML double-quoted scalar, so a colon, a quote or a
-// newline in a description cannot change what the frontmatter means.
-fun opencode_yaml_quote(text: str) > str {
-    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
-    return "\"" + escaped + "\"";
+// OpenCode's permission has no place for a human_only target's reason, so only the names
+// are read.
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return opencode_prompts(humanOnly.keys());
 }
 
 // opencode_agent renders one shipped agent as an OpenCode subagent file. It sets no model,
@@ -138,90 +98,63 @@ fun opencode_yaml_quote(text: str) > str {
 // by file name rather than a frontmatter field. A read-only agent denies the edit
 // permission, which covers every file-changing tool; bash stays at the session's setting
 // because the agent's job is running read-only magus commands.
-fun opencode_agent(agent: {str: any}) > {str: any} {
-    var content = "---\ndescription: " + opencode_yaml_quote("{agent["description"]}") + "\nmode: subagent\n";
-    if (agent["read_only"] == true) {
-        content = content + "permission:\n  edit: deny\n";
+fun opencode_agent(agent: ShippedAgent) > AgentFile {
+    final lines = mut ["---", "description: " + yamlQuote(agent.description), "mode: subagent"];
+    if (agent.readOnly) {
+        lines.append("permission:");
+        lines.append("  edit: deny");
     }
-    content = content + "---\n\n" + "{agent["instructions"]}".trim() + "\n";
-    return {
-        "path": ".opencode/agents/{agent["name"]}.md",
-        "content": content,
-    };
+    lines.append("---");
+    lines.append("");
+    lines.append(agent.instructions.trim());
+    return AgentFile{path = ".opencode/agents/{agent.name}.md", content = lines.join("\n") + "\n"};
 }
 
-fun opencode_agents(agents: [any]) > [any] {
-    final files: mut [any] = mut [];
-    foreach (agent in agents) {
-        files.append(opencode_agent(agent as {str: any}));
-    }
-    return files;
+export fun mgs_renderAgents(agents: [ShippedAgent]) > [AgentFile] {
+    return agents.map(fun (index: int, agent: ShippedAgent) > AgentFile => opencode_agent(agent));
 }
 
-// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
-export fun harness_agents(target: Target, cb: fun(any)) > [any] {
-    final req = {<str: any>};
-    cb(req);
-    final agents = req["agents"];
-    if (agents == null) { return []; }
-    return opencode_agents(agents as [any]);
-}
-
-test "harness_agents renders a read-only subagent that denies edits and sets no model" {
-    final file = opencode_agent({
-        "name": "magus-scout",
-        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
-        "instructions": "First line.\n\nSecond line.\n",
-        "read_only": true,
+test "mgs_renderAgents renders a read-only subagent that denies edits and sets no model" {
+    final file = opencode_agent(ShippedAgent{
+        name = "magus-scout",
+        description = "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        instructions = "First line.\n\nSecond line.\n",
+        readOnly = true,
     });
-    assert\equal("{file["path"]}", ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
+    assert\equal(file.path, ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
     assert\equal(
-        "{file["content"]}",
+        file.content,
         "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\npermission:\n  edit: deny\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
-    assert\isTrue("{file["content"]}".indexOf("model") == null, "the invoking session's model applies");
+    assert\isTrue(file.content.indexOf("model") == null, "the invoking session's model applies");
 }
 
-test "harness_agents leaves permissions alone for a writable subagent" {
-    final file = opencode_agent({
-        "name": "magus-worker",
-        "description": "Edits files.",
-        "instructions": "First line.\n",
-        "read_only": false,
-    });
-    assert\isTrue("{file["content"]}".indexOf("permission") == null, "the session's permissions apply");
+test "mgs_renderAgents leaves permissions alone for a writable subagent, and renders none for none" {
+    final file = opencode_agent(ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"});
+    assert\isTrue(file.content.indexOf("permission") == null, "the session's permissions apply");
+    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
 }
 
-test "harness_agents renders nothing when the call carries no agents" {
-    final noTarget = null;
-    final cb = fun(_: any) > void {};
-    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
-}
-
-test "harness_prompts asks before every spelling of a human-only target's run" {
-    final prompts = opencode_prompts(["agent-bench-run"]);
+test "mgs_renderPrompts asks before every spelling of a human-only target's run" {
+    final prompts = mgs_renderPrompts({"agent-bench-run": "launches paid sessions"});
     assert\equal(prompts.len(), 16, "the 8 push keys, then a bare and an argument key per spelling");
     final want = ["magus run agent-bench-run", "magus run agent-bench-run *", "magus affected agent-bench-run", "magus affected agent-bench-run *",
         "./magus run agent-bench-run", "./magus run agent-bench-run *", "./magus affected agent-bench-run", "./magus affected agent-bench-run *"];
     foreach (i, verb in want) {
-        final key = prompts[8 + i]["key"] as [str];
-        assert\equal(key[2], verb, "permission key {8 + i}");
-        assert\equal("{prompts[8 + i]["value"]}", "ask", "OpenCode prompts rather than refuses");
+        assert\equal(prompts[8 + i].key[2], verb, "permission key {8 + i}");
+        assert\equal("{prompts[8 + i].value}", "ask", "OpenCode prompts rather than refuses");
     }
 }
 
-test "harness_prompts asks before every backend's bare push and push with arguments" {
-    final prompts = opencode_prompts([<str>]);
+test "mgs_renderPrompts asks before every backend's bare push and push with arguments" {
+    final prompts = mgs_renderPrompts({<str: str>});
     assert\equal(prompts.len(), 8, "a bare and an argument key per backend");
-    foreach (p in prompts) {
-        assert\equal("{p["path"]}", "opencode.json", "the project config OpenCode loads");
-        assert\equal("{p["value"]}", "ask", "OpenCode prompts rather than refuses");
-    }
     final want = ["git push", "git push *", "hg push", "hg push *", "sl push", "sl push *", "jj git push", "jj git push *"];
     foreach (i, verb in want) {
-        final key = prompts[i]["key"] as [str];
-        assert\equal(key[2], verb, "permission key {i}");
+        assert\equal(prompts[i].path, "opencode.json", "the project config OpenCode loads");
+        assert\equal(prompts[i].key[2], verb, "permission key {i}");
+        assert\isTrue(prompts[i].key[0] != "env", "opencode.json gains no env key");
     }
 }
 
@@ -229,45 +162,15 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "harness_config is skills-only empty path" {
-    final cfg = opencode_config();
-    assert\equal("{cfg["path"]}", "", "no host JSON for Magus to merge");
+test "the harness is skills-only, under .opencode/skills" {
+    assert\equal(mgs_getHarnessConfig().path, "", "no host JSON for Magus to merge");
+    assert\equal(mgs_getSkills().paths.join(","), ".opencode/skills", "OpenCode reads .opencode/skills");
+    assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
 }
 
-test "harness_skills installs both forms under .opencode/skills" {
-    assert\equal(opencode_skills_form(), "both", "matches the JSON descriptor");
-    final skills = opencode_skills();
-    assert\equal("{skills["form"]}", "both", "skills map carries the form");
-    final paths = skills["paths"] as [str];
-    assert\equal(paths.len(), 1, "one skills install path");
-    assert\equal(paths[0], ".opencode/skills", "OpenCode reads .opencode/skills");
-}
-
-test "harness_entries is empty because no hook config is merged" {
-    assert\equal(opencode_entries().len(), 0, "guard is the TypeScript plugin not managed_entries");
-}
-
-test "harness_mcp points OpenCode at docs only" {
-    final mcp = opencode_mcp();
-    assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
-    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
-    assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus write");
-}
-
-test "the printed config says opencode.json has no place for MAGUS_LOG_SILENT" {
-    assert\isTrue("{opencode_mcp()["hint"]}".indexOf(opencode_env_hint()) != null, "describe prints it");
-    assert\isTrue(opencode_env_hint().indexOf("MAGUS_LOG_SILENT=true") != null, "names the variable and its value");
-    foreach (prompt in opencode_prompts(["agent-bench-run"])) {
-        final key = (prompt["key"] as? [str]) ?? [<str>];
-        assert\isTrue(key.len() == 0 or key[0] != "env", "opencode.json gains no env key");
-    }
-}
-
-test "harness_* contract wrappers return the same pure helpers" {
-    final t = null;
-    final cb = fun(_: any) > void {};
-    assert\equal("{harness_config(t, cb)["path"]}", "", "config path");
-    assert\equal("{harness_skills(t, cb)["form"]}", opencode_skills_form(), "skills form");
-    assert\equal(harness_entries(t, cb).len(), 0, "entries length");
-    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+test "mgs_getMcp points OpenCode at a stdio server it configures itself" {
+    final mcp = mgs_getMcp();
+    assert\equal(mcp.transport.value, "stdio", "the host starts ./magus mcp per session");
+    assert\isTrue(mcp.hint.indexOf("does not write") != null, "no Magus write");
+    assert\isTrue(mcp.hint.indexOf(opencode_env_hint()) != null, "describe prints the MAGUS_LOG_SILENT note");
 }

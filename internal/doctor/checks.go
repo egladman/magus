@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/xdg"
@@ -1845,7 +1846,11 @@ func (r *runner) checkGuardBinary() types.Check {
 		// hooks and legitimately has no ./magus yet, so failing there invented a broken
 		// state out of a normal one. What was actually wrong was the answer, not the
 		// severity.
-		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...); len(wired) > 0 {
+		harnesses, wiredErr := workspace.WiredHarnesses(r.ws)
+		if wiredErr != nil {
+			return unknownWiring(name, wiredErr)
+		}
+		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), harnesses...); len(wired) > 0 {
 			return types.Check{
 				Name:    name,
 				Status:  types.CheckAdvice,
@@ -2102,14 +2107,15 @@ var guardTemplateBasenames = []string{
 	"magus-session.buzz",
 }
 
-// workspaceHarnesses returns magusfile-wired harness spell names when ws
-// exposes Harnesses (a *magus.Magus does). Nil or unknown ws yields nil.
-func workspaceHarnesses(ws types.WorkspaceReader) []string {
-	type harnesses interface{ Harnesses() []string }
-	if h, ok := any(ws).(harnesses); ok {
-		return h.Harnesses()
+// unknownWiring is the check named name when the workspace carries no harness wiring:
+// unknown, and never a pass, since a check run against no wiring would read "none wired".
+func unknownWiring(name string, err error) types.Check {
+	return types.Check{
+		Name:     name,
+		Status:   types.CheckAdvice,
+		Evidence: types.EvidenceUnknown,
+		Message:  "the wired harnesses are unknown, so this check did not run: " + err.Error(),
 	}
-	return nil
 }
 
 // harnessConfigCandidates resolves configuration paths from user-owned
@@ -2259,7 +2265,11 @@ func guardTemplateMarkerProblem(body []byte) string {
 // end-to-end execution is guard_templates.txtar's job, which runs in CI
 // against real event fixtures.
 func (r *runner) checkGuardWiring() types.Check {
-	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardProbeBudget, workspaceHarnesses(r.ws)...)
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring("guard-wiring", err)
+	}
+	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardProbeBudget, wired...)
 }
 
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
@@ -2436,7 +2446,11 @@ func (r *runner) checkAgentSkills() types.Check {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no skill catalog supplied; check skipped"}
 	}
 	root := r.ws.Root()
-	statuses := r.opts.skills.CheckStatuses(r.runCtx(), root, workspaceHarnesses(r.ws)...)
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring(name, err)
+	}
+	statuses := r.opts.skills.CheckStatuses(r.runCtx(), root, wired...)
 	if len(statuses) == 0 {
 		return types.Check{
 			Name:    name,

@@ -18,35 +18,19 @@ export fun mgs_getName() > str { return "claude-code-mod"; }
 
 final SETTINGS_PATH = ".claude/settings.json";
 
-fun mod_settings() > [any] {
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = ""};
+}
+
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{paths = [<str>], form = SkillForm.both};
+}
+
+export fun mgs_listSettings() > [Setting] {
     return [
-        {
-            "path": SETTINGS_PATH,
-            "key": ["extraKnownMarketplaces", "magus"],
-            "value": {"source": {"source": "github", "repo": "egladman/magus"}},
-        },
-        {
-            "path": SETTINGS_PATH,
-            "key": ["enabledPlugins", "magus@magus"],
-            "value": true,
-        },
+        Setting{path = SETTINGS_PATH, key = ["extraKnownMarketplaces", "magus"], value = {"source": {"source": "github", "repo": "egladman/magus"}}},
+        Setting{path = SETTINGS_PATH, key = ["enabledPlugins", "magus@magus"], value = true},
     ];
-}
-
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return {"path": ""};
-}
-
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return {"paths": [<str>], "form": "both"};
-}
-
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [];
-}
-
-export fun harness_settings(target: Target, cb: fun(any)) > [any] {
-    return mod_settings();
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
@@ -54,10 +38,10 @@ test "mgs_getName is the harness id describe and verify look up" {
 }
 
 test "the settings register the marketplace and enable the mod in Claude Code settings" {
-    final settings = mod_settings();
+    final settings = mgs_listSettings();
     assert\equal(settings.len(), 2, "a marketplace and a plugin");
     foreach (s in settings) {
-        assert\equal("{s["path"]}", SETTINGS_PATH, "the project settings Claude Code reads");
+        assert\equal(s.path, SETTINGS_PATH, "the project settings Claude Code reads");
     }
-    assert\equal("{settings[1]["key"]}", "[enabledPlugins, magus@magus]", "the install id is <plugin>@<marketplace>");
+    assert\equal(settings[1].key.join(","), "enabledPlugins,magus@magus", "the install id is <plugin>@<marketplace>");
 }

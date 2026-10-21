@@ -159,3 +159,61 @@ func TestDecodeIsStrict(t *testing.T) {
 		}}}, got)
 	})
 }
+
+func strs(ss ...string) vm.Value {
+	items := make([]vm.Value, len(ss))
+	for i, s := range ss {
+		items[i] = str(s)
+	}
+	return vm.ListValue(items)
+}
+
+func TestDecodeCommand(t *testing.T) {
+	t.Run("a command decodes in full", func(t *testing.T) {
+		got, err := DecodeCommand(record("bin", str("go"), "args", strs("vet", "./...")))
+		require.NoError(t, err)
+		assert.Equal(t, spells.Command{Bin: "go", Args: []string{"vet", "./..."}}, got)
+	})
+
+	t.Run("an unknown member is refused", func(t *testing.T) {
+		_, err := DecodeCommand(record("bin", str("go"), "argv", strs("vet")))
+		require.EqualError(t, err, `command: Command has no member "argv"`)
+	})
+}
+
+func TestDecodeSandbox(t *testing.T) {
+	t.Run("a sandbox decodes in full", func(t *testing.T) {
+		allow := record("base", str("xdgData"), "path", str("x"), "mode", str("rw"))
+		got, err := DecodeSandbox(record("allow", vm.ListValue([]vm.Value{allow})))
+		require.NoError(t, err)
+		assert.Equal(t, spells.Sandbox{Allow: []spells.SandboxAllow{
+			{Base: "xdgData", Path: "x", Mode: spells.SandboxAccess("rw")},
+		}}, got)
+	})
+
+	t.Run("an unknown member is refused", func(t *testing.T) {
+		_, err := DecodeSandbox(record("allows", vm.ListValue(nil)))
+		require.EqualError(t, err, `sandbox: Sandbox has no member "allows"`)
+	})
+}
+
+func TestDecodeService(t *testing.T) {
+	t.Run("a service decodes in full", func(t *testing.T) {
+		got, err := DecodeService(record(
+			"command", record("bin", str("docker"), "args", strs("run", "postgres:16")),
+			"readiness", record("bin", str("pg_isready")),
+			"stop", record("bin", str("docker"), "args", strs("stop", "magus-pg")),
+		))
+		require.NoError(t, err)
+		assert.Equal(t, spells.Service{
+			Command:   spells.Command{Bin: "docker", Args: []string{"run", "postgres:16"}},
+			Readiness: spells.Command{Bin: "pg_isready"},
+			Stop:      spells.Command{Bin: "docker", Args: []string{"stop", "magus-pg"}},
+		}, got)
+	})
+
+	t.Run("an unknown member is refused", func(t *testing.T) {
+		_, err := DecodeService(record("command", record("bin", str("docker")), "ready", record("bin", str("true"))))
+		require.EqualError(t, err, `service: Service has no member "ready"`)
+	})
+}
