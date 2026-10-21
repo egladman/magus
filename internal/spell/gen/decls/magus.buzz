@@ -1249,6 +1249,7 @@ export object SpawnRequest {
     prompt: str = "",
     background: bool = false,
     isolated: bool = false,
+    checkout: str = "",
     agent: str = "",
     parent: str = "",
     role: str = "",

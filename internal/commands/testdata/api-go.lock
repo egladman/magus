@@ -4327,6 +4327,7 @@ github.com/egladman/magus/types.SpawnRequest type struct
 github.com/egladman/magus/types.SpawnRequest.Agent field string
 github.com/egladman/magus/types.SpawnRequest.AgentType field string
 github.com/egladman/magus/types.SpawnRequest.Background field bool
+github.com/egladman/magus/types.SpawnRequest.Checkout field string
 github.com/egladman/magus/types.SpawnRequest.Description field string
 github.com/egladman/magus/types.SpawnRequest.Host field string
 github.com/egladman/magus/types.SpawnRequest.Isolated field bool
