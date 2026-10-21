@@ -12,7 +12,7 @@ import (
 const contractSrc = "../../internal/spell/contract.go"
 
 func TestReadHarnessContract(t *testing.T) {
-	funcs, err := readContract(contractSrc, "HarnessContract")
+	funcs, err := readContract(contractSrc, "harnessContract")
 	require.NoError(t, err)
 	signatures := map[string]string{}
 	for _, fn := range funcs {

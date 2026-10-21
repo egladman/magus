@@ -6,7 +6,7 @@ import (
 )
 
 // The harness contract's records: what a harness spell's mgs_ functions return
-// (spell.HarnessContract) and what magus hands them. Each crosses under its Go name, and
+// (internal/spell/contract.go) and what magus hands them. Each crosses under its Go name, and
 // the JSON tags keep a harness descriptor's wire shape.
 
 // SkillForm says which entries a skill installation writes. It is a user-owned

@@ -17,7 +17,7 @@ import (
 //	import "ghcr.io/egladman/magus/spells/harness/cursor";
 //	magus\harness.provider(cursor);
 //
-// The spell exports the harness contract's mgs_ functions (spell.HarnessContract); Magus
+// The spell exports the harness contract's mgs_ functions (internal/spell/contract.go); Magus
 // calls them on describe/verify. A workspace may use several harnesses.
 //
 // provider returns the harness id, the key a magus\job.modelTiers hosts map is keyed by. A

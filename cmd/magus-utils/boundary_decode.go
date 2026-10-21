@@ -84,7 +84,7 @@ var inboundTypes = []string{
 	"QueueArtifactListing",
 	"QueueReview",
 	"QueueReviews",
-	// The harness contract's answers (spell.HarnessContract), leaf first.
+	// The harness contract's answers (internal/spell/contract.go), leaf first.
 	"HarnessConfig",
 	"HarnessSkills",
 	"HookCommand",
