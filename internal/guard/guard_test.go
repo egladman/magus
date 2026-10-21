@@ -371,7 +371,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Build it. Run one plain command per call.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
 			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
@@ -382,7 +382,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed. Run plain commands.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: decisionDeny, reason: "a worker does not build magus"},

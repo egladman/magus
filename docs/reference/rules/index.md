@@ -67,7 +67,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | [architecture-unbriefed](architecture-unbriefed.md)     | an agent's next call after a structure question, or a new directory, before the architecture skill |
 | [brief-command](brief-command.md)                       | a spawn or continuation brief that teaches a command the guard denies                              |
-| [brief-plain-commands](brief-plain-commands.md)         | a brief for an isolated worker that does not hold it to one plain command per call                 |
+| [brief-plain-commands](brief-plain-commands.md)         | a brief for an isolated worker that teaches a substitution, a loop or an exec                      |
 | [buzz-unbriefed](buzz-unbriefed.md)                     | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill  |
 | [capture-filter](capture-filter.md)                     | a filter over a run capture or log, which cuts the failure block apart                             |
 | [chained-run](chained-run.md)                           | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast  |

@@ -85,6 +85,11 @@
       "type": "string",
       "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
     },
+    "brief_format": {
+      "type": "string",
+      "enum": ["", "markdown", "buzz"],
+      "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
+    },
     "checkout": {
       "type": "string",
       "pattern": "^/",

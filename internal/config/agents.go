@@ -22,6 +22,10 @@ type Agents struct {
 	// magus\guard.profile declares, never lower it, and of the tiers that set it the
 	// highest applies.
 	Profile types.GuardProfile `json:"profile" yaml:"profile" validate:"omitempty,oneof=off light standard strict"`
+	// BriefFormat is the format a spawn brief takes when its job row names none: markdown,
+	// or buzz, which the guard type-checks as one `magus\Brief{...}` literal. Only the
+	// workspace's magus.yaml sets it, so two people in one repository get the same verdict.
+	BriefFormat types.BriefFormat `json:"brief_format" yaml:"brief_format" validate:"omitempty,oneof=markdown buzz"`
 	// Models adds or overrides rows of the model table the workspace's harnesses publish,
 	// keyed by model id, for a model released after the harness spell or a price that
 	// changed.
@@ -123,6 +127,7 @@ func LoadAgents(root string) (Agents, error) {
 		return Agents{}, err
 	}
 	agents := merged.Agents
+	agents.BriefFormat = workspace.Agents.BriefFormat
 	agents.Profile = workspace.Agents.Profile
 	if p := user.Agents.Profile; p != "" {
 		agents.Profile = p.Stricter(agents.Profile)

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,13 +10,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
-func TestBriefForAnIsolatedWorkerHoldsItToPlainCommands(t *testing.T) {
+func TestBriefForAnIsolatedWorkerRefusesACompoundCommand(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name     string
@@ -23,12 +26,11 @@ func TestBriefForAnIsolatedWorkerHoldsItToPlainCommands(t *testing.T) {
 		isolated bool
 		want     bool
 	}{
-		{"says it", "Fix the bug. Run one plain command per call; no `$()`, loops or exec.", true, false},
-		{"says it in other words", "Use plain commands only.", true, false},
-		{"never says it", "Fix the bug and report the sha.", true, true},
-		{"teaches a substitution", "Run one command per call. Then `git log $(git merge-base HEAD main)..HEAD`.", true, true},
-		{"teaches a loop", "Run one command per call:\n```bash\nfor f in a b; do ./magus describe file $f; done\n```\n", true, true},
-		{"a shared checkout", "Fix the bug and report the sha.", false, false},
+		{"says nothing about commands", "Fix the bug and report the sha.", true, false},
+		{"teaches a plain command", "Fix the bug, then `git log --oneline -1`.", true, false},
+		{"teaches a substitution", "Then `git log $(git merge-base HEAD main)..HEAD`.", true, true},
+		{"teaches a loop", "```bash\nfor f in a b; do ./magus describe file $f; done\n```\n", true, true},
+		{"a shared checkout", "Then `git log $(git merge-base HEAD main)..HEAD`.", false, false},
 	} {
 		v := judgeBriefPlainCommands(briefInput{text: tt.brief, isolated: tt.isolated})
 		if tt.want {
@@ -84,7 +86,67 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		}
 		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(tt.arg)}, v.Rule, tt.name)
 		assert.Contains(t, v.Deny, string(tt.arg), "the deny names the rule the brief would trip: %s", tt.name)
+		bound := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief, bound: true})
+		assert.Equal(t, v.Rule, bound.Rule, "%s: a message to a bound worker is still graded for denied commands", tt.name)
 	}
+}
+
+// TestContinuationToABoundWorkerIsNotGradedAgainstItsRow: worker-check-only grades a bound
+// worker's own runs, so a follow-up message to it is not graded as a fresh brief.
+func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
+	row := types.Job{
+		ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	ctx, root := fleetFixture(t, row)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	project := &types.Project{Path: ".", MagusfileTargets: []string{"test", "lint"}}
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	ws.EXPECT().Get(".").Return(project).Maybe()
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{{Name: "test"}, {Name: "lint"}}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	deps := strict(Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
+		Spells:  spellCatalog,
+	})
+	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
+	message := func(to string) string {
+		raw, err := json.Marshal(map[string]any{
+			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
+			"tool_input": map[string]any{"to": to, "message": "JOB ID: guard/slice\nNow run `./magus run lint .`."},
+		})
+		require.NoError(t, err)
+		return string(raw)
+	}
+	unbound := Judge(ctx, deps, Request{Input: message("ghost"), Host: "claude-code"})
+	assert.Equal(t, "deny", unbound.Decision, "a message to an agent magus never saw is graded as a brief")
+	assert.Contains(t, unbound.Reason, string(denyRuleWorkerCheckOnly))
+
+	Judge(ctx, deps, Request{Input: finishedSpawn(t, "orchestrator/feat guard/slice", "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
+	bound := Judge(ctx, deps, Request{Input: message("brisk-heron"), Host: "claude-code"})
+	assert.NotEqual(t, "deny", bound.Decision, bound.Reason)
+}
+
+// TestSpawnBriefFormatComesFromItsRow: a row forked with a brief_format decides its spawn's
+// format over magus.yaml, and the verdict names the format and the row it came from.
+func TestSpawnBriefFormatComesFromItsRow(t *testing.T) {
+	row := types.Job{ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		State: types.StateDeclared, Registered: 1, BriefFormat: types.BriefFormatBuzz}
+	ctx, root := fleetFixture(t, row)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	deps := strict(Dependencies{BriefFormat: types.BriefFormatMarkdown})
+	raw, err := json.Marshal(map[string]any{
+		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"description": "orchestrator/feat guard/slice", "prompt": "Fix the bug.", "model": "sonnet"},
+	})
+	require.NoError(t, err)
+	v := Judge(ctx, deps, Request{Input: string(raw), Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision, "prose is not a magus\\Brief literal")
+	assert.Contains(t, v.Reason, "buzz, from row guard/slice")
 }
 
 // Both a spawn and a continuation carry a brief, so both reach the rule through Judge.

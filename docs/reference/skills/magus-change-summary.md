@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 6519
-skill_short_bytes: 3565
+skill_full_bytes: 6577
+skill_short_bytes: 3606
 ---
 
 # magus-change-summary
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `143` |
+| `agent-skill-version` | `144` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `bd1b9cbe8ad7` |
+| `skill-content` | `073970f8aea0` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -132,7 +132,7 @@ Raw VCS: who, when; above: what change did.
 
 "what changed since last review, what needs look now", three pieces:
 1. At review time: `magus vcs checkpoint -o name` prints revision, or `<revision>+<digest>` when tree dirty.
-2. Later: `git diff <revision> | magus diff -` -> annotated delta: each changed file's reach, public API exposure, referents. `magus diff` refuses positional git ref by design; use pipe form.
+2. Later: `magus diff --rev <revision>...HEAD` -> annotated delta: each changed file's reach, public API exposure, referents. Uncommitted edits too: `git diff <revision> | magus diff --patch -`. Positional git ref refused by design.
 3. Diff session: per-hunk viewed marks keyed by content digest, not position; unchanged stays marked, changed resurfaces.
 
 Wrong: re-review whole branch; nobody recorded where last review stopped.
@@ -295,12 +295,13 @@ pieces:
    `<revision>+<digest>` when the tree was dirty (the digest says
    which dirty tree was reviewed, since the revision alone reads the same
    for every dirty tree built on it).
-2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
+2. Later: `magus diff --rev <revision>...HEAD` gives the annotated delta: each
    changed file's reach, public API exposure, and referents,
    the surrounding code worth a second look, not just the literal
-   hunks. `magus diff` refuses a positional git ref on
-   purpose; a swallowed ref once printed the reader's own edits
-   as the answer; the pipe form is the sanctioned spelling.
+   hunks. To count uncommitted edits too, hand it the patch:
+   `git diff <revision> | magus diff --patch -`. `magus diff` refuses a positional
+   git ref on purpose; a swallowed ref once printed the reader's own edits
+   as the answer.
 3. In a diff session, per-hunk viewed marks key off content digest, not position:
    unchanged stays marked, changed resurfaces.
 

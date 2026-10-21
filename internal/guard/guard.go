@@ -164,6 +164,9 @@ type Dependencies struct {
 	// --no-default-charms is passed. The leased rw rule reads them, since rw added here
 	// writes as surely as rw typed on the target.
 	DefaultCharms []string
+	// BriefFormat is the workspace magus.yaml's agents.brief_format, the format a brief
+	// takes when its job row names none. Empty is unset, which resolves to markdown.
+	BriefFormat types.BriefFormat
 	// Builtins is the effective setting of every compiled rule, resolved from what the
 	// workspace declared over builtin.Defaults. Nil means the defaults, with no
 	// parameters set.

@@ -71,6 +71,20 @@ Only {{mgslink "MGS3043"}}, {{mgslink "MGS3044"}} and {{mgslink "MGS3045"}} can 
 subject is the write path, the output path, or `target project` for MGS3045. A waiver on any other
 code is refused. Magus checks that the reason is not blank; a reviewer reads it.
 
+## The exit record
+
+A worker files its result as its last act:
+
+```sh
+magus job exit <job> --stdin <<'EOF'
+{"schema_version": 2, "job": "<job>",
+ "changed_paths": ["api/store.go", "api/store_test.go"],
+ "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "descendants": [],
+ "unresolved_risks": ["what is left, or what the worker could not verify"]}
+EOF
+```
+
 ## After the spawn
 
 The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a

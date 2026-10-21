@@ -155,12 +155,13 @@ pieces:
    `<revision>+<digest>` when the tree was dirty (the digest says
    which dirty tree was reviewed, since the revision alone reads the same
    for every dirty tree built on it).{{else}}1. At review time: `{{cmd "vcs checkpoint"}} -o name` prints revision, or `<revision>+<digest>` when tree dirty.{{end}}
-{{if .Full}}2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
+{{if .Full}}2. Later: `{{cmd "diff"}} --rev <revision>...HEAD` gives the annotated delta: each
    changed file's reach, public API exposure, and referents,
    the surrounding code worth a second look, not just the literal
-   hunks. `{{cmd "diff"}}` refuses a positional git ref on
-   purpose; a swallowed ref once printed the reader's own edits
-   as the answer; the pipe form is the sanctioned spelling.{{else}}2. Later: `git diff <revision> | {{cmd "diff"}} -` -> annotated delta: each changed file's reach, public API exposure, referents. `{{cmd "diff"}}` refuses positional git ref by design; use pipe form.{{end}}
+   hunks. To count uncommitted edits too, hand it the patch:
+   `git diff <revision> | {{cmd "diff"}} --patch -`. `{{cmd "diff"}}` refuses a positional
+   git ref on purpose; a swallowed ref once printed the reader's own edits
+   as the answer.{{else}}2. Later: `{{cmd "diff"}} --rev <revision>...HEAD` -> annotated delta: each changed file's reach, public API exposure, referents. Uncommitted edits too: `git diff <revision> | {{cmd "diff"}} --patch -`. Positional git ref refused by design.{{end}}
 {{if .Full}}3. In a diff session, per-hunk viewed marks key off content digest, not position:
    unchanged stays marked, changed resurfaces.{{else}}3. Diff session: per-hunk viewed marks keyed by content digest, not position; unchanged stays marked, changed resurfaces.{{end}}
 
