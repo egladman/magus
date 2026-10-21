@@ -337,6 +337,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	index := newGuardLookups(rootOverride)
 	deps.GraphStaleAdvice = index.staleGraphAdvice
 	deps.SymbolDefined = index.symbolDefined
+	deps.SymbolIDs = index.symbolIDs
 	deps.IndexCause = index.indexCause
 	deps.SymbolSites = index.symbolSites
 	deps.GraphIDs = index.graphIDs
@@ -577,6 +578,17 @@ func (l guardLookups) symbolDefined(ident string) (defined, definitive bool) {
 		return answer{idx.Has(knowledge.GuardSymbol, ident), idx.Fresh(knowledge.GuardSymbol)}
 	})
 	return a.defined, ok && a.definitive
+}
+
+// symbolIDs lists the ids of the symbols named ident, none past the lookup budget.
+func (l guardLookups) symbolIDs(ident string) []string {
+	ids, _ := withinBudget(guardLookupBudget, func() []string {
+		if idx := l.index(); idx != nil {
+			return idx.SymbolIDs(ident)
+		}
+		return nil
+	})
+	return ids
 }
 
 // symbolSites reads ident's sites from the refs file beside the guard index, on the same

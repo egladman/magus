@@ -86,7 +86,28 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 	}
 }
 
-// TestSymbolSearchOnNamedFiles pins the file half: a search of ONE named Go file for an
+// A name that two symbols carry makes refs list them and stop, so the deny names one id.
+func TestSymbolSearchNamesASymbolIDForAnAmbiguousName(t *testing.T) {
+	const first, second = "symbol:gomod m `m/a`/Open()", "symbol:gomod m `m/b`/Open()"
+	ids := map[string][]string{"Open": {first, second}, "Judge": {"symbol:gomod m `m/a`/Judge()"}}
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return len(ids[name]) > 0, true },
+		SymbolIDs:     func(name string) []string { return ids[name] },
+		Spells:        spellCatalog,
+	}
+
+	v := Evaluate(strict(deps), `grep -rn 'func Open' internal/`)
+	require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "Open"}, v.Rule)
+	full := denial{Say: v.Deny, Why: v.Why}.full()
+	assert.Contains(t, full, "refs '"+first+"'", "the first id stands for the name")
+	assert.NotContains(t, full, second)
+
+	v = Evaluate(strict(deps), `grep -rn 'func Judge' internal/`)
+	require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "Judge"}, v.Rule)
+	assert.Contains(t, denial{Say: v.Deny, Why: v.Why}.full(), "refs Judge", "an unambiguous name stays a name")
+}
+
+// TestSymbolSearchOnNamedFiles pins the file half:a search of ONE named Go file for an
 // indexed name is a read, and runs with refs advised; anything the index does not cover, or
 // a flag that changes the question, gets no such advice. Two files or a glob is a search,
 // pinned in TestSymbolSearchAnswersTreeSearches.

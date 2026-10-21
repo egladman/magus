@@ -1234,6 +1234,11 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 			r.run = hint.Refs.With(a.ident, "--definition", "--source")
 		}
 		defined, definitive := deps.symbolDefined(a.ident)
+		ids := deps.symbolIDs(a.ident)
+		if len(ids) > 1 {
+			// refs on a name that several symbols carry lists them and stops.
+			r.run = strings.Replace(r.run, " "+a.ident, " '"+ids[0]+"'", 1)
+		}
 		switch {
 		case definitive && defined:
 			route(a, r, a.how+", defined in the index")

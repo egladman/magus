@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -122,32 +124,32 @@ func requireArchitectureDeny(t *testing.T, v types.GuardJudgment, msgAndArgs ...
 func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "no structure question, nothing to read first")
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "no structure question, nothing to read first")
 
 	v := s.message("does this respect our current architecture patterns?")
 	assert.Equal(t, "pass", v.Decision, "a message is recorded, never judged")
 	assert.Empty(t, v.Context, "and nothing is said back")
 
-	v = s.bash("", "echo hello")
+	v = s.bash("", "ls")
 	requireArchitectureDeny(t, v, "the next graded call waits on the load")
 	assert.Contains(t, v.Reason,
 		"acting on an architecture question before the magus-architecture-review skill loaded; load Skill(magus-architecture-review), then retry.")
 	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write is a graded call too")
 
 	s.load("", architectureSkill.String())
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "the load clears the gate")
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "the load clears the gate")
 }
 
 func TestArchitectureUnbriefedIgnoresAnOrdinaryMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("fix the flaky cache test")
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
 }
 
 func TestArchitectureUnbriefedStandsDownWhereLoadsAreNotObserved(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), false)
 	s.message("why do we need a new package called audit package?")
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision,
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision,
 		"a wiring that reports no loads could never clear it")
 }
 
@@ -155,7 +157,7 @@ func TestArchitectureUnbriefedClearsOnTheFullTwin(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("check the blast radius of this")
 	s.load("", agent.FullTwinName(architectureSkill.String()))
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
 }
 
 // A load counts for the context it was read into. A parent's load leaves its subagent
@@ -165,19 +167,19 @@ func TestArchitectureUnbriefedCountsLoadsPerAgent(t *testing.T) {
 	s.message("respecting the current like application boundaries")
 
 	s.load("", architectureSkill.String())
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "the root loaded it")
-	requireArchitectureDeny(t, s.bash("a1b2c3", "echo hello"), "the parent's load is not the child's")
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "the root loaded it")
+	requireArchitectureDeny(t, s.bash("a1b2c3", "ls"), "the parent's load is not the child's")
 
 	s.load("a1b2c3", architectureSkill.String())
-	assert.NotEqual(t, "deny", s.bash("a1b2c3", "echo hello").Decision, "the child loaded it itself")
-	requireArchitectureDeny(t, s.bash("d4e5f6", "echo hello"), "a sibling is briefed by its own load only")
+	assert.NotEqual(t, "deny", s.bash("a1b2c3", "ls").Decision, "the child loaded it itself")
+	requireArchitectureDeny(t, s.bash("d4e5f6", "ls"), "a sibling is briefed by its own load only")
 }
 
 func TestASubagentLoadDoesNotBriefItsParent(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("the architecture skill should be able to catch all these crazy imports and the sprawl")
 	s.load("a1b2c3", architectureSkill.String())
-	requireArchitectureDeny(t, s.bash("", "echo hello"))
+	requireArchitectureDeny(t, s.bash("", "ls"))
 }
 
 func TestArchitectureUnbriefedGatesANewDirectory(t *testing.T) {
@@ -205,10 +207,10 @@ func TestArchitectureUnbriefedAdvisesOnceWhenSetToAdvise(t *testing.T) {
 	s := newArchSession(t, advising(testDependencies(), string(denyArchitectureUnbriefed)), true)
 	s.message("where should the retry helper live?")
 
-	v := s.bash("", "echo hello")
+	v := s.bash("", "ls")
 	assert.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule})
 	assert.Contains(t, v.Context, "magus-architecture-review")
-	assert.NotEqual(t, string(denyArchitectureUnbriefed), s.bash("", "echo hello").Rule, "said once per session")
+	assert.NotEqual(t, string(denyArchitectureUnbriefed), s.bash("", "ls").Rule, "said once per session")
 }
 
 func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
@@ -216,7 +218,29 @@ func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
 	v := Judge(s.ctx, s.deps, Request{Input: "check the blast radius", Message: true, DryRun: true,
 		Host: "claude-code", Form: "buzz", Session: s.session})
 	assert.Equal(t, "pass", v.Decision)
-	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)
+	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
+}
+
+func TestArchitectureUnbriefedFiresOnlyOnAProbeOfSource(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("does this respect our current architecture patterns?")
+
+	assert.NotEqual(t, "deny", s.bash("", "wc -l main.go").Decision, "counting lines probes no structure")
+	assert.NotEqual(t, "deny", s.bash("", "cat /var/memory/MEMORY.md").Decision, "a memory file is outside the workspace")
+	assert.NotEqual(t, "deny", s.bash("", "ls /var/memory").Decision, "so is a listing of its directory")
+	requireArchitectureDeny(t, s.bash("", "grep -rn handler ."), "a search of the workspace reads its structure")
+	requireArchitectureDeny(t, s.bash("", "ls internal"), "so does a listing of it")
+}
+
+func TestArchitectureUnbriefedStandsDownForAnAgentWithNoSkillTool(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("does this respect our current architecture patterns?")
+	facts := hint.NewGate(s.t.TempDir(), FactsKey("claude-code", s.session))
+	writeAgentMarker(facts, agentTypeKind("a1b2c3"), []byte(`{"type":"magus-scout"}`))
+
+	assert.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a1b2c3"}}.loadsSkills(), "a read-only agent type cannot load a skill")
+	assert.True(t, Dependencies{facts: facts, caller: job.Caller{Agent: "d4e5f6"}}.loadsSkills(), "an agent of no recorded type can")
+	requireArchitectureDeny(t, s.bash("d4e5f6", "ls internal"))
 }
 
 func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {

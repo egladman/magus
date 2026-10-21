@@ -129,6 +129,9 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// SymbolIDs lists the ids of the indexed symbols named ident. More than one makes the
+	// name ambiguous: refs wants an id to pick a definition. Nil leaves every name unambiguous.
+	SymbolIDs func(ident string) []string
 	// IndexCause names the observed reason the symbol index is missing or behind (no
 	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
 	// sync running now) and the command that clears it, as advisory sentences. "" when it
@@ -293,6 +296,14 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 		return false, false
 	}
 	return d.SymbolDefined(ident)
+}
+
+// symbolIDs lists the ids of every symbol named ident, none for an unset resolver.
+func (d Dependencies) symbolIDs(ident string) []string {
+	if d.SymbolIDs == nil {
+		return nil
+	}
+	return d.SymbolIDs(ident)
 }
 
 // symbolSites answers not-definitive for an unset resolver, like symbolDefined.
@@ -1087,7 +1098,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
 		}
-		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, ""), rankArchitectureUnbriefed); {
+		var unbriefed string
+		if structureProbe(input, location.workspace) {
+			unbriefed = denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, "")
+		}
+		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, unbriefed, rankArchitectureUnbriefed); {
 		case v.Deny != "":
 			// A bound worker's raw tool is refused naming its check, the remedy it can run,
 			// rather than raw-tool's generic target.

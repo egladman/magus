@@ -58,6 +58,8 @@ func TestGuardIndexRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, x.Has(GuardSymbol, "Judge"))
 	assert.False(t, x.Has(GuardSymbol, "Jud"))
+	assert.Equal(t, []string{"symbol:go other/Judge().", "symbol:go pkg/Judge()."}, x.SymbolIDs("Judge"), "every id behind an ambiguous name")
+	assert.Empty(t, x.SymbolIDs("Jud"))
 	assert.Equal(t, []string{"docsection:docs/x.md#title"}, x.IDs(types.KindDocSection))
 	assert.Equal(t, []string{"target:.:lint"}, x.IDs(types.KindTarget))
 	assert.Equal(t, []string{"diagnostic:MGS1001"}, x.IDs(types.KindDiagnostic))
