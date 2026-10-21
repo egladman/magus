@@ -26,7 +26,7 @@ const (
 )
 
 // requiredEvalSets are the external sets every texts run scans against, each read from
-// <-eval>/<name>.jsonl, unless -no-eval names it.
+// <-eval>/<name>/, unless -no-eval names it.
 var requiredEvalSets = []string{"csn-go", "cosqa", "stackoverflow-qa"}
 
 // decontaminator holds every eval text's normalized whole-text hash and gram hashes.
@@ -242,38 +242,43 @@ func windowHashes(words []string, size int) []uint64 {
 	return out
 }
 
-// readEvalSets adds every <dir>/<name>.jsonl of {"id", "text"} lines as eval set name.
-// Each required set must be present unless leftOut names it; an empty dir is allowed only
-// when every required set is left out.
+// readEvalSets adds every <dir>/<name>/ holding queries.jsonl as eval set name: the
+// {"id", "text"} lines of its queries.jsonl and corpus.jsonl, the layout embed bench
+// reads. Each required set must be present unless leftOut names it; an empty dir is
+// allowed only when every required set is left out.
 func readEvalSets(e *evalCorpus, dir string, leftOut map[string]bool) error {
-	var paths []string
+	var sets []string
 	if dir != "" {
 		var err error
-		if paths, err = filepath.Glob(filepath.Join(dir, "*.jsonl")); err != nil {
+		if sets, err = filepath.Glob(filepath.Join(dir, "*", "queries.jsonl")); err != nil {
 			return err
 		}
 	}
 	found := map[string]bool{}
-	for _, p := range paths {
-		name := strings.TrimSuffix(filepath.Base(p), ".jsonl")
-		texts, err := readEvalTexts(p)
-		if err != nil {
-			return err
+	for _, q := range sets {
+		set := filepath.Dir(q)
+		name := filepath.Base(set)
+		for _, file := range []string{"queries.jsonl", "corpus.jsonl"} {
+			p := filepath.Join(set, file)
+			texts, err := readEvalTexts(p)
+			if err != nil {
+				return err
+			}
+			digest, err := teacher.FileSHA256(p)
+			if err != nil {
+				return err
+			}
+			if e.files == nil {
+				e.files = map[string]string{}
+			}
+			e.files[name+"/"+file] = digest
+			e.add(name, texts...)
 		}
-		digest, err := teacher.FileSHA256(p)
-		if err != nil {
-			return err
-		}
-		if e.files == nil {
-			e.files = map[string]string{}
-		}
-		e.files[name] = digest
-		e.add(name, texts...)
 		found[name] = true
 	}
 	for _, name := range requiredEvalSets {
 		if !found[name] && !leftOut[name] {
-			return fmt.Errorf("eval set %s: no %s.jsonl under -eval %q, export it or name it in -no-eval to leave it out", name, name, dir)
+			return fmt.Errorf("eval set %s: no %s/queries.jsonl under -eval %q, export it or name it in -no-eval to leave it out", name, name, dir)
 		}
 	}
 	return nil

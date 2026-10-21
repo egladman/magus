@@ -124,7 +124,7 @@ func runTexts(args []string) error {
 	maxBytes := fs.Int("chunk-bytes", 512, "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it")
 	ratio := fs.Float64("cornstack", 1, "CoRNStack rows per in-repo text; each row adds two texts")
 	skip := fs.String("skip", "", "comma-separated input names left out; an input with no reader must be named here")
-	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>.jsonl of {\"id\", \"text\"} lines per set: every query and gold document")
+	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>/ per set whose queries.jsonl and corpus.jsonl hold {\"id\", \"text\"} lines, the layout embed bench reads")
 	noEval := fs.String("no-eval", "", "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl")
 	common := fs.Int("common", 10, "a 13-word window more eval texts than this hold is boilerplate and drops nothing")
 	_ = fs.Parse(args)
