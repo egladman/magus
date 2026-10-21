@@ -533,12 +533,13 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 	})
 }
 
-// extendedFootprint is [job.ExtendFootprint] for a record about to be declared: the write
-// paths its change reaches and a note for each. A bound caller is skipped, since its own
-// fork may not widen its boundary, and so is a workspace that did not load.
-func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (paths, notes []string) {
+// extendedFootprint is rec with the tests beside what it writes added to its write paths and
+// the outputs regenerated from them waived as the integrator's, with a note for each and a
+// count line. A bound caller, whose fork may not widen its boundary, and a workspace that
+// did not load are skipped.
+func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
 	if store.Actor().Bound() || ws.Unavailable != "" {
-		return nil, nil
+		return rec, nil
 	}
 	var declared types.Job
 	rec.Apply(&declared)
@@ -546,7 +547,15 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	if g := graph.load(ctx); g != nil && g.HasSymbols() {
 		referrers = g.Referrers
 	}
-	return job.ExtendFootprint(root, declared, ws.Projects, referrers, ws.Ignored)
+	paths, notes := job.ExtendFootprint(root, declared, ws.Projects, referrers)
+	rec.WritePaths = append(rec.WritePaths, paths...)
+	declared.WritePaths = append(declared.WritePaths, paths...)
+	waivers := job.IntegratorWaivers(root, declared, ws.Projects, ws.Ignored)
+	rec.Waivers = append(rec.Waivers, waivers...)
+	if len(waivers) > 0 {
+		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are waived: the integrator owns them", len(waivers)))
+	}
+	return rec, notes
 }
 
 // graphsByTree answers a graph per checkout, root's being rootGraph and any other built on
@@ -573,7 +582,7 @@ func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree stri
 // runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
 // check would mint there now is the key the run was stored under. Any lookup that fails
 // answers no, so the clock judges the run as it would without this.
-func runsAtCurrentKey() func(ctx context.Context, tree string, run types.JobAttempt) bool {
+func runsAtCurrentKey() job.CurrentRun {
 	return func(ctx context.Context, tree string, run types.JobAttempt) bool {
 		if run.Ref == "" || run.Failed {
 			return false
@@ -613,6 +622,7 @@ func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer 
 		if err != nil {
 			return seen, err
 		}
+		seen.CurrentRun = runsAtCurrentKey()
 		if delta, ok := observeSymbolDelta(ctx, tree, row, seen, graph); ok {
 			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
 		}

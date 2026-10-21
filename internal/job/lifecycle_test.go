@@ -1570,7 +1570,13 @@ func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
 		asked = append(asked, tree+" "+run.Ref)
 		return true
 	}
-	status, err := Wait(WithCurrentRuns(t.Context(), current), NewStore(j.loc), j.row.ID, nil, nil, observeClaim(j.result), nil)
+	claimed := observeClaim(j.result)
+	observe := func(ctx context.Context, row types.Job) (Observed, error) {
+		seen, err := claimed(ctx, row)
+		seen.CurrentRun = current
+		return seen, err
+	}
+	status, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, nil, observe, nil)
 
 	require.NoError(t, err)
 	assert.True(t, status.Verified, "a run whose key is the one its check mints now read the files as they stand: %v", status.Gates)

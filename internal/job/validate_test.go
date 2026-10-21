@@ -227,7 +227,29 @@ func TestValidateMergeWaivesEveryRegeneratedOutputByGlob(t *testing.T) {
 	assert.Less(t, len(narrow.Problems), len(bare.Problems))
 }
 
-func TestExtendFootprintAddsSiblingTestsAndRegeneratedOutputs(t *testing.T) {
+func TestIntegratorWaiversAcceptEveryOutputButADeniedOne(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+
+	got := IntegratorWaivers(root, row, projects, ignoresCoverage)
+
+	subjects := make([]string, len(got))
+	for i, w := range got {
+		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
+		assert.Equal(t, IntegratorRegenerates, w.Reason)
+		subjects[i] = w.Subject
+	}
+	assert.Contains(t, subjects, "docs/manpage/*.md")
+	assert.Contains(t, subjects, "cmd/gen/*.go")
+	assert.NotContains(t, subjects, "cli/testdata/api.lock", "a denied output stays refused")
+
+	row.Waivers = got
+	assert.Empty(t, IntegratorWaivers(root, row, projects, ignoresCoverage), "an output already waived needs no second waiver")
+}
+
+func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
@@ -239,17 +261,12 @@ func TestExtendFootprintAddsSiblingTestsAndRegeneratedOutputs(t *testing.T) {
 		return map[string]int{"cli/registry_test.go": 3, "cmd/main_test.go": 1, "cmd/main.go": 2}
 	}
 
-	paths, notes := ExtendFootprint(root, row, projects, referrers, ignoresCoverage)
+	paths, notes := ExtendFootprint(root, row, projects, referrers)
 
-	assert.Contains(t, paths, "cli/registry_test.go", "a test beside a written file is reached")
-	assert.NotContains(t, paths, "cmd/main_test.go", "a test in another directory is a finding, not a path")
-	assert.NotContains(t, paths, "cmd/main.go")
-	assert.NotContains(t, paths, "cli/testdata/api.lock", "an output a deny path touches is its owner's")
-	assert.Contains(t, paths, "cmd/gen/*.go")
-	assert.Contains(t, paths, "docs/manpage/*.md")
+	assert.Equal(t, []string{"cli/registry_test.go"}, paths, "a test beside a written file is reached; outputs and other directories are not")
 	assert.Len(t, notes, len(paths), "each added path says why")
 
-	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers, nil)
+	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers)
 	assert.Empty(t, none)
 }
 

@@ -88,6 +88,9 @@ type Observed struct {
 	// other than it reads now, with why: the job wrote after it, so its pass graded other
 	// files. A run absent from it read the tree as it stands, or was never compared.
 	Stale map[string]string
+	// CurrentRun is the observer's answer to whether a recorded run is current in a tree,
+	// which clears it of Stale and of the waiter-evidence read test. Nil answers no.
+	CurrentRun CurrentRun
 	// DefaultCharms are the default_charms in effect in the job's checkout, which `magus
 	// run` stacks under the charms a target names. A check is resolved against them before
 	// it is compared with a recorded run; nil resolves every check to the charms it names.

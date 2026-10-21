@@ -323,7 +323,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 		return graded{}, nil, errors.New("job: the job's diff could not be read, so nothing names the files a run here has to share with the holder's checkout")
 	}
 	changed := slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(seen.Changed), ev.result.ChangedPaths...))))
-	if err := sameChangedPaths(ctx, row.CheckoutRoot, here, changed, runs); err != nil {
+	if err := sameChangedPaths(ctx, row.CheckoutRoot, here, changed, runs, seen.CurrentRun); err != nil {
 		return graded{}, nil, err
 	}
 	return out, taken, nil
@@ -404,7 +404,7 @@ func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *t
 //     the weaker witness: a filesystem with coarse timestamps can date a change made in the
 //     run's first second or two before it, and a copy that keeps its times shows only
 //     through the directory it lands in.
-func sameChangedPaths(ctx context.Context, holder, here string, changed []string, runs []types.JobAttempt) error {
+func sameChangedPaths(ctx context.Context, holder, here string, changed []string, runs []types.JobAttempt, current CurrentRun) error {
 	if holder == "" {
 		return errors.New("job: the job records no checkout for its holder, so nothing shows this one holds the work the holder changed")
 	}
@@ -426,6 +426,9 @@ func sameChangedPaths(ctx context.Context, holder, here string, changed []string
 			" and %d differ between %s and %s: %s", len(differ), holder, here, listPaths(differ))
 	}
 	for _, run := range runs {
+		if current.holds(ctx, here, run) {
+			continue
+		}
 		if err := readAsNow(ctx, here, local, run); err != nil {
 			return err
 		}
@@ -450,7 +453,6 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	if tree == "" {
 		return nil
 	}
-	current, _ := ctx.Value(currentRunsKey{}).(func(context.Context, string, types.JobAttempt) bool)
 	var changed []string
 	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
 		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) {
@@ -460,7 +462,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	changed = slices.Compact(slices.Sorted(slices.Values(changed)))
 	stale := map[string]string{}
 	for _, run := range runs {
-		if !run.Found || current != nil && current(ctx, tree, run) {
+		if !run.Found || seen.CurrentRun.holds(ctx, tree, run) {
 			continue
 		}
 		if why := unreadSince(ctx, tree, changed, run); why != "" {
@@ -470,14 +472,13 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	return stale
 }
 
-type currentRunsKey struct{}
+// CurrentRun answers whether a run is current in tree: its cache key is the one its check
+// would mint there now. A cache HIT replays a run that began before the job's last write,
+// so the clock calls it stale while its inputs are the ones on disk. Nil answers no.
+type CurrentRun func(ctx context.Context, tree string, run types.JobAttempt) bool
 
-// WithCurrentRuns returns ctx carrying current, the caller's answer to whether a run is
-// current in tree: its cache key is the one its check would mint there now. A cache HIT
-// replays a run that began before the job's last write, so the clock calls it stale while
-// its inputs are the ones on disk.
-func WithCurrentRuns(ctx context.Context, current func(ctx context.Context, tree string, run types.JobAttempt) bool) context.Context {
-	return context.WithValue(ctx, currentRunsKey{}, current)
+func (c CurrentRun) holds(ctx context.Context, tree string, run types.JobAttempt) bool {
+	return c != nil && c(ctx, tree, run)
 }
 
 // attemptKey names one recorded run: its attempt id, which no later run takes over, else its ref.

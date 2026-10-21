@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bmatcuk/doublestar/v4"
-
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
@@ -114,36 +112,16 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
-	v.Problems, v.Waived = ps.Waive(expandWaivers(merged.Waivers, ps))
+	v.Problems, v.Waived = ps.Waive(merged.Waivers)
 	return v
-}
-
-// expandWaivers is ws with each glob subject of an output or gate waiver spelled out as one
-// exact waiver per problem in ps it matches, since [types.JobProblems.Waive] compares
-// subjects exactly. `**` waives every regenerated output the integrator owns in one entry.
-func expandWaivers(ws []types.JobWaiver, ps types.JobProblems) []types.JobWaiver {
-	out := slices.Clone(ws)
-	for _, w := range ws {
-		if w.Code != types.OutputOutsideWritePaths && w.Code != types.GateNotRun || !types.IsGlobMeta(w.Subject) {
-			continue
-		}
-		for _, p := range ps {
-			if matched, _ := doublestar.Match(w.Subject, p.Subject); matched && p.Code == w.Code {
-				out = append(out, types.JobWaiver{Code: p.Code, Subject: p.Subject, Reason: w.Reason})
-			}
-		}
-	}
-	return out
 }
 
 // ExtendFootprint is the write paths row's change reaches that it did not declare, and a
 // note saying why for each: the test files beside a written file that reference what the
-// write paths define ([ReferencedOutside]), and the declared outputs a target regenerates
-// from them ([RegeneratedOutside]). An output a deny path touches is left to its owner.
-// A read-only row reaches none.
+// write paths define ([ReferencedOutside]). A read-only row reaches none.
 //
 // The caller skips it for a holder, whose own fork may not widen its boundary.
-func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int, ignored func([]string) []string) (paths, notes []string) {
+func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
 		return nil, nil
 	}
@@ -157,15 +135,27 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 			notes = append(notes, fmt.Sprintf("%s added to the write paths: it tests what %s defines", f.File, strings.Join(f.Uses, ", ")))
 		}
 	}
+	return paths, notes
+}
+
+// IntegratorRegenerates is the reason a record gives for an output the integrator owns.
+const IntegratorRegenerates = "the integrator regenerates it"
+
+// IntegratorWaivers is one waiver per output a target regenerates from row's write paths
+// that sits outside them: the integrator regenerates it after the job. An output a deny
+// path touches stays its owner's, and one a waiver of row accepts already needs no new one.
+func IntegratorWaivers(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.JobWaiver {
+	var waivers []types.JobWaiver
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")
-		if slices.Contains(paths, glob) || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+		problem := types.JobProblem{Code: types.OutputOutsideWritePaths, Subject: o.Output}
+		accepted := slices.ContainsFunc(row.Waivers, func(w types.JobWaiver) bool { return w.Waives(problem) })
+		if accepted || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
 			continue
 		}
-		paths = append(paths, glob)
-		notes = append(notes, fmt.Sprintf("%s added to the write paths: %s regenerates it from %s", glob, o.Target, o.Source))
+		waivers = append(waivers, types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: IntegratorRegenerates})
 	}
-	return paths, notes
+	return waivers
 }
 
 // ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
