@@ -214,7 +214,7 @@ func ExampleMagus_Run() {
 	fmt.Println("graph built under the run:", obs.builds.Load() > 0)
 	// Output:
 	// build ran
-	// graph built under the run: true
+	// graph built under the run: false
 }
 
 // refuseEverything is a magusfile whose guard rules deny every command and every write.

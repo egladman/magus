@@ -268,7 +268,7 @@ func TestEventJSONKeepsTheWireForm(t *testing.T) {
 
 	out, err = json.Marshal(Event{Kind: journal.KindOutput})
 	require.NoError(t, err)
-	assert.Equal(t, `{"ts":0,"kind":"output"}`, string(out), "a zero Duration omits duration_ms")
+	assert.Equal(t, `{"ts":0,"kind":"output","duration_ms":0}`, string(out), "json/v2 omitempty keeps a zero duration_ms, as journal.Event writes it")
 }
 
 // TestNewEventCopiesTheCommand: the projection must not alias the journal's own
