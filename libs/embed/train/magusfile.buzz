@@ -93,7 +93,7 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 
 // Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
 // figures, and CoRNStack rows), decontaminated against the eval sets in the cache root's
-// eval/, and the forced tokens under the cache root's training/, then
+// eval/ (testdata/retrieval has no queries.jsonl, so judged-queries is left out), and the forced tokens under the cache root's training/, then
 // the vocabulary's token texts beside them and its counts to gen/vocab.jsonl, which convert
 // reads. FineWeb-Edu is left out: the module has no parquet reader. The texts run is
 // appended to runs.jsonl. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
@@ -103,7 +103,7 @@ export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final dir = fs\join(cache, name: "training");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
-        "-eval", fs\join(cache, name: "eval"), "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
+        "-eval", fs\join(cache, name: "eval"), "-no-eval", "judged-queries", "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
     runlog\appendTexts(dir, target: "runs.jsonl");
     fs\mkdirAll("gen");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
