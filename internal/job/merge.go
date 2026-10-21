@@ -45,6 +45,12 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	str("criteria", &put.Criteria)
 	str("checkpoint", &put.Checkpoint)
 	str("model", &put.Model)
+	if v, ok, e := mergeString(params, "brief_format"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		f := types.BriefFormat(strings.TrimSpace(v))
+		put.BriefFormat = &f
+	}
 	str("timeout", &put.Timeout)
 	str("enter", &put.Enter)
 	list("write_paths", &put.WritePaths)
@@ -150,6 +156,14 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		v := strings.TrimSpace(*p.Model)
 		set = append(set, func(u *types.Job) { u.Model = v })
 	}
+	if p.BriefFormat != nil {
+		if f := *p.BriefFormat; f != "" && !f.Valid() {
+			err = errors.Join(err, fmt.Errorf("job: brief_format %q is not one of %s, or empty for magus.yaml's agents.brief_format",
+				f, strings.Join(f.Values(), ", ")))
+		} else {
+			set = append(set, func(u *types.Job) { u.BriefFormat = f })
+		}
+	}
 	for _, l := range []struct {
 		v     *[]string
 		apply func(*types.Job, []string)
@@ -253,7 +267,7 @@ func declaredKeys(p types.JobPut) []string {
 		set bool
 	}{
 		{"parent", p.Parent != nil}, {"criteria", p.Criteria != nil}, {"checkpoint", p.Checkpoint != nil},
-		{"model", p.Model != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
+		{"model", p.Model != nil}, {"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
@@ -270,7 +284,7 @@ func declaredKeys(p types.JobPut) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "breaks", "model", "check", "validation", "goals", "waivers", "state", "read_only",
+	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "waivers", "state", "read_only",
 	"timeout", "max_attempts", "enter",
 }
 

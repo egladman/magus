@@ -1,20 +1,20 @@
 ---
-title: "brief-plain-commands: a brief for an isolated worker that does not hold it to one plain command per call"
-description: "An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that does not hold it to one plain command per call."
+title: "brief-plain-commands: a brief for an isolated worker that teaches a substitution, a loop or an exec"
+description: "An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that teaches a substitution, a loop or an exec."
 tags: [guard, rules, brief-plain-commands, advise]
 ---
 
 # brief-plain-commands
 
-An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that does not hold it to one plain command per call.
+An advisory by default: it explains, and blocks nothing, on a brief for an isolated worker that teaches a substitution, a loop or an exec.
 
 ## What it catches
 
-A brief for an isolated worker that does not hold it to one plain command per call.
+A brief for an isolated worker that teaches a substitution, a loop or an exec.
 
 ## Why
 
-A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. So a spawn into its own worktree must say "one plain command per call; no `$()`, loops or exec" (any wording naming one command per call, or plain commands), and must not itself show a command of those shapes. A spawn into a shared checkout passes. It cannot tell a brief that says the same thing in other words from one that never says it.
+A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. A worker writes its commands the way its brief shows them, so a spawn into its own worktree must not show a command of those shapes. A brief need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.
 
 ## Default and override
 

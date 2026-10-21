@@ -58,7 +58,7 @@ func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 const (
 	claudeSpawnEnvelope = `{"session_id":"8f2c6a1e","transcript_path":"/Users/dev/.claude/projects/p/8f2c6a1e.jsonl",` +
 		`"cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse","tool_name":"Agent",` +
-		`"tool_input":{"description":"orchestrator/brisk-heron/implement adr 0002","prompt":"Implement ADR 0002. Run one plain command per call.",` +
+		`"tool_input":{"description":"orchestrator/brisk-heron/implement adr 0002","prompt":"Implement ADR 0002.",` +
 		`"subagent_type":"general-purpose","model":"sonnet","name":"brisk-heron","run_in_background":true,"isolation":"worktree"},` +
 		`"tool_use_id":"toolu_01"}`
 	claudeContinueEnvelope = `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
@@ -89,7 +89,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			want: types.SpawnRequest{
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
-				Name: "brisk-heron", Prompt: "Implement ADR 0002. Run one plain command per call.", Background: true, Isolated: true,
+				Name: "brisk-heron", Prompt: "Implement ADR 0002.", Background: true, Isolated: true,
 				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 			},
 		},

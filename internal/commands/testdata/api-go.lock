@@ -21,23 +21,26 @@ github.com/egladman/magus.Command.Cwd field string "json:\"cwd,omitempty\""
 github.com/egladman/magus.Command.Trigger field string "json:\"trigger,omitempty\""
 github.com/egladman/magus.ComposeGraph func(ws github.com/egladman/magus/types.WorkspaceRepository, opts ...ComposeOption) github.com/egladman/magus/types.GraphOutput
 github.com/egladman/magus.ComposeOption type func(*compose)
-github.com/egladman/magus.DefaultConcurrency func() int
 github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.DriftPolicy, reason string) TargetOption
+github.com/egladman/magus.DurationPredictor type interface
+github.com/egladman/magus.DurationPredictor.PredictDuration imethod func(project string, target string, tags []string) time.Duration
 github.com/egladman/magus.Event type struct
 github.com/egladman/magus.Event.Command field *Command "json:\"command,omitempty\""
 github.com/egladman/magus.Event.DiagnosticCode field string "json:\"diagnostic_code,omitempty\""
-github.com/egladman/magus.Event.DurationMs field int64 "json:\"duration_ms,omitempty\""
-github.com/egladman/magus.Event.Inv field string "json:\"inv,omitempty\""
+github.com/egladman/magus.Event.Duration field time.Duration "json:\"-\""
+github.com/egladman/magus.Event.Invocation field string "json:\"inv,omitempty\""
 github.com/egladman/magus.Event.Kind field string "json:\"kind\""
 github.com/egladman/magus.Event.Level field string "json:\"level,omitempty\""
 github.com/egladman/magus.Event.MagusVersion field string "json:\"magus_version,omitempty\""
+github.com/egladman/magus.Event.MarshalJSON method func() ([]byte, error)
 github.com/egladman/magus.Event.Project field string "json:\"project,omitempty\""
 github.com/egladman/magus.Event.Ref field string "json:\"ref,omitempty\""
 github.com/egladman/magus.Event.Status field string "json:\"status,omitempty\""
 github.com/egladman/magus.Event.Stream field string "json:\"stream,omitempty\""
 github.com/egladman/magus.Event.Target field string "json:\"target,omitempty\""
 github.com/egladman/magus.Event.Text field string "json:\"text,omitempty\""
-github.com/egladman/magus.Event.Ts field int64 "json:\"ts\""
+github.com/egladman/magus.Event.Timestamp field int64 "json:\"ts\""
+github.com/egladman/magus.Event.UnmarshalJSON method(ptr) func(data []byte) error
 github.com/egladman/magus.FindRoot func(dir string) (string, error)
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption
 github.com/egladman/magus.IgnoreGlob func(pattern string) github.com/egladman/magus/types.IgnorePattern
@@ -65,8 +68,6 @@ github.com/egladman/magus.LazyWorkspace.Opened method(ptr) func() bool
 github.com/egladman/magus.LazyWorkspace.Root method(ptr) func() string
 github.com/egladman/magus.LazyWorkspace.TargetGraph method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.TargetGraphOutput, error)
 github.com/egladman/magus.LazyWorkspace.Workspace method(ptr) func(ctx context.Context, cfg github.com/egladman/magus/types.WorkspaceConfig) (github.com/egladman/magus/types.WorkspaceEntry, error)
-github.com/egladman/magus.Limiter type struct
-github.com/egladman/magus.Limiter.Capacity method(ptr) func() int
 github.com/egladman/magus.ListSpells func(ctx context.Context) ([]github.com/egladman/magus/types.Spell, error)
 github.com/egladman/magus.Magus type struct
 github.com/egladman/magus.Magus.Affected method(ptr) func(ctx context.Context, base string) (*github.com/egladman/magus/types.AffectedResult, error)
@@ -188,7 +189,6 @@ github.com/egladman/magus.MergeMarkers func(base []byte, ours []byte, theirs []b
 github.com/egladman/magus.MetricsCollector type struct
 github.com/egladman/magus.MetricsCollector.Collect method(ptr) func(ctx context.Context) (go.opentelemetry.io/otel/sdk/metric/metricdata.ResourceMetrics, error)
 github.com/egladman/magus.NewLazyWorkspace func(root string, open func(context.Context) (*Magus, error)) *LazyWorkspace
-github.com/egladman/magus.NewLimiter func(n int) *Limiter
 github.com/egladman/magus.NewSink func(format github.com/egladman/magus/libs/cmdline/output.Format, stdout io.Writer, stderr io.Writer, opts ...SinkOption) (*Sink, error)
 github.com/egladman/magus.NewWorkspaceRegistry func() *WorkspaceRegistry
 github.com/egladman/magus.Open func(ctx context.Context, root string, opts ...Option) (*Magus, error)
@@ -201,7 +201,6 @@ github.com/egladman/magus.PlanOptions.HistoryPath field string
 github.com/egladman/magus.PlanOptions.MaxShards field int
 github.com/egladman/magus.PlanOptions.RunnerPoolBudget field int
 github.com/egladman/magus.ProjectOption type = github.com/egladman/magus/internal/workspace.ProjectOption
-github.com/egladman/magus.ReadOutputRecords func(r io.Reader, each func(github.com/egladman/magus/types.StoredOutput) error) error
 github.com/egladman/magus.ResolveCacheDir func(root string, opts ...Option) (string, error)
 github.com/egladman/magus.RetryOnVolatile func(reason string) TargetOption
 github.com/egladman/magus.RunOption type func(*run)
@@ -254,9 +253,8 @@ github.com/egladman/magus.WithDryRun func() RunOption
 github.com/egladman/magus.WithEnv func(env []string) Option
 github.com/egladman/magus.WithExtraArgs func(args []string) RunOption
 github.com/egladman/magus.WithGate func() RunOption
-github.com/egladman/magus.WithGraphHistory func(h interface{PredictDuration(project string, target string, tags []string) time.Duration}, target string) ComposeOption
+github.com/egladman/magus.WithGraphHistory func(h DurationPredictor, target string) ComposeOption
 github.com/egladman/magus.WithGraphInput func(g *github.com/egladman/magus/types.Graph) ComposeOption
-github.com/egladman/magus.WithLimiter func(l *Limiter) Option
 github.com/egladman/magus.WithMetricsCollection func() Option
 github.com/egladman/magus.WithNoCache func() RunOption
 github.com/egladman/magus.WithNoVolatilityRetry func() RunOption
@@ -881,6 +879,35 @@ github.com/egladman/magus/types.BranchChange.Ref field string "json:\"ref\""
 github.com/egladman/magus/types.BranchChangeReporter type interface
 github.com/egladman/magus/types.BranchChangeReporter.BranchChanges imethod func(ctx context.Context, dir string, base string, limit int) ([]BranchChange, error)
 github.com/egladman/magus/types.BranchIdents func(lines [][]byte, start int, end int, language string) []string
+github.com/egladman/magus/types.Brief type struct
+github.com/egladman/magus/types.Brief.Decisions field []BriefDecision "json:\"decisions,omitempty\""
+github.com/egladman/magus/types.Brief.Evidence field []BriefRef "json:\"evidence,omitempty\""
+github.com/egladman/magus/types.Brief.Goal field string "json:\"goal\""
+github.com/egladman/magus/types.Brief.Job field string "json:\"job\""
+github.com/egladman/magus/types.Brief.Why field string "json:\"why,omitempty\""
+github.com/egladman/magus/types.BriefDecision type struct
+github.com/egladman/magus/types.BriefDecision.What field string "json:\"what\""
+github.com/egladman/magus/types.BriefDecision.Why field string "json:\"why,omitempty\""
+github.com/egladman/magus/types.BriefFormat type string
+github.com/egladman/magus/types.BriefFormat.String method func() string
+github.com/egladman/magus/types.BriefFormat.Valid method func() bool
+github.com/egladman/magus/types.BriefFormat.Values method func() []string
+github.com/egladman/magus/types.BriefFormatBuzz const BriefFormat = "buzz"
+github.com/egladman/magus/types.BriefFormatMarkdown const BriefFormat = "markdown"
+github.com/egladman/magus/types.BriefRef type struct
+github.com/egladman/magus/types.BriefRef.ID field string "json:\"id\""
+github.com/egladman/magus/types.BriefRef.Kind field BriefRefKind "json:\"kind\""
+github.com/egladman/magus/types.BriefRef.Says field string "json:\"says,omitempty\""
+github.com/egladman/magus/types.BriefRefCommit const BriefRefKind = "commit"
+github.com/egladman/magus/types.BriefRefFile const BriefRefKind = "file"
+github.com/egladman/magus/types.BriefRefInvocation const BriefRefKind = "invocation"
+github.com/egladman/magus/types.BriefRefKind type string
+github.com/egladman/magus/types.BriefRefKind.String method func() string
+github.com/egladman/magus/types.BriefRefKind.Valid method func() bool
+github.com/egladman/magus/types.BriefRefKind.Values method func() []string
+github.com/egladman/magus/types.BriefRefOutput const BriefRefKind = "output"
+github.com/egladman/magus/types.BriefRefPlan const BriefRefKind = "plan"
+github.com/egladman/magus/types.BriefRefVerdict const BriefRefKind = "verdict"
 github.com/egladman/magus/types.BrokerBestEffort const BrokerPolicy = "best-effort"
 github.com/egladman/magus/types.BrokerOff const BrokerPolicy = "off"
 github.com/egladman/magus/types.BrokerPolicy type string
@@ -1362,6 +1389,7 @@ github.com/egladman/magus/types.Declaration type struct
 github.com/egladman/magus/types.Declaration.Apply method func(u *Job)
 github.com/egladman/magus/types.Declaration.ApplySpec method func(u *Job)
 github.com/egladman/magus/types.Declaration.Breaks field []string "json:\"breaks,omitempty\""
+github.com/egladman/magus/types.Declaration.BriefFormat field BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.Declaration.Checkout field string "json:\"checkout,omitempty\" schema:\"abspath\""
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
@@ -2448,6 +2476,7 @@ github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,om
 github.com/egladman/magus/types.Job.Attempts field int "json:\"attempts,omitempty\"  yaml:\"attempts,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
 github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
+github.com/egladman/magus/types.Job.BriefFormat field BriefFormat "json:\"brief_format,omitempty\" yaml:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Job.Check field *LeaseCheck "json:\"check,omitempty\" yaml:\"check,omitempty\""
 github.com/egladman/magus/types.Job.CheckoutRoot field string "json:\"checkout_root,omitempty\" yaml:\"checkout_root,omitempty\""
 github.com/egladman/magus/types.Job.Checkpoint field string "json:\"checkpoint,omitempty\" yaml:\"checkpoint,omitempty\""
@@ -2628,6 +2657,7 @@ github.com/egladman/magus/types.JobProblems.Err method func() error
 github.com/egladman/magus/types.JobProblems.Waive method func(ws []JobWaiver) (kept JobProblems, waived JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Breaks field *[]string "json:\"breaks,omitempty\""
+github.com/egladman/magus/types.JobPut.BriefFormat field *BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.JobPut.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.JobPut.Checkpoint field *string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.JobPut.Criteria field *string "json:\"criteria,omitempty\""

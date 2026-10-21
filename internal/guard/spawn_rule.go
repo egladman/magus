@@ -117,7 +117,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled)})); refused {
+		row, bound := continuedRow(ctx, at, facts, env)
+		if env.IsSpawn {
+			row, _ = titled()
+		}
+		brief := briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled), bound: bound}
+		brief.format, brief.formatFrom = job.ResolveBriefFormat(row, deps.BriefFormat)
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, brief)); refused {
 			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && verdict.Decision == decisionPass {
@@ -788,6 +794,19 @@ func baseSuperseded(ctx context.Context, deps Dependencies, at location, row typ
 	live := deps.revision(ctx, at.workspace, "")
 	reported, _ := types.ParseCheckpointToken(row.ReportedBase)
 	return live != "" && !job.SameRevision(live, reported)
+}
+
+// continuedRow is the live row a continue's agent was spawned for, by its spawn title; false
+// for a spawn, or an agent bound to no live row.
+func continuedRow(ctx context.Context, at location, facts hint.Gate, env hookRequest) (types.Job, bool) {
+	if !env.IsContinue {
+		return types.Job{}, false
+	}
+	rec, ok := readSpawnedAgent(facts, resolveAgentID(facts, env.Target))
+	if !ok {
+		return types.Job{}, false
+	}
+	return spawnTitleJob(ctx, at, rec.Description)
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id

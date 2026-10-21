@@ -1,4 +1,5 @@
 config agents.billing
+config agents.brief_format
 config agents.profile
 config broker
 config cache.dir

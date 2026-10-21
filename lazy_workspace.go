@@ -92,6 +92,7 @@ func (l *LazyWorkspace) usePublishedShards(r knowledge.RemoteShards) {
 // The types.Inspector methods, each call opening the workspace on first use. A failed open
 // is every call's error.
 
+// ListCharms opens the workspace on first use, then lists its charms.
 func (l *LazyWorkspace) ListCharms(ctx context.Context) ([]types.CharmEntry, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -100,6 +101,7 @@ func (l *LazyWorkspace) ListCharms(ctx context.Context) ([]types.CharmEntry, err
 	return m.ListCharms(ctx)
 }
 
+// ListTargets opens the workspace on first use, then lists its targets.
 func (l *LazyWorkspace) ListTargets(ctx context.Context) ([]types.TargetEntry, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -108,6 +110,7 @@ func (l *LazyWorkspace) ListTargets(ctx context.Context) ([]types.TargetEntry, e
 	return m.ListTargets(ctx)
 }
 
+// ListProjects opens the workspace on first use, then lists its declared projects.
 func (l *LazyWorkspace) ListProjects(ctx context.Context) (types.ProjectsOutput, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -116,6 +119,7 @@ func (l *LazyWorkspace) ListProjects(ctx context.Context) (types.ProjectsOutput,
 	return m.ListProjects(ctx)
 }
 
+// EvaluateProjects opens the workspace on first use, then resolves every project.
 func (l *LazyWorkspace) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOutput, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -124,6 +128,7 @@ func (l *LazyWorkspace) EvaluateProjects(ctx context.Context) (types.EvaluatedPr
 	return m.EvaluateProjects(ctx)
 }
 
+// EvaluateTarget opens the workspace on first use, then resolves one target.
 func (l *LazyWorkspace) EvaluateTarget(ctx context.Context, t types.Target) ([]types.EvaluatedTarget, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -132,6 +137,7 @@ func (l *LazyWorkspace) EvaluateTarget(ctx context.Context, t types.Target) ([]t
 	return m.EvaluateTarget(ctx, t)
 }
 
+// ClassifyFiles opens the workspace on first use, then reports which project owns each path.
 func (l *LazyWorkspace) ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -140,6 +146,7 @@ func (l *LazyWorkspace) ClassifyFiles(ctx context.Context, paths []string) ([]ty
 	return m.ClassifyFiles(ctx, paths)
 }
 
+// TargetGraph opens the workspace on first use, then reads its ctx.needs graph.
 func (l *LazyWorkspace) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {
@@ -148,6 +155,7 @@ func (l *LazyWorkspace) TargetGraph(ctx context.Context) (types.TargetGraphOutpu
 	return m.TargetGraph(ctx)
 }
 
+// Workspace opens the workspace on first use, then describes it under cfg.
 func (l *LazyWorkspace) Workspace(ctx context.Context, cfg types.WorkspaceConfig) (types.WorkspaceEntry, error) {
 	m, err := l.Magus(ctx)
 	if err != nil {

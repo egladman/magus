@@ -1025,7 +1025,7 @@ func (e evidenceFlag) Set(value string) error {
 // job piped in are the same declaration.
 type forkFlags struct {
 	criteria, parent, check, model, checkpoint string
-	timeout, checkout                          string
+	timeout, checkout, briefFormat             string
 	writePaths, readPaths, denyPaths           listFlag
 	dependsOn                                  listFlag
 	readOnly                                   bool
@@ -1035,20 +1035,21 @@ type forkFlags struct {
 // flag fork and a record fork land the same.
 func (f forkFlags) row(id string) types.Declaration {
 	return types.Declaration{
-		Schema:     types.Schema{Version: types.JobSchemaVersion},
-		ID:         id,
-		Parent:     f.parent,
-		Criteria:   f.criteria,
-		Checkpoint: f.checkpoint,
-		WritePaths: f.writePaths,
-		DenyPaths:  f.denyPaths,
-		ReadPaths:  f.readPaths,
-		DependsOn:  f.dependsOn,
-		Check:      f.declaredCheck(),
-		Model:      f.model,
-		ReadOnly:   f.readOnly,
-		Timeout:    f.timeout,
-		Checkout:   f.checkout,
+		Schema:      types.Schema{Version: types.JobSchemaVersion},
+		ID:          id,
+		Parent:      f.parent,
+		Criteria:    f.criteria,
+		Checkpoint:  f.checkpoint,
+		WritePaths:  f.writePaths,
+		DenyPaths:   f.denyPaths,
+		ReadPaths:   f.readPaths,
+		DependsOn:   f.dependsOn,
+		Check:       f.declaredCheck(),
+		Model:       f.model,
+		BriefFormat: types.BriefFormat(f.briefFormat),
+		ReadOnly:    f.readOnly,
+		Timeout:     f.timeout,
+		Checkout:    f.checkout,
 	}
 }
 
@@ -1100,6 +1101,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 		fs.StringVar(&declared.model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
+		fs.StringVar(&declared.briefFormat, "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 		fs.StringVar(&declared.checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
 		fs.Usage = func() {
@@ -1175,7 +1177,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		var dropped []string
 		flags.Visit(func(f *flag.Flag) {
-			if slices.Contains([]string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "read-only"}, f.Name) {
+			if slices.Contains([]string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "read-only"}, f.Name) {
 				dropped = append(dropped, "--"+f.Name)
 			}
 		})

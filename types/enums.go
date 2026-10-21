@@ -194,6 +194,20 @@ func (v GroupingVerdict) Values() []string { return groupingVerdicts.Strings() }
 func (v GroupingVerdict) Valid() bool      { return groupingVerdicts.Valid(v) }
 func (v GroupingVerdict) String() string   { return enum.String(v) }
 
+var briefFormats = enum.Set[BriefFormat]{BriefFormatMarkdown, BriefFormatBuzz}
+
+func (v BriefFormat) Values() []string { return briefFormats.Strings() }
+func (v BriefFormat) Valid() bool      { return briefFormats.Valid(v) }
+func (v BriefFormat) String() string   { return enum.String(v) }
+
+var briefRefKinds = enum.Set[BriefRefKind]{
+	BriefRefOutput, BriefRefVerdict, BriefRefInvocation, BriefRefFile, BriefRefPlan, BriefRefCommit,
+}
+
+func (v BriefRefKind) Values() []string { return briefRefKinds.Strings() }
+func (v BriefRefKind) Valid() bool      { return briefRefKinds.Valid(v) }
+func (v BriefRefKind) String() string   { return enum.String(v) }
+
 var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceDefault}
 
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }

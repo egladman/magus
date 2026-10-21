@@ -32,6 +32,8 @@ import (
 
 const archiveDefaultMaxSize int64 = 10 << 30 // 10 GiB
 
+// Archive is the Buzz archive module; the Impl of each function is the Go door a
+// program calls without Buzz.
 var Archive = Module{
 	Name: "archive",
 	Doc:  "Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped.",
@@ -429,6 +431,9 @@ func archiveHoldThreads(ctx context.Context, opts map[string]any) (threads int, 
 	return threads, func() { lim.ReleaseN(threads); reclaim() }, nil
 }
 
+// ArchiveUncompress extracts src into dest, skipping symlinks and non-regular
+// entries, and fails at max_size uncompressed bytes (10 GiB by default) rather than
+// filling the disk.
 func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (types.UncompressResult, error) {
 	if types.Tracing(ctx) {
 		return types.UncompressResult{}, nil
@@ -485,6 +490,9 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	return types.UncompressResult{Files: basedPaths(files, dest), Bytes: int(totalBytes)}, nil
 }
 
+// ArchiveCompress archives src to dest in the format dest's extension names, unless
+// the format option overrides it. Symlinks are not followed by default, so a link
+// inside src cannot pull files from outside it into the archive.
 func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (types.CompressResult, error) {
 	if types.Tracing(ctx) {
 		return types.CompressResult{}, nil

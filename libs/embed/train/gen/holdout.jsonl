@@ -873,6 +873,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/bootstrap.go"}
 {"group":"dir:internal/guard","path":"internal/guard/bootstrap_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/brief.go"}
+{"group":"dir:internal/guard","path":"internal/guard/brief_buzz.go"}
+{"group":"dir:internal/guard","path":"internal/guard/brief_buzz_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/brief_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz_read.go"}

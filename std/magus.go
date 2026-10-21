@@ -632,7 +632,9 @@ var Magus = Module{
 					Extern:  true,
 				},
 			},
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "GuardBinary"},
+			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
+			// guard type-checks against this declaration.
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "GuardBinary", "Brief"},
 		},
 		{
 			Name: "harness",

@@ -324,6 +324,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		SchemaVersion:  int32(row.Version),
 		Requires:       row.Requires,
 		ModelTier:      wireModelTier(row.ModelTier),
+		BriefFormat:    string(row.BriefFormat),
 		ReworkRounds:   int32(row.ReworkRounds),
 		Widenings:      int32(row.Widenings),
 	}
