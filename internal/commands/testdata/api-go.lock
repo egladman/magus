@@ -21,23 +21,26 @@ github.com/egladman/magus.Command.Cwd field string "json:\"cwd,omitempty\""
 github.com/egladman/magus.Command.Trigger field string "json:\"trigger,omitempty\""
 github.com/egladman/magus.ComposeGraph func(ws github.com/egladman/magus/types.WorkspaceRepository, opts ...ComposeOption) github.com/egladman/magus/types.GraphOutput
 github.com/egladman/magus.ComposeOption type func(*compose)
-github.com/egladman/magus.DefaultConcurrency func() int
 github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.DriftPolicy, reason string) TargetOption
+github.com/egladman/magus.DurationPredictor type interface
+github.com/egladman/magus.DurationPredictor.PredictDuration imethod func(project string, target string, tags []string) time.Duration
 github.com/egladman/magus.Event type struct
 github.com/egladman/magus.Event.Command field *Command "json:\"command,omitempty\""
 github.com/egladman/magus.Event.DiagnosticCode field string "json:\"diagnostic_code,omitempty\""
-github.com/egladman/magus.Event.DurationMs field int64 "json:\"duration_ms,omitempty\""
-github.com/egladman/magus.Event.Inv field string "json:\"inv,omitempty\""
+github.com/egladman/magus.Event.Duration field time.Duration "json:\"-\""
+github.com/egladman/magus.Event.Invocation field string "json:\"inv,omitempty\""
 github.com/egladman/magus.Event.Kind field string "json:\"kind\""
 github.com/egladman/magus.Event.Level field string "json:\"level,omitempty\""
 github.com/egladman/magus.Event.MagusVersion field string "json:\"magus_version,omitempty\""
+github.com/egladman/magus.Event.MarshalJSON method func() ([]byte, error)
 github.com/egladman/magus.Event.Project field string "json:\"project,omitempty\""
 github.com/egladman/magus.Event.Ref field string "json:\"ref,omitempty\""
 github.com/egladman/magus.Event.Status field string "json:\"status,omitempty\""
 github.com/egladman/magus.Event.Stream field string "json:\"stream,omitempty\""
 github.com/egladman/magus.Event.Target field string "json:\"target,omitempty\""
 github.com/egladman/magus.Event.Text field string "json:\"text,omitempty\""
-github.com/egladman/magus.Event.Ts field int64 "json:\"ts\""
+github.com/egladman/magus.Event.Timestamp field int64 "json:\"ts\""
+github.com/egladman/magus.Event.UnmarshalJSON method(ptr) func(data []byte) error
 github.com/egladman/magus.FindRoot func(dir string) (string, error)
 github.com/egladman/magus.HumanOnly func(reason string) TargetOption
 github.com/egladman/magus.IgnoreGlob func(pattern string) github.com/egladman/magus/types.IgnorePattern
@@ -65,8 +68,6 @@ github.com/egladman/magus.LazyWorkspace.Opened method(ptr) func() bool
 github.com/egladman/magus.LazyWorkspace.Root method(ptr) func() string
 github.com/egladman/magus.LazyWorkspace.TargetGraph method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.TargetGraphOutput, error)
 github.com/egladman/magus.LazyWorkspace.Workspace method(ptr) func(ctx context.Context, cfg github.com/egladman/magus/types.WorkspaceConfig) (github.com/egladman/magus/types.WorkspaceEntry, error)
-github.com/egladman/magus.Limiter type struct
-github.com/egladman/magus.Limiter.Capacity method(ptr) func() int
 github.com/egladman/magus.ListSpells func(ctx context.Context) ([]github.com/egladman/magus/types.Spell, error)
 github.com/egladman/magus.Magus type struct
 github.com/egladman/magus.Magus.Affected method(ptr) func(ctx context.Context, base string) (*github.com/egladman/magus/types.AffectedResult, error)
@@ -188,7 +189,6 @@ github.com/egladman/magus.MergeMarkers func(base []byte, ours []byte, theirs []b
 github.com/egladman/magus.MetricsCollector type struct
 github.com/egladman/magus.MetricsCollector.Collect method(ptr) func(ctx context.Context) (go.opentelemetry.io/otel/sdk/metric/metricdata.ResourceMetrics, error)
 github.com/egladman/magus.NewLazyWorkspace func(root string, open func(context.Context) (*Magus, error)) *LazyWorkspace
-github.com/egladman/magus.NewLimiter func(n int) *Limiter
 github.com/egladman/magus.NewSink func(format github.com/egladman/magus/libs/cmdline/output.Format, stdout io.Writer, stderr io.Writer, opts ...SinkOption) (*Sink, error)
 github.com/egladman/magus.NewWorkspaceRegistry func() *WorkspaceRegistry
 github.com/egladman/magus.Open func(ctx context.Context, root string, opts ...Option) (*Magus, error)
@@ -201,7 +201,6 @@ github.com/egladman/magus.PlanOptions.HistoryPath field string
 github.com/egladman/magus.PlanOptions.MaxShards field int
 github.com/egladman/magus.PlanOptions.RunnerPoolBudget field int
 github.com/egladman/magus.ProjectOption type = github.com/egladman/magus/internal/workspace.ProjectOption
-github.com/egladman/magus.ReadOutputRecords func(r io.Reader, each func(github.com/egladman/magus/types.StoredOutput) error) error
 github.com/egladman/magus.ResolveCacheDir func(root string, opts ...Option) (string, error)
 github.com/egladman/magus.RetryOnVolatile func(reason string) TargetOption
 github.com/egladman/magus.RunOption type func(*run)
@@ -254,9 +253,8 @@ github.com/egladman/magus.WithDryRun func() RunOption
 github.com/egladman/magus.WithEnv func(env []string) Option
 github.com/egladman/magus.WithExtraArgs func(args []string) RunOption
 github.com/egladman/magus.WithGate func() RunOption
-github.com/egladman/magus.WithGraphHistory func(h interface{PredictDuration(project string, target string, tags []string) time.Duration}, target string) ComposeOption
+github.com/egladman/magus.WithGraphHistory func(h DurationPredictor, target string) ComposeOption
 github.com/egladman/magus.WithGraphInput func(g *github.com/egladman/magus/types.Graph) ComposeOption
-github.com/egladman/magus.WithLimiter func(l *Limiter) Option
 github.com/egladman/magus.WithMetricsCollection func() Option
 github.com/egladman/magus.WithNoCache func() RunOption
 github.com/egladman/magus.WithNoVolatilityRetry func() RunOption

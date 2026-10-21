@@ -50,7 +50,7 @@ func validImportedDescriptor() OutputDescriptor {
 }
 
 func TestOutputImportRejectsForgedIdentity(t *testing.T) {
-	require.NoError(t, CheckImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src", Digest: "0123456789ab", Count: 3}}))
+	require.NoError(t, checkImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src", Digest: "0123456789ab", Count: 3}}))
 
 	cases := map[string]func(*OutputDescriptor){
 		"short key":            func(d *OutputDescriptor) { d.Key = "abcd"; d.Ref = PortableRef(d.Key) },
@@ -74,21 +74,21 @@ func TestOutputImportRejectsForgedIdentity(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			d := validImportedDescriptor()
 			mutate(&d)
-			assert.Error(t, CheckImportedDescriptor(d, nil))
+			assert.Error(t, checkImportedDescriptor(d, nil))
 		})
 	}
 	withNeed := validImportedDescriptor()
 	withNeed.FailedNeedTarget, withNeed.FailedNeedRef = "lint-go", "out0123456789ab"
-	require.NoError(t, CheckImportedDescriptor(withNeed, nil), "a member and its ref are advice, not refused")
-	assert.Error(t, CheckImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src\n", Digest: "0123456789ab"}}))
-	assert.Error(t, CheckImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src", Digest: "zz"}}))
+	require.NoError(t, checkImportedDescriptor(withNeed, nil), "a member and its ref are advice, not refused")
+	assert.Error(t, checkImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src\n", Digest: "0123456789ab"}}))
+	assert.Error(t, checkImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src", Digest: "zz"}}))
 }
 
 func TestOutputImportEnforcesLimits(t *testing.T) {
-	limits := ImportLimits{LineBytes: 16, TotalBytes: 40, Records: 3}
+	limits := importLimits{LineBytes: 16, TotalBytes: 40, Records: 3}
 	read := func(in string) ([]int, error) {
 		var lines []int
-		err := ReadRecordLines(strings.NewReader(in), limits, func(line int, _ []byte) error {
+		err := readRecordLines(strings.NewReader(in), limits, func(line int, _ []byte) error {
 			lines = append(lines, line)
 			return nil
 		})
@@ -112,7 +112,7 @@ func TestOutputImportEnforcesLimits(t *testing.T) {
 // A line far past the limit is refused without being read whole.
 func TestOutputImportDoesNotBufferAnOversizedLine(t *testing.T) {
 	r := &countingReader{size: 1 << 30}
-	err := ReadRecordLines(r, ImportLimits{LineBytes: 1 << 20, TotalBytes: 1 << 40, Records: 1}, func(int, []byte) error { return nil })
+	err := readRecordLines(r, importLimits{LineBytes: 1 << 20, TotalBytes: 1 << 40, Records: 1}, func(int, []byte) error { return nil })
 	assert.EqualError(t, err, "line 1: longer than 1048576 bytes")
 	assert.Less(t, r.read, 2<<20)
 }

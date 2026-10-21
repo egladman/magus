@@ -279,8 +279,12 @@ with an `unknown` verdict means part of the workspace had no symbol index.
 - No `ExpandCwd`: expand a target against the project you name with `ExpandPath`.
 - No `Serve` or `Stream`: the daemon and the shell pipeline belong to the CLI.
 - No `SetGraphObserver`: pass `WithObserver` to the run you want observed.
-- No exported declaration names a type from an `internal/` package; the
-  `go-api-generate` target fails on one.
+- No internal type to import. `Option`, `ProjectOption`, `BindingOption`,
+  `TargetOption` and `SymbolOccurrenceRead` are aliases of types in `internal/`
+  packages, and `types.Schema.Unknown` carries an `internal/json.RawMessage`. You
+  name the alias, pass it and return it, but you cannot import the original.
+- The harness is CLI-only. Install and verify run through `magus agent harness`
+  and `magus describe harness`; the SDK has no harness call.
 
 ## Testing code that uses the SDK
 
