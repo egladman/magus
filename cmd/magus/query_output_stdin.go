@@ -17,7 +17,7 @@ import (
 // stdout, provenance on stderr. Every printed string is neutralized, and no reproduce
 // command is printed, since a forged record chooses its own project and target.
 func printOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
-	return magus.ReadOutputRecords(in, func(rec types.StoredOutput) error {
+	return cache.ReadOutputRecords(in, func(rec types.StoredOutput) error {
 		writeRecordProvenance(stderr, rec)
 		out, n := cache.NeutralizeTerminal(rec.Bytes(), true)
 		if _, err := stdout.Write(out); err != nil {
