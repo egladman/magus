@@ -1012,6 +1012,7 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
-	assert.Equal(t, "principal", got.ModelTier.Name)
-	assert.Equal(t, 2, got.ModelTier.Rank)
+	tier := *got.ModelTier
+	tier.Reason = ""
+	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
 }
