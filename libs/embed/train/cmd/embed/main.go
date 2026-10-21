@@ -35,6 +35,7 @@ commands:
   teacher         embed a texts file with a teacher model into resumable, content-addressed shards
   teacher-parity  check the Go teacher against the reference vectors and report texts/s
   train           distill, train and quantize the table from finished teacher runs
+  convert         write potion-code-16M-v2 as a table over the vocabulary, mean of each token's word pieces
   bench           write CodeRankEmbed's runs over a subset the external benchmark exported
 
 run "embed <command> -h" for a command's flags`
@@ -58,6 +59,8 @@ func main() {
 		err = runParity(os.Args[2:])
 	case "train":
 		err = runTrain(os.Args[2:])
+	case "convert":
+		err = runConvert(os.Args[2:])
 	case "bench":
 		err = runBench(os.Args[2:])
 	default:
