@@ -361,12 +361,9 @@ export object Site {
         final url = cleanURL(rel, this.blog);
         // Join tags with "||" (never present in a tag) so the record stays flat;
         // sharedTagCount splits it back out.
-        var joined = "";
-        var first = true;
-        foreach (t in parseTags(md)) {
-            if (first) { joined = t; first = false; }
-            else { joined = joined + "||" + t; }
-        }
+        final tagParts = mut [<str>];
+        foreach (t in parseTags(md)) { tagParts.append(t); }
+        final joined = tagParts.join("||");
         this.docPages.append(DocPage{
             url = url,
             title = title,
@@ -483,20 +480,24 @@ export object Site {
         // owns that URL - an in-dir index (codes/race/README.md) or a sibling-file landing
         // (targets.md next to targets/); segments with no page (bare "codes/") fall back to a
         // capitalized label.
-        var acc = "";
+        final crumbs = mut [<str>];
+        crumbs.append(li);
+        final accParts = mut [<str>];
         var i = 0;
         while (i < dirCount) {
             final seg = segs[i];
-            if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
+            accParts.append(seg);
+            final acc = accParts.join("/");
             final label = capitalizeFirst(seg);
             final t = this.lookupTitle(acc + "/");
             if (t != "") {
-                li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
+                crumbs.append("<li><a href=\"" + root + acc + "/\">" + t + "</a></li>");
             } else {
-                li = li + "<li>" + label + "</li>";
+                crumbs.append("<li>" + label + "</li>");
             }
             i = i + 1;
         }
+        li = crumbs.join("");
 
         // The leaf is the current page's own title, matching how the intermediate crumbs read.
         li = li + "<li aria-current=\"page\">" + title + "</li>";
@@ -755,12 +756,7 @@ export object Site {
                 if (md.indexOf(t.term.lower()) != null) { hits.append(t.anchor); }
             }
             final sorted = hits.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-            var joined = "";
-            var first = true;
-            foreach (a in sorted) {
-                if (first) { joined = a; first = false; } else { joined = joined + "||" + a; }
-            }
-            this.pageTerms[p.url] = joined;
+            this.pageTerms[p.url] = sorted.join("||");
         }
     }
 
@@ -954,22 +950,22 @@ export object Site {
             // keys() hands back an immutable list and sort mutates in place, so copy first.
             final sections = mut [<str>];
             foreach (s in bySection.keys()) { sections.append(s); }
-            var groups = "";
+            final groups = mut [<str>];
             foreach (section in sections.sort(fun (a: str, b: str) > bool { return strLess(a, b); })) {
                 final pages = bySection[section]!.sort(fun (a: {str: str}, b: {str: str}) > bool {
                     return strLess(a["title"], b["title"]);
                 });
-                var items = "";
+                final items = mut [<str>];
                 foreach (p in pages) {
-                    items = items + "<li><a href=\"" + p["href"] + "\">" + p["title"] + "</a></li>";
+                    items.append("<li><a href=\"" + p["href"] + "\">" + p["title"] + "</a></li>");
                 }
-                groups = groups + "<div><b>" + section + "</b><ul>" + items + "</ul></div>";
+                groups.append("<div><b>" + section + "</b><ul>" + items.join("") + "</ul></div>");
             }
             var noun = " pages";
             if (count == 1) { noun = " page"; }
             byAnchor[anchor] = "<details class=\"glossary-backlinks\">"
                 + "<summary>Referenced on {count}" + noun + "</summary>"
-                + groups + "</details>\n";
+                + groups.join("") + "</details>\n";
         }
         return byAnchor;
     }

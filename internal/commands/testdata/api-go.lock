@@ -232,7 +232,6 @@ github.com/egladman/magus.SpellCache.Refused field []string
 github.com/egladman/magus.SpellCache.Skipped field int
 github.com/egladman/magus.SpellCache.Spell field string
 github.com/egladman/magus.SpellCache.Transferred field int64
-github.com/egladman/magus.SymbolIndexedAt func(cacheDir string, projectAbsDir string) (time.Time, bool)
 github.com/egladman/magus.SymbolOccurrenceRead type = github.com/egladman/magus/internal/graph/workspacegraph.SymbolOccurrenceRead
 github.com/egladman/magus.SymbolOccurrenceRead.Files field []github.com/egladman/magus/types.SymbolOccurrenceFile
 github.com/egladman/magus.SymbolOccurrenceRead.Names field []string
@@ -3848,7 +3847,6 @@ github.com/egladman/magus/types.ProjectRef.Dir field string "json:\"-\" yaml:\"-
 github.com/egladman/magus/types.ProjectRef.Display method func() string
 github.com/egladman/magus/types.ProjectRef.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.ProjectRef.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.ProjectRef.WorkspaceURI method func() string
 github.com/egladman/magus/types.ProjectsOutput type struct
 github.com/egladman/magus/types.ProjectsOutput.Count field int "json:\"count\"      yaml:\"count\""
 github.com/egladman/magus/types.ProjectsOutput.Definition field string "json:\"definition\" yaml:\"definition\" buzz:\"-\""
@@ -5134,7 +5132,6 @@ github.com/egladman/magus/types.WorkspaceReader.Graph imethod func() (*Graph, er
 github.com/egladman/magus/types.WorkspaceReader.Root imethod func() string
 github.com/egladman/magus/types.WorkspaceReader.VCSOptions imethod func() VCSOptions
 github.com/egladman/magus/types.WorkspaceReader.Where imethod func(dir string) (*Project, bool)
-github.com/egladman/magus/types.WorkspaceRef func(path string) string
 github.com/egladman/magus/types.WorkspaceReport type struct
 github.com/egladman/magus/types.WorkspaceReport.Count field int "json:\"count\"      yaml:\"count\""
 github.com/egladman/magus/types.WorkspaceReport.Definition field string "json:\"definition\" yaml:\"definition\""

@@ -14,7 +14,7 @@ func TestFailureExcerptFindsFileLevelLintFindingPastAdvice(t *testing.T) {
 	for i := range 100 {
 		fmt.Fprintf(&log, "advice: shared-reach source: attr.go#Error measures %d, past 7\n", i)
 	}
-	const finding = "hack/lint/policy.buzz: sanctions file:internal/textembed/eval_test.go, which no longer departs [policy]"
+	const finding = "hack/lint/policy.buzz: sanctions file:libs/embed/eval_test.go, which no longer departs [policy]"
 	const remedy = "    Delete the entry: the list only shrinks."
 	log.WriteString(finding + "\n" + remedy + "\n")
 	got, omitted := failureExcerpt([]byte(log.String()), 6)

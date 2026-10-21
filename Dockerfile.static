@@ -29,6 +29,7 @@ COPY go.mod go.sum ./
 # fails when a replace directive has no line here, so the list cannot drift unnoticed.
 COPY libs/cmdline/go.mod libs/cmdline/
 COPY libs/diagnostics/go.mod libs/diagnostics/
+COPY libs/embed/go.mod libs/embed/
 COPY libs/gopherbuzz/go.mod libs/gopherbuzz/
 COPY libs/xdg/go.mod libs/xdg/
 RUN --mount=type=cache,target=/root/.cache/go-build \

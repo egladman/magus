@@ -47,14 +47,14 @@ func runDecisionCases(t *testing.T, rule Rule, cases []textCase) {
 func TestBlameReportsAPersonOrPastWorkAsTheSubjectOfAFault(t *testing.T) {
 	runDecisionCases(t, RuleBlame, []textCase{
 		{"a person who should have", KindChangeDescription, pr("- The author should have pinned the key."),
-			[]string{"4:The author should have pinned:deny"}},
+			[]string{"4:The author should have pinned:advise"}},
 		{"a pull request that forgot to", KindChangeDescription, pr("- #341 forgot to regenerate the index."),
-			[]string{"4:#341 forgot to:deny"}},
-		{"you failed to in a reply", KindReviewReply, "You failed to run the suite.", []string{"1:You failed to:deny"}},
-		{"whoever wrote", KindReviewReply, "Whoever wrote this left the lock out.", []string{"1:Whoever wrote:deny"}},
+			[]string{"4:#341 forgot to:advise"}},
+		{"you failed to in a reply", KindReviewReply, "You failed to run the suite.", []string{"1:You failed to:advise"}},
+		{"whoever wrote", KindReviewReply, "Whoever wrote this left the lock out.", []string{"1:Whoever wrote:advise"}},
 		// #439, the worst phrase the research found.
-		{"contempt", KindChangeDescription, pr("- The old names read as sloppy."), []string{"4:sloppy:deny"}},
-		{"naive said of a decision", KindReviewReply, "The retry was naive.", []string{"1:naive:deny"}},
+		{"contempt", KindChangeDescription, pr("- The old names read as sloppy."), []string{"4:sloppy:advise"}},
+		{"naive said of a decision", KindReviewReply, "The retry was naive.", []string{"1:naive:advise"}},
 		// #485, #400 and docs/guides/integrations/ci.md name a role or a technique.
 		{"a careless caller", KindChangeDescription, pr("- Tells the careful and the careless caller the same sentence."), nil},
 		{"a lazy fetch and a naive clone", KindChangeDescription, pr("- Skips the lazy fetch a naive shallow clone makes."), nil},
@@ -169,9 +169,9 @@ func TestClaimReportsAClaimWithNoEvidenceBesideIt(t *testing.T) {
 
 func TestReplyOpenerReportsAReplyThatOpensByContradicting(t *testing.T) {
 	runDecisionCases(t, RuleReplyOpener, []textCase{
-		{"no", KindReviewReply, "No, the map is shared.", []string{"1:No,:deny"}},
-		{"as I said, mid-reply", KindReviewReply, "The map is shared. As I said, it needs a lock.", []string{"1:As I said:deny"}},
-		{"wrong and again", KindReviewReply, "Wrong, it races.\n\nAgain, it races.", []string{"1:Wrong:deny", "3:Again,:deny"}},
+		{"no", KindReviewReply, "No, the map is shared.", []string{"1:No,:advise"}},
+		{"as I said, mid-reply", KindReviewReply, "The map is shared. As I said, it needs a lock.", []string{"1:As I said:advise"}},
+		{"wrong and again", KindReviewReply, "Wrong, it races.\n\nAgain, it races.", []string{"1:Wrong:advise", "3:Again,:advise"}},
 		// filler reports it, in a reply as anywhere.
 		{"actually", KindReviewReply, "Actually, it races.", nil},
 		{"no without a comma", KindReviewReply, "No lock guards the map.", nil},

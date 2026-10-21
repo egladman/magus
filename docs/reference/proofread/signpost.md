@@ -1,13 +1,13 @@
 ---
 title: "signpost"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `agent-reply` by default: it reports an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
-tags: [proofread, rules, signpost, deny]
+description: "An advisory by default: it explains, and blocks nothing, on an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")."
+tags: [proofread, rules, signpost, advise]
 aliases: [reference/prose/signpost]
 ---
 
 # signpost
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-brief`, `commit-message`, `issue`, `release-notes`, `changelog`, `review-summary`, `review-inline`, `review-reply`, and `agent-compact` and advises on `agent-reply` by default: it reports an announcement standing where the point should be ("Here's the thing", "Let's dive in").
+An advisory by default: it explains, and blocks nothing, on an announcement standing where the point should be ("Here's the thing", "Let's dive in").
 
 ## What it catches
 
@@ -28,19 +28,19 @@ The code is `PRF4003`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-brief`        | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `review-summary`     | deny    |
-| `review-inline`      | deny    |
-| `review-reply`       | deny    |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-brief`        | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
 | `agent-reply`        | advise  |
-| `agent-compact`      | deny    |
+| `agent-compact`      | advise  |
 
 ## Changing it
 
@@ -50,7 +50,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"signpost": "advise"},
+  "rules": {"signpost": "deny"},
   "paths": {"blog/**": {"signpost": "off"}}
 }
 ```
@@ -63,7 +63,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "signpost", "code": "PRF4003", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/signpost/"}
+{"rule": "signpost", "code": "PRF4003", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/signpost/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

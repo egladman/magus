@@ -31,6 +31,14 @@ func CacheDir() (string, error) {
 	return homeDir("XDG_CACHE_HOME", ".cache")
 }
 
+// DataDir returns the base directory for user data, files the user keeps and other
+// programs read, such as man pages: XDG_DATA_HOME when absolute, LocalAppData on
+// Windows, else ~/.local/share on every platform. It errors when no home directory
+// resolves.
+func DataDir() (string, error) {
+	return homeDir("XDG_DATA_HOME", ".local", "share")
+}
+
 func homeDir(variable string, fallback ...string) (string, error) {
 	if x := os.Getenv(variable); x != "" && filepath.IsAbs(x) {
 		return x, nil

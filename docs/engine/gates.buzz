@@ -357,12 +357,12 @@ export fun writeSiteManifest(site: Site) > void !> any {
     final acc: mut [str] = mut [<str>];
     walkGen("", acc, site);
     final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    var body = "";
+    final body = mut [<str>];
     foreach (rel in sorted) {
         if (rel == "site-manifest.sha256") { continue; }
-        body = body + fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n";
+        body.append(fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n");
     }
-    fs\writeFile(site.outDir + "/site-manifest.sha256", body);
+    fs\writeFile(site.outDir + "/site-manifest.sha256", body.join(""));
 }
 
 // pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
@@ -425,14 +425,15 @@ export fun abandonedLinkCheck(site: Site) > void !> any {
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
 export fun updateUrlLock(site: Site) > void !> any {
-    var set = readURLSet(URL_LOCK);
+    final set: mut {str: bool} = mut {};
+    foreach (known in readURLSet(URL_LOCK).keys()) { set[known] = true; }
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
     var lines: mut [str] = mut [<str>];
     foreach (u in set.keys()) { lines.append(u); }
     final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    var body = "";
-    foreach (u in sorted) { body = body + u + "\n"; }
-    fs\writeFile(URL_LOCK, body);
+    final body = mut [<str>];
+    foreach (u in sorted) { body.append(u + "\n"); }
+    fs\writeFile(URL_LOCK, body.join(""));
 }
 
 // LINT_SKIP_DIRS never hold prose this lint has an opinion about: build output, installed
@@ -569,17 +570,17 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     if (violations.len() > 0 or cross.len() > 0) {
         var message = "";
         if (violations.len() > 0) {
-            var body = "";
-            foreach (v in violations) { body = body + "\n  " + v; }
+            final body = mut [<str>];
+            foreach (v in violations) { body.append("\n  " + v); }
             message = "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
-                + body + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+                + body.join("") + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
         }
         if (cross.len() > 0) {
-            var body = "";
-            foreach (v in cross) { body = body + "\n  " + v; }
+            final body = mut [<str>];
+            foreach (v in cross) { body.append("\n  " + v); }
             if (message != "") { message = message + "\n\n"; }
             message = message + "crosscheck: {cross.len()} disagreement(s) between a page and what it documents:"
-                + body + "\n\nEach line names both halves; fix whichever is wrong.";
+                + body.join("") + "\n\nEach line names both halves; fix whichever is wrong.";
         }
         throw message;
     }

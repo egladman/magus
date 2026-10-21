@@ -219,7 +219,8 @@ fun judge(dir: str, pairs: [Pair]) > [any] !> any {
         args: ["skill-template", "--decisions", table, "--only", RULES, listing],
         opts: {"quiet": true, "allow_failure": true}) catch null;
     fs\remove(table) catch void;
-    if (run == null or run!.code != 0) {
+    // Exit 1 is a deny finding, written to stdout like any other.
+    if (run == null or (run!.code != 0 and run!.code != 1)) {
         throw if (run == null) "proofread did not start" else "proofread exited {run!.code}: " + run!.stderr.trim();
     }
     final rows: [any] = json\parse(run!.stdout);

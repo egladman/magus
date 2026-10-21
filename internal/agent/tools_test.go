@@ -88,8 +88,8 @@ func testModelFacts(t testing.TB) *ModelFacts {
 	})
 	require.NoError(t, err)
 	return &ModelFacts{Tiers: tiers, Rows: []types.ModelPricing{
-		{ID: "small-1", Tier: "economy", Window: 200_000, Input: 1, Output: 5},
-		{ID: "large-1", Tier: "standard", Window: 1_000_000, Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15,
+		{ID: "small-1", Tier: "economy", Alias: "small", Window: 200_000, Input: 1, Output: 5},
+		{ID: "large-1", Tier: "standard", Alias: "large", Window: 1_000_000, Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15,
 			LongContext: &types.PriceStep{Above: 200_000, Multiplier: 2}},
 	}}
 }

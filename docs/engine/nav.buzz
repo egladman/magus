@@ -94,7 +94,8 @@ export fun renderTocList(content: str) > str !> any {
     }
     if (nHead < 3) { return ""; }
 
-    var ul = "<ul>";
+    final ul = mut [<str>];
+    ul.append("<ul>");
     var haveLi = false;   // an h2 <li> is open, awaiting its </li>
     var inSub = false;    // an h3 sublist <ul> is open
     foreach (line in lines) {
@@ -117,28 +118,28 @@ export fun renderTocList(content: str) > str !> any {
                     final plain = stripTags(label);
                     final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
                     if (lvl == 2) {
-                        if (inSub) { ul = ul + "</ul>"; inSub = false; }
-                        if (haveLi) { ul = ul + "</li>"; }
-                        ul = ul + "<li>" + link;
+                        if (inSub) { ul.append("</ul>"); inSub = false; }
+                        if (haveLi) { ul.append("</li>"); }
+                        ul.append("<li>" + link);
                         haveLi = true;
                     } else {
                         if (haveLi == false) {
-                            ul = ul + "<li>" + link + "</li>";
+                            ul.append("<li>" + link + "</li>");
                         } else {
-                            if (inSub == false) { ul = ul + "<ul>"; inSub = true; }
-                            ul = ul + "<li>" + link + "</li>";
+                            if (inSub == false) { ul.append("<ul>"); inSub = true; }
+                            ul.append("<li>" + link + "</li>");
                         }
                     }
                 }
             }
         }
     }
-    if (inSub) { ul = ul + "</ul>"; }
-    if (haveLi) { ul = ul + "</li>"; }
-    ul = ul + "</ul>";
+    if (inSub) { ul.append("</ul>"); }
+    if (haveLi) { ul.append("</li>"); }
+    ul.append("</ul>");
     return template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
-`, {"ul": ul});
+`, {"ul": ul.join("")});
 }
 
 // renderSettingsPanel renders the gear button and its dropdown, the rightmost control in
@@ -281,13 +282,13 @@ export fun loadReferenceContent(site: Site) > void {
 // block runs from its own <h3 id="> to the next <h3 id="> or <h2>.
 fun keepGlossarySections(html: str, keep: {str: bool}) > str {
     final marker = "<h3 id=\"";
-    var kept = "";
+    final kept = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(marker);
     while (idx != null) {
         rest = rest.sub(idx! + marker.len());
         final q = rest.indexOf("\"");
-        if (q == null) { return kept; }
+        if (q == null) { return kept.join(""); }
         final anchor = rest.sub(0, len: q!);
         var cut = rest.len();
         final nextH3 = rest.indexOf(marker);
@@ -295,12 +296,12 @@ fun keepGlossarySections(html: str, keep: {str: bool}) > str {
         final nextH2 = rest.indexOf("<h2");
         if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
         if (keep[anchor] != null) {
-            kept = kept + marker + rest.sub(0, len: cut);
+            kept.append(marker + rest.sub(0, len: cut));
         }
         rest = rest.sub(cut);
         idx = rest.indexOf(marker);
     }
-    return kept;
+    return kept.join("");
 }
 
 // keepConventionSections is keepGlossarySections one heading level up: the conventions page
@@ -308,24 +309,24 @@ fun keepGlossarySections(html: str, keep: {str: bool}) > str {
 // <h2 id="> to the next one. Order is preserved.
 export fun keepConventionSections(html: str, keep: {str: bool}) > str {
     final marker = "<h2 id=\"";
-    var kept = "";
+    final kept = mut [<str>];
     var rest = html;
     var idx = rest.indexOf(marker);
     while (idx != null) {
         rest = rest.sub(idx! + marker.len());
         final q = rest.indexOf("\"");
-        if (q == null) { return kept; }
+        if (q == null) { return kept.join(""); }
         final anchor = rest.sub(0, len: q!);
         var cut = rest.len();
         final nextH2 = rest.indexOf(marker);
         if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
         if (keep[anchor] != null) {
-            kept = kept + marker + rest.sub(0, len: cut);
+            kept.append(marker + rest.sub(0, len: cut));
         }
         rest = rest.sub(cut);
         idx = rest.indexOf(marker);
     }
-    return kept;
+    return kept.join("");
 }
 
 // conventionAnchorsIn returns the convention sections this page can actually send a reader

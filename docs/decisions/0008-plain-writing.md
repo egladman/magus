@@ -118,7 +118,10 @@ everything after the lead, so a cut never removes the origin or the reason.
 The judge enforces nothing of its own. Each rule ships a default decision, `deny` or
 `advise`, the two words a guard rule's default takes, and a workspace sets any rule to
 `off`, `advise` or `deny` the way `magus\guard.builtins` overrides a built-in guard rule.
-A caller denies on `deny`, tells `advise` once, and never sees `off`.
+A caller denies on `deny` and never sees `off`. Since 2026-10-20 `advise` means graded: each
+advise finding weighs its rule's measured lower bound on precision, and a text whose grade
+falls under its kind's minimum gets a `grade` deny finding (ADR 0006, amendment of
+2026-10-20).
 
 - **What ships is portable.** House style, the rules that encode one repository's
   conventions rather than plain writing (its glossary, plain-ASCII typography,
@@ -137,7 +140,8 @@ A caller denies on `deny`, tells `advise` once, and never sees `off`.
   a code in its own `PRF` prefix through `libs/diagnostics`, the shared framework magus
   uses for `MGS` codes and gopherbuzz for `BZZ`, so a finding links to its page.
 - **The findings are a contract.** A finding is `{source, kind, rule, code, decision,
-  message, match, url}`. Any command that writes the same array, a team's own style
+  message, match, url, weight}`, where `weight` is what an advise finding costs its text's
+  grade and 0 on a deny finding. Any command that writes the same array, a team's own style
   checker or a reviewer it drives, feeds the same guard rule and lint, and the same
   decisions table applies to it. magus ships one judge; it does not have to be the only
   one.

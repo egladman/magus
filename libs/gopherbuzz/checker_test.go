@@ -1372,6 +1372,59 @@ func TestStringAccumulationReportedOnce(t *testing.T) {
 	require.Len(t, got, 1, "the speculative pass must not double-report")
 }
 
+func TestImmutableWriteIsRejected(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"map key", `final m = {"a": 1}; m["b"] = 2;`},
+		{"object field", `object Point { x: int } final p = Point{ x = 1 }; p.x = 2;`},
+		{"typed immutable map parameter", `fun f(m: {str: int}) > void { m["b"] = 2; }`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := checkSource(tc.src)
+			require.Len(t, errs, 1, fmtErrors(errs))
+			assert.Equal(t, ImmutableWrite, errs[0].Code)
+		})
+	}
+}
+
+func TestImmutableWriteStaysQuiet(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"mut map", `final m = mut {"a": 1}; m["b"] = 2;`},
+		{"mut object", `object Point { x: int } final p = mut Point{ x = 1 }; p.x = 2;`},
+		{"mut map parameter", `fun f(m: mut {str: int}) > void { m["b"] = 2; }`},
+		{"mut list element", `final xs = mut [1, 2]; xs[0] = 3;`},
+		{"this field in a method of a mut receiver", `object Counter { n: int = 0, fun bump() > void { this.n = this.n + 1; } } final c = mut Counter{}; c.bump();`},
+		{"untracked value", `fun f(m: any) > void { m["b"] = 2; }`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkOK(t, tc.src)
+		})
+	}
+}
+
+func TestRedundantUnwrapWarns(t *testing.T) {
+	for _, src := range []string{
+		`final n: int = 3; final _m = n!;`,
+		`final _m = 3!;`,
+		`fun f(n: int) > int { return n!; }`,
+	} {
+		got := typeWarnings(t, src)
+		require.Len(t, got, 1, src)
+		assert.Equal(t, RedundantUnwrap, got[0].Code)
+		assert.Equal(t, SeverityWarning, got[0].Severity)
+	}
+}
+
+func TestRedundantUnwrapStaysQuiet(t *testing.T) {
+	for _, src := range []string{
+		`final n: int? = null; final _m = n!;`,
+		`fun f(n: int?) > int { return n!; }`,
+		`fun f(n: any) > any { return n!; }`,
+		`fun g() > int? { return null; } final v = g(); final _m = v!;`,
+	} {
+		assert.Empty(t, typeWarnings(t, src), src)
+	}
+}
+
 // TestCheck_ArgumentType covers argument type checking at a call site, which upstream
 // Buzz reports as `.call_argument_type` ("Bad argument type", TypeChecker.zig). Before
 // this the checker inferred each argument against its parameter and threw the answer

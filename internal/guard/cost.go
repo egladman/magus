@@ -201,14 +201,7 @@ type pendingCall struct {
 const pendingCap = 64
 
 func readCostState(facts hint.Gate) costState {
-	var st costState
-	if facts.CacheDir() == "" {
-		return st
-	}
-	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), costStateKind))
-	if err == nil {
-		_ = json.Unmarshal(body, &st)
-	}
+	st, _ := readMarker[costState](facts, costStateKind)
 	return st
 }
 

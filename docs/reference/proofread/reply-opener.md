@@ -1,13 +1,13 @@
 ---
 title: "reply-opener"
-description: "A rule that is off by default: it reports a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\") once a decisions table turns it on."
-tags: [proofread, rules, reply-opener, off]
+description: "An advisory by default: it explains, and blocks nothing, on a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\")."
+tags: [proofread, rules, reply-opener, advise]
 aliases: [reference/prose/reply-opener]
 ---
 
 # reply-opener
 
-A rule that is off by default: it reports a sentence of a review reply that opens by contradicting ("No,", "As I said") once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a sentence of a review reply that opens by contradicting ("No,", "As I said").
 
 ## What it catches
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A contradiction first reads as winning an argument whatever follows it. Measured 2026-10-11 over the adjudicated labeling round: 44.2% precision (19 of 43) before, 95.0% (19 of 20) after. "Wrong" counts only as an exclamation, not before a noun ("Wrong indentation"), and a "No," answering the question the reply quotes, or conceding ("good catch"), is left alone. It stays off until 30 labeled firings show it.
+A contradiction first reads as winning an argument whatever follows it. Measured 2026-10-11 over the adjudicated labeling round: 44.2% precision (19 of 43) before, 95.0% (19 of 20) after. "Wrong" counts only as an exclamation, not before a noun ("Wrong indentation"), and a "No," answering the question the reply quotes, or conceding ("good catch"), is left alone. Labeling round 3 measured 21 of 40, a lower bound of 0.37, which each graded finding weighs.
 
 ## Default decision
 
@@ -28,9 +28,9 @@ The code is `PRF8001`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | off     |
-| `review-inline`  | off     |
-| `review-reply`   | off     |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "reply-opener", "code": "PRF8001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
+{"rule": "reply-opener", "code": "PRF8001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

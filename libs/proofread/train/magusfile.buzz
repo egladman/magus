@@ -1,0 +1,45 @@
+import "magus";
+import "../../../hack/magusfile/advisories" as advisories;
+
+import "magus/spell/go";
+
+// Its own go.mod keeps training and calibration out of the libs/proofread module, which
+// libs/conventions imports for diagmsg. No one go-installs proofread-train, so go.mod
+// replaces libs/proofread with the tree above it.
+magus\project({
+    "spells": [go],
+    "targets": {
+        "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
+        "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
+    },
+});
+
+export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void { go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {"args": ["./..."]}); }
+// The calibrate tests replay the cases internal/calibrate embeds and judge with the
+// libs/proofread rules, so both are inputs.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "../*.go", "../internal/**/*.go", "../go.mod", "../go.sum",
+                   "../internal/wordclass/gen/model.gz", "../internal/wordclass/testdata/*", "../internal/calibrate/cases/*.txtar");
+    go["go-test"](ctx, {"args": ["./..."] + args});
+}
+
+// Fails on a vulnerable symbol this module calls.
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    final inheritedFatal = advisories\inheritedFatal(args);
+    advisories\govulncheck(ctx, go: go, inheritedFatal: inheritedFatal);
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
+    ctx.needs(format);
+    ctx.needs(lint, build, test, security);
+}

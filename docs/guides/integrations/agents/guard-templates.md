@@ -1903,7 +1903,7 @@ It declares no `magus-guard-coverage` line, for the reason
 //     loop_count above 0 on cursor), because the findings this hook handed back are what
 //     started it, and judging that reply would loop;
 //   - the message is empty, the envelope is unreadable, or the turn did not complete;
-//   - proofread is missing, not executable, or exits non-zero;
+//   - proofread is missing, not executable, or exits 2 (it could not judge);
 //   - proofread finds nothing.
 //
 // It always exits 0. A missing proofread is silent because the hook fires on every turn: a
@@ -1914,9 +1914,11 @@ It declares no `magus-guard-coverage` line, for the reason
 //   --agent-name HOST  REQUIRED: the host this entry is wired into, the harness spell's own
 //                      name. Without it nothing is judged and MGS3024 goes to stderr
 //   --decisions FILE   a JSON decisions table passed to proofread as --decisions:
-//                      {"rules": {"<rule>": "deny" | "advise" | "off"}}. Keep it to
-//                      "rules": proofread refuses a "paths" glob that matches no file
-//                      argument, and a reply is read from stdin
+//                      {"rules": {"<rule>": "deny" | "advise" | "off"},
+//                      "minimums": {"agent-reply": N}}. It must set the agent-reply
+//                      minimum, or proofread judges nothing. Keep it to those two keys:
+//                      proofread refuses a "paths" glob that matches no file argument,
+//                      and a reply is read from stdin
 //   --proofread PATH   the proofread binary, ahead of the environment and PATH
 //
 // Override:
@@ -1945,6 +1947,10 @@ final CLAUDE_CODE = "claude-code";
 final CODEX = "codex";
 final CURSOR = "cursor";
 final OPENCODE = "opencode";
+
+// MINIMUM is the grade a reply is held to when no decisions file is given: the review-reply
+// minimum in magus's own hack/policy/proofread.buzz, where every reply people wrote grades 100.
+final MINIMUM = 100;
 
 // MAX_FINDINGS caps the findings handed back for one reply, in proofread's order.
 final MAX_FINDINGS = 5;
@@ -2056,16 +2062,21 @@ fun resolveBin(flagged: str) > str {
     return bin;
 }
 
-// judge runs bin over reply, or finds nothing when it fails.
+// judge runs bin over reply, or finds nothing when it fails. With no decisions file it
+// grades the reply against MINIMUM; a decisions file sets the agent-reply minimum itself.
 fun judge(bin: str, decisions: str, reply: str) > [Finding] {
     final argv = mut ["agent-reply", "--stdin", "-o", "json"];
     if (decisions != "") {
         argv.append("--decisions");
         argv.append(decisions);
+    } else {
+        argv.append("--minimum");
+        argv.append("{MINIMUM}");
     }
     final run = proc\exec(bin, args: argv,
         opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
-    if (run == null or run!.code != 0) {
+    // Exit 1 is a deny finding, written to stdout like any other; 2 is a run that could not judge.
+    if (run == null or (run!.code != 0 and run!.code != 1)) {
         return [<Finding>];
     }
     return parseFindings(run!.stdout);

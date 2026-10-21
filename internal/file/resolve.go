@@ -14,8 +14,7 @@ import (
 // workspaceScheme is the RETIRED URI prefix a project reference may carry.
 // A bare workspace-relative path is the only spelling magus teaches;
 // ResolveProject still consumes the scheme, with a warning, so no caller
-// strips it by hand. The output half lives in types (WorkspaceURI, also
-// deprecated); magus itself no longer emits the scheme anywhere.
+// strips it by hand. magus itself no longer emits the scheme anywhere.
 const workspaceScheme = "workspace://"
 
 // resolveAmbiguous canonicalises input to a repo-relative, forward-slash path,
@@ -98,9 +97,7 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 		// out: `grep -rn --exclude-dir=gen "workspace://" docs/ CONTRIBUTING.md
 		// internal/agent/skills/` finds nothing (docs/gen is rendered output and follows the
 		// sources). Today it finds exactly two, both saying the scheme is deprecated and
-		// a bare path replaced it; that pair IS the window this branch covers. The
-		// hits under types/ are a different thing: the OUTPUT rendering
-		// (types.WorkspaceRef), which this branch does not serve.
+		// a bare path replaced it; that pair IS the window this branch covers.
 		suggest := rest
 		if suggest == "" {
 			suggest = "."

@@ -1,13 +1,13 @@
 ---
 title: "verdict"
-description: "A rule that is off by default: it reports a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\") once a decisions table turns it on."
-tags: [proofread, rules, verdict, off]
+description: "An advisory by default: it explains, and blocks nothing, on a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\")."
+tags: [proofread, rules, verdict, advise]
 aliases: [reference/prose/verdict]
 ---
 
 # verdict
 
-A rule that is off by default: it reports a judgment word standing in for the behavior it judges ("was broken", "a mess") once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on a judgment word standing in for the behavior it judges ("was broken", "a mess").
 
 ## What it catches
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A verdict tells the reader what to think in place of what happened. It advises because "broken" and "wrong" also name a broken test or the wrong checkout; it moves to deny only after every firing on real text was right. Measured 2026-10-11 over the adjudicated labeling round: 20.9% precision (9 of 43) before, 100% (9 of 9) after. Most firings named the behavior beside the word, so a verdict with a reason or cause in its sentence, or a later sentence in its paragraph, is left alone, as are quoted words, a broken test or link, a denied or supposed state ("nothing was broken", "may be broken"), and the verb senses ("broken into lines", "mess with"). It stays off until 30 labeled firings show it.
+A verdict tells the reader what to think in place of what happened. It advises because "broken" and "wrong" also name a broken test or the wrong checkout; it moves to deny only after every firing on real text was right. Measured 2026-10-11 over the adjudicated labeling round: 20.9% precision (9 of 43) before, 100% (9 of 9) after. Most firings named the behavior beside the word, so a verdict with a reason or cause in its sentence, or a later sentence in its paragraph, is left alone, as are quoted words, a broken test or link, a denied or supposed state ("nothing was broken", "may be broken"), and the verb senses ("broken into lines", "mess with"). Labeling round 3 measured 16 of 40, a lower bound of 0.26, which each graded finding weighs.
 
 ## Default decision
 
@@ -28,12 +28,12 @@ The code is `PRF2002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
-| `commit-message`     | off     |
-| `issue`              | off     |
+| `change-description` | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
 
 ## Changing it
 
@@ -56,7 +56,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "verdict", "code": "PRF2002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/verdict/"}
+{"rule": "verdict", "code": "PRF2002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/verdict/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

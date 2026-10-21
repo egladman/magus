@@ -50,7 +50,8 @@ export fun check(files: [Path]) > [Finding] !> any {
     final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
         opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
     fs\remove(table) catch void;
-    if (run.code != 0) {
+    // Exit 1 is a deny finding, written to stdout like any other.
+    if (run.code != 0 and run.code != 1) {
         return [Finding{ path = "{proofread\home}/{proofread\command}",
             message = "proofread exited {run.code}, so no doc was judged: " + run.stderr.trim(),
             fix = "Run `{proofread\build}`, then {bin} doc-comment, and read why it stopped." }];

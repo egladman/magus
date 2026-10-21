@@ -10,12 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -436,6 +439,72 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	v = judgeSpawn(ctx, t, deps, "opus")
 	assert.Equal(t, decisionDeny, v.Decision)
 	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), and job scout was forked at economy (rank 0)")
+}
+
+func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
+	if _, registered := project.DefaultSpellRegistry().Lookup("claude-code"); !registered {
+		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("claude-code") })
+	}
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	root := t.TempDir()
+	file := filepath.Join(root, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(file, []byte(`import "`+filepath.ToSlash(repo)+`/spells/harness/claude-code" as claude;`), 0o644))
+	_, err = interp.Parse(t.Context(), &interp.Source{Dir: root, Files: []string{file}, Engine: "buzz"})
+	require.NoError(t, err)
+	descriptor, _, err := agent.LoadHarness(t.Context(), root, "claude-code")
+	require.NoError(t, err)
+	require.NotNil(t, descriptor.Tools)
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
+		Bounds: []types.ModelTierBounds{{}, {}, {}},
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Hosts:  map[types.HarnessKey][]string{{ID: "claude-code"}: {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+	})
+	require.NoError(t, err)
+	tools := *descriptor.Tools
+	tools.Models = &agent.ModelFacts{Rows: descriptor.Models, Tiers: set}
+	for _, f := range tools.Files() {
+		path := filepath.Join(root, f.Path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
+	}
+	facts, err := agent.ReadToolRows(root, tools.Dir).Models()
+	require.NoError(t, err)
+	assert.Equal(t, descriptor.Models, facts.Rows, "the hook reads the same model facts the harness publishes")
+	for _, tc := range []struct {
+		model, tier, parent string
+		allow               bool
+	}{
+		{"opus", "principal", "claude-opus-5-5", true},
+		{"sonnet", "standard", "claude-sonnet-5-5", true},
+		{"haiku", "economy", "claude-haiku-5-5", true},
+		{"fable", "principal", "claude-opus-5-5", false},
+		{"Opus", "principal", "claude-opus-5-5", false},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Model: tc.tier, ReadOnly: true, State: types.StateDeclared})
+			deps := strictDeps(t)
+			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
+			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
+			at := hookLocation(ctx, deps)
+			hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+			writeCostState(hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey()), costState{Model: tc.parent})
+			v := judgeSpawn(ctx, t, deps, tc.model)
+			if tc.allow {
+				assert.Equal(t, types.GuardJudgment{Decision: decisionPass}, judgedAs(v), v.Reason+v.Context)
+				if tc.model == "sonnet" {
+					deps.Builtins = levelDeps(t, types.GuardProfileStandard).Builtins
+					higher := judgeSpawn(ctx, t, deps, "opus")
+					assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, judgedAs(higher))
+					assert.Contains(t, higher.Reason, "above this session's model")
+				}
+			} else {
+				assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, judgedAs(v))
+				assert.Contains(t, v.Reason, "maps to no model tier")
+			}
+		})
+	}
 }
 
 // A declaration that maps no model for the spawning host is refused at strict, naming the

@@ -45,13 +45,13 @@ var agentReply = []Kind{KindAgentReply}
 var agentWords = slices.Concat(withReply, agentReply, compact)
 
 var agentReplyChecks = []check{
-	{rule: RuleBoldLabel, on: agentReply, advise: agentReply, judge: boldLabels},
-	{rule: RuleClosingOffer, on: agentReply, advise: agentReply, judge: closingOffer},
-	{rule: RuleRequestRecap, on: agentReply, advise: agentReply, judge: requestRecap},
-	{rule: RuleOptionList, on: agentReply, advise: agentReply, judge: optionList},
-	{rule: RuleUnbackedDone, on: agentReply, advise: agentReply, judge: unbackedDone},
-	{rule: RuleShortReplyHeading, on: agentReply, advise: agentReply, judge: shortReplyHeading},
-	{rule: RuleAgreementOpener, on: agentReply, advise: agentReply, judge: agreementOpener},
+	{rule: RuleBoldLabel, on: agentReply, graded: true, judge: boldLabels},
+	{rule: RuleClosingOffer, on: agentReply, graded: true, judge: closingOffer},
+	{rule: RuleRequestRecap, on: agentReply, graded: true, judge: requestRecap},
+	{rule: RuleOptionList, on: agentReply, graded: true, judge: optionList},
+	{rule: RuleUnbackedDone, on: agentReply, graded: true, judge: unbackedDone},
+	{rule: RuleShortReplyHeading, on: agentReply, graded: true, judge: shortReplyHeading},
+	{rule: RuleAgreementOpener, on: agentReply, graded: true, judge: agreementOpener},
 }
 
 var agentReplyTexts = map[Rule]ruleText{

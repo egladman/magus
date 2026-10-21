@@ -1,13 +1,13 @@
 ---
 title: "all-caps"
-description: "A rule that is off by default: it reports words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\") once a decisions table turns it on."
-tags: [proofread, rules, all-caps, off]
+description: "An advisory by default: it explains, and blocks nothing, on words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")."
+tags: [proofread, rules, all-caps, advise]
 aliases: [reference/prose/all-caps]
 ---
 
 # all-caps
 
-A rule that is off by default: it reports words in capitals for emphasis in a review reply ("DO NOT", "NEVER") once a decisions table turns it on.
+An advisory by default: it explains, and blocks nothing, on words in capitals for emphasis in a review reply ("DO NOT", "NEVER").
 
 ## What it catches
 
@@ -28,9 +28,9 @@ The code is `PRF8013`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | off     |
-| `review-inline`  | off     |
-| `review-reply`   | off     |
+| `review-summary` | advise  |
+| `review-inline`  | advise  |
+| `review-reply`   | advise  |
 
 ## Changing it
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "all-caps", "code": "PRF8013", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/all-caps/"}
+{"rule": "all-caps", "code": "PRF8013", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/all-caps/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -19,13 +19,13 @@ labeling round is how you get them: you draw firings the rule was never tuned on
 rule's commit before anyone labels, have two labelers judge each firing alone, settle
 their disagreements, and score the result. This is calibration, not training: the rules
 stay hand-written, and a round only measures how often one is right. This guide runs one
-round end to end with `proofread calibrate round`. How to add a rule or a kind, and how
+round end to end with `proofread-train calibrate round`. How to add a rule or a kind, and how
 a fix round avoids fooling itself, is in
 [the proofread README](https://github.com/egladman/magus/blob/main/libs/proofread/README.md).
 
-You need the `proofread` binary from this repository
-(`magus run proofread-build libs/proofread` writes it to
-`libs/proofread/gen/proofread`), `jq`, and a clean checkout of this repository.
+You need the `proofread-train` binary from this repository's `libs/proofread/train`
+module (`go install -C libs/proofread/train ./cmd/proofread-train` puts it on your
+`PATH`), `jq`, and a clean checkout of this repository.
 
 ## Where the data lives
 
@@ -76,7 +76,7 @@ file that mixes bots and people hides the worse of the two.
    exclusion:
 
    ```sh
-   proofread calibrate round sample \
+   proofread-train calibrate round sample \
      --rules claim,absolute,issue-repro,ing-tail,participles \
      --seed 20261101 --per-rule 40 --min-per-source 10 \
      --exclude "$C/labels/candidates.jsonl" \
@@ -107,14 +107,14 @@ A directory that already holds a sample is refused: start a new round directory 
 Freeze before anyone labels:
 
 ```sh
-proofread calibrate round freeze --dir "$C/labels/round5" \
+proofread-train calibrate round freeze --dir "$C/labels/round5" \
   --guideline libs/proofread/testdata/guideline.md \
   --purpose "confirm claim and absolute after the round 4 guideline revisions"
 ```
 
 `freeze` refuses a tree whose rule files are not committed, rule files that changed since
 the sample, and source files whose sha256 differs from the sample's. It writes
-`freeze.json`: the rule commit, the sha256 of the running `proofread` binary
+`freeze.json`: the rule commit, the sha256 of the running `proofread-train` binary
 (`proofread_sha256`), the proofread version, the seed, the rules, the gates, the
 guideline's sha256 and every source's sha256. It copies the guideline beside the
 candidates.
@@ -169,7 +169,7 @@ a revision of `guideline.md` for the next round, never of this one.
 ## 6. Score
 
 ```sh
-proofread calibrate round score --dir "$C/labels/round5"
+proofread-train calibrate round score --dir "$C/labels/round5"
 ```
 
 `score` refuses a round with no freeze record, a round whose rule files changed since its
@@ -193,7 +193,7 @@ you promote it.
    one wrong. One round never promotes a rule to deny. Pool two scored rounds:
 
    ```sh
-   proofread calibrate round pool --dir "$C/labels/round5" --dir "$C/labels/round6"
+   proofread-train calibrate round pool --dir "$C/labels/round5" --dir "$C/labels/round6"
    ```
 
    `pool` scores each round the way `score` does, so it refuses a round that is not
@@ -248,13 +248,14 @@ a rule's failures, but it never again supports a promotion.
 Each record under `libs/proofread/testdata/rounds/` names its rule commit, its seed and its sources, or
 says `unrecorded` where the round kept no such fact.
 
-1. Check out the rule commit in a worktree and build `proofread` there.
+1. Check out the rule commit in a worktree and build `proofread-train` there. A commit
+   from before the binary split runs the same subcommands as `proofread calibrate`.
 2. Re-score the labels. For a round scored after its rules moved on, `--replay` skips the
    void check and marks the result as deciding nothing:
 
    ```sh
    cp -R "$C/labels/round4" /tmp/round4
-   proofread calibrate round score --dir /tmp/round4 --replay --out /tmp/round4/scores-replay.json
+   proofread-train calibrate round score --dir /tmp/round4 --replay --out /tmp/round4/scores-replay.json
    ```
 
 3. For a round drawn with `round sample`, re-draw it at the rule commit with the seed,

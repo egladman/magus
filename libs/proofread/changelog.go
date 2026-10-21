@@ -24,8 +24,8 @@ var (
 
 var changelogChecks = []check{
 	{rule: RuleChangelogHeading, on: changelog, judge: changelogHeading},
-	{rule: RuleChangelogGroup, on: releaseKinds, advise: []Kind{KindReleaseNotes}, judge: changelogGroup},
-	{rule: RuleChangelogEntry, on: releaseKinds, advise: releaseKinds, judge: changelogEntry},
+	{rule: RuleChangelogGroup, on: releaseKinds, graded: true, judge: changelogGroup},
+	{rule: RuleChangelogEntry, on: releaseKinds, graded: true, judge: changelogEntry},
 }
 
 var changelogTexts = map[Rule]ruleText{

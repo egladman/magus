@@ -15,8 +15,10 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Quick start
 - Query first
 - Project: magus
-- Project: hack/embed
+- Project: libs/embed
+- Project: libs/embed/train
 - Project: libs/figure
+- Project: libs/proofread/train
 
 ## Route by question
 
@@ -72,7 +74,7 @@ magus graph export -o json  # the whole graph
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
 | link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                                                             |
 | marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                                                                      |
-| figure     |      20+ | `magus query kind=figure`     | `One pipeline, and the modules each host registers`, `One library draws every figure, here and in the console`, `The only listener a second machine can reach` |
+| figure     |      20+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
@@ -80,13 +82,15 @@ magus graph export -o json  # the whole graph
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                                    |
 | [docs](docs/MAGUS.md)                                                       |      24 | `magus query project=docs`                            | `site-generate`, `catalog-docs-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
-| hack/embed                                                                  |      13 | `magus query project=hack/embed`                      | `format`, `build`, `ci`                                       |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                                        |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                                        |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                                        |
+| libs/embed                                                                  |       7 | `magus query project=libs/embed`                      | `ci`, `format`, `build`                                       |
+| libs/embed/train                                                            |      13 | `magus query project=libs/embed/train`                | `format`, `build`, `ci`                                       |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                          |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `ci`                                       |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `ci`                             |
+| libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `ci`, `format`, `build`                                       |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       8 | `magus query project=libs/testlayout`                 | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `test`, `install`                                     |
@@ -145,7 +149,7 @@ magus graph export -o json  # the whole graph
 | `agent-bench-report`     | Turns a results tree into the benchmark report.                                                                                                                                                                                        |
 | `agent-bench-run`        | Runs a benchmark manifest (default pilot.manifest) with CLAUDE_BENCH_TOKEN read through the secret provider, so the launching shell never holds it.                                                                                    |
 | `agent-eval`             | Runs cmd/magus's agent eval, which skips in the ordinary test target because it spends tokens.                                                                                                                                         |
-| `retrieval-eval`         | Replays each eval set under testdata/retrieval through query, refs and explain and prints recall, MRR and nDCG per set; no score fails it.                                                                                             |
+| `retrieval-eval-test`    | Replays each eval set under testdata/retrieval through query, refs and explain and prints recall, MRR and nDCG per set; no score fails it.                                                                                             |
 | `hoste-2-e-test`         | Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired workspace; see docs/guides/integrations/agents.md.                                                                                               |
 | `deploy-generate`        | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root and the console under /console/.                                                                                                       |
 | `toolchain-report`       | Reports installed toolchains; excluded from CI because it probes remote tags.                                                                                                                                                          |
@@ -162,7 +166,19 @@ magus graph export -o json  # the whole graph
 | `swegrade-build`         | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.                                                                                                              |
 | `compress-cgo-test`      | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                        |
 
-## Project: hack/embed
+## Project: libs/embed
+
+| Target     | What it does                                                                          |
+| ---------- | ------------------------------------------------------------------------------------- |
+| `install`  |                                                                                       |
+| `ci`       | The anchor `magus affected ci` keys off.                                              |
+| `format`   |                                                                                       |
+| `lint`     | testdata/probe.txt is embedded in the package, and the go spell claims only Go files. |
+| `build`    |                                                                                       |
+| `test`     |                                                                                       |
+| `security` | Fails on a vulnerable symbol this module calls.                                       |
+
+## Project: libs/embed/train
 
 | Target           | What it does                                                                                                                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -187,3 +203,15 @@ magus graph export -o json  # the whole graph
 | `ci`   | ci runs lint, then test.                                                     |
 | `test` | test runs the in-file test blocks upstream-strict.                           |
 | `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic. |
+
+## Project: libs/proofread/train
+
+| Target     | What it does                                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `install`  |                                                                                                                             |
+| `ci`       | The anchor `magus affected ci` keys off.                                                                                    |
+| `format`   |                                                                                                                             |
+| `lint`     |                                                                                                                             |
+| `build`    |                                                                                                                             |
+| `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
+| `security` | Fails on a vulnerable symbol this module calls.                                                                             |

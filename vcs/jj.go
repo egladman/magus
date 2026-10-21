@@ -60,7 +60,7 @@ func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error 
 		return err
 	}
 	name := "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	if err := hgRun(ctx, "jj", root, []string{"workspace", "add", "--name", name, "--revision", rev, "--", dir}); err != nil {
+	if err := runVCS(ctx, "jj", root, []string{"workspace", "add", "--name", name, "--revision", rev, "--", dir}); err != nil {
 		return err
 	}
 	return recordMadeCheckout(ctx, filepath.Join(root, ".jj"), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir), Name: name})
@@ -80,7 +80,7 @@ func (v jjVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	case !ok:
 		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
 	}
-	if err := hgRun(ctx, "jj", root, []string{"workspace", "forget", "--", rec.Name}); err != nil {
+	if err := runVCS(ctx, "jj", root, []string{"workspace", "forget", "--", rec.Name}); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(rec.Dir); err != nil {
@@ -933,11 +933,9 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 		_ = cmd.Run()
 	}()
 
-	cmd := vcsExec(ctx, "jj", "workspace", "add",
-		"-r", rev, "--sparse-patterns", "full", "--name", name, target)
-	cmd.Dir = root
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("jj workspace add %q: %w", rev, withOutput(err, string(out)))
+	if err := runVCS(ctx, "jj", root, []string{"workspace", "add",
+		"-r", rev, "--sparse-patterns", "full", "--name", name, target}); err != nil {
+		return err
 	}
 
 	return copySubtree(target, prefix, dstDir)

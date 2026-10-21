@@ -36,7 +36,10 @@ func FromConfig(root, cacheDir, storeDir string, cfg config.SandboxConfig, spell
 	if err != nil {
 		return nil, err
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("sandbox: locate the home directory: %w", err)
+	}
 	if storeDir == cacheDir {
 		storeDir = ""
 	}
@@ -60,7 +63,10 @@ type Box struct {
 // installed. It creates nothing. WritesOutside reports what the policy writes outside
 // the box.
 func FromConfigBoxed(root string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox, box Box) (*Policy, error) {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("sandbox: locate the home directory: %w", err)
+	}
 	return buildFromConfig(root, cfg, spellGrants, PolicyOptions{
 		TempDir: box.TempDir,
 		Home:    envMap(box.Environ)["HOME"],

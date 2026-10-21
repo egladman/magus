@@ -23,26 +23,27 @@ export fun renderBlogAtom(site: Site) > void !> any {
         return strLess(a.base, b.base);
     });
     final feedUpdated = atomDate(sorted[0].date);
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    final body = mut [<str>];
+    body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
         + "  " + xmlElement("title", site.config.title + " blog") + "\n"
         + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
         + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
         + "  " + xmlElement("id", site.config.baseURL + "blog/") + "\n"
-        + "  " + xmlElement("updated", feedUpdated) + "\n";
+        + "  " + xmlElement("updated", feedUpdated) + "\n");
     foreach (p in sorted) {
         final entryUrl = site.config.baseURL + p.url;
-        body = body + "  <entry>\n"
+        body.append("  <entry>\n"
             + "    " + xmlElement("title", p.title) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", entryUrl)) + "\n"
             + "    " + xmlElement("id", entryUrl) + "\n"
             + "    " + xmlElement("updated", atomDate(p.date)) + "\n"
             + "    " + xmlElement("summary", p.description) + "\n"
-            + "  </entry>\n";
+            + "  </entry>\n");
     }
-    body = body + "</feed>\n";
+    body.append("</feed>\n");
     fs\mkdirAll(site.outDir + "/public/atom");
-    fs\writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
+    fs\writeFile(site.outDir + "/public/atom/blog.atom.xml", body.join(""));
     // Register it: pruneStaleOutputs deletes a directory whose index.html is no
     // longer produced, and /public/atom/ has no page of its own.
     site.writtenPaths["public/atom/blog.atom.xml"] = true;
@@ -65,27 +66,28 @@ export fun renderReleasesAtom(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     if (site.releases.len() == 0) { return; }
     final feedUpdated = atomDate(site.releases[0].date);
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+    final body = mut [<str>];
+    body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
         + "  " + xmlElement("title", site.config.title + " releases") + "\n"
         + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.repoURL + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
         + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
         + "  " + xmlElement("id", site.config.repoURL + "/releases") + "\n"
-        + "  " + xmlElement("updated", feedUpdated) + "\n";
+        + "  " + xmlElement("updated", feedUpdated) + "\n");
     foreach (r in site.releases) {
         final ver = r.version;
         final link = site.config.repoURL + "/releases/tag/" + ver;
-        body = body + "  <entry>\n"
+        body.append("  <entry>\n"
             + "    " + xmlElement("title", releaseEntryTitle(ver)) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
             + "    " + xmlElement("id", link) + "\n"
             + "    " + xmlElement("updated", atomDate(r.date)) + "\n"
             + "    " + xmlElementAttribute("summary", xmlAttribute("type", "text"), r.body.trim()) + "\n"
-            + "  </entry>\n";
+            + "  </entry>\n");
     }
-    body = body + "</feed>\n";
+    body.append("</feed>\n");
     fs\mkdirAll(site.outDir + "/public/atom");
-    fs\writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
+    fs\writeFile(site.outDir + "/public/atom/releases.atom.xml", body.join(""));
     // Register it: pruneStaleOutputs deletes a directory whose index.html is no
     // longer produced, and /public/atom/ has no page of its own.
     site.writtenPaths["public/atom/releases.atom.xml"] = true;

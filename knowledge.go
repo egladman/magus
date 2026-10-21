@@ -1480,19 +1480,6 @@ func workspaceSymbolGaps(ctx context.Context, ws types.Inspector, root string, c
 	}), true
 }
 
-// SymbolIndexedAt reports when the cached SCIP index the default indexer op writes for the
-// project at projectAbsDir was written under cacheDir, and false when there is none.
-//
-// Deprecated: a project may hold an index per indexer op, which this cannot see. Use
-// SymbolIndexTimes, which reads every index each project declares.
-func SymbolIndexedAt(cacheDir, projectAbsDir string) (time.Time, bool) {
-	info, err := os.Stat(symbols.IndexPath(cacheDir, projectAbsDir, spells.DefaultSymbolIndexOp))
-	if err != nil {
-		return time.Time{}, false
-	}
-	return info.ModTime(), true
-}
-
 // workspaceSymbolIndexTimes reports, by workspace-relative project path, when the cached SCIP
 // indexes each project declares were written, leaving out a project with none built. A
 // project with several reports the oldest: a caller asks whether a file predates the index

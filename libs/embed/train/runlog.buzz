@@ -1,0 +1,204 @@
+import "std";
+import "fs";
+import "math";
+import "crypto";
+import "path";
+import "encoding/json";
+
+// runs.jsonl logs one line per texts run and per teacher run. A run already logged is
+// not logged again, so rerunning a finished target leaves the log as it was.
+
+// relativize keeps machine paths out of the committed log: a path under the cache root
+// is logged relative to it, and any other path as given.
+export fun relativize(root: str, file: str) > str !> any {
+    final rel = path\rel(path\abs(root), target: path\abs(file)) catch "..";
+    if (rel.startsWith("..")) {
+        return file;
+    }
+    return rel;
+}
+
+fun nonBlank(path: str) > [str] !> any {
+    final kept: mut [str] = mut [];
+    foreach (line in fs\readLines(path)) {
+        if (line.trim() != "") {
+            kept.append(line);
+        }
+    }
+    return kept;
+}
+
+fun logged(target: str, key: str, value: str) > bool !> any {
+    if (!fs\exists(target)) {
+        return false;
+    }
+    foreach (line in nonBlank(target)) {
+        final row: {str: any} = json\parse(line);
+        if (row[key] -> v) {
+            if ("{v}" == value) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fun count(row: {str: any}, key: str) > int {
+    if (row[key] -> v) {
+        return std\toInt(v);
+    }
+    return 0;
+}
+
+// appendTexts appends the line `embed texts` wrote to dir's texts-run.json, unless the
+// log already holds a run over the same texts.
+export fun appendTexts(dir: str, target: str) > void !> any {
+    final line = fs\readFile(fs\join(dir, name: "texts-run.json")).trim();
+    final row: {str: any} = json\parse(line);
+    final digest = "{row["texts_sha256"]}";
+    if (logged(target, key: "texts_sha256", value: digest)) {
+        std\print("texts {digest}: already recorded");
+        return;
+    }
+    fs\appendFile(target, content: line + "\n");
+}
+
+// summarize totals a teacher manifest. A shard encoded twice counts once, by its later
+// record, as the trainer reads it. The run id is the manifest's directory name, which
+// the teacher derives from the run spec.
+export fun summarize(manifest: str) > {str: any} !> any {
+    var spec: {str: any}? = null;
+    final shards: mut {int: {str: any}} = mut {};
+    foreach (line in nonBlank(manifest)) {
+        final r: {str: any} = json\parse(line);
+        final kind = "{r["kind"]}";
+        if (spec == null and kind == "run" and r["spec"] != null) {
+            spec = r["spec"];
+        } else if (spec != null and kind == "shard") {
+            shards[count(r, key: "shard")] = r;
+        } else {
+            throw "{manifest}: unexpected \"{kind}\" record";
+        }
+    }
+    if (spec -> s) {
+        var rows = 0;
+        var tokens = 0;
+        var seconds = 0.0;
+        foreach (_, r in shards) {
+            rows = rows + count(r, key: "rows");
+            tokens = tokens + count(r, key: "tokens");
+            if (r["seconds"] -> secs) {
+                seconds = seconds + std\toDouble(secs);
+            }
+        }
+        return {
+            "kind": "teacher",
+            "run": fs\basename(fs\dirname(manifest)),
+            "teacher": s["model"] ?? "",
+            "revision": s["revision"] ?? "",
+            "weights_sha256": s["weights_sha256"] ?? "",
+            "texts_sha256": s["texts_sha256"] ?? "",
+            "max_len": count(s, key: "max_len"),
+            "shard_size": count(s, key: "shard_size"),
+            "shards": shards.len(),
+            "rows": rows,
+            "tokens": tokens,
+            "seconds": math\round(seconds, places: 1),
+            "manifest_sha256": crypto\sha256Hex(fs\readFile(manifest)),
+        };
+    }
+    throw "{manifest} holds no run record";
+}
+
+// recordTeacher appends the state of the teacher run under cache that embedded texts at
+// maxLen with model. Exactly one run may match.
+export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target: str) > void !> any {
+    final digest = crypto\sha256File(texts);
+    final n = nonBlank(texts).len();
+    final found: mut [str] = mut [];
+    var line: {str: any} = {};
+    foreach (m in fs\glob(fs\join(cache, name: "teacher/{model}/*/manifest.jsonl"))) {
+        final l = summarize(m.value);
+        if (l["texts_sha256"] == digest and l["max_len"] == maxLen) {
+            found.append(m.value);
+            line = l;
+        }
+    }
+    if (found.len() != 1) {
+        throw "{found.len()} {model} runs under {cache} embedded {texts} at max-len {maxLen}, want 1: {found}";
+    }
+    final rows = count(line, key: "rows");
+    final done = line.cloneMutable();
+    done["texts"] = n;
+    done["complete"] = rows == n;
+    done["texts_file"] = relativize(cache, file: texts);
+    done["manifest"] = relativize(cache, file: found[0]);
+    final manifest = "{done["manifest"]}";
+    if (logged(target, key: "manifest_sha256", value: "{done["manifest_sha256"]}")) {
+        std\print("{manifest}: already recorded");
+        return;
+    }
+    fs\appendFile(target, content: json\stringify(done) + "\n");
+    final seconds = std\toDouble(done["seconds"]);
+    final tokens = count(done, key: "tokens");
+    final rate = if (seconds > 0.0) math\round(std\toDouble(tokens) / seconds) else 0.0;
+    std\print("{manifest}: {rows} of {n} texts in {done["shards"]} shards, {tokens} tokens, {seconds}s encoding ({rate} tokens/s); manifest sha256 {done["manifest_sha256"]}");
+}
+
+fun writeManifest(path: str, records: [str]) > void !> any {
+    fs\mkdirAll(fs\dirname(path));
+    fs\writeFile(path, content: records.join("\n") + "\n");
+}
+
+test "recordTeacher logs a run once and counts a re-encoded shard by its later record" {
+    final cache = fs\tempDir("runlog");
+    final texts = fs\join(cache, name: "training/texts.jsonl");
+    fs\mkdirAll(fs\dirname(texts));
+    fs\writeFile(texts, content: "\{\"id\":\"a\",\"text\":\"x\"}\n\{\"id\":\"b\",\"text\":\"y\"}\n\{\"id\":\"c\",\"text\":\"z\"}\n");
+    final digest = crypto\sha256File(texts);
+    final spec = "\{\"kind\":\"run\",\"spec\":\{\"model\":\"M\",\"revision\":\"r1\",\"max_len\":256,\"shard_size\":2,\"texts_sha256\":\"{digest}\"}}";
+    final manifest = fs\join(cache, name: "teacher/M/8cc4f1f9600be0c9/manifest.jsonl");
+    writeManifest(manifest, records: [spec, "\{\"kind\":\"shard\",\"shard\":0,\"rows\":2,\"tokens\":10,\"seconds\":1.5}"]);
+    final runs = fs\join(fs\tempDir("runlog-out"), name: "runs.jsonl");
+
+    recordTeacher(cache, model: "M", texts: texts, maxLen: 256, target: runs);
+    recordTeacher(cache, model: "M", texts: texts, maxLen: 256, target: runs);
+    final first = nonBlank(runs);
+    std\assert(first.len() == 1, message: "an unchanged manifest is recorded once");
+    final row: {str: any} = json\parse(first[0]);
+    std\assert(row["run"] == "8cc4f1f9600be0c9", message: "run id is the manifest directory");
+    std\assert(row["texts_file"] == "training/texts.jsonl", message: "texts path is relative to the cache");
+    std\assert(row["manifest"] == "teacher/M/8cc4f1f9600be0c9/manifest.jsonl", message: "manifest path is relative");
+    std\assert(count(row, key: "texts") == 3 and count(row, key: "rows") == 2, message: "texts and rows");
+    std\assert(row["complete"] == false, message: "two of three rows is incomplete");
+
+    writeManifest(manifest, records: [spec,
+        "\{\"kind\":\"shard\",\"shard\":0,\"rows\":2,\"tokens\":10,\"seconds\":1.5}",
+        "\{\"kind\":\"shard\",\"shard\":1,\"rows\":1,\"tokens\":4,\"seconds\":0.5}",
+        "\{\"kind\":\"shard\",\"shard\":1,\"rows\":1,\"tokens\":5,\"seconds\":0.25}"]);
+    recordTeacher(cache, model: "M", texts: texts, maxLen: 256, target: runs);
+    final lines = nonBlank(runs);
+    std\assert(lines.len() == 2, message: "a changed manifest is recorded again");
+    final last: {str: any} = json\parse(lines[1]);
+    std\assert(last["complete"] == true, message: "every row encoded");
+    std\assert(count(last, key: "shards") == 2 and count(last, key: "rows") == 3 and count(last, key: "tokens") == 15,
+        message: "a re-encoded shard counts once, by its later record");
+    std\assert(std\toDouble(last["seconds"]) == 1.8, message: "seconds sum to one decimal");
+
+    var raised = false;
+    try {
+        recordTeacher(cache, model: "M", texts: texts, maxLen: 512, target: runs);
+    } catch (err: str) {
+        raised = err.indexOf("0 M runs") != null;
+    }
+    std\assert(raised, message: "no run at max-len 512");
+}
+
+test "appendTexts logs a texts run once" {
+    final dir = fs\tempDir("runlog-texts");
+    fs\writeFile(fs\join(dir, name: "texts-run.json"), content: "\{\"kind\":\"texts\",\"texts_sha256\":\"abc\"}\n");
+    final runs = fs\join(dir, name: "runs.jsonl");
+    appendTexts(dir, target: runs);
+    appendTexts(dir, target: runs);
+    std\assert(nonBlank(runs).len() == 1, message: "one line per texts run");
+}

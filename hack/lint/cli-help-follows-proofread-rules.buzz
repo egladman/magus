@@ -175,7 +175,8 @@ export fun judge(helps: [Help], rows: {str: [any]}, baseline: [str]) > [Finding]
 fun judged(bin: str, table: str, text: str) > [any] !> any {
     final run = proc\exec(bin, args: ["cli-help", "--stdin", "--decisions", table],
         opts: {"stdin": text, "quiet": true, "allow_failure": true});
-    if (run.code != 0) {
+    // Exit 1 is a deny finding, written to stdout like any other.
+    if (run.code != 0 and run.code != 1) {
         throw "proofread exited {run.code}: " + run.stderr.trim();
     }
     final rows: [any] = json\parse(run.stdout);

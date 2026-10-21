@@ -280,8 +280,12 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration", hint.ServerStop), attr.Notice(""), attr.Component("magus"))
 
-	installRefreshHooks(ctx)
-	installDriftHooks(ctx)
+	installVCSHook(ctx, types.VCSDriver.InstallRefreshHook, hint.JobRun.With("sync-graph"),
+		"could not install VCS refresh hook",
+		"installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically")
+	installVCSHook(ctx, types.VCSDriver.InstallDriftHook, hint.JobRun.With(job.NameCheckDrift),
+		"could not install VCS drift-notice hook",
+		"installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically")
 
 	// serverProvider was built by startServer (which runs before this command handler)
 	// so the bridge Magus shares the same OTel instruments the per-workspace builds record
@@ -933,14 +937,13 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 	return nil
 }
 
-// installRefreshHooks installs the VCS refresh hook so a history change (branch switch,
-// merge, rebase) pokes this server to reconcile in the background. It reuses the same
-// per-VCS installer as the merge driver (types.RefreshHookInstaller), so there is one
-// VCS-integration path. Best-effort: a non-git tree, a VCS with no hook support (jj), or
-// a write failure is noted, never fatal to starting the server.
-func installRefreshHooks(ctx context.Context) {
+// installVCSHook installs a hook that pokes this server on a VCS event. Best-effort: a
+// non-git tree, a VCS with no hook support (jj) or a write failure is logged, never fatal
+// to starting the server. installedFmt takes the VCS name and the hook labels.
+func installVCSHook(ctx context.Context, install func(types.VCSDriver, context.Context, string, string) ([]string, error), command, failed, installedFmt string) {
 	cwd, err := os.Getwd()
 	if err != nil {
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the working directory; no VCS hook installed", attr.Error(err))
 		return
 	}
 	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
@@ -951,48 +954,16 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil {
 		root = cwd
 	}
-	installed, err := res.VCS.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+	installed, err := install(res.VCS, ctx, root, command)
 	if errors.Is(err, types.ErrVCSUnsupported) {
 		return // this VCS has no hook support
 	}
 	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS refresh hook", attr.Error(err))
+		slog.With(attr.Component("server start")).WarnContext(ctx, failed, attr.Error(err))
 		return
 	}
 	if len(installed) > 0 {
-		slog.InfoContext(ctx, fmt.Sprintf("installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically", res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
-	}
-}
-
-// installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
-// commit and the push that follows it each poke this server to check, in the background,
-// whether the commit left generated output stale, and a push also hands over the refs it
-// sends so the server counts their unread hunks. Same shape and same guarantees as
-// installRefreshHooks: best-effort, never fatal to starting the server, and a no-op on a
-// non-git tree or a VCS with no hook support (jj).
-func installDriftHooks(ctx context.Context) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return
-	}
-	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return
-	}
-	root, err := res.VCS.Root(ctx, cwd)
-	if err != nil {
-		root = cwd
-	}
-	installed, err := res.VCS.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return // this VCS has no hook support
-	}
-	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS drift-notice hook", attr.Error(err))
-		return
-	}
-	if len(installed) > 0 {
-		slog.InfoContext(ctx, fmt.Sprintf("installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically", res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
+		slog.InfoContext(ctx, fmt.Sprintf(installedFmt, res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
 	}
 }
 

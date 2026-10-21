@@ -196,7 +196,7 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
         + ", SignedHeaders=" + signedHeaders
         + ", Signature=" + signature;
 
-    var headers = {
+    var headers = mut {
         "x-amz-date": amzdate,
         "x-amz-content-sha256": payloadHash,
         "Authorization": authorization,

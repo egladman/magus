@@ -15,7 +15,7 @@ var issueKind = []Kind{KindIssue}
 // issueChecks hold the issue rule and the release rules: the text a project
 // writes for the people who track it.
 var issueChecks = slices.Concat([]check{
-	{rule: RuleIssueRepro, on: issueKind, advise: issueKind, judge: issueRepro},
+	{rule: RuleIssueRepro, on: issueKind, graded: true, judge: issueRepro},
 }, changelogChecks)
 
 var issueTexts = mergeTexts(map[Rule]ruleText{
@@ -33,7 +33,8 @@ var issueTexts = mergeTexts(map[Rule]ruleText{
 			"names other work (\"test:\", \"Add a regression test\"), whose defect word names a topic " +
 			"(\"crash detection\") or sits in code is no report, and a body that says what should happen, " +
 			"what happened in the past tense, numbered steps or a quote of the original report shows the " +
-			"defect. It stays off until a fresh labeling round measures it.",
+			"defect. Labeling round 4 measured 26 of 40, a lower bound of 0.50, which each graded finding " +
+			"weighs.",
 	},
 }, changelogTexts)
 

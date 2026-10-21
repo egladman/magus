@@ -22,11 +22,10 @@ check, fix first error, run.{{end}}
 {{if .Full}}1. Run `--check` after every edit. Fix the FIRST error, then check again:
    a parse error early in a file produces later errors that are only echoes of it.{{else}}1. Run `--check` after every edit. Fix FIRST error, then check again;
    later errors often echoes of it.{{end}}
-{{if .Full}}2. A clean check is not a working script. The checker does NOT see a missing method
-   on a str, list or map, or a free function like `len(xs)`. Nor does it see a write
-   into a map declared without `mut`. Those fail only when run, with no line number. Run the{{else}}2. clean check not working script. checker does NOT see missing method
-   on str, list or map, or free function like `len(xs)`. Nor does it see write
-   into map declared without `mut`. Those fail only when run, with no line number. Run{{end}}
+{{if .Full}}2. A clean check is not a working script. The checker reports an unknown method and a
+   free function like `len(xs)`, but it does not yet see a write into a map or object
+   declared without `mut`. That fails only when run, with no line number. Run the{{else}}2. clean check not working script. checker reports unknown method and `len(xs)`, but not
+   write into map or object declared without `mut`: fails only when run, no line number. Run{{end}}
    script, or its tests, before calling it done.
 {{if .Full}}3. `null is not callable` at run time means you called a method or function that
    does not exist. Look it up in the Built-in methods table below.{{else}}3. `null is not callable` at run time means you called method or function that

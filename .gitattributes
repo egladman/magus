@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-76-g367b438bf-dirty (commit 367b438bf30883c9fb7f593ed26606ae6cfd05cc, 2026-10-20T15:08:43-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-106-g4717772bc (commit 4717772bc0be8847b2f3ff658e75211bdfa46a4d, 2026-10-20T22:11:19-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -124,9 +124,6 @@ gen/site/assets/go-coverage.svg merge=magus linguist-generated
 gen/site/assets/typescript-coverage.svg merge=magus linguist-generated
 gen/symbol-index.json merge=magus linguist-generated
 gen/target-graph.json merge=magus linguist-generated
-hack/embed/gen/holdout.jsonl merge=magus linguist-generated
-hack/embed/gen/pairs.jsonl merge=magus linguist-generated
-hack/embed/gen/sources.jsonl merge=magus linguist-generated
 internal/commands/testdata/api-go.lock merge=magus linguist-generated
 internal/commands/testdata/api.lock merge=magus linguist-generated
 internal/config/gen/*.go merge=magus linguist-generated
@@ -151,6 +148,9 @@ libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
+libs/embed/train/gen/holdout.jsonl merge=magus linguist-generated
+libs/embed/train/gen/pairs.jsonl merge=magus linguist-generated
+libs/embed/train/gen/sources.jsonl merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/token/testdata/fuzz/** merge=magus linguist-generated

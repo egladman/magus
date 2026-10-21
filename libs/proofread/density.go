@@ -23,8 +23,8 @@ const (
 var densityKinds = []Kind{KindChangeDescription, KindReference, KindGuide, KindIssue}
 
 var densityChecks = []check{
-	{rule: RuleParticiples, on: densityKinds, advise: densityKinds, judge: participles},
-	{rule: RuleNominalizations, on: densityKinds, advise: densityKinds, judge: nominalizations},
+	{rule: RuleParticiples, on: densityKinds, graded: true, judge: participles},
+	{rule: RuleNominalizations, on: densityKinds, graded: true, judge: nominalizations},
 }
 
 var densityTexts = map[Rule]ruleText{

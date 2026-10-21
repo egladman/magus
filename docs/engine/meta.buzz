@@ -154,20 +154,20 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
 // of Markdown a front matter value carries. An unpaired backtick stays literal.
 fun codeSpans(s: str) > str {
     final parts = s.split("`");
-    var res = "";
+    final res = mut [<str>];
     var i = 0;
     while (i < parts.len()) {
         final text = escapeAttr(parts[i]).replace(">", with: "&gt;");
         if (i % 2 == 0) {
-            res = res + text;
+            res.append(text);
         } else if (i < parts.len() - 1) {
-            res = res + "<code>" + text + "</code>";
+            res.append("<code>" + text + "</code>");
         } else {
-            res = res + "`" + text;
+            res.append("`" + text);
         }
         i = i + 1;
     }
-    return res;
+    return res.join("");
 }
 
 // insertAdrMeta places an ADR's status, date and what it supersedes under the H1, in the

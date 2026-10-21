@@ -230,7 +230,26 @@ func TestRecordedCheckoutsLeaveOutThisCheckoutThroughASymlink(t *testing.T) {
 
 	opened, err := Inspect(t.Context(), worker, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
-	assert.Equal(t, []string{orchestrator}, opened.(*Magus).recordedCheckouts(ref))
+	assert.Equal(t, []string{orchestrator}, opened.(*Magus).recordedCheckouts(t.Context(), ref))
+}
+
+// A session store that cannot be read leaves the other checkouts unconsulted; the lookup
+// says so instead of answering as though no other checkout ran the ref.
+func TestRecordedCheckoutsWarnWhenTheStoreCannotBeRead(t *testing.T) {
+	testkit.Isolate(t)
+	_, trees := linkedWorktrees(t, "worker")
+	opened, err := Inspect(t.Context(), trees[0], WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+
+	var notices bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "")
+
+	assert.Empty(t, opened.(*Magus).recordedCheckouts(t.Context(), "outbeef00000005"))
+	assert.Contains(t, notices.String(), "other checkouts were not consulted")
 }
 
 // A fact's ref is matched by prefix either way, but only between ref-shaped strings: the

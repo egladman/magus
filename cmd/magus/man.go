@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/xdg"
 )
 
 func manCmd(args []string) error {
@@ -29,13 +30,20 @@ func manCmd(args []string) error {
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
-	dir := fs.String("dir", defaultManDir(), "directory for section 1 man pages")
+	dir := fs.String("dir", "", "directory for section 1 man pages (default: $XDG_DATA_HOME/man/man1)")
 	dryRun := fs.Bool("dry-run", false, "print what would be written without touching the filesystem")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
+	}
+	if *dir == "" {
+		def, err := defaultManDir()
+		if err != nil {
+			return fmt.Errorf("magus man install: pass --dir: %w", err)
+		}
+		*dir = def
 	}
 	root := commands.Root
 	root.Env = config.EnvVars()
@@ -62,15 +70,12 @@ func manCmd(args []string) error {
 	return nil
 }
 
-func defaultManDir() string {
-	if dataHome := os.Getenv("XDG_DATA_HOME"); dataHome != "" {
-		return filepath.Join(dataHome, "man", "man1")
-	}
-	home, err := os.UserHomeDir()
+func defaultManDir() (string, error) {
+	data, err := xdg.DataDir()
 	if err != nil {
-		return "share/man/man1"
+		return "", fmt.Errorf("resolve the data directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "man", "man1")
+	return filepath.Join(data, "man", "man1"), nil
 }
 
 func manUsage() {

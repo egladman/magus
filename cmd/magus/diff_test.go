@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/interactive/difftui"
@@ -2405,4 +2406,60 @@ func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
 				"the caveat stays last")
 		})
 	}
+}
+
+func TestDialDiffBridgeSaysWhyItDidNotJoin(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	token, err := auth.GenerateOperator()
+	require.NoError(t, err)
+	_, err = auth.SaveOperator(token)
+	require.NoError(t, err)
+
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+		warning string
+	}{
+		{"refused status", func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusForbidden) }, "refused the session"},
+		{"undecodable session", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("{")) }, "did not decode"},
+		{"declined as-of", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"as_of":"other"}`)) }, "different patch"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(c.handler)
+			t.Cleanup(srv.Close)
+			globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+			var got *diffBridge
+			logged := captureWarnings(t, func() { got = dialDiffBridge(context.Background(), nil, "digest") })
+
+			assert.Nil(t, got)
+			assert.Contains(t, logged, c.warning)
+		})
+	}
+
+	t.Run("no server stays silent", func(t *testing.T) {
+		srv := httptest.NewServer(http.NotFoundHandler())
+		globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+		srv.Close()
+		var got *diffBridge
+		logged := captureWarnings(t, func() { got = dialDiffBridge(context.Background(), nil, "digest") })
+
+		assert.Nil(t, got)
+		assert.Empty(t, logged)
+	})
+}
+
+func TestDialDiffBridgeWarnsOnATokenThatDoesNotLoad(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	require.NoError(t, os.MkdirAll(filepath.Join(state, "magus"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "mcp_token"), []byte("junk\n"), 0o644))
+	var got *diffBridge
+	logged := captureWarnings(t, func() { got = dialDiffBridge(context.Background(), nil, "digest") })
+
+	assert.Nil(t, got)
+	assert.Contains(t, logged, "operator token did not load")
 }

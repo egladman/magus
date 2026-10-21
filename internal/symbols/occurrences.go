@@ -7,103 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/scip-code/scip/bindings/go/scip"
-	"google.golang.org/protobuf/proto"
-
 	"github.com/egladman/magus/types"
 )
-
-// ParseOccurrences decodes a SCIP index and returns every occurrence of one symbol key,
-// with its full source range and no cap. It does no I/O; the caller supplies the bytes.
-//
-// This is the deliberate counterpart to ParseIndex, not a variant of it. ParseIndex
-// collapses occurrences to one entry per (file, symbol) with a count and a MaxRefLines-
-// capped line list, because the graph stores a shard per workspace and a hot symbol would
-// otherwise dominate it. Those are exactly the two properties a rewrite cannot use: the
-// cap silently drops sites, and a bare line number does not say which occurrence on the
-// line it means. So this walks the same documents and keeps what that one throws away,
-// for ONE key rather than all of them, which is what makes keeping it affordable.
-//
-// names are the spellings that may legitimately appear at an occurrence, used by Verify.
-// names[0] is the source identifier a rename targets; any others are alternate spellings
-// the index itself asserts for the same symbol. A package needs both: `assert.Equal(...)`
-// holds the bare identifier while the import statement above it holds the full path
-// `github.com/stretchr/testify/assert`, and both are real occurrences of that one symbol.
-// Verifying against a single spelling rejected 8025 of 8501 sites on this repo's own index
-// and reported a fresh index as stale.
-//
-// They are returned rather than taken as an argument so the parse and the check cannot
-// disagree about what the symbol is called.
-//
-// projectPath rebases indexer-relative document paths onto the workspace, with the same
-// rules and the same outside-the-workspace drop as ParseIndex; see workspacePath.
-func ParseOccurrences(ctx context.Context, data []byte, projectPath, key string) (files []types.SymbolOccurrenceFile, names []string, err error) {
-	var idx scip.Index
-	if err := proto.Unmarshal(data, &idx); err != nil {
-		return nil, nil, err
-	}
-	var ident, display string
-
-	byFile := map[string][]types.SymbolOccurrence{}
-	for _, doc := range idx.Documents {
-		if err := ctx.Err(); err != nil {
-			// An index can carry thousands of documents; a cancelled caller should not have
-			// to wait out the whole walk.
-			return nil, nil, err
-		}
-		// SymbolInformation carries the display name, and it can live in ANY document,
-		// including one holding no occurrence of the symbol, and including one whose path
-		// falls outside the workspace. So it is read before the workspace filter below,
-		// matching how ParseIndex builds infoByKey: a package whose SymbolInformation is
-		// recorded only in a dependency document would otherwise lose its full-path
-		// spelling, and every import-statement site would then read as a mismatch.
-		if display == "" {
-			for _, si := range doc.Symbols {
-				if info, ok := parseMoniker(si.Symbol); ok && info.Key == key && si.DisplayName != "" {
-					display = si.DisplayName
-					break
-				}
-			}
-		}
-		docPath, ok := workspacePath(projectPath, doc.RelativePath)
-		if !ok {
-			continue
-		}
-		for _, occ := range doc.Occurrences {
-			if occ.Symbol == "" || scip.IsLocalSymbol(occ.Symbol) {
-				continue
-			}
-			info, ok := parseMoniker(occ.Symbol)
-			if !ok || info.Key != key {
-				continue
-			}
-			// The descriptor's own name is what is written at a call site, which makes it
-			// the identifier a rename targets.
-			if ident == "" {
-				ident = info.Label
-			}
-			r, ok := occ.SourceRange()
-			if !ok || r.Start.Line < 0 || r.Start.Character < 0 {
-				// A range magus cannot read is not reported as an editable site at all.
-				// Emitting it with a zero position would put a plausible-looking
-				// 1:1 in the output, which is worse than the omission.
-				continue
-			}
-			byFile[docPath] = append(byFile[docPath], types.SymbolOccurrence{
-				// SCIP positions are 0-based; magus prints and accepts file:line:col
-				// 1-based everywhere else, and an off-by-one here lands the edit one
-				// character early on every site.
-				Line:       int(r.Start.Line) + 1,
-				Column:     int(r.Start.Character) + 1,
-				EndLine:    int(r.End.Line) + 1,
-				EndColumn:  int(r.End.Character) + 1,
-				Definition: occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0,
-			})
-		}
-	}
-
-	return sortedOccurrenceFiles(byFile), spellings(ident, display), nil
-}
 
 // sortedOccurrenceFiles orders each file's sites and the files themselves (byFile iteration
 // is unordered, so the sort is what makes the output deterministic).
@@ -170,7 +75,7 @@ func spellings(ident, display string) []string {
 }
 
 // VerifyOccurrences stamps a status on every occurrence by reading the range out of the
-// file as it is NOW and checking it against names, the spellings ParseOccurrences found
+// file as it is NOW and checking it against names, the spellings IndexOccurrences found
 // for this symbol. read returns one file's current bytes.
 //
 // It MUTATES files in place and returns only an error. An earlier version also returned

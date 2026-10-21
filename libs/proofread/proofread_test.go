@@ -40,11 +40,15 @@ func houseDecisions(d Decision) map[Rule]Decision {
 	return out
 }
 
-// assertFindings reads a want with no Decision as [DecisionDeny], so a case
-// names a decision only where it advises, and fills in each want's code and
-// page from its rule. A want with no Column checks no position, and one with
-// no Replacements checks none, so a case pins a span or a fix only where it
-// is what the case tests.
+// isGraded reports whether r's check is graded.
+func isGraded(r Rule) bool {
+	return slices.ContainsFunc(checks, func(c check) bool { return c.rule == r && c.graded })
+}
+
+// assertFindings reads a want with no Decision as its rule's declared one and
+// an advise want with no Weight as its rule's, and fills in each want's code
+// and page. A want with no Column checks no position, and one with no
+// Replacements checks none, so a case pins only what it tests.
 func assertFindings(t *testing.T, got, want []Finding) {
 	t.Helper()
 
@@ -60,6 +64,13 @@ func assertFindings(t *testing.T, got, want []Finding) {
 
 		if want[i].Decision == "" {
 			want[i].Decision = DecisionDeny
+			if isGraded(want[i].Rule) {
+				want[i].Decision = DecisionAdvise
+			}
+		}
+
+		if want[i].Decision == DecisionAdvise && want[i].Weight == 0 {
+			want[i].Weight = weights[want[i].Rule]
 		}
 
 		want[i].Code = ruleTexts[want[i].Rule].code
@@ -93,7 +104,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 	}, ruleNames(toneChecks), ruleNames(slopChecks), ruleNames(messageChecks), ruleNames(commitChecks),
 		ruleNames(helpChecks), ruleNames(issueChecks), ruleNames(densityChecks), ruleNames(reviewChecks),
 		ruleNames(reviewKindChecks), ruleNames(suppressChecks), ruleNames(agentReplyChecks), ruleNames(toolChecks), ruleNames(listChecks), []Rule{RuleVoiceDrift},
-		ruleNames(compactChecks), ruleNames(skillChecks), []Rule{RuleTemplate})
+		ruleNames(compactChecks), ruleNames(skillChecks), []Rule{RuleTemplate, RuleGrade})
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Rules() = %q, want %q", got, want)

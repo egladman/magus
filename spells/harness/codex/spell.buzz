@@ -215,7 +215,8 @@ fun codex_human_only_rule(pattern: str, reason: str) > str {
 // human_only target; a spelling no prefix catches, such as a flag before the target, is
 // refused rather than asked.
 fun codex_rules(humanOnly: {str: str}) > str {
-    var rules = "# Printed by magus describe harness codex. Delete this file to drop these prompts.\n"
+    final rules: mut [str] = mut [
+        "# Printed by magus describe harness codex. Delete this file to drop these prompts.\n"
         + "#\n"
         + "# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The\n"
         + "# magus PermissionRequest hook answers it: a push a passing gate covers is approved\n"
@@ -224,17 +225,18 @@ fun codex_rules(humanOnly: {str: str}) > str {
         + codex_push_rule("\"git\", \"push\"")
         + codex_push_rule("\"hg\", \"push\"")
         + codex_push_rule("\"sl\", \"push\"")
-        + codex_push_rule("\"jj\", \"git\", \"push\"");
+        + codex_push_rule("\"jj\", \"git\", \"push\""),
+    ];
     final names = humanOnly.keys().cloneMutable();
     names.sort(fun (left: str, right: str) > bool => left < right);
     foreach (name in names) {
         foreach (bin in ["magus", "./magus"]) {
             foreach (verb in ["run", "affected"]) {
-                rules = rules + codex_human_only_rule("\"{bin}\", \"{verb}\", \"{name}\"", reason: humanOnly[name] ?? "");
+                rules.append(codex_human_only_rule("\"{bin}\", \"{verb}\", \"{name}\"", reason: humanOnly[name] ?? ""));
             }
         }
     }
-    return rules;
+    return rules.join("");
 }
 
 // humanOnly maps each target the workspace declares human_only to its reason; none prompts
