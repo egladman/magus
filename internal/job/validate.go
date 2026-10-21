@@ -206,7 +206,7 @@ func (s *Store) InWorkspace(ws Workspace) *Store {
 		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
 		trailBase: s.trailBase, landed: s.landed, grader: s.grader, dryRun: s.dryRun, build: s.build,
-		modelTiers: s.modelTiers, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
+		modelTiers: s.modelTiers, modelRows: s.modelRows, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
 		workspace: &ws,
 	}
 }
