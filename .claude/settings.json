@@ -24,6 +24,16 @@
           }
         ],
         "matcher": "Agent|Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
+            "timeout": 30,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ],
     "PreToolUse": [
