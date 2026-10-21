@@ -356,10 +356,10 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     fs\chmod("{local}.bootstrap", mode: 493);
     fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
-    // A bound job cannot rewrite the skills that steer it, so refresh every wired
-    // harness before job exec takes the lease.
-    magusAt(local, root: root, args: ["agent", "harness", "install"]);
-    std\print("refreshed the wired harness skills");
+    std\print(refreshSkills(
+        fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
+        lease: leaseOf(env\getOr("BAGGAGE", def: "") catch ""),
+    ));
     return claimThenIndex(
         fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
         root: root,
@@ -367,6 +367,17 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
         main: main,
         trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
     );
+}
+
+// refreshSkills refreshes every wired harness's skills and returns the line to print. A bound job
+// cannot rewrite the skills that steer it ("bound job cannot change a harness skill tree"), so a
+// session already under a lease skips the install.
+export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
+    if (lease != "") {
+        return "skipped the harness skill install; this session holds the lease `{lease}`, and a bound job cannot change a harness skill tree";
+    }
+    run(["agent", "harness", "install"]);
+    return "refreshed the wired harness skills";
 }
 
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
@@ -532,6 +543,18 @@ test "a row with no checkpoint passes and says nothing verified its base" {
     final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
     assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
+}
+
+test "the harness skill install is skipped under a lease and run without one" {
+    final ran = mut [<str>];
+    final run = fun (args: [str]) > str !> any {
+        ran.append(args.join(" "));
+        return "";
+    };
+    refreshSkills(run, lease: "policy-bootstrap");
+    assert\equal(ran.len(), want: 0, message: "no install under a lease");
+    assert\equal(refreshSkills(run, lease: ""), want: "refreshed the wired harness skills", message: "line without a lease");
+    assert\equal(ran.join("|"), want: "agent harness install", message: "install without a lease");
 }
 
 test "the lease is taken before the graph is built" {
