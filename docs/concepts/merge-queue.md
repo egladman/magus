@@ -1063,21 +1063,21 @@ A provider is a Buzz script run on an embedded gopherbuzz VM. It imports
 `mergequeue/types` and exports these functions, each taking one typed request and
 returning one answer:
 
-| Function          | Receives                     | Returns                                                                 |
-| ----------------- | ---------------------------- | ----------------------------------------------------------------------- |
-| `describe`        | `QueueDescribeRequest`       | `QueueDescribeResult`: `capabilities` or `refused`, exactly one         |
-| `list_changes`    | `QueueListChangesRequest`    | `QueueChanges`: `changes`, `merged`, `unqueued` and `closed`            |
-| `approval_at`     | `QueueApprovalRequest`       | `QueueApproval`                                                         |
-| `list_green`      | `QueueListGreenRequest`      | `[QueueGreenChange]`                                                    |
-| `post_status`     | `QueueStatusRequest`         | `Ack`, ok when recorded                                                 |
-| `retarget`        | `QueueRetargetRequest`       | `Ack`, ok once the change targets `to`                                  |
-| `merge_change`    | `QueueMergeRequest`          | `QueueMergeAnswer`                                                      |
-| `kick_back`       | `QueueKickBackRequest`       | `Ack`, ok when both the comment and the removal happened                |
-| `mark`            | `QueueMarkRequest`           | `Ack`, ok once the change shows that mark and no other                  |
-| `list_artifacts`  | `QueueListArtifactsRequest`  | `QueueArtifactListing`                                                  |
-| `required_checks` | `QueueRequiredChecksRequest` | `[QueueCheck]`, `state` one of `pending`, `success`, `failure`          |
-| `reviews`         | `QueueReviewsRequest`        | `QueueReviews`: the head and the approving reviews                      |
-| `dismiss_review`  | `QueueDismissReviewRequest`  | `Ack`, ok once the review is dismissed                                  |
+| Function          | Receives                     | Returns                                                         |
+| ----------------- | ---------------------------- | --------------------------------------------------------------- |
+| `describe`        | `QueueDescribeRequest`       | `QueueDescribeResult`: `capabilities` or `refused`, exactly one |
+| `list_changes`    | `QueueListChangesRequest`    | `QueueChanges`: `changes`, `merged`, `unqueued` and `closed`    |
+| `approval_at`     | `QueueApprovalRequest`       | `QueueApproval`                                                 |
+| `list_green`      | `QueueListGreenRequest`      | `[QueueGreenChange]`                                            |
+| `post_status`     | `QueueStatusRequest`         | `Ack`, ok when recorded                                         |
+| `retarget`        | `QueueRetargetRequest`       | `Ack`, ok once the change targets `to`                          |
+| `merge_change`    | `QueueMergeRequest`          | `QueueMergeAnswer`                                              |
+| `kick_back`       | `QueueKickBackRequest`       | `Ack`, ok when both the comment and the removal happened        |
+| `mark`            | `QueueMarkRequest`           | `Ack`, ok once the change shows that mark and no other          |
+| `list_artifacts`  | `QueueListArtifactsRequest`  | `QueueArtifactListing`                                          |
+| `required_checks` | `QueueRequiredChecksRequest` | `[QueueCheck]`, `state` one of `pending`, `success`, `failure`  |
+| `reviews`         | `QueueReviewsRequest`        | `QueueReviews`: the head and the approving reviews              |
+| `dismiss_review`  | `QueueDismissReviewRequest`  | `Ack`, ok once the review is dismissed                          |
 
 Each record mirrors a Go type of `internal/queue/types`, and its Buzz declaration, every
 member and its default, is generated into `internal/queue/provider/gen/types/`: read the
