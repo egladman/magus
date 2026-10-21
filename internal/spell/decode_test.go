@@ -369,8 +369,7 @@ func TestDescriptor_NeedsAndProvidesAreLexicalValues(t *testing.T) {
 		ProvidedGlobs: []types.Path{{Value: "gen/**"}},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"**/*.go", "go.mod"}, m.Needs)
-	assert.Equal(t, []string{"gen/**"}, m.Provides)
+	assert.Equal(t, spells.Descriptor{Name: "myspell", Needs: []string{"**/*.go", "go.mod"}, Provides: []string{"gen/**"}}, m)
 }
 
 // Ignore dirs reduce to their values, and an absent declaration is nil.

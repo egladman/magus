@@ -21,50 +21,75 @@ import (
 // what is left is meaning: a valid op name, a charm patch that applies, a lockfile that
 // is one of the manifest's candidates. It registers nothing.
 func (r Resolved) Descriptor() (spells.Descriptor, error) {
-	c := r.Contract
-	name := c.Name
+	name := r.Contract.Name
 	if name == "" {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
-	lang, err := validateLanguage(c.Language)
+	m, err := r.declared()
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
+	if m.Sandbox != nil {
+		if err := validateSandbox(*m.Sandbox); err != nil {
+			return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
+		}
+	}
+	if err := r.assembleOps(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := applyModeArgs(&m, r.Contract.ModeArgs); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := addSymbolIndexOp(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := synthesizeInstall(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := validateTools(m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	return m, nil
+}
+
+// declared validates the contract's load-time answers other than the ops and the sandbox,
+// and returns the descriptor they make. Its errors do not name the spell.
+func (r Resolved) declared() (spells.Descriptor, error) {
+	c := r.Contract
+	lang, err := validateLanguage(c.Language)
+	if err != nil {
+		return spells.Descriptor{}, err
 	}
 	tools, err := validateToolDecls(c.Tools)
 	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+		return spells.Descriptor{}, err
 	}
 	ignoreDirs, err := ignoreDirValues(c.IgnoreDirs)
 	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+		return spells.Descriptor{}, err
 	}
 	manifests, err := validateManifests(c.Manifests)
 	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+		return spells.Descriptor{}, err
 	}
 	for i, runner := range c.ScriptRunners {
 		if err := validateCommand("", "", runner); err != nil {
-			return spells.Descriptor{}, fmt.Errorf("spell %q: mgs_listScriptRunners[%d]: %w", name, i, err)
+			return spells.Descriptor{}, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
 		}
 	}
 	if err := spells.ValidateScriptRunners(c.ScriptRunners); err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+		return spells.Descriptor{}, err
 	}
 	var indexer *spells.SymbolIndexer
 	if c.SymbolIndexer != nil {
 		si := *c.SymbolIndexer
-		if err := validateSymbolIndexer(name, &si); err != nil {
-			return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+		if err := validateSymbolIndexer(c.Name, &si); err != nil {
+			return spells.Descriptor{}, err
 		}
 		indexer = &si
 	}
-	if c.Sandbox != nil {
-		if err := validateSandbox(*c.Sandbox); err != nil {
-			return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
-		}
-	}
-	m := spells.Descriptor{
-		Name:               name,
+	return spells.Descriptor{
+		Name:               c.Name,
 		Needs:              globValues(c.RequiredGlobs),
 		Provides:           globValues(c.ProvidedGlobs),
 		IgnoreDirs:         ignoreDirs,
@@ -77,102 +102,117 @@ func (r Resolved) Descriptor() (spells.Descriptor, error) {
 		SymbolIndexer:      indexer,
 		Sandbox:            c.Sandbox,
 		Opaque:             c.Opaque,
-	}
-	if err := r.assembleOps(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := applyModeArgs(&m, c.ModeArgs); err != nil {
-		return spells.Descriptor{}, err
-	}
-	// magus registers a declared indexer under the reserved name, so an authored op
-	// there collides. Before mgs_getSymbolIndexer, declaring `scip` WAS the capability,
-	// and accepting it would run the indexer with an unresolved $MAGUS_SYMBOL_INDEX.
+	}, nil
+}
+
+// addSymbolIndexOp registers m's declared indexer as an op under its reserved name.
+func addSymbolIndexOp(m *spells.Descriptor) error {
+	indexer := m.SymbolIndexer
+	// An authored op under the reserved name collides. Before mgs_getSymbolIndexer,
+	// declaring `scip` WAS the capability, and accepting it would run the indexer with an
+	// unresolved $MAGUS_SYMBOL_INDEX.
 	for _, reserved := range []string{spells.DefaultSymbolIndexOp, indexer.OpName()} {
 		if _, authored := m.Ops[reserved]; authored {
-			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer, move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
+			return fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer, move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", m.Name, reserved)
 		}
 	}
-	if indexer != nil {
-		if m.Ops == nil {
-			m.Ops = map[string]spells.Op{}
-		}
-		// Synthesized, so the run, cache and freshness paths reach the indexer as an
-		// ordinary command op; the kind is what the runner matches on.
-		m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+	if indexer == nil {
+		return nil
 	}
-	if err := synthesizeInstall(&m); err != nil {
-		return spells.Descriptor{}, err
+	if m.Ops == nil {
+		m.Ops = map[string]spells.Op{}
 	}
-	if err := validateTools(m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	return m, nil
+	// Synthesized, so the run, cache and freshness paths reach the indexer as an
+	// ordinary command op; the kind is what the runner matches on.
+	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+	return nil
 }
 
 // assembleOps turns the spell's target and service handlers into m.Ops and m.DocOps.
 func (r Resolved) assembleOps(m *spells.Descriptor) error {
 	c, name := r.Contract, r.Contract.Name
 	ops := map[string]spells.Op{}
-	claimed := map[string]string{}
-	var docOps []string
-	claim := func(op string) (string, error) {
-		if err := types.ValidateTargetName(op); err != nil {
-			return "", fmt.Errorf("spell %q op %q: %w", name, op, err)
-		}
-		// Every request reaching dispatch is already kebab-normalized, so an op stored
-		// as go_build would be unreachable. Two spellings can now land on one key, which
-		// is an error naming both rather than a silent overwrite.
-		canonical := types.Normalize(op)
-		if prior, dup := claimed[canonical]; dup {
-			return "", fmt.Errorf("spell %q declares ops %q and %q, which are the same op %q, rename one", name, prior, op, canonical)
-		}
-		claimed[canonical] = op
-		docOps = append(docOps, canonical)
-		return canonical, nil
-	}
+	names := opNames{spell: name, claimed: map[string]string{}}
 	for _, op := range slices.Sorted(maps.Keys(c.Targets)) {
-		canonical, err := claim(op)
+		canonical, err := names.claim(op)
 		if err != nil {
 			return err
 		}
-		cmd := c.Targets[op]
-		if err := validateCommand(name, canonical, cmd); err != nil {
+		t, err := targetOp(name, canonical, c.Targets[op], r.TargetDocs[op])
+		if err != nil {
 			return err
-		}
-		t := spells.Op{Command: cmd, Capture: cmd.Capture, Doc: r.TargetDocs[op]}
-		if diags := ward.Check(canonical, t); len(diags) > 0 {
-			return diags[0]
 		}
 		ops[canonical] = t
 	}
 	for _, op := range slices.Sorted(maps.Keys(c.Services)) {
-		canonical, err := claim(op)
+		canonical, err := names.claim(op)
 		if err != nil {
 			return err
 		}
-		svc := c.Services[op]
-		if err := validateService(name, canonical, svc); err != nil {
+		t, err := serviceOp(name, canonical, c.Services[op], r.TargetDocs[op])
+		if err != nil {
 			return err
-		}
-		// The op's embedded Command mirrors Command, or Start when set, so the fork,
-		// render and cache paths read every op uniformly.
-		t := spells.Op{Kind: spells.OpKindService, Service: &svc, Command: svc.Command, Doc: r.TargetDocs[op]}
-		if svc.Start.Bin != "" {
-			t.Command = svc.Start
-		}
-		if diags := ward.Check(canonical, t); len(diags) > 0 {
-			return diags[0]
 		}
 		ops[canonical] = t
 	}
 	if len(ops) > 0 {
 		m.Ops = ops
 	}
-	if len(docOps) > 0 {
-		slices.Sort(docOps)
-		m.DocOps = docOps
+	if len(names.docOps) > 0 {
+		slices.Sort(names.docOps)
+		m.DocOps = names.docOps
 	}
 	return nil
+}
+
+// opNames claims a spell's op names in their canonical spelling.
+type opNames struct {
+	spell   string
+	claimed map[string]string
+	docOps  []string
+}
+
+func (n *opNames) claim(op string) (string, error) {
+	if err := types.ValidateTargetName(op); err != nil {
+		return "", fmt.Errorf("spell %q op %q: %w", n.spell, op, err)
+	}
+	// Every request reaching dispatch is already kebab-normalized, so an op stored
+	// as go_build would be unreachable. Two spellings can now land on one key, which
+	// is an error naming both rather than a silent overwrite.
+	canonical := types.Normalize(op)
+	if prior, dup := n.claimed[canonical]; dup {
+		return "", fmt.Errorf("spell %q declares ops %q and %q, which are the same op %q, rename one", n.spell, prior, op, canonical)
+	}
+	n.claimed[canonical] = op
+	n.docOps = append(n.docOps, canonical)
+	return canonical, nil
+}
+
+func targetOp(spellName, canonical string, cmd spells.Command, doc string) (spells.Op, error) {
+	if err := validateCommand(spellName, canonical, cmd); err != nil {
+		return spells.Op{}, err
+	}
+	t := spells.Op{Command: cmd, Capture: cmd.Capture, Doc: doc}
+	if diags := ward.Check(canonical, t); len(diags) > 0 {
+		return spells.Op{}, diags[0]
+	}
+	return t, nil
+}
+
+func serviceOp(spellName, canonical string, svc spells.Service, doc string) (spells.Op, error) {
+	if err := validateService(spellName, canonical, svc); err != nil {
+		return spells.Op{}, err
+	}
+	// The op's embedded Command mirrors Command, or Start when set, so the fork,
+	// render and cache paths read every op uniformly.
+	t := spells.Op{Kind: spells.OpKindService, Service: &svc, Command: svc.Command, Doc: doc}
+	if svc.Start.Bin != "" {
+		t.Command = svc.Start
+	}
+	if diags := ward.Check(canonical, t); len(diags) > 0 {
+		return spells.Op{}, diags[0]
+	}
+	return t, nil
 }
 
 // globValues reduces declared Paths to their lexical values: glob matching does not
@@ -221,7 +261,7 @@ func validateManifests(ms []spells.Manifest) ([]spells.Manifest, error) {
 // rather than an install that misbehaves in one project later.
 func validateInstalls(m spells.Manifest) (map[string]spells.Install, error) {
 	if len(m.Installs) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // a manifest that declares no installs is not an error; nil is that answer
 	}
 	out := make(map[string]spells.Install, len(m.Installs))
 	for _, lock := range slices.Sorted(maps.Keys(m.Installs)) {
@@ -255,7 +295,6 @@ func validateInstalls(m spells.Manifest) (map[string]spells.Install, error) {
 	}
 	return out, nil
 }
-
 
 // synthesizeInstall registers one install op per Name a spell's manifests declare,
 // after checking each install's tools against the ones the spell declares. Entries
