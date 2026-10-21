@@ -35,6 +35,8 @@ export object Spawn {
     lease: str = "",
     // prompt is the brief handed to the spawned worker.
     prompt: str = "",
+    // checkout is the checkout the spawn runs in, "" when unread.
+    checkout: str = "",
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -115,6 +117,14 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
         return magus\guard.deny("the row `{found!.id}` is not under your lease, so the guard will not bind the child to it\n"
             + "You act under the lease `{spawn.lease}`, and `{found!.id}` is neither it nor forked beneath it. "
             + remedy(spawn, line: line));
+    }
+    if (line!.role == integrateRole and spawn.checkout != "" and found!.checkoutRoot != "" and found!.checkoutRoot != spawn.checkout) {
+        return magus\guard.deny("the row `{found!.id}` is bound to another checkout; spawn its integrator from there\n"
+            + "The integrator shares the spawning checkout, `{spawn.checkout}`, but the row is bound to "
+            + "`{found!.checkoutRoot}`, where the guard takes its lease and the child would find no lease to hold. "
+            + "Spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
+            + "`magus job fork {found!.id}-here --write-paths <paths> --criteria \"<what done means>\"` (no --checkout), "
+            + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }
     return magus\guard.allow();
 }
@@ -265,6 +275,24 @@ test "a code-changing spawn without its own checkout is denied" {
         std\assert(v.decision == "deny", message: title);
         std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
     }
+}
+
+test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
+    final rows = [
+        helpers\JobRow{ id = "land", state = "declared", checkoutRoot = "/w/other" },
+        helpers\JobRow{ id = "here", state = "declared", checkoutRoot = "/w/main" },
+        helpers\JobRow{ id = "unbound", state = "declared" },
+    ];
+    final at = fun (title: str) > Spawn {
+        return Spawn{ kind = "spawn", title = title, isolated = false, checkout = "/w/main" };
+    };
+    final denied = judged(at("orchestrator/integrate land"), rows: rows, unreadable: "");
+    std\assert(denied.decision == "deny", message: "bound elsewhere");
+    std\assert(denied.reason.indexOf("`/w/other`") != null and denied.reason.indexOf("magus job fork land-here") != null, message: denied.reason);
+    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == "allow", message: "bound here");
+    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == "allow", message: "bound to none");
+    std\assert(judged(Spawn{ kind = "spawn", title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == "allow",
+        message: "a spawn whose checkout is unread");
 }
 
 test "a thinking role, an isolated worker and a continue pass" {

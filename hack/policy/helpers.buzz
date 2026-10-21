@@ -219,6 +219,8 @@ export object JobRow {
     id: str,
     parent: str = "",
     state: str,
+    // checkoutRoot is the checkout the row is bound to, "" when it is bound to none or unread.
+    checkoutRoot: str = "",
 }
 
 // jobRows is a job store, each row spelled as [id, state] or [id, state, parent].

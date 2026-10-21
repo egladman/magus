@@ -9,7 +9,10 @@ import "./hack/policy/verdict" as verdict;
 final gateDenial = "a worker mid-change does not run the gate; finish with the narrow validation your brief names and report.\n"
     + "The gate runs once per branch, by the orchestrator or by a worker spawned as "
     + "`<parent>/integrate <job>` in the checkout its row was taken in, once your branch is integrated. "
-    + "`magus affected ci --plan` stays open to you: it runs nothing.";
+    + "`magus affected ci --plan` stays open to you: it runs nothing. "
+    + "Report with `magus job exit <job> --stdin`; the orchestrator runs the gate. "
+    + "If you were spawned as the integrator and are refused, `magus describe job <job>` names the checkout "
+    + "your row was taken in; the gate runs only from there.";
 
 // Caller is who runs a command: role is root, worker (a lease binds it) or integrator, and title is
 // the description it was itself spawned with, empty for a person or the orchestrator.
@@ -120,6 +123,8 @@ test "a worker whose role is not integrate may not run the gate" {
         final v = judged(gate, caller: caller, checkout: null);
         std\assert(v.decision == "deny", message: "{caller.role} {caller.title}");
         std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
+        std\assert(v.reason.indexOf("`magus job exit <job> --stdin`") != null and v.reason.indexOf("`magus describe job <job>`") != null,
+            message: "names commands the refused role can run");
     }
     final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
     foreach (argv in [

@@ -1,6 +1,7 @@
 namespace bootstrapworktree;
 
 import "encoding/json";
+import "env";
 import "flags";
 import "fs";
 import "path";
@@ -10,8 +11,8 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] | --check --from <checkout>)";
-final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script never compiles magus\n{USAGE}\n\n"
+final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
+final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
     + "(the main checkout, or the one --from names), refreshes the wired harness skills, takes the job's lease, refuses\n"
     + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
@@ -25,6 +26,8 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "built at and this worktree, and none went into it uncommitted. Docs, console, a package nothing links and a separate\n"
     + "module such as libs/embed/train do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
     + "script refuses and names what to build in the root.\n"
+    + "--build-from <checkout> is --from after building: it runs `<checkout>/magus --root <checkout> run go-build .` first, then\n"
+    + "judges that binary the same way. A session holding a job lease is refused, since a worker never compiles magus.\n"
     + "--check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
 
@@ -294,7 +297,40 @@ export fun placed(bin: str, commit: str, rootRev: str, scopes: int) > str {
 export fun refusal(why: str, source: str) > str {
     return "bootstrap-worktree: REFUSED to place {why}\n"
         + "A worker checkout never compiles magus. The orchestrator builds ./magus once for this base, in {source} "
-        + "(`{source}/magus --root {source} run go-build .`), then reruns this with `--from {source}`.";
+        + "(`{source}/magus --root {source} run go-build .`), then reruns this with `--from {source}`. "
+        + "Or a session holding no lease does both: rerun this with `--build-from {source}`; a leased worker asks the main session to.";
+}
+
+// leaseOf is the job named by a W3C baggage header's magus.lease entry, "" when it holds none.
+export fun leaseOf(baggage: str) > str {
+    foreach (entry in baggage.split(",")) {
+        final pair = entry.trim();
+        if (pair.startsWith("magus.lease=")) {
+            return pair.sub("magus.lease=".len());
+        }
+    }
+    return "";
+}
+
+// buildArgs is the go-build run in source that --build-from makes before it judges the binary.
+export fun buildArgs(source: str) > [str] {
+    return ["--root", source, "run", "go-build", "."];
+}
+
+// buildRefusal is what a leased worker is told for --build-from: it never compiles magus.
+export fun buildRefusal(lease: str, source: str) > str {
+    return "bootstrap-worktree: --build-from compiles magus, and this session holds the lease `{lease}`; a worker never compiles magus\n"
+        + "Ask the main session to run `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease} --build-from {source}`, "
+        + "or to place a built binary with `--from {source}`.";
+}
+
+// buildFrom compiles magus in source with the checkout's own ./magus, so the go-build target stamps it.
+fun buildFrom(source: str) > void !> any {
+    final bin = "{source}/magus";
+    if (!fs\isFile(bin)) {
+        throw "bootstrap-worktree: {source} holds no ./magus to build with; `GOEXPERIMENT=jsonv2 go -C {source} run -trimpath ./cmd/magus run go-build --no-cache .` makes the first one";
+    }
+    proc\exec(bin, args: buildArgs(source));
 }
 
 // bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
@@ -385,7 +421,7 @@ export fun render(row: Row, root: str) > [str] {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--check"], valued: ["--job", "--from"]);
+    final parsed = flags\parse(args, switches: ["--help", "--check"], valued: ["--job", "--from", "--build-from"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -394,7 +430,22 @@ export fun main(args: [str]) > void !> any {
         throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final root = vcs\root();
-    final source = parsed.values["--from"] ?? "";
+    var source = parsed.values["--from"] ?? "";
+    final built = parsed.values["--build-from"] ?? "";
+    if (built != "") {
+        if (source != "" and source != built) {
+            throw "bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}";
+        }
+        final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
+        if (lease != "") {
+            throw buildRefusal(lease, source: built);
+        }
+        source = built;
+        if (parsed.values["--check"] != null) {
+            throw "bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}";
+        }
+        buildFrom(source);
+    }
     if (parsed.values["--check"] != null) {
         if (source == "") {
             throw "bootstrap-worktree: --check needs --from, the checkout whose ./magus to judge\n{USAGE}";
@@ -556,7 +607,17 @@ test "a build input is a Go file in a linked package, a root module file, or a f
         want: "/r/magus was built at 166d3dabd, which this worktree is at; no Go build input under 3 package scopes differs", message: "same commit");
     assert\equal(placed("/r/magus", commit: "166d3dabd", rootRev: "1111111", scopes: 3),
         want: "/r/magus was built at 166d3dabd, while this worktree is at 1111111; no Go build input under 3 package scopes differs", message: "another commit");
-    assert\equal(refusal("x", source: "/r"), want: "bootstrap-worktree: REFUSED to place x\nA worker checkout never compiles magus. The orchestrator builds ./magus once for this base, in /r (`/r/magus --root /r run go-build .`), then reruns this with `--from /r`.", message: "refusal");
+    assert\equal(refusal("x", source: "/r"), want: "bootstrap-worktree: REFUSED to place x\nA worker checkout never compiles magus. The orchestrator builds ./magus once for this base, in /r (`/r/magus --root /r run go-build .`), then reruns this with `--from /r`. Or a session holding no lease does both: rerun this with `--build-from /r`; a leased worker asks the main session to.", message: "refusal");
+}
+
+test "--build-from builds in the source checkout and is refused under a lease, naming who builds" {
+    assert\equal(buildArgs("/r"), want: ["--root", "/r", "run", "go-build", "."], message: "the build runs in the source checkout");
+    assert\equal(leaseOf("a=b, magus.lease=policy-bootstrap ,c=d"), want: "policy-bootstrap", message: "the lease entry of a baggage header");
+    assert\equal(leaseOf("a=b"), want: "", message: "no lease");
+    assert\equal(leaseOf(""), want: "", message: "no baggage");
+    final refused = buildRefusal("job-a", source: "/r");
+    assert\equal(refused.indexOf("a worker never compiles magus") != null and refused.indexOf("--job job-a --build-from /r`") != null, want: true,
+        message: "a leased worker is refused and told who builds: " + refused);
     assert\equal(parseBuild("\{\"version\":\"v0.4.3-485-g166d3dabd-dirty\",\"commit\":\"166d3dabd\"}"), want: BuildFacts{ commit = "166d3dabd", dirty = true }, message: "dirty build");
 }
 

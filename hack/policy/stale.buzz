@@ -10,6 +10,7 @@ import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/binaries" as binaries;
+import "./hack/policy/builds" as builds;
 
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
 // the skills it serves, and the host declarations and spell sources it embeds, which are
@@ -251,8 +252,31 @@ export fun onBase(workspace: str) > fun (commit: str) > BaseCheck {
         if (res == null or (res!.code != 0 and res!.code != 1)) {
             return BaseCheck{ base = base, known = false, contained = false };
         }
+        if (res!.code == 1 and sameStampedInputs(commit, base: base, workspace: workspace)) {
+            return BaseCheck{ base = base, known = true, contained = true };
+        }
         return BaseCheck{ base = base, known = true, contained = res!.code == 0 };
     };
+}
+
+// stampedDiff is the git diff that exits 0 when no stamped input differs between commit and
+// base. A squash merge leaves the branch commit off the base's history while its sources
+// sit on the base unchanged, so ancestry alone calls that build foreign.
+export fun stampedDiff(commit: str, base: str) > [str] {
+    return ["diff", "--quiet", commit, base, "--"] + stampGlobs;
+}
+
+fun sameStampedInputs(commit: str, base: str, workspace: str) > bool {
+    final res = vcs\cmd(stampedDiff(commit, base: base), opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+    return res != null and res!.code == 0;
+}
+
+// rebuildRemedy is the rebuild each role can run: the main session or a person builds in
+// place, and a leased worker, which never compiles magus, has one placed.
+fun rebuildRemedy(binary: str, workspace: str) > str {
+    return "rebuild with `{binary} --root {workspace} run go-build .` (the main session, holding no lease); "
+        + "a worker under a lease asks the main session to place one with "
+        + "`<main checkout>/magus buzz {builds\placementScript} -- --job <id> --build-from <main checkout>`";
 }
 
 // decideStateWrite denies a state-writing magus verb that a stale ./magus would run
@@ -276,8 +300,8 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
             why = "it was built before {movedList(hook)}";
         }
         return magus\guard.deny("the magus answering this hook is stale; rebuild it from its own sources, then rerun\n"
-            + "{hook.path} is stale against {hook.workspace}; rebuild it with "
-            + "`{hook.path} --root {hook.workspace} run go-build .`. "
+            + "{hook.path} is stale against {hook.workspace}; "
+            + rebuildRemedy(hook.path, workspace: hook.workspace) + ". "
             + "`magus {verb}` writes state other checkouts and other magus versions read, and that binary is "
             + "stale: {why}. That is the hook's binary, judged against its own checkout, not the one this "
             + "command names. It would stamp that state with a build its checkout has moved past, and can "
@@ -287,8 +311,8 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
         return magus\guard.allow();
     }
     if (hook.commit == "") {
-        return magus\guard.deny("./magus names no commit to check against the base branch; rebuild it: "
-            + "`./magus run go-build .`.\n"
+        return magus\guard.deny("./magus names no commit to check against the base branch; rebuild it\n"
+            + rebuildRemedy("./magus", workspace: hook.workspace) + ".\n"
             + "`magus {verb}` writes state every checkout of this repository shares, and ./magus was built "
             + "before go-build stamped a commit. Rerun once it is rebuilt.");
     }
@@ -303,8 +327,8 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
     return magus\guard.deny("./magus was not built from {check.base}; run this from a checkout at {check.base} with that checkout's own ./magus\n"
         + "./magus was built from {hook.commit}, which is not on {check.base}. `magus {verb}` writes state every checkout of this repository shares. A branch's build stamps "
         + "that state newer than every build from {check.base}, which then refuse it, and one behind "
-        + "{check.base} can undo what a newer magus wrote. Rebuild that checkout's ./magus with "
-        + "`./magus run go-build .`.");
+        + "{check.base} can undo what a newer magus wrote, and a stamped source of it differs from {check.base}'s. "
+        + rebuildRemedy("./magus", workspace: hook.workspace) + ".");
 }
 
 // deadlockEscape is the way out for a binary that cannot load the tree and so cannot
@@ -514,4 +538,29 @@ test "read-only verbs, dry runs and another binary stay with the advisory" {
     }
     final other = fun () > HookBinary { return HookBinary{ ours = false, stamped = false, moved = [<str>] }; };
     std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == "allow", message: "not this workspace's binary");
+}
+
+test "a squash-merged build is judged by its stamped sources, not its ancestry" {
+    final args = stampedDiff("c1", base: "origin/main");
+    std\assert(args.join(" ").startsWith("diff --quiet c1 origin/main -- "), message: args.join(" "));
+    std\assert(args.indexOf("internal/guard/*.go") != null and args.indexOf("spells/*/*.buzz") != null, message: "every stamped glob");
+
+    final sameSources = fun (commit: str) > BaseCheck { return BaseCheck{ base = "origin/main", known = true, contained = true }; };
+    foreach (argv in stateWriters) {
+        std\assert(writeVerdict(argv, bin: built("squashed"), onBase: sameSources).decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "every refusal names a rebuild the role can run" {
+    final off = writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: mainHolds(["c1"]));
+    final none = writeVerdict(["./magus", "init"], bin: built(""), onBase: mainHolds([<str>]));
+    final old = writeVerdict(["./magus", "init"], bin: fun () > HookBinary {
+        return HookBinary{ ours = true, stamped = true, moved = ["internal/guard/shell.go"], path = "/repo/magus", workspace = "/repo" };
+    }, onBase: mainHolds(["c1"]));
+    foreach (v in [off, none, old]) {
+        std\assert(v.decision == "deny", message: v.reason);
+        std\assert(v.reason.indexOf("run go-build .`") != null, message: "the main session's rebuild: " + v.reason);
+        std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz -- --job <id> --build-from <main checkout>`") != null,
+            message: "a leased worker's placement: " + v.reason);
+    }
 }
