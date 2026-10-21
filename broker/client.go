@@ -87,6 +87,8 @@ type Client struct {
 	// seatWaiting is set while a claim waits on its job tree's validation seat, so the
 	// wait is said once.
 	seatWaiting atomic.Bool
+	// overrunUnknown says once that the broker predates the overrun frame.
+	overrunUnknown sync.Once
 }
 
 // heldClaim is a claim this client holds, and the id the current broker knows it by;
@@ -196,6 +198,30 @@ func (c *Client) Release(ctx context.Context, id string) {
 		return
 	}
 	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote})
+}
+
+// Overrun tells the broker a claim Request granted held more than its memory curve
+// predicted, so the broker charges it its full peak until Release. Best-effort like
+// Release: an unknown id or a gone broker is ignored, and a broker too old to know the
+// frame is logged once per Client, never an error the run fails on.
+func (c *Client) Overrun(ctx context.Context, id string) {
+	c.mu.Lock()
+	var remote string
+	if h, ok := c.held[id]; ok {
+		remote = h.remote
+	}
+	cn := c.cur
+	c.mu.Unlock()
+	if remote == "" || cn == nil {
+		return
+	}
+	err := cn.roundTrip(ctx, c.next(), typeOverrun, overrunRequest{ClaimID: remote}, typeOverrunReply, nil, nil)
+	if be := (*Error)(nil); errors.As(err, &be) && be.Code == CodeUnknownType {
+		c.overrunUnknown.Do(func() {
+			slog.WarnContext(ctx, "the broker predates memory overruns: a claim over its curve stays charged by the curve; restart the broker to pick up this build",
+				attr.Component("broker"))
+		})
+	}
 }
 
 // Reserve asks the broker to hold a seat the size of claim for process reader, once, and

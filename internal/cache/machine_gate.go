@@ -22,6 +22,9 @@ import (
 type MachineAdmitter interface {
 	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
+	// Overrun says the granted claim id held more than its memory curve predicted, so
+	// the budget charges it its full peak until Release. Best-effort, like Release.
+	Overrun(ctx context.Context, id string)
 }
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
@@ -181,6 +184,48 @@ func (g *machineGate) releaser(id string) func() {
 		defer cancel()
 		g.admit.Release(ctx, id)
 	}
+}
+
+type overrunWatchKey struct{}
+
+// overrunWatch is the granted claim a step's samples are judged against.
+type overrunWatch struct {
+	admit   MachineAdmitter
+	id      string
+	profile types.MemoryProfile
+}
+
+// withOverrunWatch marks ctx as holding claim id, granted with profile. A claim with no
+// profile is charged its peak already, so there is nothing to watch.
+func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id string, profile types.MemoryProfile) context.Context {
+	if id == "" || profile.Runs == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, overrunWatchKey{}, overrunWatch{admit: admit, id: id, profile: profile})
+}
+
+// watchOverrun compares each sample the collector under ctx hears to the claim's
+// curve, and the first time one exceeds it tells the admitter, once. The call leaves
+// the sampler's goroutine, which every exec in the process shares and a sick broker
+// must not stall.
+func watchOverrun(ctx context.Context) {
+	w, ok := ctx.Value(overrunWatchKey{}).(overrunWatch)
+	if !ok {
+		return
+	}
+	var once sync.Once
+	types.OnRSSSample(ctx, func(at time.Duration, bytes int64) {
+		if bytes <= int64(w.profile.HeldMB(at))<<20 {
+			return
+		}
+		once.Do(func() {
+			go func() {
+				octx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+				defer cancel()
+				w.admit.Overrun(octx, w.id)
+			}()
+		})
+	})
 }
 
 // GroupHolder is an admitter that ends a step's process groups with the step's claim:

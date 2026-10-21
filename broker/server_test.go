@@ -140,6 +140,49 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	assert.Empty(t, holders(t, addr), "a release frees the claim")
 }
 
+// curvedClaim is a claim over a 100s run holding early for its first half and late for
+// its second, claiming its peak.
+func curvedClaim(target string, pid int, early, late uint32) types.MachineClaim {
+	p := types.MemoryProfile{D10Ms: 100_000, D90Ms: 100_000, Runs: 3}
+	for i := range p.Curve {
+		p.Curve[i] = early
+		if i >= types.MemoryCurveBuckets/2 {
+			p.Curve[i] = late
+		}
+	}
+	return types.MachineClaim{Project: ".", Target: target, MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
+}
+
+func TestOverrunFrameChargesThePeak(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(10_000, 8))
+	c := dial(t, addr)
+	held, err := c.Request(t.Context(), curvedClaim("test", 100, 7000, 1000))
+	require.NoError(t, err)
+	require.True(t, held.Granted)
+
+	other := dial(t, addr)
+	late := curvedClaim("lint", 200, 1000, 7000)
+	packed, err := other.Request(t.Context(), late)
+	require.NoError(t, err)
+	require.True(t, packed.Granted, "an early peak and a late one pack")
+	other.Release(t.Context(), packed.ID)
+
+	cn, err := other.connect(t.Context())
+	require.NoError(t, err)
+	require.NoError(t, cn.roundTrip(t.Context(), other.next(), typeOverrun, overrunRequest{ClaimID: held.ID}, typeOverrunReply, nil, nil))
+	v, err := other.Request(t.Context(), late)
+	require.NoError(t, err)
+	require.True(t, v.Granted, "an overrun from a connection that does not hold the claim is ignored")
+	other.Release(t.Context(), v.ID)
+
+	c.Overrun(t.Context(), held.ID)
+	v, err = other.Request(t.Context(), late)
+	require.NoError(t, err)
+	assert.False(t, v.Granted, "the overrun claim is charged its 7000 peak beside the late 7000")
+	assert.True(t, v.Fits)
+}
+
 // TestClosingTheConnectionReleasesItsClaims is the whole reason claims ride a
 // connection: a holder that never says release still gives everything back.
 func TestClosingTheConnectionReleasesItsClaims(t *testing.T) {

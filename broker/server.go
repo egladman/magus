@@ -517,6 +517,20 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		}
 		_ = w.write(typeReleaseReply, f.ID, nil)
 
+	case typeOverrun:
+		var req overrunRequest
+		if err := decodeBody(f, &req); err != nil {
+			fail(CodeMalformed, "broker: decode overrun: %v", err)
+			return
+		}
+		s.mu.Lock()
+		_, mine := sess.claims[req.ClaimID]
+		s.mu.Unlock()
+		if mine {
+			s.budget.Overrun(req.ClaimID)
+		}
+		_ = w.write(typeOverrunReply, f.ID, nil)
+
 	case typeHold:
 		var req holdRequest
 		if err := decodeBody(f, &req); err != nil || req.Hold.PGID <= 0 || (req.Hold.Deadline.IsZero() && req.Hold.Claim == "") {

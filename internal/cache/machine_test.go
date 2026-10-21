@@ -106,6 +106,22 @@ func TestOverrunClaimCountsItsPeak(t *testing.T) {
 	assert.True(t, v.Fits)
 }
 
+func TestOverrunCurveCountsItsPeak(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	first := b.Request(curveClaim(100, 7000, 1000, 100_000))
+	require.True(t, first.Granted)
+	*now = now.Add(60 * time.Second)
+
+	b.Overrun(first.ID)
+	b.Overrun("unknown")
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	assert.False(t, v.Granted, "an overrun claim is charged its 7000 peak, not its late 1000")
+	assert.True(t, v.Fits)
+
+	b.Release(first.ID)
+	assert.True(t, b.Request(curveClaim(200, 1000, 7000, 100_000)).Granted, "released, it holds nothing")
+}
+
 func TestClaimWithoutProfileCountsItsPeak(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(curveClaim(100, 1000, 7000, 100_000)).Granted)
@@ -422,6 +438,7 @@ type budgetAdmitter struct {
 	requests int
 	fail     error
 	released []string
+	overruns []string
 }
 
 func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
@@ -439,6 +456,13 @@ func (f *budgetAdmitter) Release(_ context.Context, id string) {
 	defer f.mu.Unlock()
 	f.released = append(f.released, id)
 	f.budget.Release(id)
+}
+
+func (f *budgetAdmitter) Overrun(_ context.Context, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.overruns = append(f.overruns, id)
+	f.budget.Overrun(id)
 }
 
 func testGate(t *testing.T, b *MachineBudget) (*machineGate, *budgetAdmitter) {

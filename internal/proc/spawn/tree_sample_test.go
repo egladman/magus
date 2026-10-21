@@ -37,8 +37,9 @@ func TestSamplerKeepsEverySampleOffset(t *testing.T) {
 		func() (<-chan time.Time, func()) { return tick, func() {} })
 
 	start := time.Unix(1000, 0)
-	a := s.follow(10, start)
-	b := s.follow(20, start.Add(time.Second))
+	var recorded []types.MemorySample
+	a := s.follow(10, start, func(m types.MemorySample) { recorded = append(recorded, m) })
+	b := s.follow(20, start.Add(time.Second), nil)
 
 	tick <- start.Add(200 * time.Millisecond)
 	tick <- start.Add(400 * time.Millisecond)
@@ -49,6 +50,7 @@ func TestSamplerKeepsEverySampleOffset(t *testing.T) {
 		{At: 400 * time.Millisecond, Bytes: 100 << 20},
 		{At: 1400 * time.Millisecond, Bytes: 100 << 20},
 	}, s.stop(a), "every tick is kept, timed from the root's own start")
+	assert.Len(t, recorded, 3, "each sample reaches the recorder as it is taken")
 	assert.Empty(t, s.stop(b), "a reading of 0 is unknown, not a sample")
 	assert.Nil(t, s.stop(nil), "a command that never started has no samples")
 }

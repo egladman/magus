@@ -51,6 +51,7 @@ type sampledRoot struct {
 	pid     int
 	start   time.Time
 	samples []types.MemorySample
+	record  func(types.MemorySample)
 	done    chan []types.MemorySample
 }
 
@@ -63,11 +64,12 @@ func newTreeSampler(read func(pid int) int64, ticks func() (<-chan time.Time, fu
 	}
 }
 
-// follow begins sampling the tree rooted at pid, timing samples from start. A pid
+// follow begins sampling the tree rooted at pid, timing samples from start, and hands
+// each sample to record, when non-nil, on the sampler's goroutine as it is taken. A pid
 // by value rather than the *exec.Cmd, because reading c.Process from another
 // goroutine races with the Start that writes it.
-func (s *treeSampler) follow(pid int, start time.Time) *sampledRoot {
-	r := &sampledRoot{pid: pid, start: start, done: make(chan []types.MemorySample, 1)}
+func (s *treeSampler) follow(pid int, start time.Time, record func(types.MemorySample)) *sampledRoot {
+	r := &sampledRoot{pid: pid, start: start, record: record, done: make(chan []types.MemorySample, 1)}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.roots[r] = struct{}{}
@@ -102,7 +104,11 @@ func (s *treeSampler) loop() {
 			s.mu.Unlock()
 			for _, r := range roots {
 				if n := s.read(r.pid); n > 0 {
-					r.samples = append(r.samples, types.MemorySample{At: max(now.Sub(r.start), 0), Bytes: n})
+					sample := types.MemorySample{At: max(now.Sub(r.start), 0), Bytes: n}
+					r.samples = append(r.samples, sample)
+					if r.record != nil {
+						r.record(sample)
+					}
 				}
 			}
 		case r := <-s.leave:

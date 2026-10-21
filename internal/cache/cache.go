@@ -891,6 +891,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 
 	lp := c.logPath(s.ProjectPath, hash)
 	ctx = types.WithExecCost(ctx)
+	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
@@ -1252,6 +1253,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	held.machineClaim = true
 	if id != "" {
 		ctx = withStepGroups(ctx, c.machine.admit, id)
+		ctx = withOverrunWatch(ctx, c.machine.admit, id, s.MemoryProfile)
 	}
 	return held.on(ctx), release, nil
 }

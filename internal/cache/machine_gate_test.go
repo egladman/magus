@@ -164,6 +164,53 @@ func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.Ma
 
 func (refusingAdmitter) Release(context.Context, string) {}
 
+func (refusingAdmitter) Overrun(context.Context, string) {}
+
+// overrunAdmitter sends each overrun it is told of on overruns.
+type overrunAdmitter struct {
+	refusingAdmitter
+	overruns chan string
+}
+
+func (a overrunAdmitter) Overrun(_ context.Context, id string) { a.overruns <- id }
+
+func TestOverrunIsSentOnce(t *testing.T) {
+	admit := overrunAdmitter{overruns: make(chan string, 4)}
+	profile := types.MemoryProfile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
+	for i := range profile.Curve {
+		profile.Curve[i] = 100
+	}
+	ctx := types.WithExecCost(t.Context())
+	ctx = withOverrunWatch(ctx, admit, "claim-1", profile)
+	watchOverrun(ctx)
+
+	record, end := types.RecordCurve(ctx, time.Now())
+	defer end()
+	record(types.MemorySample{At: time.Second, Bytes: 50 << 20})
+	select {
+	case id := <-admit.overruns:
+		t.Fatalf("a sample under the curve sent an overrun for %s", id)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	record(types.MemorySample{At: 2 * time.Second, Bytes: 200 << 20})
+	record(types.MemorySample{At: 3 * time.Second, Bytes: 300 << 20})
+	select {
+	case id := <-admit.overruns:
+		assert.Equal(t, "claim-1", id)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a sample over the curve sent no overrun")
+	}
+	select {
+	case <-admit.overruns:
+		t.Fatal("a second sample over the curve sent a second overrun")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, "claim-2", types.MemoryProfile{})
+	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
+}
+
 // groupAdmitter is a budget that also holds process groups, recording each hold and
 // release in order.
 type groupAdmitter struct {

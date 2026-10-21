@@ -268,15 +268,17 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	// the sampler is handed it. Behaviorally identical (Run is Start plus Wait);
 	// the split exists only so nothing reads c.Process concurrently.
 	var root *sampledRoot
-	var startedAt time.Time
+	endCurve := func() {}
 	started := func(pid int) {
 		if ruleset != nil {
 			// This process's copy of the ruleset serves nothing once the launcher holds
 			// its own; the defer below covers a Start that failed.
 			_ = ruleset.Close()
 		}
-		startedAt = time.Now()
-		root = processSampler.follow(pid, startedAt)
+		startedAt := time.Now()
+		var record func(types.MemorySample)
+		record, endCurve = types.RecordCurve(ctx, startedAt)
+		root = processSampler.follow(pid, startedAt, record)
 	}
 	if ruleset != nil {
 		defer ruleset.Close()
@@ -295,6 +297,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		}
 	}
 	samples := processSampler.stop(root)
+	endCurve()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 
 	res := ExecResult{}
@@ -308,11 +311,10 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// and cannot report less than magus reported before sampling existed.
 		kernelPeak := maxRSSBytes(c.ProcessState)
 		res.MaxRSSBytes = max(kernelPeak, samplePeak(samples))
-		// Report both upward as well as returning the peak. The shard planner wants
-		// them and has no path to an ExecResult; the context collector folds the
-		// series into the step's curve, floored by the kernel figure.
+		// Report the kernel figure upward as well as returning the peak. The shard
+		// planner wants it and has no path to an ExecResult; it floors the step's
+		// curve, which the sampler fed as it ran.
 		types.RecordPeakRSS(ctx, kernelPeak)
-		types.RecordCurve(ctx, startedAt, samples)
 		res.CPUMs = (c.ProcessState.UserTime() + c.ProcessState.SystemTime()).Milliseconds()
 		types.RecordCPUMs(ctx, res.CPUMs)
 	} else {

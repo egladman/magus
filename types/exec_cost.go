@@ -49,17 +49,45 @@ type execCost struct {
 	// kernelPeak is the largest ru_maxrss any one exec reported: exact for that
 	// process, so the step's peak never reads below it.
 	kernelPeak int64
-	// series holds each exec's samples, offset from the step's start.
-	series [][]MemorySample
-	cpuMs  int64
+	series     []*execSeries
+	cpuMs      int64
+	// parent is the collector this one was installed under. Its listeners hear this
+	// one's samples too, because a step's spell installs its own collector inside the
+	// step's.
+	parent    *execCost
+	listeners []func(at time.Duration, bytes int64)
+}
+
+// execSeries is one exec's samples, offset from the step's start. live is false once
+// the exec ended, so its last sample stops counting toward the live total.
+type execSeries struct {
+	samples []MemorySample
+	live    bool
 }
 
 // WithExecCost returns a context that collects the memory curve, the peak resident
 // memory and the CPU time of every process executed under it, timed from now.
 // Install it once per unit of work you want figures for; nested installs are
-// independent, so an inner one does not feed its outer.
+// independent, so an inner one does not feed its outer's figures. An outer's
+// OnRSSSample listeners do hear an inner one's samples.
 func WithExecCost(ctx context.Context) context.Context {
-	return context.WithValue(ctx, execCostKey{}, &execCost{start: time.Now(), now: time.Now})
+	parent, _ := ctx.Value(execCostKey{}).(*execCost)
+	return context.WithValue(ctx, execCostKey{}, &execCost{start: time.Now(), now: time.Now, parent: parent})
+}
+
+// OnRSSSample registers fn on the collector under ctx. fn is called as each sample
+// arrives with its offset from the collector's start and the bytes the collector's
+// live execs hold together, each counted at its latest sample. It runs on the
+// sampler's goroutine, which every exec in the process shares, so fn must not block.
+// A no-op without a collector.
+func OnRSSSample(ctx context.Context, fn func(at time.Duration, bytes int64)) {
+	c, ok := ctx.Value(execCostKey{}).(*execCost)
+	if !ok {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.listeners = append(c.listeners, fn)
 }
 
 // RecordPeakRSS reports one process's kernel peak resident memory in bytes, the
@@ -80,25 +108,53 @@ func RecordPeakRSS(ctx context.Context, bytes int64) {
 	c.kernelPeak = max(c.kernelPeak, bytes)
 }
 
-// RecordCurve adds one exec's sampled series. start is when the exec began and
-// each sample's At is its offset from that. A no-op without a collector or
-// without samples.
-func RecordCurve(ctx context.Context, start time.Time, samples []MemorySample) {
-	if len(samples) == 0 {
-		return
-	}
+// RecordCurve opens one exec's series. start is when the exec began. record adds a
+// sample as it is taken, its At the offset from start, and calls every OnRSSSample
+// listener; end closes the series. Call record from one goroutine at a time and never
+// after end. Both are no-ops without a collector.
+func RecordCurve(ctx context.Context, start time.Time) (record func(MemorySample), end func()) {
 	c, ok := ctx.Value(execCostKey{}).(*execCost)
 	if !ok {
-		return
+		return func(MemorySample) {}, func() {}
 	}
+	series := &execSeries{live: true}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	shift := start.Sub(c.start)
-	series := make([]MemorySample, len(samples))
-	for i, s := range samples {
-		series[i] = MemorySample{At: shift + s.At, Bytes: s.Bytes}
-	}
 	c.series = append(c.series, series)
+	c.mu.Unlock()
+	shift := start.Sub(c.start)
+	record = func(s MemorySample) {
+		at := shift + s.At
+		c.mu.Lock()
+		series.samples = append(series.samples, MemorySample{At: at, Bytes: s.Bytes})
+		var held int64
+		for _, other := range c.series {
+			if other.live && len(other.samples) > 0 {
+				held += other.samples[len(other.samples)-1].Bytes
+			}
+		}
+		c.mu.Unlock()
+		c.notify(at, held)
+	}
+	end = func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		series.live = false
+	}
+	return record, end
+}
+
+// notify calls the listeners of c and of every collector above it, each with at
+// shifted to that collector's start. Called without c.mu held, so a listener may
+// read the collector.
+func (c *execCost) notify(at time.Duration, held int64) {
+	for p := c; p != nil; p = p.parent {
+		p.mu.Lock()
+		listeners := p.listeners
+		p.mu.Unlock()
+		for _, fn := range listeners {
+			fn(at+c.start.Sub(p.start), held)
+		}
+	}
 }
 
 // Curve folds every series recorded under ctx into one curve over the step's
@@ -125,7 +181,7 @@ func (c *execCost) binSums() [MemoryCurveBuckets]int64 {
 	width := max(c.now().Sub(c.start)/MemoryCurveBuckets, 1)
 	for _, series := range c.series {
 		var peaks [MemoryCurveBuckets]int64
-		for _, s := range series {
+		for _, s := range series.samples {
 			bin := min(max(int(s.At/width), 0), MemoryCurveBuckets-1)
 			peaks[bin] = max(peaks[bin], s.Bytes)
 		}

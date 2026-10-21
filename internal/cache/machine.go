@@ -47,6 +47,8 @@ type machineEntry struct {
 	started time.Time
 	// reader is the process a reservation is held for; 0 for a granted claim.
 	reader int
+	// overrun is set once the claim's own tree held more than its curve predicted.
+	overrun bool
 }
 
 // reservationBound is how long a reservation waits for its reader's first claim. It
@@ -225,6 +227,17 @@ func (b *MachineBudget) Release(id string) {
 	delete(b.claims, id)
 }
 
+// Overrun charges a granted claim its full peak, MemoryMB, until it is released: its
+// run held more than its curve predicted, so the curve no longer bounds it. Nothing is
+// preempted. An unknown id is ignored, as Release ignores one.
+func (b *MachineBudget) Overrun(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if e, ok := b.claims[id]; ok {
+		e.overrun = true
+	}
+}
+
 // Snapshot reports the whole budget. Read-only, so a status command can ask what the
 // machine is doing without changing it.
 func (b *MachineBudget) Snapshot() types.MachineSnapshot {
@@ -338,15 +351,15 @@ func (b *MachineBudget) breach(c types.MachineClaim, skip func(id string, c type
 }
 
 // curved reports whether e is charged by its curve at now: it has a profile with a
-// duration band and has not yet run past its D90.
+// duration band, has not yet run past its D90 and has not overrun its curve.
 func curved(e machineEntry, now time.Time) bool {
 	p := e.claim.Profile
 	d90 := time.Duration(p.D90Ms) * time.Millisecond
-	return p.Runs > 0 && d90 > 0 && now.Sub(e.started) <= d90
+	return !e.overrun && p.Runs > 0 && d90 > 0 && now.Sub(e.started) <= d90
 }
 
-// heldAt is what e holds at t, judged at now. A claim with no curve, or one that has
-// already overrun its D90, holds its flat MemoryMB until released. A curved claim is
+// heldAt is what e holds at t, judged at now. A claim that is not curved (see curved)
+// holds its flat MemoryMB until released. A curved claim is
 // expected released past its D90 and holds nothing there; a run that is still held
 // then is an overrun, which the next verdict charges its peak.
 func heldAt(e machineEntry, now, t time.Time) int {

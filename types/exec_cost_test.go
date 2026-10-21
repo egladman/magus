@@ -123,15 +123,15 @@ func TestStepCurveSumsConcurrentExecs(t *testing.T) {
 
 	// Ten seconds in twenty buckets is 500ms each. Exec a peaks at 2GiB in the
 	// bucket [1s, 1.5s), and exec b, started a second in, holds 3GiB there too.
-	RecordCurve(ctx, step, []MemorySample{
-		{At: time.Second, Bytes: 1 << 30},
-		{At: 1200 * time.Millisecond, Bytes: 2 << 30},
-		{At: 5 * time.Second, Bytes: 512 << 20},
-	})
-	RecordCurve(ctx, step.Add(time.Second), []MemorySample{
-		{At: 100 * time.Millisecond, Bytes: 3 << 30},
-		{At: 20 * time.Second, Bytes: 256 << 20},
-	})
+	recordSeries(ctx, step,
+		MemorySample{At: time.Second, Bytes: 1 << 30},
+		MemorySample{At: 1200 * time.Millisecond, Bytes: 2 << 30},
+		MemorySample{At: 5 * time.Second, Bytes: 512 << 20},
+	)
+	recordSeries(ctx, step.Add(time.Second),
+		MemorySample{At: 100 * time.Millisecond, Bytes: 3 << 30},
+		MemorySample{At: 20 * time.Second, Bytes: 256 << 20},
+	)
 	RecordPeakRSS(ctx, 4<<30)
 
 	var want MemoryCurve
@@ -143,4 +143,42 @@ func TestStepCurveSumsConcurrentExecs(t *testing.T) {
 
 	RecordPeakRSS(ctx, 8<<30)
 	assert.Equal(t, int64(8<<30), PeakRSS(ctx), "the kernel figure floors the curve's peak")
+}
+
+func recordSeries(ctx context.Context, start time.Time, samples ...MemorySample) {
+	record, end := RecordCurve(ctx, start)
+	for _, s := range samples {
+		record(s)
+	}
+	end()
+}
+
+func TestOnRSSSampleHearsTheLiveTotal(t *testing.T) {
+	t.Parallel()
+	outer := WithExecCost(context.Background())
+	type heard struct {
+		at    time.Duration
+		bytes int64
+	}
+	var got []heard
+	OnRSSSample(outer, func(at time.Duration, bytes int64) { got = append(got, heard{at, bytes}) })
+	inner := WithExecCost(outer)
+	c := inner.Value(execCostKey{}).(*execCost)
+	shift := c.start.Sub(outer.Value(execCostKey{}).(*execCost).start)
+
+	recordA, endA := RecordCurve(inner, c.start)
+	recordB, endB := RecordCurve(inner, c.start.Add(time.Second))
+	recordA(MemorySample{At: time.Second, Bytes: 100})
+	recordB(MemorySample{At: 200 * time.Millisecond, Bytes: 50})
+	endA()
+	recordB(MemorySample{At: 400 * time.Millisecond, Bytes: 70})
+	endB()
+
+	assert.Equal(t, []heard{
+		{shift + time.Second, 100},
+		{shift + 1200*time.Millisecond, 150},
+		{shift + 1400*time.Millisecond, 70},
+	}, got, "each live exec counts at its latest sample, timed from the listener's collector")
+	assert.Zero(t, PeakRSS(outer), "an inner collector still does not feed its outer's figures")
+	OnRSSSample(context.Background(), func(time.Duration, int64) { t.Fatal("no collector, no listener") })
 }
