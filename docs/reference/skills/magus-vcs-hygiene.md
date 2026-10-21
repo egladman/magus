@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9879
-skill_short_bytes: 5298
+skill_full_bytes: 11156
+skill_short_bytes: 6282
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `142` |
+| `agent-skill-version` | `143` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `2bf5f913a190` |
+| `skill-content` | `f609c2a37b4a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -112,6 +112,21 @@ Steps below: what it automates, fallback:
    - Hand-typed path list not safer: first non-matching pathspec aborts whole call.
    - Confirm with `git diff --cached --stat`: every intended edit, renames included.
 5. `magus affected ci` before calling work done: reaches projects you never edited; after commit, confirms HEAD builds.
+
+### Commit message
+
+magus ships no commit style; the log is the style. Learn subject style from recent subjects.
+
+1. Read log: `git log --no-merges --format=%s -n 30`; hg or sl: `hg log -l 30 -T '{desc|firstline}\n'`; jj: `jj log --no-graph -n 30 -T 'description.first_line() ++ "\n"'`.
+2. From majority of subjects note: first-letter case, `type:` or `type(scope):` prefix or none, tense, usual length, trailing period or none.
+3. Subject in that shape. Name change, not session.
+4. No clear majority, or under 10 subjects: plain imperative, no prefix, under 72 characters, lowercase unless log capitalizes; say which chosen.
+5. CONTRIBUTING file or commit-msg hook stating requirement wins over log. Hook refusal is the answer: read it, fix message.
+6. Body only when subject cannot say why; wrap at 72.
+
+WRONG: `Refactor: Cache lookup improvements.` in a log of `drop the unused retry flag` and
+`rename Cache.get to Cache.lookup`.
+CORRECT: `skip expired entries in Cache.lookup`.
 
 Read change before staging.
 `magus diff --impact`: uncommitted changes ordered by what they can break, generated files folded; appends landing cost: rebuilds, recent editors, time estimate, advisors, anchored notes.
@@ -268,6 +283,29 @@ automates, and the fallback:
    pipeline over every project the diff reaches, including ones you never edited,
    and after committing confirms HEAD builds; a partial commit that drops a
    rename or an importer update leaves HEAD non-building.
+
+### The commit message
+
+magus ships no commit style. The repository already has one: its log. Learn the subject
+style from the recent subjects before you write yours.
+
+1. Read the log: `git log --no-merges --format=%s -n 30`. Mercurial or Sapling:
+   `hg log -l 30 -T '{desc|firstline}\n'`. Jujutsu:
+   `jj log --no-graph -n 30 -T 'description.first_line() ++ "\n"'`.
+2. From the majority of those subjects, note the first-letter case, a `type:` or
+   `type(scope):` prefix or none, imperative or past tense, the usual length, and a
+   trailing period or none.
+3. Write the subject in that shape. Name the change, not the session: "encode buildUrl
+   query keys", never a note on the editing session.
+4. With no clear majority, or fewer than 10 subjects, write a plain imperative with no
+   prefix, under 72 characters, lowercase unless the log capitalizes. Say which you chose.
+5. A CONTRIBUTING file or a commit-msg hook that states a requirement wins over the log. A hook's
+   refusal is the answer: read it and fix the message.
+6. Add a body only when the subject cannot say why. Wrap it at 72.
+
+WRONG: `Refactor: Cache lookup improvements.` in a log of `drop the unused retry flag` and
+`rename Cache.get to Cache.lookup`.
+CORRECT: `skip expired entries in Cache.lookup`.
 
 Read the change before you stage it. `magus diff --impact` orders the uncommitted
 changeset by what it can BREAK and folds the generated files away. It appends what
