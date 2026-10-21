@@ -30,21 +30,30 @@ var (
 	procGetProcessMemoryInfo = psapi.NewProc("GetProcessMemoryInfo")
 )
 
-// TreeBytes sums the resident memory of pid and every descendant, or 0 when the
-// tree cannot be read.
+// TreeBytes sums, for each pid, the resident memory of pid and every descendant, in
+// the order given; an entry is 0 when that tree cannot be read. One snapshot answers
+// every root.
 //
 // This is the only platform where the figure exists at all: wait4-style rusage has
 // no Windows equivalent, so maxRSSBytes reports UNKNOWN there and sampling is not a
 // second opinion but the first one.
-func TreeBytes(pid int) int64 {
+func TreeBytes(pids ...int) []int64 {
+	out := make([]int64, len(pids))
 	parents, err := processParents()
 	if err != nil {
-		return 0
+		return out
 	}
 	children := make(map[uint32][]uint32, len(parents))
 	for self, parent := range parents {
 		children[parent] = append(children[parent], self)
 	}
+	for i, pid := range pids {
+		out[i] = walkTree(pid, children)
+	}
+	return out
+}
+
+func walkTree(pid int, children map[uint32][]uint32) int64 {
 	var total int64
 	seen := map[uint32]bool{}
 	stack := []uint32{uint32(pid)}

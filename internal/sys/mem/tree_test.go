@@ -57,7 +57,7 @@ func TestTreeBytesCountsConcurrentChildren(t *testing.T) {
 		perChild = 128
 		children = 4
 	)
-	before := TreeBytes(os.Getpid())
+	before := TreeBytes(os.Getpid())[0]
 	require.Positive(t, before, "this host must report its own resident memory")
 
 	var procs []*exec.Cmd
@@ -79,7 +79,7 @@ func TestTreeBytesCountsConcurrentChildren(t *testing.T) {
 	var grew int64
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
-		if grew = TreeBytes(os.Getpid()) - before; grew > int64(children)*perChild<<20*3/4 {
+		if grew = TreeBytes(os.Getpid())[0] - before; grew > int64(children)*perChild<<20*3/4 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -93,6 +93,17 @@ func TestTreeBytesCountsConcurrentChildren(t *testing.T) {
 // A pid with no children is its own tree, and a pid that does not exist is 0
 // rather than an error: a process that exits mid-walk is the ordinary case.
 func TestTreeBytesEdges(t *testing.T) {
-	assert.Positive(t, TreeBytes(os.Getpid()))
-	assert.Zero(t, TreeBytes(-1))
+	assert.Positive(t, TreeBytes(os.Getpid())[0])
+	assert.Equal(t, []int64{0}, TreeBytes(-1))
+	assert.Empty(t, TreeBytes())
+}
+
+// One call answers several roots in the order given, each from the same table read,
+// and an unreadable root does not spoil the others.
+func TestTreeBytesAnswersEveryRoot(t *testing.T) {
+	got := TreeBytes(os.Getpid(), -1, os.Getppid())
+	require.Len(t, got, 3)
+	assert.Positive(t, got[0])
+	assert.Zero(t, got[1])
+	assert.Positive(t, got[2], "the parent's tree, this process among it")
 }

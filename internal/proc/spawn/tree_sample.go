@@ -16,14 +16,14 @@ import (
 // but only sees the instants it looks at. Neither is complete, which is why the
 // two are combined rather than one replacing the other.
 //
-// 200ms because the cost is per sample and, on darwin, the whole process table is
-// read to find a tree: roughly 1.5ms on a busy machine, under 1% of one core. A
-// command shorter than one tick pays nothing, because the first sample lands after
-// the first tick.
+// 200ms because the cost is per tick and, on darwin, the whole process table is
+// read once for every followed tree: roughly 1.5ms on a busy machine, under 1% of
+// one core. A command shorter than one tick pays nothing, because the first sample
+// lands after the first tick.
 const treeSampleEvery = 200 * time.Millisecond
 
 // processSampler is the one sampler every exec in this process shares, so ten
-// concurrent execs wake on one ticker rather than ten.
+// concurrent execs wake on one ticker and one table read rather than ten.
 var processSampler = newTreeSampler(mem.TreeBytes, newTicker)
 
 func newTicker() (<-chan time.Time, func()) {
@@ -36,7 +36,8 @@ func newTicker() (<-chan time.Time, func()) {
 // goroutine runs while any root is followed and owns the samples; stop asks it for
 // them, so a tick it already received is recorded first.
 type treeSampler struct {
-	read  func(pid int) int64
+	// read answers every followed root from one read of the process table per tick.
+	read  func(pids ...int) []int64
 	ticks func() (<-chan time.Time, func())
 	leave chan *sampledRoot
 
@@ -55,7 +56,7 @@ type sampledRoot struct {
 	done    chan []types.MemorySample
 }
 
-func newTreeSampler(read func(pid int) int64, ticks func() (<-chan time.Time, func())) *treeSampler {
+func newTreeSampler(read func(pids ...int) []int64, ticks func() (<-chan time.Time, func())) *treeSampler {
 	return &treeSampler{
 		read:  read,
 		ticks: ticks,
@@ -98,12 +99,15 @@ func (s *treeSampler) loop() {
 		case now := <-tick:
 			s.mu.Lock()
 			roots := make([]*sampledRoot, 0, len(s.roots))
+			pids := make([]int, 0, len(s.roots))
 			for r := range s.roots {
 				roots = append(roots, r)
+				pids = append(pids, r.pid)
 			}
 			s.mu.Unlock()
-			for _, r := range roots {
-				if n := s.read(r.pid); n > 0 {
+			sizes := s.read(pids...)
+			for i, r := range roots {
+				if n := sizes[i]; n > 0 {
 					sample := types.MemorySample{At: max(now.Sub(r.start), 0), Bytes: n}
 					r.samples = append(r.samples, sample)
 					if r.record != nil {

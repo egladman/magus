@@ -8,13 +8,22 @@ import (
 	"strings"
 )
 
-// TreeBytes sums the resident memory of pid and every descendant, or 0 when the
-// tree cannot be read.
+// TreeBytes sums, for each pid, the resident memory of pid and every descendant, in
+// the order given; an entry is 0 when that tree cannot be read.
 //
 // /proc/<pid>/task/<tid>/children rather than a scan of the whole table: the
-// kernel already maintains the child list, so the walk touches only the tree it is
-// asked about. A pid that exits mid-walk stops contributing.
-func TreeBytes(pid int) int64 {
+// kernel already maintains the child list, so each walk touches only the tree it is
+// asked about, and several roots cost no more read apart than together. A pid that
+// exits mid-walk stops contributing.
+func TreeBytes(pids ...int) []int64 {
+	out := make([]int64, len(pids))
+	for i, pid := range pids {
+		out[i] = walkTree(pid)
+	}
+	return out
+}
+
+func walkTree(pid int) int64 {
 	var total int64
 	seen := map[int]bool{}
 	stack := []int{pid}
