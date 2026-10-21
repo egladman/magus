@@ -331,6 +331,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "TrailSpawn", Type: reflect.TypeFor[types.TrailSpawn](), RuntimeObject: true},
 	{Name: "Trail", Type: reflect.TypeFor[types.Trail](), RuntimeObject: true},
 	{Name: "TrailMark", Type: reflect.TypeFor[types.TrailMark](), RuntimeObject: true},
+	// A buzz-format brief is one magus\Brief literal the guard type-checks; nothing hands
+	// one back, so none is a runtime object. Leaf first: Brief holds lists of the two.
+	{Name: "BriefDecision", Type: reflect.TypeFor[types.BriefDecision]()},
+	{Name: "BriefRef", Type: reflect.TypeFor[types.BriefRef]()},
+	{Name: "Brief", Type: reflect.TypeFor[types.Brief]()},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
@@ -505,6 +510,12 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "GroupingShape",
 		Type:  reflect.TypeFor[types.GroupingShape](),
 		Cases: []enumCase{{"none", ""}, {"chained", "chained"}, {"split", "split"}, {"solo", "solo"}},
+	},
+	{
+		Name: "BriefRefKind",
+		Type: reflect.TypeFor[types.BriefRefKind](),
+		Cases: []enumCase{{"output", "output"}, {"verdict", "verdict"}, {"invocation", "invocation"},
+			{"file", "file"}, {"plan", "plan"}, {"commit", "commit"}},
 	},
 	{
 		Name:  "GroupingVerdict",

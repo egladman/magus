@@ -142,3 +142,16 @@ func TestMergeKeepsAnEntryAlone(t *testing.T) {
 	got := applyPut(t, types.JobPut{Enter: new("cmd/magus/x/a.go")}, types.Job{ID: "u1"})
 	assert.Equal(t, []types.JobEntry{{Path: "cmd/magus/x/a.go"}}, got.Entries)
 }
+
+// A put sets a live row's brief format, or clears it back to magus.yaml's, and refuses a
+// value that is neither format.
+func TestPutSetsTheBriefFormat(t *testing.T) {
+	t.Parallel()
+	got := applyPut(t, types.JobPut{BriefFormat: new(types.BriefFormatBuzz)}, types.Job{ID: "u1"})
+	assert.Equal(t, types.BriefFormatBuzz, got.BriefFormat)
+	got = applyPut(t, types.JobPut{BriefFormat: new(types.BriefFormat(""))}, got)
+	assert.Empty(t, got.BriefFormat)
+
+	_, err := PutMerge(types.JobPut{BriefFormat: new(types.BriefFormat("json"))})
+	require.ErrorContains(t, err, `brief_format "json"`)
+}

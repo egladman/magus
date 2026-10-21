@@ -417,6 +417,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		check:      "test internal/ledger",
 		model:      "principal",
 	}
+	flags.briefFormat = "buzz"
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
@@ -431,7 +432,8 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "read_paths": ["internal/trail"],
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
-	  "model": "principal"
+	  "model": "principal",
+	  "brief_format": "buzz"
 	}`))
 	require.NoError(t, err)
 
@@ -442,6 +444,15 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)
+	assert.Equal(t, types.BriefFormatBuzz, a.BriefFormat)
+}
+
+// A brief format is one of the two, refused at fork rather than read as markdown later.
+func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
+	t.Parallel()
+	err := forkFlags{criteria: "c", briefFormat: "json"}.row("adj/store").Validate()
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `brief_format "json"`)
 }
 
 // A path flag takes both spellings, and refuses the empty segment a trailing comma

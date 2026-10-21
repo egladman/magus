@@ -131,6 +131,24 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	assert.NotEqual(t, "deny", bound.Decision, bound.Reason)
 }
 
+// TestSpawnBriefFormatComesFromItsRow: a row forked with a brief_format decides its spawn's
+// format over magus.yaml, and the verdict names the format and the row it came from.
+func TestSpawnBriefFormatComesFromItsRow(t *testing.T) {
+	row := types.Job{ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		State: types.StateDeclared, Registered: 1, BriefFormat: types.BriefFormatBuzz}
+	ctx, root := fleetFixture(t, row)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	deps := strict(Dependencies{BriefFormat: types.BriefFormatMarkdown})
+	raw, err := json.Marshal(map[string]any{
+		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"description": "orchestrator/feat guard/slice", "prompt": "Fix the bug.", "model": "sonnet"},
+	})
+	require.NoError(t, err)
+	v := Judge(ctx, deps, Request{Input: string(raw), Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision, "prose is not a magus\\Brief literal")
+	assert.Contains(t, v.Reason, "buzz, from row guard/slice")
+}
+
 // Both a spawn and a continuation carry a brief, so both reach the rule through Judge.
 func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	envelope := func(tool, key, text string) string {

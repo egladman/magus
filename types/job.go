@@ -741,6 +741,9 @@ type Job struct {
 	// output-only like Releases: a caller's value is replaced by the stored one, and nil
 	// means the workspace declared no model tiers when the row was written.
 	ModelTier *JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
+	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
+	// agents.brief_format. Empty defers to magus.yaml.
+	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
 	// ReworkRounds counts the times the guard saw this row's holder sent more work after it
 	// handed back. Widenings counts the writes that added write paths after a holder took
 	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
@@ -1031,6 +1034,9 @@ type Declaration struct {
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
+	// BriefFormat is the format a brief to this job's worker takes; empty defers to
+	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
+	BriefFormat BriefFormat `json:"brief_format,omitempty"`
 	// Checkout is an absolute directory, outside the workspace, where the fork makes a new
 	// checkout of the repository for this job at its checkpoint, or at the forking
 	// checkout's revision when it names none.
@@ -1172,6 +1178,10 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if _, err := ParseJobTimeout(r.Timeout); err != nil {
 		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", r.Timeout), "name one such as 30m or 2h, or leave it out")
+	}
+	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
+		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
+			"use one of "+strings.Join(r.BriefFormat.Values(), ", ")+", or leave it out for magus.yaml's agents.brief_format")
 	}
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
@@ -1531,6 +1541,7 @@ func (r Declaration) Apply(u *Job) {
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
+	u.BriefFormat = r.BriefFormat
 	// Validate refused an unparsable check before the row reached a store, so the problems
 	// here cannot arise; the rendered line is written from the record so the two agree.
 	check, declared, _ := r.check()
