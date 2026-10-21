@@ -45,6 +45,9 @@ const (
 	// was never proof the guard runs, and distinct from HarnessUncovered, because
 	// the gap is this machine's tooling or load, not the config.
 	HarnessUnprobed HarnessStatus = "unprobed"
+	// harnessSkipped is a check that could not run against this descriptor, with Reason
+	// saying why. It is reported, never read as verified.
+	harnessSkipped HarnessStatus = "skipped"
 )
 
 var (
@@ -63,37 +66,30 @@ var (
 // or a reply codec. Transport lives in host-native glue (shipped scripts or a
 // plugin) that already names magus shell. Optional MCP client wiring is a
 // separate document (or register hint), always bound to a secret ref.
+//
+// Each field holds what one function of the harness contract returned, nil or zero when
+// the spell does not export it.
 type HarnessDescriptor struct {
-	SchemaVersion  int                `json:"schema_version"`
-	ID             string             `json:"id"`
-	Display        HarnessDisplay     `json:"display"`
-	Config         HarnessConfig      `json:"config"`
-	ConfigDefaults map[string]any     `json:"config_defaults,omitempty"`
-	Skills         HarnessSkills      `json:"skills"`
-	ManagedEntries []HarnessEntries   `json:"managed_entries,omitempty"`
-	MCP            *HarnessMCP        `json:"mcp,omitempty"`
-	Prompts        []HarnessPrompt    `json:"prompts,omitempty"`
-	Agents         []HarnessAgentFile `json:"agents,omitempty"`
-	Settings       []HarnessSetting   `json:"settings,omitempty"`
-	Limits         HarnessLimits      `json:"limits,omitzero"`
+	SchemaVersion  int                    `json:"schema_version"`
+	ID             string                 `json:"id"`
+	Display        HarnessDisplay         `json:"display"`
+	Config         types.HarnessConfig    `json:"config"`
+	Skills         types.HarnessSkills    `json:"skills"`
+	ManagedEntries []types.ManagedEntries `json:"managed_entries,omitempty"`
+	// Hooks are what the managed entries run, as data. Verify checks each appears in them.
+	Hooks    []types.HookCommand `json:"hooks,omitempty"`
+	MCP      *types.McpServer    `json:"mcp,omitempty"`
+	Prompts  []types.Prompt      `json:"prompts,omitempty"`
+	Agents   []types.AgentFile   `json:"agents,omitempty"`
+	Settings []types.Setting     `json:"settings,omitempty"`
+	// Limits.ForegroundDefaultMs is not read here: the wiring passes the same number to
+	// magus shell as --foreground-default-ms.
+	Limits types.Limits `json:"limits,omitzero"`
 	// Tools is the host's tool table, nil for a harness that declares none.
-	Tools *HarnessTools `json:"tools,omitempty"`
-	// Models are the rows of the models this host runs, as its harness_models op returns
-	// them; nil for a harness that publishes none. Never read from JSON: the op's rows
-	// are decoded separately, since types.ModelPricing carries no wire tags.
+	Tools *types.HarnessTools `json:"tools,omitempty"`
+	// Models are the rows of the models this host runs; nil for a harness that publishes
+	// none. Never read from JSON, since types.ModelPricing carries no wire tags.
 	Models []types.ModelPricing `json:"-"`
-}
-
-// HarnessLimits are how long the host waits, in milliseconds: on a shell command in the
-// foreground, ForegroundDefaultMs for one that names no timeout and ForegroundMaxMs at most,
-// past which the host moves the command to the background; and on one hook, HookTimeoutMs,
-// past which it stops waiting for a verdict. Zero when the harness declares none.
-// ForegroundDefaultMs is the harness_limits contract's own key and is not read here: the
-// wiring passes the same number to magus shell as --foreground-default-ms.
-type HarnessLimits struct {
-	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
-	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
-	HookTimeoutMs       int64 `json:"hook_timeout_ms,omitempty"`
 }
 
 // ShortestForegroundMax is the shortest foreground maximum among harnesses, the longest a
@@ -119,27 +115,6 @@ type HarnessDisplay struct {
 	Name  string `json:"name"`
 	Color string `json:"color,omitempty"`
 	Icon  string `json:"icon,omitempty"`
-}
-
-// HarnessConfig identifies the workspace-local JSON document a descriptor's
-// fragments merge into. Path must be relative to the workspace when set. Empty Path
-// is skills-only: there is nothing to merge, and verify does not claim guard
-// coverage from a missing config.
-type HarnessConfig struct {
-	Path string `json:"path"`
-}
-
-// HarnessSkills lists workspace-relative locations this collaborator reads.
-type HarnessSkills struct {
-	Paths []string `json:"paths"`
-	Form  Form     `json:"form"`
-}
-
-// HarnessEntries declares exact host-config fragments to merge. Each entry is
-// opaque host JSON: Magus does not rewrite a command field.
-type HarnessEntries struct {
-	Path    []string         `json:"path"`
-	Entries []map[string]any `json:"entries"`
 }
 
 // HarnessVerification makes coverage gaps explicit. A missing or invalid
@@ -172,6 +147,10 @@ type HarnessVerification struct {
 	// descriptor's settings is installed for this person, zero when the descriptor enables
 	// none or the workspace has not turned it on. Uncovered names the install command.
 	Plugin HarnessCheck `json:"plugin,omitzero"`
+	// Hooks is whether every hook the spell lists appears in its managed entries, zero when
+	// it lists none. Skipped for a harness that declares no config path, which has no
+	// entries to hold the hooks to.
+	Hooks HarnessCheck `json:"hooks,omitzero"`
 }
 
 // HarnessCheck is one verdict beside the harness config's own. A zero Status means the
@@ -181,9 +160,9 @@ type HarnessCheck struct {
 	Reason string        `json:"reason,omitempty"`
 }
 
-// Failing reports a check that ran and did not verify.
+// Failing reports a check that ran and did not verify. A skipped check did not run.
 func (c HarnessCheck) Failing() bool {
-	return c.Status != "" && c.Status != HarnessVerified
+	return c.Status != "" && c.Status != HarnessVerified && c.Status != harnessSkipped
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -236,7 +215,7 @@ func wiredHarnessesFromContext(ctx context.Context) (ids []string, ok bool) {
 // LoadHarness resolves one validated descriptor, always from a harness spell:
 // there is no other source. When the context carries ContextWithWiredHarnesses,
 // a harness spell answers only if that id is wired; otherwise any registered
-// harness spell that exports harness_config answers (tests and callers that
+// harness spell that exports mgs_getHarnessConfig answers (tests and callers that
 // have not inspected the magusfile). A miss is an error either way.
 func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescriptor, source string, err error) {
 	if err = ctx.Err(); err != nil {
@@ -294,7 +273,7 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("config.path must be a workspace-relative path")
 		}
 		if strings.EqualFold(filepath.Base(d.Config.Path), "mcp.json") {
-			return fmt.Errorf("config.path %q looks like host MCP client config, Magus does not write MCP registration, use harness_mcp setup guidance instead", d.Config.Path)
+			return fmt.Errorf("config.path %q looks like host MCP client config, Magus does not write MCP registration, use mgs_getMcp setup guidance instead", d.Config.Path)
 		}
 	} else if len(d.ManagedEntries) > 0 {
 		return fmt.Errorf("config.path is required when managed_entries is set")
@@ -311,6 +290,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	for i, group := range d.ManagedEntries {
 		if err := validateHarnessEntries(group); err != nil {
 			return fmt.Errorf("managed_entries[%d]: %w", i, err)
+		}
+	}
+	for i, h := range d.Hooks {
+		if h.Event == "" || h.Script == "" {
+			return fmt.Errorf("hooks[%d]: a hook names its event and its script", i)
 		}
 	}
 	if err := validateHarnessMCP(d.MCP); err != nil {
@@ -339,7 +323,7 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	return nil
 }
 
-func validateHarnessEntries(group HarnessEntries) error {
+func validateHarnessEntries(group types.ManagedEntries) error {
 	if len(group.Path) == 0 {
 		return fmt.Errorf("path is required")
 	}
@@ -472,7 +456,7 @@ func planHarnessConfig(root string, d HarnessDescriptor) (types.HarnessFile, err
 		return file, fmt.Errorf("agent: read harness config %s: %w", path, err)
 	}
 	fragment := map[string]any{}
-	fillConfigDefaults(config, d.ConfigDefaults, fragment, nil, &file.Changes)
+	fillConfigDefaults(config, d.Config.Defaults, fragment, nil, &file.Changes)
 	for _, group := range d.ManagedEntries {
 		entries, changes, err := mergeManagedGroup(config, group)
 		if err != nil {
@@ -603,23 +587,24 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	result, err := verifyHarnessConfig(ctx, root, d, source)
 	if err == nil {
 		merge := "; merge what `magus describe harness " + d.ID + "` prints"
-		result.Prompt = verifyEach(root, d.Prompts, planHarnessPrompt, func(p HarnessPrompt) string {
+		result.Prompt = verifyEach(root, d.Prompts, planHarnessPrompt, func(p types.Prompt) string {
 			return "missing " + promptLocation(p) + ", so the host never asks the person before the call" + merge
 		})
-		result.Agent = verifyEach(root, d.Agents, func(root string, a HarnessAgentFile) (types.HarnessFile, error) {
+		result.Agent = verifyEach(root, d.Agents, func(root string, a types.AgentFile) (types.HarnessFile, error) {
 			return planWholeFile(root, a.Path, a.Content)
-		}, func(a HarnessAgentFile) string {
+		}, func(a types.AgentFile) string {
 			return a.Path + " is missing or differs from what the spell renders" + merge
 		})
-		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s HarnessSetting) string {
+		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s types.Setting) string {
 			return "missing " + settingLocation(s) + merge
 		})
-		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f HarnessAgentFile) (types.HarnessFile, error) {
+		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f types.AgentFile) (types.HarnessFile, error) {
 			return planWholeFile(root, f.Path, f.Content)
-		}, func(f HarnessAgentFile) string {
+		}, func(f types.AgentFile) string {
 			return f.Path + " is missing or differs from the tool rows the spell declares, so the guard misreads its tools; run `magus agent harness install`"
 		})
 		verifyHarnessPlugins(root, d, &result)
+		result.Hooks = verifyHarnessHooks(d)
 	}
 	return result, err
 }
@@ -669,7 +654,53 @@ func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerif
 	}
 }
 
-func enabledPluginID(s HarnessSetting) (string, bool) {
+// verifyHarnessHooks reports whether every hook d lists runs from one of its managed
+// entries: an entry under the hook's event whose matcher is the hook's and whose command
+// runs the hook's glue script with its flags. A hook the entries lack is drift between the
+// spell's two declarations, which the person's merge cannot repair.
+func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
+	if len(d.Hooks) == 0 {
+		return HarnessCheck{}
+	}
+	if d.Config.Path == "" {
+		return HarnessCheck{Status: harnessSkipped, Reason: "skipped: " + d.ID + " declares no config path"}
+	}
+	for _, h := range d.Hooks {
+		if !entriesRunHook(d.ManagedEntries, h) {
+			matcher := h.Matcher
+			if matcher == "" {
+				matcher = "no matcher"
+			}
+			return HarnessCheck{Status: HarnessInvalid, Reason: fmt.Sprintf(
+				"the spell lists a %s hook (%s) running %s.buzz that none of its managed entries runs; render the entries from mgs_listHooks", h.Event, matcher, h.Script)}
+		}
+	}
+	return HarnessCheck{Status: HarnessVerified}
+}
+
+func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
+	invocation := "/" + h.Script + ".buzz"
+	if len(h.Flags) > 0 {
+		invocation += " -- " + strings.Join(h.Flags, " ")
+	}
+	for _, group := range groups {
+		if len(group.Path) == 0 || group.Path[len(group.Path)-1] != h.Event {
+			continue
+		}
+		for _, entry := range group.Entries {
+			matcher, commands := EntryCommands(entry)
+			if matcher != h.Matcher {
+				continue
+			}
+			if slices.ContainsFunc(commands, func(c string) bool { return strings.HasSuffix(c, invocation) }) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func enabledPluginID(s types.Setting) (string, bool) {
 	if len(s.Key) != 2 || s.Key[0] != "enabledPlugins" || s.Value != true {
 		return "", false
 	}
@@ -679,7 +710,7 @@ func enabledPluginID(s HarnessSetting) (string, bool) {
 // pluginMissingReason names the one-time install line. The marketplace repo comes from the
 // extraKnownMarketplaces setting the descriptor keeps for the plugin's marketplace, and
 // falls back to the marketplace name when it keeps none.
-func pluginMissingReason(d HarnessDescriptor, enabled HarnessSetting, id string) string {
+func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) string {
 	name, marketplace, _ := strings.Cut(id, "@")
 	source := marketplace
 	for _, s := range d.Settings {
@@ -832,13 +863,13 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 	return result, nil
 }
 
-func LoadHarnessSkills(ctx context.Context, root, id string) (HarnessSkills, error) {
+func LoadHarnessSkills(ctx context.Context, root, id string) (types.HarnessSkills, error) {
 	if err := ctx.Err(); err != nil {
-		return HarnessSkills{}, err
+		return types.HarnessSkills{}, err
 	}
 	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
-		return HarnessSkills{}, err
+		return types.HarnessSkills{}, err
 	}
 	return d.Skills, nil
 }
@@ -874,7 +905,7 @@ func pathEntries(config map[string]any, path []string) ([]any, error) {
 // entries plus the person's own, and what that changes. The person's entries keep their
 // positions, an entry a descriptor wrote that no declared entry takes the place of is
 // retired, and declared entries nothing matched are appended. config is not modified.
-func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []types.HarnessChange, error) {
+func mergeManagedGroup(config map[string]any, group types.ManagedEntries) ([]any, []types.HarnessChange, error) {
 	existing, err := pathEntries(config, group.Path)
 	if err != nil {
 		return nil, nil, err
@@ -1018,7 +1049,7 @@ func carriesOwnedMarker(command string) bool {
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
 // `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
-	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz"} {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "magus-buzz-check.buzz"} {
 		if strings.Contains(command, template) {
 			return true
 		}
@@ -1166,7 +1197,7 @@ func decodeHarnessJSON(body []byte, dst any) error {
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed
 // provider list into the binary. It returns IDs in deterministic order.
 //
-// wired are magusfile-selected harness spell names (Magus.Harnesses()) and are
+// wired are magusfile-selected harness spell names (magus\harness.provider) and are
 // the only source of an ID: there is no compat JSON directory left to union
 // them against, so a caller that wants a spell to appear must pass its id. A
 // workspace may wire several hosts; bouncing between LLM providers is the

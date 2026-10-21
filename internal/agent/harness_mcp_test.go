@@ -9,18 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testMCPURL = "http://127.0.0.1:7391/mcp"
+
+func stdioServer(hint string) *types.McpServer {
+	return &types.McpServer{Transport: types.McpStdio, Command: []string{"./magus", "mcp"}, Hint: hint}
+}
+
 func TestHarnessMCPHintRendersGuidanceOnly(t *testing.T) {
 	hint, err := harnessMCPHint(HarnessDescriptor{
 		ID: "cursor",
-		MCP: &HarnessMCP{
-			TokenRef: DefaultHarnessMCPTokenRef,
-			URL:      DefaultHarnessMCPURL,
-			Hint:     "Wire Magus MCP in Cursor Settings -> Tools & MCP at __URL__; export __TOKEN_REF__ first. Magus does not write mcp.json.",
-			Docs:     "docs/guides/integrations/mcp.md",
+		MCP: &types.McpServer{
+			Transport: types.McpHTTP,
+			TokenRef:  DefaultHarnessMCPTokenRef,
+			URL:       testMCPURL,
+			Hint:      "Wire Magus MCP in Cursor Settings -> Tools & MCP at __URL__; export __TOKEN_REF__ first. Magus does not write mcp.json.",
+			Docs:      "docs/guides/integrations/mcp.md",
 		},
 	})
 	require.NoError(t, err)
-	assert.Contains(t, hint, DefaultHarnessMCPURL)
+	assert.Contains(t, hint, testMCPURL)
 	assert.Contains(t, hint, DefaultHarnessMCPTokenRef)
 	assert.Contains(t, hint, "docs/guides/integrations/mcp.md")
 	assert.NotContains(t, hint, "__TOKEN_REF__")
@@ -29,26 +36,28 @@ func TestHarnessMCPHintRendersGuidanceOnly(t *testing.T) {
 func TestHarnessMCPHintRegisterSketch(t *testing.T) {
 	hint, err := harnessMCPHint(HarnessDescriptor{
 		ID: "claude-code",
-		MCP: &HarnessMCP{
-			TokenRef: DefaultHarnessMCPTokenRef,
-			URL:      DefaultHarnessMCPURL,
-			Hint:     "Resolve __TOKEN_REF__, then run the host CLI.",
-			Register: []string{"claude", "mcp", "add", "--transport", "http", "magus", "__URL__"},
+		MCP: &types.McpServer{
+			Transport: types.McpHTTP,
+			URL:       testMCPURL,
+			Hint:      "Resolve __TOKEN_REF__, then run the host CLI.",
+			Register:  []string{"claude", "mcp", "add", "--transport", "http", "magus", "__URL__"},
 		},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, hint, "claude mcp add")
-	assert.Contains(t, hint, DefaultHarnessMCPURL)
+	assert.Contains(t, hint, testMCPURL)
 	assert.Contains(t, hint, "command sketch (not executed)")
 }
 
-func TestHarnessMCPPlanDefaultsToStdioInTheCheckout(t *testing.T) {
+func TestHarnessMCPPlanRendersTheStdioCommandTheSpellNames(t *testing.T) {
 	registerHarnessSpell(t, "stdio-host", `{
   "schema_version": 2,
   "id": "stdio-host",
   "display": {"name": "Stdio Host"},
   "skills": {"paths": [".agents/skills"], "form": "short"},
   "mcp": {
+    "transport": "stdio",
+    "command": ["./magus", "mcp"],
     "hint": "register __COMMAND__ with project scope",
     "register": ["host", "mcp", "add", "magus", "--", "./magus", "mcp"],
     "docs": "docs/guides/integrations/mcp.md"
@@ -66,57 +75,68 @@ func TestHarnessMCPPlanDefaultsToStdioInTheCheckout(t *testing.T) {
 	}, plan)
 }
 
-func TestHarnessMCPTransportIsHTTPOnlyWhenTheSpellNamesAURL(t *testing.T) {
-	assert.Equal(t, HarnessMCPStdio, (*HarnessMCP)(nil).Transport())
-	assert.Equal(t, HarnessMCPStdio, (&HarnessMCP{Hint: "see docs"}).Transport())
-	assert.Equal(t, HarnessMCPHTTP, (&HarnessMCP{URL: DefaultHarnessMCPURL}).Transport())
-
-	hint, err := harnessMCPHint(HarnessDescriptor{ID: "remote", MCP: &HarnessMCP{URL: DefaultHarnessMCPURL, Hint: "see docs"}})
+func TestHarnessMCPHintLeadsWithTheDeclaredTransport(t *testing.T) {
+	hint, err := harnessMCPHint(HarnessDescriptor{ID: "remote", MCP: &types.McpServer{Transport: types.McpHTTP, URL: testMCPURL, Hint: "see docs"}})
 	require.NoError(t, err)
-	assert.Equal(t, "transport: http, "+DefaultHarnessMCPURL+"; one shared server answers from the checkout and build that started it\nsee docs", hint)
+	assert.Equal(t, "transport: http, "+testMCPURL+"; one shared server answers from the checkout and build that started it\nsee docs", hint)
+
+	hint, err = harnessMCPHint(HarnessDescriptor{ID: "local", MCP: stdioServer("see docs")})
+	require.NoError(t, err)
+	assert.Equal(t, "transport: stdio, ./magus mcp started per session in this checkout, so it serves this tree at this build\nsee docs", hint)
+
+	hint, err = harnessMCPHint(HarnessDescriptor{ID: "none"})
+	require.NoError(t, err)
+	assert.Empty(t, hint, "a harness that does not export mgs_getMcp declares no guidance")
+}
+
+// No transport is inferred: each one names what the host starts or reaches, and one that
+// names neither is refused rather than read as a default.
+func TestValidateHarnessMCPHoldsEachTransportToWhatItReaches(t *testing.T) {
+	for name, tc := range map[string]struct {
+		server types.McpServer
+		want   string
+	}{
+		"stdio without a command": {types.McpServer{Transport: types.McpStdio, Hint: "h"}, "a stdio server names the command"},
+		"http without a url":      {types.McpServer{Transport: types.McpHTTP, Hint: "h"}, "an http server names the url"},
+		"no transport":            {types.McpServer{Command: []string{"./magus", "mcp"}, Hint: "h"}, "transport unset is none of stdio, http"},
+	} {
+		err := validateHarnessMCP(&tc.server)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), tc.want, name)
+	}
 }
 
 func TestValidateHarnessMCPRejectsEmbeddedToken(t *testing.T) {
-	err := validateHarnessMCP(&HarnessMCP{
-		TokenRef: DefaultHarnessMCPTokenRef,
-		Hint:     "Authorization: Bearer mgs_deadbeef",
-	})
+	m := stdioServer("Authorization: Bearer mgs_deadbeef")
+	m.TokenRef = DefaultHarnessMCPTokenRef
+	err := validateHarnessMCP(m)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolved bearer token")
 }
 
 func TestValidateHarnessMCPRejectsTokenRefThatLooksLikeSecret(t *testing.T) {
-	err := validateHarnessMCP(&HarnessMCP{
-		TokenRef: "mgs_deadbeef",
-		Hint:     "export __TOKEN_REF__",
-	})
+	m := stdioServer("export __TOKEN_REF__")
+	m.TokenRef = "mgs_deadbeef"
+	err := validateHarnessMCP(m)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolved token")
 }
 
 func TestValidateHarnessMCPRejectsBareMgsInHint(t *testing.T) {
-	err := validateHarnessMCP(&HarnessMCP{
-		TokenRef: DefaultHarnessMCPTokenRef,
-		Hint:     "paste mgs_deadbeef into the header",
-	})
-	require.Error(t, err)
+	require.Error(t, validateHarnessMCP(stdioServer("paste mgs_deadbeef into the header")))
 }
 
 func TestValidateHarnessMCPRequiresGuidance(t *testing.T) {
-	err := validateHarnessMCP(&HarnessMCP{TokenRef: DefaultHarnessMCPTokenRef})
+	err := validateHarnessMCP(stdioServer(""))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hint")
 }
 
 func TestVerifyHarnessMCPDoesNotInspectHost(t *testing.T) {
 	result := HarnessVerification{}
-	verifyHarnessMCP(HarnessDescriptor{
-		ID: "cursor",
-		MCP: &HarnessMCP{
-			Hint: "see docs",
-			Docs: "docs/guides/integrations/mcp.md",
-		},
-	}, &result)
+	m := stdioServer("see docs")
+	m.Docs = "docs/guides/integrations/mcp.md"
+	verifyHarnessMCP(HarnessDescriptor{ID: "cursor", MCP: m}, &result)
 	assert.Equal(t, HarnessVerified, result.MCP.Status)
 	assert.Contains(t, result.MCP.Reason, "user owns")
 }

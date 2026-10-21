@@ -4,6 +4,7 @@ package bindgen
 
 import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -2143,6 +2144,432 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 	return out
 }
 
+func ObjectEmpty(v types.Empty) vm.Value {
+	out := vm.NewMap()
+	return out
+}
+
+func ObjectSecretRef(v types.SecretRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	return out
+}
+
+func ObjectCIGroup(v types.CIGroup) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("collapsed", vm.BoolValue(v.Collapsed))
+	return out
+}
+
+func ObjectCIGroupEnd(v types.CIGroupEnd) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	return out
+}
+
+func ObjectCIAnnotation(v types.CIAnnotation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("level", vm.StrValue(v.Level))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("file", vm.StrValue(v.File))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("endCol", vm.IntValue(int64(v.EndCol)))
+	return out
+}
+
+func ObjectArtifactRequest(v types.ArtifactRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("hash", vm.StrValue(v.Hash))
+	out.MapSet("path", vm.StrValue(v.Path))
+	return out
+}
+
+func ObjectPruneRequest(v types.PruneRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("olderThanSecs", vm.IntValue(int64(v.OlderThanSecs)))
+	out.MapSet("keepLast", vm.IntValue(int64(v.KeepLast)))
+	out.MapSet("dryRun", vm.BoolValue(v.DryRun))
+	return out
+}
+
+func ObjectLifecycleQuery(v types.LifecycleQuery) vm.Value {
+	out := vm.NewMap()
+	itemsKeys := make([]vm.Value, len(v.Keys))
+	for indexKeys := range v.Keys {
+		itemsKeys[indexKeys] = vm.StrValue(v.Keys[indexKeys])
+	}
+	out.MapSet("keys", vm.ListValue(itemsKeys))
+	return out
+}
+
+func ObjectFindReviewRequest(v types.FindReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("remote", vm.StrValue(v.Remote))
+	out.MapSet("wantViewer", vm.BoolValue(v.WantViewer))
+	return out
+}
+
+func ObjectReviewDraft(v types.ReviewDraft) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectPublishReviewRequest(v types.PublishReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("summary", vm.StrValue(v.Summary))
+	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
+	itemsDrafts := make([]vm.Value, len(v.Drafts))
+	for indexDrafts := range v.Drafts {
+		itemsDrafts[indexDrafts] = ObjectReviewDraft(v.Drafts[indexDrafts])
+	}
+	out.MapSet("drafts", vm.ListValue(itemsDrafts))
+	return out
+}
+
+func ObjectReplyReviewRequest(v types.ReplyReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("thread", vm.StrValue(v.Thread))
+	out.MapSet("body", vm.StrValue(v.Body))
+	return out
+}
+
+func ObjectReviewRef(v types.ReviewRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("id", vm.StrValue(v.ID))
+	return out
+}
+
+func ObjectProjectQuery(v types.ProjectQuery) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("root", vm.StrValue(v.Root))
+	return out
+}
+
+func ObjectQueuePinnedChange(v queuetypes.PinnedChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueReproduction(v queuetypes.Reproduction) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("gate", vm.StrValue(v.Gate))
+	out.MapSet("regenerate", vm.StrValue(v.Regenerate))
+	return out
+}
+
+func ObjectQueueDescribeRequest(v queuetypes.DescribeRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("remoteURL", vm.StrValue(v.RemoteURL))
+	out.MapSet("statusContext", vm.StrValue(v.StatusContext))
+	out.MapSet("app", vm.StrValue(v.App))
+	out.MapSet("setupSteps", vm.BoolValue(v.SetupSteps))
+	return out
+}
+
+func ObjectQueueListChangesRequest(v queuetypes.ListChangesRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("remoteURL", vm.StrValue(v.RemoteURL))
+	out.MapSet("only", vm.StrValue(v.Only))
+	return out
+}
+
+func ObjectQueueApprovalRequest(v queuetypes.ApprovalRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueRequiredChecksRequest(v queuetypes.RequiredChecksRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueListGreenRequest(v queuetypes.ListGreenRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("remoteURL", vm.StrValue(v.RemoteURL))
+	out.MapSet("context", vm.StrValue(v.Context))
+	return out
+}
+
+func ObjectQueueStatusRequest(v queuetypes.StatusRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("context", vm.StrValue(v.CommitStatus.Context))
+	out.MapSet("state", vm.StrValue(string(v.CommitStatus.State)))
+	out.MapSet("description", vm.StrValue(v.CommitStatus.Description))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueRetargetRequest(v queuetypes.RetargetRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("to", vm.StrValue(v.To))
+	return out
+}
+
+func ObjectQueueMergeRequest(v queuetypes.MergeRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("commit", vm.StrValue(v.MergeOptions.Commit))
+	out.MapSet("message", vm.StrValue(v.MergeOptions.Message))
+	out.MapSet("app", vm.StrValue(v.MergeOptions.App))
+	itemsThrough := make([]vm.Value, len(v.MergeOptions.Through))
+	for indexThrough := range v.MergeOptions.Through {
+		itemsThrough[indexThrough] = ObjectQueuePinnedChange(v.MergeOptions.Through[indexThrough])
+	}
+	out.MapSet("through", vm.ListValue(itemsThrough))
+	return out
+}
+
+func ObjectQueueKickBackRequest(v queuetypes.KickBackRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("code", vm.StrValue(string(v.Kick.Code)))
+	out.MapSet("report", vm.StrValue(v.Kick.Report))
+	out.MapSet("claim", vm.StrValue(v.Kick.Claim))
+	itemsPaths := make([]vm.Value, len(v.Kick.Paths))
+	for indexPaths := range v.Kick.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Kick.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	itemsWith := make([]vm.Value, len(v.Kick.With))
+	for indexWith := range v.Kick.With {
+		itemsWith[indexWith] = vm.StrValue(v.Kick.With[indexWith])
+	}
+	out.MapSet("with", vm.ListValue(itemsWith))
+	out.MapSet("candidateCommit", vm.StrValue(v.Kick.CandidateCommit))
+	out.MapSet("source", vm.StrValue(v.Kick.Source))
+	optReproduce := vm.Null
+	if v.Kick.Reproduce != nil {
+		optReproduce = ObjectQueueReproduction((*v.Kick.Reproduce))
+	}
+	out.MapSet("reproduce", optReproduce)
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueMarkRequest(v queuetypes.MarkRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("mark", vm.StrValue(string(v.Mark)))
+	return out
+}
+
+func ObjectQueueListArtifactsRequest(v queuetypes.ListArtifactsRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("source", vm.StrValue(v.Source))
+	return out
+}
+
+func ObjectQueueReviewsRequest(v queuetypes.ReviewsRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	return out
+}
+
+func ObjectQueueReview(v queuetypes.Review) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("reviewer", vm.StrValue(v.Reviewer))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectQueueDismissReviewRequest(v queuetypes.DismissReviewRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.Change.ID))
+	out.MapSet("repo", vm.StrValue(v.Change.Repo))
+	out.MapSet("head", vm.StrValue(v.Change.Head))
+	out.MapSet("ref", vm.StrValue(v.Change.Ref))
+	out.MapSet("branch", vm.StrValue(v.Change.Branch))
+	out.MapSet("base", vm.StrValue(v.Change.Base))
+	out.MapSet("title", vm.StrValue(v.Change.Title))
+	out.MapSet("author", vm.StrValue(v.Change.Author))
+	out.MapSet("method", vm.StrValue(string(v.Change.Method)))
+	out.MapSet("parent", vm.StrValue(v.Change.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Change.Fork))
+	itemsAffected := make([]vm.Value, len(v.Change.Affected))
+	for indexAffected := range v.Change.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Change.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.Change.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.Change.StackBase))
+	out.MapSet("below", vm.StrValue(v.Change.Below))
+	out.MapSet("review", ObjectQueueReview(v.Review))
+	out.MapSet("message", vm.StrValue(v.Message))
+	return out
+}
+
 func ObjectCommitAuthor(v types.CommitAuthor) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -3234,6 +3661,16 @@ func ObjectJobWorktree(v types.JobWorktree) vm.Value {
 	return out
 }
 
+func ObjectShippedAgent(v types.ShippedAgent) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("instructions", vm.StrValue(v.Instructions))
+	out.MapSet("model", vm.StrValue(v.Model))
+	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))
+	return out
+}
+
 func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -4067,6 +4504,83 @@ func ObjectTrailMark(v types.TrailMark) vm.Value {
 	return out
 }
 
+func ObjectInstall(v spells.Install, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("command", ObjectCommand(v.Command, enums))
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	out.MapSet("relocatable", vm.BoolValue(v.Relocatable))
+	itemsStamps := make([]vm.Value, len(v.Stamps))
+	for indexStamps := range v.Stamps {
+		itemsStamps[indexStamps] = vm.StrValue(v.Stamps[indexStamps])
+	}
+	out.MapSet("stamps", vm.ListValue(itemsStamps))
+	itemsInputs := make([]vm.Value, len(v.Inputs))
+	for indexInputs := range v.Inputs {
+		itemsInputs[indexInputs] = vm.StrValue(v.Inputs[indexInputs])
+	}
+	out.MapSet("inputs", vm.ListValue(itemsInputs))
+	itemsTools := make([]vm.Value, len(v.Tools))
+	for indexTools := range v.Tools {
+		itemsTools[indexTools] = vm.StrValue(v.Tools[indexTools])
+	}
+	out.MapSet("tools", vm.ListValue(itemsTools))
+	return out
+}
+
+func ObjectManifest(v spells.Manifest, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	itemsLockCandidates := make([]vm.Value, len(v.LockCandidates))
+	for indexLockCandidates := range v.LockCandidates {
+		itemsLockCandidates[indexLockCandidates] = vm.StrValue(v.LockCandidates[indexLockCandidates])
+	}
+	out.MapSet("lockCandidates", vm.ListValue(itemsLockCandidates))
+	mappedInstalls := vm.NewMap()
+	for keyInstalls, itemInstalls := range v.Installs {
+		mappedInstalls.MapSet(keyInstalls, ObjectInstall(itemInstalls, enums))
+	}
+	out.MapSet("installs", mappedInstalls)
+	return out
+}
+
+func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("command", ObjectCommand(v.Command, enums))
+	out.MapSet("start", ObjectCommand(v.Start, enums))
+	out.MapSet("readiness", ObjectCommand(v.Readiness, enums))
+	out.MapSet("stop", ObjectCommand(v.Stop, enums))
+	out.MapSet("distinct", vm.StrValue(v.Distinct))
+	out.MapSet("idle", vm.StrValue(v.Idle))
+	return out
+}
+
+func ObjectVersionKey(v spells.VersionKey, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("const", vm.StrValue(v.Const))
+	out.MapSet("upTo", enums.Case("VersionComponent", string(v.UpTo)))
+	return out
+}
+
+func ObjectVersionBounds(v spells.VersionBounds) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("min", vm.StrValue(v.Min))
+	out.MapSet("below", vm.StrValue(v.Below))
+	return out
+}
+
+func ObjectTool(v spells.Tool, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("probe", ObjectCommand(v.Probe, enums))
+	out.MapSet("key", ObjectVersionKey(v.Key, enums))
+	out.MapSet("observe", ObjectCommand(v.Observe, enums))
+	out.MapSet("ready", ObjectCommand(v.Ready, enums))
+	out.MapSet("supported", ObjectVersionBounds(v.Supported))
+	out.MapSet("diagnostics", enums.Case("DiagnosticFormat", string(v.Diagnostics)))
+	out.MapSet("lifecycle", vm.StrValue(v.Lifecycle))
+	return out
+}
+
 func ObjectLanguage(v spells.Language) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -4080,5 +4594,563 @@ func ObjectLanguage(v spells.Language) vm.Value {
 		optSyntax = ObjectSyntax((*v.Syntax))
 	}
 	out.MapSet("syntax", optSyntax)
+	return out
+}
+
+func ObjectAck(v types.Ack) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ok", vm.BoolValue(v.OK))
+	return out
+}
+
+func ObjectGreenRun(v types.GreenRun) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("run", vm.StrValue(v.Run))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	return out
+}
+
+func ObjectStrings(v types.Strings) vm.Value {
+	out := vm.NewMap()
+	itemsItems := make([]vm.Value, len(v.Items))
+	for indexItems := range v.Items {
+		itemsItems[indexItems] = vm.StrValue(v.Items[indexItems])
+	}
+	out.MapSet("items", vm.ListValue(itemsItems))
+	return out
+}
+
+func ObjectPruneResult(v types.PruneResult) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("done", vm.BoolValue(v.Done))
+	return out
+}
+
+func ObjectSecret(v spells.Secret) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	return out
+}
+
+func ObjectReleaseCycle(v spells.ReleaseCycle) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("cycle", vm.StrValue(v.Cycle))
+	out.MapSet("released", vm.StrValue(v.Released))
+	out.MapSet("eol", vm.StrValue(v.EOL))
+	out.MapSet("lts", vm.BoolValue(v.LTS))
+	out.MapSet("latest", vm.StrValue(v.Latest))
+	return out
+}
+
+func ObjectLifecycle(v spells.Lifecycle) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", vm.StrValue(v.Key))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("asOf", vm.StrValue(v.AsOf))
+	itemsCycles := make([]vm.Value, len(v.Cycles))
+	for indexCycles := range v.Cycles {
+		itemsCycles[indexCycles] = ObjectReleaseCycle(v.Cycles[indexCycles])
+	}
+	out.MapSet("cycles", vm.ListValue(itemsCycles))
+	return out
+}
+
+func ObjectReviewTarget(v types.ReviewTarget) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("state", vm.StrValue(v.State))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("viewer", vm.StrValue(v.Viewer))
+	return out
+}
+
+func ObjectReviewComment(v types.ReviewComment) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("hunk", vm.IntValue(int64(v.Hunk)))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("body", vm.StrValue(v.Body))
+	out.MapSet("root", vm.StrValue(v.Root))
+	out.MapSet("outdated", vm.BoolValue(v.Outdated))
+	out.MapSet("diffHunk", vm.StrValue(v.DiffHunk))
+	out.MapSet("new", vm.BoolValue(v.New))
+	return out
+}
+
+func ObjectProvidedProject(v spells.ProvidedProject) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("name", vm.StrValue(v.Name))
+	itemsSpells := make([]vm.Value, len(v.Spells))
+	for indexSpells := range v.Spells {
+		itemsSpells[indexSpells] = vm.StrValue(v.Spells[indexSpells])
+	}
+	out.MapSet("spells", vm.ListValue(itemsSpells))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("depends_on", vm.ListValue(itemsDependsOn))
+	itemsSources := make([]vm.Value, len(v.Sources))
+	for indexSources := range v.Sources {
+		itemsSources[indexSources] = vm.StrValue(v.Sources[indexSources])
+	}
+	out.MapSet("sources", vm.ListValue(itemsSources))
+	itemsOutputs := make([]vm.Value, len(v.Outputs))
+	for indexOutputs := range v.Outputs {
+		itemsOutputs[indexOutputs] = vm.StrValue(v.Outputs[indexOutputs])
+	}
+	out.MapSet("outputs", vm.ListValue(itemsOutputs))
+	return out
+}
+
+func ObjectQueueIntegration(v queuetypes.Integration) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("name", vm.StrValue(v.Name))
+	return out
+}
+
+func ObjectQueueRequiredCheck(v queuetypes.RequiredCheck) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("context", vm.StrValue(v.Context))
+	out.MapSet("integration", vm.StrValue(v.Integration))
+	itemsEvents := make([]vm.Value, len(v.Events))
+	for indexEvents := range v.Events {
+		itemsEvents[indexEvents] = vm.StrValue(v.Events[indexEvents])
+	}
+	out.MapSet("events", vm.ListValue(itemsEvents))
+	return out
+}
+
+func ObjectQueueSetting(v queuetypes.Setting) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("value", vm.StrValue(v.Value))
+	out.MapSet("want", vm.StrValue(v.Want))
+	return out
+}
+
+func ObjectQueueApp(v queuetypes.App) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("slug", vm.StrValue(v.Slug))
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("clientID", vm.StrValue(v.ClientID))
+	out.MapSet("registrationURL", vm.StrValue(v.RegistrationURL))
+	out.MapSet("installURL", vm.StrValue(v.InstallURL))
+	out.MapSet("environment", vm.StrValue(v.Environment))
+	out.MapSet("variable", vm.StrValue(v.Variable))
+	out.MapSet("secret", vm.StrValue(v.Secret))
+	return out
+}
+
+func ObjectQueueSetupStep(v queuetypes.SetupStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("command", vm.StrValue(v.Command))
+	out.MapSet("url", vm.StrValue(v.URL))
+	return out
+}
+
+func ObjectQueueSetup(v queuetypes.Setup) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("statusContext", vm.StrValue(v.StatusContext))
+	out.MapSet("credential", ObjectQueueIntegration(v.Credential))
+	itemsRequiredChecks := make([]vm.Value, len(v.RequiredChecks))
+	for indexRequiredChecks := range v.RequiredChecks {
+		itemsRequiredChecks[indexRequiredChecks] = ObjectQueueRequiredCheck(v.RequiredChecks[indexRequiredChecks])
+	}
+	out.MapSet("requiredChecks", vm.ListValue(itemsRequiredChecks))
+	itemsSettings := make([]vm.Value, len(v.Settings))
+	for indexSettings := range v.Settings {
+		itemsSettings[indexSettings] = ObjectQueueSetting(v.Settings[indexSettings])
+	}
+	out.MapSet("settings", vm.ListValue(itemsSettings))
+	optApp := vm.Null
+	if v.App != nil {
+		optApp = ObjectQueueApp((*v.App))
+	}
+	out.MapSet("app", optApp)
+	itemsSteps := make([]vm.Value, len(v.Steps))
+	for indexSteps := range v.Steps {
+		itemsSteps[indexSteps] = ObjectQueueSetupStep(v.Steps[indexSteps])
+	}
+	out.MapSet("steps", vm.ListValue(itemsSteps))
+	return out
+}
+
+func ObjectQueueSetupRefusedError(v queuetypes.SetupRefusedError) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("url", vm.StrValue(v.URL))
+	out.MapSet("app", vm.StrValue(v.App))
+	return out
+}
+
+func ObjectQueueCapabilities(v queuetypes.Capabilities) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("stackMerge", vm.StrValue(string(v.StackMerge)))
+	out.MapSet("linearStacks", vm.BoolValue(v.LinearStacks))
+	itemsMethods := make([]vm.Value, len(v.Methods))
+	for indexMethods := range v.Methods {
+		itemsMethods[indexMethods] = vm.StrValue(string(v.Methods[indexMethods]))
+	}
+	out.MapSet("methods", vm.ListValue(itemsMethods))
+	out.MapSet("requiredApprovals", vm.IntValue(int64(v.RequiredApprovals)))
+	out.MapSet("queueLabel", vm.StrValue(v.QueueLabel))
+	out.MapSet("committer", ObjectPerson(v.Committer))
+	optSetup := vm.Null
+	if v.Setup != nil {
+		optSetup = ObjectQueueSetup((*v.Setup))
+	}
+	out.MapSet("setup", optSetup)
+	return out
+}
+
+func ObjectQueueDescribeResult(v queuetypes.DescribeResult) vm.Value {
+	out := vm.NewMap()
+	optCapabilities := vm.Null
+	if v.Capabilities != nil {
+		optCapabilities = ObjectQueueCapabilities((*v.Capabilities))
+	}
+	out.MapSet("capabilities", optCapabilities)
+	optRefused := vm.Null
+	if v.Refused != nil {
+		optRefused = ObjectQueueSetupRefusedError((*v.Refused))
+	}
+	out.MapSet("refused", optRefused)
+	return out
+}
+
+func ObjectQueueChange(v queuetypes.Change) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("head", vm.StrValue(v.Head))
+	out.MapSet("ref", vm.StrValue(v.Ref))
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("method", vm.StrValue(string(v.Method)))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("fork", vm.BoolValue(v.Fork))
+	itemsAffected := make([]vm.Value, len(v.Affected))
+	for indexAffected := range v.Affected {
+		itemsAffected[indexAffected] = vm.StrValue(v.Affected[indexAffected])
+	}
+	out.MapSet("affected", vm.ListValue(itemsAffected))
+	out.MapSet("unboundedBy", vm.StrValue(v.UnboundedBy))
+	out.MapSet("stackBase", vm.StrValue(v.StackBase))
+	out.MapSet("below", vm.StrValue(v.Below))
+	return out
+}
+
+func ObjectQueueMergedChange(v queuetypes.MergedChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("head", vm.StrValue(v.Head))
+	out.MapSet("commit", vm.StrValue(v.Commit))
+	out.MapSet("method", vm.StrValue(string(v.Method)))
+	return out
+}
+
+func ObjectQueueUnqueuedChange(v queuetypes.UnqueuedChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("head", vm.StrValue(v.Head))
+	out.MapSet("title", vm.StrValue(v.Title))
+	out.MapSet("author", vm.StrValue(v.Author))
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("mark", vm.StrValue(string(v.Mark)))
+	return out
+}
+
+func ObjectQueueClosedChange(v queuetypes.ClosedChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	return out
+}
+
+func ObjectQueueChanges(v queuetypes.Changes) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("schema", vm.StrValue(v.Schema))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("remoteURL", vm.StrValue(v.RemoteURL))
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectQueueChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	itemsMerged := make([]vm.Value, len(v.Merged))
+	for indexMerged := range v.Merged {
+		itemsMerged[indexMerged] = ObjectQueueMergedChange(v.Merged[indexMerged])
+	}
+	out.MapSet("merged", vm.ListValue(itemsMerged))
+	itemsUnqueued := make([]vm.Value, len(v.Unqueued))
+	for indexUnqueued := range v.Unqueued {
+		itemsUnqueued[indexUnqueued] = ObjectQueueUnqueuedChange(v.Unqueued[indexUnqueued])
+	}
+	out.MapSet("unqueued", vm.ListValue(itemsUnqueued))
+	itemsClosed := make([]vm.Value, len(v.Closed))
+	for indexClosed := range v.Closed {
+		itemsClosed[indexClosed] = ObjectQueueClosedChange(v.Closed[indexClosed])
+	}
+	out.MapSet("closed", vm.ListValue(itemsClosed))
+	return out
+}
+
+func ObjectQueueApproval(v queuetypes.Approval) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("approved", vm.BoolValue(v.Approved))
+	out.MapSet("head", vm.StrValue(v.Head))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("method", vm.StrValue(string(v.Method)))
+	out.MapSet("queued", vm.BoolValue(v.Queued))
+	out.MapSet("approvedCommit", vm.StrValue(v.ApprovedCommit))
+	itemsBranchSharedWith := make([]vm.Value, len(v.BranchSharedWith))
+	for indexBranchSharedWith := range v.BranchSharedWith {
+		itemsBranchSharedWith[indexBranchSharedWith] = vm.StrValue(v.BranchSharedWith[indexBranchSharedWith])
+	}
+	out.MapSet("branchSharedWith", vm.ListValue(itemsBranchSharedWith))
+	return out
+}
+
+func ObjectQueueCheck(v queuetypes.Check) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	return out
+}
+
+func ObjectQueueGreenChange(v queuetypes.GreenChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("head", vm.StrValue(v.Head))
+	return out
+}
+
+func ObjectQueueMergeAnswer(v queuetypes.MergeAnswer) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("merged", vm.BoolValue(v.Merged))
+	out.MapSet("byProvider", vm.BoolValue(v.ByProvider))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
+func ObjectQueueRunOrigin(v queuetypes.RunOrigin) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StrValue(v.Repo))
+	out.MapSet("headRepo", vm.StrValue(v.HeadRepo))
+	out.MapSet("headBranch", vm.StrValue(v.HeadBranch))
+	out.MapSet("event", vm.StrValue(v.Event))
+	out.MapSet("branchEvent", vm.BoolValue(v.BranchEvent))
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	return out
+}
+
+func ObjectQueueArtifact(v queuetypes.Artifact) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("url", vm.StrValue(v.URL))
+	return out
+}
+
+func ObjectQueueArtifactListing(v queuetypes.ArtifactListing) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("run", ObjectQueueRunOrigin(v.Run))
+	out.MapSet("complete", vm.BoolValue(v.Complete))
+	mappedHeaders := vm.NewMap()
+	for keyHeaders, itemHeaders := range v.Headers {
+		mappedHeaders.MapSet(keyHeaders, vm.StrValue(itemHeaders))
+	}
+	out.MapSet("headers", mappedHeaders)
+	itemsArtifacts := make([]vm.Value, len(v.Artifacts))
+	for indexArtifacts := range v.Artifacts {
+		itemsArtifacts[indexArtifacts] = ObjectQueueArtifact(v.Artifacts[indexArtifacts])
+	}
+	out.MapSet("artifacts", vm.ListValue(itemsArtifacts))
+	return out
+}
+
+func ObjectQueueReviews(v queuetypes.Reviews) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("head", vm.StrValue(v.Head))
+	itemsApproving := make([]vm.Value, len(v.Approving))
+	for indexApproving := range v.Approving {
+		itemsApproving[indexApproving] = ObjectQueueReview(v.Approving[indexApproving])
+	}
+	out.MapSet("approving", vm.ListValue(itemsApproving))
+	return out
+}
+
+func ObjectHarnessConfig(v types.HarnessConfig) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	mappedDefaults := vm.NewMap()
+	for keyDefaults, itemDefaults := range v.Defaults {
+		mappedDefaults.MapSet(keyDefaults, ffi.AnyVal(itemDefaults))
+	}
+	out.MapSet("defaults", mappedDefaults)
+	return out
+}
+
+func ObjectHarnessSkills(v types.HarnessSkills, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	out.MapSet("form", enums.Case("SkillForm", string(v.Form)))
+	return out
+}
+
+func ObjectHookCommand(v types.HookCommand) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("event", vm.StrValue(v.Event))
+	out.MapSet("matcher", vm.StrValue(v.Matcher))
+	out.MapSet("script", vm.StrValue(v.Script))
+	itemsFlags := make([]vm.Value, len(v.Flags))
+	for indexFlags := range v.Flags {
+		itemsFlags[indexFlags] = vm.StrValue(v.Flags[indexFlags])
+	}
+	out.MapSet("flags", vm.ListValue(itemsFlags))
+	out.MapSet("timeoutS", vm.IntValue(int64(v.TimeoutS)))
+	return out
+}
+
+func ObjectManagedEntries(v types.ManagedEntries) vm.Value {
+	out := vm.NewMap()
+	itemsPath := make([]vm.Value, len(v.Path))
+	for indexPath := range v.Path {
+		itemsPath[indexPath] = vm.StrValue(v.Path[indexPath])
+	}
+	out.MapSet("path", vm.ListValue(itemsPath))
+	itemsEntries := make([]vm.Value, len(v.Entries))
+	for indexEntries := range v.Entries {
+		mappedEntriesItem := vm.NewMap()
+		for keyEntriesItem, itemEntriesItem := range v.Entries[indexEntries] {
+			mappedEntriesItem.MapSet(keyEntriesItem, ffi.AnyVal(itemEntriesItem))
+		}
+		itemsEntries[indexEntries] = mappedEntriesItem
+	}
+	out.MapSet("entries", vm.ListValue(itemsEntries))
+	return out
+}
+
+func ObjectMcpServer(v types.McpServer, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("transport", enums.Case("McpTransport", string(v.Transport)))
+	itemsCommand := make([]vm.Value, len(v.Command))
+	for indexCommand := range v.Command {
+		itemsCommand[indexCommand] = vm.StrValue(v.Command[indexCommand])
+	}
+	out.MapSet("command", vm.ListValue(itemsCommand))
+	out.MapSet("url", vm.StrValue(v.URL))
+	out.MapSet("tokenRef", vm.StrValue(v.TokenRef))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	out.MapSet("docs", vm.StrValue(v.Docs))
+	itemsRegister := make([]vm.Value, len(v.Register))
+	for indexRegister := range v.Register {
+		itemsRegister[indexRegister] = vm.StrValue(v.Register[indexRegister])
+	}
+	out.MapSet("register", vm.ListValue(itemsRegister))
+	return out
+}
+
+func ObjectPrice(v types.Price) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("input", vm.FloatValue(float64(v.Input)))
+	out.MapSet("cacheWrite5m", vm.FloatValue(float64(v.CacheWrite5m)))
+	out.MapSet("cacheWrite1h", vm.FloatValue(float64(v.CacheWrite1h)))
+	out.MapSet("cacheRead", vm.FloatValue(float64(v.CacheRead)))
+	out.MapSet("output", vm.FloatValue(float64(v.Output)))
+	return out
+}
+
+func ObjectPriceStep(v types.PriceStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("above", vm.IntValue(int64(v.Above)))
+	out.MapSet("multiplier", vm.FloatValue(float64(v.Multiplier)))
+	return out
+}
+
+func ObjectModelRow(v types.ModelRow) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("tier", vm.StrValue(v.Tier))
+	out.MapSet("alias", vm.StrValue(v.Alias))
+	out.MapSet("window", vm.IntValue(int64(v.Window)))
+	out.MapSet("price", ObjectPrice(v.Price))
+	out.MapSet("step", ObjectPriceStep(v.Step))
+	return out
+}
+
+func ObjectHarnessTool(v types.HarnessTool, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("capability", enums.Case("ToolCapability", string(v.Capability)))
+	return out
+}
+
+func ObjectHarnessTools(v types.HarnessTools, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectHarnessTool(v.Rows[indexRows], enums)
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	return out
+}
+
+func ObjectAgentFile(v types.AgentFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("content", vm.StrValue(v.Content))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	return out
+}
+
+func ObjectPrompt(v types.Prompt) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("content", vm.StrValue(v.Content))
+	itemsKey := make([]vm.Value, len(v.Key))
+	for indexKey := range v.Key {
+		itemsKey[indexKey] = vm.StrValue(v.Key[indexKey])
+	}
+	out.MapSet("key", vm.ListValue(itemsKey))
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	return out
+}
+
+func ObjectSetting(v types.Setting) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	itemsKey := make([]vm.Value, len(v.Key))
+	for indexKey := range v.Key {
+		itemsKey[indexKey] = vm.StrValue(v.Key[indexKey])
+	}
+	out.MapSet("key", vm.ListValue(itemsKey))
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	return out
+}
+
+func ObjectLimits(v types.Limits) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("foregroundDefaultMs", vm.IntValue(int64(v.ForegroundDefaultMs)))
+	out.MapSet("foregroundMaxMs", vm.IntValue(int64(v.ForegroundMaxMs)))
+	out.MapSet("hookTimeoutMs", vm.IntValue(int64(v.HookTimeoutMs)))
 	return out
 }

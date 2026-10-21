@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,77 @@ import (
 
 	"github.com/egladman/magus/internal/queue/types"
 )
+
+// The records a script's ops take and return, generated from the boundary registry, leaf
+// first in queueTypeFiles because a mirror names the mirrors it carries.
+//
+//go:generate go run ../../../cmd/magus-utils types -type Ack -out gen/types/ack.buzz
+//go:generate go run ../../../cmd/magus-utils types -type Person -out gen/types/person.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueIntegration -out gen/types/integration.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueRequiredCheck -out gen/types/requiredcheck.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueSetting -out gen/types/setting.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueApp -out gen/types/app.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueSetupStep -out gen/types/setupstep.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueSetup -out gen/types/setup.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueSetupRefusal -out gen/types/setuprefusal.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueCapabilities -out gen/types/capabilities.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueDescribeResult -out gen/types/describeresult.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueChange -out gen/types/change.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueMergedChange -out gen/types/mergedchange.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueUnqueuedChange -out gen/types/unqueuedchange.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueClosedChange -out gen/types/closedchange.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueChanges -out gen/types/changes.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueApproval -out gen/types/approval.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueCheck -out gen/types/check.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueGreenChange -out gen/types/greenchange.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueMergeAnswer -out gen/types/mergeanswer.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueRunOrigin -out gen/types/runorigin.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueArtifact -out gen/types/artifact.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueArtifactListing -out gen/types/artifactlisting.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueReview -out gen/types/review.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueReviews -out gen/types/reviews.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueuePinnedChange -out gen/types/pinnedchange.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueReproduction -out gen/types/reproduction.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueDescribeRequest -out gen/types/describerequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueListChangesRequest -out gen/types/listchangesrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueApprovalRequest -out gen/types/approvalrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueRequiredChecksRequest -out gen/types/requiredchecksrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueListGreenRequest -out gen/types/listgreenrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueStatusRequest -out gen/types/statusrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueRetargetRequest -out gen/types/retargetrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueMergeRequest -out gen/types/mergerequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueKickBackRequest -out gen/types/kickbackrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueMarkRequest -out gen/types/markrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueListArtifactsRequest -out gen/types/listartifactsrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueReviewsRequest -out gen/types/reviewsrequest.buzz
+//go:generate go run ../../../cmd/magus-utils types -type QueueDismissReviewRequest -out gen/types/dismissreviewrequest.buzz
+//go:embed gen/types/*.buzz
+var queueTypes embed.FS
+
+var queueTypeFiles = []string{
+	"ack", "person", "integration", "requiredcheck", "setting", "app", "setupstep", "setup", "setuprefusal",
+	"capabilities", "describeresult", "change", "mergedchange", "unqueuedchange", "closedchange", "changes", "approval", "check",
+	"greenchange", "mergeanswer", "runorigin", "artifact", "artifactlisting", "review", "reviews", "pinnedchange",
+	"reproduction", "describerequest", "listchangesrequest", "approvalrequest", "requiredchecksrequest",
+	"listgreenrequest", "statusrequest", "retargetrequest", "mergerequest", "kickbackrequest", "markrequest",
+	"listartifactsrequest", "reviewsrequest", "dismissreviewrequest",
+}
+
+// typesModule is the import path of the records' module, source only like magus/spell.
+const typesModule = "mergequeue/types"
+
+// typesSource is every record's mirror in queueTypeFiles order.
+func typesSource() string {
+	parts := make([]string, len(queueTypeFiles))
+	for i, name := range queueTypeFiles {
+		src, err := queueTypes.ReadFile("gen/types/" + name + ".buzz")
+		if err != nil {
+			panic(fmt.Sprintf("queue provider: the generated mirror %s.buzz is not embedded: %v", name, err))
+		}
+		parts[i] = string(src)
+	}
+	return strings.Join(parts, "\n")
+}
 
 // hostDecls types the host module for the checker; the natives below are what run.
 const hostDecls = `export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}) > {str: any} !> any;
@@ -36,6 +108,7 @@ var hostModule = buzz.Module{
 		m.MapSet("codeBlock", vm.DirectValue("mergequeue.codeBlock", literal("codeBlock", types.CodeBlock)))
 		s.SetNativeModule("mergequeue", m)
 		s.SetModuleDecls("mergequeue", hostDecls)
+		s.SetModuleDecls(typesModule, typesSource())
 		return nil
 	},
 }

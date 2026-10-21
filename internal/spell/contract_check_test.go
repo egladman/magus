@@ -13,12 +13,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type contractCase struct {
+	name string
+	src  string
+	want string // "" when the source conforms
+}
+
+func runContractCases(t *testing.T, cases []contractCase) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkContract(tc.src)
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, types.SpellContractViolated)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
 func TestCheckContract(t *testing.T) {
-	cases := []struct {
-		name string
-		src  string
-		want string // "" when the source conforms
-	}{
+	runContractCases(t, []contractCase{
 		{
 			name: "every annotation matches",
 			src: `export fun mgs_getName() > str { return "x"; }
@@ -58,31 +75,60 @@ export fun mgs_listTargets() > any { return {}; }`,
 			src:  `export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`,
 			want: "line 1: mgs_getVersionProbe is not a spell contract function",
 		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := checkContract(tc.src)
-			if tc.want == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.ErrorIs(t, err, types.SpellContractViolated)
-			assert.Contains(t, err.Error(), tc.want)
-		})
-	}
-
-	t.Run("every violation is reported at once", func(t *testing.T) {
-		err := checkContract(`export fun mgs_getTools() > any { return {}; }
-export fun mgs_listClaimedGlobs() > [Path] { return []; }`)
-		require.ErrorIs(t, err, types.SpellContractViolated)
-		assert.Contains(t, err.Error(), "line 1: mgs_getTools declares > any")
-		assert.Contains(t, err.Error(), "line 2: mgs_listClaimedGlobs is not a spell contract function")
 	})
 }
 
-// The check is off unless a caller passes WithContractCheck: the same source resolves
-// without it and is refused with it.
-func TestResolveRunsTheContractCheckOnlyWhenAsked(t *testing.T) {
+func TestCheckContractProviderOps(t *testing.T) {
+	runContractCases(t, []contractCase{
+		{
+			name: "a provider op takes its Target and its request",
+			src: `export fun mgs_getName() > str { return "x"; }
+export fun resolve_secret(t: Target, ask: SecretRef) > Secret { return Secret{value = ask.ref}; }
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] { return []; }`,
+		},
+		{
+			name: "a provider op still on the input callback",
+			src:  `export fun get_artifact(target: Target, cb: fun(any)) > bool { return false; }`,
+			want: "line 1: get_artifact takes (Target, fun(any)); the contract wants (target: Target, req: ArtifactRequest)",
+		},
+		{
+			name: "a provider op returning the bare value",
+			src:  `export fun resolve_secret(target: Target, req: SecretRef) > str { return ""; }`,
+			want: "line 1: resolve_secret declares > str; the contract wants > Secret",
+		},
+	})
+}
+
+func TestCheckContractHarnessFunctions(t *testing.T) {
+	runContractCases(t, []contractCase{
+		{
+			name: "a harness function takes the arguments the harness contract names",
+			src: `export fun mgs_getName() > str { return "x"; }
+export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = ".x/hooks.json"}; }
+export fun mgs_renderAgents(shipped: [ShippedAgent]) > [AgentFile] { return []; }`,
+		},
+		{
+			name: "a harness function with the wrong argument",
+			src:  `export fun mgs_renderPrompts(humanOnly: [str]) > [Prompt] { return []; }`,
+			want: "line 1: mgs_renderPrompts takes ([str]); the contract wants (humanOnly: {str: str})",
+		},
+		{
+			name: "a harness function still on the input callback",
+			src:  `export fun mgs_getMcp(target: Target, cb: fun(any)) > McpServer { return McpServer{}; }`,
+			want: "line 1: mgs_getMcp takes parameters; a contract function takes none",
+		},
+	})
+}
+
+func TestCheckContractReportsEveryViolationAtOnce(t *testing.T) {
+	err := checkContract(`export fun mgs_getTools() > any { return {}; }
+export fun mgs_listClaimedGlobs() > [Path] { return []; }`)
+	require.ErrorIs(t, err, types.SpellContractViolated)
+	assert.Contains(t, err.Error(), "line 1: mgs_getTools declares > any")
+	assert.Contains(t, err.Error(), "line 2: mgs_listClaimedGlobs is not a spell contract function")
+}
+
+func TestResolveRefusesASpellThatBreaksTheContract(t *testing.T) {
 	const src = `export fun mgs_getName() > str { return "probe"; }
 export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`
 	ctx := context.Background()
@@ -91,22 +137,9 @@ export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }`
 	sess.SetModuleDecls(SpellModulePath, SpellModuleSource)
 	require.NoError(t, sess.Exec(ctx, src))
 
-	spec, err := Resolve(ctx, sess)
-	require.NoError(t, err)
-	assert.Equal(t, "probe", spec.Name)
-
-	_, err = Resolve(ctx, sess, WithContractCheck(src))
+	_, err := Resolve(ctx, sess, src)
 	require.ErrorIs(t, err, types.SpellContractViolated)
 	assert.Contains(t, err.Error(), "mgs_getVersionProbe is not a spell contract function")
-}
-
-// shippedContractViolations are the shipped spells that do not conform yet, each with
-// why. An entry here fails once its spell conforms, so the list only shrinks; it is empty
-// when WithContractCheck can be passed on every load.
-var shippedContractViolations = map[string]string{
-	"typescript":      "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
-	"podman":          "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
-	"experimental/nx": "mgs_listTargets returns > any: its map mixes commands and services until mgs_listServices splits them",
 }
 
 func TestShippedSpellsMatchTheContract(t *testing.T) {
@@ -119,13 +152,7 @@ func TestShippedSpellsMatchTheContract(t *testing.T) {
 		src, err := fs.ReadFile(spells.Shipped(), p)
 		require.NoError(t, err)
 		checked++
-		cerr := checkContract(string(src))
-		if why, known := shippedContractViolations[dir]; known {
-			assert.ErrorIs(t, cerr, types.SpellContractViolated,
-				"spells/%s conforms now; drop it from shippedContractViolations (%s)", dir, why)
-			return nil
-		}
-		require.NoError(t, cerr, "spells/%s", dir)
+		require.NoError(t, checkContract(string(src)), "spells/%s", dir)
 		return nil
 	})
 	require.NoError(t, err)

@@ -84,7 +84,7 @@ func probeSpell(ctx context.Context, sess *buzz.Session) []spellOp {
 // decodeSpellOp classifies a handler's returned object into a spellOp. A Service is
 // recognized by its `command` or `start` field, and its op runs `start` when that is
 // set, else `command`; a Command op decodes bin/args/charms directly. Both route
-// through the shared spell.DecodeCommandValue so the sandbox and the engine read a
+// through the shared spell.CheckCommand so the sandbox and the engine read a
 // command identically; a decode error is carried on the op (decodeErr) so `run` can
 // surface it. Mirrors the service-vs-command decision in internal/spell.traceOp /
 // decode.
@@ -95,17 +95,17 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 		op := spellOp{name: name, kind: spells.OpKindService}
 		if hasStart {
 			if sv, ok := startV.MapView(); ok {
-				op.cmd, op.decodeErr = spell.DecodeCommandValue(sv)
+				op.cmd, op.decodeErr = spell.CheckCommand(sv)
 			}
 		}
 		if op.cmd.Bin == "" && op.decodeErr == nil && isService {
 			if cv, ok := cmdV.MapView(); ok {
-				op.cmd, op.decodeErr = spell.DecodeCommandValue(cv)
+				op.cmd, op.decodeErr = spell.CheckCommand(cv)
 			}
 		}
 		return op
 	}
-	cmd, err := spell.DecodeCommandValue(mv)
+	cmd, err := spell.CheckCommand(mv)
 	return spellOp{name: name, kind: spells.OpKindCommand, cmd: cmd, decodeErr: err}
 }
 

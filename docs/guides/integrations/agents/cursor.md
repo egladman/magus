@@ -1047,6 +1047,28 @@ fun main(args: [str]) > void {
 }
 ```
 
+### Checking the Buzz it writes
+
+A second `postToolUse` entry, on `Write|StrReplace|Edit`, runs
+[`magus-buzz-check.buzz`](guard-templates.md#magus-buzz-checkbuzz), which runs
+`magus buzz --check` on a `.buzz` file the agent just wrote and hands a failure back
+as the reason to fix it:
+
+```json
+{
+  "hooks": {
+    "postToolUse": [
+      {
+        "matcher": "Write|StrReplace|Edit",
+        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor",
+        "timeout": 30
+      }
+    ]
+  },
+  "version": 1
+}
+```
+
 ## Notifications
 
 Cursor can run a command from its agent hooks. Shape the event into the

@@ -1,28 +1,3 @@
-// Package dry is the in-process, non-executing magus evaluator: it runs Buzz
-// source and magusfiles with every host effect (subprocess, filesystem, network)
-// replaced by an in-memory tracer, then reports the project graph and the dry-run
-// op trace instead of running anything. It backs three callers: the WebAssembly
-// playground (internal/playground, via cmd/buzz-playground), the `magus buzz` CLI
-// subcommand (cmd/magus/buzz.go, via WASMCompatibleMagusModules), and the docs
-// generator (cmd/magus-docs, for runnability detection). It carries no build tags
-// and none of the heavyweight host stack (proc/cache/http), so it both compiles to
-// js/wasm and is unit-testable on the host against the real interpreter.
-//
-// It is a thin adapter over the real engine, not a parallel implementation: the
-// genuinely shared, pure logic is imported, not re-derived: command decoding
-// (spell.DecodeCommandValue), charm application (spell.ApplyCharms), ward checks
-// (ward.Check), and the magus.* module API (parity-guarded against
-// bindings.MagusModuleKeys). Only the legitimately different pieces live here: the
-// tracing host stubs (host effects cannot run in a browser), the lenient spell probe
-// (it keeps warded/undecodable ops so `ls`/`graph` still list them, where the
-// engine's strict resolve aborts), and the traced-edge topo order.
-//
-// It lives at internal/dry because it can share a package with neither counterpart:
-// the high-level runner is the host-only public API, and the subprocess primitive
-// (internal/proc) forks processes; both pull in os/exec, syscall, and platform
-// build tags. Compiling to js/wasm means it MUST NOT import internal/proc,
-// internal/cache, or the root magus engine; one such import would break that build.
-// It stays a leaf over the pure, shared logic (internal/spell, internal/ward, types).
 package dry
 
 import (

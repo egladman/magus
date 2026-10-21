@@ -183,22 +183,20 @@ export fun slug(remote: str, host: str) > str {
 // Each draft becomes one inline comment anchored to a path and a line. A draft carrying no
 // line is dropped rather than promoted to a review-level remark: it would arrive detached from
 // the code it was written about, which is the one thing an inline comment is for.
-export fun reviewBody(summary: str, verdict: str, drafts: [any]) > any {
+export fun reviewBody(summary: str, verdict: str, drafts: [ReviewDraft]) > any {
     final event = if (verdict == "approve") "APPROVE"
         else if (verdict == "request_changes") "REQUEST_CHANGES"
         else "COMMENT";
     final comments = mut [<any>];
     foreach (d in drafts) {
-        final path = "{d["path"] ?? ""}";
-        final line = d["line"] ?? 0;
-        if (path == "" or line == 0) {
+        if (d.path == "" or d.line == 0) {
             continue;
         }
         comments.append({
-            "path": path,
-            "line": line,
+            "path": d.path,
+            "line": d.line,
             "side": "RIGHT",
-            "body": "{d["body"] ?? ""}",
+            "body": d.body,
         });
     }
     return {
@@ -211,27 +209,25 @@ export fun reviewBody(summary: str, verdict: str, drafts: [any]) > any {
 // find_review reports the pull request open for this branch, or an empty number when there is
 // none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
 // so it is never an error and never a reason a diff fails to open.
-export fun find_review(target: Target, cb: fun(any)) > any !> any {
-    final io = {<str: any>};
-    cb(io);
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any {
     if (!has_token()) {
-        return {"id": "", "reason": "no credential"};
+        return ReviewTarget{ reason = "no credential" };
     }
     // The branch and the remote arrive from the CALLER rather than being discovered here.
     // magus already knows both, through a VCS layer that speaks four backends, and a spell
     // that re-derived them would be a second opinion about the same working tree - one that
     // only knows git.
     final base = apiBase();
-    final repo = slug("{io["remote"] ?? ""}", host: apiHost(base));
-    final branch = "{io["branch"] ?? ""}";
+    final repo = slug(req.remote, host: apiHost(base));
+    final branch = req.branch;
     if (repo == "" or branch == "") {
-        return {"id": "", "reason": "not a {apiHost(base)} remote"};
+        return ReviewTarget{ reason = "not a {apiHost(base)} remote" };
     }
     final head = repo.split("/")[0] + ":" + branch;
     final url = base + "/repos/" + repo + "/pulls?head=" + head;
     final res = http\get(url, headers: headers());
     if (res["status"] != 200) {
-        return {"id": "", "reason": "github: HTTP {res["status"]}"};
+        return ReviewTarget{ reason = "github: HTTP {res["status"]}" };
     }
     // .listValue(), never the boxed value itself - see decodeThreads. Without it len() is the
     // accessor count (16) whatever the response, so this branch was taken even for an EMPTY
@@ -241,12 +237,12 @@ export fun find_review(target: Target, cb: fun(any)) > any !> any {
     if (list.len() > 0) {
         // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
         // named by a hash stays writable. GitHub's is a number and reads as one either way.
-        return {
-            "id": "{list[0].q("number").integerValue()}",
-            "repo": repo,
-            "state": "open",
-            "author": list[0].q("user").q("login").stringValue(),
-            "viewer": viewerLogin(io),
+        return ReviewTarget{
+            id = "{list[0].q("number").integerValue()}",
+            repo = repo,
+            state = "open",
+            author = list[0].q("user").q("login").stringValue(),
+            viewer = viewerLogin(req.wantViewer),
         };
     }
     // Nothing OPEN for this branch, which is what the query above asks for and all magus needed
@@ -255,11 +251,11 @@ export fun find_review(target: Target, cb: fun(any)) > any !> any {
     // of one, and the reader is owed the difference.
     final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: headers());
     if (all["status"] != 200) {
-        return {"id": "", "reason": "no pull request for this branch"};
+        return ReviewTarget{ reason = "no pull request for this branch" };
     }
     final closed = serialize\jsonDecode(all["body"]).listValue();
     if (closed.len() == 0) {
-        return {"id": "", "reason": "no pull request for this branch"};
+        return ReviewTarget{ reason = "no pull request for this branch" };
     }
     // A MERGED one wins over a merely closed one, whatever the sort said. These arrive newest-
     // updated first, so a branch that carried two pull requests - one merged last week, one
@@ -278,12 +274,12 @@ export fun find_review(target: Target, cb: fun(any)) > any !> any {
             break;
         }
     }
-    return {
-        "id": "{pick.q("number").integerValue()}",
-        "repo": repo,
-        "state": state,
-        "author": pick.q("user").q("login").stringValue(),
-        "viewer": viewerLogin(io),
+    return ReviewTarget{
+        id = "{pick.q("number").integerValue()}",
+        repo = repo,
+        state = state,
+        author = pick.q("user").q("login").stringValue(),
+        viewer = viewerLogin(req.wantViewer),
     };
 }
 
@@ -291,11 +287,11 @@ export fun find_review(target: Target, cb: fun(any)) > any !> any {
 //
 // GitHub hands over the pull request's author in the payload find_review already fetches, but the
 // token's own owner takes a second round trip. magus caches that for the life of the daemon and
-// sets want_viewer only while its cache is empty, so this costs one call ever rather than one per
+// sets wantViewer only while its cache is empty, so this costs one call ever rather than one per
 // diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup,
 // and magus reads an empty pair as UNKNOWN rather than as "yours".
-fun viewerLogin(io: any) > str !> any {
-    if (io["want_viewer"] != true) {
+fun viewerLogin(want: bool) > str !> any {
+    if (!want) {
         return "";
     }
     final res = http\get(apiBase() + "/user", headers: headers());
@@ -311,53 +307,43 @@ fun viewerLogin(io: any) > str !> any {
 // you accumulate remarks, and only then decide the set is worth sending. Publishing each as it
 // is written would send the first thought before the fifth changed your mind about it.
 //
-// Returns the review id and the drafts it accepted, so the caller can mark exactly those
-// published. A partial result is a real answer here: GitHub rejects an inline comment whose
-// line is not in the diff, and the rest of the review still lands.
-export fun publish_review(target: Target, cb: fun(any)) > any !> any {
-    final io = {<str: any>};
-    cb(io);
+// A failed post throws rather than answering false, so the reason reaches the reader.
+export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> any {
     if (!has_token()) {
         throw "github-review: no credential; publishing needs {TOKEN_REF}";
     }
-    final repo = "{io["repo"] ?? ""}";
-    final id = "{io["id"] ?? ""}";
-    if (repo == "" or id == "") {
+    if (req.repo == "" or req.id == "") {
         throw "github-review: publish needs a repo and a pull-request id";
     }
-    final drafts = io["drafts"] ?? [<any>];
-    final payload = reviewBody("{io["summary"] ?? ""}", verdict: "{io["verdict"] ?? "comment"}", drafts: drafts);
-    final url = apiBase() + "/repos/" + repo + "/pulls/" + id + "/reviews";
+    final payload = reviewBody(req.summary, verdict: req.verdict, drafts: req.drafts);
+    final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/reviews";
     final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
     if (res["status"] != 200 and res["status"] != 201) {
         throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
     }
-    final decoded = serialize\jsonDecode(res["body"]);
-    return {"id": decoded.q("id").integerValue(), "count": payload["comments"].len()};
+    return Ack{ ok = true };
 }
 
 // decodeThreads turns one page of GitHub's review-comment JSON into thread records.
 //
 // jsonDecode returns a boxed value: a map of accessors over the payload. An array must be read
 // through .listValue(), or the foreach walks the accessors instead of the rows.
-fun decodeThreads(body: str) > [any] !> any {
-    final threads = mut [<any>];
+fun decodeThreads(body: str) > [ReviewComment] !> any {
+    final threads = mut [<ReviewComment>];
     foreach (c in serialize\jsonDecode(body).listValue()) {
         // GitHub reports a null line once the commented line has left the head, and the boxed
         // read turns a null into 0. A reply points at the first comment of its conversation.
         final line = c.q("line").integerValue();
         final replyTo = c.q("in_reply_to_id").integerValue();
-        threads.append({
-            "id": "{c.q("id").integerValue()}",
-            "root": if (replyTo == 0) "" else "{replyTo}",
-            "path": c.q("path").stringValue(),
-            "line": line,
-            "outdated": line == 0,
-            "diff_hunk": c.q("diff_hunk").stringValue(),
-            "author": c.q("user").q("login").stringValue(),
-            "body": c.q("body").stringValue(),
-            // Key is "created" to match the Go decoder, which ignores it until thread aging lands.
-            "created": c.q("created_at").stringValue(),
+        threads.append(ReviewComment{
+            id = "{c.q("id").integerValue()}",
+            root = if (replyTo == 0) "" else "{replyTo}",
+            path = c.q("path").stringValue(),
+            line = line,
+            outdated = line == 0,
+            diffHunk = c.q("diff_hunk").stringValue(),
+            author = c.q("user").q("login").stringValue(),
+            body = c.q("body").stringValue(),
         });
     }
     return threads;
@@ -374,21 +360,17 @@ fun decodeThreads(body: str) > [any] !> any {
 // after the thirtieth". A page that fails discards the pages before it for the same reason:
 // the return has no way to say "incomplete", so a short list would read as a finished
 // conversation. The 10-page cap bounds an unbounded loop against a paging bug.
-export fun review_threads(target: Target, cb: fun(any)) > [any] !> any {
-    final io = {<str: any>};
-    cb(io);
-    final repo = "{io["repo"] ?? ""}";
-    final id = "{io["id"] ?? ""}";
-    if (!has_token() or repo == "" or id == "") {
-        return [<any>];
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any {
+    if (!has_token() or req.repo == "" or req.id == "") {
+        return [<ReviewComment>];
     }
-    final base = apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments?per_page=100&page=";
-    final threads = mut [<any>];
+    final base = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/comments?per_page=100&page=";
+    final threads = mut [<ReviewComment>];
     var page = 1;
     while (page <= 10) {
         final res = http\get(base + "{page}", headers: headers());
         if (res["status"] != 200) {
-            return [<any>];
+            return [<ReviewComment>];
         }
         final got = decodeThreads(res["body"]);
         foreach (t in got) {
@@ -403,18 +385,13 @@ export fun review_threads(target: Target, cb: fun(any)) > [any] !> any {
 }
 
 // reply_review answers one existing thread, so a conversation can be finished without leaving.
-export fun reply_review(target: Target, cb: fun(any)) > bool !> any {
-    final io = {<str: any>};
-    cb(io);
-    final repo = "{io["repo"] ?? ""}";
-    final id = "{io["id"] ?? ""}";
-    final thread = "{io["thread"] ?? ""}";
-    if (!has_token() or repo == "" or id == "" or thread == "") {
-        return false;
+export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any {
+    if (!has_token() or req.repo == "" or req.id == "" or req.thread == "") {
+        return Ack{ ok = false };
     }
-    final url = apiBase() + "/repos/" + repo + "/pulls/" + id + "/comments/" + thread + "/replies";
-    final res = http\post(url, serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), headers: headers());
-    return res["status"] == 200 or res["status"] == 201;
+    final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/comments/" + req.thread + "/replies";
+    final res = http\post(url, serialize\jsonEncode({"body": req.body}), headers: headers());
+    return Ack{ ok = res["status"] == 200 or res["status"] == 201 };
 }
 
 test "slug reads every remote spelling and rejects a foreign host" {
@@ -445,7 +422,7 @@ test "the API host is derived from the endpoint, so two settings cannot disagree
 }
 
 test "the resolved verdict maps onto GitHub's event vocabulary" {
-    final drafts = [{"path": "a.go", "line": 3, "body": "why"}];
+    final drafts = [ReviewDraft{ path = "a.go", line = 3, body = "why" }];
     assert\equal(reviewBody("s", verdict: "comment", drafts: drafts)["event"], want: "COMMENT", message: "remarks alone");
     assert\equal(reviewBody("s", verdict: "approve", drafts: drafts)["event"], want: "APPROVE", message: "a colleague's change");
     assert\equal(reviewBody("s", verdict: "request_changes", drafts: drafts)["event"], want: "REQUEST_CHANGES", message: "not yet");
@@ -453,7 +430,7 @@ test "the resolved verdict maps onto GitHub's event vocabulary" {
 }
 
 test "an unrecognized verdict comments rather than asserting" {
-    final drafts = [{"path": "a.go", "line": 3, "body": "why"}];
+    final drafts = [ReviewDraft{ path = "a.go", line = 3, body = "why" }];
     // The safe end. A word this spell does not know must never become an approval - and magus
     // has already refused the case that matters, a self-review, before calling in here.
     assert\equal(reviewBody("s", verdict: "", drafts: drafts)["event"], want: "COMMENT", message: "empty");
@@ -462,9 +439,9 @@ test "an unrecognized verdict comments rather than asserting" {
 
 test "a draft with no line is dropped rather than detached from its code" {
     final body = reviewBody("s", verdict: "comment", drafts: [
-        {"path": "a.go", "line": 3, "body": "anchored"},
-        {"path": "b.go", "body": "no line"},
-        {"path": "", "line": 9, "body": "no path"},
+        ReviewDraft{ path = "a.go", line = 3, body = "anchored" },
+        ReviewDraft{ path = "b.go", body = "no line" },
+        ReviewDraft{ path = "", line = 9, body = "no path" },
     ]);
     assert\equal(body["comments"].len(), want: 1, message: "only the anchored draft survives");
     assert\equal(body["comments"][0]["path"], want: "a.go", message: "and it is the right one");
@@ -480,28 +457,27 @@ test "a draft with no line is dropped rather than detached from its code" {
 test "one comment decodes to one thread, not to the decoder's accessor count" {
     final threads = decodeThreads(`[{"id":1,"path":"a.go","line":4,"user":{"login":"priya"},"body":"why","created_at":"2026-08-27T10:00:00Z"}]`);
     assert\equal(threads.len(), want: 1, message: "a one-comment page is one thread; 16 means the boxed map was walked");
-    assert\equal(threads[0]["path"], want: "a.go", message: "the row's own fields survive");
-    assert\equal(threads[0]["author"], want: "priya", message: "a nested object still resolves");
-    assert\equal(threads[0]["created"], want: "2026-08-27T10:00:00Z", message: "the timestamp rides along for aging");
+    assert\equal(threads[0].path, want: "a.go", message: "the row's own fields survive");
+    assert\equal(threads[0].author, want: "priya", message: "a nested object still resolves");
 }
 
 test "a reply names the comment that started its conversation" {
     final threads = decodeThreads(`[{"id":1,"path":"a.go","line":4,"user":{"login":"priya"},"body":"why"},{"id":2,"in_reply_to_id":1,"path":"a.go","line":4,"user":{"login":"eli"},"body":"because"}]`);
-    assert\equal(threads[0]["root"], want: "", message: "the first comment is its own root, so it names none");
-    assert\equal(threads[1]["root"], want: "1", message: "the reply names the first comment");
-    assert\equal(threads[1]["id"], want: "2", message: "and keeps its own id");
+    assert\equal(threads[0].root, want: "", message: "the first comment is its own root, so it names none");
+    assert\equal(threads[1].root, want: "1", message: "the reply names the first comment");
+    assert\equal(threads[1].id, want: "2", message: "and keeps its own id");
 }
 
 test "a null line marks the comment outdated" {
     final threads = decodeThreads(`[{"id":1,"path":"a.go","line":null,"user":{"login":"a"},"body":"gone"},{"id":2,"path":"a.go","line":9,"user":{"login":"b"},"body":"here"}]`);
-    assert\equal(threads[0]["outdated"], want: true, message: "no line in the head is outdated");
-    assert\equal(threads[1]["outdated"], want: false, message: "a live line is not");
+    assert\equal(threads[0].outdated, want: true, message: "no line in the head is outdated");
+    assert\equal(threads[1].outdated, want: false, message: "a live line is not");
 }
 
 test "the diff hunk rides along, empty when the host sent none" {
     final threads = decodeThreads(`[{"id":1,"path":"a.go","line":4,"diff_hunk":"@@ -1,2 +1,3 @@","user":{"login":"a"},"body":"one"},{"id":2,"path":"a.go","line":4,"user":{"login":"b"},"body":"two"}]`);
-    assert\equal(threads[0]["diff_hunk"], want: "@@ -1,2 +1,3 @@", message: "the host's hunk text is kept");
-    assert\equal(threads[1]["diff_hunk"], want: "", message: "absent is empty");
+    assert\equal(threads[0].diffHunk, want: "@@ -1,2 +1,3 @@", message: "the host's hunk text is kept");
+    assert\equal(threads[1].diffHunk, want: "", message: "absent is empty");
 }
 
 test "an empty page decodes to no threads" {
@@ -513,7 +489,7 @@ test "an empty page decodes to no threads" {
 test "every comment on a page is kept" {
     final threads = decodeThreads(`[{"id":1,"path":"a.go","line":1,"user":{"login":"a"},"body":"one","created_at":"t1"},{"id":2,"path":"b.go","line":2,"user":{"login":"b"},"body":"two","created_at":"t2"},{"id":3,"path":"c.go","line":3,"user":{"login":"c"},"body":"three","created_at":"t3"}]`);
     assert\equal(threads.len(), want: 3, message: "three comments, three threads");
-    assert\equal(threads[2]["body"], want: "three", message: "and the last one is not dropped");
+    assert\equal(threads[2].body, want: "three", message: "and the last one is not dropped");
 }
 
 // find_review's half of the same bug. Its list is pull requests rather than comments, and it

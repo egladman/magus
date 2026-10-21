@@ -44,18 +44,10 @@ import "crypto";
 import "strings";
 import "encoding/json";
 import "lib/hook" as hook;
+import "lib/session" as shared;
 
 final HOST = "opencode";
 final STDOUT_FLAG = "--stdout";
-
-// warn says why nothing was extracted; see the Claude Code adapter.
-fun warn(message: str) > void {
-    io\stderr.write("magus session load: {message}\n") catch void;
-}
-
-fun inScope(cwd: str, root: str) > bool {
-    return cwd == root or cwd.startsWith(root + "/");
-}
 
 fun firstValue(node: any?, dotPaths: [str]) > str {
     foreach (dotPath in dotPaths) {
@@ -121,7 +113,7 @@ fun render(session: str, cwd: str, part: any?, kind: str, transcript: str) > str
 fun extract(doc: any?, parts: [any], skip: int, transcript: str, root: str) > [str] {
     final emitted = mut [<str>];
     final cwd = firstValue(doc, dotPaths: ["session.directory", "directory"]);
-    if (!inScope(cwd, root: root)) { return emitted; }
+    if (!shared\inScope(cwd, root: root)) { return emitted; }
     final session = firstValue(doc, dotPaths: ["session.id", "id"]);
     foreach (i, part in parts) {
         if (i < skip) { continue; }
@@ -152,33 +144,23 @@ fun sessionIds(opencode: str) > [str] {
     return ids;
 }
 
-fun repoRoot(bin: str) > str {
-    final declared = env\get("HOST_REPO_ROOT") catch "";
-    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
-    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
-        "quiet": true,
-        "allow_failure": true,
-    }) catch null;
-    if (result == null or result!.code != 0) { return ""; }
-    return hook\trimTrailingNewlines(result!.stdout);
-}
 
 fun main(args: [str]) > int {
     final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
     final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
     final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
-    final root = repoRoot(bin);
+    final root = shared\repoRoot(bin);
     if (root == "") {
-        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        shared\warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
         return 0;
     }
     final opencode = hook\envOr("HOST_OPENCODE_BIN", fallback: proc\which("opencode") catch "");
     if (opencode == "" or !hook\isExecutable(opencode)) {
-        warn("opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.");
+        shared\warn("opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.");
         return 0;
     }
     if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
-        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        shared\warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
         return 0;
     }
 

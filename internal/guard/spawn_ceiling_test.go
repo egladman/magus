@@ -131,9 +131,9 @@ func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
 	tests := []struct {
 		name, session, spawn, why, add string
 	}{
-		{"spawn model id", "sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is in no harness_models row", "add a row for claude-opus-5-5"},
-		{"session model id", "claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is in no harness_models row", "add a row for claude-sonnet-5-5"},
-		{"both", "claude-sonnet-5-5", "gpt-5", "this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are in no harness_models row", "add a row for gpt-5 and claude-sonnet-5-5"},
+		{"spawn model id", "sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is in no mgs_listModels row", "add a row for claude-opus-5-5"},
+		{"session model id", "claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is in no mgs_listModels row", "add a row for claude-sonnet-5-5"},
+		{"both", "claude-sonnet-5-5", "gpt-5", "this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are in no mgs_listModels row", "add a row for gpt-5 and claude-sonnet-5-5"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
 			shape, text := spoken(v)
 			assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
 			assert.Contains(t, text, tt.why)
-			assert.Contains(t, text, tt.add+` with "tier" to the claude-code spell's harness_models`)
+			assert.Contains(t, text, tt.add+` with a tier to the claude-code spell's mgs_listModels`)
 			assert.Contains(t, text, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
 		})
 	}
@@ -207,5 +207,5 @@ func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
 
 // A host the declaration does not map names no tier, and the advice says so.
 func TestSpawnAboveParentTierNamesAnUnmappedHost(t *testing.T) {
-	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), types.HarnessKey{ID: "claude-code"}), "maps no model for harness claude-code: its hosts are codex")
+	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), "claude-code"), "maps no model for harness claude-code: its hosts are codex")
 }

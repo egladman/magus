@@ -23,9 +23,9 @@ func tierSet(t *testing.T, bounds ...types.ModelTierBounds) *types.ModelTierSet 
 		Default: 1,
 		Bounds:  bounds,
 		Skills:  []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
-		Hosts: map[types.HarnessKey][]string{
-			{ID: "claude-code"}: {"haiku", "sonnet", "opus"},
-			{ID: "other-host"}:  {"mini", "sonnet", "max"},
+		Hosts: map[string][]string{
+			"claude-code": {"haiku", "sonnet", "opus"},
+			"other-host":  {"mini", "sonnet", "max"},
 		},
 	})
 	require.NoError(t, err)
@@ -226,9 +226,9 @@ func TestAssignModelTierRefusesAnAliasThatNamesTwoTiers(t *testing.T) {
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"low", "high"}, Default: 0,
 		Bounds: []types.ModelTierBounds{{}, {}},
 		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
-		Hosts: map[types.HarnessKey][]string{
-			{ID: "a"}: {"x", "y"},
-			{ID: "b"}: {"y", "x"},
+		Hosts: map[string][]string{
+			"a": {"x", "y"},
+			"b": {"y", "x"},
 		},
 	})
 	require.NoError(t, err)

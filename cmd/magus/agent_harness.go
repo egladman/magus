@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
@@ -95,7 +96,7 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 // asking, so what it writes and what it deletes is the only thing standing
 // between a person and a skill that left without being named. Same wording as
 // `magus agent install`, which reports the same two lists.
-func installHarnessSkillPath(ctx context.Context, root, path string, form agent.Form, dryRun bool) error {
+func installHarnessSkillPath(ctx context.Context, root, path string, form types.SkillForm, dryRun bool) error {
 	if dryRun {
 		planned, err := agentSkills.PlanSkillTree(root, path, form)
 		if err != nil {
@@ -317,6 +318,9 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if result.Plugin.Failing() && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s plugin for %s (%s)", result.Plugin.Status, result.ID, result.Plugin.Reason)
 		}
+		if result.Hooks.Failing() && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s hooks for %s (%s)", result.Hooks.Status, result.ID, result.Hooks.Reason)
+		}
 	}
 	return firstFail
 }
@@ -330,7 +334,10 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 	if err != nil {
 		return nil, ctx, err
 	}
-	wired := workspaceHarnessNames(ws)
+	wired, err := workspace.WiredHarnesses(ws)
+	if err != nil {
+		return nil, ctx, err
+	}
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
 	// A harness's native prompts name the workspace's human_only targets.
 	ctx = types.WithWorkspace(ctx, ws)
@@ -341,14 +348,6 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 		return nil, ctx, exit.Usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
 	}
 	return wired, ctx, nil
-}
-
-func workspaceHarnessNames(ws types.WorkspaceRepository) []string {
-	type harnesses interface{ Harnesses() []string }
-	if h, ok := any(ws).(harnesses); ok {
-		return h.Harnesses()
-	}
-	return nil
 }
 
 func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) error {
@@ -388,6 +387,15 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 		_, err = fmt.Fprintf(w, "%s %s plugin", typed.Plugin.Status, typed.ID)
 		if err == nil && typed.Plugin.Reason != "" {
 			_, err = fmt.Fprintf(w, " (%s)", typed.Plugin.Reason)
+		}
+		if err == nil {
+			_, err = fmt.Fprintln(w)
+		}
+	}
+	if err == nil && typed.Hooks.Status != "" {
+		_, err = fmt.Fprintf(w, "%s %s hooks", typed.Hooks.Status, typed.ID)
+		if err == nil && typed.Hooks.Reason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.Hooks.Reason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)

@@ -57,8 +57,9 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .except([buzzStdlib, magus\dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: both hosts install them the same way, so they tell the two apart in nothing")
         .except(gopherbuzzAround(), why: AROUND_WHY)
-        .except([magus\dir("internal/interp/bindings/ffi"), magus\dir("internal/interp/bindings/gen/decode")],
-            why: "the register call and the generated argument decoders every trampoline uses")
+        .except([magus\dir("internal/interp/bindings/ffi"), magus\dir("internal/interp/bindings/gen/decode"),
+                magus\dir("internal/interp/bindings/gen/providerops")],
+            why: "the register call, the generated argument decoders and the generated provider-call values every trampoline uses")
         .except([magus\dir("internal/interp/engine"), magus\dir("internal/interp/engine/buzz")],
             why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
         .except([magus\dir("internal/interp/mcpclient"), magus\dir("internal/interp/transform")],

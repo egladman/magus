@@ -1192,8 +1192,8 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 		}
 	}
 	if err != nil {
-		// The comments that DID decode still travel, and the reason rides beside them: the
-		// handler's posture, for the handler's reason.
+		// The reason rides beside whatever came back: none on a malformed answer, which decodes
+		// strictly, and every comment when only the watermark failed.
 		return comments, err.Error()
 	}
 	return comments, ""

@@ -430,7 +430,10 @@ import (
 // 142: magus-multi-agent checks a record with `magus job fork --stdin --dry-run` before
 // forking, and teaches the claim breadth bounds (MGS3043), the outputs a fork refuses to
 // leave unregenerated (MGS3044) and the waivers for both.
-const SkillVersion = 142
+//
+// 143: magus-vcs-hygiene teaches the commit message: read the repository's recent
+// subjects and write in their shape, imposing no style of its own.
+const SkillVersion = 143
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -468,7 +471,7 @@ type AgentSkill struct {
 	Description string
 	Body        string
 	// Variant is what THIS entry was actually rendered as, independent of the
-	// Form requested from RenderedSkills. FormBoth also returns each skill's
+	// Form requested from RenderedSkills. types.SkillFormBoth also returns each skill's
 	// always-full twin (see fullTwinSuffix), and the twin's own stamp must say
 	// "full", never "short": StampSkill and friends key off this field, not
 	// the request. Meaningless on an unrendered definition from EmbeddedSkills.
@@ -490,7 +493,7 @@ type installedFile struct {
 	body []byte
 }
 
-// fullTwinSuffix names the always-full twin [FormBoth] writes alongside each
+// fullTwinSuffix names the always-full twin [types.SkillFormBoth] writes alongside each
 // skill's primary entry: <name>-full. The short form is a bet that the
 // INSTALLING reader can re-derive what it drops, but a session that installs
 // short can still delegate to a smaller or less-briefed reader who cannot, and
@@ -503,50 +506,20 @@ const fullTwinSuffix = "-full"
 func FullTwinName(base string) string { return base + fullTwinSuffix }
 
 // IsFullTwinName reports whether name is a full twin rather than a primary
-// skill entry. Callers that enumerate an INSTALLED tree need this: [FormBoth]
+// skill entry. Callers that enumerate an INSTALLED tree need this: [types.SkillFormBoth]
 // writes both, so a name-by-name comparison against the canonical skill list
 // sees twins it would otherwise call unrecognized.
 func IsFullTwinName(name string) bool { return strings.HasSuffix(name, fullTwinSuffix) }
 
-// Form says which entries an installation writes. It is a user-owned
-// installation choice, not a claim about a host or model: magus cannot reliably
-// observe either one.
-//
-// It is a superset of [types.SkillVariant] rather than the same type, because a Form
-// may name TWO bodies: FormBoth writes each skill short and its twin full. Every
-// enumerator here takes a Form for that reason, and [Catalog.Render] takes a
-// SkillVariant because one file holds one body.
-type Form string
-
-const (
-	// FormBoth writes each skill's short body under its own name plus a full
-	// twin (see fullTwinSuffix). The default, and the only form that leaves a
-	// delegated reader something to ask for.
-	FormBoth Form = "both"
-	// FormShort writes one short body per skill and no twins.
-	FormShort Form = "short"
-	// FormFull writes one full body per skill and no twins.
-	FormFull Form = "full"
-)
-
-// ParseForm validates the spelling accepted by `magus agent install`.
-func ParseForm(s string) (Form, error) {
-	form := Form(s)
-	switch form {
-	case FormBoth, FormShort, FormFull:
-		return form, nil
-	default:
-		return "", fmt.Errorf("unknown skill form %q (want both, short, or full)", s)
+// ParseForm validates the spelling accepted by `magus agent install`. Every enumerator
+// here takes a [types.SkillForm], since a form may name two bodies, and [Catalog.Render]
+// a SkillVariant because one file holds one body.
+func ParseForm(s string) (types.SkillForm, error) {
+	form := types.SkillForm(s)
+	if form == "" || !form.Valid() {
+		return "", fmt.Errorf("unknown skill form %q (want %s)", s, strings.Join(form.Values(), ", "))
 	}
-}
-
-// Variant returns the body this form's PRIMARY entries carry. FormBoth's twins
-// are full regardless; each twin's own Variant field records that.
-func (f Form) Variant() types.SkillVariant {
-	if f == FormFull {
-		return types.SkillVariantFull
-	}
-	return types.SkillVariantShort
+	return form, nil
 }
 
 // skillFuncs is the template vocabulary a skill body may call.
@@ -927,9 +900,9 @@ func (c *Catalog) Render(def AgentSkill, v types.SkillVariant) (AgentSkill, erro
 // RenderedSkills returns exactly the entries form installs, in name order: the
 // install-ready list SkillBytes, SkillTar, PlanSkillTree, and WriteSkillTree all
 // draw from, so none of them can disagree about which names exist. Under
-// [FormBoth] each skill is followed immediately by its always-full <name>-full
+// [types.SkillFormBoth] each skill is followed immediately by its always-full <name>-full
 // twin (see fullTwinSuffix); the single-body forms add no twins.
-func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
+func (c *Catalog) RenderedSkills(form types.SkillForm) ([]AgentSkill, error) {
 	if _, err := ParseForm(string(form)); err != nil {
 		return nil, err
 	}
@@ -953,13 +926,13 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		// hand and a step it left underspecified has no way to learn the fuller copy exists
 		// unless this entry says so, and browsing for it is exactly what nobody did:
 		// measured, 12 of 15 twins were never loaded once.
-		if form == FormBoth {
+		if form == types.SkillFormBoth {
 			primary.Description += " A fuller copy with the worked examples kept is installed as " +
 				FullTwinName(def.Name) + "; load that one if this leaves a step underspecified."
 		}
 		skills = append(skills, primary)
 
-		if form != FormBoth {
+		if form != types.SkillFormBoth {
 			continue
 		}
 		full, err := c.Render(def, types.SkillVariantFull)
@@ -1013,7 +986,7 @@ func (c *Catalog) installFiles(skill AgentSkill) []installedFile {
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
-func (c *Catalog) SkillBytes(name string, form Form) ([]byte, error) {
+func (c *Catalog) SkillBytes(name string, form types.SkillForm) ([]byte, error) {
 	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
@@ -1033,7 +1006,7 @@ func (c *Catalog) SkillBytes(name string, form Form) ([]byte, error) {
 // result to `tar -xf - -C <dir>` is the supported way to install skills
 // outside the workspace root: the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
-func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
+func (c *Catalog) SkillTar(dest string, form types.SkillForm) ([]byte, error) {
 	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
@@ -1073,7 +1046,7 @@ func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
 // Shares checkDestination with the writer, so a plan cannot name paths the run
 // would not. The --force conflict check is not repeated: a plan reports what a
 // successful run produces.
-func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
+func (c *Catalog) PlanSkillTree(dir, dest string, form types.SkillForm) ([]string, error) {
 	if err := checkDestination(dir, dest); err != nil {
 		return nil, err
 	}
@@ -1123,7 +1096,7 @@ func checkDestination(dir, dest string) error {
 // every reinstall reads identically whether it replaced the whole set or confirmed a
 // set that was already current, and a line that says the same thing every time is one
 // nobody reads on the run where it finally differs.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (written, changed []string, err error) {
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form types.SkillForm) (written, changed []string, err error) {
 	if err := checkDestination(dir, dest); err != nil {
 		return nil, nil, err
 	}
@@ -1212,7 +1185,7 @@ func (c *Catalog) checkInstalledNotNewer(path string) error {
 // hand-authored skill sitting in the same folder (magus-skill-authoring and a
 // workspace's own magus-local-development both live there) and is never a candidate
 // even though the catalog does not name it.
-func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) {
+func (c *Catalog) StaleSkillDirs(dir, dest string, form types.SkillForm) ([]string, error) {
 	shipped, err := c.shipped(form)
 	if err != nil {
 		return nil, err
@@ -1246,7 +1219,7 @@ func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) 
 // Install runs it after writing, and reports every directory it returns: the deletion
 // is chosen by a rule inside a binary the caller may have just upgraded, so the
 // report is what keeps it from being silent. The stamp makes the deletion safe.
-func (c *Catalog) PruneSkillTree(dir, dest string, form Form) ([]string, error) {
+func (c *Catalog) PruneSkillTree(dir, dest string, form types.SkillForm) ([]string, error) {
 	stale, err := c.StaleSkillDirs(dir, dest, form)
 	if err != nil {
 		return nil, err
@@ -1462,7 +1435,7 @@ func (c *Catalog) CheckStatuses(ctx context.Context, dir string, wired ...string
 // magus-* skills beside an ignored generated destination; those are not an
 // installed Magus skill tree, so a missing anchor is not stale by itself.
 func (c *Catalog) hasMagusOwnedSkill(dir, dest string) bool {
-	shipped, shippedErr := c.shipped(FormBoth)
+	shipped, shippedErr := c.shipped(types.SkillFormBoth)
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		if shippedErr != nil || shipped[name] {
 			return true
@@ -1480,7 +1453,7 @@ func (c *Catalog) hasMagusOwnedSkill(dir, dest string) bool {
 type HarnessSkillLocation struct {
 	ID   string
 	Path string
-	Form Form
+	Form types.SkillForm
 }
 
 // HarnessSkillLocations discovers skill locations from wired harness spells. There is no
@@ -1562,10 +1535,10 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
 	// pre-versioning install of a shipped skill, the one case that must still report.
-	// FormBoth, the permissive superset: grading asks whether a name is one magus ever
+	// types.SkillFormBoth, the permissive superset: grading asks whether a name is one magus ever
 	// writes, and a twin beside its primary is a correct install rather than litter.
 	// Pruning is the question that needs the form the caller chose.
-	shipped, shippedErr := c.shipped(FormBoth)
+	shipped, shippedErr := c.shipped(types.SkillFormBoth)
 	expected, expectedErr := c.shipped(location.Form)
 	if expectedErr != nil {
 		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
@@ -1682,15 +1655,15 @@ func (c *Catalog) installedSkillNames(path string) []string {
 //
 // Derived from what the form actually renders rather than asserted here: the set used
 // to be every primary PLUS every twin unconditionally, which is right only for
-// FormBoth. The single-body forms write no twin, so the twins a previous FormBoth
+// types.SkillFormBoth. The single-body forms write no twin, so the twins a previous types.SkillFormBoth
 // install left behind graded as shipped: never reported stale, never pruned, and
 // still loaded by the host. That is the orphaned directory the form choice exists to
 // prevent.
 //
-// Pass FormBoth to ask the permissive question ("is this a name magus ever writes"),
+// Pass types.SkillFormBoth to ask the permissive question ("is this a name magus ever writes"),
 // which is what grading an existing tree wants: a twin beside a primary is a correct
 // install, not litter.
-func (c *Catalog) shipped(form Form) (map[string]bool, error) {
+func (c *Catalog) shipped(form types.SkillForm) (map[string]bool, error) {
 	skills, err := c.RenderedSkills(form)
 	if err != nil {
 		return nil, err
@@ -1745,7 +1718,7 @@ func (c *Catalog) Section() string { return c.agentsSection }
 // without performing one. Deliberately excludes RenderedSkills' full twins:
 // reportContextCost uses this to compare "what you have" against "what the other
 // variant would be", and a twin-inclusive total would make VariantSize(types.SkillVariantShort)
-// larger than VariantSize(types.SkillVariantFull) precisely because FormBoth installs more
+// larger than VariantSize(types.SkillVariantFull) precisely because types.SkillFormBoth installs more
 // files, silently inverting the comparison it exists to answer ("what does the
 // short form buy").
 func (c *Catalog) VariantSize(v types.SkillVariant) (int64, error) {
@@ -1774,9 +1747,9 @@ const (
 type SkillQuery struct {
 	// Name selects one skill by its canonical name; "" selects all.
 	Name string
-	// Form narrows the shipped entries; "" means [FormBoth]. Local skills have one body
+	// Form narrows the shipped entries; "" means [types.SkillFormBoth]. Local skills have one body
 	// and are never narrowed by it.
-	Form Form
+	Form types.SkillForm
 }
 
 // Offered lists the skills the workspace at root offers an agent: both forms of every
@@ -1795,7 +1768,7 @@ type SkillQuery struct {
 func (c *Catalog) Offered(ctx context.Context, root string, wired []string, q SkillQuery) ([]types.Skill, error) {
 	form := q.Form
 	if form == "" {
-		form = FormBoth
+		form = types.SkillFormBoth
 	}
 	if _, err := ParseForm(string(form)); err != nil {
 		return nil, err
@@ -1834,7 +1807,7 @@ func (c *Catalog) Offered(ctx context.Context, root string, wired []string, q Sk
 	return picked, nil
 }
 
-func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, form Form) ([]types.Skill, error) {
+func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, form types.SkillForm) ([]types.Skill, error) {
 	defs, err := c.EmbeddedSkills()
 	if err != nil {
 		return nil, err
@@ -1855,7 +1828,7 @@ func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, 
 	var out []types.Skill
 	for _, def := range defs {
 		for _, v := range []types.SkillVariant{types.SkillVariantShort, types.SkillVariantFull} {
-			if form != FormBoth && form.Variant() != v {
+			if form != types.SkillFormBoth && form.Variant() != v {
 				continue
 			}
 			rendered, err := c.Render(def, v)
@@ -1897,7 +1870,7 @@ func (c *Catalog) installedCurrent(root string, installs map[HarnessSkillLocatio
 }
 
 func (c *Catalog) offeredLocal(root string, locations []HarnessSkillLocation) ([]types.Skill, error) {
-	shipped, err := c.shipped(FormBoth)
+	shipped, err := c.shipped(types.SkillFormBoth)
 	if err != nil {
 		return nil, err
 	}

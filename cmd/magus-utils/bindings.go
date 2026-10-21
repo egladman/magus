@@ -682,20 +682,20 @@ func buzzValConv(t std.TypeTag, src string) string {
 // hand-bound members in the parent package, which is why types carried a second,
 // parallel set of encoders as METHODS until this replaced them.
 type buzzValueEmitter struct {
-	funcs      bytes.Buffer
-	emitted    map[reflect.Type]bool
-	enumReach  map[reflect.Type]bool
-	usesTypes  bool
-	usesSpells bool
-	usesTime   bool
-	usesFFI    bool
+	funcs     bytes.Buffer
+	emitted   map[reflect.Type]bool
+	enumReach map[reflect.Type]bool
+	// pkgs holds the boundaryPackages aliases the encoders spell, for importLines.
+	pkgs     map[string]bool
+	usesTime bool
+	usesFFI  bool
 	// usesEnums records that a call this emitter rendered passes `enums`, so the
 	// trampoline file must declare it.
 	usesEnums bool
 }
 
 func newBuzzValueEmitter() *buzzValueEmitter {
-	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, enumReach: map[reflect.Type]bool{}}
+	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, enumReach: map[reflect.Type]bool{}, pkgs: map[string]bool{}}
 }
 
 func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error) {
@@ -759,19 +759,72 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	return nil
 }
 
-// qualify renders t as the emitted file must spell it ("types.FileInfo",
-// "spells.Charm"), and markPkg records the import that spelling needs. Together they are
-// what let a boundary type live outside the types package.
+// boundaryPackage is a Go package boundary types may live in: the alias a generated file
+// imports it under, and the prefix that keeps its encoder and decoder names apart from a
+// same-named type in another package (queue's Check beside types.Check).
+type boundaryPackage struct {
+	path   string
+	alias  string
+	prefix string
+}
+
+// boundaryPackages is every package a boundary type may come from, keyed by import path
+// rather than by name: two of them are named types. Their order is the generated import
+// order.
+var boundaryPackages = []boundaryPackage{
+	{path: "github.com/egladman/magus/spells", alias: "spells"},
+	{path: "github.com/egladman/magus/types", alias: "types"},
+	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
+}
+
+// typePackage is t's entry in boundaryPackages. A type from any other package panics: the
+// generator would otherwise emit a spelling no generated file imports.
+func typePackage(t reflect.Type) boundaryPackage {
+	for _, p := range boundaryPackages {
+		if p.path == t.PkgPath() {
+			return p
+		}
+	}
+	panic(fmt.Sprintf("boundary type %s is in package %q, which boundaryPackages (cmd/magus-utils/bindings.go) does not list", t, t.PkgPath()))
+}
+
+// qualifyType renders t as a generated file spells it ("types.FileInfo",
+// "queuetypes.Change").
+func qualifyType(t reflect.Type) string {
+	return typePackage(t).alias + "." + t.Name()
+}
+
+// typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
+func typeIdent(t reflect.Type) string {
+	return typePackage(t).prefix + t.Name()
+}
+
+// importLines renders the import of each package in used, which is keyed by alias, in
+// boundaryPackages order. An alias the import path already implies is not written.
+func importLines(used map[string]bool) string {
+	var b strings.Builder
+	for _, p := range boundaryPackages {
+		if !used[p.alias] {
+			continue
+		}
+		if path.Base(p.path) == p.alias {
+			fmt.Fprintf(&b, "\t%q\n", p.path)
+		} else {
+			fmt.Fprintf(&b, "\t%s %q\n", p.alias, p.path)
+		}
+	}
+	return b.String()
+}
+
+// qualify renders t as the emitted file must spell it, and markPkg records the import
+// that spelling needs. Together they are what let a boundary type live outside the types
+// package.
 func (e *buzzValueEmitter) qualify(t reflect.Type) string {
-	return path.Base(t.PkgPath()) + "." + t.Name()
+	return qualifyType(t)
 }
 
 func (e *buzzValueEmitter) markPkg(t reflect.Type) {
-	if t.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath() {
-		e.usesTypes = true
-		return
-	}
-	e.usesSpells = true
+	e.pkgs[typePackage(t).alias] = true
 }
 
 // value renders the conversion for one field, emitting any temporaries it needs first.
@@ -875,7 +928,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 // Exported because the hand-bound members in internal/interp/bindings call these
 // directly; a member bound at run time has no trampoline to inline the conversion into.
 func (e *buzzValueEmitter) funcName(t reflect.Type) string {
-	return "Object" + t.Name()
+	return "Object" + typeIdent(t)
 }
 
 // call renders a call of t's encoder on src, passing `enums` through when t reaches an

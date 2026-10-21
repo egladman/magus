@@ -86,6 +86,9 @@ type sessionBrief struct {
 	// GuardWiring is the host hook config paths in this checkout that invoke magus.
 	// Empty means the rules exist here and nothing runs them.
 	GuardWiring []string `json:"guard_wiring,omitempty"`
+	// WiringUnknown says why GuardWiring and Rules were not read, empty when they were: a
+	// checkout whose harness wiring is unknown is not one with nothing wired.
+	WiringUnknown string `json:"wiring_unknown,omitempty"`
 	// Rules are the instruction files and skill directories that exist here, named
 	// so the model re-reads them instead of trusting a summary of them.
 	Rules []string `json:"rules,omitempty"`
@@ -245,8 +248,12 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
 	brief.Failures = lastRunFailures(root)
-	brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
-	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
+	if wired, err := workspace.WiredHarnesses(ws); err == nil {
+		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
+		brief.Rules = ruleLocations(ctx, root, wired...)
+	} else {
+		brief.WiringUnknown = err.Error()
+	}
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
 	if base, err := rootmagus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
 		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
@@ -441,7 +448,7 @@ func lastRunFailures(root string) []briefFailure {
 // ruleLocations names the instruction files and skill directories that exist in this
 // checkout. What EXISTS, never a recommended list: a path magus prints that is not
 // there teaches a reader to ignore the line. wired are magusfile-selected harness
-// spell names (workspaceHarnessNames(ws)); a harness with no id in wired names no
+// spell names (workspace.WiredHarnesses); a harness with no id in wired names no
 // skill directory here.
 func ruleLocations(ctx context.Context, root string, wired ...string) []string {
 	var out []string
