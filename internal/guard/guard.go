@@ -1204,8 +1204,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		// The push gate, upgraded from the advisory gitGuard returned when the run log proves
-		// no green gate covers this commit: the person is asked through the host's prompt,
-		// or a leased worker is refused outright (see gradePushWithoutGate).
+		// no green gate covers this commit: every session is refused, and a leased worker's
+		// reason sends the commit to its orchestrator (see gradePushWithoutGate).
 		//
 		// Here rather than in gitGuard because that function is pure over the parsed
 		// command and this reads the run log and the revision. The rule is split the same
@@ -1214,13 +1214,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
 			cover, commit, moved := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
-			// publishes, so it is asked like a person rather than refused like a worker. A
-			// row that cannot be read stays a worker.
+			// publishes, so its refusal names no orchestrator. A row that cannot be read
+			// stays a worker.
 			worker := actingLease
 			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
 				worker = ""
 			}
-			// An ask is graded as the deny it stands in for: demoted, nobody is asked.
 			decision, reason := gradePushWithoutGate(cover, commit, worker)
 			if moved {
 				decision, reason = decisionDeny, movedPushReason
@@ -1230,15 +1229,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 					decision = ""
 				}
 			}
-			switch decision {
-			case decisionAsk:
-				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
-				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("pushing "+commit+" ungated")
-					whys[verdict.Reason] = reason + "\n" + askUnrendered
-				}
-				verdict.Rule = string(denyRulePushUngated)
-			case decisionDeny:
+			if decision == decisionDeny {
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRulePushUngated)
 			}
