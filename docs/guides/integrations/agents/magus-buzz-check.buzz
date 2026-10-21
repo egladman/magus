@@ -29,6 +29,9 @@ import "std";
 import "lib/hook" as hook;
 
 final AGENT_NAME_FLAG = "--agent-name";
+// Cursor carries it on every tool hook. This check judges no call, so it reads nothing
+// from it, and accepting it keeps the unsupported-argument warning for real mistakes.
+final OBSERVES_SKILL_LOADS_FLAG = "--observes-skill-loads";
 
 fun warn(message: str) > void {
     io\stderr.write("magus-buzz-check.buzz: {message}\n") catch void;
@@ -36,10 +39,10 @@ fun warn(message: str) > void {
 
 // readAgentName reads the host off this script's argv, "" when the entry names none.
 fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    final parsed = flags\parse(args, switches: [OBSERVES_SKILL_LOADS_FLAG], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. Fix the hook command in your host config.");
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG} and {OBSERVES_SKILL_LOADS_FLAG}. Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }

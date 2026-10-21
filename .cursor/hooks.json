@@ -26,7 +26,7 @@
         "timeout": 10
       },
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor",
+        "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor --observes-skill-loads",
         "matcher": "Write|StrReplace|Edit",
         "timeout": 30
       }

@@ -80,7 +80,9 @@ fun cursor_matcher(event: str) > str {
 
 fun cursor_buzz_check_hook() > HookCommand {
     final check = buzzCheckHook(mgs_getName());
-    return HookCommand{event = "postToolUse", matcher = WRITE_MATCHER, script = check.script, flags = check.flags, timeoutS = check.timeoutS};
+    final flags = check.flags.cloneMutable();
+    flags.append("--observes-skill-loads");
+    return HookCommand{event = "postToolUse", matcher = WRITE_MATCHER, script = check.script, flags = flags, timeoutS = check.timeoutS};
 }
 
 fun cursor_hooks() > [HookCommand] {
