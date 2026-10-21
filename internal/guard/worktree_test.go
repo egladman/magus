@@ -134,6 +134,26 @@ func TestWorktreeRemovePassesWhenNothingCanBeLost(t *testing.T) {
 }
 
 // Each failing condition refuses with its own reason and the command that inspects it.
+// An exited row that filed no result has no grade to wait for, so a clean landed tree
+// passes; a dirty or unlanded one still denies, pointing at job exit.
+func TestWorktreeRemovePassesAnUngradedRowOnlyWhenNothingCanBeLost(t *testing.T) {
+	r := newWorktreeRepo(t)
+	clean := r.add("clean")
+	row := func(wt string) types.Job { return types.Job{ID: "u", State: types.StateExited, CheckoutRoot: wt} }
+	assert.Equal(t, ShellVerdict{}, r.judge("git worktree remove "+clean, row(clean)))
+
+	unlanded := r.add("unlanded")
+	r.commit(unlanded)
+	dirty := r.add("dirty")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty, "scratch.txt"), []byte("x\n"), 0o644))
+	for _, wt := range []string{unlanded, dirty} {
+		v := r.judge("git worktree remove "+wt, row(wt))
+		assertRemovalDenied(t, v)
+		require.Len(t, v.Next, 1)
+		assert.Equal(t, hint.JobExit.Argv("u"), v.Next[0].Argv)
+	}
+}
+
 func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 	r := newWorktreeRepo(t)
 
