@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2158,9 +2157,10 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 	assert.Equal(t, wantCall, got[0])
 }
 
-// TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a run
-// sizes its claim from the measured peaks of runs shaped like it, and records its own
-// outcome under that same shape for the next run to read.
+// TestRun_MemoryClaimFollowsTheRunsShape pins both ends of shape-sized claims: a narrowed
+// run sizes its claim from the measured peaks of narrowed runs, whatever their args,
+// capped by the full runs' peak, and records its own outcome under its own args hash for
+// the next run to read.
 func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 	spellName := register.Spell(t, "zzz-shaped-claim-spell",
 		spells.WithTargets("work"),
@@ -2178,10 +2178,15 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 
 	args := []string{"-run", "X"}
 	shape := forecast.NewShape([]string{types.CharmReadWrite}, args)
+	run := func(peakMB int64, args ...string) forecast.Outcome {
+		s := forecast.NewShape([]string{types.CharmReadWrite}, args)
+		return forecast.Outcome{Result: forecast.OutcomePass, MaxRSSBytes: peakMB << 20, Charms: s.Charms, ArgsHash: s.ArgsHash}
+	}
 	seeded := forecast.History{Version: forecast.HistoryVersion, Projects: map[string]map[string]forecast.Stats{
-		".": {spellName + "/work": {RecentOutcomes: slices.Repeat([]forecast.Outcome{{
-			Result: forecast.OutcomePass, MaxRSSBytes: 10 << 20, Charms: shape.Charms, ArgsHash: shape.ArgsHash,
-		}}, 3)}},
+		".": {spellName + "/work": {RecentOutcomes: []forecast.Outcome{
+			run(12, "-run", "A"), run(12, "-run", "B"), run(12, "-run", "C"),
+			run(10), run(10), run(10),
+		}}},
 	}}
 	historyPath := filepath.Join(root, "history.json")
 	require.NoError(t, forecast.UpdateHistory(t.Context(), historyPath, func(h *forecast.History) error {
@@ -2199,14 +2204,15 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
 		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
-	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs\"", "ceil(1.25 x 10MB), under the 64MB declared")
+	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 13 MiB peak\"",
+		"ceil(1.25 x the 10MB full-run peak), not the 12MB narrowed one, under the 64MB declared")
 
 	var got forecast.History
 	require.NoError(t, got.Load(context.Background(), historyPath))
 	outcomes := got.Projects["."][spellName+"/work"].RecentOutcomes
-	require.Len(t, outcomes, 4)
-	assert.Equal(t, shape.Charms, outcomes[3].Charms)
-	assert.Equal(t, shape.ArgsHash, outcomes[3].ArgsHash)
+	require.Len(t, outcomes, 7)
+	assert.Equal(t, shape.Charms, outcomes[6].Charms)
+	assert.Equal(t, shape.ArgsHash, outcomes[6].ArgsHash)
 }
 
 // TestRun_OutcomeRecordsTheTargetsCPUTime pins that the CPU time every exec under a

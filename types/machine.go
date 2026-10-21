@@ -15,6 +15,9 @@ type MachineClaim struct {
 	Target     string `json:"target" yaml:"target"`
 	DeclaredBy string `json:"declared_by,omitempty" yaml:"declared_by,omitempty"` // absent when that is Target itself
 	MemoryMB   int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	// Profile is the curve MemoryMB peaks over, which the broker packs claims by. A zero
+	// profile (Runs 0) is a claim held flat at MemoryMB.
+	Profile MemoryProfile `json:"profile,omitzero" yaml:"profile,omitempty"`
 	// Sizing is where MemoryMB came from, so a refusal can say whether it rests on a
 	// declaration or on measured runs.
 	Sizing MemorySizing `json:"sizing,omitzero" yaml:"sizing,omitempty"`
@@ -48,16 +51,18 @@ func (c MachineClaim) Run() string {
 // granted. A Reserved holder is a seat `magus status --wait` sized and holds for PID, the
 // run reading its output, until that run's first claim takes it.
 type MachineClaimant struct {
-	Reserved bool         `json:"reserved,omitzero" yaml:"reserved,omitempty"`
-	Project  string       `json:"project" yaml:"project"`
-	Target   string       `json:"target" yaml:"target"`
-	PID      int          `json:"pid,omitzero" yaml:"pid,omitempty"`
-	MemoryMB int          `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
-	Sizing   MemorySizing `json:"sizing,omitzero" yaml:"sizing,omitempty"`
-	Slots    int          `json:"slots,omitzero" yaml:"slots,omitempty"`
-	Dir      string       `json:"dir,omitempty" yaml:"dir,omitempty"`
-	Command  string       `json:"command,omitempty" yaml:"command,omitempty"`
-	Since    time.Time    `json:"since,omitempty" yaml:"since,omitempty"`
+	Reserved bool   `json:"reserved,omitzero" yaml:"reserved,omitempty"`
+	Project  string `json:"project" yaml:"project"`
+	Target   string `json:"target" yaml:"target"`
+	PID      int    `json:"pid,omitzero" yaml:"pid,omitempty"`
+	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	// Profile is the holder's claimed curve, so a refusal can name when the sum breaches.
+	Profile MemoryProfile `json:"profile,omitzero" yaml:"profile,omitempty"`
+	Sizing  MemorySizing  `json:"sizing,omitzero" yaml:"sizing,omitempty"`
+	Slots   int           `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir     string        `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command string        `json:"command,omitempty" yaml:"command,omitempty"`
+	Since   time.Time     `json:"since,omitempty" yaml:"since,omitempty"`
 }
 
 // MachineVerdict is the budget's answer to one admission request.
@@ -71,7 +76,10 @@ type MachineVerdict struct {
 	// OwnRun is set on a claim that is not granted but would fit beside every claim
 	// outside its own process and run. What keeps it out will be released by the
 	// requester's own run, so the requester waits rather than refusing.
-	OwnRun      bool              `json:"own_run,omitzero" yaml:"own_run,omitempty"`
+	OwnRun bool `json:"own_run,omitzero" yaml:"own_run,omitempty"`
+	// Packed is true when the verdict judged memory by curve, and false when every
+	// claim it weighed was a peak held flat, or the broker predates curves.
+	Packed      bool              `json:"packed,omitempty" yaml:"packed,omitempty"`
 	Holders     []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
 	BudgetMB    int               `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`

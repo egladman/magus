@@ -30,7 +30,7 @@ import (
 // They are the selected targets' own claims. A step the run reaches through a project
 // dependency claims for itself when it starts, and is not weighed here.
 func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []types.MachineClaim {
-	size := newClaimSizer(m.measuredRuns(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs))
+	size := newClaimSizer(m.measuredRuns(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs), m.chainReadsCharm)
 	capacity := m.limiter().Capacity()
 	out := make([]types.MachineClaim, 0, len(targets))
 	for _, t := range targets {
@@ -48,7 +48,7 @@ func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charm
 		}
 		out = append(out, types.MachineClaim{
 			Project: p.Path, Target: t.Name, DeclaredBy: step.MemoryDeclaredBy,
-			MemoryMB: step.MemoryMB, Sizing: step.MemorySizing, Slots: slots,
+			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
 		})
 	}
 	return out

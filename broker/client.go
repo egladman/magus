@@ -87,13 +87,17 @@ type Client struct {
 	// seatWaiting is set while a claim waits on its job tree's validation seat, so the
 	// wait is said once.
 	seatWaiting atomic.Bool
+	// overrunUnknown says once that the broker predates the overrun frame.
+	overrunUnknown sync.Once
 }
 
 // heldClaim is a claim this client holds, and the id the current broker knows it by;
-// remote is empty while no broker does.
+// remote is empty while no broker does. overrun is set once Overrun names the claim, so
+// a broker the claim is re-asserted on charges its peak too.
 type heldClaim struct {
-	claim  types.MachineClaim
-	remote string
+	claim   types.MachineClaim
+	remote  string
+	overrun bool
 }
 
 // heldRider is a process group this client handed the broker to end with one of its
@@ -196,6 +200,36 @@ func (c *Client) Release(ctx context.Context, id string) {
 		return
 	}
 	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote})
+}
+
+// Overrun tells the broker a claim Request granted held more than its memory curve
+// predicted, so the broker charges it its full peak until Release. Best-effort like
+// Release: an unknown id or a gone broker is ignored, and a broker too old to know the
+// frame is logged once per Client, never an error the run fails on. A claim re-asserted
+// on a later broker is marked overrun there as well.
+func (c *Client) Overrun(ctx context.Context, id string) {
+	c.mu.Lock()
+	var remote string
+	if h, ok := c.held[id]; ok {
+		h.overrun = true
+		remote = h.remote
+	}
+	cn := c.cur
+	c.mu.Unlock()
+	if remote == "" || cn == nil {
+		return
+	}
+	c.sendOverrun(ctx, cn, remote)
+}
+
+func (c *Client) sendOverrun(ctx context.Context, cn *conn, remote string) {
+	err := cn.roundTrip(ctx, c.next(), typeOverrun, overrunRequest{ClaimID: remote}, typeOverrunReply, nil, nil)
+	if be := (*Error)(nil); errors.As(err, &be) && be.Code == CodeUnknownType {
+		c.overrunUnknown.Do(func() {
+			slog.WarnContext(ctx, "the broker predates memory overruns: a claim over its curve stays charged by the curve; restart the broker to pick up this build",
+				attr.Component("broker"))
+		})
+	}
 }
 
 // Reserve asks the broker to hold a seat the size of claim for process reader, once, and
@@ -373,6 +407,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	c.mu.Lock()
 	held := maps.Clone(c.held)
 	c.mu.Unlock()
+	marked := map[*heldClaim]bool{}
 	for _, h := range held {
 		var reply claimReply
 		if err := cn.roundTrip(dctx, c.next(), typeClaim, claimRequest{Claim: h.claim, Reassert: true}, typeClaimReply, &reply, nil); err != nil {
@@ -381,7 +416,12 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		}
 		c.mu.Lock()
 		h.remote = reply.Verdict.ID
+		overrun := h.overrun
 		c.mu.Unlock()
+		if overrun {
+			c.sendOverrun(dctx, cn, h.remote)
+			marked[h] = true
+		}
 	}
 	riders, err := c.reassertRiders(ctx, dctx, cn)
 	if err != nil {
@@ -400,11 +440,15 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	c.cur = cn
 	// A Release or ReleaseHold that ran before cn was published found no connection to
-	// send on, so what it dropped is handed back here; one after it finds cn itself.
-	var released, unheld []string
+	// send on, so what it dropped is handed back here; one after it finds cn itself. So
+	// is an Overrun that ran after its claim's reassert.
+	var released, unheld, overrun []string
 	for id, h := range held {
-		if c.held[id] != h {
+		switch {
+		case c.held[id] != h:
 			released = append(released, h.remote)
+		case h.overrun && !marked[h]:
+			overrun = append(overrun, h.remote)
 		}
 	}
 	for id, r := range riders {
@@ -419,6 +463,9 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	for _, id := range released {
 		_, _ = cn.call(dctx, c.next(), typeRelease, releaseRequest{ClaimID: id})
+	}
+	for _, id := range overrun {
+		c.sendOverrun(dctx, cn, id)
 	}
 	return cn, nil
 }

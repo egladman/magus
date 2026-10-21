@@ -4,18 +4,17 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPeakRSSTakesTheMaximumNotTheSum(t *testing.T) {
+func TestPeakRSSKernelFloorTakesTheMaximum(t *testing.T) {
 	t.Parallel()
 	ctx := WithExecCost(context.Background())
 
-	// A target that forks a compiler, a linker and a test binary reached its
-	// high-water mark in whichever one peaked. Summing would describe a machine
-	// that never existed, and would make every multi-process target look
-	// unschedulable.
+	// A kernel figure carries no time, so it cannot say whether two execs
+	// overlapped; only the curve sums. Without samples the floor alone is the peak.
 	RecordPeakRSS(ctx, 200<<20)
 	RecordPeakRSS(ctx, 4<<30)
 	RecordPeakRSS(ctx, 512<<20)
@@ -113,4 +112,73 @@ func TestCPUMsNestedCollectorsAreIndependent(t *testing.T) {
 	assert.Equal(t, int64(100), CPUMs(outer))
 	assert.Equal(t, int64(7), CPUMs(inner))
 	assert.Zero(t, CPUMs(context.Background()), "no collector, no figure")
+}
+
+func TestStepCurveSumsConcurrentExecs(t *testing.T) {
+	t.Parallel()
+	ctx := WithExecCost(context.Background())
+	c := ctx.Value(execCostKey{}).(*execCost)
+	step := c.start
+	c.now = func() time.Time { return step.Add(10 * time.Second) }
+
+	// Ten seconds in twenty buckets is 500ms each. Exec a peaks at 2GiB in the
+	// bucket [1s, 1.5s), and exec b, started a second in, holds 3GiB there too.
+	recordSeries(ctx, step,
+		MemorySample{At: time.Second, Bytes: 1 << 30},
+		MemorySample{At: 1200 * time.Millisecond, Bytes: 2 << 30},
+		MemorySample{At: 5 * time.Second, Bytes: 512 << 20},
+	)
+	recordSeries(ctx, step.Add(time.Second),
+		MemorySample{At: 100 * time.Millisecond, Bytes: 3 << 30},
+		MemorySample{At: 20 * time.Second, Bytes: 256 << 20},
+	)
+	RecordPeakRSS(ctx, 4<<30)
+
+	var want MemoryCurve
+	want[2] = 5 << 10
+	want[10] = 512
+	want[MemoryCurveBuckets-1] = 256
+	assert.Equal(t, want, Curve(ctx), "a bucket sums each exec's largest sample in it")
+	assert.Equal(t, int64(5<<30), PeakRSS(ctx), "concurrent execs add, above the kernel floor")
+
+	RecordPeakRSS(ctx, 8<<30)
+	assert.Equal(t, int64(8<<30), PeakRSS(ctx), "the kernel figure floors the curve's peak")
+}
+
+func recordSeries(ctx context.Context, start time.Time, samples ...MemorySample) {
+	record, end := RecordCurve(ctx, start)
+	for _, s := range samples {
+		record(s)
+	}
+	end()
+}
+
+func TestOnRSSSampleHearsTheLiveTotal(t *testing.T) {
+	t.Parallel()
+	outer := WithExecCost(context.Background())
+	type heard struct {
+		at    time.Duration
+		bytes int64
+	}
+	var got []heard
+	OnRSSSample(outer, func(at time.Duration, bytes int64) { got = append(got, heard{at, bytes}) })
+	inner := WithExecCost(outer)
+	c := inner.Value(execCostKey{}).(*execCost)
+	shift := c.start.Sub(outer.Value(execCostKey{}).(*execCost).start)
+
+	recordA, endA := RecordCurve(inner, c.start)
+	recordB, endB := RecordCurve(inner, c.start.Add(time.Second))
+	recordA(MemorySample{At: time.Second, Bytes: 100})
+	recordB(MemorySample{At: 200 * time.Millisecond, Bytes: 50})
+	endA()
+	recordB(MemorySample{At: 400 * time.Millisecond, Bytes: 70})
+	endB()
+
+	assert.Equal(t, []heard{
+		{shift + time.Second, 100},
+		{shift + 1200*time.Millisecond, 150},
+		{shift + 1400*time.Millisecond, 70},
+	}, got, "each live exec counts at its latest sample, timed from the listener's collector")
+	assert.Zero(t, PeakRSS(outer), "an inner collector still does not feed its outer's figures")
+	OnRSSSample(context.Background(), func(time.Duration, int64) { t.Fatal("no collector, no listener") })
 }

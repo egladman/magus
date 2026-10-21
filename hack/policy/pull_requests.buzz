@@ -23,11 +23,14 @@
 //   1 + floor(log2(1 + shipped source files));
 //   1 + floor(log2(1 + changed lines / linesPerChange)), over every path not generated.
 // Each term is a lower bound on what a reviewer must check. The paths and lines come from
-// vcs\diffStat against the base, read for a description of the checkout's own branch. When
-// the diff cannot be read (no base, a failed or empty diff, or a call about another
-// branch's pull request) its terms count as 1 and a description over the budget is
-// advised, never denied: the denial would rest on a fact nobody read. A hook that runs out
-// of time fails open as a whole, as every rule does.
+// vcs\diffStat against the base for the checkout's own branch, or a git numstat of the head
+// the call names (`--head`, or the head `gh pr view` reports for `gh pr edit <n>`). A
+// description whose diff cannot be read (no base, a failed `gh pr view`, a failed or empty
+// diff) is denied with the fetch that would make it readable, never judged on facts nobody
+// read. The same diff feeds the check CI's pr-changelog target runs: a feat, fix, perf or
+// breaking title that changes a shipped path needs a fragment under changes/unreleased/,
+// and every fragment must lint. A hook that runs out of time fails open as a whole, as
+// every rule does.
 //
 // The shape past the lead: bullets (a list may follow a one-line lead-in ending in `:`),
 // at most one closing sentence after them, and headed sections, whose prose is free. Prose
@@ -49,6 +52,11 @@ import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
 import "./libs/proofread/proofread" as proofread;
+
+// HYGIENE_TARGETS are the magus targets CI's hygiene job runs over a pull request. The
+// guard runs the same checks (judgeText for pr-description, the changelog functions for
+// pr-changelog) before the text is posted.
+export final HYGIENE_TARGETS = ["pr-description", "pr-changelog"];
 
 final descriptionKind = "change-description";
 final summaryKind = "review-summary";
@@ -425,7 +433,8 @@ fun last(values: [Value]) > str? {
 // it adds and deletes outside generated files. known is false when the diff could not be
 // read, and the counts are then zero. paths are the changed paths outside generated
 // files, and areas the projects and top-level packages they sit in (see touchedAreas),
-// which only branchDiff fills.
+// which only the diff readers fill. changed is every changed path, generated ones too,
+// and added the fragments among them that gained lines: what CI's pr-changelog reads.
 export object Facts {
     known: bool,
     fragments: int,
@@ -433,6 +442,8 @@ export object Facts {
     lines: int,
     paths: [str] = [<str>],
     areas: [str] = [<str>],
+    changed: [str] = [<str>],
+    added: [str] = [<str>],
 }
 
 export fun unknownFacts() > Facts {
@@ -457,9 +468,13 @@ export fun statFacts(stats: [FileStat]) > Facts {
     var shipped = 0;
     var lines = 0;
     final sources = mut [<str>];
+    final changed = mut [<str>];
+    final added = mut [<str>];
     foreach (s in stats) {
+        changed.append(s.path);
         if (entries\fragments([s.path]).len() > 0 and s.added > 0) {
             fragments = fragments + 1;
+            added.append(s.path);
         }
         if (!generated(s.path)) {
             sources.append(s.path);
@@ -472,7 +487,8 @@ export fun statFacts(stats: [FileStat]) > Facts {
     if (stats.len() == 0) {
         return unknownFacts();
     }
-    return Facts{ known = true, fragments = fragments, shipped = shipped, lines = lines, paths = sources };
+    return Facts{ known = true, fragments = fragments, shipped = shipped, lines = lines, paths = sources,
+        changed = changed, added = added };
 }
 
 // The section of .gitattributes magus writes from every project's declared outputs, per
@@ -672,6 +688,96 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
         return Facts{ known = facts.known, fragments = facts.fragments, shipped = facts.shipped,
             lines = facts.lines, paths = facts.paths, areas = changedAreas(workspace, paths: facts.paths) };
     };
+}
+
+// PullRef is the head revision and base branch `gh pr view` reports for a pull request.
+export object PullRef {
+    head: str,
+    base: str,
+}
+
+// diffReader reads the Facts of the pull request a description command is about, through
+// two reads it is handed: view names the head and base of pull request number, and stat
+// counts the lines head carries past ref (head "" is the checkout's own branch). A base the
+// command names wins over the pull request's. A read that fails or finds nothing is
+// unknown, which textProblems denies.
+export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?) > fun (head: str, base: str, number: str) > Facts {
+    return fun (head: str, base: str, number: str) > Facts {
+        var rev = head;
+        var name = base;
+        if (number != "") {
+            final pull = view(number);
+            if (pull == null) {
+                return unknownFacts();
+            }
+            rev = pull!.head;
+            if (name == "") {
+                name = pull!.base;
+            }
+        }
+        var ref = "origin/" + name;
+        if (name == "") {
+            ref = vcs\base(workspace) catch "";
+        }
+        if (ref == "") {
+            return unknownFacts();
+        }
+        final stats = stat(rev, ref);
+        if (stats == null) {
+            return unknownFacts();
+        }
+        final facts = statFacts(stats!);
+        return Facts{ known = facts.known, fragments = facts.fragments, shipped = facts.shipped, lines = facts.lines,
+            paths = facts.paths, areas = changedAreas(workspace, paths: facts.paths), changed = facts.changed,
+            added = facts.added };
+    };
+}
+
+// pullRequestDiff is diffReader over the real `gh pr view` and the repository at workspace.
+// A head other than the checkout's is counted with git, which is the one backend that names
+// a revision range.
+export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: str) > Facts {
+    final view = fun (number: str) > PullRef? {
+        final run = proc\exec("gh", args: ["pr", "view", number, "--json", "headRefOid,baseRefName"],
+            opts: {"quiet": true, "allow_failure": true}) catch null;
+        if (run == null or run!.code != 0) {
+            return null;
+        }
+        final fields: {str: str} = json\parse(run!.stdout) catch {<str: str>};
+        final rev = fields["headRefOid"] ?? "";
+        final name = fields["baseRefName"] ?? "";
+        if (rev == "" or name == "") {
+            return null;
+        }
+        return PullRef{ head = rev, base = name };
+    };
+    final stat = fun (head: str, ref: str) > [FileStat]? {
+        if (head == "") {
+            return vcs\diffStat(ref, dir: workspace) catch null;
+        }
+        final run = vcs\cmd(["diff", "--numstat", "--no-renames", "{ref}...{head}"],
+            opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
+        if (run == null or run!.code != 0) {
+            return null;
+        }
+        return parseNumstat(run!.stdout);
+    };
+    return diffReader(workspace, view: view, stat: stat);
+}
+
+// parseNumstat reads `git diff --numstat` rows: added, deleted and path, where a binary
+// file has `-` for both counts.
+export fun parseNumstat(text: str) > [FileStat] {
+    final stats = mut [<FileStat>];
+    foreach (row in text.split("\n")) {
+        final cols = row.split("\t");
+        if (cols.len() < 3) {
+            continue;
+        }
+        stats.append(FileStat{ path = cols[2], added = std\parseInt(cols[0]) ?? 0,
+            deleted = std\parseInt(cols[1]) ?? 0, binary = cols[0] == "-" });
+    }
+    return stats;
 }
 
 // Judged is one finding of a judge, in the findings JSON libs/proofread/README.md
@@ -1309,23 +1415,64 @@ fun flagsIn(c: TextCommand) > [str] {
     return c.title + c.body + c.bodyFile + c.fields + c.base + c.head + c.values;
 }
 
-// describesBranch reports whether p, a description command, describes the checkout's
-// branch, the only one whose diff the rule can read: it names no pull request and no head
-// branch.
-fun describesBranch(p: helpers\Program, c: TextCommand) > bool {
-    return helpers\stripFlags(p.args, valueFlags: flagsIn(c)).len() == c.command.len()
-        and flagValues(p.args, flags: c.head).len() == 0;
+// editedPull is the pull request `gh pr edit` names, "" when the call names none (the
+// checkout's own) or is another command.
+fun editedPull(p: helpers\Program, c: TextCommand) > str {
+    if (c.program != "gh" or c.command[1] != "edit") {
+        return "";
+    }
+    final rest = helpers\stripFlags(p.args, valueFlags: flagsIn(c));
+    if (rest.len() > c.command.len()) {
+        return rest[c.command.len()];
+    }
+    return "";
+}
+
+// unreadableDiff is the denial for a description whose diff cannot be read, naming the
+// fetch that brings the base in.
+fun unreadableDiff(base: str) > str {
+    var name = base;
+    if (name == "") {
+        name = "main";
+    }
+    return "the diff of this pull request cannot be read, so its changelog, word budget and areas cannot be "
+        + "checked: run `git fetch origin {name}`, then retry";
+}
+
+// changelogProblems are what CI's pr-changelog target reaches over the same diff: a
+// fragment that fails changelog\lint, then a title that owes a fragment the diff does not
+// add. A fragment absent from this checkout (its head is not checked out) is not linted.
+fun changelogProblems(title: str, facts: Facts) > [str] {
+    final present = mut [<str>];
+    foreach (path in facts.added) {
+        if (fs\exists(path) catch false) {
+            present.append(path);
+        }
+    }
+    final malformed = entries\lint(present);
+    if (malformed.len() > 0) {
+        return ["malformed changelog fragment(s); fix each to the format changes/README.md gives:\n  "
+            + malformed.join("\n  ")];
+    }
+    if (entries\owed(title, changed: facts.changed).len() == 0) {
+        return [<str>];
+    }
+    final owing = entries\problem(title, changed: facts.changed, added: facts.added);
+    if (owing == "") {
+        return [<str>];
+    }
+    return ["changelog: " + owing];
 }
 
 // textProblems names what is wrong with one call's text. files holds the contents of the
-// text files the guard could read; diff reads the branch's Facts against a base (see
-// branchDiff), and is called only for the checkout's own pull request; judge is the prose
+// text files the guard could read; diff reads the Facts of the pull request the call
+// describes (see pullRequestDiff); judge is the prose
 // judge (see judgeRunner); cited judges the output refs a description cites (see judgeText).
 // A value the parser could not render is unknown, and then the whole line is judged for
 // credit and typography in its place. A review's inline comments are judged beside its
 // body. An --input JSON file is the whole request, so its texts alone are judged, and none
 // when the guard could not read it.
-export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
+export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
     final c = matchCommand(p)!;
     final kind = kindOf(p, c: c);
     final input = inputFile(p);
@@ -1340,6 +1487,16 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
     }
     final file = textFile(p);
     var known = title != "" and body != "";
+    var read = unknownFacts();
+    var changelog = [<str>];
+    if (c.kind == descriptionKind and (title ?? "") != "") {
+        final base = last(flagValues(p.args, flags: c.base)) ?? "";
+        read = diff(last(flagValues(p.args, flags: c.head)) ?? "", base: base, number: editedPull(p, c: c));
+        if (!read.known) {
+            return Findings{ denies = [unreadableDiff(base)], advice = [<str>] };
+        }
+        changelog = changelogProblems(title!, facts: read);
+    }
     if (file != null) {
         final content = files[file!];
         if (content == null) {
@@ -1349,14 +1506,8 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         }
     }
     if (known) {
-        final facts = fun () > Facts {
-            if (describesBranch(p, c: c)) {
-                return diff(last(flagValues(p.args, flags: c.base)) ?? "");
-            }
-            return unknownFacts();
-        };
         final found = judgeText(Text{ kind = kind, title = title, body = body, event = eventOf(p, c: c) },
-            facts: facts, judge: judge, cited: cited);
+            facts: fun () > Facts => read, judge: judge, cited: cited);
         final inline = mut [<Text>];
         if (kind == summaryKind) {
             foreach (v in namedFields(p.args, flags: c.fields, name: inlineField)) {
@@ -1365,9 +1516,13 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
                 }
             }
         }
-        return merged(found, more: judgeAll(inline, judge: judge, cited: cited));
+        return merged(merged(found, more: judgeAll(inline, judge: judge, cited: cited)),
+            more: Findings{ denies = changelog, advice = [<str>] });
     }
     final problems = mut [<str>];
+    foreach (problem in changelog) {
+        problems.append(problem);
+    }
     foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: kind)) {
         if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
             problems.append("{f.message} [{f.rule}]");
@@ -1463,12 +1618,12 @@ fun adviceKey(p: helpers\Program, c: TextCommand) > str {
 // a description that departs from the shape or leaves a touched area unnamed. The verdict
 // names the rule, so the trail and a repeated denial tell it apart. The guard holds the
 // author's runs, so it holds the output refs a description cites to them.
-export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
+export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
     return decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
 }
 
 // decideCiting is decidePullRequest with the check on cited output refs chosen by the caller.
-fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
+fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
     final problems = mut [<str>];
     final advice = mut [<str>];
     final denied = mut [<str>];
@@ -1629,12 +1784,12 @@ fun teaching(kinds: [str], advice: bool) > str {
 }
 
 // decided is decidePullRequest with every denial held to the verdict shape.
-fun decided(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
+fun decided(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
     return decidedCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
 }
 
 // decidedCiting is decideCiting with every denial held to the verdict shape.
-fun decidedCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
+fun decidedCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
     final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
     return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited), label: label);
 }
@@ -1646,8 +1801,8 @@ fun create(title: str, body: str) > [helpers\Program] {
 }
 
 // facts is a diff reader that answers f and never touches a repository.
-fun facts(f: Facts) > fun (base: str) > Facts {
-    return fun (base: str) > Facts {
+fun facts(f: Facts) > fun (head: str, base: str, number: str) > Facts {
+    return fun (head: str, base: str, number: str) > Facts {
         return f;
     };
 }
@@ -1668,7 +1823,7 @@ fun reporting(f: Judged) > fun (text: str, kind: str) > [Judged] {
 }
 
 fun judged(programs: [helpers\Program], line: str, files: {str: str}) > GuardVerdict {
-    return decidedCiting(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(), cited: skipCited);
+    return decidedCiting(programs, line: line, files: files, diff: facts(readable()), judge: passing(), once: helpers\counter(), cited: skipCited);
 }
 
 fun judgedReason(title: str, body: str) > str {
@@ -1693,6 +1848,11 @@ fun sized(n: int) > str {
         left = left - take;
     }
     return lines.join("\n");
+}
+
+// readable is a diff that was read and proves nothing beyond one changed line.
+fun readable() > Facts {
+    return Facts{ known = true, fragments = 0, shipped = 0, lines = 1 };
 }
 
 fun shipping(shipped: int, lines: int) > Facts {
@@ -1727,13 +1887,13 @@ test "a spaced hyphen is denied with the shape and its example" {
 test "every deny finding is listed with where it sits and its rule, under the rule's name" {
     final lead = Judged{ rule = "lead-context", line = 2, message = "It opens with a heading: open with a paragraph." };
     final v = decided(create(goodTitle, body: "## Summary"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(lead), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(lead), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.rule == "pull-request-text", message: "named: {v.rule}");
     std\assert(v.reason.indexOf("description line 1: It opens with a heading: open with a paragraph. [lead-context]") != null, message: v.reason);
     final title = Judged{ rule = "filler", line = 1, message = "Drop 'robust': state the fact.", matched = "robust" };
     final t = decided(create("fix(cache): add a robust key", body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(title), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(title), once: helpers\counter());
     std\assert(t.reason.indexOf("the title: Drop 'robust': state the fact. [filler]") != null, message: t.reason);
     std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word proofread reported is not reported twice: {t.reason}");
 }
@@ -1741,7 +1901,7 @@ test "every deny finding is listed with where it sits and its rule, under the ru
 test "an advise finding is graded by proofread, so this rule neither denies nor advises on it" {
     final verdict = Judged{ rule = "verdict", line = 2, message = "Name the behavior 'broken' stands for.", decision = "advise" };
     final v = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(verdict), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(verdict), once: helpers\counter());
     std\assert(v.decision == "allow", message: "{v.decision}: {v.reason}");
 }
 
@@ -1758,7 +1918,7 @@ fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) 
 }
 
 fun citing(body: str, cited: fun (ref: str) > Citation) > GuardVerdict {
-    return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(unknownFacts()),
+    return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(readable()),
         judge: passing(), once: helpers\counter(), cited: cited);
 }
 
@@ -1821,7 +1981,7 @@ test "a description is looked up for at most ten distinct refs" {
 test "a review reply is not held to the runs it cites" {
     final asked = mut [<str>];
     final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
-        files: {<str: str>}, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(),
+        files: {<str: str>}, diff: facts(readable()), judge: passing(), once: helpers\counter(),
         cited: holding({<str: magus\OutputRecord>}, asked: asked));
     std\assert(v.decision == "allow" and asked.len() == 0, message: "{v.reason} {asked}");
 }
@@ -1833,12 +1993,12 @@ test "proofread reads the title and the description as one pull request" {
         return [<Judged>];
     };
     decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0].text == goodTitle + "\nPins the key." and seen[0].kind == "change-description",
         message: "{seen.len()}");
     final unread = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
     decided(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
 }
 
@@ -1870,7 +2030,7 @@ test "each forge command is judged as the kind it writes" {
             return [<Judged>];
         };
         decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {"reply.md": "From a file."},
-            diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+            diff: facts(readable()), judge: recording, once: helpers\counter());
         final got = if (seen.len() > 0) seen[0].kind + "|" + seen[0].text else "not judged";
         std\assert(seen.len() == 1 and got == want, message: "{argv.join(" ")}: {got}");
     }
@@ -1879,7 +2039,7 @@ test "each forge command is judged as the kind it writes" {
 test "a reply denial teaches a reply, not a description" {
     final opener = Judged{ rule = "reply-opener", line = 1, message = "Open with the point you answer." };
     final v = decidePullRequest(helpers\request([["gh", "pr", "comment", "412", "--body", "No, as I said."]]), line: "",
-        files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(opener), once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: reporting(opener), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
@@ -1889,7 +2049,7 @@ test "a reply denial teaches a reply, not a description" {
 test "a summary denial teaches a review's body" {
     final f = Judged{ rule = "blame", line = 1, message = "Name the code, not the person." };
     final v = decidePullRequest(helpers\request([["gh", "pr", "review", "412", "-r", "-b", "You broke it."]]), line: "",
-        files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(f), once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: reporting(f), once: helpers\counter());
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("the verdict and what blocks it") != null and v.reason.indexOf("acknowledge the point") == null,
         message: v.reason);
@@ -1902,7 +2062,7 @@ fun judgedCalls(argv: [str], files: {str: str}) > [str] {
         seen.append(kind + "|" + text);
         return [<Judged>];
     };
-    decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(unknownFacts()),
+    decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(readable()),
         judge: recording, once: helpers\counter());
     return seen;
 }
@@ -1944,21 +2104,21 @@ test "a commit message is judged as a commit message, its subject on line 1" {
         return [<Judged>];
     };
     decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0].kind == "commit-message" and seen[0].text == "trim a fragment", message: "{seen.len()}");
     decidePullRequest(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment", "-m", "why"]]), line: "",
-        files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "trim a fragment\n\nwhy", message: "each -m is a paragraph");
-    decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     decidePullRequest(helpers\vcsRequest([["git", "status"]]), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2, message: "a message known only at run time, and another subcommand, go unjudged");
 }
 
 test "a commit message denial names the subject, its rule and the shape, under its own rule name" {
     final mood = Judged{ rule = "subject-mood", line = 1, message = "Open the subject with the imperative: 'Add', not 'Added'.", matched = "Added" };
     final v = decidePullRequest(commit("Added the key"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(mood), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(mood), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.rule == "commit-message-text", message: "named: {v.rule}");
     std\assert(v.reason.startsWith("this commit message breaks a writing rule"), message: v.reason);
@@ -1966,32 +2126,32 @@ test "a commit message denial names the subject, its rule and the shape, under i
     std\assert(v.reason.indexOf("one line in the imperative") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
     final body = Judged{ rule = "filler", line = 3, message = "Drop 'actually': state the fact.", matched = "actually" };
     final b = decidePullRequest(commit("trim a fragment\n\nIt actually works."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(body), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(body), once: helpers\counter());
     std\assert(b.reason.indexOf("line 3: Drop 'actually': state the fact. [filler]") != null, message: b.reason);
 }
 
 test "a commit message's advise finding is graded by proofread and allowed here" {
     final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
     final v = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(claim), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(claim), once: helpers\counter());
     std\assert(v.decision == "allow", message: "{v.decision} {v.reason}");
     final low = Judged{ rule = "grade", line = 0, message = "Grade 0.0 is under the minimum of 20." };
     final denied = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(low), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(low), once: helpers\counter());
     std\assert(denied.decision == "deny" and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
 }
 
 test "a judge that did not run is advice for a commit message and a denial for a pull request" {
     final unrun = Judged{ rule = "judge", line = 0, message = "proofread cannot run: it is not built; run `build`, then retry" };
     final c = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(unrun), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
     std\assert(c.decision == "advise", message: "{c.decision} {c.reason}");
     std\assert(c.reason.indexOf("proofread cannot run") != null, message: c.reason);
     final p = decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(unrun), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
     std\assert(p.decision == "deny", message: "{p.decision} {p.reason}");
     final denied = Judged{ rule = "subject-mood", line = 1, message = "Open with the imperative." };
-    std\assert(decidePullRequest(commit("Added it"), line: "", files: {<str: str>}, diff: facts(unknownFacts()),
+    std\assert(decidePullRequest(commit("Added it"), line: "", files: {<str: str>}, diff: facts(readable()),
         judge: reporting(denied), once: helpers\counter()).decision == "deny", message: "a finding of a judge that ran still denies");
 }
 
@@ -2000,10 +2160,10 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final bad = Judged{ rule = "blame", line = 3, message = "Describe what happened." };
     final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
     final graded = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(repro), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(repro), once: helpers\counter());
     std\assert(graded.decision == "allow", message: "{graded.decision} {graded.reason}");
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
-        diff: facts(unknownFacts()), judge: reporting(bad), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(bad), once: helpers\counter());
     std\assert(denied.decision == "deny" and denied.rule == "forge-text", message: denied.reason);
     std\assert(denied.reason.startsWith("this issue breaks a writing rule"), message: denied.reason);
     std\assert(denied.reason.indexOf("body line 2: Describe what happened. [blame]") != null, message: denied.reason);
@@ -2013,7 +2173,7 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
 test "release notes are judged as written, with no title, budget or shape" {
     final hedge = Judged{ rule = "hedge", line = 2, message = "Drop 'might fix'." };
     final v = decidePullRequest(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\nMight fix the key."]]),
-        line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(hedge), once: helpers\counter());
+        line: "", files: {<str: str>}, diff: facts(readable()), judge: reporting(hedge), once: helpers\counter());
     std\assert(v.decision == "deny" and v.rule == "forge-text", message: v.reason);
     std\assert(v.reason.startsWith("these release notes break a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 2: Drop 'might fix'. [hedge]") != null, message: v.reason);
@@ -2145,32 +2305,108 @@ test "words after the lead past the budget are denied with the budget and why; t
     std\assert(verdictWith(goodTitle, body: longLead, f: small).decision == "allow", message: "the lead is not counted");
 }
 
-test "a budget the diff could not settle is advice, told once" {
-    final body = sized(120);
-    final v = verdictWith(goodTitle, body: body, f: unknownFacts());
-    std\assert(v.decision == "advise", message: v.reason);
-    std\assert(v.reason.indexOf("could not be read, so it counts as 1 and this is advice") != null, message: v.reason);
-
-    final once = helpers\counter();
-    final edit = helpers\request([["gh", "pr", "edit", "412", "--body", body]]);
-    final big = facts(shipping(100, lines: 5000));
-    std\assert(decided(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "advise", message: "another pull request's diff is never read");
-    std\assert(decided(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "allow", message: "said once per pull request");
+test "a diff that cannot be read is denied with the fetch that makes it readable" {
+    final v = verdictWith(goodTitle, body: sized(120), f: unknownFacts());
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.reason.indexOf("run `git fetch origin main`") != null, message: v.reason);
+    final release = helpers\request([["gh", "pr", "create", "--base", "release", "--title", goodTitle, "--body", "Pins the key."]]);
+    final other = decided(release, line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter());
+    std\assert(other.decision == "deny" and other.reason.indexOf("run `git fetch origin release`") != null, message: other.reason);
 }
 
-test "the diff is read once, and only for the checkout's own pull request" {
+test "the diff is read once per description, for the head and base the call names" {
     final reads = mut [<str>];
-    final counting = fun (base: str) > Facts {
-        reads.append(base);
+    final counting = fun (head: str, base: str, number: str) > Facts {
+        reads.append("{head}|{base}|{number}");
         return shipping(1, lines: 40);
     };
     decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
-    std\assert(reads.len() == 1 and reads[0] == "main", message: "one read, against the pull request's base");
+    std\assert(reads.join(",") == "|main|", message: "the checkout's branch, against the pull request's base: {reads}");
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
     decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
-    std\assert(reads.len() == 1, message: "another branch's diff is not this checkout's");
+    std\assert(reads[1] == "other||", message: "another branch is read by name: {reads}");
+    final edit = helpers\request([["gh", "pr", "edit", "412", "--title", goodTitle, "--body", "Pins the key."]]);
+    decided(edit, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    std\assert(reads[2] == "||412", message: "an edit names its pull request: {reads}");
     decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
-    std\assert(reads.len() == 1, message: "a reply reads no diff");
+    std\assert(reads.len() == 3, message: "a reply reads no diff");
+}
+
+final featTitle = "feat(cache): hash the key in sorted order";
+
+// shipped is the diff of a feature that changes one shipped path, with the fragments
+// paths gained lines.
+fun shippedDiff(fragments: [str]) > Facts {
+    return Facts{ known = true, fragments = fragments.len(), shipped = 1, lines = 10,
+        paths = ["internal/cache/key.go"] + fragments, changed = ["internal/cache/key.go"] + fragments,
+        added = fragments };
+}
+
+test "a feat that ships code with no fragment is denied with the fix, and a fragment settles it" {
+    final bare = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
+    std\assert(bare.decision == "deny", message: bare.reason);
+    std\assert(bare.reason.indexOf("adds no changelog fragment") != null and bare.reason.indexOf("changes/unreleased/<branch>.md") != null, message: bare.reason);
+    final refactor = decided(create("refactor(cache): hash the key in sorted order", body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
+    std\assert(refactor.decision == "allow", message: "a title that owes no entry needs none: " + refactor.reason);
+
+    final fragments = fs\glob("changes/unreleased/*.md") catch [<fs\Path>];
+    if (fragments.len() > 0) {
+        final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
+            diff: facts(shippedDiff([fragments[0].value])), judge: passing(), once: helpers\counter());
+        std\assert(settled.decision == "allow", message: "a well-formed fragment: " + settled.reason);
+    }
+}
+
+test "a fragment that fails lint is denied even when the title owes none" {
+    final malformed = decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(shippedDiff(["changes/README.md"])), judge: passing(), once: helpers\counter());
+    std\assert(malformed.decision == "deny", message: malformed.reason);
+    std\assert(malformed.reason.indexOf("malformed changelog fragment(s)") != null, message: malformed.reason);
+}
+
+test "gh pr edit <n> reads its head and base from gh and counts the lines between them" {
+    final asked = mut [<str>];
+    final view = fun (number: str) > PullRef? {
+        asked.append(number);
+        return PullRef{ head = "0123abc", base = "release" };
+    };
+    final stat = fun (head: str, ref: str) > [FileStat]? {
+        asked.append("{head}...{ref}");
+        return [
+            FileStat{ path = "internal/cache/key.go", added = 10, deleted = 2, binary = false },
+            FileStat{ path = "changes/unreleased/key.md", added = 4, deleted = 0, binary = false },
+            FileStat{ path = "MAGUS.md", added = 1, deleted = 1, binary = false },
+        ];
+    };
+    final read = diffReader(".", view: view, stat: stat)("", base: "", number: "12");
+    std\assert(asked.join(",") == "12,0123abc...origin/release", message: "asked {asked}");
+    std\assert(read.known and read.shipped == 1 and read.fragments == 1 and read.lines == 16, message: "counts {read}");
+    std\assert(read.paths.join(",") == "internal/cache/key.go,changes/unreleased/key.md", message: "paths {read.paths}");
+    std\assert(read.changed.len() == 3 and read.added.join(",") == "changes/unreleased/key.md", message: "changed {read.changed}, added {read.added}");
+
+    diffReader(".", view: view, stat: stat)("", base: "main", number: "12");
+    std\assert(asked[asked.len() - 1] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
+    final unseen = fun (number: str) > PullRef? {
+        return null;
+    };
+    std\assert(!diffReader(".", view: unseen, stat: stat)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
+    final unstat = fun (head: str, ref: str) > [FileStat]? {
+        return null;
+    };
+    std\assert(!diffReader(".", view: view, stat: unstat)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
+}
+
+test "numstat rows become file stats, a binary file with zero counts" {
+    final stats = parseNumstat("10\t2\tinternal/cache/key.go\n-\t-\tassets/logo.png\n\n");
+    std\assert(stats.len() == 2, message: "two rows: {stats.len()}");
+    std\assert(stats[0].path == "internal/cache/key.go" and stats[0].added == 10 and stats[0].deleted == 2 and !stats[0].binary, message: "a text row");
+    std\assert(stats[1].binary and stats[1].added == 0, message: "a binary row");
+}
+
+test "the guard runs the checks of the targets CI's hygiene job runs" {
+    std\assert(HYGIENE_TARGETS.join(",") == "pr-description,pr-changelog", message: "targets {HYGIENE_TARGETS}");
 }
 
 test "an area the diff touches and the description never names is a question, not a denial" {
@@ -2267,7 +2503,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
         lead + "\n\n- Pins it.\n\n## Why this approach\n\nA per-process cache suited one worker. It stops holding at eight.\n\n"
             + "## Not verified\n\n- [ ] Linux, which CI runs.",
     ]) {
-        final v = verdictWith(goodTitle, body: body, f: unknownFacts());
+        final v = verdictWith(goodTitle, body: body, f: readable());
         std\assert(v.decision == "allow", message: "{body}: {v.reason}");
     }
     final advised = {
@@ -2297,12 +2533,12 @@ test "a description read from a heredoc or a body file is judged" {
         seen.append(text);
         return [<Judged>];
     };
-    decided(filled, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decided(filled, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0] == "fix: pin the key\nClaude pinned the key.", message: "{seen}");
 
     final fromFile = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body-file", "pr.md"]]);
     std\assert(bodyFiles(fromFile)[0] == "pr.md", message: "the file to read");
-    decided(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decided(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1] == goodTitle + "\nClaude wanted this.", message: "{seen}");
 }
 
@@ -2313,7 +2549,7 @@ test "an unreadable description is judged from the whole line for credit and typ
         return [Judged{ rule = "attribution", line = 1, message = "Drop 'Claude': describe the change." },
             Judged{ rule = "lead-context", line = 2, message = "Open with the outcome." }];
     };
-    final v = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: both, once: helpers\counter());
+    final v = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: both, once: helpers\counter());
     std\assert(v.reason.indexOf("Drop 'Claude': describe the change. [attribution]") != null, message: v.reason);
     std\assert(v.reason.indexOf("lead-context") == null, message: "a line has no lead: {v.reason}");
     final long = "gh pr create --body \"$BODY\" " + "x".repeat(3000);
@@ -2328,7 +2564,7 @@ test "an unreadable description reaches proofread without its shell quotes" {
     };
     final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
     final line = "gh pr create --title \"feat: add a Claude Code mod\" --body 'written by Claude'";
-    decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0] == "gh pr create --title feat: add a Claude Code mod --body written by Claude", message: "{seen}");
 }
 

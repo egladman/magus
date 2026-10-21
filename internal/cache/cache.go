@@ -267,7 +267,10 @@ type Step struct {
 	// MemorySizing says whether MemoryMB is the declaration or a figure sized from
 	// measured runs, so a refusal names where it came from. Never hashed.
 	MemorySizing types.MemorySizing
-	Label        string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// MemoryProfile is the curve MemoryMB peaks over, zero when the claim is a peak
+	// held flat. Never hashed.
+	MemoryProfile types.MemoryProfile
+	Label         string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output
@@ -563,6 +566,10 @@ func (c *Cache) Stats() Stats {
 // next to the cache (the symbol index a `scip` op produces) resolve their paths under
 // it, so those artifacts stay out of the working tree.
 func (c *Cache) Dir() string { return c.dir }
+
+// MachineArbitrated reports whether a machine admitter (WithMachineAdmission) decides
+// each step's claim. False on a nil Cache.
+func (c *Cache) MachineArbitrated() bool { return c != nil && c.machine != nil }
 
 // RunningTargets names what this process has in flight right now, as "project:target".
 //
@@ -884,6 +891,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 
 	lp := c.logPath(s.ProjectPath, hash)
 	ctx = types.WithExecCost(ctx)
+	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
@@ -1235,7 +1243,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	}
 	id, release, err := c.machine.claim(ctx, types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
+		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 	})
@@ -1245,6 +1253,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	held.machineClaim = true
 	if id != "" {
 		ctx = withStepGroups(ctx, c.machine.admit, id)
+		ctx = withOverrunWatch(ctx, c.machine.admit, id, s.MemoryProfile)
 	}
 	return held.on(ctx), release, nil
 }
