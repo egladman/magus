@@ -2,6 +2,7 @@ package types
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,36 @@ func TestMemoryProfileRoundTrips(t *testing.T) {
 	var back MemoryProfile
 	require.NoError(t, json.Unmarshal(raw, &back))
 	assert.Equal(t, p, back)
+}
+
+func TestMemoryProfileHeldMB(t *testing.T) {
+	t.Parallel()
+	ramp := MemoryProfile{D10Ms: 50_000, D90Ms: 100_000, Runs: 3}
+	for i := range ramp.Curve {
+		ramp.Curve[i] = uint32(100 * (i + 1))
+	}
+	ramp.Curve[3] = 5000
+	cases := []struct {
+		name    string
+		profile MemoryProfile
+		elapsed time.Duration
+		want    int
+	}{
+		{"the start holds the first bucket", ramp, 0, 100},
+		{"buckets 2 to 4 of the band, spike included", ramp, 10 * time.Second, 5000},
+		{"buckets 5 to 10, past the spike", ramp, 25 * time.Second, 1100},
+		{"past D10 the band reaches the last bucket", ramp, 60 * time.Second, 2000},
+		{"at D90 the last bucket", ramp, 100 * time.Second, 2000},
+		{"past D90 the peak", ramp, 100*time.Second + 1, 5000},
+		{"no duration band holds the peak", MemoryProfile{Curve: ramp.Curve, Runs: 3}, time.Second, 5000},
+		{"no profile holds nothing", MemoryProfile{}, time.Second, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, tc.profile.HeldMB(tc.elapsed))
+		})
+	}
 }
 
 func TestMemoryCurveRefusesWrongLength(t *testing.T) {

@@ -2204,7 +2204,7 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
 		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
-	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs\"",
+	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 13 MiB peak\"",
 		"ceil(1.25 x the 10MB full-run peak), not the 12MB narrowed one, under the 64MB declared")
 
 	var got forecast.History

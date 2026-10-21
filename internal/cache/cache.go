@@ -267,7 +267,10 @@ type Step struct {
 	// MemorySizing says whether MemoryMB is the declaration or a figure sized from
 	// measured runs, so a refusal names where it came from. Never hashed.
 	MemorySizing types.MemorySizing
-	Label        string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// MemoryProfile is the curve MemoryMB peaks over, zero when the claim is a peak
+	// held flat. Never hashed.
+	MemoryProfile types.MemoryProfile
+	Label         string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output

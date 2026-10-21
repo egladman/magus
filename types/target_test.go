@@ -171,8 +171,8 @@ func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 		`target "build" exceeded its declared timeout of 1m0s after 1m30s; its process tree was killed`)
 }
 
-// TestChainMemoryMBPeaksOverOneCall: members of one ctx.needs call run together, so their
-// declarations add; a later call runs after, so it competes with the sum rather than
+// TestChainMemoryMBPeaksOverOneCall: members of one ctx.needs call run together, and with
+// no curves their declarations add; a later call runs after, so it competes with the sum rather than
 // joining it.
 func TestChainMemoryMBPeaksOverOneCall(t *testing.T) {
 	t.Parallel()
@@ -211,12 +211,12 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 		},
 	}
 	var sized []string
-	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing) {
+	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing, MemoryProfile) {
 		sized = append(sized, target)
 		if target == "test" {
-			return 2000, MemorySizing{Samples: 7}
+			return 2000, MemorySizing{Samples: 7}, MemoryProfile{}
 		}
-		return declaredMB, MemorySizing{}
+		return declaredMB, MemorySizing{}, MemoryProfile{}
 	}
 
 	got := SizedChainMemory(p, "ci", nil, size)
@@ -225,7 +225,8 @@ func TestSizedChainMemoryFoldsSizedFigures(t *testing.T) {
 	assert.ElementsMatch(t, []string{"ci", "lint", "test", "bench"}, sized, "ci declares nothing and is sized too")
 
 	p.TargetPolicies["bench"] = Target{MemoryMB: 1500}
-	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "test", Sizing: MemorySizing{Samples: 7}},
+	fallback := "lint: no memory curve; summed the peaks of its ctx.needs call"
+	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "test", Sizing: MemorySizing{Samples: 7, Fallback: fallback}},
 		SizedChainMemory(p, "ci", nil, size))
 
 	mb, by := ChainMemoryMB(p, "ci", nil)
@@ -244,18 +245,105 @@ func TestSizedChainMemorySizesAnUndeclaredMember(t *testing.T) {
 		TargetPolicies: map[string]Target{"lint": {MemoryMB: 1000}},
 	}
 	measured := map[string]int{"scip": 2000}
-	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing) {
+	size := func(proj *Project, target string, declaredMB int) (int, MemorySizing, MemoryProfile) {
 		if mb, ok := measured[target]; ok {
-			return mb, MemorySizing{Samples: 3}
+			return mb, MemorySizing{Samples: 3}, MemoryProfile{}
 		}
-		return declaredMB, MemorySizing{}
+		return declaredMB, MemorySizing{}, MemoryProfile{}
 	}
 
-	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "scip", Sizing: MemorySizing{Samples: 3}},
+	fallback := "lint: no memory curve; summed the peaks of its ctx.needs call"
+	assert.Equal(t, ChainMemory{MB: 3000, DeclaredBy: "scip", Sizing: MemorySizing{Samples: 3, Fallback: fallback}},
 		SizedChainMemory(p, "ci", nil, size), "scip's measured peak sums with lint's declaration")
 
 	delete(measured, "scip")
 	assert.Equal(t, ChainMemory{MB: 1000, DeclaredBy: "lint"}, SizedChainMemory(p, "ci", nil, size))
+}
+
+// halves is a profile over a fixed 100s run holding early for its first half and late
+// for its second.
+func halves(early, late uint32, d10Ms int64) MemoryProfile {
+	p := MemoryProfile{D10Ms: d10Ms, D90Ms: 100_000, Runs: 3}
+	for i := range p.Curve {
+		p.Curve[i] = early
+		if i >= MemoryCurveBuckets/2 {
+			p.Curve[i] = late
+		}
+	}
+	return p
+}
+
+// curveSizer claims each target's curve peak with its curve, as the limiter's sizer
+// does once a shape has enough runs.
+func curveSizer(profiles map[string]MemoryProfile) MemorySizer {
+	return func(proj *Project, target string, declaredMB int) (int, MemorySizing, MemoryProfile) {
+		p, ok := profiles[target]
+		if !ok {
+			return declaredMB, MemorySizing{}, MemoryProfile{}
+		}
+		return p.Curve.PeakMB(), MemorySizing{Samples: p.Runs}, p
+	}
+}
+
+// TestChainCurveSumsOneCallOverTime: one call's members whose peaks fall in different
+// halves of the run claim the peak of their sum, not the sum of their peaks; calls in
+// turn still take the larger.
+func TestChainCurveSumsOneCallOverTime(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:         ".",
+		TargetChains: map[string][]ChainStep{"ci": Needs("test", "lint").Needs("bench")},
+	}
+	size := curveSizer(map[string]MemoryProfile{
+		"test":  halves(500, 7000, 100_000),
+		"lint":  halves(4000, 300, 100_000),
+		"bench": halves(1000, 1000, 100_000),
+	})
+	assert.Equal(t, ChainMemory{MB: 7300, DeclaredBy: "test", Sizing: MemorySizing{Samples: 3}},
+		SizedChainMemory(p, "ci", nil, size), "test's late 7000 overlaps lint's late 300, not its early 4000")
+
+	size = curveSizer(map[string]MemoryProfile{
+		"test":  halves(500, 7000, 100_000),
+		"lint":  halves(4000, 300, 100_000),
+		"bench": halves(9000, 9000, 100_000),
+	})
+	got := SizedChainMemory(p, "ci", nil, size)
+	assert.Equal(t, 9000, got.MB, "the call after runs alone and is larger")
+	assert.Equal(t, "bench", got.DeclaredBy)
+	assert.Equal(t, MemoryProfile{}, got.Profile, "two calls in turn are not one run's curve")
+
+	alone := &Project{Path: ".", TargetChains: map[string][]ChainStep{"ci": Needs("bench")}}
+	assert.Equal(t, halves(9000, 9000, 100_000), SizedChainMemory(alone, "ci", nil, size).Profile,
+		"a lone member's call carries its curve")
+
+	missing := &Project{
+		Path:           ".",
+		TargetChains:   map[string][]ChainStep{"ci": Needs("test", "lint")},
+		TargetPolicies: map[string]Target{"lint": {MemoryMB: 4000}},
+	}
+	got = SizedChainMemory(missing, "ci", nil, curveSizer(map[string]MemoryProfile{"test": halves(500, 7000, 100_000)}))
+	assert.Equal(t, 11000, got.MB, "lint has no curve, so the call sums its peaks")
+	assert.Equal(t, "lint: no memory curve; summed the peaks of its ctx.needs call", got.Sizing.Fallback)
+	assert.Equal(t, MemoryProfile{}, got.Profile, "a folded claim carries no single run's curve")
+}
+
+// TestChainCurveNeverExceedsSummedPeak: a wide duration band lets peaks overlap, which
+// the fold claims in full, and a curve above its member's claim is capped at that claim,
+// so the fold is never above the summed peaks.
+func TestChainCurveNeverExceedsSummedPeak(t *testing.T) {
+	t.Parallel()
+	p := &Project{Path: ".", TargetChains: map[string][]ChainStep{"ci": Needs("test", "lint")}}
+	size := curveSizer(map[string]MemoryProfile{
+		"test": halves(500, 7000, 50_000),
+		"lint": halves(4000, 300, 50_000),
+	})
+	assert.Equal(t, 11000, SizedChainMemory(p, "ci", nil, size).MB,
+		"with D10 at half of D90, test may be late while lint is still early")
+
+	capped := func(proj *Project, target string, declaredMB int) (int, MemorySizing, MemoryProfile) {
+		return 1000, MemorySizing{Samples: 3}, halves(5000, 5000, 100_000)
+	}
+	assert.Equal(t, 2000, SizedChainMemory(p, "ci", nil, capped).MB, "each curve is capped at its member's 1000")
 }
 
 func TestMemorySizingString(t *testing.T) {

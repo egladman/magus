@@ -84,10 +84,10 @@ func (m *Magus) hostUsableBytes() int64 {
 // the memory is worth in the local pool; a broker holds memory in megabytes, so under
 // it they stay CPU (see slotsForPolicy).
 //
-// The claim is held for the whole step, including the phases that do not need it,
-// which is conservative in the direction the machine survives: the alternative is
-// admitting the chain and refusing it twenty minutes in, when the work already done
-// is wasted.
+// A claim with a measured curve carries it as step.MemoryProfile, and one call's
+// members fold by curve rather than by summed peaks. A claim without one is its peak
+// held for the whole step, conservative in the direction the machine survives: the
+// alternative is admitting the chain and refusing it twenty minutes in.
 //
 // size is nil to claim the declarations as written, or newClaimSizer's answer to claim
 // what this shape of run has measured.
@@ -110,7 +110,7 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
 	}
 	c.Sizing.Slots = slotSizing
-	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing = c.MB, c.DeclaredBy, c.Sizing
+	step.MemoryMB, step.MemoryDeclaredBy, step.MemorySizing, step.MemoryProfile = c.MB, c.DeclaredBy, c.Sizing, c.Profile
 	return c.Sizing
 }
 
@@ -162,14 +162,14 @@ func (s *claimSizer) shapeFor(proj *types.Project, target string) forecast.Shape
 
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See
 // sizeMemoryClaim.
-func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing) {
+func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing, types.MemoryProfile) {
 	shape := s.shapeFor(proj, target)
 	same, all := s.runs.Peak(proj.Path, target, shape)
 	var full forecast.Measurement
 	if shape.Narrowed {
 		full, _, _ = trustedMeasurement(s.runs.Peak(proj.Path, target, shape.Full()))
 	}
-	return sizeMemoryClaim(declaredMB, same, all, full)
+	return sizeMemoryClaim(target, declaredMB, same, all, full, s.runs.Profile(proj.Path, target, shape))
 }
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
@@ -199,19 +199,35 @@ func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Meas
 // fullPeak is the trusted peak of full runs when the shape is narrowed, and zero
 // otherwise. Narrowed runs pool across args only to lower a claim, so a narrowed shape's
 // own peak is capped by it; a narrowed shape sized from every run already includes it.
-func sizeMemoryClaim(declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement) (int, types.MemorySizing) {
+//
+// profile is the shape's measured curve. With minMeasuredRuns runs behind it, it is
+// returned with peakMargin on every bucket and the same declaration ceiling; with fewer,
+// the claim is its peak held flat and sizing's Fallback says so.
+func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement, profile types.MemoryProfile) (int, types.MemorySizing, types.MemoryProfile) {
 	peak, sizing, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
-		return declaredMB, types.MemorySizing{}
+		return declaredMB, types.MemorySizing{}, types.MemoryProfile{}
 	}
 	if !sizing.AnyShape && fullPeak.Runs > 0 {
 		peak.Value = min(peak.Value, fullPeak.Value)
 	}
 	mb := int(math.Ceil(float64(peak.Value) * peakMargin / (1 << 20)))
 	if declaredMB > 0 && mb >= declaredMB {
-		return declaredMB, types.MemorySizing{}
+		mb, sizing = declaredMB, types.MemorySizing{}
 	}
-	return mb, sizing
+	if profile.Runs < minMeasuredRuns {
+		sizing.Fallback = fmt.Sprintf("%s: no memory curve for this shape (%d of %d runs); claimed the %s peak",
+			target, profile.Runs, minMeasuredRuns, cache.FormatMB(mb))
+		return mb, sizing, types.MemoryProfile{}
+	}
+	for i, bucket := range profile.Curve {
+		held := int(math.Ceil(float64(bucket) * peakMargin))
+		if declaredMB > 0 {
+			held = min(held, declaredMB)
+		}
+		profile.Curve[i] = uint32(held)
+	}
+	return mb, sizing, profile
 }
 
 // sizeSlotClaim is the measured width (forecast.MeasuredRuns.Width), capped at capacity

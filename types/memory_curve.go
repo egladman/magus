@@ -58,6 +58,28 @@ type MemoryProfile struct {
 	Runs  int         `json:"runs"`
 }
 
+// HeldMB is what a run of this profile holds elapsed after it started, in MiB: the
+// largest bucket over the fractions [elapsed/D90, elapsed/D10] of the run, wherever in
+// its duration band the run really is. Once elapsed passes D90 it is the peak, held
+// until the run is released. A profile with no curve holds 0.
+func (p MemoryProfile) HeldMB(elapsed time.Duration) int {
+	d10, d90 := time.Duration(p.D10Ms)*time.Millisecond, time.Duration(p.D90Ms)*time.Millisecond
+	if d90 <= 0 || elapsed > d90 {
+		return p.Curve.PeakMB()
+	}
+	elapsed = max(elapsed, 0)
+	last := MemoryCurveBuckets - 1
+	if d10 > 0 {
+		last = min(int(int64(elapsed)*MemoryCurveBuckets/int64(d10)), last)
+	}
+	first := min(int(int64(elapsed)*MemoryCurveBuckets/int64(d90)), last)
+	held := uint32(0)
+	for _, mb := range p.Curve[first : last+1] {
+		held = max(held, mb)
+	}
+	return int(held)
+}
+
 // MemorySample is one reading of a process tree's resident memory, taken At after
 // the exec started.
 type MemorySample struct {
