@@ -2288,7 +2288,7 @@ func HookConfigs(ctx context.Context, root string, wired ...string) []string {
 
 // guardHookConfigs is the inventory HookConfigs and the bound-lease check share, so
 // neither can disagree with checkGuardWiring about what counts as verified wiring.
-// wired are magusfile-selected harness spell names (see Magus.Harnesses).
+// wired are magusfile-selected harness spell names (see workspace.WiredHarnesses).
 func guardHookConfigs(ctx context.Context, root string, wired ...string) []string {
 	var out []string
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)

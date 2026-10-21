@@ -145,6 +145,7 @@
 {"group":"file:changes/unreleased/mcp-job-actor.md","path":"changes/unreleased/mcp-job-actor.md"}
 {"group":"file:changes/unreleased/measured-claims-go-width.md","path":"changes/unreleased/measured-claims-go-width.md"}
 {"group":"file:changes/unreleased/measured-claims.md","path":"changes/unreleased/measured-claims.md"}
+{"group":"file:changes/unreleased/memory-claims-pool-runs-by-charms-read.md","path":"changes/unreleased/memory-claims-pool-runs-by-charms-read.md"}
 {"group":"file:changes/unreleased/merge-job-branches.md","path":"changes/unreleased/merge-job-branches.md"}
 {"group":"file:changes/unreleased/merge-queue-dashboard.md","path":"changes/unreleased/merge-queue-dashboard.md"}
 {"group":"file:changes/unreleased/metrics-histogram-counters-removed.md","path":"changes/unreleased/metrics-histogram-counters-removed.md"}
