@@ -583,8 +583,9 @@ func (s MemorySizing) String() string {
 type MemorySizer func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing, profile MemoryProfile)
 
 // ChainMemory is a folded memory claim: the figure, the target whose declaration it
-// came from, and how that declaration was sized. Profile is the curve MB peaks over
-// when one run's profile is the whole claim, and zero when the claim folds several.
+// came from, and how that declaration was sized. Profile is the curve MB peaks over:
+// one run's, or one call's members composed; it is zero when the claim folds calls
+// that run in turn, or fell back to a peak.
 type ChainMemory struct {
 	MB         int
 	DeclaredBy string
@@ -597,7 +598,7 @@ type ChainMemory struct {
 // than their declarations, and a member declaring nothing claims what its runs
 // measured. A nil size folds the declarations as written.
 //
-// The members of one call fold by curve when each has a profile (see callCurveMB), and
+// The members of one call fold by curve when each has a profile (see composeCall), and
 // by summed peaks otherwise, with Sizing.Fallback naming the member that had none.
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
 func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
@@ -653,7 +654,7 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 			}
 		}
 		close()
-		// A profile describes one run; a claim folded from several has none to carry.
+		// Calls in turn, or a body and its call, compose no one curve: the larger peak is held flat.
 		if contributors > 1 {
 			peak.Profile = MemoryProfile{}
 		}
@@ -687,35 +688,48 @@ func foldCall(members []ChainMemory, names []string) ChainMemory {
 		}
 		return call
 	}
-	call.MB = min(callCurveMB(members), sum)
+	call.Profile = composeCall(members)
+	call.MB = call.Profile.Curve.PeakMB()
 	return call
 }
 
-// callCurveMB is the peak of the members' summed curves from the call's start, exact
-// at the breakpoints where any HeldMB can change. A member ends at its D90 here, where
-// admission keeps charging a still-held run its peak, and is capped at its MB so the
-// fold never claims more than the summed peaks.
-func callCurveMB(members []ChainMemory) int {
-	var breakpoints []time.Duration
+// composeCall sums the members' profiles from the call's start; each bucket is the
+// largest sum at the breakpoints in it, where any HeldMB can change, so the peak is
+// exact. A member ends at its D90, where admission charges a held run its peak, and
+// is capped at its MB so no bucket passes the summed peaks.
+func composeCall(members []ChainMemory) MemoryProfile {
+	composed := MemoryProfile{Runs: members[0].Profile.Runs}
+	for _, m := range members {
+		composed.D10Ms = max(composed.D10Ms, m.Profile.D10Ms)
+		composed.D90Ms = max(composed.D90Ms, m.Profile.D90Ms)
+		composed.Runs = min(composed.Runs, m.Profile.Runs)
+	}
+	span := int64(time.Duration(composed.D90Ms) * time.Millisecond)
 	for _, m := range members {
 		for _, ms := range []int64{m.Profile.D10Ms, m.Profile.D90Ms} {
 			d := int64(time.Duration(ms) * time.Millisecond)
 			for k := range int64(MemoryCurveBuckets + 1) {
-				breakpoints = append(breakpoints, time.Duration((k*d+MemoryCurveBuckets-1)/MemoryCurveBuckets))
+				t := time.Duration((k*d + MemoryCurveBuckets - 1) / MemoryCurveBuckets)
+				bucket := MemoryCurveBuckets - 1
+				if span > 0 {
+					bucket = min(int(int64(t)*MemoryCurveBuckets/span), bucket)
+				}
+				composed.Curve[bucket] = max(composed.Curve[bucket], uint32(summedHeldMB(members, t)))
 			}
 		}
 	}
-	peak := 0
-	for _, t := range breakpoints {
-		held := 0
-		for _, m := range members {
-			if t <= time.Duration(m.Profile.D90Ms)*time.Millisecond {
-				held += min(m.Profile.HeldMB(t), m.MB)
-			}
+	return composed
+}
+
+// summedHeldMB is what the members hold together elapsed after their call started.
+func summedHeldMB(members []ChainMemory, elapsed time.Duration) int {
+	held := 0
+	for _, m := range members {
+		if elapsed <= time.Duration(m.Profile.D90Ms)*time.Millisecond {
+			held += min(m.Profile.HeldMB(elapsed), m.MB)
 		}
-		peak = max(peak, held)
 	}
-	return peak
+	return held
 }
 
 // ErrSkipChain is a ChainWalkFunc's answer that keeps WalkChain from descending under the
