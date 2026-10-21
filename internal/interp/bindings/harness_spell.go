@@ -134,7 +134,11 @@ func callHarness[Resp any](ctx context.Context, drv spells.Driver, fn string, ar
 	if err != nil {
 		return resp, true, fmt.Errorf("%w: %s: %w", errMalformedAnswer, fn, err)
 	}
-	return decoded.(Resp), true, nil
+	typed, ok := decoded.(Resp)
+	if !ok {
+		return resp, true, fmt.Errorf("%w: %s decoded as %T, not %T", errMalformedAnswer, fn, decoded, resp)
+	}
+	return typed, true, nil
 }
 
 // callHarnessOptional is callHarness for a function whose absence leaves a nil field rather

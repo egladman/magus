@@ -1407,7 +1407,7 @@ func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessPlan, er
 	}
 	plans, err := runMagusJSON[[]types.HarnessPlan](ctx, "describe", []string{"harness"}, nil)
 	if err != nil {
-		return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id; listing the wired ones failed: %w`, err)
+		return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: no harness id named, and listing the wired ones failed: %w`, err)
 	}
 	ids := make([]string, len(plans))
 	for i, p := range plans {
@@ -1417,7 +1417,7 @@ func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessPlan, er
 	if wired == "" {
 		wired = "none"
 	}
-	return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id; the wired ones are %s`, wired)
+	return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id, one of the wired ones: %s`, wired)
 }
 
 // MagusDescribeMCPTool implements magus\describe.mcpTool.

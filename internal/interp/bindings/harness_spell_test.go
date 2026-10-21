@@ -92,8 +92,10 @@ func TestHarnessSpellsDeclareAStdioMCPServer(t *testing.T) {
 	for _, id := range []string{"claude-code", "codex", "cursor", "opencode"} {
 		d := loadShippedHarness(t, id)
 		require.NotNil(t, d.MCP, id)
-		assert.Equal(t, types.McpStdio, d.MCP.Transport, id)
-		assert.Equal(t, []string{"./magus", "mcp"}, d.MCP.Command, id)
+		got := *d.MCP
+		// The setup prose is each host's own; the server it describes is the same.
+		got.Hint, got.Docs, got.Register = "", "", nil
+		assert.Equal(t, types.McpServer{Transport: types.McpStdio, Command: []string{"./magus", "mcp"}}, got, id)
 	}
 	assert.Nil(t, loadShippedHarness(t, "claude-code-mod").MCP, "the mod declares no server")
 }

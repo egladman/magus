@@ -16,8 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -261,7 +261,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			name := nv.AsString()
 			if _, exists := project.DefaultSpellRegistry().Lookup(name); !exists {
-				return nil, fmt.Errorf("magus.project: spell %q is not registered; importing a spell registers it", name)
+				return nil, fmt.Errorf("magus.project: spell %q is not registered, and importing a spell registers it", name)
 			}
 			// A tool spell bound to contribute targets that exposes none almost always
 			// means its mgs_listTargets was omitted or misnamed: the spell loads and

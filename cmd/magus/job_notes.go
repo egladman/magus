@@ -113,7 +113,7 @@ func hostForegroundMax(ctx context.Context, m *magus.Magus) func() (time.Duratio
 	return sync.OnceValues(func() (time.Duration, bool) {
 		wired, err := workspace.WiredHarnesses(m)
 		if err != nil {
-			slog.With(attr.Component("job fork")).WarnContext(ctx, "no host foreground limit is read", slog.String("error", err.Error()))
+			slog.With(attr.Component("job fork")).WarnContext(ctx, "no host foreground limit is read", attr.Error(err))
 			return 0, false
 		}
 		ctx := agent.ContextWithWiredHarnesses(ctx, wired)

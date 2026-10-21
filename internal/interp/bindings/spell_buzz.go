@@ -150,6 +150,6 @@ func newBuzzSpellInvoker(spec spells.Descriptor) func(context.Context, spells.In
 		if _, ok := spec.Ops[req.Target]; ok {
 			return dispatchOp(ctx, spec, req)
 		}
-		return nil, nil //nolint:nilnil // documented no-op: an undeclared target, nil Data
+		return nil, nil
 	}
 }

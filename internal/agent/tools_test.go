@@ -188,7 +188,9 @@ func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 }
 
 func TestValidateHarnessToolsRefusesWhatTheGuardCannotRead(t *testing.T) {
-	row := func(name string, c types.ToolCapability) types.HarnessTool { return types.HarnessTool{Name: name, Capability: c} }
+	row := func(name string, c types.ToolCapability) types.HarnessTool {
+		return types.HarnessTool{Name: name, Capability: c}
+	}
 	for name, tc := range map[string]struct {
 		tools types.HarnessTools
 		err   string
