@@ -16,12 +16,12 @@ import (
 // exceptions are failed_need_target, which comes back neutralized, and failed_need_ref, which
 // comes back empty unless it is a ref magus mints.
 func ReadOutputRecords(r io.Reader, each func(types.StoredOutput) error) error {
-	return readOutputRecords(r, DefaultImportLimits, each)
+	return readOutputRecords(r, defaultImportLimits, each)
 }
 
-func readOutputRecords(r io.Reader, limits ImportLimits, each func(types.StoredOutput) error) error {
+func readOutputRecords(r io.Reader, limits importLimits, each func(types.StoredOutput) error) error {
 	var recs []types.StoredOutput
-	err := ReadRecordLines(r, limits, func(line int, raw []byte) error {
+	err := readRecordLines(r, limits, func(line int, raw []byte) error {
 		rec, err := decodeOutputRecord(raw)
 		if err != nil {
 			return fmt.Errorf("line %d: %w", line, err)
@@ -67,7 +67,7 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 		rec.FailedNeedRef = ""
 	}
 	d := rec.OutputDescriptor
-	err := CheckImportedDescriptor(OutputDescriptor{
+	err := checkImportedDescriptor(OutputDescriptor{
 		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
 		TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
 		FailedNeedTarget: d.FailedNeedTarget, FailedNeedRef: d.FailedNeedRef,

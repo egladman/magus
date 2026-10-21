@@ -80,7 +80,7 @@ func TestOutputImportRefusesAJSONBomb(t *testing.T) {
 	assert.ErrorContains(t, err, "line 1: not an output record")
 
 	err = readOutputRecords(strings.NewReader(outputRecordLine(t, nil)+outputRecordLine(t, nil)),
-		ImportLimits{LineBytes: 1 << 20, TotalBytes: 1 << 20, Records: 1}, func(types.StoredOutput) error { return nil })
+		importLimits{LineBytes: 1 << 20, TotalBytes: 1 << 20, Records: 1}, func(types.StoredOutput) error { return nil })
 	assert.EqualError(t, err, "line 2: more than 1 records")
 }
 
