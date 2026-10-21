@@ -10,9 +10,9 @@ import (
 // it for the distinct [Tool.Lifecycle] values the workspace's spells declare, in ONE call,
 // the way publish_review takes every draft at once:
 //
-//	fun list_lifecycles(target: Target, cb: fun(any)) > [Lifecycle]
+//	fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle]
 //
-// cb yields {keys: [str]}. A key the provider does not know is left out of the answer
+// req.keys lists the keys. A key the provider does not know is left out of the answer
 // rather than thrown for; magus reads its rows as unknown.
 //
 // A workspace wires ONE provider (magus\lifecycle.provider), because Tool.Lifecycle is one

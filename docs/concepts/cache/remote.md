@@ -40,19 +40,20 @@ any machine replays.
 
 magus itself knows nothing about S3 or GitHub. A provider is a
 [spell](../spells.md) that declares no operations and instead exports the cache
-contract: functions the remote-cache subsystem detects by name and invokes:
+contract: functions the remote-cache subsystem detects by name and calls with the
+target and a typed request:
 
-| function                   | when                              | returns                                                        |
-| -------------------------- | --------------------------------- | -------------------------------------------------------------- |
-| `enabled(target, cb)`      | once, before any other call       | is the provider configured? (gates everything)                 |
-| `get_artifact(target, cb)` | on a local-tier miss              | download into `dest`; `true` = hit, `false` = not stored       |
-| `put_artifact(target, cb)` | after a build, and for a backfill | upload `src`; `true` = stored, `false` = already stored        |
-| `has_artifact(target, cb)` | before a backfill (optional)      | is it stored? without downloading; absent = cannot say         |
-| `prune(target, cb)`        | `config cache prune --remote`     | evict by retention policy (optional); `true` = the sweep ended |
+| function                                      | when                              | returns                                                        |
+| --------------------------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| `enabled(target, Empty) > Ack`                | once, before any other call       | is the provider configured? (gates everything)                 |
+| `get_artifact(target, ArtifactRequest) > Ack` | on a local-tier miss              | download into `req.path`; `ok` = hit, not `ok` = not stored    |
+| `put_artifact(target, ArtifactRequest) > Ack` | after a build, and for a backfill | upload `req.path`; `ok` = stored, not `ok` = already stored    |
+| `has_artifact(target, ArtifactRequest) > Ack` | before a backfill (optional)      | is it stored? without downloading; absent = cannot say         |
+| `prune(target, PruneRequest) > PruneResult`   | `config cache prune --remote`     | evict by retention policy (optional); `done` = the sweep ended |
 
 A function that cannot do its job **throws**. A throw is a failure: counted as
 failed, never as missed, and it degrades the run to the local tier. A provider must
-not return `false` for a failed request, since that would read as a cold cache or as
+not answer not `ok` for a failed request, since that would read as a cold cache or as
 another writer's entry. Without `has_artifact` the remote tier is not backfilled:
 uploading every hit to find out would cost more than the miss it saves.
 
@@ -409,11 +410,10 @@ metrics live under their own `.remote` prefix and are never folded into the loca
 
 Any store reachable over HTTP can be a provider. Implement the contract functions
 (`enabled`/`get_artifact`/`put_artifact`, and `has_artifact` so the remote tier can be
-backfilled) in a spell: read inputs from the `cb(io)` callback (`io.hash`,
-`io.dest`/`io.src`), use the `http` byte primitives
-(`http\download`/`upload_chunked`/`byteSize`, `http\request("HEAD", ...)` for
+backfilled) in a spell: read the request (`req.hash`, `req.path`), use the `http` byte
+primitives (`http\download`/`upload_chunked`/`byteSize`, `http\request("HEAD", ...)` for
 `has_artifact`) and `crypto` for request signing (e.g. AWS SigV4 via
-`crypto\hmacSha256`), return the boolean result, and throw on a failed request. The two
+`crypto\hmacSha256`), return an `Ack`, and throw on a failed request. The two
 shipped providers are worked examples; start from whichever transport is closest.
 
 A provider is a pure byte mover: **artifact signing and verification happen in

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -39,20 +41,20 @@ func openSpellRemoteBackend(ctx context.Context, selector string) (types.CacheBa
 }
 
 // spellRemoteBackend adapts a spell to the cache's RemoteBackend contract. The spell is
-// an ordinary magus spell — authored in Buzz with the mgs_ functions — exposing
-// these handler ops:
+// an ordinary magus spell, authored in Buzz with the mgs_ functions, exposing these
+// provider ops:
 //
-//	enabled()                           -> bool  is this backend usable here? (optional)
-//	get_artifact({project, hash, dest}) -> bool  download into dest; true=hit, false=miss
-//	put_artifact({project, hash, src})  -> bool  upload src; true=stored, false=already present
-//	has_artifact({project, hash})       -> bool  is it stored? without downloading (optional)
-//	prune({older_than_secs, ...})       -> bool  evict by retention policy (optional)
+//	enabled(target, Empty) > Ack                 is this backend usable here? (optional)
+//	get_artifact(target, ArtifactRequest) > Ack  download into path; ok=hit, !ok=miss
+//	put_artifact(target, ArtifactRequest) > Ack  upload path; ok=stored, !ok=already present
+//	has_artifact(target, ArtifactRequest) > Ack  is it stored? without downloading (optional)
+//	prune(target, PruneRequest) > PruneResult    evict by retention policy (optional)
 //
 // An op that cannot do its job THROWS: a transport or protocol failure is an error,
-// which the cache counts as failed, never as a miss. The wire keeps the names project
-// and hash for the Go side's namespace and key, so existing spells keep working.
+// which the cache counts as failed, never as a miss. ArtifactRequest's project and hash
+// are the Go side's namespace and key.
 //
-// The adapter moves a temp file across the boundary and reads the op's Data; it
+// The adapter moves a temp file across the boundary and reads what the op answers; it
 // has no provider knowledge, so the binary stays CI-provider-agnostic.
 type spellRemoteBackend struct {
 	drv  spells.Driver
@@ -79,28 +81,23 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	if b.activeKnown {
 		return b.active
 	}
-	resp, err := b.invoke(ctx, spells.InvokeRequest{Target: "enabled"})
+	ack, exported, err := callBackend(ctx, b, providerops.CacheEnabled, types.Empty{})
 	if err != nil {
 		return false // transient: don't latch, re-probe next call
 	}
-	switch resp.Data {
-	case nil:
-		b.active = true // no enabled() op declared → always active
-	default:
-		v, _ := resp.Data.(bool)
-		b.active = v
-	}
+	b.active = !exported || ack.OK // no enabled() op declared → always active
 	b.activeKnown = true
 	return b.active
 }
 
-// invoke runs one of the backend spell's ops as magus's own work, not the served
+// callBackend runs one of the backend spell's ops as magus's own work, not the served
 // target's: under the workspace policy scoped to this spell's declaration (see
 // sandbox.ForProvider), and over a fresh environment overlay, so nothing a target set
 // with env\set, a PATH among it, reaches the spell or the processes it starts. Every op
 // goes through here, so a new one cannot run under the target's policy by omission.
-func (b *spellRemoteBackend) invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
-	return b.drv.Invoke(environ.With(sandbox.ForProvider(ctx, b.drv.Name())), req)
+func callBackend[Req, Resp any](ctx context.Context, b *spellRemoteBackend, op bindgen.ProviderOp[Req, Resp], req Req) (Resp, bool, error) {
+	ctx = environ.With(sandbox.ForProvider(ctx, b.drv.Name()))
+	return CallOp(ctx, b.drv, op, providerTarget(ctx, op.Name, ""), req)
 }
 
 // GetArtifact invokes the spell's get_artifact op against a fresh temp file. true yields
@@ -111,20 +108,16 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key str
 	if err != nil {
 		return nil, err
 	}
-	resp, err := b.invoke(ctx, spells.InvokeRequest{
-		Target: "get_artifact",
-		Params: map[string]any{"project": namespace, "hash": key, "dest": dest},
-	})
+	hit, exported, err := callBackend(ctx, b, providerops.GetArtifact, types.ArtifactRequest{Project: namespace, Hash: key, Path: dest})
 	if err != nil {
 		_ = os.Remove(dest)
 		return nil, err
 	}
-	hit, ok := resp.Data.(bool)
-	if !ok {
+	if !exported {
 		_ = os.Remove(dest)
-		return nil, fmt.Errorf("remote backend %q: get_artifact returned %T, want bool", b.drv.Name(), resp.Data)
+		return nil, fmt.Errorf("remote backend %q does not export get_artifact", b.drv.Name())
 	}
-	if !hit {
+	if !hit.OK {
 		_ = os.Remove(dest)
 		return nil, types.ErrCacheMiss
 	}
@@ -142,21 +135,14 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key str
 // HasArtifact invokes the spell's optional has_artifact op. A spell that declares none
 // answers [errors.ErrUnsupported].
 func (b *spellRemoteBackend) HasArtifact(ctx context.Context, namespace, key string) (bool, error) {
-	resp, err := b.invoke(ctx, spells.InvokeRequest{
-		Target: "has_artifact",
-		Params: map[string]any{"project": namespace, "hash": key},
-	})
+	has, exported, err := callBackend(ctx, b, providerops.HasArtifact, types.ArtifactRequest{Project: namespace, Hash: key})
 	if err != nil {
 		return false, err
 	}
-	if resp.Data == nil {
+	if !exported {
 		return false, errors.ErrUnsupported
 	}
-	has, ok := resp.Data.(bool)
-	if !ok {
-		return false, fmt.Errorf("remote backend %q: has_artifact returned %T, want bool", b.drv.Name(), resp.Data)
-	}
-	return has, nil
+	return has.OK, nil
 }
 
 // PutArtifact streams r into a temp file and invokes the spell's put_artifact op. false
@@ -180,50 +166,38 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, namespace, key str
 		return err
 	}
 
-	resp, err := b.invoke(ctx, spells.InvokeRequest{
-		Target: "put_artifact",
-		Params: map[string]any{"project": namespace, "hash": key, "src": src},
-	})
+	stored, exported, err := callBackend(ctx, b, providerops.PutArtifact, types.ArtifactRequest{Project: namespace, Hash: key, Path: src})
 	if err != nil {
 		return err
 	}
-	stored, ok := resp.Data.(bool)
-	if !ok {
-		return fmt.Errorf("remote backend %q: put_artifact returned %T, want bool", b.drv.Name(), resp.Data)
+	if !exported {
+		return fmt.Errorf("remote backend %q does not export put_artifact", b.drv.Name())
 	}
-	if !stored {
+	if !stored.OK {
 		return types.ErrCacheExists
 	}
 	return nil
 }
 
-// PruneArtifacts implements cache.RemotePruner by invoking the spell's optional
-// "prune" op with the retention policy. The op enumerates and evicts artifacts in
-// Buzz — it owns the store's list/delete protocol — and returns a bool: true once a
-// sweep completes. A spell that declares no prune op yields nil Data (the invoker
-// no-ops unknown targets), surfaced here as a clear "unsupported" error rather than
-// a silent success. Counts/dry-run detail are reported by the spell itself; only
-// completion crosses back here.
+// PruneArtifacts implements cache.RemotePruner by calling the spell's optional prune op
+// with the retention policy. The op enumerates and evicts artifacts in Buzz (it owns
+// the store's list/delete protocol) and reports whether the sweep completed. A spell
+// that exports no prune is a clear "unsupported" error rather than a silent success.
+// Counts and dry-run detail are reported by the spell itself; only completion crosses
+// back here.
 func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.RetentionPolicy) error {
-	resp, err := b.invoke(ctx, spells.InvokeRequest{
-		Target: "prune",
-		Params: map[string]any{
-			"older_than_secs": int64(policy.OlderThan / time.Second),
-			"keep_last":       int64(policy.KeepLast),
-			"dry_run":         policy.DryRun,
-		},
+	res, exported, err := callBackend(ctx, b, providerops.Prune, types.PruneRequest{
+		OlderThanSecs: int64(policy.OlderThan / time.Second),
+		KeepLast:      int64(policy.KeepLast),
+		DryRun:        policy.DryRun,
 	})
 	if err != nil {
 		return err
 	}
-	if resp.Data == nil {
+	if !exported {
 		return fmt.Errorf("remote backend %q does not implement prune", b.drv.Name())
 	}
-	done, ok := resp.Data.(bool)
-	if !ok {
-		return fmt.Errorf("remote backend %q: prune returned %T, want bool", b.drv.Name(), resp.Data)
-	}
-	if !done {
+	if !res.Done {
 		return fmt.Errorf("remote backend %q: prune did not complete", b.drv.Name())
 	}
 	return nil

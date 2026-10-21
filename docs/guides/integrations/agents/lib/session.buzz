@@ -1,0 +1,84 @@
+// Shared glue for the magus-session-load-<host>.buzz adapters in the directory above this
+// one: the reading of a transcript store that every host's adapter does alike. Each adapter
+// keeps only its host's event decoding. An adapter imports it as `shared`, so the names
+// here do not collide with an adapter's own.
+//
+// Like lib/hook, it imports no magus module and no spell.
+
+import "std";
+import "io";
+import "env";
+import "fs";
+import "proc";
+import "time";
+import "hook" as hook;
+
+// warn says why nothing was extracted. An adapter that loaded nothing looks exactly like a
+// host nobody used, so every arm that gives up announces itself on stderr.
+export fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
+}
+
+// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
+export fun ms(stamp: str) > int {
+    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed);
+}
+
+// inScope reports whether path is root or under it.
+export fun inScope(path: str, root: str) > bool {
+    return path == root or path.startsWith(root + "/");
+}
+
+// wholeLines is the prefix of chunk that ends at its last line break, so a record the host
+// is still appending is read whole on the next run.
+export fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+// parseOffset reads the byte offset an earlier run recorded in mark, 0 when there is none.
+export fun parseOffset(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+// transcripts lists every JSONL file under dir, nested ones included.
+export fun transcripts(dir: str) > [str] {
+    final found = mut [<str>];
+    fs\walk(dir, callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+// repoRoot is the workspace the transcripts are scoped to: HOST_REPO_ROOT when set, else
+// what bin says the workspace is, "" when neither answers.
+export fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+test "wholeLines keeps only complete records" {
+    std\assert(wholeLines("a\nb\nhalf") == "a\nb\n", message: "the half record waits");
+    std\assert(wholeLines("half") == "", message: "no line break, nothing whole");
+}
+
+test "inScope takes the root and what is under it" {
+    std\assert(inScope("/r", root: "/r") and inScope("/r/w", root: "/r"), message: "root and below");
+    std\assert(!inScope("/rx", root: "/r"), message: "a sibling with the same prefix is out");
+}

@@ -1,6 +1,10 @@
 package types
 
-import "github.com/egladman/magus/types/enum"
+import (
+	"slices"
+
+	"github.com/egladman/magus/types/enum"
+)
 
 // The case lists of this package's closed string types, excluding each zero value.
 // cmd/magus-utils's boundaryEnums names the same values for the Buzz mirror, and
@@ -149,6 +153,28 @@ func (v SkillVariant) String() string   { return enum.String(v) }
 // text only the shorter reader sees, so it suits wording, never a step.
 func (v SkillVariant) Full() bool  { return v == SkillVariantFull }
 func (v SkillVariant) Short() bool { return v == SkillVariantShort }
+
+var skillForms = enum.Set[SkillForm]{SkillFormBoth, SkillFormShort, SkillFormFull}
+
+func (v SkillForm) Values() []string { return skillForms.Strings() }
+func (v SkillForm) Valid() bool      { return skillForms.Valid(v) }
+func (v SkillForm) String() string   { return enum.String(v) }
+
+// toolCapabilities orders the files of a tool rows directory, one per capability.
+var toolCapabilities = enum.Set[ToolCapability]{ToolRuns, ToolReads, ToolWrites, ToolSpawns, ToolNetwork, ToolInert}
+
+func (v ToolCapability) Values() []string { return toolCapabilities.Strings() }
+func (v ToolCapability) Valid() bool      { return toolCapabilities.Valid(v) }
+func (v ToolCapability) String() string   { return enum.String(v) }
+
+// ToolCapabilities is every capability, each the name of one file in a tool rows directory.
+func ToolCapabilities() []ToolCapability { return slices.Clone(toolCapabilities) }
+
+var mcpTransports = enum.Set[McpTransport]{McpStdio, McpHTTP}
+
+func (v McpTransport) Values() []string { return mcpTransports.Strings() }
+func (v McpTransport) Valid() bool      { return mcpTransports.Valid(v) }
+func (v McpTransport) String() string   { return enum.String(v) }
 
 var jobKinds = enum.Set[JobKind]{JobKindCheck, JobKindSymbol, JobKindPaths, JobKindScript, JobKindProse}
 

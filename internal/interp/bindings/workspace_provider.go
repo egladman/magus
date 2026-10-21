@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // This file lives in the bindings layer (not the magus library) for the reason
@@ -67,11 +69,10 @@ func buildWorkspace(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 // only format log lines.)
 const providerDeadline = 2 * time.Minute
 
-// runWorkspaceProvider invokes spellName's list_projects contract and decodes what
-// it returns. It runs at WORKSPACE scope (Dir is the root), unlike an ordinary op,
-// which runs in a project directory: a provider is answering what the projects
-// ARE, so there is no project to run it in yet. root also travels in Params, which
-// is what reaches the contract's cb callback; Dir only reaches it as target.projectPath.
+// runWorkspaceProvider calls spellName's list_projects op and returns what it answers.
+// It runs at WORKSPACE scope (target.projectPath and req.root are the root), unlike an
+// ordinary op, which runs in a project directory: a provider is answering what the
+// projects ARE, so there is no project to run it in yet.
 func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells.ProvidedProject, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(spellName)
 	if !ok {
@@ -80,93 +81,21 @@ func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells
 	ctx, cancel := context.WithTimeout(ctx, providerDeadline)
 	defer cancel()
 	started := time.Now()
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.ListProjectsContract,
-		Dir:    root,
-		Params: map[string]any{"root": root},
-	})
+	op := providerops.ListProjects
+	got, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, root), types.ProjectQuery{Root: root})
 	if err != nil {
 		// Report how long it actually ran rather than this function's ceiling: the
 		// caller may have carried a shorter deadline (a server request budget), and
 		// naming 2m for a run that was cut off at 10s sends the reader to the wrong knob.
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, fmt.Errorf("spell %q: %s was still running after %s and was cancelled: %w",
-				spellName, spells.ListProjectsContract, time.Since(started).Round(time.Second), err)
+				spellName, op.Name, time.Since(started).Round(time.Second), err)
 		}
 		return nil, err
 	}
-	// nil Data covers two cases the invoker cannot tell apart: the spell exports no
-	// function of that name (the no-op an optional cache-backend op relies on), or it
-	// exported one that returned null. A provider was wired to supply projects, so
-	// neither case is benign, and the message names both.
-	if resp.Data == nil {
-		return nil, fmt.Errorf("spell %q is wired as a workspace provider but its %s(target, cb) returned nothing, it must be exported and must return a list of Project (an empty list if there are none)", spellName, spells.ListProjectsContract)
+	if !exported {
+		return nil, fmt.Errorf("spell %q is wired as a workspace provider but does not export %s(target: Target, req: ProjectQuery) > [Project]",
+			spellName, op.Name)
 	}
-	items, ok := resp.Data.([]any)
-	if !ok {
-		return nil, fmt.Errorf("spell %q: %s returned %T, want a list of Project", spellName, spells.ListProjectsContract, resp.Data)
-	}
-	out := make([]spells.ProvidedProject, 0, len(items))
-	for i, item := range items {
-		pp, err := decodeProvidedProject(spellName, i, item)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pp)
-	}
-	return out, nil
-}
-
-// Field keys of the Buzz `object Project` (spells.ProvidedProject's mirror). They
-// are named here because the record crosses as a plain map: a rename on the Go
-// struct must be mirrored here, and TestDecodeCoversEveryProvidedProjectField walks
-// the struct with reflect to make sure it is.
-const (
-	fieldPath      = "path"
-	fieldName      = "name"
-	fieldSpells    = "spells"
-	fieldDependsOn = "depends_on"
-	fieldSources   = "sources"
-	fieldOutputs   = "outputs"
-)
-
-// decodeProvidedProject turns one returned Project record into the typed wire form.
-// It stops there: turning those facts into ProjectOption values is the workspace
-// package's job (projectOptions), which keeps this side a pure Buzz-value decode and
-// keeps the decoded record serializable, so the provider's answer can be cached.
-//
-// It decodes explicitly rather than through a JSON round-trip: this is the least
-// trustworthy input in the load path (a spell that shelled out to another tool), and
-// a field of the wrong type should name itself rather than silently zero.
-func decodeProvidedProject(spellName string, index int, item any) (spells.ProvidedProject, error) {
-	where := fmt.Sprintf("spell %q: %s[%d]", spellName, spells.ListProjectsContract, index)
-	m, ok := item.(map[string]any)
-	if !ok {
-		return spells.ProvidedProject{}, fmt.Errorf("%s is %T, want a Project", where, item)
-	}
-
-	var pp spells.ProvidedProject
-	var err error
-	if pp.Path, err = strField(m, fieldPath, where); err != nil {
-		return spells.ProvidedProject{}, err
-	}
-	if pp.Name, err = strField(m, fieldName, where); err != nil {
-		return spells.ProvidedProject{}, err
-	}
-	for _, field := range []struct {
-		key string
-		dst *[]string
-	}{
-		{fieldSpells, &pp.Spells},
-		{fieldDependsOn, &pp.DependsOn},
-		{fieldSources, &pp.Sources},
-		{fieldOutputs, &pp.Outputs},
-	} {
-		vals, err := strListField(m, field.key, where)
-		if err != nil {
-			return spells.ProvidedProject{}, err
-		}
-		*field.dst = vals
-	}
-	return pp, nil
+	return got, nil
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testHost = HarnessKey{ID: "test-host"}
+const testHost = "test-host"
 
 func threeTiers() ModelTierDeclaration {
 	return ModelTierDeclaration{
@@ -18,7 +18,7 @@ func threeTiers() ModelTierDeclaration {
 		Default: 1,
 		Bounds:  []ModelTierBounds{{MaxLive: 4, MaxContext: 100000}, {MaxLive: 2}, {MaxLive: 1}},
 		Skills:  []SkillVariant{SkillVariantFull, SkillVariantShort, SkillVariantShort},
-		Hosts:   map[HarnessKey][]string{testHost: {"small", "medium", "large"}},
+		Hosts:   map[string][]string{testHost: {"small", "medium", "large"}},
 	}
 }
 
@@ -165,10 +165,10 @@ func TestModelTierAliasAndResolveRoundTrip(t *testing.T) {
 
 	_, ok := set.Resolve(testHost, "unmapped-model")
 	assert.False(t, ok)
-	_, ok = set.Resolve(HarnessKey{ID: "other"}, "small")
+	_, ok = set.Resolve("other", "small")
 	assert.False(t, ok)
 
-	_, err := set.Alias(HarnessKey{ID: "other"}, set.Default())
+	_, err := set.Alias("other", set.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "test-host", "the error names the hosts the declaration maps")
 
@@ -204,7 +204,7 @@ func TestNewModelTierSetRefusesMisconfiguration(t *testing.T) {
 		}, "host test-host maps 4 cases"},
 		{"empty alias", func(d *ModelTierDeclaration) { d.Hosts[testHost][1] = "" }, "maps rank 1 to an empty alias"},
 		{"shared alias", func(d *ModelTierDeclaration) { d.Hosts[testHost][2] = "small" }, `maps two cases to "small"`},
-		{"empty host id", func(d *ModelTierDeclaration) { d.Hosts[HarnessKey{}] = []string{"a", "b", "c"} }, "has no harness id"},
+		{"empty host id", func(d *ModelTierDeclaration) { d.Hosts[""] = []string{"a", "b", "c"} }, "has no harness id"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -247,15 +247,15 @@ func TestModelTierSetNamesItsSiteAndHosts(t *testing.T) {
 	t.Parallel()
 
 	decl := threeTiers()
-	decl.Hosts = map[HarnessKey][]string{
-		{ID: "zed"}:     {"a", "b", "c"},
-		{ID: "claude"}:  {"d", "e", "f"},
-		{ID: "bravado"}: {"g", "h", "i"},
+	decl.Hosts = map[string][]string{
+		"zed":     {"a", "b", "c"},
+		"claude":  {"d", "e", "f"},
+		"bravado": {"g", "h", "i"},
 	}
 	set := mustTiers(t, decl)
 
 	assert.Equal(t, "magusfile.buzz:3", set.Site())
-	assert.Equal(t, []HarnessKey{{ID: "bravado"}, {ID: "claude"}, {ID: "zed"}}, set.Hosts())
+	assert.Equal(t, []string{"bravado", "claude", "zed"}, set.Hosts())
 	assert.Empty(t, mustTiers(t, func() ModelTierDeclaration { d := threeTiers(); d.Hosts = nil; return d }()).Hosts())
 }
 

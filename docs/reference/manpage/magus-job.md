@@ -83,6 +83,9 @@ them and magus describe job prints one job's terms.
 
 ### job fork options
 
+**--brief-format** *string*
+: The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides
+
 **--check** *\<target\> \<project\> [-- args]*
 : The one check this job runs, as \<target\> \<project\> [-- args] (the \`magus run\` is implied)
 

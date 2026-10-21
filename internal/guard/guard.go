@@ -83,7 +83,7 @@ type Dependencies struct {
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
-	// harness_models, nil when none does. It can load the workspace and its harness
+	// mgs_listModels, nil when none does. It can load the workspace and its harness
 	// spells, so it must load them once however often it is called; the guard calls it
 	// only for a judgment that needs a window or a price, never for one that needs only
 	// the billing mode. Nil means no rows: a rule then finds no facts for a model, as for
@@ -1674,7 +1674,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
-	case tools.Capability(env.ToolName) == agent.ToolInert && envelopeString(env.ToolInput, "skill") == "":
+	case tools.Capability(env.ToolName) == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that
 		// touches nothing has nothing to judge whatever its fields are called.
 		req.NothingToJudge = true
@@ -1714,7 +1714,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// A host's own content or file search, judged as the shell line it stands for so
 		// the search rules hold on that channel too.
 		req.Value = nativeSearchLine(env.ToolInput)
-	case envelopeWritePath(env.ToolInput) != "" && tools.Capability(env.ToolName) == agent.ToolReads:
+	case envelopeWritePath(env.ToolInput) != "" && tools.Capability(env.ToolName) == types.ToolReads:
 		// A file path is a read or a write, and only the tool knows which.
 		req.Value = envelopeWritePath(env.ToolInput)
 		req.Read = readLine(req.Value, env.ToolInput)
@@ -1812,7 +1812,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			req.ChildStarted = env.AgentID
 		}
 	}
-	req.Inert = req.NothingToJudge && tools.Capability(env.ToolName) == agent.ToolInert &&
+	req.Inert = req.NothingToJudge && tools.Capability(env.ToolName) == types.ToolInert &&
 		req.LoadedSkill == "" && req.ChildStarted == "" && req.AgentTranscript == ""
 	return req, true
 }

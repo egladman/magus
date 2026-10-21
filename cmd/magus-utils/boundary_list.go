@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/format"
 	"sort"
-	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
 )
@@ -31,17 +30,15 @@ func runBoundaryList(args []string) error {
 	}
 
 	var rows []string
-	usesSpells := false
+	used := map[string]bool{"types": true}
 	objects := newBuzzValueEmitter()
 	for _, e := range boundaryTypes {
 		if !e.RuntimeObject {
 			continue
 		}
 		t := e.Type
-		qualified := t.PkgPath()[len("github.com/egladman/magus/"):] + "." + t.Name()
-		if !strings.HasPrefix(qualified, "types.") {
-			usesSpells = true
-		}
+		qualified := qualifyType(t)
+		used[typePackage(t).alias] = true
 		// The encoder is named after the Go type, matching buzzValueEmitter.funcName.
 		// Carried as a closure rather than left for the test to look up: a method could
 		// be reached through an interface assertion, and a free function cannot.
@@ -58,10 +55,7 @@ func runBoundaryList(args []string) error {
 	fmt.Fprintln(&b, `import (`)
 	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if usesSpells {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
-	fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
+	b.WriteString(importLines(used))
 	fmt.Fprintln(&b, `)`)
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "// RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired")

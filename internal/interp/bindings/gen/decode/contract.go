@@ -2,6 +2,14 @@
 
 package decode
 
+import (
+	"fmt"
+
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+)
+
 // ContractFunc is one load-time function of the spell contract, generated from a field
 // of internal/spell.Contract.
 type ContractFunc struct {
@@ -12,25 +20,473 @@ type ContractFunc struct {
 	// Returns is the return annotation the function must declare, as Buzz source spells
 	// it. A spell may space it differently.
 	Returns string
+	// Params is the parameter list the function must declare. A load-time function takes none.
+	Params string
 	// Required marks the function a module must export to be a spell at all.
 	Required bool
+	// Handler marks a {str: fun(Target) T} map: the caller invokes each handler once with a
+	// null Target and passes Decode the map of what they returned.
+	Handler bool
+	// Decode reads the function's result strictly into the Go type of the Contract field,
+	// naming the field path of any mismatch.
+	Decode func(v vm.Value) (any, error)
 }
 
 // ContractFuncs is every load-time function of the spell contract, in the order
 // internal/spell.Contract declares them.
 var ContractFuncs = []ContractFunc{
-	{Name: "mgs_getName", Field: "Name", Returns: "str", Required: true},
-	{Name: "mgs_listRequiredGlobs", Field: "RequiredGlobs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listProvidedGlobs", Field: "ProvidedGlobs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listIgnoreDirs", Field: "IgnoreDirs", Returns: "[Path]", Required: false},
-	{Name: "mgs_listManifests", Field: "Manifests", Returns: "[Manifest]", Required: false},
-	{Name: "mgs_listScriptRunners", Field: "ScriptRunners", Returns: "[Command]", Required: false},
-	{Name: "mgs_getTools", Field: "Tools", Returns: "{str: Tool}", Required: false},
-	{Name: "mgs_getLanguage", Field: "Language", Returns: "Language", Required: false},
-	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false},
-	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false},
-	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false},
-	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false},
-	{Name: "mgs_listTargets", Field: "Targets", Returns: "{str: fun(Target) Command}", Required: false},
-	{Name: "mgs_listServices", Field: "Services", Returns: "{str: fun(Target) Service}", Required: false},
+	{Name: "mgs_getName", Field: "Name", Returns: "str", Required: true, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractName(v) }},
+	{Name: "mgs_listRequiredGlobs", Field: "RequiredGlobs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractRequiredGlobs(v) }},
+	{Name: "mgs_listProvidedGlobs", Field: "ProvidedGlobs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractProvidedGlobs(v) }},
+	{Name: "mgs_listIgnoreDirs", Field: "IgnoreDirs", Returns: "[Path]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractIgnoreDirs(v) }},
+	{Name: "mgs_listManifests", Field: "Manifests", Returns: "[Manifest]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractManifests(v) }},
+	{Name: "mgs_listScriptRunners", Field: "ScriptRunners", Returns: "[Command]", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractScriptRunners(v) }},
+	{Name: "mgs_getTools", Field: "Tools", Returns: "{str: Tool}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractTools(v) }},
+	{Name: "mgs_getLanguage", Field: "Language", Returns: "Language", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractLanguage(v) }},
+	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSymbolIndexer(v) }},
+	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSandbox(v) }},
+	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractOpaque(v) }},
+	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractModeArgs(v) }},
+	{Name: "mgs_listTargets", Field: "Targets", Returns: "{str: fun(Target) Command}", Required: false, Handler: true, Decode: func(v vm.Value) (any, error) { return decodeContractTargets(v) }},
+	{Name: "mgs_listServices", Field: "Services", Returns: "{str: fun(Target) Service}", Required: false, Handler: true, Decode: func(v vm.Value) (any, error) { return decodeContractServices(v) }},
+}
+
+// HarnessFuncs is every function of the harness contract, in the order
+// internal/spell's harnessContract declares them. Required marks the one a harness must export.
+var HarnessFuncs = []ContractFunc{
+	{Name: "mgs_getHarnessConfig", Field: "Config", Returns: "HarnessConfig", Params: "", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncConfig(v) }},
+	{Name: "mgs_getSkills", Field: "Skills", Returns: "HarnessSkills", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSkills(v) }},
+	{Name: "mgs_listEntries", Field: "Entries", Returns: "[ManagedEntries]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncEntries(v) }},
+	{Name: "mgs_listHooks", Field: "Hooks", Returns: "[HookCommand]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncHooks(v) }},
+	{Name: "mgs_getMcp", Field: "MCP", Returns: "McpServer", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncMCP(v) }},
+	{Name: "mgs_listTools", Field: "Tools", Returns: "HarnessTools", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncTools(v) }},
+	{Name: "mgs_getLimits", Field: "Limits", Returns: "Limits", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncLimits(v) }},
+	{Name: "mgs_listModels", Field: "Models", Returns: "[ModelRow]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
+	{Name: "mgs_listSettings", Field: "Settings", Returns: "[Setting]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSettings(v) }},
+	{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderAgents(v) }},
+	{Name: "mgs_renderPrompts", Field: "RenderPrompts", Returns: "[Prompt]", Params: "humanOnly: {str: str}", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderPrompts(v) }},
+}
+
+func decodeContractName(v vm.Value) (string, error) {
+	var out string
+	sName, err := decodeStr(v, "mgs_getName")
+	if err != nil {
+		return out, err
+	}
+	out = sName
+	return out, nil
+}
+
+func decodeContractRequiredGlobs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listRequiredGlobs, err := decodeList(v, "mgs_listRequiredGlobs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listRequiredGlobs) > 0 {
+		itemsRequiredGlobs := make([]types.Path, len(listRequiredGlobs))
+		for indexRequiredGlobs, itemRequiredGlobs := range listRequiredGlobs {
+			xRequiredGlobsItem, err := decodePath(itemRequiredGlobs, fmt.Sprintf("%s[%d]", "mgs_listRequiredGlobs", indexRequiredGlobs))
+			if err != nil {
+				return out, err
+			}
+			itemsRequiredGlobs[indexRequiredGlobs] = xRequiredGlobsItem
+		}
+		out = itemsRequiredGlobs
+	}
+	return out, nil
+}
+
+func decodeContractProvidedGlobs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listProvidedGlobs, err := decodeList(v, "mgs_listProvidedGlobs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listProvidedGlobs) > 0 {
+		itemsProvidedGlobs := make([]types.Path, len(listProvidedGlobs))
+		for indexProvidedGlobs, itemProvidedGlobs := range listProvidedGlobs {
+			xProvidedGlobsItem, err := decodePath(itemProvidedGlobs, fmt.Sprintf("%s[%d]", "mgs_listProvidedGlobs", indexProvidedGlobs))
+			if err != nil {
+				return out, err
+			}
+			itemsProvidedGlobs[indexProvidedGlobs] = xProvidedGlobsItem
+		}
+		out = itemsProvidedGlobs
+	}
+	return out, nil
+}
+
+func decodeContractIgnoreDirs(v vm.Value) ([]types.Path, error) {
+	var out []types.Path
+	listIgnoreDirs, err := decodeList(v, "mgs_listIgnoreDirs", "[Path]")
+	if err != nil {
+		return out, err
+	}
+	if len(listIgnoreDirs) > 0 {
+		itemsIgnoreDirs := make([]types.Path, len(listIgnoreDirs))
+		for indexIgnoreDirs, itemIgnoreDirs := range listIgnoreDirs {
+			xIgnoreDirsItem, err := decodePath(itemIgnoreDirs, fmt.Sprintf("%s[%d]", "mgs_listIgnoreDirs", indexIgnoreDirs))
+			if err != nil {
+				return out, err
+			}
+			itemsIgnoreDirs[indexIgnoreDirs] = xIgnoreDirsItem
+		}
+		out = itemsIgnoreDirs
+	}
+	return out, nil
+}
+
+func decodeContractManifests(v vm.Value) ([]spells.Manifest, error) {
+	var out []spells.Manifest
+	listManifests, err := decodeList(v, "mgs_listManifests", "[Manifest]")
+	if err != nil {
+		return out, err
+	}
+	if len(listManifests) > 0 {
+		itemsManifests := make([]spells.Manifest, len(listManifests))
+		for indexManifests, itemManifests := range listManifests {
+			xManifestsItem, err := decodeManifest(itemManifests, fmt.Sprintf("%s[%d]", "mgs_listManifests", indexManifests))
+			if err != nil {
+				return out, err
+			}
+			itemsManifests[indexManifests] = xManifestsItem
+		}
+		out = itemsManifests
+	}
+	return out, nil
+}
+
+func decodeContractScriptRunners(v vm.Value) ([]spells.Command, error) {
+	var out []spells.Command
+	listScriptRunners, err := decodeList(v, "mgs_listScriptRunners", "[Command]")
+	if err != nil {
+		return out, err
+	}
+	if len(listScriptRunners) > 0 {
+		itemsScriptRunners := make([]spells.Command, len(listScriptRunners))
+		for indexScriptRunners, itemScriptRunners := range listScriptRunners {
+			xScriptRunnersItem, err := decodeCommand(itemScriptRunners, fmt.Sprintf("%s[%d]", "mgs_listScriptRunners", indexScriptRunners))
+			if err != nil {
+				return out, err
+			}
+			itemsScriptRunners[indexScriptRunners] = xScriptRunnersItem
+		}
+		out = itemsScriptRunners
+	}
+	return out, nil
+}
+
+func decodeContractTools(v vm.Value) (map[string]spells.Tool, error) {
+	var out map[string]spells.Tool
+	entriesTools, err := decodeMap(v, "mgs_getTools", "{str: Tool}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesTools.MapKeys(); len(keys) > 0 {
+		mappedTools := make(map[string]spells.Tool, len(keys))
+		for _, keyTools := range keys {
+			elemTools, _ := entriesTools.MapGet(keyTools)
+			var valueTools spells.Tool
+			xToolsValue, err := decodeTool(elemTools, fmt.Sprintf("%s[%q]", "mgs_getTools", keyTools))
+			if err != nil {
+				return out, err
+			}
+			valueTools = xToolsValue
+			mappedTools[keyTools] = valueTools
+		}
+		out = mappedTools
+	}
+	return out, nil
+}
+
+func decodeContractLanguage(v vm.Value) (*spells.Language, error) {
+	var out *spells.Language
+	if !v.IsNull() {
+		var optLanguage spells.Language
+		xLanguage, err := decodeLanguage(v, "mgs_getLanguage")
+		if err != nil {
+			return out, err
+		}
+		optLanguage = xLanguage
+		out = &optLanguage
+	}
+	return out, nil
+}
+
+func decodeContractSymbolIndexer(v vm.Value) (*spells.SymbolIndexer, error) {
+	var out *spells.SymbolIndexer
+	if !v.IsNull() {
+		var optSymbolIndexer spells.SymbolIndexer
+		xSymbolIndexer, err := decodeSymbolIndexer(v, "mgs_getSymbolIndexer")
+		if err != nil {
+			return out, err
+		}
+		optSymbolIndexer = xSymbolIndexer
+		out = &optSymbolIndexer
+	}
+	return out, nil
+}
+
+func decodeContractSandbox(v vm.Value) (*spells.Sandbox, error) {
+	var out *spells.Sandbox
+	if !v.IsNull() {
+		var optSandbox spells.Sandbox
+		xSandbox, err := decodeSandbox(v, "mgs_getSandbox")
+		if err != nil {
+			return out, err
+		}
+		optSandbox = xSandbox
+		out = &optSandbox
+	}
+	return out, nil
+}
+
+func decodeContractOpaque(v vm.Value) (bool, error) {
+	var out bool
+	bOpaque, err := decodeBool(v, "mgs_isOpaque")
+	if err != nil {
+		return out, err
+	}
+	out = bOpaque
+	return out, nil
+}
+
+func decodeContractModeArgs(v vm.Value) (map[string][]string, error) {
+	var out map[string][]string
+	entriesModeArgs, err := decodeMap(v, "mgs_getModeArgs", "{str: [str]}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesModeArgs.MapKeys(); len(keys) > 0 {
+		mappedModeArgs := make(map[string][]string, len(keys))
+		for _, keyModeArgs := range keys {
+			elemModeArgs, _ := entriesModeArgs.MapGet(keyModeArgs)
+			var valueModeArgs []string
+			strsModeArgsValue, err := decodeStrs(elemModeArgs, fmt.Sprintf("%s[%q]", "mgs_getModeArgs", keyModeArgs))
+			if err != nil {
+				return out, err
+			}
+			valueModeArgs = strsModeArgsValue
+			mappedModeArgs[keyModeArgs] = valueModeArgs
+		}
+		out = mappedModeArgs
+	}
+	return out, nil
+}
+
+func decodeContractTargets(v vm.Value) (map[string]spells.Command, error) {
+	var out map[string]spells.Command
+	entriesTargets, err := decodeMap(v, "mgs_listTargets", "{str: Command}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesTargets.MapKeys(); len(keys) > 0 {
+		mappedTargets := make(map[string]spells.Command, len(keys))
+		for _, keyTargets := range keys {
+			elemTargets, _ := entriesTargets.MapGet(keyTargets)
+			var valueTargets spells.Command
+			xTargetsValue, err := decodeCommand(elemTargets, fmt.Sprintf("%s[%q]", "mgs_listTargets", keyTargets))
+			if err != nil {
+				return out, err
+			}
+			valueTargets = xTargetsValue
+			mappedTargets[keyTargets] = valueTargets
+		}
+		out = mappedTargets
+	}
+	return out, nil
+}
+
+func decodeContractServices(v vm.Value) (map[string]spells.Service, error) {
+	var out map[string]spells.Service
+	entriesServices, err := decodeMap(v, "mgs_listServices", "{str: Service}")
+	if err != nil {
+		return out, err
+	}
+	if keys := entriesServices.MapKeys(); len(keys) > 0 {
+		mappedServices := make(map[string]spells.Service, len(keys))
+		for _, keyServices := range keys {
+			elemServices, _ := entriesServices.MapGet(keyServices)
+			var valueServices spells.Service
+			xServicesValue, err := decodeService(elemServices, fmt.Sprintf("%s[%q]", "mgs_listServices", keyServices))
+			if err != nil {
+				return out, err
+			}
+			valueServices = xServicesValue
+			mappedServices[keyServices] = valueServices
+		}
+		out = mappedServices
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncConfig(v vm.Value) (types.HarnessConfig, error) {
+	var out types.HarnessConfig
+	xConfig, err := decodeHarnessConfig(v, "mgs_getHarnessConfig")
+	if err != nil {
+		return out, err
+	}
+	out = xConfig
+	return out, nil
+}
+
+func decodeHarnessFuncSkills(v vm.Value) (types.HarnessSkills, error) {
+	var out types.HarnessSkills
+	xSkills, err := decodeHarnessSkills(v, "mgs_getSkills")
+	if err != nil {
+		return out, err
+	}
+	out = xSkills
+	return out, nil
+}
+
+func decodeHarnessFuncEntries(v vm.Value) ([]types.ManagedEntries, error) {
+	var out []types.ManagedEntries
+	listEntries, err := decodeList(v, "mgs_listEntries", "[ManagedEntries]")
+	if err != nil {
+		return out, err
+	}
+	if len(listEntries) > 0 {
+		itemsEntries := make([]types.ManagedEntries, len(listEntries))
+		for indexEntries, itemEntries := range listEntries {
+			xEntriesItem, err := decodeManagedEntries(itemEntries, fmt.Sprintf("%s[%d]", "mgs_listEntries", indexEntries))
+			if err != nil {
+				return out, err
+			}
+			itemsEntries[indexEntries] = xEntriesItem
+		}
+		out = itemsEntries
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncHooks(v vm.Value) ([]types.HookCommand, error) {
+	var out []types.HookCommand
+	listHooks, err := decodeList(v, "mgs_listHooks", "[HookCommand]")
+	if err != nil {
+		return out, err
+	}
+	if len(listHooks) > 0 {
+		itemsHooks := make([]types.HookCommand, len(listHooks))
+		for indexHooks, itemHooks := range listHooks {
+			xHooksItem, err := decodeHookCommand(itemHooks, fmt.Sprintf("%s[%d]", "mgs_listHooks", indexHooks))
+			if err != nil {
+				return out, err
+			}
+			itemsHooks[indexHooks] = xHooksItem
+		}
+		out = itemsHooks
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncMCP(v vm.Value) (types.McpServer, error) {
+	var out types.McpServer
+	xMCP, err := decodeMcpServer(v, "mgs_getMcp")
+	if err != nil {
+		return out, err
+	}
+	out = xMCP
+	return out, nil
+}
+
+func decodeHarnessFuncTools(v vm.Value) (types.HarnessTools, error) {
+	var out types.HarnessTools
+	xTools, err := decodeHarnessTools(v, "mgs_listTools")
+	if err != nil {
+		return out, err
+	}
+	out = xTools
+	return out, nil
+}
+
+func decodeHarnessFuncLimits(v vm.Value) (types.Limits, error) {
+	var out types.Limits
+	xLimits, err := decodeLimits(v, "mgs_getLimits")
+	if err != nil {
+		return out, err
+	}
+	out = xLimits
+	return out, nil
+}
+
+func decodeHarnessFuncModels(v vm.Value) ([]types.ModelRow, error) {
+	var out []types.ModelRow
+	listModels, err := decodeList(v, "mgs_listModels", "[ModelRow]")
+	if err != nil {
+		return out, err
+	}
+	if len(listModels) > 0 {
+		itemsModels := make([]types.ModelRow, len(listModels))
+		for indexModels, itemModels := range listModels {
+			xModelsItem, err := decodeModelRow(itemModels, fmt.Sprintf("%s[%d]", "mgs_listModels", indexModels))
+			if err != nil {
+				return out, err
+			}
+			itemsModels[indexModels] = xModelsItem
+		}
+		out = itemsModels
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncSettings(v vm.Value) ([]types.Setting, error) {
+	var out []types.Setting
+	listSettings, err := decodeList(v, "mgs_listSettings", "[Setting]")
+	if err != nil {
+		return out, err
+	}
+	if len(listSettings) > 0 {
+		itemsSettings := make([]types.Setting, len(listSettings))
+		for indexSettings, itemSettings := range listSettings {
+			xSettingsItem, err := decodeSetting(itemSettings, fmt.Sprintf("%s[%d]", "mgs_listSettings", indexSettings))
+			if err != nil {
+				return out, err
+			}
+			itemsSettings[indexSettings] = xSettingsItem
+		}
+		out = itemsSettings
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncRenderAgents(v vm.Value) ([]types.AgentFile, error) {
+	var out []types.AgentFile
+	listRenderAgents, err := decodeList(v, "mgs_renderAgents", "[AgentFile]")
+	if err != nil {
+		return out, err
+	}
+	if len(listRenderAgents) > 0 {
+		itemsRenderAgents := make([]types.AgentFile, len(listRenderAgents))
+		for indexRenderAgents, itemRenderAgents := range listRenderAgents {
+			xRenderAgentsItem, err := decodeAgentFile(itemRenderAgents, fmt.Sprintf("%s[%d]", "mgs_renderAgents", indexRenderAgents))
+			if err != nil {
+				return out, err
+			}
+			itemsRenderAgents[indexRenderAgents] = xRenderAgentsItem
+		}
+		out = itemsRenderAgents
+	}
+	return out, nil
+}
+
+func decodeHarnessFuncRenderPrompts(v vm.Value) ([]types.Prompt, error) {
+	var out []types.Prompt
+	listRenderPrompts, err := decodeList(v, "mgs_renderPrompts", "[Prompt]")
+	if err != nil {
+		return out, err
+	}
+	if len(listRenderPrompts) > 0 {
+		itemsRenderPrompts := make([]types.Prompt, len(listRenderPrompts))
+		for indexRenderPrompts, itemRenderPrompts := range listRenderPrompts {
+			xRenderPromptsItem, err := decodePrompt(itemRenderPrompts, fmt.Sprintf("%s[%d]", "mgs_renderPrompts", indexRenderPrompts))
+			if err != nil {
+				return out, err
+			}
+			itemsRenderPrompts[indexRenderPrompts] = xRenderPromptsItem
+		}
+		out = itemsRenderPrompts
+	}
+	return out, nil
 }

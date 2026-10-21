@@ -402,8 +402,8 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 // parseOpDocs reads spells/<dir>/spell.buzz and returns op-name -> doc-comment,
 // recovered from the source AST. Built-in Descriptors carry no per-op Doc (the
 // bytecode strips it), so the source is the only place the handler comments
-// survive. It maps each op key to its handler via the mgs_listTargets return map,
-// then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
+// survive. It maps each op key to its handler via the mgs_listTargets and
+// mgs_listServices return maps, then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
 // so a spell with no source-side docs renders no op descriptions. The symbol indexer's
 // doc is keyed under spells.DefaultSymbolIndexOp, since an indexer that declares no op
 // runs under it; the caller moves it to the op the descriptor declares.
@@ -427,7 +427,7 @@ func parseOpDocs(dir string) map[string]string {
 		if fd.Doc != "" {
 			funcDoc[fd.Name] = cleanDoc(fd.Doc)
 		}
-		if fd.Name == "mgs_listTargets" {
+		if fd.Name == "mgs_listTargets" || fd.Name == "mgs_listServices" {
 			collectOpHandlers(fd, opToHandler)
 		}
 	}
@@ -438,7 +438,7 @@ func parseOpDocs(dir string) map[string]string {
 			out[op] = doc
 		}
 	}
-	// The symbol indexer has no entry in mgs_listTargets to walk: magus synthesizes its
+	// The symbol indexer has no entry in either list to walk: magus synthesizes its
 	// op from mgs_getSymbolIndexer, so that export's own comment is the prose describing
 	// it, and without this the page renders the indexer's argv with nothing said about it.
 	if doc := funcDoc["mgs_getSymbolIndexer"]; doc != "" {
@@ -447,7 +447,7 @@ func parseOpDocs(dir string) map[string]string {
 	return out
 }
 
-// collectOpHandlers walks mgs_listTargets's body for its `return {"op": handler}`
+// collectOpHandlers walks a list export's body for its `return {"op": handler}`
 // map and records each op key -> handler function name. Non-identifier values
 // (none exist in the built-ins) are skipped.
 func collectOpHandlers(fd *ast.FunDecl, out map[string]string) {

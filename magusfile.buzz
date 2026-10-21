@@ -796,14 +796,19 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Regenerates everything derived from the boundary registry: the runtime boundary list,
-// the Go-to-Buzz encoders, the Buzz-to-Go decoders and the spell contract's signatures.
+// the Go-to-Buzz encoders, the Buzz-to-Go decoders, the provider ops, the spell
+// contract's signatures and the merge queue script's record mirrors.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("internal/interp/bindings/gen/boundary_list.go",
         "internal/interp/bindings/gen/boundary_objects.go",
+        "internal/interp/bindings/gen/boundary_ops.go",
+        "internal/interp/bindings/gen/providerops/providerops.go",
         "internal/interp/bindings/gen/decode/decode.go",
         "internal/interp/bindings/gen/decode/inbound_list_test.go",
-        "internal/interp/bindings/gen/decode/contract.go");
+        "internal/interp/bindings/gen/decode/contract.go",
+        "internal/queue/provider/gen/types/*.buzz");
     proc\exec("go", ["generate", "./cmd/magus-utils"]);
+    proc\exec("go", ["generate", "./internal/queue/provider"]);
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from
@@ -1089,7 +1094,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // for declared generated directories.
     final before = drift\vcsHashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
-    ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
+    // symbol-digest-generate writes a gitignored file, so it has no drift to gate, and it
+    // builds the full symbol index; the targets reading that file need it themselves.
+    ctx.needs(ctx.glob("*-generate", "!deploy-generate", "!symbol-digest-generate"));
     if (ctx.hasCharm("rw")) { return; }
 
     // Not diagnoseDrift: that classifies against one target's declarations.
@@ -2382,7 +2389,11 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("magusfile.buzz", "hack/magusfile/harness.buzz", "spells/harness/**/*.buzz",
                    ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                    ".codex/rules/*.rules", "opencode.json");
-    final report = hostconfig\stale(magus\describe.harness());
+    final plans = mut [<magus\HarnessPlan>];
+    foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim().split("\n")) {
+        if (id != "") { plans.append(magus\describe.harness(id)); }
+    }
+    final report = hostconfig\stale(plans);
     if (report.failure != "") {
         magus\log.info(report.merges);
         throw report.failure;

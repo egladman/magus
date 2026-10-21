@@ -441,7 +441,7 @@ logs and history). How you connect depends on the client:
   Prefer binding the token through the workspace **secret provider** (built-in
   environment provider: the ref `MAGUS_MCP_TOKEN`) rather than pasting a
   plaintext secret into a committed file. Harness spells declare that ref via
-  `harness_mcp`; `magus describe harness` prints a host CLI command sketch
+  `mgs_getMcp`; `magus describe harness` prints a host CLI command sketch
   and/or a docs pointer only; Magus does not write host MCP client config.
   Resolve the ref with `magus\secret.read("MAGUS_MCP_TOKEN")` inside a
   magusfile when a spell needs the value; hosts read the env var directly.

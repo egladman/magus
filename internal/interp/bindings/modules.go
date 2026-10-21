@@ -284,7 +284,7 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 // and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
 // bare imports. The result is one superset, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
-// handler op path (callBuzzSpellFunc), so both paths stay in lock-step.
+// function path (execSpellSource), so both paths stay in lock-step.
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterModules(ctx, sess)
 	RegisterSpellSourceModules(sess)
@@ -298,6 +298,7 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 //     modules because a plain script needs none of these until it imports a spell
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
+//   - magus/harness: the quoting and hook-command builders a harness spell renders with.
 //   - magus/lint: the Finding a Buzz lint rule returns.
 //   - magus: spell.MagusDeclSource, the declarations for the magus namespace itself. The
 //     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
@@ -311,7 +312,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	DeclareMagusTypes(sess)
 }
 
-// RegisterSpellDecls stores the spell, charm, and lint declaration source.
+// RegisterSpellDecls stores the spell, charm, harness and lint declaration source.
 // Storing it does not parse it: a declaration module is parsed when something
 // imports it. DeclareMagusTypes is the parse, and it is separate because a
 // closed script (a guard hook) never imports magus and should not pay for the
@@ -319,6 +320,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 func RegisterSpellDecls(sess *buzz.Session) {
 	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
 	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
+	sess.SetModuleDecls(spell.HarnessModulePath, spell.HarnessModuleSource)
 	sess.SetModuleDecls(spell.LintModulePath, spell.LintModuleSource)
 }
 

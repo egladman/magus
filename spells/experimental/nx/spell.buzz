@@ -47,15 +47,13 @@ fun ci(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "npx --no-install nx lint && npx --no-install nx test && npx --no-install nx build"]};
 }
 
-export fun mgs_listTargets() > any {
+export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build, "test": test, "lint": lint, "ci": ci};
 }
 
 // list_projects is the workspace-provider contract magus invokes by name.
-export fun list_projects(target: Target, cb: fun(any)) > [Project] !> any {
-    final io = {<str: any>};
-    cb(io);
-    final r = (io["root"] as? str) ?? "";
+export fun list_projects(target: Target, req: ProjectQuery) > [Project] !> any {
+    final r = req.root;
 
     var projects = mut [<Project>];
     // Belt and suspenders around the two exec calls below: NX_NO_CLOUD skips the

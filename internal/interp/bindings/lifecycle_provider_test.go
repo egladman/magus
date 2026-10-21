@@ -1,8 +1,6 @@
 package bindings
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -15,32 +13,42 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// withLifecycleSpell registers a stand-in provider whose list_lifecycles answers with
-// answer, and returns its name and a pointer to the request it last saw.
-func withLifecycleSpell(t *testing.T, answer func() (any, error)) (string, *spells.InvokeRequest) {
+// withLifecycleSpell registers a stand-in provider whose list_lifecycles runs body, and
+// returns its name. body sees the op's target and req.
+func withLifecycleSpell(t *testing.T, body string) string {
 	t.Helper()
-	var seen spells.InvokeRequest
-	name := register.Spell(t, "fake-lifecycle",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			seen = req
-			return answer()
-		}))
-	return name, &seen
+	return register.Spell(t, "fake-lifecycle", spells.WithFuncSource(`import "magus/spell";
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > any !> any {
+`+body+`
+}`))
 }
 
-func goRecord() map[string]any {
-	return map[string]any{
-		"key": "go", "source": "https://endoflife.date/api/v1/products/go", "asOf": "2026-09-24T07:44:41+00:00",
-		"cycles": []any{
-			map[string]any{"cycle": "1.25", "released": "2025-08-12", "eol": "2026-08-19", "lts": false, "latest": "1.25.14"},
-			map[string]any{"cycle": "1.27", "released": "2026-08-19", "eol": "", "lts": false, "latest": "1.27.1"},
-		},
+// goRecord is the go product's answer as a Buzz map, with fields replaced by over, each a
+// Buzz expression. A cycle field is keyed "cycles[0].<field>".
+func goRecord(over map[string]string) string {
+	field := func(key, def string) string {
+		if v, ok := over[key]; ok {
+			return v
+		}
+		return def
 	}
+	cycle0 := fmt.Sprintf(`{"cycle": %s, "released": %s, "eol": %s, "lts": %s, "latest": "1.25.14"}`,
+		field("cycles[0].cycle", `"1.25"`), field("cycles[0].released", `"2025-08-12"`),
+		field("cycles[0].eol", `"2026-08-19"`), field("cycles[0].lts", "false"))
+	return fmt.Sprintf(`{"key": %s, "source": %s, "asOf": %s, "cycles": %s}`,
+		field("key", `"go"`), field("source", `"https://endoflife.date/api/v1/products/go"`),
+		field("asOf", `"2026-09-24T07:44:41+00:00"`),
+		field("cycles", "["+cycle0+`, {"cycle": "1.27", "released": "2026-08-19", "eol": "", "lts": false, "latest": "1.27.1"}]`))
 }
 
 func TestRunLifecycleProviderDecodesTheAnswer(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "")
-	name, seen := withLifecycleSpell(t, func() (any, error) { return []any{goRecord()}, nil })
+	// One batch call carrying every key, at the workspace root.
+	name := withLifecycleSpell(t, `
+    if (req.keys.join(",") != "go,nodejs" or target.projectPath != "/ws") {
+        throw "asked {req.keys} at {target.projectPath}";
+    }
+    return [`+goRecord(nil)+`];`)
 
 	got, err := runLifecycleProvider(t.Context(), name, "/ws", []string{"go", "nodejs"})
 	require.NoError(t, err)
@@ -51,28 +59,21 @@ func TestRunLifecycleProviderDecodesTheAnswer(t *testing.T) {
 			{Cycle: "1.27", Released: "2026-08-19", Latest: "1.27.1"},
 		},
 	}}, got, "a key the provider did not answer is simply absent")
-	assert.Equal(t, spells.InvokeRequest{
-		Target: spells.ListLifecyclesContract,
-		Dir:    "/ws",
-		Params: map[string]any{"keys": []string{"go", "nodejs"}},
-	}, *seen, "one batch call carrying every key")
 }
 
 // MAGUS_OFFLINE is honored before the VM runs, because std/http does not honor it.
 func TestRunLifecycleProviderNeverEntersTheSpellOffline(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "1")
-	called := false
-	name, _ := withLifecycleSpell(t, func() (any, error) { called = true; return []any{}, nil })
+	name := withLifecycleSpell(t, `throw "the provider ran";`)
 
 	_, err := runLifecycleProvider(t.Context(), name, "/ws", []string{"go"})
 	require.ErrorIs(t, err, workspace.ErrLifecycleOffline)
-	assert.False(t, called)
 }
 
 // A throw is the source being unreachable, which is a state and not a failure.
 func TestRunLifecycleProviderReadsAThrowAsUnreached(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "")
-	name, _ := withLifecycleSpell(t, func() (any, error) { return nil, errors.New("dial tcp: no route to host") })
+	name := withLifecycleSpell(t, `throw "dial tcp: no route to host";`)
 
 	_, err := runLifecycleProvider(t.Context(), name, "/ws", []string{"go"})
 	require.ErrorIs(t, err, workspace.ErrLifecycleUnreached)
@@ -82,32 +83,28 @@ func TestRunLifecycleProviderReadsAThrowAsUnreached(t *testing.T) {
 // A malformed record is an error naming the spell, the key and the field.
 func TestRunLifecycleProviderRejectsAMalformedRecord(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "")
-	with := func(mutate func(map[string]any)) any {
-		r := goRecord()
-		mutate(r)
-		return []any{r}
-	}
-	cycle := func(r map[string]any) map[string]any { return r["cycles"].([]any)[0].(map[string]any) }
+	with := func(over map[string]string) string { return "return [" + goRecord(over) + "];" }
 	for _, tc := range []struct {
-		name   string
-		answer any
-		want   []string
+		name string
+		body string
+		want []string
 	}{
-		{"nothing returned", nil, []string{"returned nothing"}},
-		{"not a list", map[string]any{}, []string{"want a list of Lifecycle"}},
-		{"a key nobody asked for", with(func(r map[string]any) { r["key"] = "python" }), []string{`"python" was not asked for`}},
-		{"no source", with(func(r map[string]any) { r["source"] = "" }), []string{`key "go"`, `"source"`}},
-		{"no as-of", with(func(r map[string]any) { r["asOf"] = "" }), []string{`key "go"`, `"asOf"`, "RFC 3339"}},
-		{"as-of that is a date only", with(func(r map[string]any) { r["asOf"] = "2026-09-24" }), []string{`key "go"`, `"asOf"`}},
-		{"a bad end date", with(func(r map[string]any) { cycle(r)["eol"] = "soon" }), []string{`key "go"`, "cycles[0]", `"eol"`}},
-		{"a bad release date", with(func(r map[string]any) { cycle(r)["released"] = "Aug 2025" }), []string{"cycles[0]", `"released"`}},
-		{"an empty cycle", with(func(r map[string]any) { cycle(r)["cycle"] = "" }), []string{"cycles[0]", `"cycle"`}},
-		{"lts that is not a bool", with(func(r map[string]any) { cycle(r)["lts"] = "yes" }), []string{"cycles[0]", `"lts"`, "want bool"}},
-		{"cycles that are not a list", with(func(r map[string]any) { r["cycles"] = "1.25" }), []string{`"cycles"`}},
-		{"the same key twice", []any{goRecord(), goRecord()}, []string{`key "go" twice`}},
+		{"nothing returned", "return null;", []string{"want [Lifecycle]"}},
+		{"not a list", "return {};", []string{"want [Lifecycle]"}},
+		{"a key nobody asked for", with(map[string]string{"key": `"python"`}), []string{`"python" was not asked for`}},
+		{"no source", with(map[string]string{"source": `""`}), []string{`key "go"`, `"source"`}},
+		{"no as-of", with(map[string]string{"asOf": `""`}), []string{`key "go"`, `"asOf"`, "RFC 3339"}},
+		{"as-of that is a date only", with(map[string]string{"asOf": `"2026-09-24"`}), []string{`key "go"`, `"asOf"`}},
+		{"a bad end date", with(map[string]string{"cycles[0].eol": `"soon"`}), []string{`key "go"`, "cycles[0]", `"eol"`}},
+		{"a bad release date", with(map[string]string{"cycles[0].released": `"Aug 2025"`}), []string{"cycles[0]", `"released"`}},
+		{"an empty cycle", with(map[string]string{"cycles[0].cycle": `""`}), []string{"cycles[0]", `"cycle"`}},
+		{"lts that is not a bool", with(map[string]string{"cycles[0].lts": `"yes"`}), []string{"cycles[0].lts", "want bool"}},
+		{"cycles that are not a list", with(map[string]string{"cycles": `"1.25"`}), []string{"cycles: want [ReleaseCycle]"}},
+		{"a member Lifecycle does not declare", with(map[string]string{"cycles": `[], "eolFrom": "x"`}), []string{`no member "eolFrom"`}},
+		{"the same key twice", "return [" + goRecord(nil) + ", " + goRecord(nil) + "];", []string{`key "go" twice`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			name, _ := withLifecycleSpell(t, func() (any, error) { return tc.answer, nil })
+			name := withLifecycleSpell(t, tc.body)
 			_, err := runLifecycleProvider(t.Context(), name, "/ws", []string{"go"})
 			require.Error(t, err)
 			assert.NotErrorIs(t, err, workspace.ErrLifecycleUnreached, "a bad answer is not an unreachable host")

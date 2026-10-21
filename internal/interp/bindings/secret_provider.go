@@ -7,10 +7,12 @@ import (
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // This file lives in the bindings layer (not internal/secret) because a spell-backed
@@ -32,9 +34,9 @@ func openSpellSecretProvider(_ context.Context, name string) (secret.Provider, e
 }
 
 // spellSecretProvider adapts a spell to [secret.Provider]. The spell is an ordinary
-// magus spell authored in Buzz, exposing one handler op:
+// magus spell authored in Buzz, exposing one provider op:
 //
-//	resolve_secret({ref}) -> str   the secret value; throws if unresolvable
+//	resolve_secret(target: Target, req: SecretRef) > Secret   throws if unresolvable
 //
 // The adapter has no provider knowledge, so the binary stays backend-agnostic and the
 // reference is passed through verbatim. See docs/concepts/secrets.md for why there is no
@@ -44,12 +46,9 @@ type spellSecretProvider struct {
 	name string // for the waiting announcement and the timeout errors
 }
 
-// Fetch invokes the spell's resolve_secret op and returns the value it produced.
-//
-// The value arrives as the op's Text rather than structured Data on purpose: a secret
-// is a single opaque string, and routing it through a typed payload would mean it also
-// passes through the JSON encoder that serializes Data for MCP: one more place a
-// credential could be retained.
+// Fetch calls the spell's resolve_secret op and returns the value it produced. The value
+// decodes straight into a Secret and is wrapped at once, so it never passes through
+// InvokeResponse.Data or the JSON encoder that serializes Data for MCP.
 func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Value, error) {
 	// ANNOUNCED BEFORE THE PROVIDER RUNS, not after. A 1Password prompt appearing during
 	// what looked like an ordinary build, with nothing on screen explaining it, is a
@@ -80,10 +79,8 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	// report something must do it by failing.
 	ctx = spawn.WithOutputWriters(ctx, io.Discard, io.Discard)
 
-	resp, err := p.drv.Invoke(ctx, spells.InvokeRequest{
-		Target: "resolve_secret",
-		Params: map[string]any{"ref": ref},
-	})
+	op := providerops.ResolveSecret
+	got, exported, err := CallOp(ctx, p.drv, op, providerTarget(ctx, op.Name, ""), types.SecretRef{Ref: ref})
 	if err != nil {
 		if ctx.Err() != nil && !interactive {
 			// The distinction worth drawing for the reader: it did not "time out", it had
@@ -99,33 +96,11 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 		}
 		return secret.Value{}, err
 	}
-	// The typed return, which is the contract a provider should write today:
-	//
-	//   export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
-	//       return Secret{ value = ... };
-	//   }
-	//
-	// Buzz checks function SIGNATURES, so `> Secret` is enforced at compile time: a
-	// provider returning the wrong shape fails to load rather than failing at the first
-	// read. That is why this is worth typing even though magus\secret.read still hands a
-	// magusfile a plain str: Buzz does not check host-call results, so a type there would
-	// be decoration, while a type here is a constraint.
-	if m, ok := resp.Data.(map[string]any); ok {
-		if v, has := m["value"].(string); has && v != "" {
-			return secret.NewValue(v), nil
-		}
-		return secret.Value{}, fmt.Errorf("provider returned a Secret with no value (resolve_secret must set Secret.value)")
+	if !exported {
+		return secret.Value{}, fmt.Errorf("provider %q does not export %s(target: Target, req: SecretRef) > Secret", p.name, op.Name)
 	}
-	// compat(until: no provider spell returns a bare string from resolve_secret):
-	// the op shipped returning `> str` and third-party providers were written against
-	// that, so a plain string is still accepted. Observe it is safe to drop by checking
-	// that no spell in spells/ and no documented provider declares `> str` on
-	// resolve_secret; magus's own three were converted with the typed return.
-	if resp.Text != "" {
-		return secret.NewValue(resp.Text), nil
+	if got.Value == "" {
+		return secret.Value{}, fmt.Errorf("provider %q returned a Secret with no value (%s must set Secret.value)", p.name, op.Name)
 	}
-	if s, ok := resp.Data.(string); ok && s != "" {
-		return secret.NewValue(s), nil
-	}
-	return secret.Value{}, fmt.Errorf("provider returned no value (its resolve_secret op must return Secret{ value = ... })")
+	return secret.NewValue(got.Value), nil
 }

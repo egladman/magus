@@ -45,7 +45,8 @@ fi
 # Doctor grades skills and guard wiring only through a harness wired in a root
 # magusfile, which the fixture does not carry, so both are proven directly: the
 # skills byte-equal to a fresh render by the pinned binary (or to the custom
-# source), and the wired Bash hook answering an event.
+# source), and the wired Bash hook answering an event. The event is a raw
+# go test, which the guard denies out loud; it passes an allowed command silently.
 [ -n "$(find "$WT/.claude/skills" -name SKILL.md 2>/dev/null)" ] || arm_die "no skills are installed"
 case $source in
 dir\ *)
@@ -62,7 +63,7 @@ dir\ *)
 esac
 
 hook=$(jq -r '.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[0].command' "$settings")
-event='{"session_id":"arm-probe","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}'
+event='{"session_id":"arm-probe","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./..."}}'
 answer=$(cd "$WT" && printf '%s' "$event" | HOME="$WT/.benchmark/home" sh -c "$hook" 2>&1) ||
     arm_die "the wired Bash hook failed: $answer"
 case $answer in

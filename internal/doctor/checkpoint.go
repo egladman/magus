@@ -10,11 +10,16 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
 func (r *runner) checkCheckpointWiring() types.Check {
-	return checkCheckpointWiring(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...)
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring("checkpoint-wiring", err)
+	}
+	return checkCheckpointWiring(r.runCtx(), r.ws.Root(), wired...)
 }
 
 // checkCheckpointWiring reports a host that magus is wired into but that records no

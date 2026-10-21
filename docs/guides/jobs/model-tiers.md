@@ -84,9 +84,9 @@ magus\job.modelTiers(ModelTier, default: ModelTier.standard,
   tier fails `magus check`, like any other enum.
 - **Every mapping is a `match` over the enum.** Add a tier and `magus check`
   fails until `hosts`, `bounds` and `skills` each cover it.
-- **`hosts` is keyed by harness.** `magus\harness.provider` returns a
-  `magus\HarnessKey`; keep it, as `cc` above, and use it as the key. A call that
-  ignores the return value wires the harness as before. The harness must be wired
+- **`hosts` is keyed by harness.** `magus\harness.provider` returns the
+  harness id; keep it, as `cc` above, and use it as the key. A call that
+  ignores the return value wires the harness all the same. The harness must be wired
   above the declaration. The function answers the model alias that harness spawns
   for the tier, such as the string `sonnet`. Two tiers cannot share an alias on
   one harness, because a spawn of that alias would name no one tier.

@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/annotate"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // This file lives in the bindings layer (not internal/ci/annotate) because
@@ -51,17 +54,15 @@ func openSpellAnnotator() annotate.Annotator {
 	return &spellAnnotator{drv: drv}
 }
 
-// spellAnnotator adapts a spell to the [annotate.Annotator] contract. The
-// spell is an ordinary magus spell exposing these handler ops, all
-// optional:
+// spellAnnotator adapts a spell to the [annotate.Annotator] contract. The spell is an
+// ordinary magus spell exposing these provider ops, all optional:
 //
-//	enabled()                                  -> bool  active here?
-//	group_start({id, title, collapsed})        -> bool  open a fold
-//	group_end({id})                            -> bool  close it
-//	annotate({level, message, title, code,
-//	          file, line, end_line, col, end_col}) -> bool  raise a notice
-//	quote_prefixes()                           -> [str] line prefixes that
-//	                                                   introduce a command
+//	enabled(target, Empty) > Ack                  active here?
+//	group_start(target, CIGroup) > Ack            open a fold
+//	group_end(target, CIGroupEnd) > Ack           close it
+//	annotate(target, CIAnnotation) > Ack          raise a notice
+//	quote_prefixes(target, Empty) > Strings       line prefixes that introduce a command
+//	last_green_run(target, Empty) > GreenRun      the newest run that passed
 //
 // The adapter has no provider knowledge, so the binary stays CI-agnostic
 // and a new provider is a spell rather than a change to magus.
@@ -110,51 +111,33 @@ func (a *spellAnnotator) Active() bool {
 	}
 	ctx, cancel := spellCtx()
 	defer cancel()
-	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "enabled"})
+	op := providerops.CIEnabled
+	ack, exported, err := CallOp(ctx, a.drv, op, providerTarget(ctx, op.Name, ""), types.Empty{})
 	if err != nil {
 		return false
 	}
-	if resp.Data == nil {
-		a.active = true // no enabled() op declared -> always active
-	} else if b, ok := resp.Data.(bool); ok {
-		a.active = b
-	} else {
-		// A declared enabled() that returns a non-bool is a spell contract violation. Stay
-		// inactive rather than guess: activating on a malformed signal could emit a provider's
-		// markers outside its CI, the exact misfire Active exists to prevent.
-		a.active = false
-	}
+	// A provider that declares no enabled() is active wherever it was wired.
+	a.active = !exported || ack.OK
 	a.activeKnown = true
 	return a.active
 }
 
 func (a *spellAnnotator) StartGroup(g annotate.Group) error {
 	g = annotate.SanitizeGroup(g)
-	return a.call("group_start", map[string]any{
-		"id":        g.ID,
-		"title":     g.Title,
-		"collapsed": g.Collapsed,
-	})
+	return callCI(a.drv, providerops.GroupStart, types.CIGroup{ID: g.ID, Title: g.Title, Collapsed: g.Collapsed})
 }
 
 func (a *spellAnnotator) EndGroup(id string) error {
-	return a.call("group_end", map[string]any{"id": id})
+	return callCI(a.drv, providerops.GroupEnd, types.CIGroupEnd{ID: id})
 }
 
 func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	// Bound and de-fang before it crosses into third-party code: Message
 	// carries a failing process's own output. See annotate.Annotation.
 	an = annotate.Sanitize(an)
-	return a.call("annotate", map[string]any{
-		"level":    an.Level.String(),
-		"message":  an.Message,
-		"title":    an.Title,
-		"code":     an.Code,
-		"file":     an.File,
-		"line":     an.Line,
-		"end_line": an.EndLine,
-		"col":      an.Col,
-		"end_col":  an.EndCol,
+	return callCI(a.drv, providerops.Annotate, types.CIAnnotation{
+		Level: an.Level.String(), Message: an.Message, Title: an.Title, Code: an.Code, File: an.File,
+		Line: an.Line, EndLine: an.EndLine, Col: an.Col, EndCol: an.EndCol,
 	})
 }
 
@@ -164,26 +147,18 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 const runQueryTimeout = 15 * time.Second
 
 // LastGreenRun implements [annotate.RunSource] over the spell's optional
-// last_green_run op, which answers {run, commit} or null. Any failure
-// (an undeclared op, a null answer, a malformed record, a timeout) reads
-// as "no green run": inheritance is an optimization, never a capability.
+// last_green_run op. Any failure (an undeclared op, an empty answer, a malformed
+// record, a timeout) reads as "no green run": inheritance is an optimization, never
+// a capability.
 func (a *spellAnnotator) LastGreenRun() (annotate.GreenRun, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), runQueryTimeout)
 	defer cancel()
-	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "last_green_run"})
-	if err != nil || resp.Data == nil {
+	op := providerops.LastGreenRun
+	got, _, err := CallOp(ctx, a.drv, op, providerTarget(ctx, op.Name, ""), types.Empty{})
+	if err != nil || got.Run == "" || got.Commit == "" {
 		return annotate.GreenRun{}, false
 	}
-	m, ok := resp.Data.(map[string]any)
-	if !ok {
-		return annotate.GreenRun{}, false
-	}
-	run, _ := m["run"].(string)
-	commit, _ := m["commit"].(string)
-	if run == "" || commit == "" {
-		return annotate.GreenRun{}, false
-	}
-	return annotate.GreenRun{Run: run, Commit: commit}, true
+	return annotate.GreenRun{Run: got.Run, Commit: got.Commit}, true
 }
 
 // Defang neutralizes the provider's own command syntax in replayed output.
@@ -209,40 +184,28 @@ func (a *spellAnnotator) quotePrefixes() []string {
 	}
 	ctx, cancel := spellCtx()
 	defer cancel()
-	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "quote_prefixes"})
+	op := providerops.QuotePrefixes
+	got, _, err := CallOp(ctx, a.drv, op, providerTarget(ctx, op.Name, ""), types.Empty{})
 	if err != nil {
 		return nil // transient: do not latch an empty list
 	}
-	if list, ok := resp.Data.([]any); ok {
-		raw := make([]string, 0, len(list))
-		for _, v := range list {
-			if s, ok := v.(string); ok {
-				raw = append(raw, s)
-			}
-		}
-		// A provider could otherwise make magus match an unbounded list
-		// against every replayed line, or hand over an empty prefix that
-		// matches all of them.
-		a.prefixes = annotate.ClampPrefixes(raw)
-	}
+	// A provider could otherwise make magus match an unbounded list against every
+	// replayed line, or hand over an empty prefix that matches all of them.
+	a.prefixes = annotate.ClampPrefixes(got.Items)
 	a.prefixKnown = true
 	return a.prefixes
 }
 
-// call invokes an optional op, treating an undeclared op as success. A
-// spell implements only the verbs its provider supports, and the missing
-// rest are not errors: annotations do not exist at all on some providers.
-//
-// That tolerance is the INVOKER's, not this method's: an op the spell does not
-// declare comes back as a nil result with no error (see newBuzzSpellInvoker), so
-// every error reaching here is a real failure (a handler that raised, a spell
-// that would not load, an op that timed out), and is reported. Swallowing it made
-// a broken provider report success for the life of the build.
-func (a *spellAnnotator) call(op string, params map[string]any) error {
+// callCI calls an optional formatting op, treating an undeclared op as success: a spell
+// implements only the verbs its provider supports, and annotations do not exist at all on
+// some providers. Every error is a real failure (a handler that raised, a spell that would
+// not load, an op that timed out) and is reported; swallowing it made a broken provider
+// report success for the life of the build. What the op answers is not read.
+func callCI[Req any](drv spells.Driver, op bindgen.ProviderOp[Req, types.Ack], req Req) error {
 	ctx, cancel := spellCtx()
 	defer cancel()
-	if _, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params}); err != nil {
-		return fmt.Errorf("ci provider op %q: %w", op, err)
+	if _, _, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""), req); err != nil {
+		return fmt.Errorf("ci provider op %q: %w", op.Name, err)
 	}
 	return nil
 }

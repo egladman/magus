@@ -6,6 +6,7 @@ package main
 import (
 	"reflect"
 
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -66,6 +67,71 @@ var boundaryTypes = []boundaryType{
 	// [ReleaseCycle].
 	{Name: "ReleaseCycle", Type: reflect.TypeFor[spells.ReleaseCycle]()},
 	{Name: "Lifecycle", Type: reflect.TypeFor[spells.Lifecycle]()},
+	// A provider op's records (provider_ops.go). magus encodes each request, so it is a
+	// RuntimeObject; it decodes each response, so that one is listed in inboundTypes.
+	{Name: "Empty", Type: reflect.TypeFor[types.Empty](), RuntimeObject: true},
+	{Name: "SecretRef", Type: reflect.TypeFor[types.SecretRef](), RuntimeObject: true},
+	{Name: "CIGroup", Type: reflect.TypeFor[types.CIGroup](), RuntimeObject: true},
+	{Name: "CIGroupEnd", Type: reflect.TypeFor[types.CIGroupEnd](), RuntimeObject: true},
+	{Name: "CIAnnotation", Type: reflect.TypeFor[types.CIAnnotation](), RuntimeObject: true},
+	{Name: "ArtifactRequest", Type: reflect.TypeFor[types.ArtifactRequest](), RuntimeObject: true},
+	{Name: "PruneRequest", Type: reflect.TypeFor[types.PruneRequest](), RuntimeObject: true},
+	{Name: "LifecycleQuery", Type: reflect.TypeFor[types.LifecycleQuery](), RuntimeObject: true},
+	{Name: "FindReviewRequest", Type: reflect.TypeFor[types.FindReviewRequest](), RuntimeObject: true},
+	// Leaf first: PublishReviewRequest.drafts is [ReviewDraft].
+	{Name: "ReviewDraft", Type: reflect.TypeFor[types.ReviewDraft](), RuntimeObject: true},
+	{Name: "PublishReviewRequest", Type: reflect.TypeFor[types.PublishReviewRequest](), RuntimeObject: true},
+	{Name: "ReplyReviewRequest", Type: reflect.TypeFor[types.ReplyReviewRequest](), RuntimeObject: true},
+	{Name: "ReviewRef", Type: reflect.TypeFor[types.ReviewRef](), RuntimeObject: true},
+	{Name: "ProjectQuery", Type: reflect.TypeFor[types.ProjectQuery](), RuntimeObject: true},
+	{Name: "ReviewTarget", Type: reflect.TypeFor[types.ReviewTarget]()},
+	{Name: "ReviewComment", Type: reflect.TypeFor[types.ReviewComment]()},
+	// The merge queue provider script's records, leaf first, each taking a Queue prefix
+	// because Change, Check and Setting already name other mirrors. host.go provides them to
+	// the queue's session; nothing else imports them.
+	{Name: "Person", Type: reflect.TypeFor[types.Person]()},
+	{Name: "QueueIntegration", Type: reflect.TypeFor[queuetypes.Integration]()},
+	{Name: "QueueRequiredCheck", Type: reflect.TypeFor[queuetypes.RequiredCheck]()},
+	{Name: "QueueSetting", Type: reflect.TypeFor[queuetypes.Setting]()},
+	{Name: "QueueApp", Type: reflect.TypeFor[queuetypes.App]()},
+	{Name: "QueueSetupStep", Type: reflect.TypeFor[queuetypes.SetupStep]()},
+	{Name: "QueueSetup", Type: reflect.TypeFor[queuetypes.Setup]()},
+	{Name: "QueueSetupRefusal", Type: reflect.TypeFor[queuetypes.SetupRefusedError]()},
+	{Name: "QueueCapabilities", Type: reflect.TypeFor[queuetypes.Capabilities]()},
+	{Name: "QueueDescribeResult", Type: reflect.TypeFor[queuetypes.DescribeResult]()},
+	{Name: "QueueChange", Type: reflect.TypeFor[queuetypes.Change]()},
+	{Name: "QueueMergedChange", Type: reflect.TypeFor[queuetypes.MergedChange]()},
+	{Name: "QueueUnqueuedChange", Type: reflect.TypeFor[queuetypes.UnqueuedChange]()},
+	{Name: "QueueClosedChange", Type: reflect.TypeFor[queuetypes.ClosedChange]()},
+	{Name: "QueueChanges", Type: reflect.TypeFor[queuetypes.Changes]()},
+	{Name: "QueueApproval", Type: reflect.TypeFor[queuetypes.Approval]()},
+	{Name: "QueueCheck", Type: reflect.TypeFor[queuetypes.Check]()},
+	{Name: "QueueGreenChange", Type: reflect.TypeFor[queuetypes.GreenChange]()},
+	{Name: "QueueMergeAnswer", Type: reflect.TypeFor[queuetypes.MergeAnswer]()},
+	{Name: "QueueRunOrigin", Type: reflect.TypeFor[queuetypes.RunOrigin]()},
+	{Name: "QueueArtifact", Type: reflect.TypeFor[queuetypes.Artifact]()},
+	{Name: "QueueArtifactListing", Type: reflect.TypeFor[queuetypes.ArtifactListing]()},
+	{Name: "QueueReview", Type: reflect.TypeFor[queuetypes.Review]()},
+	{Name: "QueueReviews", Type: reflect.TypeFor[queuetypes.Reviews]()},
+	{Name: "QueuePinnedChange", Type: reflect.TypeFor[queuetypes.PinnedChange](), RuntimeObject: true},
+	{Name: "QueueReproduction", Type: reflect.TypeFor[queuetypes.Reproduction](), RuntimeObject: true},
+	{Name: "QueueDescribeRequest", Type: reflect.TypeFor[queuetypes.DescribeRequest](), RuntimeObject: true},
+	{Name: "QueueListChangesRequest", Type: reflect.TypeFor[queuetypes.ListChangesRequest](), RuntimeObject: true},
+	{Name: "QueueApprovalRequest", Type: reflect.TypeFor[queuetypes.ApprovalRequest](), RuntimeObject: true},
+	{Name: "QueueRequiredChecksRequest", Type: reflect.TypeFor[queuetypes.RequiredChecksRequest](), RuntimeObject: true},
+	{Name: "QueueListGreenRequest", Type: reflect.TypeFor[queuetypes.ListGreenRequest](), RuntimeObject: true},
+	{Name: "QueueStatusRequest", Type: reflect.TypeFor[queuetypes.StatusRequest](), RuntimeObject: true},
+	{Name: "QueueRetargetRequest", Type: reflect.TypeFor[queuetypes.RetargetRequest](), RuntimeObject: true},
+	{Name: "QueueMergeRequest", Type: reflect.TypeFor[queuetypes.MergeRequest](), RuntimeObject: true},
+	{Name: "QueueKickBackRequest", Type: reflect.TypeFor[queuetypes.KickBackRequest](), RuntimeObject: true},
+	{Name: "QueueMarkRequest", Type: reflect.TypeFor[queuetypes.MarkRequest](), RuntimeObject: true},
+	{Name: "QueueListArtifactsRequest", Type: reflect.TypeFor[queuetypes.ListArtifactsRequest](), RuntimeObject: true},
+	{Name: "QueueReviewsRequest", Type: reflect.TypeFor[queuetypes.ReviewsRequest](), RuntimeObject: true},
+	{Name: "QueueDismissReviewRequest", Type: reflect.TypeFor[queuetypes.DismissReviewRequest](), RuntimeObject: true},
+	{Name: "Ack", Type: reflect.TypeFor[types.Ack]()},
+	{Name: "GreenRun", Type: reflect.TypeFor[types.GreenRun]()},
+	{Name: "Strings", Type: reflect.TypeFor[types.Strings]()},
+	{Name: "PruneResult", Type: reflect.TypeFor[types.PruneResult]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "ShellCommand", Type: reflect.TypeFor[types.ShellCommand](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
@@ -279,7 +345,24 @@ var boundaryTypes = []boundaryType{
 	// a list of records. There is deliberately no ModelTier object: that name is the
 	// workspace's own Buzz enum.
 	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
-	{Name: "HarnessKey", Type: reflect.TypeFor[types.HarnessKey]()},
+	// The harness contract's records (types/harness_contract.go), leaf first: a harness
+	// spell's mgs_ functions return all but ShippedAgent, which magus hands
+	// mgs_renderAgents.
+	{Name: "HarnessConfig", Type: reflect.TypeFor[types.HarnessConfig]()},
+	{Name: "HarnessSkills", Type: reflect.TypeFor[types.HarnessSkills]()},
+	{Name: "HookCommand", Type: reflect.TypeFor[types.HookCommand]()},
+	{Name: "ManagedEntries", Type: reflect.TypeFor[types.ManagedEntries]()},
+	{Name: "McpServer", Type: reflect.TypeFor[types.McpServer]()},
+	{Name: "Price", Type: reflect.TypeFor[types.Price]()},
+	{Name: "PriceStep", Type: reflect.TypeFor[types.PriceStep]()},
+	{Name: "ModelRow", Type: reflect.TypeFor[types.ModelRow]()},
+	{Name: "HarnessTool", Type: reflect.TypeFor[types.HarnessTool]()},
+	{Name: "HarnessTools", Type: reflect.TypeFor[types.HarnessTools]()},
+	{Name: "AgentFile", Type: reflect.TypeFor[types.AgentFile]()},
+	{Name: "Prompt", Type: reflect.TypeFor[types.Prompt]()},
+	{Name: "Setting", Type: reflect.TypeFor[types.Setting]()},
+	{Name: "Limits", Type: reflect.TypeFor[types.Limits]()},
+	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
 	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
@@ -500,6 +583,22 @@ var boundaryEnums = []boundaryEnum{
 		Type: reflect.TypeFor[types.JobKind](),
 		Cases: []enumCase{{"check", "check"}, {"symbol", "symbol"}, {"paths", "paths"},
 			{"script", "script"}, {"prose", "prose"}},
+	},
+	{
+		Name:  "SkillForm",
+		Type:  reflect.TypeFor[types.SkillForm](),
+		Cases: []enumCase{{"none", ""}, {"both", "both"}, {"short", "short"}, {"full", "full"}},
+	},
+	{
+		Name: "ToolCapability",
+		Type: reflect.TypeFor[types.ToolCapability](),
+		Cases: []enumCase{{"none", ""}, {"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
+			{"network", "network"}, {"inert", "inert"}},
+	},
+	{
+		Name:  "McpTransport",
+		Type:  reflect.TypeFor[types.McpTransport](),
+		Cases: []enumCase{{"none", ""}, {"stdio", "stdio"}, {"http", "http"}},
 	},
 	{
 		Name:  "ModelTierSource",

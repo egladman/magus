@@ -719,7 +719,7 @@ var ruleDocUnjudgedTool = types.RuleDoc{
 	Catches: "a tool call whose input carries nothing any rule reads, from a tool the guard does not know",
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
-		"The harness spell declares the rows (harness_tools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
+		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
 		"It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.",
 }
 
@@ -1022,7 +1022,7 @@ var ruleDocGuardUnfinished = types.RuleDoc{
 		"So a check that has not answered within the guard's own budget, 7s against the host's 10s, stops waiting on its rules and answers unjudged: " +
 		"a call that changes state is denied, to be retried, and one that only reads runs with a note saying no rule judged it. The trail records the check as lapsed. " +
 		"Each check leaves a mark when it starts, before the workspace's rules load, and removes it when it answers while the host still waits. " +
-		"The host stopped waiting when the hook process it started is gone, or past the hook timeout the host's harness declares in harness_limits; a host whose harness declares none is not taken to have given up on a slow check. " +
+		"The host stopped waiting when the hook process it started is gone, or past the hook timeout the host's harness declares in mgs_getLimits; a host whose harness declares none is not taken to have given up on a slow check. " +
 		"The next check in the session reports and clears every mark whose process ended without removing it, and every one still running past the declared timeout. " +
 		"It stands alone only when the rules passed the call; on any other verdict the note is appended to that verdict. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing.",
@@ -1091,8 +1091,8 @@ var ruleDocSpawnAboveParentTier = types.RuleDoc{
 	Name:    string(denyRuleSpawnAboveParentTier),
 	Catches: "a subagent spawned on a model whose tier ranks above its spawner's",
 	Why: "A child never outranks the work that handed it out: the root session runs on the model the person picked, and every agent below it stays at that tier or lower. " +
-		"Both models resolve to tiers by an exact alias of the spawning host in the workspace's model-tier declaration, or by the exact id of a harness_models row that names a tier, and compare by rank, never by name or price. A spawn naming no model is never judged. " +
-		"Any other model has an unknown tier: magus never infers one from a name, and advises once naming the model, the aliases the declaration maps and the harness_models row to add. " +
+		"Both models resolve to tiers by an exact alias of the spawning host in the workspace's model-tier declaration, or by the exact id of a mgs_listModels row that names a tier, and compare by rank, never by name or price. A spawn naming no model is never judged. " +
+		"Any other model has an unknown tier: magus never infers one from a name, and advises once naming the model, the aliases the declaration maps and the mgs_listModels row to add. " +
 		"The spawner's model is proven when its host reported it: a main thread's from its transcript once the host has reported the thread, a subagent's from the model its spawn named. Proven, the spawn is refused; a subagent spawned on no model is taken to run on the session's, which is inferred and advised once. " +
 		"`magus job fork` holds a child row to its parent's tier the same way. The way up is a person's: they fork the higher-tier row and run it from a session at that tier. Set to advise, proof is advised too.",
 }

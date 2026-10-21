@@ -1771,9 +1771,12 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		if err != nil {
 			return nil, err
 		}
-		wired := workspaceHarnessNames(ws)
+		wired, err := workspace.WiredHarnesses(ws)
+		if err != nil {
+			return nil, err
+		}
 		hostCtx := agent.ContextWithWiredHarnesses(ctx, wired)
-		var toolRows []agent.HarnessTools
+		var toolRows []types.HarnessTools
 		for _, id := range wired {
 			d, _, err := agent.LoadHarness(hostCtx, ws.Root(), id)
 			if err != nil {
@@ -1785,7 +1788,7 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		}
 		var out []string
 		for _, f := range files {
-			installed := slices.ContainsFunc(toolRows, func(t agent.HarnessTools) bool { return t.Holds(f.Path) })
+			installed := slices.ContainsFunc(toolRows, func(t types.HarnessTools) bool { return t.Holds(f.Path) })
 			if installed || f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
 				out = append(out, f.Path)
 			}

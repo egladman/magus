@@ -791,7 +791,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 
 	global = globalFlags{}
 	tools := t.TempDir()
-	for _, f := range (agent.HarnessTools{Dir: ".", Rows: []agent.HarnessTool{{Name: "TodoWrite", Capability: agent.ToolInert}}}).Files() {
+	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: ".", Rows: []types.HarnessTool{{Name: "TodoWrite", Capability: types.ToolInert}}}, nil) {
 		require.NoError(t, os.WriteFile(filepath.Join(tools, f.Path), []byte(f.Content), 0o644))
 	}
 	var out bytes.Buffer
