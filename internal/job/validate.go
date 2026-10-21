@@ -48,6 +48,7 @@ import (
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
 func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
+	rows = hardenWritten(ctx, store, rows)
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	prev, updates := mergeBase(rows, id, merge)
 	merged := prev.Clone()
@@ -70,11 +71,11 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool {
 			return slices.ContainsFunc(prev.WritePaths, func(held string) bool { return types.PathWithin(p, held) })
 		})
-		addedRow := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		addedRow := types.Job{ID: id, WritePaths: added, SoftPaths: merged.SoftPaths, Parent: merged.Parent, DependsOn: merged.DependsOn}
 		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow), addedRow, merged)...)
 		addedDenies := types.Job{ID: id, DenyPaths: slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
-		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, rows, addedRow), addedRow, merged)...)
+		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
 		// Judged on what the update changes, so a check the row already held never blocks an
 		// unrelated update: a new check or goal is graded against every write path, an old
 		// one only against the paths this update adds.
@@ -104,7 +105,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
-		ps = append(ps, unorderedFileShareProblems(ctx, store, rows, merged)...)
+		ps = append(ps, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
 		ps = append(ps, narrowedTestProblems(store, merged)...)
 		ps = append(ps, deniedCheckProblems(graded, store, merged)...)
 		v.WriteProof = store.WriteProof(rows, merged)
@@ -122,7 +123,8 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 // test file would pull in every test that merely shares its helpers. A read-only row reaches
 // none.
 //
-// The caller skips it for a holder, whose own fork may not widen its boundary.
+// The caller skips it for a holder, whose own fork may not widen its boundary, and records
+// the paths it returns as the row's SoftPaths: they overlap nothing until the holder writes.
 func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
 		return nil, nil

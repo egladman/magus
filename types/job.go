@@ -714,6 +714,9 @@ type Job struct {
 	// path `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
 	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
 	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
+	// SoftPaths are the WritePaths entries that overlap nothing until the holder's diff
+	// touches them; the store then drops them from here. Always a subset of WritePaths.
+	SoftPaths []string `json:"soft_paths,omitempty" yaml:"soft_paths,omitempty"`
 	// ReadPaths widens what this lease may read beyond its WritePaths: the paths whose
 	// projects it may also read, each widened to those projects' own dependencies when the
 	// guard resolves it. A lease always reads what it writes.
@@ -1023,6 +1026,8 @@ type Declaration struct {
 	WritePaths []string `json:"write_paths,omitempty" schema:"writepath"`
 	// DenyPaths are the paths inside those this lease may not write.
 	DenyPaths []string `json:"deny_paths,omitempty" schema:"writepath"`
+	// SoftPaths are the entries of WritePaths that are soft claims (see [Job.SoftPaths]).
+	SoftPaths []string `json:"soft_paths,omitempty" schema:"writepath"`
 	// ReadPaths is what it may READ, widened to those projects' dependencies by the
 	// guard. Empty means write_paths stands in.
 	ReadPaths []string `json:"read_paths,omitempty" schema:"writepath"`
@@ -1200,6 +1205,13 @@ func (r Declaration) Problems() JobProblems {
 				invalid(at, fmt.Sprintf("%s %q %s, so it matches no workspace path and bounds nothing", at, p, why),
 					"name it relative to the workspace root")
 			}
+		}
+	}
+	for i, p := range r.SoftPaths {
+		if !slices.Contains(r.WritePaths, p) {
+			at := fmt.Sprintf("soft_paths[%d]", i)
+			invalid(at, fmt.Sprintf("%s %q is not in write_paths, and a soft path is a write path that overlaps nothing", at, p),
+				"name an entry of write_paths, or drop it")
 		}
 	}
 	_, declared, checkProblems := r.check()
@@ -1537,6 +1549,7 @@ func (r Declaration) Apply(u *Job) {
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
 	u.WritePaths = trimmedNonEmpty(r.WritePaths)
 	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
+	u.SoftPaths = trimmedNonEmpty(r.SoftPaths)
 	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
@@ -2004,7 +2017,7 @@ func NewJobList(jobs []Job) JobList {
 func jobOverlaps(jobs []Job) []JobOverlap {
 	claims := func(j Job) bool {
 		_, blocked := JobBlockedOn(jobs, j)
-		return j.State.Editing() && len(j.WritePaths) > 0 && !blocked
+		return j.State.Editing() && len(j.HardPaths()) > 0 && !blocked
 	}
 	var out []JobOverlap
 	for i, a := range jobs {
@@ -2015,7 +2028,7 @@ func jobOverlaps(jobs []Job) []JobOverlap {
 			if !claims(b) {
 				continue
 			}
-			if pa, pb := intersectingPaths(a.WritePaths, b.WritePaths); len(pa) > 0 {
+			if pa, pb := intersectingPaths(a.HardPaths(), b.HardPaths()); len(pa) > 0 {
 				out = append(out, JobOverlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb, Claims: claimsVerdict(pa, pb)})
 			}
 		}
@@ -2276,6 +2289,15 @@ func starStarShape(glob string) (prefix, last string, ok bool) {
 	return "", "", false
 }
 
+// HardPaths is WritePaths without the soft entries: the paths the row claims against other
+// rows. Every overlap check reads this, never WritePaths.
+func (u Job) HardPaths() []string {
+	if len(u.SoftPaths) == 0 {
+		return u.WritePaths
+	}
+	return slices.DeleteFunc(slices.Clone(u.WritePaths), func(p string) bool { return slices.Contains(u.SoftPaths, p) })
+}
+
 // Clone returns a deep copy: the slice fields are the only shared state, so copying
 // them is what makes a value handed out of a store safe to keep. slices.Clone
 // preserves nil, so a row that stored null does not come back as [].
@@ -2284,6 +2306,7 @@ func (u Job) Clone() Job {
 	c.Schema = u.clone()
 	c.WritePaths = slices.Clone(u.WritePaths)
 	c.DenyPaths = slices.Clone(u.DenyPaths)
+	c.SoftPaths = slices.Clone(u.SoftPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Breaks = slices.Clone(u.Breaks)

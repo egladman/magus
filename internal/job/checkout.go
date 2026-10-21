@@ -628,15 +628,15 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	}
 	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
 		there := workingCheckout(peer.CheckoutRoot, peer)
-		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
+		return peer.ID == row.ID || !Editing(peer) || len(peer.HardPaths()) == 0 ||
 			there != "" && !samePath(there, here)
 	})
 	if len(peers) == 0 {
 		return types.WriteProofAlone
 	}
 	for _, peer := range peers {
-		for _, mine := range row.WritePaths {
-			for _, theirs := range peer.WritePaths {
+		for _, mine := range row.HardPaths() {
+			for _, theirs := range peer.HardPaths() {
 				if types.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
 					return types.WriteProofOverlapping
 				}
@@ -644,4 +644,62 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 		}
 	}
 	return types.WriteProofDisjoint
+}
+
+// hardenWritten is rows with each live holder's soft paths its diff has touched made hard,
+// and the change recorded on the row. A footprint that cannot be read hardens nothing; a
+// record that fails leaves the row soft in the store for the next check to record again.
+func hardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.Job {
+	if store == nil || store.root == "" {
+		return rows
+	}
+	ctx = withFootprintCache(ctx, store.footprintCache())
+	var driver types.VCSDriver
+	out := slices.Clone(rows)
+	for i, row := range rows {
+		if len(row.SoftPaths) == 0 || !Editing(row) || row.CheckoutRoot == "" {
+			continue
+		}
+		if driver == nil {
+			driver, _ = resolveDriver(ctx, store.root)
+		}
+		fp := readFootprint(ctx, driver, rows, row.ID)
+		if !fp.known {
+			continue
+		}
+		written := slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+			return !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) })
+		})
+		if len(written) == 0 {
+			continue
+		}
+		harden := func(soft []string) []string {
+			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return slices.Contains(written, p) })
+		}
+		out[i].SoftPaths = harden(row.SoftPaths)
+		if store.dryRun {
+			continue
+		}
+		_, _ = store.mutate(ctx, row.ID, asObservation, func(cur *types.Job, exists bool, _ int64) error {
+			if exists {
+				cur.SoftPaths = harden(cur.SoftPaths)
+			}
+			return nil
+		})
+	}
+	return out
+}
+
+// claiming is row as the checks that read WritePaths for a collision see it: soft paths out.
+func claiming(row types.Job) types.Job {
+	row.WritePaths = row.HardPaths()
+	return row
+}
+
+func claimingRows(rows []types.Job) []types.Job {
+	out := make([]types.Job, len(rows))
+	for i, r := range rows {
+		out[i] = claiming(r)
+	}
+	return out
 }

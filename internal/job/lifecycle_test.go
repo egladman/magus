@@ -116,6 +116,33 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.Equal(t, types.StatePass, rows[0].State)
 }
 
+func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
+	t.Parallel()
+
+	row := coveredRow()
+	row.WritePaths = append(row.WritePaths, "docs/unwritten_test.go")
+	row.SoftPaths = []string{"docs/unwritten_test.go"}
+	loc := declared(t, row)
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref = result.Validation.OutputRef
+	attempt.TimestampMs = 9_999_999_999_999
+	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+
+	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
+	require.NoError(t, err)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.True(t, status.Verified)
+	assert.Empty(t, status.Violations, "an unwritten soft path is no violation")
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
+	assert.Empty(t, rows[0].SoftPaths)
+}
+
 func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 

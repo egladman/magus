@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -65,6 +66,45 @@ func seed(t *testing.T, s *Store, row types.Job) types.Job {
 	stored, err := s.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	return stored
+}
+
+func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(tempLocation(t, t.TempDir()))
+	soft := func(id string, hard, soft []string) types.Job {
+		return types.Job{ID: id, State: types.StateRunning, WritePaths: append(slices.Clone(hard), soft...), SoftPaths: soft}
+	}
+	seed(t, s, soft("A", []string{"a.go"}, []string{"a_test.go"}))
+	seed(t, s, soft("B", []string{"b.go"}, []string{"a_test.go"}))
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, types.NewJobList(rows).Overlaps, "two rows extending one test file overlap nowhere")
+
+	seed(t, s, soft("C", []string{"a_test.go"}, nil))
+	rows, err = s.List()
+	require.NoError(t, err)
+	overlaps := types.NewJobList(rows).Overlaps
+	assert.Empty(t, overlaps, "a hard claim on a soft path is no overlap either")
+
+	seed(t, s, soft("D", []string{"a.go"}, nil))
+	rows, err = s.List()
+	require.NoError(t, err)
+	assert.Len(t, types.NewJobList(rows).Overlaps, 1, "hard against hard still overlaps")
+
+	t.Run("dropping an unwritten soft path records no release", func(t *testing.T) {
+		t.Parallel()
+		kept, err := s.Update(t.Context(), "A", func(cur *types.Job) { cur.WritePaths, cur.SoftPaths = nil, nil })
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a.go"}, releasedPaths(kept), "a.go was held; a_test.go never was")	})
+}
+
+func releasedPaths(row types.Job) []string {
+	out := make([]string, len(row.Releases))
+	for i, r := range row.Releases {
+		out[i] = r.Path
+	}
+	return out
 }
 
 // stamped copies the fields the store writes itself from got onto want, so a whole-row

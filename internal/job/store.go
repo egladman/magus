@@ -660,6 +660,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if i < 0 {
 			row.Entries = nil
 		}
+		// Hardening is one-way: a re-declaration cannot soften a path the holder already
+		// wrote, and a soft path that is no write path claims nothing.
+		row.SoftPaths = slices.DeleteFunc(row.SoftPaths, func(p string) bool {
+			return !slices.Contains(row.WritePaths, p) ||
+				i >= 0 && slices.Contains(prev.WritePaths, p) && !slices.Contains(prev.SoftPaths, p)
+		})
 		// The store writes every reason: the sweep's, and the one a write ending a live row
 		// as no_return gets from what the row had become. A row brought back to life has none.
 		row.EndReason = prev.EndReason
@@ -896,7 +902,7 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 		return slices.Contains(next.WritePaths, r.Path)
 	})
 	for _, p := range prev.WritePaths {
-		if slices.Contains(next.WritePaths, p) {
+		if slices.Contains(next.WritePaths, p) || slices.Contains(prev.SoftPaths, p) {
 			continue
 		}
 		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
