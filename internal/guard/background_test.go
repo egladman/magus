@@ -146,8 +146,8 @@ func TestAdviseCheckTimeoutCoversTheLastRealRun(t *testing.T) {
 		{"the default would cut it off", 5 * time.Minute, claudeLimits, "give it a timeout of 8m0s (480000 ms)"},
 		{"a named timeout too short", 5 * time.Minute, shellCall{timeout: 3 * time.Minute, foregroundDefault: 2 * time.Minute, foregroundMax: 10 * time.Minute}, "this call waits 3m0s"},
 		{"capped at the maximum", 9 * time.Minute, claudeLimits, "give it a timeout of 10m0s (600000 ms)"},
-		{"past the maximum", 12 * time.Minute, claudeLimits, "a foreground call may wait; ask the orchestrator for a narrower check"},
-		{"already waiting the maximum", 9 * time.Minute, maxed, "needs 13m30s with room, past the 10m0s a foreground call may wait; ask the orchestrator for a narrower check"},
+		{"past the maximum", 12 * time.Minute, claudeLimits, "a foreground call may wait; run it bounded: `./magus job exec --timeout 18m0s -- ./magus run diagrams_generate docs`."},
+		{"already waiting the maximum", 9 * time.Minute, maxed, "needs 13m30s with room, past the 10m0s a foreground call may wait; run it bounded: `./magus job exec --timeout 14m0s -- "},
 		{"a timeout that covers it", 5 * time.Minute, shellCall{timeout: 8 * time.Minute, foregroundDefault: 2 * time.Minute, foregroundMax: 10 * time.Minute}, ""},
 		{"the default covers it", time.Minute, claudeLimits, ""},
 		{"no foreground limits declared", 5 * time.Minute, shellCall{timeout: time.Minute}, ""},
@@ -195,4 +195,25 @@ func TestAdviseCheckTimeoutCoversTheLastRealRun(t *testing.T) {
 		again := Judge(ctx, lowered, req)
 		assert.NotContains(t, again.Context, "480000 ms", "held to one firing per target per session")
 	})
+}
+
+// A run narrowed with `-- -run` is priced as the whole target, since no per-test durations
+// are recorded, so past the foreground maximum it is told the bounded form with its filter
+// kept. That line carries its own deadline and passes, in the foreground or the background.
+func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
+	row := figuresLease()
+	ctx, root := fleetFixture(t, row)
+	recordRun(t, root, "docs", "diagrams-generate", 13*time.Minute)
+	const bounded = "./magus job exec --timeout 20m0s -- ./magus run diagrams_generate docs -- -run 'TestA|TestB'"
+
+	a := checkTimeoutAdvice(ctx, row.ID, "./magus run diagrams_generate docs -- -run 'TestA|TestB'", claudeLimits)
+	assert.Contains(t, a.Say, "`"+bounded+"`")
+
+	assert.Empty(t, checkTimeoutAdvice(ctx, row.ID, bounded, claudeLimits).Say)
+	for _, background := range []bool{false, true} {
+		req := Request{Input: bounded, Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", CallBackground: background,
+			HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
+		v := Judge(ctx, Dependencies{}, req)
+		assert.NotEqual(t, "deny", v.Decision, "background %v: %s", background, v.Reason)
+	}
 }

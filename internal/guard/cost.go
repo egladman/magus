@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
@@ -184,7 +185,13 @@ type costState struct {
 	// Forked are the rows the thread handed out: forks the store confirmed and rows a
 	// titled spawn bound. A row the thread then takes itself with `magus job exec` leaves.
 	Forked []string `json:"forked,omitempty"`
+	// Refs are the output, invocation and verdict refs the thread's tool results named,
+	// oldest first and at most refsCap, so reading one back is checking its own work.
+	Refs []string `json:"refs,omitempty"`
 }
+
+// refsCap bounds Refs, dropping the oldest first.
+const refsCap = 256
 
 // forget drops id from the rows the thread handed out, reporting whether it was there.
 func (st *costState) forget(id string) bool {
@@ -294,8 +301,57 @@ func (st *costState) readTranscript(transcript string) []toolResult {
 			}
 		}
 		results = append(results, st.toolCalls(rec)...)
+		if rec.Type == "response_item" && rec.Payload.Type == "function_call_output" {
+			st.noteRefs(rec.Payload.Output)
+			continue
+		}
+		var blocks []contentBlock
+		if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && json.Unmarshal(rec.Message.Content, &blocks) == nil {
+			for _, b := range blocks {
+				if b.Type == "tool_result" {
+					st.noteRefs(b.Content)
+				}
+			}
+		}
 	}
 	return results
+}
+
+// noteRefs adds to Refs every minted output ref, invocation id and guard verdict ref a
+// tool result's text names.
+func (st *costState) noteRefs(raw json.RawMessage) {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		var blocks []contentBlock
+		_ = json.Unmarshal(raw, &blocks)
+		for _, b := range blocks {
+			text += b.Text + "\n"
+		}
+	}
+	words := strings.FieldsFunc(text, func(r rune) bool { return (r < 'a' || r > 'z') && (r < '0' || r > '9') })
+	for _, w := range words {
+		if !namesRef(w) || slices.Contains(st.Refs, w) {
+			continue
+		}
+		st.Refs = append(st.Refs, w)
+	}
+	if over := len(st.Refs) - refsCap; over > 0 {
+		st.Refs = slices.Delete(st.Refs, 0, over)
+	}
+}
+
+// namesRef reports a word `magus query output` or `query invocation` reads back: a minted
+// output ref, an invocation id, or a guard verdict ref. An invocation id carries a digit,
+// which keeps words like "invalid" out.
+func namesRef(w string) bool {
+	if cache.IsMintedRef(w) {
+		return true
+	}
+	if tail, ok := strings.CutPrefix(w, verdictRefPrefix); ok && len(tail) == 16 {
+		_, err := hex.DecodeString(tail)
+		return err == nil
+	}
+	return cache.LooksLikeInvocationID(w) && strings.ContainsAny(w, "0123456789")
 }
 
 // contentBlock is one entry of a message's content: a tool call the model made, or the
@@ -1033,8 +1089,9 @@ func drivesOnlyJobs(script string) bool {
 }
 
 // mainWork is rootWorkClass for line, less what an orchestrator owes the rows it forked:
-// running the check of a live row this thread forked, and reading any row's recorded check
-// output. The store is read only for a line that could be one of those.
+// running the check of a live row this thread forked, reading any row's recorded check
+// output, and reading back a ref its own tool results named. The store is read only for a
+// line that could be one of those.
 func mainWork(ctx context.Context, at location, st costState, line string) types.DelegableClass {
 	class := rootWorkClass(line, at)
 	if class != types.DelegableRun && class != types.DelegableRead {
@@ -1048,6 +1105,11 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 	if len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
 		return class
 	}
+	words := magusSubcommandWords(cmds[0].Args)
+	readsBack := (hint.QueryOutput.MatchedBy(words) || hint.QueryInvocation.MatchedBy(words)) && len(words) > 2
+	if readsBack && slices.Contains(st.Refs, words[2]) {
+		return ""
+	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return class
@@ -1060,7 +1122,7 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 		}
 		return class
 	}
-	if words := magusSubcommandWords(cmds[0].Args); hint.QueryOutput.MatchedBy(words) && len(words) > 2 {
+	if readsBack {
 		for _, row := range rows {
 			if row.Result != nil && row.Result.Validation.OutputRef == words[2] {
 				return ""

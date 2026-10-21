@@ -232,6 +232,22 @@ func TestReadTranscriptReadsARollout(t *testing.T) {
 	assert.Equal(t, costState{Tokens: 120000, Window: 272000, Transcript: path, Offset: fileSize(t, path), Pending: map[string]pendingCall{}}, st)
 }
 
+// The refs a thread's tool results name are kept, so the thread reading one back reads its
+// own work; refs only its own calls named, and words shaped nearly like one, are not.
+func TestReadTranscriptKeepsTheRefsToolResultsName(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "main.jsonl")
+	appendLines(t, path,
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"./magus query output out000000000001"}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"go-test . failed\nref out0123456789ab\nnothing ran\nfull verdict: ./magus query output grdb492392346a78802"}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"invalid input (invmvim3mfh1); outed"}]}]}}`,
+		`{"type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"ref outfeedbeef"}}`,
+	)
+	var st costState
+	st.readTranscript(path)
+	assert.Equal(t, []string{"out0123456789ab", "grdb492392346a78802", "invmvim3mfh1", "outfeedbeef"}, st.Refs)
+}
+
 // fileSize is path's length in bytes, the offset a transcript read wholly leaves.
 func fileSize(t *testing.T, path string) int64 {
 	t.Helper()
@@ -621,6 +637,11 @@ func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, forked, "./magus run go-test internal/guard"), "another project")
 	assert.Empty(t, mainWork(ctx, at, costState{}, "./magus query output out9"))
 	assert.Equal(t, types.DelegableRead, mainWork(ctx, at, forked, "./magus query output out1"))
+
+	seen := costState{Refs: []string{"out0123456789ab", "invmvim3mfh1"}}
+	assert.Empty(t, mainWork(ctx, at, seen, "./magus query output out0123456789ab"), "a ref its own results named")
+	assert.Empty(t, mainWork(ctx, at, seen, "./magus query invocation invmvim3mfh1"))
+	assert.Equal(t, types.DelegableRead, mainWork(ctx, at, seen, "./magus query output out00000000ffff"), "a ref it never saw")
 }
 
 // The request a workspace rule is handed carries the caller's thread and context.

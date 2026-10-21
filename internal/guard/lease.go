@@ -413,7 +413,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
 			return rewriteDenial(v, me, deps.DefaultCharms)
-		case v.permitted:
+		case v.permitted, vetsWritePaths(v.run, me.WritePaths, deps):
 			continue
 		}
 		r = v.run
@@ -437,6 +437,23 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		}
 	}
 	return denial{}
+}
+
+// vetsWritePaths reports a `magus run go::go-vet` over projects holding the write paths,
+// with no rw charm the op honors. Vetting compiles and writes nothing, so a worker whose
+// check the machine cannot fit still has a way to know its code builds.
+func vetsWritePaths(r targetRun, writePaths []string, deps Dependencies) bool {
+	if r.verb != "run" || !sameTarget("go::go-vet", r.target) {
+		return false
+	}
+	if r.rewrites(deps.DefaultCharms) && opHonorsRewrite(deps.spells(), r.target) {
+		return false
+	}
+	// "/" is every project, most of which hold none of the write paths.
+	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+		p = path.Clean(p)
+		return p != "." && !slices.ContainsFunc(writePaths, func(w string) bool { return strings.HasPrefix(w, p+"/") })
+	})
 }
 
 // lazyWorkspace opens the workspace at root on its first call and keeps it, or the error
@@ -1633,8 +1650,13 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 	// held job is in flight: once it has exited or ended, or names no row at all, the next
 	// exec is how the caller moves on (see bindOnExec).
 	case hint.JobExec.MatchedBy(words) && len(words) > 2:
-		if held := h.standing(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
+		held := h.standing()
+		operand := execOperand(c.Args)
+		if !held.inFlight() || operand == held.row.ID {
 			return rebind{}
+		}
+		if operand == "" {
+			return boundedExecRebind(h)
 		}
 		return rebind{problem: "would take the lease on another job while lease " + h.id + " is in flight", ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
@@ -1646,6 +1668,20 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job", "fork it")
 	}
 	return rebind{}
+}
+
+// boundedExecRebind judges `job exec --timeout <d> -- <cmd>`, which takes no job: the
+// command runs owned by the lease the store writes as. Under the holder's own lease it is
+// the bounded run other rules send a holder to, so only another lease's is refused.
+func boundedExecRebind(h holder) rebind {
+	owner := h.storeLease()
+	if owner == "" || owner == h.id {
+		return rebind{}
+	}
+	return rebind{
+		problem: "would run a command owned by lease " + owner + " while lease " + h.id + " is in flight",
+		fix:     "set BAGGAGE=" + trail.BaggageLease + "=" + h.id + " on the line so it runs under your own lease",
+	}
 }
 
 // descendsFrom reports whether id sits below the held row in the parent chain.

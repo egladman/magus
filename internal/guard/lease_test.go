@@ -583,6 +583,26 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 	assert.True(t, denyWorkerCheckOnly(ctx, rw, row.ID, "./magus run go-fmt .").refused(), "go-fmt honors rw, so default rw rewrites through it")
 }
 
+// A worker may always vet the projects holding its write paths, beside a check that composes
+// no vet there: vetting compiles and writes nothing, so a worker whose check the machine
+// cannot fit still learns whether its code builds.
+func TestWorkerCheckOnlyLetsAWorkerVetItsOwnPaths(t *testing.T) {
+	row := testCheckLease()
+	row.Check = &types.LeaseCheck{Target: "test", Project: "libs/conventions"}
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+	rw := deps
+	rw.DefaultCharms = []string{"rw"}
+
+	for _, command := range []string{"./magus run go::go-vet .", "./magus run go-vet .", "./magus run go::go-vet . -- ./internal/guard/..."} {
+		assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, command), "%q", command)
+		assert.Empty(t, denyWorkerCheckOnly(ctx, rw, row.ID, command), "%q under default rw", command)
+	}
+	for _, command := range []string{"./magus run go::go-vet docs", "./magus run go::go-vet", "./magus run go::go-test .", "./magus affected go::go-vet"} {
+		assert.True(t, denyWorkerCheckOnly(ctx, deps, row.ID, command).refused(), "%q", command)
+	}
+}
+
 // A worker never builds ./magus: the orchestrator builds one per base and places it. The
 // refusal says so and names the placement, rather than a check the build has nothing to do
 // with, so an integrating worker whose own changes reach the binary knows who builds it.
@@ -2201,6 +2221,31 @@ func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+me.ID)
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
+}
+
+// `job exec --timeout <d> -- <cmd>` takes no job: it is the bounded run other rules send a
+// holder to, so it passes under the holder's own lease and is refused only when the line's
+// BAGGAGE would hand the command to another one.
+func TestDenyLeaseScopedRebindLetsAHolderBoundItsOwnRun(t *testing.T) {
+	me := narrowLease()
+	ctx, _ := fleetFixture(t, me)
+	t.Setenv(trail.EnvBaggage, "")
+	const bounded = "magus job exec --timeout 1m -- true"
+
+	for _, line := range []string{
+		bounded,
+		"./magus job exec --timeout 20m -- ./magus run go-test . -- -run TestX",
+		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + bounded,
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
+	}
+
+	other := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "export BAGGAGE="+trail.BaggageLease+"=elsewhere; "+bounded)
+	require.True(t, other.refused())
+	assert.Contains(t, other.Say, "owned by lease elsewhere")
+	assert.Contains(t, other.Say, "BAGGAGE="+trail.BaggageLease+"="+me.ID, "the remedy is the holder's own")
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "magus job exec --timeout 1m harness/other").Say,
+		"take the lease on another job", "a job operand is still a take")
 }
 
 // TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal

@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
+	"strings"
 	"time"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
@@ -106,12 +109,13 @@ func denyWorkerBackgroundRun(run workerRun, call shellCall) denial {
 
 // adviseCheckTimeout advises a bound worker's magus run whose timeout is shorter than the
 // target's last real run allows for, keyed so it speaks once per target per session. It
-// names the timeout to pass, capped at the host's foreground maximum, or says the check
-// cannot finish in the foreground when even the maximum is short of it.
+// names the timeout to pass, capped at the host's foreground maximum, or, when even the
+// maximum is short of it, the same run under `magus job exec --timeout`.
 //
 // Silent for a call the host backgrounds (the deny answers that), for a wiring that declared
-// no foreground limits, and for a target with no recorded real run. The session store is
-// read only once every other condition holds.
+// no foreground limits, for a target with no recorded real run, and for a run inside `magus
+// job exec --timeout`, which carries its own bound. The session store is read only once
+// every other condition holds.
 func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 	limit, ok := call.foregroundLimit()
 	if !ok || call.background || at.workspace == "" || len(run.runs) == 0 {
@@ -140,21 +144,15 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		why := "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
 			"The duration is the newest real run of this target in the repository's session store; the advised timeout leaves half again as much for a cold cache or a loaded machine. " +
 			"It speaks once per target per session."
-		if last > call.foregroundMax {
+		bound := (need + time.Minute - time.Nanosecond).Truncate(time.Minute)
+		timeout := min(bound, call.foregroundMax)
+		if last > call.foregroundMax || timeout <= limit {
 			return advice{
-				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here, past the %s a foreground call may wait; ask the orchestrator for a narrower check.",
-					r.target, last.Round(time.Second), call.foregroundMax),
-				Why: why,
-				Key: checkTimeoutKey(r),
-			}
-		}
-		timeout := min((need + time.Minute - time.Nanosecond).Truncate(time.Minute), call.foregroundMax)
-		if timeout <= limit {
-			// The call already waits as long as a foreground call may.
-			return advice{
-				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; ask the orchestrator for a narrower check.",
-					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax),
-				Why: why,
+				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded: `%s`.",
+					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax, execBounded(r, bound)),
+				Why: why + "\n" +
+					"`magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from. " +
+					"A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.",
 				Key: checkTimeoutKey(r),
 			}
 		}
@@ -166,6 +164,22 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		}
 	}
 	return advice{}
+}
+
+// execBounded is r as the line `magus job exec --timeout` bounds, its forwarded arguments
+// kept so a run narrowed with `-- -run` stays narrowed. Not magus run's own --timeout
+// (boundedRun): that run still holds the call, and a worker may not background it.
+func execBounded(r targetRun, timeout time.Duration) string {
+	words := append([]string{"./magus", "job", "exec", "--timeout", timeout.String(), "--", "./magus", r.verb, r.target}, r.projects...)
+	if len(r.forwarded) > 0 {
+		words = append(append(words, "--"), r.forwarded...)
+	}
+	for i, w := range words {
+		if quoted, err := syntax.Quote(w, syntax.LangBash); err == nil {
+			words[i] = quoted
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // checkTimeoutKey holds check-timeout to one firing per session per target and project
