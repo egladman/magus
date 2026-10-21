@@ -26,7 +26,9 @@ import (
 // holder killed outright is released by the kernel closing its socket.
 //
 // DECLARED, not observed, so the same command on the same host reaches the same
-// verdict whatever a browser is doing. Observed pressure stays advisory in sys/mem.
+// verdict whatever a browser is doing. Observed pressure stays advisory in sys/mem. A
+// claim with a memory curve is charged by how long it has run, a wall-clock fact rather
+// than a host reading: two identical states at the same elapsed time agree.
 type MachineBudget struct {
 	mu          sync.Mutex
 	budgetMB    int
@@ -45,6 +47,8 @@ type machineEntry struct {
 	started time.Time
 	// reader is the process a reservation is held for; 0 for a granted claim.
 	reader int
+	// overrun is set once the claim's own tree held more than its curve predicted.
+	overrun bool
 }
 
 // reservationBound is how long a reservation waits for its reader's first claim. It
@@ -74,6 +78,10 @@ func (b *MachineBudget) clock() time.Time {
 // and records nothing, and it never blocks: whether to ask again belongs to the client,
 // which the verdict's OwnRun tells.
 //
+// Memory is admitted by curve: c is seated when at every future instant it fits beside
+// what counts against it (see fitsOverTime), so two claims whose peaks would not fit
+// together are seated when their curves say the peaks fall apart. Slots stay peaks.
+//
 // A seat reserved for c's process (see Reserve) does not count against c, and granting c
 // consumes it.
 func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
@@ -84,9 +92,11 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	if c.Slots < 1 {
 		c.Slots = 1
 	}
-	heldMB, heldSlots := b.held(c)
+	held := b.held(c)
+	heldMB, heldSlots := b.sum(held)
 	v := types.MachineVerdict{
-		Fits:        b.fits(c, 0, 0),
+		Fits:        b.fitsOverTime(c, func(string, types.MachineClaim) bool { return true }),
+		Packed:      b.packs(c, held),
 		Holders:     b.holders(c),
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
@@ -96,9 +106,8 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	if !v.Fits {
 		return v
 	}
-	if !b.fits(c, heldMB, heldSlots) && !b.freeSlot(c.Ancestors) {
-		othersMB, othersSlots := b.heldByOthers(c)
-		v.OwnRun = b.fits(c, othersMB, othersSlots)
+	if !b.fitsOverTime(c, held) && !b.freeSlot(c.Ancestors) {
+		v.OwnRun = b.fitsOverTime(c, b.heldByOthers(c))
 		return v
 	}
 
@@ -130,7 +139,7 @@ func (b *MachineBudget) Reserve(c types.MachineClaim, reader int) types.MachineV
 		}
 	}
 	c.Slots, c.PID = max(c.Slots, 1), reader
-	heldMB, heldSlots := b.held(types.MachineClaim{})
+	heldMB, heldSlots := b.sum(b.held(types.MachineClaim{}))
 	v := types.MachineVerdict{
 		Fits:        b.fits(c, 0, 0),
 		Holders:     b.holders(types.MachineClaim{}),
@@ -218,13 +227,24 @@ func (b *MachineBudget) Release(id string) {
 	delete(b.claims, id)
 }
 
+// Overrun charges a granted claim its full peak, MemoryMB, until it is released: its
+// run held more than its curve predicted, so the curve no longer bounds it. Nothing is
+// preempted. An unknown id is ignored, as Release ignores one.
+func (b *MachineBudget) Overrun(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if e, ok := b.claims[id]; ok {
+		e.overrun = true
+	}
+}
+
 // Snapshot reports the whole budget. Read-only, so a status command can ask what the
 // machine is doing without changing it.
 func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.pruneLocked()
-	heldMB, heldSlots := b.held(types.MachineClaim{})
+	heldMB, heldSlots := b.sum(b.held(types.MachineClaim{}))
 	return types.MachineSnapshot{
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
@@ -252,9 +272,11 @@ func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 // Two INDEPENDENT roots whose children each need more than the other root leaves free
 // are past what any exclusion here can reach, since a holder does not report whether it
 // is blocked. freeSlot answers that pair structurally.
-func (b *MachineBudget) held(c types.MachineClaim) (mb, slots int) {
+//
+// It returns the skip that sum and fitsOverTime take.
+func (b *MachineBudget) held(c types.MachineClaim) func(id string, c types.MachineClaim) bool {
 	excused := b.excused(c)
-	return b.sum(func(id string, _ types.MachineClaim) bool { return excused[id] })
+	return func(id string, _ types.MachineClaim) bool { return excused[id] }
 }
 
 // heldByOthers is held less the claims of c's own process and of c's own run: the part
@@ -263,14 +285,107 @@ func (b *MachineBudget) held(c types.MachineClaim) (mb, slots int) {
 //
 // The same process covers the server's adopted runs and a run's own concurrent steps;
 // the same run covers sibling nested magus processes under one root.
-func (b *MachineBudget) heldByOthers(c types.MachineClaim) (mb, slots int) {
+func (b *MachineBudget) heldByOthers(c types.MachineClaim) func(id string, c types.MachineClaim) bool {
 	excused := b.excused(c)
 	run := c.Run()
-	return b.sum(func(id string, held types.MachineClaim) bool {
+	return func(id string, held types.MachineClaim) bool {
 		return excused[id] ||
 			(c.PID != 0 && held.PID == c.PID) ||
 			(run != "" && held.Run() == run)
-	})
+	}
+}
+
+// fitsOverTime reports whether c, starting now, fits beside every claim skip does not
+// exclude at every future instant (see breach). A non-positive budget is unlimited on
+// that axis.
+func (b *MachineBudget) fitsOverTime(c types.MachineClaim, skip func(id string, c types.MachineClaim) bool) bool {
+	_, breached := b.breach(c, skip)
+	return !breached
+}
+
+// breach is the first instant c, starting now, and the claims skip does not exclude
+// together pass the budget. Each contribution is a step function (see heldAt), so
+// checking now and every claim's breakpoints s + k*D10/K and s + k*D90/K is exact.
+// Slots are peaks and breach now.
+func (b *MachineBudget) breach(c types.MachineClaim, skip func(id string, c types.MachineClaim) bool) (time.Time, bool) {
+	now := b.clock()
+	_, slots := b.sum(skip)
+	if b.budgetSlots > 0 && slots+max(c.Slots, 1) > b.budgetSlots {
+		return now, true
+	}
+	if b.budgetMB <= 0 {
+		return time.Time{}, false
+	}
+	counted := []machineEntry{{claim: c, started: now}}
+	for id, e := range b.claims {
+		if !skip(id, e.claim) {
+			counted = append(counted, *e)
+		}
+	}
+	instants := []time.Time{now}
+	for _, e := range counted {
+		if !curved(e, now) {
+			continue
+		}
+		for _, ms := range []int64{e.claim.Profile.D10Ms, e.claim.Profile.D90Ms} {
+			d := int64(time.Duration(ms) * time.Millisecond)
+			for k := range int64(types.MemoryCurveBuckets + 1) {
+				if t := e.started.Add(time.Duration((k*d + types.MemoryCurveBuckets - 1) / types.MemoryCurveBuckets)); t.After(now) {
+					instants = append(instants, t)
+				}
+			}
+		}
+	}
+	var first time.Time
+	breached := false
+	for _, t := range instants {
+		total := 0
+		for _, e := range counted {
+			total += heldAt(e, now, t)
+		}
+		if total > b.budgetMB && (!breached || t.Before(first)) {
+			first, breached = t, true
+		}
+	}
+	return first, breached
+}
+
+// curved reports whether e is charged by its curve at now: it has a profile with a
+// duration band, has not yet run past its D90 and has not overrun its curve.
+func curved(e machineEntry, now time.Time) bool {
+	p := e.claim.Profile
+	d90 := time.Duration(p.D90Ms) * time.Millisecond
+	return !e.overrun && p.Runs > 0 && d90 > 0 && now.Sub(e.started) <= d90
+}
+
+// heldAt is what e holds at t, judged at now. A claim that is not curved (see curved)
+// holds its flat MemoryMB until released. A curved claim is
+// expected released past its D90 and holds nothing there; a run that is still held
+// then is an overrun, which the next verdict charges its peak.
+func heldAt(e machineEntry, now, t time.Time) int {
+	if !curved(e, now) {
+		return e.claim.MemoryMB
+	}
+	elapsed := t.Sub(e.started)
+	if elapsed > time.Duration(e.claim.Profile.D90Ms)*time.Millisecond {
+		return 0
+	}
+	return min(e.claim.Profile.HeldMB(elapsed), e.claim.MemoryMB)
+}
+
+// packs reports whether a verdict on c beside the claims skip does not exclude judges
+// any of them by curve.
+func (b *MachineBudget) packs(c types.MachineClaim, skip func(id string, c types.MachineClaim) bool) bool {
+	now := b.clock()
+	if curved(machineEntry{claim: c, started: now}, now) {
+		return true
+	}
+	for id, e := range b.claims {
+		if !skip(id, e.claim) && curved(*e, now) {
+			return true
+		}
+	}
+	return false
 }
 
 // sum totals every claim skip does not exclude.
@@ -362,7 +477,7 @@ func (b *MachineBudget) holders(c types.MachineClaim) []types.MachineClaimant {
 		}
 		out = append(out, types.MachineClaimant{
 			Reserved: e.reader != 0, Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
-			MemoryMB: e.claim.MemoryMB, Sizing: e.claim.Sizing, Slots: e.claim.Slots,
+			MemoryMB: e.claim.MemoryMB, Profile: e.claim.Profile, Sizing: e.claim.Sizing, Slots: e.claim.Slots,
 			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
 		})
 	}

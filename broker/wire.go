@@ -24,6 +24,8 @@ const (
 	typeClaimReply     = "claim.reply"
 	typeRelease        = "release"
 	typeReleaseReply   = "release.reply"
+	typeOverrun        = "overrun"
+	typeOverrunReply   = "overrun.reply"
 	typeReserve        = "reserve"
 	typeReserveReply   = "reserve.reply"
 	typeServiceAcquire = "service.acquire"
@@ -129,6 +131,12 @@ type holdReleaseRequest struct {
 // releaseRequest returns a granted claim. An id the broker does not hold, or one another
 // connection took, is ignored.
 type releaseRequest struct {
+	ClaimID string `json:"claim_id"`
+}
+
+// overrunRequest says a claim this connection holds went over its memory curve. An id
+// it does not hold is ignored, as a release's is. The reply carries no body.
+type overrunRequest struct {
 	ClaimID string `json:"claim_id"`
 }
 

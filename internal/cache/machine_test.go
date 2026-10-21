@@ -58,6 +58,91 @@ func TestMachineBudgetRefusesWhatCanNeverFit(t *testing.T) {
 	assert.False(t, v.Fits, "no state of the machine seats a claim larger than the whole budget")
 }
 
+// curveClaim is a claim over a 100s run holding early for its first half and late for
+// its second, with a duration band from d10Ms to 100s, claiming its peak.
+func curveClaim(pid int, early, late uint32, d10Ms int64) types.MachineClaim {
+	p := types.MemoryProfile{D10Ms: d10Ms, D90Ms: 100_000, Runs: 3}
+	for i := range p.Curve {
+		p.Curve[i] = early
+		if i >= types.MemoryCurveBuckets/2 {
+			p.Curve[i] = late
+		}
+	}
+	return types.MachineClaim{Project: ".", Target: "test", MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
+}
+
+func TestRequestPacksCurvesWhosePeaksDoNotOverlap(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000)).Granted)
+
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	assert.True(t, v.Granted, "an early peak and a late one sum to 8000 at every instant")
+	assert.True(t, v.Packed)
+	assert.Equal(t, 14_000, v.HeldMB, "what is held is still reported as peaks")
+}
+
+func TestRequestRefusesWhenBandsOverlapAtThePeak(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
+
+	v := b.Request(curveClaim(200, 1000, 7000, 50_000))
+	assert.False(t, v.Granted, "with D10 at half of D90 the first may still be early when the second is late")
+	assert.True(t, v.Fits)
+	assert.True(t, v.Packed)
+}
+
+func TestOverrunClaimCountsItsPeak(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000)).Granted)
+
+	*now = now.Add(60 * time.Second)
+	within := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	require.True(t, within.Granted, "60s in, the first holds its late 1000 and is expected released at 100s")
+	b.Release(within.ID)
+
+	*now = now.Add(41 * time.Second)
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	assert.False(t, v.Granted, "past its D90 the first is charged its 7000 peak until released")
+	assert.True(t, v.Fits)
+}
+
+func TestOverrunCurveCountsItsPeak(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	first := b.Request(curveClaim(100, 7000, 1000, 100_000))
+	require.True(t, first.Granted)
+	*now = now.Add(60 * time.Second)
+
+	b.Overrun(first.ID)
+	b.Overrun("unknown")
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	assert.False(t, v.Granted, "an overrun claim is charged its 7000 peak, not its late 1000")
+	assert.True(t, v.Fits)
+
+	b.Release(first.ID)
+	assert.True(t, b.Request(curveClaim(200, 1000, 7000, 100_000)).Granted, "released, it holds nothing")
+}
+
+func TestClaimWithoutProfileCountsItsPeak(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 1000, 7000, 100_000)).Granted)
+
+	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, Slots: 1, PID: 200}
+	v := b.Request(flat)
+	assert.False(t, v.Granted, "a claim with no curve holds 7000 from now, across the first's late 7000")
+	assert.True(t, v.Packed, "the held claim is still judged by its curve")
+
+	peaks, _ := testBudget(t, 10_000, 8)
+	held := curveClaim(100, 1000, 7000, 100_000)
+	held.Profile = types.MemoryProfile{}
+	require.True(t, peaks.Request(held).Granted)
+	v = peaks.Request(flat)
+	assert.False(t, v.Granted, "two peaks held flat sum to 14000")
+	assert.False(t, v.Packed)
+
+	early := b.Request(types.MachineClaim{Project: ".", Target: "vet", MemoryMB: 3000, Slots: 1, PID: 300})
+	assert.True(t, early.Granted, "3000 flat fits beside the first's 7000 peak")
+}
+
 // TestMachineBudgetKeepsNothingForARefusedClaim pins that a refusal leaves no trace. A
 // refused claim reserving its room would turn away a smaller claim that fits, which is a
 // spurious exit 75 for a run that nothing was in the way of.
@@ -353,6 +438,7 @@ type budgetAdmitter struct {
 	requests int
 	fail     error
 	released []string
+	overruns []string
 }
 
 func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
@@ -370,6 +456,13 @@ func (f *budgetAdmitter) Release(_ context.Context, id string) {
 	defer f.mu.Unlock()
 	f.released = append(f.released, id)
 	f.budget.Release(id)
+}
+
+func (f *budgetAdmitter) Overrun(_ context.Context, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.overruns = append(f.overruns, id)
+	f.budget.Overrun(id)
 }
 
 func testGate(t *testing.T, b *MachineBudget) (*machineGate, *budgetAdmitter) {

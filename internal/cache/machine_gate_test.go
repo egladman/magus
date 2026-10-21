@@ -164,6 +164,53 @@ func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.Ma
 
 func (refusingAdmitter) Release(context.Context, string) {}
 
+func (refusingAdmitter) Overrun(context.Context, string) {}
+
+// overrunAdmitter sends each overrun it is told of on overruns.
+type overrunAdmitter struct {
+	refusingAdmitter
+	overruns chan string
+}
+
+func (a overrunAdmitter) Overrun(_ context.Context, id string) { a.overruns <- id }
+
+func TestOverrunIsSentOnce(t *testing.T) {
+	admit := overrunAdmitter{overruns: make(chan string, 4)}
+	profile := types.MemoryProfile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
+	for i := range profile.Curve {
+		profile.Curve[i] = 100
+	}
+	ctx := types.WithExecCost(t.Context())
+	ctx = withOverrunWatch(ctx, admit, "claim-1", profile)
+	watchOverrun(ctx)
+
+	record, end := types.RecordCurve(ctx, time.Now())
+	defer end()
+	record(types.MemorySample{At: time.Second, Bytes: 50 << 20})
+	select {
+	case id := <-admit.overruns:
+		t.Fatalf("a sample under the curve sent an overrun for %s", id)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	record(types.MemorySample{At: 2 * time.Second, Bytes: 200 << 20})
+	record(types.MemorySample{At: 3 * time.Second, Bytes: 300 << 20})
+	select {
+	case id := <-admit.overruns:
+		assert.Equal(t, "claim-1", id)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a sample over the curve sent no overrun")
+	}
+	select {
+	case <-admit.overruns:
+		t.Fatal("a second sample over the curve sent a second overrun")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, "claim-2", types.MemoryProfile{})
+	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
+}
+
 // groupAdmitter is a budget that also holds process groups, recording each hold and
 // release in order.
 type groupAdmitter struct {
@@ -276,6 +323,27 @@ func TestMachineBusyRefusalNamesTheWaitPipe(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "status --wait | ")
 	assert.Contains(t, err.Error(), "run <same args>")
+}
+
+func TestVerdictSaysItPackedByCurve(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
+	c := curveClaim(200, 1000, 7000, 50_000)
+	v := b.Request(c)
+	require.False(t, v.Granted)
+
+	assert.Contains(t, machineBusyError(c, v, *now).Error(),
+		"The broker packed by curve: the claims pass the 9.8 GiB budget together at 12:00:25, 25s from now.")
+
+	old := v
+	old.Packed = false
+	assert.Contains(t, machineBusyError(c, old, *now).Error(),
+		"The broker packed by peak, predating memory curves: this claimed the 6.8 GiB peak, which passes the budget now.",
+		"a broker that predates curves answers Packed false")
+
+	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, PID: 200}
+	assert.Contains(t, machineBusyError(flat, types.MachineVerdict{BudgetMB: 10_000, HeldMB: 7000}, *now).Error(),
+		"The broker packed by peak: this claimed the 6.8 GiB peak, which passes the budget now.")
 }
 
 // A step's result carries the claim it ran under, what it cost, and how long it queued:
