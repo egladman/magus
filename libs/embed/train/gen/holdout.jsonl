@@ -1332,7 +1332,6 @@
 {"group":"dir:libs/embed","path":"libs/embed/pin_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search_test.go"}
-{"group":"dir:libs/embed","path":"libs/embed/shipped_golden_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/table.go"}
 {"group":"dir:libs/embed","path":"libs/embed/table_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/tokens.go"}
