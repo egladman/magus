@@ -2934,7 +2934,7 @@
 {"doc_ref":"docs/site/diagrams/commit-generated.buzz:5-38","query_ref":"docs/site/diagrams/all.buzz:50-56","source":"buzz-scip-ref","split":"holdout"}
 {"doc_ref":"docs/site/diagrams/lease-loop.buzz:7-56","query_ref":"docs/site/diagrams/all.buzz:51-57","source":"buzz-scip-ref","split":"holdout"}
 {"doc_ref":"docs/site/diagrams/cache-trust.buzz:7-42","query_ref":"docs/site/diagrams/all.buzz:52-58","source":"buzz-scip-ref","split":"holdout"}
-{"doc_ref":"docs/site/diagrams/diagram-pipeline.buzz:7-68","query_ref":"docs/site/diagrams/all.buzz:53-59","source":"buzz-scip-ref","split":"holdout"}
+{"doc_ref":"docs/site/diagrams/diagram-pipeline.buzz:7-70","query_ref":"docs/site/diagrams/all.buzz:53-59","source":"buzz-scip-ref","split":"holdout"}
 {"doc_ref":"docs/site/diagrams/knowledge-graph.buzz:7-53","query_ref":"docs/site/diagrams/all.buzz:54-60","source":"buzz-scip-ref","split":"holdout"}
 {"doc_ref":"docs/site/diagrams/guard-path.buzz:7-58","query_ref":"docs/site/diagrams/all.buzz:55-61","source":"buzz-scip-ref","split":"holdout"}
 {"doc_ref":"docs/site/diagrams/agent-integration.buzz:6-46","query_ref":"docs/site/diagrams/all.buzz:56-62","source":"buzz-scip-ref","split":"holdout"}
@@ -7586,7 +7586,7 @@
 {"doc_ref":"internal/ci/annotate/annotate.go:1-21","query_ref":"docs/site/diagrams/ci-providers.buzz:7-38","source":"figure","split":"holdout"}
 {"doc_ref":"internal/ci/ci.go:1-3","query_ref":"docs/site/diagrams/ci-providers.buzz:7-38","source":"figure","split":"holdout"}
 {"doc_ref":"docs/concepts/cache.md:760-800","query_ref":"docs/site/diagrams/commit-generated.buzz:5-38","source":"figure","split":"train"}
-{"doc_ref":"docs/guides/diagrams.md:7-16","query_ref":"docs/site/diagrams/diagram-pipeline.buzz:7-68","source":"figure","split":"holdout"}
+{"doc_ref":"docs/guides/diagrams.md:7-16","query_ref":"docs/site/diagrams/diagram-pipeline.buzz:7-70","source":"figure","split":"holdout"}
 {"doc_ref":"docs/guides/integrations/agents/any-host.md:52-106","query_ref":"docs/site/diagrams/guard-path.buzz:7-58","source":"figure","split":"holdout"}
 {"doc_ref":"internal/guard/builtin/builtin.go:1-5","query_ref":"docs/site/diagrams/guard-path.buzz:7-58","source":"figure","split":"holdout"}
 {"doc_ref":"docs/recommendations.md:95-125","query_ref":"docs/site/diagrams/image-build.buzz:5-27","source":"figure","split":"holdout"}
