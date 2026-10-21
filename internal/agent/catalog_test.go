@@ -76,7 +76,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	writeTestHarness(t, dir)
-	written, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	written, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources), "a full install writes one file per skill and no twins")
 
@@ -127,7 +127,7 @@ func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	writeTestHarness(t, dir)
-	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	require.False(t, catalog.CheckStatuses(context.Background(), dir, "test-host")[0].Stale)
 
@@ -160,7 +160,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".agents/skills"
-	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, types.SkillFormBoth)
 	require.NoError(t, err)
 
 	// An orphan from an earlier release: magus wrote it, so magus may remove it.
@@ -179,12 +179,12 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// Detection first, and it must not delete: an install that did not ask for a
 	// prune still reports what is stale, so the orphan stays visible.
-	stale, err := catalog.StaleSkillDirs(dir, dest, FormBoth)
+	stale, err := catalog.StaleSkillDirs(dir, dest, types.SkillFormBoth)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, stale)
 	assert.DirExists(t, orphan, "detecting a stale skill must not remove it")
 
-	removed, err := catalog.PruneSkillTree(dir, dest, FormBoth)
+	removed, err := catalog.PruneSkillTree(dir, dest, types.SkillFormBoth)
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
 
@@ -199,7 +199,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// ... and a form that writes NO twin reports them, which is the whole point of the
 	// form reaching this far. Left as a report: pruning them is the caller's ask.
-	stale, err = catalog.StaleSkillDirs(dir, dest, FormShort)
+	stale, err = catalog.StaleSkillDirs(dir, dest, types.SkillFormShort)
 	require.NoError(t, err)
 	assert.Contains(t, stale, filepath.Join(dest, FullTwinName(skillSources[0].name)),
 		"a twin no longer written by the selected form is an orphan")
@@ -207,7 +207,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 
 	// Nothing installed at all is not an error: install prunes unconditionally, and
 	// a first install has nothing to prune.
-	removed, err = catalog.PruneSkillTree(dir, "never/installed", FormBoth)
+	removed, err = catalog.PruneSkillTree(dir, "never/installed", types.SkillFormBoth)
 	require.NoError(t, err)
 	assert.Empty(t, removed)
 }
@@ -221,12 +221,12 @@ func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	_, _, err := catalog.WriteSkillTree(dir, "../../outside", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, "../../outside", false, types.SkillFormFull)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes the working tree")
 
 	// An ordinary nested destination is unaffected.
-	written, _, err := catalog.WriteSkillTree(dir, "nested/skills", false, FormFull)
+	written, _, err := catalog.WriteSkillTree(dir, "nested/skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources))
 }
@@ -236,7 +236,7 @@ func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
 func TestWriteSkillTreeRefusesANewerInstall(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	_, _, err := catalog.WriteSkillTree(dir, "skills", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, "skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	victim := filepath.Join(dir, "skills", skillSources[0].name, "SKILL.md")
 	other := filepath.Join(dir, "skills", skillSources[1].name, "SKILL.md")
@@ -251,7 +251,7 @@ func TestWriteSkillTreeRefusesANewerInstall(t *testing.T) {
 		require.NoError(t, os.WriteFile(victim, []byte(newer), 0o644))
 		require.NoError(t, os.WriteFile(other, []byte("changed\n"), 0o644))
 
-		_, _, err = catalog.WriteSkillTree(dir, "skills", true, FormFull)
+		_, _, err = catalog.WriteSkillTree(dir, "skills", true, types.SkillFormFull)
 		require.Error(t, err, stamp)
 		assert.Contains(t, err.Error(), victim)
 		assert.Contains(t, err.Error(), fmt.Sprintf("agent-skill-version %d, knowledge-schema-version 6)", SkillVersion))
@@ -262,7 +262,7 @@ func TestWriteSkillTreeRefusesANewerInstall(t *testing.T) {
 
 	older := fmt.Sprintf("# older\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: 6; skill-content: abc -->\n", SkillVersion-1)
 	require.NoError(t, os.WriteFile(victim, []byte(older), 0o644))
-	_, _, err = catalog.WriteSkillTree(dir, "skills", true, FormFull)
+	_, _, err = catalog.WriteSkillTree(dir, "skills", true, types.SkillFormFull)
 	require.NoError(t, err)
 	got, err := os.ReadFile(other)
 	require.NoError(t, err)
@@ -324,7 +324,7 @@ func TestAgentsBlockRoutingIndexLineIsConditional(t *testing.T) {
 func TestFormBothWritesTwinsStampedFull(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
+	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, types.SkillFormBoth)
 	require.NoError(t, err)
 	require.Len(t, written, 2*len(skillSources), "FormBoth writes one primary plus one twin per skill")
 
@@ -343,9 +343,9 @@ func TestFormBothWritesTwinsStampedFull(t *testing.T) {
 
 func TestCatalogSkillTarIsByteStable(t *testing.T) {
 	catalog := testCatalog(t)
-	a, err := catalog.SkillTar(".claude/skills", FormFull)
+	a, err := catalog.SkillTar(".claude/skills", types.SkillFormFull)
 	require.NoError(t, err)
-	b, err := catalog.SkillTar(".claude/skills", FormFull)
+	b, err := catalog.SkillTar(".claude/skills", types.SkillFormFull)
 	require.NoError(t, err)
 	assert.Equal(t, a, b, "SkillTar must be reproducible; no embedded timestamps in the body")
 	assert.NotEmpty(t, a)
@@ -353,24 +353,24 @@ func TestCatalogSkillTarIsByteStable(t *testing.T) {
 
 func TestCatalogSkillBytesByName(t *testing.T) {
 	catalog := testCatalog(t)
-	body, err := catalog.SkillBytes("magus-architecture-review", FormFull)
+	body, err := catalog.SkillBytes("magus-architecture-review", types.SkillFormFull)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "name: magus-architecture-review")
 	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-architecture-review"))
 
-	ultra, err := catalog.SkillBytes("magus-multi-agent", FormFull)
+	ultra, err := catalog.SkillBytes("magus-multi-agent", types.SkillFormFull)
 	require.NoError(t, err)
 	assert.Contains(t, string(ultra), "name: magus-multi-agent")
 
-	_, err = catalog.SkillBytes("does-not-exist", FormFull)
+	_, err = catalog.SkillBytes("does-not-exist", types.SkillFormFull)
 	assert.ErrorContains(t, err, "unknown skill")
 }
 
 func TestTestDesignFullVariantAddsDelegatedWorkflow(t *testing.T) {
 	catalog := Default(7)
-	short, err := catalog.SkillBytes("magus-test-design", FormShort)
+	short, err := catalog.SkillBytes("magus-test-design", types.SkillFormShort)
 	require.NoError(t, err)
-	full, err := catalog.SkillBytes("magus-test-design", FormFull)
+	full, err := catalog.SkillBytes("magus-test-design", types.SkillFormFull)
 	require.NoError(t, err)
 
 	assert.Greater(t, len(full), len(short))
@@ -391,9 +391,9 @@ func TestMustSkillRefusesWhatMagusDoesNotShip(t *testing.T) {
 
 func TestMultiAgentVariantsKeepTheSameSafetyContract(t *testing.T) {
 	catalog := Default(7)
-	full, err := catalog.SkillBytes("magus-multi-agent", FormFull)
+	full, err := catalog.SkillBytes("magus-multi-agent", types.SkillFormFull)
 	require.NoError(t, err)
-	short, err := catalog.SkillBytes("magus-multi-agent", FormShort)
+	short, err := catalog.SkillBytes("magus-multi-agent", types.SkillFormShort)
 	require.NoError(t, err)
 
 	for _, body := range [][]byte{full, short} {
@@ -420,11 +420,11 @@ func TestPlanSkillTreeMatchesTheWriter(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", FormBoth)
+	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", types.SkillFormBoth)
 	require.NoError(t, err)
 	require.NotEmpty(t, planned)
 
-	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
+	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, types.SkillFormBoth)
 	require.NoError(t, err)
 
 	assert.Equal(t, written, planned, "the plan must name exactly what the writer writes")
@@ -435,7 +435,7 @@ func TestPlanSkillTreeWritesNothing(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	_, err := catalog.PlanSkillTree(dir, ".claude/skills", FormShort)
+	_, err := catalog.PlanSkillTree(dir, ".claude/skills", types.SkillFormShort)
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(dir)
@@ -478,9 +478,9 @@ func TestSkillTreeRefusesASymlinkedDestination(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "symlink")
 
-	_, _, err = catalog.WriteSkillTree(dir, dest, true, FormFull)
+	_, _, err = catalog.WriteSkillTree(dir, dest, true, types.SkillFormFull)
 	require.Error(t, err, "a write through a symlinked component lands outside the tree")
-	_, err = catalog.PlanSkillTree(dir, dest, FormFull)
+	_, err = catalog.PlanSkillTree(dir, dest, types.SkillFormFull)
 	require.Error(t, err, "a plan must refuse what the writer refuses")
 
 	// An install writes before it prunes, so the refused write is what keeps the
@@ -749,9 +749,9 @@ func validateActionPipe(pipe *parse.PipeNode) error {
 // would let a short install look current against a source its sibling outgrew.
 func TestStampNamesTheVariantButSharesTheDigest(t *testing.T) {
 	catalog := testCatalog(t)
-	full, err := catalog.SkillBytes("magus-vcs-hygiene", FormFull)
+	full, err := catalog.SkillBytes("magus-vcs-hygiene", types.SkillFormFull)
 	require.NoError(t, err)
-	short, err := catalog.SkillBytes("magus-vcs-hygiene", FormShort)
+	short, err := catalog.SkillBytes("magus-vcs-hygiene", types.SkillFormShort)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(full), "skill-variant: full")
@@ -771,14 +771,14 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, types.SkillFormBoth)
 	require.NoError(t, err)
 
 	blocked := filepath.Join(dir, dest, "magus-run", "SKILL.md")
 	require.NoError(t, os.Chmod(blocked, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o644) })
 
-	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormBoth})
 
 	assert.True(t, got.Stale, "an unreadable installed skill graded as current")
 	assert.Contains(t, got.Detail, "magus-run")
@@ -793,7 +793,7 @@ func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, types.SkillFormBoth)
 	require.NoError(t, err)
 
 	empty := filepath.Join(dir, dest, "magus-empty")
@@ -807,7 +807,7 @@ func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
 	_, readErr := os.ReadFile(lockedSkill)
 	require.Error(t, readErr)
 
-	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormBoth})
 
 	assert.Equal(t, Status{
 		Location:  dest,
@@ -826,12 +826,12 @@ func TestGradeDestLeftoverBesideARealFindingKeepsTheReinstall(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, types.SkillFormBoth)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, dest, "magus-empty"), 0o755))
 	require.NoError(t, os.Remove(filepath.Join(dir, dest, "magus-run", "SKILL.md")))
 
-	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormBoth})
 
 	assert.True(t, got.Stale)
 	assert.False(t, got.OnlyLeftovers)
@@ -848,7 +848,7 @@ func TestGradeDestReportsEveryReasonNotJustTheFirst(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, types.SkillFormFull)
 	require.NoError(t, err)
 
 	// Sorts before every shipped name, so the old first-offender return hit this
@@ -861,7 +861,7 @@ func TestGradeDestReportsEveryReasonNotJustTheFirst(t *testing.T) {
 	stale := "---\nname: magus-query\n---\nbody\n<!-- generated by: magus agent install; agent-skill-version: 23; knowledge-schema-version: 7; skill-content: deadbeefcafe; skill-variant: full -->\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, dest, "magus-query", "SKILL.md"), []byte(stale), 0o644))
 
-	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormFull})
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormFull})
 
 	require.True(t, got.Stale)
 	assert.Contains(t, got.Detail, "magus-aaa-orphan", "the orphan finding must still be reported")
@@ -902,7 +902,7 @@ func offeredWorkspace(t *testing.T) (*Catalog, string) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	writeTestHarness(t, dir)
-	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	writeLocalSkill(t, dir, "acme-rules", "---\nname: acme-rules\ndescription: \"Our house rules.\"\n---\n\n# Acme\n\nShip on Fridays.\n")
 	return catalog, dir
@@ -958,7 +958,7 @@ func TestOfferedBodyIsTheInstalledFileWithoutFrontmatter(t *testing.T) {
 	installed, err := os.ReadFile(filepath.Join(dir, ".agents/skills", anchorSkillRel))
 	require.NoError(t, err)
 
-	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: FormFull})
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: types.SkillFormFull})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.True(t, strings.HasSuffix(string(installed), "\n\n"+got[0].Body), "body must be the installed file after its frontmatter")
@@ -971,7 +971,7 @@ func TestOfferedIsNotCurrentOnceAnInstalledCopyDrifts(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(body, "hand edit\n"...), 0o644))
 
-	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: FormFull})
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Name: "magus-query", Form: types.SkillFormFull})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.False(t, got[0].Current)
@@ -980,7 +980,7 @@ func TestOfferedIsNotCurrentOnceAnInstalledCopyDrifts(t *testing.T) {
 func TestOfferedFormNarrowsShippedSkillsOnly(t *testing.T) {
 	catalog, dir := offeredWorkspace(t)
 
-	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Form: FormShort})
+	got, err := catalog.Offered(context.Background(), dir, []string{"test-host"}, SkillQuery{Form: types.SkillFormShort})
 	require.NoError(t, err)
 	require.Len(t, got, len(skillSources)+1)
 	for _, s := range got {

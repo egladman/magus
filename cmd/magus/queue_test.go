@@ -44,24 +44,25 @@ func queueHead(id string) string { return strings.Repeat("0", 39) + id }
 // queueProvider approves every change at the commit asked about, lists CHANGES, merges
 // nothing, and lists RUN as every validation run's artifacts.
 const queueProvider = `
-export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"], "required_approvals": 0, "queue_label": "merge: ",
-        "committer": {"name": "bot", "email": "bot@example.invalid"}};
+import "mergequeue/types";
+export fun describe(req: QueueDescribeRequest) > any {
+    return {"capabilities": {"stackMerge": "sequential", "linearStacks": false, "methods": ["squash"], "requiredApprovals": 0, "queueLabel": "merge: ",
+        "committer": {"name": "bot", "email": "bot@example.invalid"}}};
 }
-export fun list_changes(io: {str: any}) > any {
+export fun list_changes(req: QueueListChangesRequest) > any {
     return {"changes": CHANGES, "merged": [<any>], "unqueued": [<any>]};
 }
-export fun approval_at(io: {str: any}) > any {
-    return {"approved": true, "head": io["commit"], "base": "main", "method": io["method"], "queued": true, "shared_with": [<str>]};
+export fun approval_at(req: QueueApprovalRequest) > any {
+    return {"approved": true, "head": req.commit, "base": "main", "method": req.method, "queued": true, "branchSharedWith": [<str>]};
 }
-export fun list_green(io: {str: any}) > any { return {"changes": [<any>]}; }
-export fun post_status(io: {str: any}) > bool { return true; }
-export fun retarget(io: {str: any}) > bool { return true; }
-export fun kick_back(io: {str: any}) > bool { return true; }
-export fun mark(io: {str: any}) > bool { return true; }
-export fun merge_change(io: {str: any}) > any { return {"merged": false, "reason": "the test merges nothing"}; }
-export fun list_artifacts(io: {str: any}) > any {
-    final run = {"repo": "acme/widgets", "head_repo": "acme/widgets", "head_branch": "main", "event": "push", "branch_event": true,
+export fun list_green(req: QueueListGreenRequest) > any { return [<any>]; }
+export fun post_status(req: QueueStatusRequest) > Ack { return Ack{ ok = true }; }
+export fun retarget(req: QueueRetargetRequest) > Ack { return Ack{ ok = true }; }
+export fun kick_back(req: QueueKickBackRequest) > Ack { return Ack{ ok = true }; }
+export fun mark(req: QueueMarkRequest) > Ack { return Ack{ ok = true }; }
+export fun merge_change(req: QueueMergeRequest) > any { return {"merged": false, "reason": "the test merges nothing"}; }
+export fun list_artifacts(req: QueueListArtifactsRequest) > any {
+    final run = {"repo": "acme/widgets", "headRepo": "acme/widgets", "headBranch": "main", "event": "push", "branchEvent": true,
         "definition": ".github/workflows/queue.yaml"};
     return {"run": run, "complete": true, "headers": {"Authorization": "Bearer tok"}, "artifacts": RUN};
 }
@@ -258,7 +259,7 @@ func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 }
 
 func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
-	change := `[{"id": "1", "repo": io["remote_url"], "head": "` + queueHead("1") + `", "base": "main", "method": "squash", "fork": false}]`
+	change := `[{"id": "1", "repo": req.remoteURL, "head": "` + queueHead("1") + `", "base": "main", "method": "squash", "fork": false}]`
 	f := newQueueFixture(t, change, "")
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
 	out, err := f.run(t, "", "ls", "--provider", "local.buzz", "--base", "main")
@@ -311,27 +312,27 @@ func TestQueueDescribeSaysWhenTheBaseRequiresNoApproval(t *testing.T) {
 // about, so a test reads the query from the answer. It declines one for the apps
 // "unknown" and "hidden", asking again with "<slug>" and "hidden:<id>".
 const setupProvider = `
-export fun describe(io: {str: any}) > any {
-    if (io["status_context"] == "") {
-        return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash"], "required_approvals": 2};
+export fun describe(req: QueueDescribeRequest) > any {
+    if (req.statusContext == "") {
+        return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash"], "requiredApprovals": 2}};
     }
-    if (io["app"] == "unknown") {
+    if (req.app == "unknown") {
         return {"refused": {"reason": "no app is named unknown", "url": "https://example.invalid/apps", "app": "<slug>"}};
     }
-    if (io["app"] == "hidden") {
+    if (req.app == "hidden") {
         return {"refused": {"reason": "no id for hidden", "url": "https://example.invalid/apps/hidden", "app": "hidden:<id>"}};
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "merge"], "required_approvals": 2, "queue_label": "queue: ",
+    return {"capabilities": {"stackMerge": "atomic", "linearStacks": true, "methods": ["squash", "merge"], "requiredApprovals": 2, "queueLabel": "queue: ",
         "setup": {
-            "status_context": io["status_context"],
-            "credential": {"id": "812", "name": "{io["app"]}"},
-            "required_checks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
+            "statusContext": req.statusContext,
+            "credential": {"id": "812", "name": req.app},
+            "requiredChecks": [{"context": "merge-queue", "integration": "15368"}, {"context": "ci gate", "events": ["pull_request"]}],
             "settings": [{"name": "allow_auto_merge", "value": "false", "want": "true"}],
             "steps": [
                 {"title": "Allow auto-merge", "command": "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
                 {"title": "Install it", "url": "https://github.com/apps/q/installations/new"},
             ],
-        }};
+        }}};
 }
 `
 
@@ -630,7 +631,7 @@ func TestQueueApplyRefusesARunAPullRequestStarted(t *testing.T) {
 	f := newQueueFixture(t, "", artifactRun(t, nil))
 	src, err := os.ReadFile(f.provider)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(f.provider, []byte(strings.Replace(string(src), `"event": "push", "branch_event": true`, `"event": "pull_request", "branch_event": false`, 1)), 0o644))
+	require.NoError(t, os.WriteFile(f.provider, []byte(strings.Replace(string(src), `"event": "push", "branchEvent": true`, `"event": "pull_request", "branchEvent": false`, 1)), 0o644))
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("", nil)
 	_, err = f.run(t, "", "apply", "--provider", "local.buzz", "--base", "main", "--workflow", queueWorkflow, "--facts", "true", "--once", "run:acme/widgets/runs/7")
 	var diag *magustypes.DiagnosticError

@@ -6,22 +6,16 @@
 //   magus\cache.remote(s3)
 //
 // magus knows nothing about S3: it speaks only the generic spell contract. It
-// exports the cache contract, four functions typed fun(Target, fun(any)) bool
-// that the remote-cache subsystem detects by name and invokes with the work-unit
-// Target and an input callback cb, reading the boolean result of:
+// exports the cache contract, provider ops the remote-cache subsystem detects by
+// name and calls with the work-unit Target and a typed request:
 //
-//   enabled(target, cb)      -> bool   active here? (gates fetch/push; ignores cb)
-//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit, false=miss
-//   has_artifact(target, cb) -> bool   stored? (HEAD, no download)
-//   put_artifact(target, cb) -> bool   upload artifact at src; true=stored
-//   prune(target, cb)        -> bool   evict artifacts by retention policy; true=swept
+//   enabled(target, Empty) > Ack                  active here? (gates fetch/push)
+//   get_artifact(target, ArtifactRequest) > Ack   download into req.path; ok=hit, !ok=miss
+//   has_artifact(target, ArtifactRequest) > Ack   stored? (HEAD, no download)
+//   put_artifact(target, ArtifactRequest) > Ack   upload req.path; ok=stored
+//   prune(target, PruneRequest) > PruneResult     evict artifacts by retention policy
 //
 // A request that fails throws: the cache counts it as a failure, never as a miss.
-//
-// A contract function reads its inputs by calling cb(io): the host writes
-// {project, hash, dest/src} (or, for prune, {older_than_secs, keep_last, dry_run})
-// into io, which the function then reads. (Command ops do not use cb - they return
-// a Command; cb survives only here, where the work happens in-VM.)
 //
 // prune is the maintenance function behind `magus config cache prune --remote`: it walks
 // the bucket through the `listing` fiber — a coroutine that yields one object per
@@ -213,53 +207,47 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
 
 // enabled gates the provider on having credentials and a bucket. The cache probes
 // this once and skips fetch/push entirely when false — no remote calls.
-export fun enabled(target: Target, cb: fun(any)) > bool {
-    return access() != "" and secret() != "" and bucket() != "";
+export fun enabled(target: Target, req: Empty) > Ack {
+    return Ack{ ok = access() != "" and secret() != "" and bucket() != "" };
 }
 
-// get_artifact downloads the object for io.hash into io.dest: true on a hit (200),
-// false on a miss (404) or when not configured. Any other status throws, so a failing
+// get_artifact downloads the object for req.hash into req.path: ok on a hit (200), not
+// ok on a miss (404) or when not configured. Any other status throws, so a failing
 // store is counted as failed rather than read as a cold cache.
-export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (access() == "" or bucket() == "") { return false; }
-    final io = {};
-    cb(io);
-    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    if (access() == "" or bucket() == "") { return Ack{ ok = false }; }
+    final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("GET", path, "", EMPTY_SHA256);
-    final code = http\download(endpoint() + path, "{io["dest"]}", headers);
-    if (code == 404) { return false; }
+    final code = http\download(endpoint() + path, req.path, headers);
+    if (code == 404) { return Ack{ ok = false }; }
     if (code != 200) { throw "s3 cache: GET {path}: status {code}"; }
-    return true;
+    return Ack{ ok = true };
 }
 
-// has_artifact asks for the object's metadata only (HEAD): true on 200, false on 404,
+// has_artifact asks for the object's metadata only (HEAD): ok on 200, not ok on 404,
 // and any other status throws.
-export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (access() == "" or bucket() == "") { return false; }
-    final io = {};
-    cb(io);
-    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
+export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+    if (access() == "" or bucket() == "") { return Ack{ ok = false }; }
+    final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("HEAD", path, "", EMPTY_SHA256);
     final res = http\request("HEAD", endpoint() + path, "", headers);
-    if (res["status"] == 404) { return false; }
+    if (res["status"] == 404) { return Ack{ ok = false }; }
     if (res["status"] != 200) { throw "s3 cache: HEAD {path}: status {res["status"]}"; }
-    return true;
+    return Ack{ ok = true };
 }
 
-// put_artifact uploads the file at io.src as the object for io.hash: true on a 200
+// put_artifact uploads the file at req.path as the object for req.hash: ok on a 200
 // store; any other status throws. S3 overwrites, so it never answers "already
 // present". The payload hash is the file's SHA-256 (S3 verifies it against
 // x-amz-content-sha256).
-export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
     if (access() == "" or bucket() == "") { throw "s3 cache: put_artifact: no credentials or bucket configured"; }
-    final io = {};
-    cb(io);
-    final src = "{io["src"]}";
-    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
+    final src = req.path;
+    final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("PUT", path, "", crypto\sha256File(src));
     final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
     if (res[0] != 200) { throw "s3 cache: PUT {path}: status {res[0]}"; }
-    return true;
+    return Ack{ ok = true };
 }
 
 // listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style)
@@ -330,21 +318,19 @@ fun deleteObject(key: str) > bool !> any {
 }
 
 // prune evicts cache objects per a retention policy, enumerating them through the
-// listing fiber. Inputs arrive via cb:
-//   older_than_secs : int  — evict objects older than this many seconds (0 = off)
-//   keep_last       : int  — keep only the newest N objects (0 = off)
-//   dry_run         : bool — report intended deletions without performing them
+// listing fiber. The request carries:
+//   olderThanSecs : int  — evict objects older than this many seconds (0 = off)
+//   keepLast      : int  — keep only the newest N objects (0 = off)
+//   dryRun        : bool — report intended deletions without performing them
 // The two bounds are additive — an object is doomed if it trips either — and the
-// doomed set is keyed by object key so the overlap never double-deletes. Returns
-// true once the sweep completes; counts are reported to stdout (the host bridge
-// only learns completion).
-export fun prune(target: Target, cb: fun(any)) > bool !> any {
-    if (access() == "" or bucket() == "") { return false; }
-    final io = {};
-    cb(io);
-    final olderSecs = std\toInt(io["older_than_secs"]);
-    final keepLast = std\toInt(io["keep_last"]);
-    final dry = io["dry_run"] == true;
+// doomed set is keyed by object key so the overlap never double-deletes. Reports done
+// once the sweep completes; counts are reported to stdout (the host bridge only
+// learns completion).
+export fun prune(target: Target, req: PruneRequest) > PruneResult !> any {
+    if (access() == "" or bucket() == "") { return PruneResult{ done = false }; }
+    final olderSecs = req.olderThanSecs;
+    final keepLast = req.keepLast;
+    final dry = req.dryRun;
 
     // Drain the pagination fiber, parsing each object's S3 timestamp to epoch
     // millis once (host time module) so the bounds below are integer comparisons.
@@ -392,5 +378,5 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
     } else {
         std\print("s3 prune: deleted {removed} object(s), {artifacts.len()} scanned");
     }
-    return true;
+    return PruneResult{ done = true };
 }

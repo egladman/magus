@@ -80,10 +80,8 @@ export fun mgs_listRequiredGlobs() > [Path] {
 }
 
 // list_projects is the workspace-provider contract. magus invokes it by name.
-export fun list_projects(target: Target, cb: fun(any)) > [Project] {
-    final io = {<str: any>};
-    cb(io);                       // the host writes {root} into io
-    final root = io["root"] ?? "";
+export fun list_projects(target: Target, req: ProjectQuery) > [Project] {
+    final root = req.root;        // the absolute workspace root
 
     // ... shell out to the foreign tool, then:
     return [

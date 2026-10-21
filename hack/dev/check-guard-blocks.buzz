@@ -684,7 +684,11 @@ export fun check(root: str) > Report {
     var plans = [<magus\HarnessPlan>];
     var err = "";
     try {
-        plans = magus\describe.harness();
+        final wired = mut [<magus\HarnessPlan>];
+        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim().split("\n")) {
+            if (id != "") { wired.append(magus\describe.harness(id)); }
+        }
+        plans = wired;
     } catch (e) {
         err = "{e}";
     }

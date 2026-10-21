@@ -57,6 +57,7 @@ type Spell struct {
 	scriptRunners       []Command
 
 	invoke      func(ctx context.Context, req InvokeRequest) (any, error)
+	funcSource  string // Buzz source whose exports a provider op calls; "" for a spell with none
 	renderCmd   func(target string, charms []string) (cmd string, args []string, ok bool, err error)
 	explainCmd  func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
 	conflictCmd func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)
@@ -91,6 +92,19 @@ func (s *Spell) Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, 
 }
 
 var _ Driver = (*Spell)(nil)
+
+// FuncSource is a Driver backed by Buzz source: magus calls a provider op by running that
+// source and calling the function it exports under the op's name.
+type FuncSource interface {
+	Driver
+	FuncSource() string
+}
+
+// FuncSource returns the Buzz source a provider op runs, "" when the spell was built
+// without [WithFuncSource].
+func (s *Spell) FuncSource() string { return s.funcSource }
+
+var _ FuncSource = (*Spell)(nil)
 
 func (s *Spell) Sources() []string { return s.sources }
 func (s *Spell) Outputs() []string { return s.outputs }
@@ -406,6 +420,11 @@ func WithInternal() Option {
 // returns structured Data (nil for fork targets), surfaced via InvokeResponse.
 func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) Option {
 	return func(s *Spell) { s.invoke = fn }
+}
+
+// WithFuncSource sets the Buzz source a provider op runs. See [FuncSource].
+func WithFuncSource(src string) Option {
+	return func(s *Spell) { s.funcSource = src }
 }
 
 // WithCommandRenderer sets the fork-command renderer used by `magus describe` to

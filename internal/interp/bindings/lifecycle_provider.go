@@ -2,14 +2,17 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // Registered at init for the reason workspace_provider.go gives: running the provider
@@ -23,8 +26,8 @@ func init() { //nolint:gochecknoinits // internal/workspace cannot link the Buzz
 // that runs out of it reads as unreached.
 const lifecycleDeadline = 15 * time.Second
 
-// runLifecycleProvider invokes spellName's list_lifecycles contract for keys and decodes
-// what it returns.
+// runLifecycleProvider calls spellName's list_lifecycles op for keys and checks what it
+// returns.
 //
 // MAGUS_OFFLINE is checked HERE, before the VM runs: std/http would refuse the provider's
 // requests anyway, but answering ErrLifecycleOffline up front is what lets describe tools
@@ -39,122 +42,58 @@ func runLifecycleProvider(ctx context.Context, spellName, root string, keys []st
 	}
 	ctx, cancel := context.WithTimeout(ctx, lifecycleDeadline)
 	defer cancel()
-	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
-		Target: spells.ListLifecyclesContract,
-		Dir:    root,
-		Params: map[string]any{"keys": keys},
-	})
+	op := providerops.ListLifecycles
+	got, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, root), types.LifecycleQuery{Keys: keys})
 	if err != nil {
-		// A throw is the provider failing to reach its source, the review_threads posture:
-		// what it adds is optional, so an unreachable host is a state and not an error.
-		return nil, fmt.Errorf("%w: spell %q: %s: %w", workspace.ErrLifecycleUnreached, spellName, spells.ListLifecyclesContract, err)
-	}
-	if resp.Data == nil {
-		return nil, fmt.Errorf("spell %q is wired as the lifecycle provider but its %s(target, cb) returned nothing, it must be exported and must return a list of Lifecycle (an empty list if it knows none of the keys)",
-			spellName, spells.ListLifecyclesContract)
-	}
-	items, ok := resp.Data.([]any)
-	if !ok {
-		return nil, fmt.Errorf("spell %q: %s returned %T, want a list of Lifecycle", spellName, spells.ListLifecyclesContract, resp.Data)
-	}
-	out := make([]spells.Lifecycle, 0, len(items))
-	for i, item := range items {
-		l, err := decodeLifecycle(spellName, keys, i, item)
-		if err != nil {
+		if !exported || errors.Is(err, errMalformedAnswer) {
 			return nil, err
 		}
-		if slices.ContainsFunc(out, func(o spells.Lifecycle) bool { return o.Key == l.Key }) {
-			return nil, fmt.Errorf("spell %q: %s answered key %q twice", spellName, spells.ListLifecyclesContract, l.Key)
-		}
-		out = append(out, l)
+		// A throw is the provider failing to reach its source, the review_threads posture:
+		// what it adds is optional, so an unreachable host is a state and not an error.
+		return nil, fmt.Errorf("%w: %w", workspace.ErrLifecycleUnreached, err)
 	}
-	return out, nil
+	if !exported {
+		return nil, fmt.Errorf("spell %q is wired as the lifecycle provider but does not export %s(target: Target, req: LifecycleQuery) > [Lifecycle]",
+			spellName, op.Name)
+	}
+	for i, l := range got {
+		if err := checkLifecycle(spellName, keys, i, l); err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(got[:i], func(o spells.Lifecycle) bool { return o.Key == l.Key }) {
+			return nil, fmt.Errorf("spell %q: %s answered key %q twice", spellName, op.Name, l.Key)
+		}
+	}
+	return got, nil
 }
 
-// decodeLifecycle turns one returned Lifecycle into the typed record, naming the spell, the
-// key and the field of anything wrong. Strict for the reason decodeProvidedProject is: a
-// silently zeroed date is an end of life nobody was told about.
-func decodeLifecycle(spellName string, keys []string, index int, item any) (spells.Lifecycle, error) {
-	where := fmt.Sprintf("spell %q: %s[%d]", spellName, spells.ListLifecyclesContract, index)
-	m, ok := item.(map[string]any)
-	if !ok {
-		return spells.Lifecycle{}, fmt.Errorf("%s is %T, want a Lifecycle", where, item)
-	}
-	var l spells.Lifecycle
-	var err error
-	if l.Key, err = strField(m, "key", where); err != nil {
-		return spells.Lifecycle{}, err
-	}
+// checkLifecycle holds one returned Lifecycle to what its fields mean, naming the spell,
+// the key and the field of anything wrong: a silently zeroed date is an end of life
+// nobody was told about.
+func checkLifecycle(spellName string, keys []string, index int, l spells.Lifecycle) error {
 	if !slices.Contains(keys, l.Key) {
-		return spells.Lifecycle{}, fmt.Errorf("%s: key %q was not asked for (asked: %v)", where, l.Key, keys)
+		return fmt.Errorf("spell %q: %s[%d]: key %q was not asked for (asked: %v)", spellName, spells.ListLifecyclesContract, index, l.Key, keys)
 	}
-	where = fmt.Sprintf("spell %q: %s key %q", spellName, spells.ListLifecyclesContract, l.Key)
-	if l.Source, err = strField(m, "source", where); err != nil {
-		return spells.Lifecycle{}, err
-	}
+	where := fmt.Sprintf("spell %q: %s key %q", spellName, spells.ListLifecyclesContract, l.Key)
 	if l.Source == "" {
-		return spells.Lifecycle{}, fmt.Errorf("%s: field \"source\" is empty, name the URL the answer was read from", where)
+		return fmt.Errorf("%s: field \"source\" is empty, name the URL the answer was read from", where)
 	}
-	if l.AsOf, err = strField(m, "asOf", where); err != nil {
-		return spells.Lifecycle{}, err
+	if _, err := time.Parse(time.RFC3339, l.AsOf); err != nil {
+		return fmt.Errorf("%s: field \"asOf\" is %q, want upstream's last-modified time in RFC 3339", where, l.AsOf)
 	}
-	if _, perr := time.Parse(time.RFC3339, l.AsOf); perr != nil {
-		return spells.Lifecycle{}, fmt.Errorf("%s: field \"asOf\" is %q, want upstream's last-modified time in RFC 3339", where, l.AsOf)
-	}
-	raw, present := m["cycles"]
-	if !present || raw == nil {
-		return l, nil
-	}
-	rows, ok := raw.([]any)
-	if !ok {
-		return spells.Lifecycle{}, fmt.Errorf("%s: field \"cycles\" is %T, want [ReleaseCycle]", where, raw)
-	}
-	for i, row := range rows {
-		c, err := decodeReleaseCycle(fmt.Sprintf("%s: cycles[%d]", where, i), row)
-		if err != nil {
-			return spells.Lifecycle{}, err
+	for i, c := range l.Cycles {
+		at := fmt.Sprintf("%s: cycles[%d]", where, i)
+		if c.Cycle == "" {
+			return fmt.Errorf("%s: field \"cycle\" is empty", at)
 		}
-		l.Cycles = append(l.Cycles, c)
-	}
-	return l, nil
-}
-
-func decodeReleaseCycle(where string, row any) (spells.ReleaseCycle, error) {
-	m, ok := row.(map[string]any)
-	if !ok {
-		return spells.ReleaseCycle{}, fmt.Errorf("%s is %T, want a ReleaseCycle", where, row)
-	}
-	var c spells.ReleaseCycle
-	var err error
-	if c.Cycle, err = strField(m, "cycle", where); err != nil {
-		return spells.ReleaseCycle{}, err
-	}
-	if c.Cycle == "" {
-		return spells.ReleaseCycle{}, fmt.Errorf("%s: field \"cycle\" is empty", where)
-	}
-	for _, f := range []struct {
-		key string
-		dst *string
-	}{{"released", &c.Released}, {"eol", &c.EOL}} {
-		if *f.dst, err = strField(m, f.key, where); err != nil {
-			return spells.ReleaseCycle{}, err
-		}
-		if *f.dst == "" {
-			continue
-		}
-		if _, perr := time.Parse(time.DateOnly, *f.dst); perr != nil {
-			return spells.ReleaseCycle{}, fmt.Errorf("%s: field %q is %q, want a YYYY-MM-DD date or empty", where, f.key, *f.dst)
+		for _, f := range []struct{ key, date string }{{"released", c.Released}, {"eol", c.EOL}} {
+			if f.date == "" {
+				continue
+			}
+			if _, err := time.Parse(time.DateOnly, f.date); err != nil {
+				return fmt.Errorf("%s: field %q is %q, want a YYYY-MM-DD date or empty", at, f.key, f.date)
+			}
 		}
 	}
-	if c.Latest, err = strField(m, "latest", where); err != nil {
-		return spells.ReleaseCycle{}, err
-	}
-	if v, present := m["lts"]; present && v != nil {
-		b, ok := v.(bool)
-		if !ok {
-			return spells.ReleaseCycle{}, fmt.Errorf("%s: field \"lts\" is %T, want bool", where, v)
-		}
-		c.LTS = b
-	}
-	return c, nil
+	return nil
 }

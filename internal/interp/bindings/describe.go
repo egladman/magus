@@ -89,8 +89,8 @@ func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 		return ffi.ObjectSlice(out, bindgen.ObjectRuleDoc), err
 	})
 	bind("harness", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeHarness(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))
-		return ffi.ObjectSlice(out, bindgen.ObjectHarnessPlan), err
+		out, err := std.MagusDescribeHarness(ctx, ffi.Str(args, 0))
+		return bindgen.ObjectHarnessPlan(out), err
 	})
 	bind("mcpTool", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		out, err := std.MagusDescribeMCPTool(ctx, ffi.Str(args, 0), ffi.AnyMap(args, 1))

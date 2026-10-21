@@ -1303,10 +1303,6 @@ export object WriteRequest {
     newText: str = "",
 }
 
-export object HarnessKey {
-    id: str = "",
-}
-
 export object JobOverlapFootprint {
     verdict: str = "",
     shared: [str] = [],
@@ -1965,9 +1961,9 @@ export object guard {
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
-// Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
+// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarnessConfig, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
 export object harness {
-    static extern fun provider(spell: {str: any}) > HarnessKey;
+    static extern fun provider(spell: {str: any}) > str;
 }
 
 // Secret provider selection, and the credentials read through it.
@@ -2012,7 +2008,7 @@ export object describe {
     static extern fun file(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
     static extern fun graph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
     static extern fun graphMarkdown(projects: [str] = [<str>], opts: {str: any} = {<str: any>}) > str !> any;
-    static extern fun harness(id: str = "", opts: {str: any} = {<str: any>}) > [HarnessPlan] !> any;
+    static extern fun harness(id: str) > HarnessPlan !> any;
     static extern fun mcpTool(name: str = "", opts: {str: any} = {<str: any>}) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;

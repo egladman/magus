@@ -105,10 +105,10 @@ func declaredModelTier(set *types.ModelTierSet, model string) (tier types.ModelT
 		switch {
 		case !found:
 		case !ok:
-			tier, host, ok = t, h.ID, true
+			tier, host, ok = t, h, true
 		case t.Rank() != tier.Rank():
 			return types.ModelTier{}, "", false, fmt.Errorf("the model %s is the %s tier of harness %s and the %s tier of harness %s: name a tier instead",
-				model, tier.Name(), host, t.Name(), h.ID)
+				model, tier.Name(), host, t.Name(), h)
 		}
 	}
 	return tier, host, ok, nil

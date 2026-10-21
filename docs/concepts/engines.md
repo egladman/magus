@@ -66,19 +66,20 @@ _ ".../internal/interp/engine/buzz"
 ## The spell contract
 
 A spell exports a fixed set of `mgs_`-prefixed functions (see
-[spells.md](spells.md#authoring-a-custom-spell)). The list of optional functions
-and the decoder keys they map to is **single-sourced** in
-[`internal/spell/contract.go`](../../internal/spell/contract.go) as
-`OptionalContract`, and the Buzz resolver (`internal/spell/resolve.go`) iterates
-that one list. A spell's `mgs_` functions decode to a `Spec` for every scalar and
-list contribution (`needs`, `provides`, `version_cmd`, `opaque`) and
-for record-shaped ops (`{bin, args, charms}`).
+[spells.md](spells.md#authoring-a-custom-spell)). The list is **single-sourced** in
+[`internal/spell/contract.go`](../../internal/spell/contract.go) as `Contract`, and
+`magus-utils contract` generates from it the decoder for each function
+(`decode.ContractFuncs`), the signature check ([MGS1051](../reference/codes/magusfile/MGS1051.md))
+and the [reference page](../reference/spell-contract.md). `internal/spell/resolve.go` calls each
+export once and decodes the answer strictly, so a wrong kind, an unknown member or a bad
+enum case fails at load naming the field path.
 
-An op is a command or a service; a function-valued op is `fun(Target) > Command` or
-`fun(Target) > Service`, called once at load to record the declarative value it
-returns (a Command's `{bin, args, charms}` or a Service's `{command, readiness?, stop?}`,
-a long-running process `magus run` blocks on). The op's kind is inferred from that
-value, so one spell mixes both. A remote cache backend
+An op is a command or a service. `mgs_listTargets` returns `{str: fun(Target) Command}`
+and `mgs_listServices` returns `{str: fun(Target) Service}`, each handler called once at
+load to record the declarative value it returns (a Command's `{bin, args, charms}` or a
+Service's `{command, readiness?, stop?}`, a long-running process `magus run` blocks on).
+A record-shaped op, a mixed `> any` map and a `[Path]` where `[Manifest]` belongs are
+refused. A remote cache backend
 is not an op: it is a spell that exports the backend functions
 (`enabled`/`get_artifact`/`put_artifact`/`has_artifact`/`prune`), detected by name and wired with
 `magus\cache.remote` (see [Remote caching](cache/remote.md)).

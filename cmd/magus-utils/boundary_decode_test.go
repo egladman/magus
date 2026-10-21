@@ -44,6 +44,9 @@ func TestRunBoundaryDecode(t *testing.T) {
 	assert.Contains(t, dec, "package decode")
 	assert.Contains(t, dec, "func DecodeLanguage(v vm.Value) (spells.Language, error)")
 	assert.Contains(t, dec, `return decodeLanguage(v, "language")`)
+	assert.Contains(t, dec, "func DecodeCommand(v vm.Value) (spells.Command, error)")
+	assert.Contains(t, dec, "func DecodePath(v vm.Value) (types.Path, error)")
+	assert.Contains(t, dec, "decodeStrs(", "a [str] reads through the one shared list helper")
 	// The key is the mirror's field name, tag renames included, never the Go name.
 	assert.Contains(t, dec, `case "blockComments":`)
 	assert.Contains(t, dec, `case "ignoreEscape":`)
@@ -75,8 +78,7 @@ func TestDecodeEmitterRefusesANestedTypeThatIsNotInbound(t *testing.T) {
 	assert.Contains(t, err.Error(), "add Syntax to inboundTypes")
 }
 
-// Every spell contract type must already generate, so a later unit marking one inbound
-// changes the list and nothing else. Tool reaches enums, maps of structs, optional
+// Every spell contract type must generate: Tool reaches enums, maps of structs, optional
 // pointers and Command with its charms.
 func TestDecodeEmitterGeneratesTheContractTypes(t *testing.T) {
 	for _, root := range []reflect.Type{

@@ -30,24 +30,18 @@
 // EVERY call that can fail is caught: a rollout this run cannot read is not a
 // reason to abandon the rest.
 
-import "std";
 import "io";
 import "env";
 import "flags";
 import "fs";
 import "proc";
 import "crypto";
-import "time";
 import "encoding/json";
 import "lib/hook" as hook;
+import "lib/session" as shared;
 
 final HOST = "codex";
 final STDOUT_FLAG = "--stdout";
-
-// warn says why nothing was extracted; see the Claude Code adapter.
-fun warn(message: str) > void {
-    io\stderr.write("magus session load: {message}\n") catch void;
-}
 
 // render writes the contract's fields in the contract's order, which a map would not.
 fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, transcript: str) > str {
@@ -55,17 +49,6 @@ fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, tran
     return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{ts},\"cwd\":{s(cwd)},"
         + "\"kind\":{s(kind)},\"ref\":{s(ref)},\"text\":{s(text)},\"transcript\":{s(transcript)},"
         + "\"outcome\":\{\"exit\":null,\"denied\":false,\"interrupted\":false}}";
-}
-
-// ms is an RFC 3339 timestamp as Unix milliseconds, 0 when it does not parse.
-fun ms(stamp: str) > int {
-    final parsed = time\parse("2006-01-02T15:04:05Z07:00", value: stamp) catch -1.0;
-    if (parsed < 0.0) { return 0; }
-    return std\toInt(parsed);
-}
-
-fun inScope(cwd: str, root: str) > bool {
-    return cwd == root or cwd.startsWith(root + "/");
 }
 
 // extract reads one rollout and returns contract lines.
@@ -88,8 +71,8 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
             cwd = hook\field(r, dotPath: "payload.cwd");
             continue;
         }
-        if (!inScope(cwd, root: root)) { continue; }
-        final ts = ms(hook\field(r, dotPath: "timestamp"));
+        if (!shared\inScope(cwd, root: root)) { continue; }
+        final ts = shared\ms(hook\field(r, dotPath: "timestamp"));
         if (kind == "custom_tool_call" and hook\field(r, dotPath: "payload.name") == "exec") {
             final input = hook\dig(r, dotPath: "payload.input");
             var text = hook\field(r, dotPath: "payload.input");
@@ -106,24 +89,6 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
     return emitted;
 }
 
-// wholeLines is the prefix of chunk that ends at its last line break, so a record
-// the host is still appending is read whole on the next run.
-fun wholeLines(chunk: str) > str {
-    var end = chunk.len();
-    while (end > 0) {
-        final b = chunk.byte(end - 1) catch -1;
-        if (b == 10) { break; }
-        end = end - 1;
-    }
-    return chunk.sub(0, len: end);
-}
-
-fun parseOffset(mark: str) > int {
-    final text = (fs\readFile(mark) catch "").trim();
-    if (text == "") { return 0; }
-    return std\parseInt(text) ?? 0;
-}
-
 fun rollouts(store: str) > [str] {
     final found = mut [<str>];
     fs\walk(store, callback: fun (path: str, isDir: bool) > bool {
@@ -133,28 +98,17 @@ fun rollouts(store: str) > [str] {
     return found;
 }
 
-fun repoRoot(bin: str) > str {
-    final declared = env\get("HOST_REPO_ROOT") catch "";
-    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
-    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
-        "quiet": true,
-        "allow_failure": true,
-    }) catch null;
-    if (result == null or result!.code != 0) { return ""; }
-    return hook\trimTrailingNewlines(result!.stdout);
-}
-
 fun main(args: [str]) > int {
     final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
     final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
     final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
-    final root = repoRoot(bin);
+    final root = shared\repoRoot(bin);
     if (root == "") {
-        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        shared\warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
         return 0;
     }
     if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
-        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        shared\warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
         return 0;
     }
 
@@ -169,7 +123,7 @@ fun main(args: [str]) > int {
         final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
         final content = fs\readFile(transcript) catch null;
         if (content == null) { continue; }
-        var offset = parseOffset(mark);
+        var offset = shared\parseOffset(mark);
         if (content!.len() < offset) { offset = 0; }
         if (content!.len() <= offset) { continue; }
 
@@ -177,7 +131,7 @@ fun main(args: [str]) > int {
         // carries the session id and cwd every later record is scoped by, so a chunk
         // starting after it has nothing to scope. Re-reading is cheap here because a
         // rollout closes when its session ends, and only the open one grows.
-        final whole = wholeLines(content!);
+        final whole = shared\wholeLines(content!);
         if (whole.len() <= offset) { continue; }
 
         // Emitting from byte 0 every time and letting `session load` dedup on

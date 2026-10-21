@@ -276,7 +276,7 @@ errors.
 
 ## Design and scope
 
-Two rules named often enough elsewhere to need a definition of their own.
+Terms named often enough elsewhere to need a definition of their own.
 
 ### Scope test
 
@@ -290,6 +290,22 @@ world? Reads stay small; acquisitions are where a tool loses its shape. See
 Each concept gets one name, used everywhere: target, spell, charm, op. A second
 word for the same thing is a house dialect, and it costs every reader (and every
 agent) a lookup that never ends. See [doctrine.md](doctrine.md).
+
+### Harness
+
+The deterministic scaffolding around a model's agent loop: checks, permission
+gates, typed contracts, leases, graph-backed answers and hooks, placed at points
+a person chose, with the model's judgment covering the steps between them. magus
+supplies one (guard hooks, skills, MCP tools, job leases) and keeps it outside
+the host's loop. Some vendors use the word for the loop itself; magus keeps the
+two apart. See [doctrine.md](doctrine.md#the-outer-harness-stays-outside).
+
+- Is: code and reviewed text that answer or decide the same way every time.
+- Is not: the model, the agent loop that reads a tool call and runs it, an
+  agent framework, or a prompt.
+- Layers, from the inside out: the model; the host's agent loop (Claude Code,
+  Codex, Cursor, OpenCode); the harness magus supplies; magus's deterministic
+  workspace model, which the harness reads.
 
 ## Sessions and leases
 

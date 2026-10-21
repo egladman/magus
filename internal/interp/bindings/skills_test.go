@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -19,8 +20,18 @@ type skillsWorkspace struct {
 	root string
 }
 
-func (w *skillsWorkspace) Root() string        { return w.root }
-func (w *skillsWorkspace) Harnesses() []string { return []string{"skills-test"} }
+func (w *skillsWorkspace) Root() string { return w.root }
+
+// wiredSkillsWorkspace is a workspace at root whose magusfile wired the skills-test harness.
+func wiredSkillsWorkspace(t *testing.T, root string) *skillsWorkspace {
+	t.Helper()
+	ws := &skillsWorkspace{root: root}
+	reg := workspace.NewWorkspaceRegistry()
+	reg.AddHarness("skills-test")
+	workspace.BindRegistry(ws, reg)
+	t.Cleanup(func() { workspace.UnbindRegistry(ws) })
+	return ws
+}
 
 const skillsScript = `
 import "magus";
@@ -76,16 +87,16 @@ func TestSkillsThroughBuzzScript(t *testing.T) {
 		SchemaVersion: 2,
 		ID:            "skills-test",
 		Display:       agent.HarnessDisplay{Name: "Skills test"},
-		Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormFull},
+		Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormFull},
 	})
 
-	_, _, err := skillCatalog().WriteSkillTree(root, ".agents/skills", false, agent.FormFull)
+	_, _, err := skillCatalog().WriteSkillTree(root, ".agents/skills", false, types.SkillFormFull)
 	require.NoError(t, err)
 	local := filepath.Join(root, ".agents/skills", "acme-rules", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(local), 0o755))
 	require.NoError(t, os.WriteFile(local, []byte("---\nname: acme-rules\ndescription: Our house rules.\n---\n\n# Acme\n"), 0o644))
 
-	ctx := types.WithWorkspace(t.Context(), &skillsWorkspace{root: root})
+	ctx := types.WithWorkspace(t.Context(), wiredSkillsWorkspace(t, root))
 	sess := skillsSession(t, ctx)
 
 	got, err := callSkills(t, ctx, sess, "summary")

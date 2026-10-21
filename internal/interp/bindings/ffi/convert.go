@@ -483,14 +483,7 @@ func valToAny(v vm.Value) any {
 	return nil
 }
 
-// AnyToValue converts a Go value to a Buzz Value (unknown types become null).
-// Exported for host code outside this package that marshals across the boundary
-// (e.g. spell function-op Params); it shares one implementation with the generated
-// trampolines so the two can't drift.
-func AnyToValue(v any) vm.Value { return AnyVal(v) }
-
-// ValueToAny converts a Buzz Value to a plain Go value. The inverse of
-// [AnyToValue]; see its note for why this is exported.
+// ValueToAny converts a Buzz Value to a plain Go value, the inverse of [AnyVal].
 func ValueToAny(v vm.Value) any { return valToAny(v) }
 
 // BoundaryType pairs a runtime boundary type with the encoder generated for it, so a

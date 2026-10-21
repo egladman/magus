@@ -1,6 +1,5 @@
-// Codex agent-host harness. Same provider-style spell contract as
-// spells/harness/cursor: selected from a magusfile with magus\harness.provider,
-// not a JSON file under harnesses/.
+// Codex agent-host harness. Same harness contract as spells/harness/cursor: selected from a
+// magusfile with magus\harness.provider, not a JSON file under harnesses/.
 //
 //   import "spells/harness/codex" as codex
 //   magus\harness.provider(codex)
@@ -10,79 +9,19 @@
 // merge what `magus describe harness codex` prints. See magus-workspace-rules "Adapting a
 // Buzz harness".
 //
-// Magus invokes the reserved harness_* names on describe/verify. The fragments are
+// Magus calls the harness contract's mgs_ functions on describe/verify. The entries are
 // opaque host JSON; Magus prints them for a person to merge and does not rewrite command
 // fields.
 
 import "magus/spell";
+import "magus/harness";
 import "assert";
 
 export fun mgs_getName() > str { return "codex"; }
 
-fun codex_config_path() > str { return ".codex/hooks.json"; }
-
-fun codex_skills_form() > str { return "both"; }
-
-fun codex_skills_paths() > [str] {
-    return [".agents/skills"];
-}
-
-// codex_buzz_command runs one Buzz glue script as a plain argv. The interpreter is PATH's
-// `magus`, a constant, so the committed config is the same on every machine. Codex
-// documents no project-directory variable for a hook. -C . names the hook's working
+// Codex documents no project-directory variable for a hook. -C . names the hook's working
 // directory explicitly so PATH's magus can hand off to that workspace's own build.
-// Flags ride after `--`, which `magus buzz` forwards to the script.
-fun codex_buzz_command(script: str, flags: [str]) > str {
-    final base = "magus buzz -C . -s docs/guides/integrations/agents/{script}.buzz";
-    if (flags.len() == 0) { return base; }
-    return base + " -- " + flags.join(" ");
-}
-
-// codex_named_command names this host on the glue's argv: `--agent-name` and the spell's
-// own mgs_getName(), the one identity the glue acts on. Rendered here, from the
-// declaration, so the name on the command cannot drift from the harness it belongs to;
-// the glue refuses a call without it (MGS3024) rather than guessing a host.
-fun codex_named_command(script: str) > str {
-    return codex_buzz_command(script, flags: ["--agent-name", mgs_getName()]);
-}
-
-// One command serves every entry that judges: each event reaches `magus shell` whole, and
-// magus reads off it what the call is, a command, a patch, an MCP call or a spawn.
-fun codex_guard_command() > str {
-    return codex_buzz_command("magus-command", flags: ["--agent-name", mgs_getName(), "--tool-rows", codex_tools_dir()]);
-}
-
-// Where `magus agent harness install` writes this host's tool rows, beside its hooks.
-fun codex_tools_dir() > str { return ".codex/magus/tools"; }
-
-// Every Codex tool the guard should know whose input's shape does not say what it does. A
-// shell call carries its command and is judged by it; a tool missing here is one the guard
-// cannot judge (unjudged-tool).
-export fun harness_tools(target: Target, cb: fun(any)) > {str: any} {
-    final rows = mut [<any>];
-    rows.append({"name": "apply_patch", "capability": "writes"});
-    foreach (name in ["spawn_agent", "collaborationspawn_agent"]) { rows.append({"name": name, "capability": "spawns"}); }
-    foreach (name in ["close_agent", "update_plan", "view_image", "web_search"]) { rows.append({"name": name, "capability": "inert"}); }
-    return {"dir": codex_tools_dir(), "rows": rows};
-}
-
-// Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has
-// to arrive as JSON, and its instruction file is AGENTS.md.
-fun codex_rehydrate_command() > str {
-    return codex_buzz_command("magus-rehydrate", flags: ["--format", "json", "--rules", "AGENTS.md"]);
-}
-
-fun codex_checkpoint_command() > str {
-    return codex_named_command("magus-checkpoint");
-}
-
-fun codex_command_hook(cmd: str, status: str) > {str: any} {
-    return {
-        "type": "command",
-        "command": cmd,
-        "statusMessage": status,
-    };
-}
+final HOOK_DIR = ".";
 
 // A matcher made only of letters, digits and underscores is an exact list of tool names,
 // so each spelling of the spawn tool needs its own member: v1 models call it spawn_agent,
@@ -93,161 +32,162 @@ final SPAWN_MATCHER = "spawn_agent|collaborationspawn_agent|Agent";
 // of its input, and names one no rule can read (the unjudged-tool rule).
 final EVERY_TOOL = "*";
 
-fun codex_pretool_entry(matcher: str, cmd: str, status: str) > {str: any} {
-    return {
-        "matcher": matcher,
-        "hooks": [codex_command_hook(cmd, status)],
-    };
+// Where `magus agent harness install` writes this host's tool rows, beside its hooks.
+final TOOLS_DIR = ".codex/magus/tools";
+
+// One glue serves every entry that judges: each event reaches `magus shell` whole, and magus
+// reads off it what the call is, a command, a patch, an MCP call or a spawn. No entry
+// declares --observes-skill-loads: Codex has no skill tool to match, so a rule that requires
+// a skill load has nothing to read and must stand down.
+fun codex_guard_flags() > [str] {
+    return ["--agent-name", mgs_getName(), "--tool-rows", TOOLS_DIR];
 }
 
-// codex_entries is the managed_entries list merged into .codex/hooks.json.
-fun codex_entries() > [any] {
+// Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has
+// to arrive as JSON, and its instruction file is AGENTS.md.
+fun codex_rehydrate_flags() > [str] {
+    return ["--format", "json", "--rules", "AGENTS.md"];
+}
+
+// codex_hook is a hook with the status line Codex shows while it runs. Codex takes no
+// timeout per entry.
+object CodexHook {
+    hook: HookCommand,
+    status: str,
+}
+
+fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str) > CodexHook {
+    return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags}, status = status};
+}
+
+fun codex_hooks() > [CodexHook] {
+    final check = buzzCheckHook(mgs_getName());
     return [
-        {
-            "path": ["hooks", "PreToolUse"],
-            "entries": [
-                // No entry declares --observes-skill-loads: Codex has no skill tool to match, so a
-                // rule that requires a skill load has nothing to read and must stand down.
-                codex_pretool_entry(EVERY_TOOL, codex_guard_command(), "magus guard: checking the call"),
-            ],
-        },
-        {
-            // Judges nothing. The finished spawn is how magus learns the child's name: a v2
-            // spawn answers with its task_name path, a v1 spawn with the agent id.
-            "path": ["hooks", "PostToolUse"],
-            "entries": [
-                codex_pretool_entry(SPAWN_MATCHER, codex_guard_command(), "magus: recording the subagent"),
-            ],
-        },
-        {
-            // The v2 spawn message is encrypted, so nothing the parent wrote can carry a
-            // brief to the child. This hook's context is the child's first instruction.
-            "path": ["hooks", "SubagentStart"],
-            "entries": [
-                {
-                    "hooks": [codex_command_hook(codex_rehydrate_command(), "magus: briefing the subagent")],
-                },
-                {
-                    // Judges nothing. The start names the child by the id its own calls
-                    // carry, which magus joins to the spawn just before it, so the child is
-                    // graded under the job that spawn's description named.
-                    "hooks": [codex_command_hook(codex_guard_command(), "magus: joining the subagent to its spawn")],
-                },
-            ],
-        },
-        {
-            // Judges nothing. The payload names the child's transcript, whose last
-            // token_count record is the context size a later continuation reads.
-            "path": ["hooks", "SubagentStop"],
-            "entries": [
-                {
-                    "hooks": [codex_command_hook(codex_guard_command(), "magus: recording the subagent's context")],
-                },
-            ],
-        },
-        {
-            // Raised just before Codex's own approval prompt. The shared template answers
-            // it from the verdict: allow for a push a gate covers, no decision for an
-            // ungated one (the person decides), deny for a leased worker.
-            "path": ["hooks", "PermissionRequest"],
-            "entries": [
-                codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking approval"),
-            ],
-        },
-        {
-            "path": ["hooks", "SessionStart"],
-            "entries": [
-                {
-                    "matcher": "compact",
-                    "hooks": [codex_command_hook(codex_rehydrate_command(), "magus: restating this checkout's rules")],
-                },
-            ],
-        },
-        {
-            "path": ["hooks", "Stop"],
-            "entries": [
-                {
-                    "hooks": [codex_command_hook(codex_checkpoint_command(), "magus: recording where the work stands")],
-                },
-            ],
-        },
+        codex_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the call"),
+        // Judges nothing. The finished spawn is how magus learns the child's name: a v2
+        // spawn answers with its task_name path, a v1 spawn with the agent id.
+        codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent"),
+        codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote"),
+        // The v2 spawn message is encrypted, so nothing the parent wrote can carry a brief
+        // to the child. This hook's context is the child's first instruction. The second
+        // entry names the child by the id its own calls carry, which magus joins to the
+        // spawn just before it.
+        codex_hook("SubagentStart", matcher: "", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: briefing the subagent"),
+        codex_hook("SubagentStart", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: joining the subagent to its spawn"),
+        // Judges nothing. The payload names the child's transcript, whose last token_count
+        // record is the context size a later continuation reads.
+        codex_hook("SubagentStop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent's context"),
+        // Raised just before Codex's own approval prompt. The shared template answers it
+        // from the verdict: allow for a push a gate covers, no decision for an ungated one
+        // (the person decides), deny for a leased worker.
+        codex_hook("PermissionRequest", matcher: "Bash", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking approval"),
+        codex_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: restating this checkout's rules"),
+        codex_hook("Stop", matcher: "", script: "magus-checkpoint", flags: ["--agent-name", mgs_getName()], status: "magus: recording where the work stands"),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing. Codex ignores a matcher on this event.
-        {
-            "path": ["hooks", "UserPromptSubmit"],
-            "entries": [
-                {
-                    "hooks": [codex_command_hook(codex_guard_command(), "magus: noting the request")],
-                },
-            ],
-        },
+        codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request"),
     ];
 }
 
-fun codex_config() > {str: any} {
-    return {
-        "path": codex_config_path(),
-    };
+export fun mgs_listHooks() > [HookCommand] {
+    return codex_hooks().map(fun (index: int, h: CodexHook) > HookCommand => h.hook);
 }
 
-fun codex_skills() > {str: any} {
-    return {
-        "paths": codex_skills_paths(),
-        "form": codex_skills_form(),
-    };
+fun codex_command(hook: HookCommand) > str {
+    return buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
 }
 
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return codex_config();
+fun codex_guard_command() > str {
+    return buzzCommand(HOOK_DIR, script: "magus-command", flags: codex_guard_flags());
 }
 
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return codex_skills();
+fun codex_rehydrate_command() > str {
+    return buzzCommand(HOOK_DIR, script: "magus-rehydrate", flags: codex_rehydrate_flags());
 }
 
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+fun codex_checkpoint_command() > str {
+    return namedCommand(HOOK_DIR, agentName: mgs_getName(), script: "magus-checkpoint", flags: [<str>]);
+}
+
+fun codex_entry(h: CodexHook) > {str: any} {
+    final entry = mut {<str: any>};
+    if (h.hook.matcher != "") { entry["matcher"] = h.hook.matcher; }
+    entry["hooks"] = [{"type": "command", "command": codex_command(h.hook), "statusMessage": h.status}];
+    return entry;
+}
+
+// codex_entries groups the hooks by event, in the order each event first appears: the
+// managed entries merged into .codex/hooks.json.
+fun codex_entries() > [ManagedEntries] {
+    final hooks = codex_hooks();
+    final events = mut [<str>];
+    foreach (h in hooks) {
+        if (events.indexOf(h.hook.event) == null) { events.append(h.hook.event); }
+    }
+    final blocks = mut [<ManagedEntries>];
+    foreach (event in events) {
+        final entries = mut [<{str: any}>];
+        foreach (h in hooks) {
+            if (h.hook.event == event) { entries.append(codex_entry(h)); }
+        }
+        blocks.append(ManagedEntries{path = ["hooks", event], entries = entries});
+    }
+    return blocks;
+}
+
+export fun mgs_listEntries() > [ManagedEntries] {
     return codex_entries();
 }
 
-fun codex_mcp() > {str: any} {
-    // Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not
-    // write it; describe prints a short paste hint. Placeholders avoid Buzz {...}.
-    // The relative command resolves in each session's own checkout.
-    //
-    // The same file carries shell_environment_policy.set, the values Codex injects into
-    // every subprocess it spawns (learn.chatgpt.com/docs/config-file/config-reference).
-    // This harness merges only .codex/hooks.json, which has no such key, and config.toml
-    // is TOML the JSON merge cannot touch, so the variable rides in the paste. A table
-    // header rather than a dotted key: pasted after [mcp_servers.magus], a dotted key
-    // would land inside that table.
-    final hint = "Paste into ~/.codex/config.toml. The first table registers the MCP server; "
-        + "the second sets MAGUS_LOG_SILENT=true on every shell command Codex runs, "
-        + "so magus prints its quiet output there:\n\n"
-        + "[mcp_servers.magus]\n"
-        + "command = \"./magus\"\n"
-        + "args = [\"mcp\"]\n"
-        + "enabled = true\n"
-        + "\n"
-        + "[shell_environment_policy.set]\n"
-        + "MAGUS_LOG_SILENT = \"true\"\n";
-    return {
-        "hint": hint,
-        "docs": "docs/guides/integrations/mcp.md",
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = ".codex/hooks.json"};
+}
+
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
+}
+
+// Every Codex tool the guard should know whose input's shape does not say what it does. A
+// shell call carries its command and is judged by it; a tool missing here is one the guard
+// cannot judge (unjudged-tool).
+export fun mgs_listTools() > HarnessTools {
+    final rows = mut [HarnessTool{name = "apply_patch", capability = ToolCapability.writes}];
+    foreach (name in ["spawn_agent", "collaborationspawn_agent"]) {
+        rows.append(HarnessTool{name = name, capability = ToolCapability.spawns});
+    }
+    foreach (name in ["close_agent", "update_plan", "view_image", "web_search"]) {
+        rows.append(HarnessTool{name = name, capability = ToolCapability.inert});
+    }
+    return HarnessTools{dir = TOOLS_DIR, rows = rows};
+}
+
+// Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not write it; describe
+// prints a short paste hint. The relative command resolves in each session's own checkout.
+//
+// The same file carries shell_environment_policy.set, the values Codex injects into every
+// subprocess it spawns (learn.chatgpt.com/docs/config-file/config-reference). This harness
+// merges only .codex/hooks.json, which has no such key, and config.toml is TOML the JSON
+// merge cannot touch, so the variable rides in the paste. A table header rather than a
+// dotted key: pasted after [mcp_servers.magus], a dotted key would land inside that table.
+export fun mgs_getMcp() > McpServer {
+    return McpServer{
+        transport = McpTransport.stdio,
+        command = ["./magus", "mcp"],
+        hint = "Paste into ~/.codex/config.toml. The first table registers the MCP server; "
+            + "the second sets MAGUS_LOG_SILENT=true on every shell command Codex runs, "
+            + "so magus prints its quiet output there:\n\n"
+            + "[mcp_servers.magus]\n"
+            + "command = \"./magus\"\n"
+            + "args = [\"mcp\"]\n"
+            + "enabled = true\n"
+            + "\n"
+            + "[shell_environment_policy.set]\n"
+            + "MAGUS_LOG_SILENT = \"true\"\n",
+        docs = "docs/guides/integrations/mcp.md",
     };
 }
 
-export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
-    return codex_mcp();
-}
-
 fun codex_rules_path() > str { return ".codex/rules/magus.rules"; }
-
-// codex_toml_basic renders text as a TOML basic string on one line. Starlark reads the same
-// escapes, so a rules file quotes with it too.
-fun codex_toml_basic(text: str) > str {
-    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
-    return "\"" + escaped + "\"";
-}
 
 // codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is
 // parsed, reported as a failure, and the call continues), so the prompt is the rule's, and
@@ -266,7 +206,7 @@ fun codex_human_only_rule(pattern: str, reason: str) > str {
     return "prefix_rule(\n"
         + "    pattern = [{pattern}],\n"
         + "    decision = \"prompt\",\n"
-        + "    justification = " + codex_toml_basic("magus: a person runs this target: " + reason) + ",\n"
+        + "    justification = " + tomlBasic("magus: a person runs this target: " + reason) + ",\n"
         + ")\n";
 }
 
@@ -299,163 +239,130 @@ fun codex_rules(humanOnly: {str: str}) > str {
     return rules.join("");
 }
 
-fun codex_prompts(humanOnly: {str: str}) > [any] {
-    return [
-        {
-            "path": codex_rules_path(),
-            "content": codex_rules(humanOnly),
-        },
-    ];
-}
-
-// The request's human_only maps each target the workspace declares human_only to its
-// reason; a request without one prompts for pushes alone.
-export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
-    final req = {<str: any>};
-    cb(req);
-    final reasons = mut {<str: str>};
-    final humanOnly = req["human_only"];
-    if (humanOnly != null) {
-        foreach (name, reason in humanOnly as {str: any}) {
-            reasons[name] = "{reason}";
-        }
-    }
-    return codex_prompts(reasons);
-}
-
-// codex_toml_multiline renders text as a TOML multiline literal string, which reads every
-// character as written: instructions full of backslashes and quotes need no escaping. The
-// one thing a literal cannot hold is its own delimiter, so text carrying it falls back to
-// an escaped basic string.
-fun codex_toml_multiline(text: str) > str {
-    if (text.indexOf("'''") != null) { return codex_toml_basic(text); }
-    return "'''\n" + text + "'''";
+// humanOnly maps each target the workspace declares human_only to its reason; none prompts
+// for pushes alone.
+export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
+    return [Prompt{path = codex_rules_path(), content = codex_rules(humanOnly)}];
 }
 
 // codex_agent renders one shipped agent as a Codex custom agent file. It sets no model, so
 // the agent runs on the person's agents.default_subagent_model. A read-only agent runs in
 // Codex's read-only sandbox, which the instructions alone could not enforce.
-fun codex_agent(agent: {str: any}) > {str: any} {
-    final name = "{agent["name"]}";
-    final instructions = "{agent["instructions"]}".trim() + "\n";
-    var content = "name = " + codex_toml_basic(name) + "\ndescription = " + codex_toml_basic("{agent["description"]}") + "\n";
-    if (agent["read_only"] == true) {
-        content = content + "sandbox_mode = \"read-only\"\n";
-    }
-    content = content + "developer_instructions = " + codex_toml_multiline(instructions) + "\n";
-    return {
-        "path": ".codex/agents/{name}.toml",
-        "content": content,
-        "hint": "{name} runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
+fun codex_agent(agent: ShippedAgent) > AgentFile {
+    final lines = mut ["name = " + tomlBasic(agent.name), "description = " + tomlBasic(agent.description)];
+    if (agent.readOnly) { lines.append("sandbox_mode = \"read-only\""); }
+    lines.append("developer_instructions = " + tomlMultiline(agent.instructions.trim() + "\n"));
+    return AgentFile{
+        path = ".codex/agents/{agent.name}.toml",
+        content = lines.join("\n") + "\n",
+        hint = "{agent.name} runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
     };
 }
 
-fun codex_agents(agents: [any]) > [any] {
-    final files: mut [any] = mut [];
-    foreach (agent in agents) {
-        files.append(codex_agent(agent as {str: any}));
-    }
-    return files;
+export fun mgs_renderAgents(agents: [ShippedAgent]) > [AgentFile] {
+    return agents.map(fun (index: int, agent: ShippedAgent) > AgentFile => codex_agent(agent));
 }
 
-// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
-export fun harness_agents(target: Target, cb: fun(any)) > [any] {
-    final req = {<str: any>};
-    cb(req);
-    final agents = req["agents"];
-    if (agents == null) { return []; }
-    return codex_agents(agents as [any]);
-}
-
-fun codex_scout_fixture(instructions: str) > {str: any} {
-    return {
-        "name": "magus-scout",
-        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
-        "instructions": instructions,
-        "read_only": true,
+fun codex_scout_fixture(instructions: str) > ShippedAgent {
+    return ShippedAgent{
+        name = "magus-scout",
+        description = "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        instructions = instructions,
+        readOnly = true,
     };
 }
 
-test "harness_agents renders name, description, sandbox and instructions with no model" {
+// codex_block is the managed block for one event, null when none is wired.
+fun codex_block(event: str) > ManagedEntries? {
+    foreach (block in codex_entries()) {
+        if (block.path[1] == event) { return block; }
+    }
+    return null;
+}
+
+// codex_commands is the command of each entry in the block for one event.
+fun codex_commands(event: str) > [str] {
+    final commands = mut [<str>];
+    final block = codex_block(event);
+    if (block == null) { return commands; }
+    foreach (entry in block!.entries) {
+        foreach (hook in entry["hooks"] as [any]) { commands.append("{hook["command"]}"); }
+    }
+    return commands;
+}
+
+test "mgs_renderAgents renders name, description, sandbox and instructions with no model" {
     final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
-    assert\equal("{file["path"]}", ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
+    assert\equal(file.path, ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
     assert\equal(
-        "{file["content"]}",
+        file.content,
         "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
         "all three required fields, instructions as a literal",
     );
-    assert\isTrue("{file["content"]}".indexOf("model") == null, "default_subagent_model applies");
+    assert\isTrue(file.content.indexOf("model") == null, "default_subagent_model applies");
 }
 
-test "harness_agents leaves the sandbox alone for a writable agent" {
-    final writable = {
-        "name": "magus-worker",
-        "description": "Edits files.",
-        "instructions": "First line.\n",
-        "read_only": false,
-    };
-    final content = "{codex_agent(writable)["content"]}";
-    assert\isTrue(content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
+test "mgs_renderAgents leaves the sandbox alone for a writable agent" {
+    final writable = ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"};
+    assert\isTrue(codex_agent(writable).content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
 }
 
-test "harness_agents escapes instructions that carry the literal delimiter" {
-    final content = "{codex_agent(codex_scout_fixture("say '''\n"))["content"]}";
+test "mgs_renderAgents escapes instructions that carry the literal delimiter" {
+    final content = codex_agent(codex_scout_fixture("say '''\n")).content;
     assert\isTrue(content.endsWith("developer_instructions = \"say '''\\n\"\n"), "falls back to an escaped basic string");
 }
 
-test "harness_agents renders nothing when the call carries no agents" {
-    final noTarget = null;
-    final cb = fun(_: any) > void {};
-    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
+test "mgs_renderAgents renders nothing when the call carries no agents" {
+    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "harness_config names the Codex hooks file" {
-    assert\equal(codex_config_path(), ".codex/hooks.json", "workspace-relative host config path");
-    final cfg = codex_config();
-    assert\equal("{cfg["path"]}", ".codex/hooks.json", "config map carries the same path");
+test "mgs_getHarnessConfig names the Codex hooks file and mgs_getSkills .agents/skills" {
+    assert\equal(mgs_getHarnessConfig().path, ".codex/hooks.json", "workspace-relative host config path");
+    assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
+    assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "Codex reads .agents/skills");
 }
 
-test "harness_skills installs both forms under .agents/skills" {
-    assert\equal(codex_skills_form(), "both", "matches the JSON descriptor and Codex dogfood");
-    final skills = codex_skills();
-    assert\equal("{skills["form"]}", "both", "skills map carries the form");
-    final paths = skills["paths"] as [str];
-    assert\equal(paths.len(), 1, "one skills install path");
-    assert\equal(paths[0], ".agents/skills", "Codex reads .agents/skills");
+test "every hook appears in the entries, so the drift check magus runs passes" {
+    final commands = mut [<str>];
+    foreach (block in codex_entries()) {
+        foreach (entry in block.entries) {
+            foreach (hook in entry["hooks"] as [any]) { commands.append("{hook["command"]}"); }
+        }
+    }
+    foreach (hook in mgs_listHooks()) {
+        assert\isTrue(commands.indexOf(codex_command(hook)) != null, "{hook.event} {hook.script} is rendered");
+    }
 }
 
-test "every glue command names this host on its argv, and rehydrate takes none" {
+test "every glue command is a plain argv that names this host, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
     assert\isTrue(codex_guard_command().indexOf(named + " ") != null, "command hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
-}
-
-test "guard commands name the Buzz glue as a plain argv" {
-    assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command hook");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
-    assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
-    foreach (cmd in [codex_guard_command(), codex_rehydrate_command(), codex_checkpoint_command()]) {
+    foreach (hook in mgs_listHooks()) {
+        final cmd = codex_command(hook);
         assert\isTrue(cmd.startsWith("magus buzz -C . -s "), "name the working directory without an environment prefix or POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
+        assert\isTrue(cmd.indexOf("--observes-skill-loads") == null, "Codex has no hook on a skill load: {cmd}");
     }
 }
 
-test "harness_prompts keeps the git push prompt rule the shared template looks for" {
+test "mgs_renderPrompts keeps the git push prompt rule the shared template looks for" {
     final none = {<str: str>};
-    final prompts = codex_prompts(none);
+    final prompts = mgs_renderPrompts(none);
     assert\equal(prompts.len(), 1, "one rules file");
-    assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
+    assert\equal(prompts[0].path, ".codex/rules/magus.rules", "project-local Codex rules");
     assert\isTrue(codex_rules(none).indexOf("[\"git\", \"push\"]") != null, "magus-command.buzz looks for this exact pattern");
     assert\isTrue(codex_rules(none).indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
     assert\isTrue(codex_rules(none).indexOf("\"run\"") == null, "no human-only target, no run prompt");
 }
 
-test "harness_prompts prompts for every spelling of a human-only target's run" {
+test "mgs_renderPrompts prompts for every spelling of a human-only target's run" {
     final rules = codex_rules({"agent-bench-run": "launches \"paid\" sessions"});
     foreach (pattern in [
         "[\"magus\", \"run\", \"agent-bench-run\"]",
@@ -469,116 +376,41 @@ test "harness_prompts prompts for every spelling of a human-only target's run" {
         "the justification quotes the reason, escaped");
 }
 
-test "harness_prompts prompts for every backend's push" {
+test "mgs_renderPrompts prompts for every backend's push" {
     final rules = codex_rules({<str: str>});
     assert\isTrue(rules.indexOf("[\"hg\", \"push\"]") != null, "Mercurial push");
     assert\isTrue(rules.indexOf("[\"sl\", \"push\"]") != null, "Sapling push, --to included by prefix");
     assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, "Jujutsu push");
 }
 
-// codex_block is the managed block for one event, null when none is wired.
-fun codex_block(event: str) > {str: any}? {
-    foreach (block in codex_entries()) {
-        final path = block["path"] as [str];
-        if (path[1] == event) { return block as {str: any}; }
-    }
-    return null;
-}
-
-// codex_commands is the command of each entry in the block for one event.
-fun codex_commands(event: str) > [str] {
-    final commands: mut [str] = mut [];
-    final block = codex_block(event);
-    if (block == null) { return commands; }
-    foreach (entry in block!["entries"] as [any]) {
-        foreach (hook in entry["hooks"] as [any]) {
-            commands.append("{hook["command"]}");
-        }
-    }
-    return commands;
-}
-
-test "PermissionRequest answers Codex's approval with the shared command template" {
-    final pr = codex_block("PermissionRequest")!;
-    final pr_entries = pr["entries"] as [any];
-    assert\equal(pr_entries.len(), 1, "Bash only");
-    assert\equal("{pr_entries[0]["matcher"]}", "Bash", "the push rule matches shell commands");
-    final hooks = pr_entries[0]["hooks"] as [any];
-    assert\equal("{hooks[0]["command"]}", codex_guard_command(), "same template as PreToolUse");
-}
-
-test "the spawn matcher lists every spelling of Codex's spawn tool" {
-    assert\equal(SPAWN_MATCHER, "spawn_agent|collaborationspawn_agent|Agent", "an alphanumeric matcher is an exact list of tool names");
-}
-
-test "harness_entries covers the tool, subagent, session, Stop and message events" {
-    final entries = codex_entries();
-    assert\equal(entries.len(), 8, "eight managed path blocks");
+test "the entries cover the tool, subagent, session, Stop and message events" {
+    final events = mut [<str>];
+    foreach (block in codex_entries()) { events.append(block.path[1]); }
+    assert\equal(events.join(","), "PreToolUse,PostToolUse,SubagentStart,SubagentStop,PermissionRequest,SessionStart,Stop,UserPromptSubmit", "eight managed path blocks");
     final pre = codex_block("PreToolUse")!;
-    final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 1, "one catch-all, so no call is judged twice");
-    assert\equal("{pre_entries[0]["matcher"]}", EVERY_TOOL, "every tool Codex raises the event for");
-    assert\equal("{(pre_entries[0]["hooks"] as [any])[0]["command"]}", codex_guard_command(),
-        "a command, a patch, an MCP call and a spawn reach one glue, which forwards the whole event");
-    foreach (entry in pre_entries) {
-        final hooks = entry["hooks"] as [any];
-        assert\equal(hooks.len(), 1, "one command hook per matcher");
-        assert\equal("{hooks[0]["type"]}", "command", "Codex hook type");
-        assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
-    }
+    assert\equal(pre.entries.len(), 1, "one catch-all, so no call is judged twice");
+    assert\equal("{pre.entries[0]["matcher"]}", EVERY_TOOL, "every tool Codex raises the event for");
+    assert\equal(codex_commands("PreToolUse")[0], codex_guard_command(), "a command, a patch, an MCP call and a spawn reach one glue");
     final post = codex_block("PostToolUse")!;
-    final post_entries = post["entries"] as [any];
-    assert\equal(post_entries.len(), 1, "the finished spawn only");
-    assert\equal("{post_entries[0]["matcher"]}", SPAWN_MATCHER, "the child's name rides the spawn's response");
-    assert\equal(codex_commands("PostToolUse")[0], codex_guard_command(), "recorded by the command glue");
+    assert\equal(post.entries.len(), 2, "the finished spawn and the Buzz check");
+    assert\equal("{post.entries[0]["matcher"]}", SPAWN_MATCHER, "the child's name rides the spawn's response");
+    assert\equal("{post.entries[1]["matcher"]}", "apply_patch", "the tool that writes a file");
     assert\equal(codex_commands("SubagentStart")[0], codex_rehydrate_command(), "the child is briefed through additionalContext");
-    assert\equal(codex_commands("SubagentStart")[1], codex_guard_command(), "the child's id is joined to its spawn by the command glue");
-    assert\equal(codex_commands("SubagentStop")[0], codex_guard_command(), "the child's context size is filed by the command glue");
-    assert\equal(codex_commands("SessionStart")[0], codex_rehydrate_command(), "rehydrate on compact");
-    final start_entries = codex_block("SessionStart")!["entries"] as [any];
-    assert\equal("{start_entries[0]["matcher"]}", "compact", "only the moment state was lost");
-    final stop_entries = codex_block("Stop")!["entries"] as [any];
-    assert\equal(stop_entries.len(), 1, "the checkpoint entry alone: the reply check is opt-in");
+    assert\equal(codex_commands("SubagentStart")[1], codex_guard_command(), "the child's id is joined to its spawn");
+    assert\equal(codex_commands("PermissionRequest")[0], codex_guard_command(), "same template as PreToolUse");
+    assert\equal("{codex_block("SessionStart")!.entries[0]["matcher"]}", "compact", "only the moment state was lost");
+    assert\equal(codex_commands("Stop").len(), 1, "the checkpoint entry alone: the reply check is opt-in");
     assert\equal(codex_commands("Stop")[0], codex_checkpoint_command(), "records where the work stands");
     final message = codex_block("UserPromptSubmit")!;
-    final message_entries = message["entries"] as [any];
-    assert\equal(message_entries.len(), 1, "one message entry");
-    assert\isTrue(message_entries[0]["matcher"] == null, "Codex ignores a matcher on this event");
-    assert\equal("{(message_entries[0]["hooks"] as [any])[0]["command"]}", codex_guard_command(),
-        "the glue tells a message from a call by the event's shape");
+    assert\isTrue(message.entries[0]["matcher"] == null, "Codex ignores a matcher on this event");
 }
 
-test "no codex entry declares observes-skill-loads, since Codex has no hook on a skill load" {
-    foreach (block in codex_entries()) {
-        foreach (entry in block["entries"] as [any]) {
-            foreach (hook in entry["hooks"] as [any]) {
-                assert\isTrue("{hook["command"]}".indexOf("--observes-skill-loads") == null,
-                    "a rule that requires a skill would deny forever: {hook["command"]}");
-            }
-        }
-    }
-}
-
-test "harness_mcp is a stdio paste hint for Codex user config.toml" {
-    final mcp = codex_mcp();
-    assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
-    assert\isTrue("{mcp["hint"]}".indexOf("command = \"./magus\"") != null, "the checkout's own binary");
-    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
-}
-
-test "harness_mcp's paste makes Codex's shell commands quiet" {
-    final hint = "{codex_mcp()["hint"]}";
-    assert\isTrue(hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_SILENT = \"true\"\n") != null,
+test "mgs_getMcp is a stdio paste hint for Codex user config.toml" {
+    final mcp = mgs_getMcp();
+    assert\equal(mcp.transport.value, "stdio", "the host starts ./magus mcp per session");
+    assert\isTrue(mcp.hint.indexOf("command = \"./magus\"") != null, "the checkout's own binary");
+    assert\isTrue(mcp.hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_SILENT = \"true\"\n") != null,
         "Codex's own environment table, as a header so a paste after the MCP table stays out of it");
-    assert\isTrue((hint.indexOf("[mcp_servers.magus]") ?? -1) < (hint.indexOf("[shell_environment_policy.set]") ?? -1),
+    assert\isTrue((mcp.hint.indexOf("[mcp_servers.magus]") ?? -1) < (mcp.hint.indexOf("[shell_environment_policy.set]") ?? -1),
         "the MCP table keeps its place at the top of the paste");
-}
-
-test "harness_* contract wrappers return the same pure helpers" {
-    final t = null;
-    final cb = fun(_: any) > void {};
-    assert\equal("{harness_config(t, cb)["path"]}", codex_config_path(), "config path");
-    assert\equal("{harness_skills(t, cb)["form"]}", codex_skills_form(), "skills form");
-    assert\equal(harness_entries(t, cb).len(), codex_entries().len(), "entries length");
-    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
 }

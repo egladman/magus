@@ -3,3 +3,9 @@ Grep
 LS
 NotebookRead
 Read
+mcp__ccd_connectors__session_connectors_status
+mcp__ccd_host__get_storage_usage
+mcp__ccd_pr__get_status
+mcp__ccd_session__list_start_targets
+mcp__ccd_session_mgmt__list_events
+mcp__ccd_session_mgmt__list_sessions

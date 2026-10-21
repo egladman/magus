@@ -128,9 +128,7 @@ func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
 // up. Without a server the forge is asked directly rather than the reader being shown a review
 // with nobody else in it.
 func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
-	withCannedThreads(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
-	})
+	withCannedThreads(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
 	cache := t.TempDir()
 
 	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
@@ -145,9 +143,7 @@ func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
 // The watermark outlives the server that normally reads it, so a thread already seen does not
 // come back marked new the moment the server is stopped.
 func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
-	withCannedThreads(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
-	})
+	withCannedThreads(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
 	cache := t.TempDir()
 	root := filepath.Join(cache, "ws")
 	sessions := changeset.NewStore(cache)
@@ -174,34 +170,30 @@ func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
 	assert.Contains(t, newRemarkLine(append(threads, types.ReviewComment{ID: "t3", New: true})), "2 remarks")
 }
 
-// A malformed remark is reported rather than dropped: the threads that decoded still travel,
-// and the caller says what it could not read.
+// A malformed remark fails the read loudly: the threads decode strictly, so the caller says
+// what it could not read rather than handing over a conversation with a remark missing.
 func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
-	withCannedThreads(t, []any{
-		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
-		"not a thread at all",
-	})
+	name := register.Spell(t, "malformed-notes-review", spells.WithFuncSource(`import "magus/spell";
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
+    return ReviewTarget{ id = "482", repo = "acme/acme" };
+}
+export fun review_threads(target: Target, req: ReviewRef) > any {
+    return [{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}, "not a thread at all"];
+}`))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 
 	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
-	assert.Len(t, threads, 1)
+	assert.Empty(t, threads)
 	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
 }
 
 // withCannedThreads wires a review provider for this test, so the server-free read path
 // can be exercised against threads instead of only against an unwired workspace.
-func withCannedThreads(t *testing.T, threads []any) {
+func withCannedThreads(t *testing.T, threads []types.ReviewComment) {
 	t.Helper()
-	name := register.Spell(t, "canned-notes-review",
-		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			switch req.Target {
-			case spells.FindReviewContract:
-				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
-			case spells.ReviewThreadsContract:
-				return threads, nil
-			default:
-				return map[string]any{}, nil
-			}
-		}))
+	name := register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads)
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

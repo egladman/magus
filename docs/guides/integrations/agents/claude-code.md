@@ -269,6 +269,32 @@ harness` prints and run `magus agent harness verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
+### Checking the Buzz it writes
+
+`PostToolUse` on `Write|Edit|MultiEdit` runs
+[`magus-buzz-check.buzz`](guard-templates.md#magus-buzz-checkbuzz), which runs
+`magus buzz --check` on a `.buzz` file the agent just wrote and hands a failure back
+as the reason to fix it:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## MCP tool calls
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, named
