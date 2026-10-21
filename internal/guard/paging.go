@@ -52,7 +52,7 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 			continue
 		}
 		first, last := rc.span(m.lines)
-		if _, inside := m.covering(first, last); inside {
+		if _, inside := m.coveringNear(first, last); inside {
 			continue
 		}
 		tally := readPagingKind(agent, rel)
@@ -67,7 +67,7 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 		}
 		// A refused window was never read, so it is not recorded as one: asked again, by
 		// any tool, it is refused again.
-		v := denyReadPaging(m, n)
+		v := denyReadPaging(m, n, first)
 		if deps.grade(v).Deny == "" {
 			facts.MarkFired(window)
 		}
@@ -76,11 +76,8 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 	return ShellVerdict{}
 }
 
-func denyReadPaging(m fileMap, window int) ShellVerdict {
-	read := "`sed -n <first>,<last>p " + shellWord(m.rel) + "`"
-	if m.indexed {
-		read = "`" + hint.Refs.With("<name>", "--definition", "--source") + "`"
-	}
+func denyReadPaging(m fileMap, window, first int) ShellVerdict {
+	read := "`" + m.read(m.suggest(first)) + "`"
 	return ShellVerdict{
 		Deny: "magus workspace: window " + strconv.Itoa(window) + " of " + m.rel + " pages through its " + strconv.Itoa(m.lines) + " lines; read one " + m.noun + ": " + read + ".",
 		Why:  denyReadNavigation(m).Why,

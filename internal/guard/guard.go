@@ -425,6 +425,10 @@ func (d Dependencies) rankGraded(v ShellVerdict, rule denyRuleName, reason strin
 	if reason == "" {
 		return v
 	}
+	// A skill the caller cannot load is a remedy it cannot take.
+	if (rule == denyArchitectureUnbriefed || rule == denyBuzzUnbriefed) && !d.loadsSkills() {
+		return v
+	}
 	if g := d.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); g.Deny == "" {
 		return stronger(v, g)
 	}

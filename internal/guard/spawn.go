@@ -142,14 +142,36 @@ const pendingSpawnWindow = 2 * time.Minute
 type pendingSpawn struct {
 	Record  spawnedAgent `json:"record"`
 	Spawner string       `json:"spawner,omitempty"`
+	// AgentType is the subagent type the spawn named, "" when it named none.
+	AgentType string `json:"agent_type,omitempty"`
+}
+
+// agentTypeKind keys the subagent type a child was spawned as, kept beside its spawn record.
+func agentTypeKind(agentID string) hint.MarkerKind {
+	return agentMarkerKind("agent-type-", agentID)
+}
+
+// agentTypeRecord is the body of an agentTypeKind marker.
+type agentTypeRecord struct {
+	Type string `json:"type"`
+}
+
+// spawnedAgentType is the subagent type agentID was spawned as, "" when it is not known.
+func spawnedAgentType(facts hint.Gate, agentID string) string {
+	if agentID == "" {
+		return ""
+	}
+	rec, _ := readMarker[agentTypeRecord](facts, agentTypeKind(agentID))
+	return rec.Type
 }
 
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
 // joined to it. A host whose finished spawn already names the child never reads it.
 func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {
 	body, err := json.Marshal(pendingSpawn{
-		Record:  spawnedAgent{Description: env.Spawn.Description, Name: env.Spawn.Name, Model: env.DeclaredModel},
-		Spawner: spawner,
+		Record:    spawnedAgent{Description: env.Spawn.Description, Name: env.Spawn.Name, Model: env.DeclaredModel},
+		Spawner:   spawner,
+		AgentType: env.Spawn.AgentType,
 	})
 	if err != nil {
 		return
@@ -215,6 +237,11 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 			DeclaredModel: e.spawn.Record.Model,
 			Spawn:         spawnFields{Description: e.spawn.Record.Description, Name: e.spawn.Record.Name},
 		}, e.spawn.Spawner)
+		if e.spawn.AgentType != "" {
+			if body, err := json.Marshal(agentTypeRecord{Type: e.spawn.AgentType}); err == nil {
+				writeAgentMarker(facts, agentTypeKind(child), body)
+			}
+		}
 	}
 	if !firstCall {
 		if len(pending) > 0 {
