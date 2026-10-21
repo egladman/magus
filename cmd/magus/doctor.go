@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -83,6 +85,15 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	if exp, ok := doctorExplanations(root); ok {
 		dopts = append(dopts, doctor.WithExplanations(exp))
 	}
+	// The budget the broker starts with (brokerServe); a ci run strips every write charm,
+	// and `magus affected ci` adds none.
+	ctx = doctor.WithGateClaims(ctx, func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error) {
+		m, err := loadMagus(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		return m.MachineClaims(ctx, targets, nil, nil), nil
+	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {
