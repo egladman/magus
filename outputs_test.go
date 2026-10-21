@@ -5,12 +5,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -734,30 +731,4 @@ func TestResolveTargetOutputsWithNothingDeclared(t *testing.T) {
 	got, err := m.ResolveTargetOutputs(context.Background(), m.All(), "build")
 	require.NoError(t, err)
 	assert.Empty(t, got)
-}
-
-func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
-	t.Helper()
-	key := strings.Repeat("ab", 32)
-	rec := map[string]any{
-		"schema_version": types.StoredOutputSchemaVersion,
-		"ref":            cache.PortableRef(key), "key": key, "attempt": "out1234abcd",
-		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
-		"output": "FAIL: x\n",
-	}
-	if mutate != nil {
-		mutate(rec)
-	}
-	b, err := json.Marshal(rec)
-	require.NoError(t, err)
-	return string(b) + "\n"
-}
-
-func readRecords(in string) ([]types.StoredOutput, error) {
-	var got []types.StoredOutput
-	err := cache.ReadOutputRecords(strings.NewReader(in), func(r types.StoredOutput) error {
-		got = append(got, r)
-		return nil
-	})
-	return got, err
 }

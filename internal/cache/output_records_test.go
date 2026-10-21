@@ -91,3 +91,32 @@ func TestOutputImportCarriesInvalidUTF8Exactly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, raw, got[0].Bytes())
 }
+
+// An imported record's failed_need_target and failed_need_ref survive the read when real; a
+// forged pair is made harmless (the target neutralized, the ref dropped unless minted)
+// and the record is still read; only an oversized target is refused, by the descriptor check.
+func TestOutputImportReadsTheFailedNeed(t *testing.T) {
+	got, err := readRecords(outputRecordLine(t, func(r map[string]any) {
+		r["failed_need_target"] = "lint-go"
+		r["failed_need_ref"] = "out0123456789ab"
+	}))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, [2]string{"lint-go", "out0123456789ab"}, [2]string{got[0].FailedNeedTarget, got[0].FailedNeedRef})
+
+	got, err = readRecords(outputRecordLine(t, func(r map[string]any) {
+		r["failed_need_target"] = "lint\x1b]0;t\x07"
+		r["failed_need_ref"] = "x; rm -rf ~"
+	}))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, [2]string{"lint<U+001B>]0;t<U+0007>", ""}, [2]string{got[0].FailedNeedTarget, got[0].FailedNeedRef})
+
+	got, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["failed_need_target"] = "lint\n" }))
+	require.NoError(t, err, "a line break in the member is escaped, not refused")
+	require.Len(t, got, 1)
+	assert.Equal(t, "lint<U+000A>", got[0].FailedNeedTarget)
+
+	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["failed_need_target"] = strings.Repeat("n", 513) }))
+	assert.ErrorContains(t, err, "line 1: failed_need_target: longer than")
+}
