@@ -126,9 +126,11 @@ exec magus shell
 stdout 'advise( \[[a-z-]+\])?: magus workspace: classify before reverting'
 stdout 'magus describe file <paths>'
 
+# A tree-identity read is refused by default, naming the command that also covers a dirty
+# tree.
 stdin rev-parse-head.txt
-exec magus shell
-stdout 'advise( \[[a-z-]+\])?: magus workspace: .magus vcs checkpoint'
+! exec magus shell
+stdout 'deny \[checkpoint-state\]: magus workspace: .magus vcs checkpoint'
 stdout 'identifies the working state'
 
 # --- the allowed shapes: a guard that denies everything routes nobody ---------
