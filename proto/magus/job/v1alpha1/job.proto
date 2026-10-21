@@ -152,6 +152,8 @@ message Job {
   JobModelTier model_tier = 41;
   int32 rework_rounds = 42;
   int32 widenings = 43;
+  // brief_format is markdown or buzz; empty defers to magus.yaml's agents.brief_format.
+  string brief_format = 44;
 }
 
 // JobModelTier is the model tier recorded on a job when it was assigned. skills is the
