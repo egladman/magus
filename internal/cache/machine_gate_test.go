@@ -17,6 +17,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestMachineRefusalNamesTheOversizedClaimAndTheWaitForm(t *testing.T) {
+	b, _ := testBudget(t, 4000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "`magus status --wait` cannot seat it either")
+	assert.Contains(t, err.Error(), "25.4 GiB against a budget of 3.9 GiB", "which claim, against which budget")
+	assert.Contains(t, err.Error(), "Narrow the run")
+}
+
 func snapshotReader(b *MachineBudget) func(context.Context) (types.MachineSnapshot, error) {
 	return func(context.Context) (types.MachineSnapshot, error) { return b.Snapshot(), nil }
 }

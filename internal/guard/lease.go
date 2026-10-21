@@ -2838,9 +2838,24 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 }
 
 // isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
-// without --to) or jj git push, relocated or not.
+// without --to) or jj git push, relocated or not. `gh pr create` counts: it pushes nothing
+// itself but opens review on the pushed head, so the push gate grades it at the same commit.
 func isPush(c hint.Invocation) bool {
-	return strings.HasSuffix(vcsMutation(c), " push")
+	return strings.HasSuffix(vcsMutation(c), " push") || isPRCreate(c)
+}
+
+// isPRCreate reports whether c is `gh pr create`, past gh's own flags.
+func isPRCreate(c hint.Invocation) bool {
+	if filepath.Base(c.Name) != "gh" {
+		return false
+	}
+	var words []string
+	for _, a := range c.Args {
+		if !strings.HasPrefix(a, "-") {
+			words = append(words, a)
+		}
+	}
+	return len(words) >= 2 && words[0] == "pr" && words[1] == "create"
 }
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.

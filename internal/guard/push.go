@@ -248,15 +248,9 @@ func askUnrenderedDeny(subject string) string {
 }
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
-// "ask" for a session no job lease binds, "deny" for one a lease binds, and "" when a gate
-// covers the commit or the question could not be asked.
-//
-// An unbound session is the orchestrator, and publishing work in progress is a call it
-// makes with the person. magus cannot tell a deliberate push from an oversight, so the
-// host's own approval prompt decides. A marker the agent types is not consent.
-//
-// A bound session is a worker. Approving its push would publish from a boundary that does
-// not own the branch, so nobody is asked.
+// "deny" for every session and "" when a gate covers the commit or the question could not
+// be asked. The root is refused too: asking it let two pull requests out with no local
+// gate. A leased worker's text also sends the commit to the orchestrator.
 func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, reason string) {
 	var state string
 	switch cover {
@@ -276,11 +270,11 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	if cover == gateIncomplete {
 		head += "That run is still going or it was killed.\n"
 	}
-	gate := "`" + hint.Affected.With(string(types.TargetCI)) + "` runs the gate, and CI runs the identical command on the identical tree, so a red push pays twice for one answer."
+	gate := "Run `" + hint.Status.With("--wait") + "`, then `" + hint.Affected.With(string(types.TargetCI)) + "`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer."
 	if lease != "" {
 		return decisionDeny, head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
 	}
-	return decisionAsk, head + "Approving publishes it as it stands. " + gate
+	return decisionDeny, head + gate
 }
 
 // movedPushReason refuses a push that follows, on the same line, a command that moves the

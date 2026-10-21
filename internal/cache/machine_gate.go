@@ -551,7 +551,8 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // lie for the other.
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
-		return "that budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine."
+		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and `magus status --wait` cannot seat it either. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
+			displayProject(c.Project), c.Target, FormatMB(c.MemoryMB), FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))

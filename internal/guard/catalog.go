@@ -301,12 +301,12 @@ var ruleDocArchitectureUnbriefed = types.RuleDoc{
 
 var ruleDocPushUngated = types.RuleDoc{
 	Name:    string(denyRulePushUngated),
-	Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
+	Catches: "a push or `gh pr create` at a commit with no green gate, refused for the orchestrator and a leased worker alike",
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
-		"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, the human in the loop for publishing, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
-		"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked. " +
+		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
+		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD.",
 }
 
@@ -931,7 +931,7 @@ var ruleDocSpawnNestedWaiter = types.RuleDoc{
 
 var ruleDocPushGate = types.RuleDoc{
 	Name:    string(advisoryPushGate),
-	Catches: "a push the run log does not prove ungated, which names the gate and lets it through",
+	Catches: "a push or `gh pr create` the run log does not prove ungated, which names the gate and lets it through",
 }
 
 var ruleDocRegenSource = types.RuleDoc{
