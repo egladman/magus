@@ -48,16 +48,17 @@ func (f *vocabFlags) build() (*distill.Vocab, error) {
 	})
 }
 
-// runVocab builds the vocabulary and writes it as the texts file the token teacher run
-// embeds.
+// runVocab builds the vocabulary and writes it twice: as the texts file the token
+// teacher run embeds, and as the token counts convert reads.
 func runVocab(args []string) error {
 	fs := flag.NewFlagSet("vocab", flag.ExitOnError)
 	var vf vocabFlags
 	vf.register(fs)
 	out := fs.String("out", "", "where to write the token texts for `embed teacher -texts`")
+	vocabOut := fs.String("vocab", "", "where to write the vocabulary for `embed convert -vocab`")
 	_ = fs.Parse(args)
-	if *out == "" {
-		return errors.New("-out is required")
+	if *out == "" || *vocabOut == "" {
+		return errors.New("-out and -vocab are required")
 	}
 	v, err := vf.build()
 	if err != nil {
@@ -70,7 +71,14 @@ func runVocab(args []string) error {
 	if err := os.WriteFile(*out, b, 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("%d tokens over %d counted; token texts %s\n", v.Len(), v.Total, sha256Hex(b))
+	vb, err := vocabJSONL(v)
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(*vocabOut, vb); err != nil {
+		return err
+	}
+	fmt.Printf("%d tokens over %d counted; token texts %s; vocabulary %s\n", v.Len(), v.Total, sha256Hex(b), sha256Hex(vb))
 	return nil
 }
 

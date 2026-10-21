@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes/float16"
@@ -68,16 +67,16 @@ func writeConvertSafetensors(t *testing.T, path string) {
 }
 
 // convertFixture writes potion's two pinned files under a cache root, the inputs.jsonl
-// pinning them, and the texts and forced tokens a vocabulary is built from.
+// pinning them, and the vocabulary a table is converted over.
 type convertFixture struct {
-	cache, inputs, texts, forced string
+	cache, inputs, vocab string
 }
 
 func newConvertFixture(t *testing.T) convertFixture {
 	t.Helper()
 	dir := t.TempDir()
 	f := convertFixture{cache: filepath.Join(dir, "cache"), inputs: filepath.Join(dir, "inputs.jsonl"),
-		texts: filepath.Join(dir, "texts.jsonl"), forced: filepath.Join(dir, "forced.txt")}
+		vocab: filepath.Join(dir, "vocab.jsonl")}
 	snap := filepath.Join("hf", potion, convertRevision)
 	require.NoError(t, os.MkdirAll(filepath.Join(f.cache, snap), 0o755))
 	writeConvertTokenizer(t, filepath.Join(f.cache, snap, "tokenizer.json"))
@@ -93,15 +92,14 @@ func newConvertFixture(t *testing.T) convertFixture {
 		lines = append(append(lines, b...), '\n')
 	}
 	require.NoError(t, os.WriteFile(f.inputs, lines, 0o644))
-	texts := `{"id": "a", "text": "parser config parse_config load"}` + "\n" + `{"id": "b", "text": "parse_config parser"}` + "\n"
-	require.NoError(t, os.WriteFile(f.texts, []byte(texts), 0o644))
-	require.NoError(t, os.WriteFile(f.forced, []byte("config\n"), 0o644))
+	vocab := `{"token":"config","count":2}` + "\n" + `{"token":"load","count":1}` + "\n" + `{"token":"parse","count":2}` + "\n" +
+		`{"token":"parse_config","count":2}` + "\n" + `{"token":"parser","count":2}` + "\n"
+	require.NoError(t, os.WriteFile(f.vocab, []byte(vocab), 0o644))
 	return f
 }
 
 func (f convertFixture) args(out string) []string {
-	return []string{"-inputs", f.inputs, "-cache", f.cache, "-texts", f.texts, "-forced", f.forced,
-		"-min-count", "1", "-size", "100", "-pipeline", "abc123", "-run", "convert-test", "-out", out}
+	return []string{"-inputs", f.inputs, "-cache", f.cache, "-vocab", f.vocab, "-run", "convert-test", "-out", out}
 }
 
 func TestConvertWritesTheSameTableEveryRun(t *testing.T) {
@@ -118,17 +116,43 @@ func TestConvertWritesTheSameTableEveryRun(t *testing.T) {
 
 	table, err := embed.ReadTable(a)
 	require.NoError(t, err)
-	textsDigest, err := teacher.FileSHA256(f.texts)
+	vocabDigest, err := teacher.FileSHA256(f.vocab)
 	require.NoError(t, err)
 	got := table.Provenance()
 	assert.NotEmpty(t, got.TokenizerDigest)
 	assert.Equal(t, embed.Provenance{
-		Format: got.Format, Teacher: potion, TeacherRevision: convertRevision, TextsDigest: textsDigest,
-		PairsDigest: "none", TokenizerDigest: got.TokenizerDigest, Pipeline: "abc123", Run: "convert-test",
-		GOARCH: runtime.GOARCH,
+		Format: got.Format, Teacher: potion, TeacherRevision: convertRevision, TextsDigest: vocabDigest,
+		PairsDigest: "none", TokenizerDigest: got.TokenizerDigest, Pipeline: convertPipeline, Run: "convert-test",
+		GOARCH: convertGOARCH,
 	}, got)
 	assert.Equal(t, convertDims, table.Dims())
 	assert.Equal(t, 5, table.Len(), "parser, config, parse_config, parse and load")
+}
+
+// Every architecture must write these bytes; a fused multiply-add in the float math
+// changes them.
+func TestConvertWritesPinnedBytes(t *testing.T) {
+	f := newConvertFixture(t)
+	out := filepath.Join(t.TempDir(), "table.mset")
+	require.NoError(t, runConvert(f.args(out)))
+	b, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Equal(t, "PENDING", sha256Hex(b))
+}
+
+func TestReadVocabRanksByCount(t *testing.T) {
+	f := newConvertFixture(t)
+	v, err := readVocab(f.vocab)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"config", "parse", "parse_config", "parser", "load"}, v.Tokens)
+	assert.Equal(t, []int64{2, 2, 2, 2, 1}, v.Counts)
+	assert.Equal(t, int64(9), v.Total)
+
+	b, err := vocabJSONL(v)
+	require.NoError(t, err)
+	written, err := os.ReadFile(f.vocab)
+	require.NoError(t, err)
+	assert.Equal(t, string(written), string(b), "vocabJSONL sorts by token")
 }
 
 func TestConvertRefusesAnUnfetchedInput(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"runtime"
 	"slices"
 
 	"github.com/egladman/magus/libs/embed"
@@ -19,27 +18,33 @@ import (
 // inputs.jsonl.
 const potion = "potion-code-16M-v2"
 
+// convertPipeline and convertGOARCH are what a converted table records as its pipeline
+// and architecture. Both are fixed: the same vocabulary and potion files write the same
+// bytes at any commit and on any architecture, so the pin holds everywhere.
+const (
+	convertPipeline = "embed convert"
+	convertGOARCH   = "any"
+)
+
 // runConvert writes potion-code-16M-v2 as a table over the embed vocabulary. Potion
 // embeds a text as the normalized sum of its pieces' vectors, so each token stands for
 // the sum over its own pieces. embed.Tokens repeats a word's parts, so the table only
 // approximates potion. The same inputs and flags write the same bytes.
 func runConvert(args []string) error {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
-	var vf vocabFlags
-	vf.register(fs)
+	vocabPath := fs.String("vocab", "", "the vocabulary, JSON lines of {\"token\", \"count\"} as `embed vocab -vocab` writes them")
 	inputs := fs.String("inputs", "inputs.jsonl", "the pinned inputs file")
 	cache := fs.String("cache", cacheRoot(), "the cache root inputs.jsonl paths are relative to")
-	pipeline := fs.String("pipeline", "", "the commit the pipeline ran at")
 	run := fs.String("run", "", "this run's id, recorded in the table")
 	out := fs.String("out", "", "where to write the table")
 	_ = fs.Parse(args)
-	if *pipeline == "" || *run == "" || *out == "" {
-		return errors.New("-pipeline, -run and -out are required")
+	if *vocabPath == "" || *run == "" || *out == "" {
+		return errors.New("-vocab, -run and -out are required")
 	}
 	if *cache == "" {
 		return errors.New("-cache is empty and no cache directory resolved")
 	}
-	v, err := vf.build()
+	v, err := readVocab(*vocabPath)
 	if err != nil {
 		return err
 	}
@@ -51,13 +56,13 @@ func runConvert(args []string) error {
 	if err != nil {
 		return err
 	}
-	textsDigest, err := teacher.FileSHA256(vf.texts)
+	vocabDigest, err := teacher.FileSHA256(*vocabPath)
 	if err != nil {
 		return err
 	}
 	table, err := encodeTable(m, v, embed.Provenance{
-		Teacher: potion, TeacherRevision: rev, TextsDigest: textsDigest, PairsDigest: "none",
-		Pipeline: *pipeline, Run: *run, GOARCH: runtime.GOARCH,
+		Teacher: potion, TeacherRevision: rev, TextsDigest: vocabDigest, PairsDigest: "none",
+		Pipeline: convertPipeline, Run: *run, GOARCH: convertGOARCH,
 	})
 	if err != nil {
 		return err
@@ -137,7 +142,9 @@ func pieceModel(tokens []string, tok *teacher.WordPiece, emb *tensors.Tensor) (*
 		var ss float64
 		for j := range mean {
 			mean[j] /= float64(len(ids))
-			ss += mean[j] * mean[j]
+			// The explicit conversion rounds the product, so no architecture fuses it
+			// into the add and the table's bytes match everywhere.
+			ss = float64(mean[j]*mean[j]) + ss
 		}
 		if ss == 0 {
 			return nil, 0, fmt.Errorf("token %q: the mean of its pieces %v is zero", t, ids)

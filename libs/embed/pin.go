@@ -16,14 +16,14 @@ var tableDigest string
 
 // Pin returns the hex sha256 of the table this module pins, the digest its OCI
 // artifact's layer and tag carry. It errors when gen/table.digest is empty or is not
-// one line of 64 lowercase hex characters; `magus run generate libs/embed` rewrites it.
+// one line of 64 lowercase hex characters; `magus run table libs/embed` rewrites it.
 func Pin() (string, error) {
 	return parsePin(tableDigest)
 }
 
 func parsePin(text string) (string, error) {
 	if text == "" {
-		return "", errors.New("gen/table.digest is empty: run `magus run generate libs/embed`")
+		return "", errors.New("gen/table.digest is empty: run `magus run table libs/embed`")
 	}
 	digest, ok := strings.CutSuffix(text, "\n")
 	if _, err := hex.DecodeString(digest); !ok || err != nil || len(digest) != 64 || strings.ToLower(digest) != digest {

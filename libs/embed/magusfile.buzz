@@ -14,7 +14,7 @@ magus\project({
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
-        "generate": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
+        "table": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
     },
 });
 
@@ -48,7 +48,8 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 
 // Pins the converted table by its sha256, the digest its OCI artifact's layer and tag
 // carry, so the release publishes the artifact without reading the pin off a registry.
-export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+// Manual, never part of ci.
+export fun table(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(train\convert);
     ctx.writesFiles("gen/table.digest");
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
