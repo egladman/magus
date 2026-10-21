@@ -1224,18 +1224,8 @@ func stepSlots(s Step, lim *Limiter) int {
 // claims first and can run to completion. The claim goes back LAST, after the slot and
 // the lease.
 //
-// A step admitted BENEATH one that already holds a claim takes none, because the ancestor
-// is the one thing that cannot release: it is blocked in dispatch waiting for this step,
-// so a second claim queued behind it would wait forever. Measured 2026-09-08: `magus
-// affected ci` sat 27 minutes at 13s of CPU with no child process running.
-//
-// The cover is a floor: Step.MemoryMB folds a chain to the largest sum over one
-// ctx.needs call (types.ChainMemoryMB), and a member's own transitive fan-out inside
-// that call adds under the member's figure rather than beside it. Covering rather than
-// yielding, because a machine claim's re-acquire
-// is FALLIBLE: it re-queues behind strangers and can be refused, so a parent that
-// released and retook could fail after its children had already run. The limiter still
-// bounds how many run at once inside this process; the machine budget does not see them.
+// A step dispatched beneath a claim holder rides that claim, which its folded figure
+// covers; a skip_cache composer's members claim their own ([ChildrenClaimTheirOwn]).
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
 	held := admissionFrom(ctx)
 	if held.machineClaim {
