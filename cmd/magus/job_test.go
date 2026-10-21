@@ -925,7 +925,7 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 		}
 	}
 	grade := func(graph *jobGraph) types.JobStatus {
-		seen, err := jobObserver("", graph)(t.Context(), row)
+		seen, err := jobObserver("", func(string) *jobGraph { return graph })(t.Context(), row)
 		require.NoError(t, err)
 		return job.VerifyGates(row, types.JobResult{Job: row.ID}, types.JobAttempt{}, nil, []types.Job{row}, seen)
 	}
@@ -945,6 +945,30 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 		assert.Contains(t, strings.Join(gate.Violations, " "), hint.GraphBuild.String(), gate.ID)
 	}
 	assert.Equal(t, waited, grade(read(true, stale)), "wait builds whatever the index says")
+}
+
+func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
+	t.Parallel()
+
+	root, checkout := t.TempDir(), t.TempDir()
+	row := types.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []types.Goal{
+		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
+	}}
+	var trees []string
+	graphIn := func(tree string) *jobGraph {
+		trees = append(trees, tree)
+		return &jobGraph{
+			rebuild: true,
+			stale:   func(context.Context) []types.KnowledgeStaleIndex { return nil },
+			build:   func(context.Context) (*knowledge.Graph, error) { return deltaGraph(map[string]string{"Present": "code.go:3"}), nil },
+		}
+	}
+
+	seen, err := jobObserver(root, graphIn)(t.Context(), row)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{checkout}, trees, "the worker's checkout holds the symbols its branch defines, not the waiter's")
+	assert.True(t, seen.SymbolsKnown)
 }
 
 // describe reads the graph evidence as it reads the symbol goals: from the graph as built,

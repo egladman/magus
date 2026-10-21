@@ -1059,6 +1059,28 @@ func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
 	assert.Equal(t, wantCapped, capped)
 }
 
+func TestStoreKeepsTheGenerationWhenWritePathsOnlyWiden(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	row := lease("a")
+	row.WritePaths = []string{"internal/job/plan.go"}
+	assert.Equal(t, 1, seed(t, s, row).Generation)
+
+	row.WritePaths = []string{"internal/job/plan.go", "internal/job/plan_test.go"}
+	assert.Equal(t, 1, seed(t, s, row).Generation, "an added path asks nothing the evidence did not answer")
+
+	row.WritePaths = []string{"internal/job"}
+	assert.Equal(t, 1, seed(t, s, row).Generation, "a path replaced by one holding it widens")
+
+	row.WritePaths = []string{"cmd/magus/job.go"}
+	assert.Equal(t, 2, seed(t, s, row).Generation, "narrowing or moving the paths is a new spec")
+
+	row.WritePaths = []string{"cmd/magus/job.go", "types/job.go"}
+	row.Criteria = "a sharper goal"
+	assert.Equal(t, 3, seed(t, s, row).Generation, "a widening beside another change still counts")
+}
+
 // endAttempt ends row a as failed, its holder having run a failing check, been sent more
 // work once and left a risk.
 func endAttempt(t *testing.T, s *Store) {

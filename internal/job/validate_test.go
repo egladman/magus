@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -197,4 +198,79 @@ func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	rows, lerr := s.List()
 	require.NoError(t, lerr)
 	assert.Empty(t, rows, "nothing is written while any record has a problem")
+}
+
+func TestValidateMergeWaivesEveryRegeneratedOutputByGlob(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+		return func(u *types.Job) {
+			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+		}
+	}
+	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
+	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unwaived")
+
+	outputs := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob waives its own code alone")
+
+	both := validateMerge(t.Context(), s, nil, "w", declare(
+		types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
+		types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
+	), config.Jobs{}, nil)
+	assert.Empty(t, both.Problems)
+	assert.Len(t, both.Waived, len(bare.Problems))
+
+	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob waives only the subjects it matches")
+	assert.Less(t, len(narrow.Problems), len(bare.Problems))
+}
+
+func TestExtendFootprintAddsSiblingTestsAndRegeneratedOutputs(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+	referrers := func(file, _ string) map[string]int {
+		if file != "cli/registry.go" {
+			return nil
+		}
+		return map[string]int{"cli/registry_test.go": 3, "cmd/main_test.go": 1, "cmd/main.go": 2}
+	}
+
+	paths, notes := ExtendFootprint(root, row, projects, referrers, ignoresCoverage)
+
+	assert.Contains(t, paths, "cli/registry_test.go", "a test beside a written file is reached")
+	assert.NotContains(t, paths, "cmd/main_test.go", "a test in another directory is a finding, not a path")
+	assert.NotContains(t, paths, "cmd/main.go")
+	assert.NotContains(t, paths, "cli/testdata/api.lock", "an output a deny path touches is its owner's")
+	assert.Contains(t, paths, "cmd/gen/*.go")
+	assert.Contains(t, paths, "docs/manpage/*.md")
+	assert.Len(t, notes, len(paths), "each added path says why")
+
+	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers, nil)
+	assert.Empty(t, none)
+}
+
+func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *testing.T) {
+	t.Parallel()
+
+	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
+		if name == "job.Declare" {
+			return SymbolFact{DefinedIn: []string{"internal/job/plan.go"}}, true
+		}
+		return SymbolFact{}, true
+	}
+	goals := []types.Goal{
+		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
+		{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"job.Typo"}},
+		{ID: "bare", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Typo"}},
+	}
+
+	ps := ambiguousSymbolProblems(t.Context(), goals, read)
+
+	require.Len(t, ps, 1, "a present goal names what the job will write, and a bare name may be a graph without an index")
+	assert.Equal(t, "goals[0].symbols[1]", ps[0].Field)
+	assert.Contains(t, ps[0].Message, `"job.Typo"`)
 }

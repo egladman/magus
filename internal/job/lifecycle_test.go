@@ -1555,6 +1555,28 @@ func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
 	j.requireUnmoved(t)
 }
 
+func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
+	t.Parallel()
+
+	run := passedHere
+	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	later := time.UnixMilli(run.TimestampMs).Add(time.Hour)
+	changed := j.result.ChangedPaths[0]
+	require.NoError(t, os.Chtimes(filepath.Join(j.holder, filepath.FromSlash(changed)), later, later))
+
+	var asked []string
+	current := func(_ context.Context, tree string, run types.JobAttempt) bool {
+		asked = append(asked, tree+" "+run.Ref)
+		return true
+	}
+	status, err := Wait(WithCurrentRuns(t.Context(), current), NewStore(j.loc), j.row.ID, nil, nil, observeClaim(j.result), nil)
+
+	require.NoError(t, err)
+	assert.True(t, status.Verified, "a run whose key is the one its check mints now read the files as they stand: %v", status.Gates)
+	assert.NotEmpty(t, asked)
+}
+
 func TestSameContentComparesLinksWithoutFollowingThem(t *testing.T) {
 	t.Parallel()
 

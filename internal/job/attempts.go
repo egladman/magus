@@ -31,16 +31,34 @@ const outsideWritePaths = "outside the job's write paths"
 
 // nextGeneration is row's Generation once written over prev: 1 for a new row, and one more
 // than prev's for a write that changes the declared spec ([specChanges]). An observation
-// declares nothing.
+// declares nothing, and neither does a write that only widens the write paths: evidence
+// taken under the narrower set still asks what the wider one asks.
 func nextGeneration(prev, row types.Job, exists bool, kind grading) int {
 	if !exists {
 		return 1
 	}
 	generation := max(prev.Generation, 1)
-	if kind != asObservation && len(specChanges(prev, row)) > 0 {
+	if kind != asObservation && changesSpec(prev, row) {
 		generation++
 	}
 	return generation
+}
+
+// changesSpec reports whether row declares anything prev did not, other than write paths
+// that each hold every path prev held.
+func changesSpec(prev, row types.Job) bool {
+	changes := specChanges(prev, row)
+	if len(changes) == 1 && changes[0] == "write_paths" {
+		return !widens(prev.WritePaths, row.WritePaths)
+	}
+	return len(changes) > 0
+}
+
+// widens reports whether every path in held lies within some path of next.
+func widens(held, next []string) bool {
+	return !slices.ContainsFunc(held, func(h string) bool {
+		return !slices.ContainsFunc(next, func(n string) bool { return types.PathWithin(h, n) })
+	})
 }
 
 // refuseAttempt refuses a fork of ended row prev, declared again as row, that starts an

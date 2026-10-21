@@ -1,6 +1,7 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -51,7 +52,7 @@ type SymbolReader func(ctx context.Context, name, signature string) (SymbolFact,
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
 	return func(ctx context.Context, row types.Job) (Observed, error) {
 		ctx = withFootprintCache(ctx, footprintCacheIn(ctx).forRow(row))
-		tree := workTree(root, row)
+		tree := WorkTree(root, row)
 		var driver types.VCSDriver
 		unresolved := ""
 		if checkpointRevision(row.Checkpoint) != "" {
@@ -77,10 +78,10 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 	}
 }
 
-// workTree is the checkout a job's work lives in: the one that took it, while it still
+// WorkTree is the checkout a job's work lives in: the one that took it, while it still
 // exists, else root. The waiter usually sits in another checkout, and grading that one's
 // diff held the job to work it never did.
-func workTree(root string, row types.Job) string {
+func WorkTree(root string, row types.Job) string {
 	if row.CheckoutRoot == "" || root == "" {
 		return root
 	}
@@ -483,7 +484,7 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 		if g == nil {
 			return SymbolFact{}, false
 		}
-		out, ok := g.Refs(name)
+		out, ok := g.Refs(bareName(name))
 		if ok && !namesSymbol(out, name) {
 			// Refs ranks fuzzily, so a deleted Foo resolves to a surviving FooBar and
 			// `present` passes on it. Only a symbol carrying the name answers for it.
@@ -512,31 +513,66 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 }
 
 // namesSymbol reports whether a resolved symbol is the one name declares: its id, its
-// label, or a qualified tail of its id such as `Declaration#Validate`.
+// label, a qualified tail of its id such as `Declaration#Validate`, or `<package>.<Name>`.
 func namesSymbol(out types.KnowledgeRefsOutput, name string) bool {
 	if out.Symbol == name || out.Label == name {
 		return true
 	}
 	id := strings.TrimRight(strings.TrimPrefix(out.Symbol, types.KindSymbol+":"), "().#:")
+	if pkg, rest, ok := packageQualified(name); ok {
+		return id == pkg+"/"+rest || id == pkg+" "+rest || strings.HasSuffix(id, "/"+pkg+"/"+rest) || strings.HasSuffix(id, "/"+pkg+" "+rest)
+	}
 	return id == name || strings.HasSuffix(id, "/"+name) || strings.HasSuffix(id, " "+name)
 }
 
-// exactSymbol is the top-ranked symbol whose label is name.
+// packageQualified splits `<package>.<Name>`, the last path segment of a package and a name
+// in it. A symbol id, a path and a name holding no dot are not of that shape.
+func packageQualified(name string) (pkg, rest string, ok bool) {
+	pkg, rest, ok = strings.Cut(name, ".")
+	if !ok || pkg == "" || rest == "" || strings.ContainsAny(name, "/ :") || strings.Contains(rest, ".") {
+		return "", "", false
+	}
+	return pkg, rest, true
+}
+
+// bareName is the label a name searches the graph by: the name itself, or for
+// `<package>.<Name>` the name's last segment.
+func bareName(name string) string {
+	if _, rest, ok := packageQualified(name); ok {
+		_, label, _ := strings.Cut(rest, "#")
+		return cmp.Or(label, rest)
+	}
+	return name
+}
+
+// matchesName reports whether graph match m is a symbol name declares: its label is the
+// name's bare label, and under `<package>.<Name>` it sits in that package.
+func matchesName(m types.KnowledgeMatch, name string) bool {
+	if m.Kind != types.KindSymbol || m.Label != bareName(name) {
+		return false
+	}
+	if _, _, ok := packageQualified(name); !ok {
+		return true
+	}
+	return namesSymbol(types.KnowledgeRefsOutput{Symbol: m.ID}, name)
+}
+
+// exactSymbol is the top-ranked symbol name declares.
 func exactSymbol(g SymbolGraph, name string) (types.KnowledgeRefsOutput, bool) {
-	for _, m := range g.Resolve(name, 0) {
-		if m.Kind == types.KindSymbol && m.Label == name {
+	for _, m := range g.Resolve(bareName(name), 0) {
+		if matchesName(m, name) {
 			return g.Refs(m.ID)
 		}
 	}
 	return types.KnowledgeRefsOutput{}, false
 }
 
-// sameNameDefinitions is one defining file per symbol whose label IS name, or nil when
-// fewer than two are.
+// sameNameDefinitions is one defining file per symbol name declares, or nil when fewer
+// than two are.
 func sameNameDefinitions(g SymbolGraph, name string) []string {
 	var files []string
-	for _, m := range g.Resolve(name, 0) {
-		if m.Kind != types.KindSymbol || m.Label != name {
+	for _, m := range g.Resolve(bareName(name), 0) {
+		if !matchesName(m, name) {
 			continue
 		}
 		file := m.ID

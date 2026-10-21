@@ -892,7 +892,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
-	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graph))
+	status, err := job.GradeGates(job.WithCurrentRuns(ctx, runsAtCurrentKey()), store, row.ID, jobObserver(root, graphsByTree(root, graph, false)))
 	if err != nil {
 		return exit.Usagef("magus describe job: %s", err)
 	}
@@ -1222,6 +1222,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
 	reader := graphSymbolReader(graph.load)
+	added, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
+	row.WritePaths = append(row.WritePaths, added...)
+	for _, n := range notes {
+		fmt.Fprintf(os.Stderr, "note: %s\n", n)
+	}
 	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1939,7 +1944,8 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if len(evidence) > 0 && (stdin || integration) {
 		return exit.Usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
 	}
-	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, newJobGraph(root, true)), evidence)
+	ctx = job.WithCurrentRuns(ctx, runsAtCurrentKey())
+	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, graphsByTree(root, newJobGraph(root, true), true)), evidence)
 	if err != nil {
 		// An ended job that filed nothing still owns its checkout, and its waiter is the one
 		// caller left to remove it.
@@ -2406,7 +2412,15 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token
 	}
-	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root, true), checkpoint, globalCfg.DryRun)
+	graph := newJobGraph(root, true)
+	for i := range records {
+		added, notes := extendedFootprint(ctx, store, graph, root, records[i], jobWS)
+		records[i].WritePaths = append(records[i].WritePaths, added...)
+		for _, n := range notes {
+			fmt.Fprintf(os.Stderr, "note: %s: %s\n", records[i].ID, n)
+		}
+	}
+	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)
 	if err != nil {
 		ids := make([]string, len(records))
 		for i, rec := range records {

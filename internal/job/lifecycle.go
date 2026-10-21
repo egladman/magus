@@ -186,7 +186,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, workTree(store.root, jobs[i]), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, ev.runs()...)
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -450,6 +450,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	if tree == "" {
 		return nil
 	}
+	current, _ := ctx.Value(currentRunsKey{}).(func(context.Context, string, types.JobAttempt) bool)
 	var changed []string
 	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
 		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) {
@@ -459,7 +460,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	changed = slices.Compact(slices.Sorted(slices.Values(changed)))
 	stale := map[string]string{}
 	for _, run := range runs {
-		if !run.Found {
+		if !run.Found || current != nil && current(ctx, tree, run) {
 			continue
 		}
 		if why := unreadSince(ctx, tree, changed, run); why != "" {
@@ -467,6 +468,16 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 		}
 	}
 	return stale
+}
+
+type currentRunsKey struct{}
+
+// WithCurrentRuns returns ctx carrying current, the caller's answer to whether a run is
+// current in tree: its cache key is the one its check would mint there now. A cache HIT
+// replays a run that began before the job's last write, so the clock calls it stale while
+// its inputs are the ones on disk.
+func WithCurrentRuns(ctx context.Context, current func(ctx context.Context, tree string, run types.JobAttempt) bool) context.Context {
+	return context.WithValue(ctx, currentRunsKey{}, current)
 }
 
 // attemptKey names one recorded run: its attempt id, which no later run takes over, else its ref.
@@ -779,7 +790,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 			return types.JobStatus{}, err
 		}
 	}
-	seen.Stale = staleRuns(ctx, workTree(store.root, row), seen, ev.result, ev.runs()...)
+	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, ev.runs()...)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.

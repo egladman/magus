@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
@@ -111,8 +114,58 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
-	v.Problems, v.Waived = ps.Waive(merged.Waivers)
+	v.Problems, v.Waived = ps.Waive(expandWaivers(merged.Waivers, ps))
 	return v
+}
+
+// expandWaivers is ws with each glob subject of an output or gate waiver spelled out as one
+// exact waiver per problem in ps it matches, since [types.JobProblems.Waive] compares
+// subjects exactly. `**` waives every regenerated output the integrator owns in one entry.
+func expandWaivers(ws []types.JobWaiver, ps types.JobProblems) []types.JobWaiver {
+	out := slices.Clone(ws)
+	for _, w := range ws {
+		if w.Code != types.OutputOutsideWritePaths && w.Code != types.GateNotRun || !types.IsGlobMeta(w.Subject) {
+			continue
+		}
+		for _, p := range ps {
+			if matched, _ := doublestar.Match(w.Subject, p.Subject); matched && p.Code == w.Code {
+				out = append(out, types.JobWaiver{Code: p.Code, Subject: p.Subject, Reason: w.Reason})
+			}
+		}
+	}
+	return out
+}
+
+// ExtendFootprint is the write paths row's change reaches that it did not declare, and a
+// note saying why for each: the test files beside a written file that reference what the
+// write paths define ([ReferencedOutside]), and the declared outputs a target regenerates
+// from them ([RegeneratedOutside]). An output a deny path touches is left to its owner.
+// A read-only row reaches none.
+//
+// The caller skips it for a holder, whose own fork may not widen its boundary.
+func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int, ignored func([]string) []string) (paths, notes []string) {
+	if row.ReadOnly || len(row.WritePaths) == 0 {
+		return nil, nil
+	}
+	beside := map[string]bool{}
+	for _, f := range writtenFiles(root, row) {
+		beside[path.Dir(f)] = true
+	}
+	for _, f := range ReferencedOutside(root, row, projects, referrers) {
+		if types.IsTestPath(f.File) && beside[path.Dir(f.File)] {
+			paths = append(paths, f.File)
+			notes = append(notes, fmt.Sprintf("%s added to the write paths: it tests what %s defines", f.File, strings.Join(f.Uses, ", ")))
+		}
+	}
+	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
+		glob, _, _ := strings.Cut(o.Output, " !")
+		if slices.Contains(paths, glob) || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+			continue
+		}
+		paths = append(paths, glob)
+		notes = append(notes, fmt.Sprintf("%s added to the write paths: %s regenerates it from %s", glob, o.Target, o.Source))
+	}
+	return paths, notes
 }
 
 // ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
@@ -515,10 +568,17 @@ func forkLimitProblems(rows []types.Job, id, parent string, limits config.Jobs) 
 	return ps
 }
 
+// namesExistingSymbol reports whether a symbol goal of expect grades a symbol that exists
+// when the job is declared: one a job is to create (present) is the exception, and a name
+// that resolves to nothing under any other expectation is a typo that grades vacuously.
+func namesExistingSymbol(expect types.GoalExpect) bool {
+	return slices.Contains([]types.GoalExpect{types.ExpectChanged, types.ExpectAbsent, types.ExpectUnreferenced}, expect)
+}
+
 // ambiguousSymbolProblems finds each symbol a goal names whose bare name resolves to more
-// than one definition, as JobGoalInvalid, naming each. A name the reader cannot answer for
-// is no problem: a cold graph must not block a declaration, and the goal itself still
-// refuses to certify later.
+// than one definition, or a `<package>.<Name>` that resolves to none when the goal grades an
+// existing symbol, as JobGoalInvalid, naming each. A name the reader cannot answer for is no
+// problem: a cold graph must not block a declaration, and the goal refuses to certify later.
 func ambiguousSymbolProblems(ctx context.Context, goals []types.Goal, read SymbolReader) types.JobProblems {
 	if read == nil {
 		return nil
@@ -533,6 +593,15 @@ func ambiguousSymbolProblems(ctx context.Context, goals []types.Goal, read Symbo
 				continue
 			}
 			fact, ok := read(ctx, name, "")
+			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && namesExistingSymbol(goal.Resolve().Expect) {
+				ps = append(ps, types.JobProblem{
+					Code: types.JobGoalInvalid, Field: fmt.Sprintf("goals[%d].symbols[%d]", i, j),
+					Message: fmt.Sprintf("goal %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",
+						goal.ID, name, goal.Resolve().Expect),
+					Fix: fmt.Sprintf("name a definition `%s` finds, as `<package>.<Name>` or a symbol id; with no symbol index built, `%s` builds one", hint.Refs.With(name), hint.GraphBuild),
+				})
+				continue
+			}
 			if !ok || len(fact.SameNameDefinitions) < 2 {
 				continue
 			}
