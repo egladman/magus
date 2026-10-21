@@ -960,7 +960,9 @@ func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
 		return &jobGraph{
 			rebuild: true,
 			stale:   func(context.Context) []types.KnowledgeStaleIndex { return nil },
-			build:   func(context.Context) (*knowledge.Graph, error) { return deltaGraph(map[string]string{"Present": "code.go:3"}), nil },
+			build: func(context.Context) (*knowledge.Graph, error) {
+				return deltaGraph(map[string]string{"Present": "code.go:3"}), nil
+			},
 		}
 	}
 
