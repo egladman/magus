@@ -192,11 +192,12 @@ fun claude_tools() > [HarnessTool] {
     foreach (name in ["Read", "NotebookRead", "Glob", "Grep", "LS"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
     foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     foreach (name in ["Agent", "Task", "SendMessage"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }
+    rows.append(HarnessTool{name = "ReadNotifications", capability = ToolCapability.reads});
     foreach (name in [
         "BashOutput", "KillShell", "TaskOutput", "TaskStop", "TodoWrite", "WebFetch", "WebSearch",
         "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch", "ScheduleWakeup",
         "CronCreate", "ListMcpResourcesTool", "ReadMcpResourceTool", "SubagentHandback", "ListAgents",
-        "ListSkills", "SearchSkills", "ListPlugins", "SearchPlugins", "Artifact",
+        "ListSkills", "SearchSkills", "ListPlugins", "SearchPlugins", "Artifact", "SendUserFile",
     ]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }
     // The desktop app's in-app browser.
     foreach (tool in [
@@ -223,6 +224,7 @@ fun claude_desktop_tools() > [HarnessTool] {
         ccd_rows("session", tools: ["start_session", "hand_off_to_session", "move_to_cloud"], capability: ToolCapability.spawns),
         ccd_rows("session", tools: ["list_start_targets"], capability: ToolCapability.reads),
         ccd_rows("session", tools: ["mark_chapter", "spawn_task", "dismiss_task", "read_widget_context"], capability: ToolCapability.inert),
+        ccd_rows("turn", tools: ["update_plan", "wrap_up"], capability: ToolCapability.inert),
         ccd_rows("session_mgmt", tools: ["list_events", "list_sessions"], capability: ToolCapability.reads),
         ccd_rows("session_mgmt", tools: [
             "archive_session", "clear_session", "delete_session", "detach_session", "export_transcript", "get_session",
@@ -557,6 +559,10 @@ test "mgs_listTools names each tool once" {
     }
     assert\isTrue(seen["Read"] ?? false, "the read tool is known");
     assert\isTrue(seen["mcp__terminal__run_in_terminal"] ?? false, "the terminal panel is known");
+    assert\isTrue(seen["ReadNotifications"] ?? false, "the notifications read is known");
+    assert\isTrue(seen["SendUserFile"] ?? false, "the file hand-off is known");
+    assert\isTrue(seen["mcp__ccd_turn__update_plan"] ?? false, "the desktop plan tool is known");
+    assert\isTrue(seen["mcp__ccd_turn__wrap_up"] ?? false, "the desktop wrap-up tool is known");
 }
 
 test "the desktop app's tools carry what each can do, and auto-merge has no row" {
@@ -565,6 +571,10 @@ test "the desktop app's tools carry what each can do, and auto-merge has no row"
     foreach (name, want in {
         "mcp__ccd_session__start_session": "spawns",
         "mcp__ccd_session__hand_off_to_session": "spawns",
+        "mcp__ccd_turn__update_plan": "inert",
+        "mcp__ccd_turn__wrap_up": "inert",
+        "ReadNotifications": "reads",
+        "SendUserFile": "inert",
         "mcp__ccd_host__sync_with_base_branch": "writes",
         "mcp__ccd_host__clean_up_worktrees": "writes",
         "mcp__ccd_host__discard_kept_worktree": "writes",
