@@ -5,9 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -124,32 +126,58 @@ func newInvocation(inv journal.Invocation) Invocation {
 }
 
 // Event is one journal entry (output line, magus log line, or a run's result): the
-// caller-facing projection of [journal.Event]. See [Magus.InvocationEventsByID]. Field
-// tags match journal.Event's exactly for JSON wire compat.
+// caller-facing projection of [journal.Event]. The JSON form is journal.Event's wire form:
+// keys ts, inv and duration_ms (integer milliseconds).
 type Event struct {
-	Ts             int64  `json:"ts"`                        // unix milliseconds
-	Inv            string `json:"inv,omitempty"`             // invocation id (one per run command)
-	Project        string `json:"project,omitempty"`         // repo-relative project path
-	Target         string `json:"target,omitempty"`          // target name (with charms, as the CLI spells it)
-	Kind           string `json:"kind"`                      // one of the journal.Kind* constants
-	Stream         string `json:"stream,omitempty"`          // stdout|stderr, for output events
-	Level          string `json:"level,omitempty"`           // info|warn|error, for magus events
-	Status         string `json:"status,omitempty"`          // pass|fail|cached, for result events
-	Ref            string `json:"ref,omitempty"`             // target-output ref, for result events
-	DurationMs     int64  `json:"duration_ms,omitempty"`     // wall-clock duration, for result events
-	Text           string `json:"text,omitempty"`            // output line or message
-	DiagnosticCode string `json:"diagnostic_code,omitempty"` // MGS code of a failed result that never ran
+	Timestamp      int64         `json:"ts"`                        // unix milliseconds
+	Invocation     string        `json:"inv,omitempty"`             // invocation id (one per run command)
+	Project        string        `json:"project,omitempty"`         // repo-relative project path
+	Target         string        `json:"target,omitempty"`          // target name (with charms, as the CLI spells it)
+	Kind           string        `json:"kind"`                      // one of the journal.Kind* constants
+	Stream         string        `json:"stream,omitempty"`          // stdout|stderr, for output events
+	Level          string        `json:"level,omitempty"`           // info|warn|error, for magus events
+	Status         string        `json:"status,omitempty"`          // pass|fail|cached, for result events
+	Ref            string        `json:"ref,omitempty"`             // target-output ref, for result events
+	Duration       time.Duration `json:"-"`                         // wall-clock duration, for result events; the wire form is duration_ms
+	Text           string        `json:"text,omitempty"`            // output line or message
+	DiagnosticCode string        `json:"diagnostic_code,omitempty"` // MGS code of a failed result that never ran
 
 	// Set only on the started event (Kind==journal.KindStarted): the run's identity.
 	Command      *Command `json:"command,omitempty"`
 	MagusVersion string   `json:"magus_version,omitempty"`
 }
 
+// eventFields is Event without its JSON methods, so eventWire can embed the tagged fields.
+type eventFields Event
+
+// eventWire adds the duration_ms conversion to Event's tagged fields.
+type eventWire struct {
+	eventFields
+	DurationMs int64 `json:"duration_ms,omitempty"`
+}
+
+// MarshalJSON encodes e in journal.Event's wire form.
+func (e Event) MarshalJSON() ([]byte, error) {
+	return json.Marshal(eventWire{eventFields: eventFields(e), DurationMs: e.Duration.Milliseconds()})
+}
+
+// UnmarshalJSON decodes journal.Event's wire form into e.
+func (e *Event) UnmarshalJSON(data []byte) error {
+	var w eventWire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	*e = Event(w.eventFields)
+	e.Duration = time.Duration(w.DurationMs) * time.Millisecond
+	return nil
+}
+
 func newEvent(e journal.Event) Event {
 	ev := Event{
-		Ts: e.Ts, Inv: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
-		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref, DurationMs: e.DurationMs,
-		Text: e.Text, DiagnosticCode: e.DiagnosticCode, MagusVersion: e.MagusVersion,
+		Timestamp: e.Ts, Invocation: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
+		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref,
+		Duration: time.Duration(e.DurationMs) * time.Millisecond, Text: e.Text,
+		DiagnosticCode: e.DiagnosticCode, MagusVersion: e.MagusVersion,
 	}
 	if e.Command != nil {
 		ev.Command = &Command{

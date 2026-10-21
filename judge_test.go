@@ -2,8 +2,10 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -115,4 +117,50 @@ func TestRunLinesAreTheCLIsCommandLines(t *testing.T) {
 
 	_, err = runLines([]types.Target{{Path: ".", Name: "build"}}, []string{"a\x00b"})
 	assert.Error(t, err, "a NUL byte has no command line to judge")
+}
+
+func openRefusingExample() (*exampleTB, *Magus) {
+	tb, ws := newExample(map[string]string{"magusfile.buzz": refuseEverything})
+	m, err := Open(context.Background(), ws.Root(), WithSpawnRule(TierCeiling))
+	if err != nil {
+		tb.close()
+		panic(err)
+	}
+	tb.Cleanup(func() { _ = m.Close() })
+	return tb, m
+}
+
+// ExampleMagus_JudgeCommand shows a deny as an answer: the error is nil and the judgment
+// carries the decision, the rule that made it and that rule's reason.
+func ExampleMagus_JudgeCommand() {
+	tb, m := openRefusingExample()
+	defer tb.close()
+
+	j, err := m.JudgeCommand(context.Background(), "example", m.Root(), "ls")
+	fmt.Println("error:", err)
+	fmt.Println("decision:", j.Decision)
+	fmt.Println("names its rule:", j.Rule != "")
+	fmt.Println("gives the rule's reason:", strings.Contains(j.Reason, "Not in this workspace."))
+	// Output:
+	// error: <nil>
+	// decision: deny
+	// names its rule: true
+	// gives the rule's reason: true
+}
+
+// ExampleMagus_JudgeWrite judges a path as a write and answers in the same shape.
+func ExampleMagus_JudgeWrite() {
+	tb, m := openRefusingExample()
+	defer tb.close()
+
+	j, err := m.JudgeWrite(context.Background(), "example", m.Root(), "notes.txt")
+	fmt.Println("error:", err)
+	fmt.Println("decision:", j.Decision)
+	fmt.Println("names its rule:", j.Rule != "")
+	fmt.Println("gives the rule's reason:", strings.Contains(j.Reason, "No writes here."))
+	// Output:
+	// error: <nil>
+	// decision: deny
+	// names its rule: true
+	// gives the rule's reason: true
 }

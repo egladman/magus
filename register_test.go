@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -636,4 +637,37 @@ func TestWithVCSDriverIsTheWorkspacesVCS(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"fossil"`)
 	assert.Contains(t, err.Error(), `"git"`)
+}
+
+// ExampleWorkspaceRegistry_withSpell attaches a spell to a project in Go instead of in a
+// magusfile, then reads back the targets the spell contributes. The example registers the
+// spell itself so its output does not depend on which built-in spells the program links.
+func ExampleWorkspaceRegistry_withSpell() {
+	tb, ws := monorepo()
+	defer tb.close()
+
+	const name = "example-lint"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name, spells.WithTargets("lint")))
+	defer project.DefaultSpellRegistry().UnregisterSpell(name)
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell(name))
+
+	m, err := Inspect(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("inspect:", err)
+		return
+	}
+	targets, err := m.ListTargets(context.Background())
+	if err != nil {
+		fmt.Println("list targets:", err)
+		return
+	}
+	for _, t := range targets {
+		if t.Kind == "spell" {
+			fmt.Println(t.Name, t.Spells)
+		}
+	}
+	// Output:
+	// lint [example-lint]
 }

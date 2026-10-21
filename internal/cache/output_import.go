@@ -17,19 +17,19 @@ import (
 // So the reader stores nothing, bounds its input, checks every identity field's shape,
 // and neutralizes terminal control in whatever it prints.
 
-// ImportLimits bounds one read of output records.
-type ImportLimits struct {
+// importLimits bounds one read of output records.
+type importLimits struct {
 	LineBytes  int
 	TotalBytes int
 	Records    int
 }
 
-// DefaultImportLimits are the limits `magus query output --stdin` reads with.
-var DefaultImportLimits = ImportLimits{LineBytes: 64 << 20, TotalBytes: 256 << 20, Records: 10_000}
+// defaultImportLimits are the limits `magus query output --stdin` reads with.
+var defaultImportLimits = importLimits{LineBytes: 64 << 20, TotalBytes: 256 << 20, Records: 10_000}
 
-// ReadRecordLines calls fn with each non-blank line of r and its 1-based number; past a
+// readRecordLines calls fn with each non-blank line of r and its 1-based number; past a
 // limit it returns an error naming the line without buffering more of it.
-func ReadRecordLines(r io.Reader, l ImportLimits, fn func(line int, raw []byte) error) error {
+func readRecordLines(r io.Reader, l importLimits, fn func(line int, raw []byte) error) error {
 	br := bufio.NewReaderSize(r, 64<<10)
 	total, records := 0, 0
 	for line := 1; ; line++ {
@@ -84,11 +84,11 @@ var (
 
 const maxFieldBytes = 512
 
-// CheckImportedDescriptor reports the first field of d or classes in a shape no magus
+// checkImportedDescriptor reports the first field of d or classes in a shape no magus
 // writes, or nil; ErrMsg is free text and is left to NeutralizeTerminal. FailedNeedTarget
 // and FailedNeedRef are advice the caller makes harmless first (neutralizing the target,
 // dropping a ref that is not minted); only the target's length is checked here.
-func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
+func checkImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	if !fullKeyPattern.MatchString(d.Key) {
 		return fmt.Errorf("key %q is not a full cache key (64 lowercase hex)", d.Key)
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -174,8 +175,8 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 
 	require.Len(t, events, 2)
 	assert.Equal(t, Event{
-		Ts:           events[0].Ts, // wall clock
-		Inv:          id,
+		Timestamp:    events[0].Timestamp, // wall clock
+		Invocation:   id,
 		Kind:         journal.KindStarted,
 		Command:      &Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun},
 		MagusVersion: "v0.cov",
@@ -183,10 +184,10 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 
 	// The lineage rides the started event alone, so the finished event has no Command.
 	assert.Equal(t, Event{
-		Ts:     events[1].Ts, // wall clock
-		Inv:    id,
-		Kind:   journal.KindFinished,
-		Status: journal.StatusPass,
+		Timestamp:  events[1].Timestamp, // wall clock
+		Invocation: id,
+		Kind:       journal.KindFinished,
+		Status:     journal.StatusPass,
 	}, events[1])
 }
 
@@ -241,11 +242,33 @@ func TestNewEventCarriesEveryField(t *testing.T) {
 	})
 
 	assert.Equal(t, Event{
-		Ts: 1700000000000, Inv: "inv1", Project: "api", Target: "build:rw",
+		Timestamp: 1700000000000, Invocation: "inv1", Project: "api", Target: "build:rw",
 		Kind: journal.KindResult, Stream: "stdout", Level: "info",
-		Status: journal.StatusCached, Ref: "outdeadbe", DurationMs: 42, Text: "done",
+		Status: journal.StatusCached, Ref: "outdeadbe", Duration: 42 * time.Millisecond, Text: "done",
 		MagusVersion: "v0.9.0",
 	}, got)
+}
+
+// TestEventJSONKeepsTheWireForm: older readers (the CI jq step, saved query output)
+// depend on the keys ts, inv and duration_ms.
+func TestEventJSONKeepsTheWireForm(t *testing.T) {
+	const line = `{"ts":1700000000000,"inv":"inv1","project":"api","target":"build:rw","kind":"result","status":"cached","ref":"outdeadbe","text":"done","duration_ms":42}`
+
+	var got Event
+	require.NoError(t, json.Unmarshal([]byte(line), &got))
+	assert.Equal(t, Event{
+		Timestamp: 1700000000000, Invocation: "inv1", Project: "api", Target: "build:rw",
+		Kind: journal.KindResult, Status: journal.StatusCached, Ref: "outdeadbe",
+		Duration: 42 * time.Millisecond, Text: "done",
+	}, got)
+
+	out, err := json.Marshal(got)
+	require.NoError(t, err)
+	assert.Equal(t, line, string(out))
+
+	out, err = json.Marshal(Event{Kind: journal.KindOutput})
+	require.NoError(t, err)
+	assert.Equal(t, `{"ts":0,"kind":"output","duration_ms":0}`, string(out), "json/v2 omitempty keeps a zero duration_ms, as journal.Event writes it")
 }
 
 // TestNewEventCopiesTheCommand: the projection must not alias the journal's own

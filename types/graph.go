@@ -81,10 +81,17 @@ func (g *Graph) PathsFromSeeds(seeds []string, target string) []AffectedPath {
 	return g.repo.PathsFromSeeds(seeds, target)
 }
 
-func (g *Graph) Successors(path string) []string   { return g.repo.Successors(path) }
+// Successors returns the projects path depends on directly.
+func (g *Graph) Successors(path string) []string { return g.repo.Successors(path) }
+
+// Predecessors returns the projects that depend on path directly.
 func (g *Graph) Predecessors(path string) []string { return g.repo.Predecessors(path) }
-func (g *Graph) Nodes() []string                   { return g.repo.Nodes() }
-func (g *Graph) Project(path string) *Project      { return g.projects[path] }
+
+// Nodes returns every project path in the graph.
+func (g *Graph) Nodes() []string { return g.repo.Nodes() }
+
+// Project returns the project at path, or nil when the graph holds none there.
+func (g *Graph) Project(path string) *Project { return g.projects[path] }
 
 // GraphView is the boundary object magus.graph returns: the project dependency
 // DAG flattened to plain data a magusfile can walk.

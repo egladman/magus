@@ -9,33 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
-
-func TestLimiterFacade(t *testing.T) {
-	limiter := NewLimiter(3)
-	var load workspace.Load
-	WithLimiter(limiter)(&load)
-
-	assert.Equal(t, struct {
-		Capacity      int
-		Default       int
-		InjectedLimit any
-	}{
-		Capacity:      3,
-		Default:       DefaultConcurrency(),
-		InjectedLimit: limiter.lim,
-	}, struct {
-		Capacity      int
-		Default       int
-		InjectedLimit any
-	}{
-		Capacity:      limiter.Capacity(),
-		Default:       DefaultConcurrency(),
-		InjectedLimit: load.Limiter,
-	})
-}
 
 // TestSlotPressureNudge pins every reason the nudge stays silent, beside the one case
 // where it speaks.

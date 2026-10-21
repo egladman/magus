@@ -49,6 +49,7 @@ func (w *Workspace) GraphObserver() Observer {
 	return w.graphObs
 }
 
+// All returns every project sorted by path, so output is stable across runs.
 func (w *Workspace) All() []*Project {
 	out := make([]*Project, 0, len(w.Projects))
 	for _, p := range w.Projects {

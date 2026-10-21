@@ -2665,3 +2665,53 @@ func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
 	assert.Equal(t, int64(4096), types.PeakRSS(step))
 	assert.Equal(t, int64(700), types.CPUMs(step))
 }
+
+type countingObserver struct {
+	builds atomic.Int32
+}
+
+func (o *countingObserver) Observe(e types.GraphEvent) {
+	if e.Op == types.GraphOpBuild {
+		o.builds.Add(1)
+	}
+}
+
+// ExampleMagus_Run runs a target that a spell registered in Go contributes; a magusfile
+// target does not run outside the magus module. WithSession names the session the guard
+// judges the run under. WithObserver sees the graph builds this run makes and no other's.
+func ExampleMagus_Run() {
+	tb, ws := newExample(map[string]string{"magusfile.buzz": ""})
+	defer tb.close()
+
+	spell := register.Spell(tb, "example-build",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			fmt.Println("build ran")
+			return nil, nil
+		}),
+	)
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spell))
+
+	m, err := Open(context.Background(), ws.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	if err != nil {
+		fmt.Println("open:", err)
+		return
+	}
+	defer m.Close()
+
+	obs := &countingObserver{}
+	err = m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}},
+		WithSession("example"), WithObserver(obs))
+	var denied *types.GuardDeniedError
+	switch {
+	case errors.As(err, &denied):
+		fmt.Println("denied:", denied.Judgment.Reason)
+	case err != nil:
+		fmt.Println("run:", err)
+	}
+	fmt.Println("graph built under the run:", obs.builds.Load() > 0)
+	// Output:
+	// build ran
+	// graph built under the run: false
+}
