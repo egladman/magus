@@ -457,7 +457,7 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	confirmForks(&st, live, judged.Add(2*time.Second))
 	assert.Equal(t, costState{
 		Forked: []string{"a1"},
-		Forks: map[string]int64{"old": judged.UnixNano()}, // a row created before the fork was not this fork's
+		Forks:  map[string]int64{"old": judged.UnixNano()}, // a row created before the fork was not this fork's
 	}, st)
 
 	confirmForks(&st, live, judged.Add(forkConfirmWindow+time.Second))
