@@ -269,7 +269,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepo(t)
 			wt, row := r.workerWorktree(types.StateExited)
-			row.ID = "remedy-wait"
+			row.ID, row.Result = "remedy-wait", &types.JobResult{}
 			seedRemedyJob(t, at, row)
 			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
 		}},
