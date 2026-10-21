@@ -110,8 +110,6 @@ jobs:
       # because every path changed since it classifies low-risk. magus decides that
       # and publishes the report; the two `if:` guards below only consume the answer.
       inherit:       ${{ steps.plan.outputs.inherit }}
-      # Doctor's verdict, carried to the gate rather than failing this job. See the step.
-      doctor:        ${{ steps.doctor.outcome }}
       # The magus every later job runs, and the digest each verifies it against. A job
       # output, never a file in the artifact: the artifact is what is being checked.
       magus_artifact: ${{ steps.magus.outputs.artifact }}
@@ -166,32 +164,10 @@ jobs:
 
       - uses: ./.github/actions/setup-scip
 
-      # Reported to the gate instead of failing this job, which is not leniency: the run
-      # still goes red, and it goes red with the shard results in hand.
+      # Uncommitted generated output and a non-deterministic generator fail this job hard:
+      # both mean the tree under test is not the tree in the commit, and a shard result
+      # from it describes nothing.
       #
-      # Doctor asks about workspace CONFIGURATION, and by this point the shard matrix is
-      # already proof the workspace loads and the graph resolves. Those shards are what
-      # says whether the code works, and a failed plan job skips every one of them. Four
-      # runs in a row reported a guard-wiring problem and said nothing whatever about the
-      # tests, and the work was merged with them still unrun. A check that costs you the
-      # answer you came for is charging too much for the answer it gives.
-      #
-      # The hard failures below keep failing hard: uncommitted generated output and a
-      # non-deterministic generator both mean the tree under test is not the tree in the
-      # commit, and a shard result from it describes nothing.
-      # Any magus command registers the merge driver in this clone, and only `init --vcs git`
-      # writes the settle hooks that finish its work, so doctor's settle-hooks check fails
-      # every clone that skipped it. --local leaves the committed magus.yaml as it is and
-      # writes no user config. A failure here is doctor's to report, like the step below.
-      - name: Wire the merge driver and its settle hooks
-        continue-on-error: true
-        run: magus init --local --vcs git
-
-      - name: Doctor
-        id: doctor
-        continue-on-error: true
-        run: magus doctor
-
       # last-passed on a push, the configured default on a pull request.
       #
       # A push to main has no useful default base: magus's is origin/main, which on main
@@ -243,11 +219,14 @@ jobs:
       # generator rewrites a committed file, before the replay compares anything. The no-rw
       # gate above and the shard gates are what keep the drift question answered.
       #
-      # audit.yaml keeps the whole-tree replay for the ambient case - a tool upgrade
-      # destabilising a generator no diff touched. Replay under rw answers byte-stability
-      # only; drift against HEAD is decided here and in the shards, nowhere else.
-      - name: Replay every gated generator and compare declared outputs
-        run: magus run generate:rw --race=replay --concurrency-profile aggressive
+      # Scoped to the affected projects, the set the gate above checked: audit.yaml's cron
+      # keeps the whole-tree replay for the ambient case - a tool upgrade destabilising a
+      # generator no diff touched. Replay under rw answers byte-stability only; drift
+      # against HEAD is decided here and in the shards, nowhere else.
+      - name: Replay the affected generators and compare declared outputs
+        env:
+          MAGUS_VCS_BASE_REF: ${{ github.event_name != 'pull_request' && 'last-passed' || '' }}
+        run: magus affected generate:rw --race=replay --concurrency-profile aggressive
 
   ci:
     name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
@@ -694,13 +673,64 @@ jobs:
       - name: Lay out every figure from the symbol index
         run: magus run diagrams-generate docs --no-default-charms
 
+  # Reported to the gate instead of failing the plan, which is not leniency: the run still
+  # goes red, and it goes red with the shard results in hand. Its own job because only the
+  # gate reads it, and in the plan it ran in series with generate (19-89 s).
+  #
+  # Doctor asks about workspace CONFIGURATION, and the shard matrix is already proof the
+  # workspace loads and the graph resolves. The shards are what says whether the code
+  # works, and a failed plan job skips every one of them. Four runs in a row reported a
+  # guard-wiring problem and said nothing whatever about the tests, and the work was
+  # merged with them still unrun. A check that costs you the answer you came for is
+  # charging too much for the answer it gives.
+  doctor:
+    name: magus doctor
+    needs: [plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Doctor checks the tools the workspace pins, so it needs them installed. Cache on
+      # pull requests only; this job holds no secret and no write token.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: ${{ github.event_name == 'pull_request' }}
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+
+      - uses: ./.github/actions/setup-scip
+
+      # Any magus command registers the merge driver in this clone, and only `init --vcs git`
+      # writes the settle hooks that finish its work, so doctor's settle-hooks check fails
+      # every clone that skipped it. --local leaves the committed magus.yaml as it is and
+      # writes no user config. A failure here is doctor's to report.
+      - name: Wire the merge driver and its settle hooks
+        continue-on-error: true
+        run: magus init --local --vcs git
+
+      - name: Doctor
+        run: magus doctor
+
   # One stable check name a branch rule can require, standing for the whole run.
   #
   # The shards are the real verdict, but their names come from a matrix the plan sizes
   # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
-    needs: [plan, ci, figures]
+    needs: [plan, ci, figures, doctor]
     # always(), or a skipped or failed dependency would skip this job too - and a required
     # check that never reports blocks the pull request instead of failing it, which reads
     # as an infrastructure problem rather than a red build.
@@ -746,7 +776,7 @@ jobs:
         if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
-          DOCTOR_RESULT: ${{ needs.plan.outputs.doctor }}
+          DOCTOR_RESULT: ${{ needs.doctor.result }}
           CI_RESULT: ${{ needs.ci.result }}
           FIGURES_RESULT: ${{ needs.figures.result }}
         run: |
@@ -760,8 +790,8 @@ jobs:
             echo "::error::plan did not pass (${PLAN_RESULT}); nothing downstream is trustworthy"
             failed=1
           fi
-          # Empty when the plan job never reached Doctor, which the plan check above owns.
-          if [ -n "$DOCTOR_RESULT" ] && [ "$DOCTOR_RESULT" != "success" ]; then
+          # skipped when the plan failed, which the plan check above owns.
+          if [ "$DOCTOR_RESULT" != "skipped" ] && [ "$DOCTOR_RESULT" != "success" ]; then
             echo "::error::doctor did not pass (${DOCTOR_RESULT}); the workspace is misconfigured even where the shards are green"
             failed=1
           fi
