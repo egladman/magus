@@ -143,7 +143,7 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 			// parent's claim, so the refusal names the fix rather than the holders.
 			return "", nil, machineBlindError(c, v)
 		default:
-			return "", nil, machineBusyError(c, v)
+			return "", nil, machineBusyError(c, v, time.Now())
 		}
 		// The holders are this run's own steps, whose progress feeds the stall watchdog,
 		// or another invocation of this process or of this job tree holding its validation
@@ -310,12 +310,50 @@ func workingDir() string {
 // machineBusyError is the fail-fast answer: another magus invocation fills the machine
 // right now, and the same command will succeed later. The wait belongs to the caller, so
 // the error names the pipe that does it rather than a retry loop.
-func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
+func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time) error {
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
+		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders),
+		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now),
 		hint.Status.With("--wait"), hint.Run)}
+}
+
+// describeMachinePacking says whether the verdict packed by curve or by peak, and the
+// instant the sum passes the budget. The broker sends no instant, so it is found here
+// from the holders' curves by the rule the broker applies; a broker that predates
+// curves answers Packed false.
+func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now time.Time) string {
+	if !v.Packed {
+		if c.MemoryMB <= 0 {
+			return "packed by peak"
+		}
+		how := "packed by peak"
+		if c.Profile.Runs > 0 {
+			how = "packed by peak, predating memory curves"
+		}
+		peak := fmt.Sprintf("%s: this claimed the %s peak", how, FormatMB(c.MemoryMB))
+		if v.BudgetMB > 0 && v.HeldMB+c.MemoryMB > v.BudgetMB {
+			peak += ", which passes the budget now"
+		}
+		return peak
+	}
+	budget := NewMachineBudget(v.BudgetMB, 0)
+	budget.now = func() time.Time { return now }
+	for i, h := range v.Holders {
+		budget.claims[strconv.Itoa(i)] = &machineEntry{
+			claim:   types.MachineClaim{MemoryMB: h.MemoryMB, Profile: h.Profile},
+			started: h.Since,
+		}
+	}
+	at, breached := budget.breach(c, func(string, types.MachineClaim) bool { return false })
+	if !breached {
+		return "packed by curve"
+	}
+	if at.Equal(now) {
+		return fmt.Sprintf("packed by curve: the claims pass the %s budget together now", FormatMB(v.BudgetMB))
+	}
+	return fmt.Sprintf("packed by curve: the claims pass the %s budget together at %s, %s from now",
+		FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
 }
 
 // machineAwaitEvery paces AwaitMachine's reads of the budget. Slower than

@@ -48,7 +48,7 @@ func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charm
 		}
 		out = append(out, types.MachineClaim{
 			Project: p.Path, Target: t.Name, DeclaredBy: step.MemoryDeclaredBy,
-			MemoryMB: step.MemoryMB, Sizing: step.MemorySizing, Slots: slots,
+			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
 		})
 	}
 	return out

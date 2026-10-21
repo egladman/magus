@@ -278,6 +278,27 @@ func TestMachineBusyRefusalNamesTheWaitPipe(t *testing.T) {
 	assert.Contains(t, err.Error(), "run <same args>")
 }
 
+func TestVerdictSaysItPackedByCurve(t *testing.T) {
+	b, now := testBudget(t, 10_000, 8)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
+	c := curveClaim(200, 1000, 7000, 50_000)
+	v := b.Request(c)
+	require.False(t, v.Granted)
+
+	assert.Contains(t, machineBusyError(c, v, *now).Error(),
+		"The broker packed by curve: the claims pass the 9.8 GiB budget together at 12:00:25, 25s from now.")
+
+	old := v
+	old.Packed = false
+	assert.Contains(t, machineBusyError(c, old, *now).Error(),
+		"The broker packed by peak, predating memory curves: this claimed the 6.8 GiB peak, which passes the budget now.",
+		"a broker that predates curves answers Packed false")
+
+	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, PID: 200}
+	assert.Contains(t, machineBusyError(flat, types.MachineVerdict{BudgetMB: 10_000, HeldMB: 7000}, *now).Error(),
+		"The broker packed by peak: this claimed the 6.8 GiB peak, which passes the budget now.")
+}
+
 // A step's result carries the claim it ran under, what it cost, and how long it queued:
 // the budget seats one step at a time, so the second waits out the first.
 func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {

@@ -1242,7 +1242,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	}
 	id, release, err := c.machine.claim(ctx, types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
-		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
+		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 	})
