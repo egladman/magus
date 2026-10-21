@@ -342,9 +342,9 @@ func (r *WorkspaceRegistry) Harnesses() []string {
 	return slices.Clone(r.harnesses)
 }
 
-// ErrNoHarnessWiring is the error WiredHarnesses wraps for a workspace that carries no
+// errNoHarnessWiring is the error WiredHarnesses wraps for a workspace that carries no
 // registry, which is unknown wiring and never "none wired".
-var ErrNoHarnessWiring = errors.New("the workspace carries no harness wiring")
+var errNoHarnessWiring = errors.New("the workspace carries no harness wiring")
 
 // boundRegistries maps each workspace value a load built to the registry its magusfile
 // wired into, so the CLI reads the wiring without the workspace exporting it.
@@ -362,20 +362,21 @@ func UnbindRegistry(ws types.WorkspaceReader) {
 
 // WiredHarnesses returns the harness ids ws's root magusfile wired with
 // magus\harness.provider, in wiring order and empty when it wired none. A workspace no
-// load bound a registry to is an error wrapping ErrNoHarnessWiring.
+// load bound a registry to is an error, never an empty list.
 func WiredHarnesses(ws types.WorkspaceReader) ([]string, error) {
 	if ws == nil {
-		return nil, fmt.Errorf("%w: no workspace is loaded", ErrNoHarnessWiring)
+		return nil, fmt.Errorf("%w: no workspace is loaded", errNoHarnessWiring)
 	}
 	// A value no load built may not be comparable, and a sync.Map lookup of one panics.
 	if !reflect.TypeOf(ws).Comparable() {
-		return nil, fmt.Errorf("%w: it was not loaded by magus.Open or magus.Inspect", ErrNoHarnessWiring)
+		return nil, fmt.Errorf("%w: it was not loaded by magus.Open or magus.Inspect", errNoHarnessWiring)
 	}
-	reg, ok := boundRegistries.Load(ws)
+	bound, _ := boundRegistries.Load(ws)
+	reg, ok := bound.(*WorkspaceRegistry)
 	if !ok {
-		return nil, fmt.Errorf("%w: it was not loaded by magus.Open or magus.Inspect", ErrNoHarnessWiring)
+		return nil, fmt.Errorf("%w: it was not loaded by magus.Open or magus.Inspect", errNoHarnessWiring)
 	}
-	ids := reg.(*WorkspaceRegistry).Harnesses()
+	ids := reg.Harnesses()
 	if ids == nil {
 		ids = []string{}
 	}

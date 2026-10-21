@@ -36,11 +36,11 @@ type unkeyableWorkspace struct {
 func TestWiredHarnessesTellsUnknownFromNone(t *testing.T) {
 	unbound := &wiringWorkspace{name: "unbound"}
 	_, err := WiredHarnesses(unbound)
-	require.ErrorIs(t, err, ErrNoHarnessWiring)
+	require.ErrorIs(t, err, errNoHarnessWiring)
 	_, err = WiredHarnesses(nil)
-	require.ErrorIs(t, err, ErrNoHarnessWiring)
+	require.ErrorIs(t, err, errNoHarnessWiring)
 	_, err = WiredHarnesses(unkeyableWorkspace{ids: []string{"x"}})
-	require.ErrorIs(t, err, ErrNoHarnessWiring, "a value no load could have bound is unknown, not a panic")
+	require.ErrorIs(t, err, errNoHarnessWiring, "a value no load could have bound is unknown, not a panic")
 
 	none := &wiringWorkspace{name: "none"}
 	BindRegistry(none, NewWorkspaceRegistry())
@@ -60,7 +60,7 @@ func TestWiredHarnessesTellsUnknownFromNone(t *testing.T) {
 
 	UnbindRegistry(wired)
 	_, err = WiredHarnesses(wired)
-	require.ErrorIs(t, err, ErrNoHarnessWiring, "a closed workspace is unbound")
+	require.ErrorIs(t, err, errNoHarnessWiring, "a closed workspace is unbound")
 }
 
 func TestContextWithRegistry_RoundTrip(t *testing.T) {

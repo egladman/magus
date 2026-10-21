@@ -52,7 +52,7 @@ var ContractFuncs = []ContractFunc{
 }
 
 // HarnessFuncs is every function of the harness contract, in the order
-// spell.HarnessContract declares them. Required marks the one a harness must export.
+// internal/spell's harnessContract declares them. Required marks the one a harness must export.
 var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_getHarnessConfig", Field: "Config", Returns: "HarnessConfig", Params: "", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncConfig(v) }},
 	{Name: "mgs_getSkills", Field: "Skills", Returns: "HarnessSkills", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSkills(v) }},

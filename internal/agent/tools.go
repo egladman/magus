@@ -50,10 +50,10 @@ func validateHarnessTools(t types.HarnessTools) error {
 	return nil
 }
 
-// ToolFiles renders t as the files a tool rows directory holds: one per capability that has
-// a row, each tool name on its own line in sorted order, the model facts install writes
-// beside them so a hook prices and tiers a call without loading the workspace (nil writes
-// neither file), and the version file, which is what tells an installed directory from none.
+// ToolFiles renders t as the files a tool rows directory holds. Each capability with a row
+// gets a file naming its tools one per line, sorted. models adds the model rows and tiers
+// install writes beside them, so a hook prices and tiers a call without loading the
+// workspace; nil writes neither. The version file tells an installed directory from none.
 func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	byCapability := map[types.ToolCapability][]string{}
 	for _, r := range t.Rows {

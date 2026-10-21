@@ -57,12 +57,11 @@ type Contract struct {
 	Services map[string]spells.Service `mgs:"mgs_listServices,handler"`
 }
 
-// HarnessContract is the mgs_ functions an agent-host harness spell exports, one field
-// per function typed as what it returns; a func field takes arguments. ",required" marks
-// the one a spell must export to be a harness, and a function it leaves out is a
-// capability its host lacks. magus-utils contract generates decode.HarnessFuncs from it;
-// nothing constructs the struct.
-type HarnessContract struct {
+// harnessContract is the mgs_ functions a harness spell exports, one field per function
+// typed as what it returns. ",required" marks the one a harness must export; a function
+// it leaves out is a capability its host lacks. magus-utils contract parses it into
+// decode.HarnessFuncs, and nothing constructs it.
+type harnessContract struct {
 	// The workspace-local host JSON document the harness maintains, such as
 	// .cursor/hooks.json, and the defaults it sets there.
 	Config types.HarnessConfig `mgs:"mgs_getHarnessConfig,required"`

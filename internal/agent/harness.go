@@ -45,9 +45,9 @@ const (
 	// was never proof the guard runs, and distinct from HarnessUncovered, because
 	// the gap is this machine's tooling or load, not the config.
 	HarnessUnprobed HarnessStatus = "unprobed"
-	// HarnessSkipped is a check that could not run against this descriptor, with Reason
+	// harnessSkipped is a check that could not run against this descriptor, with Reason
 	// saying why. It is reported, never read as verified.
-	HarnessSkipped HarnessStatus = "skipped"
+	harnessSkipped HarnessStatus = "skipped"
 )
 
 var (
@@ -162,7 +162,7 @@ type HarnessCheck struct {
 
 // Failing reports a check that ran and did not verify. A skipped check did not run.
 func (c HarnessCheck) Failing() bool {
-	return c.Status != "" && c.Status != HarnessVerified && c.Status != HarnessSkipped
+	return c.Status != "" && c.Status != HarnessVerified && c.Status != harnessSkipped
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -663,7 +663,7 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 		return HarnessCheck{}
 	}
 	if d.Config.Path == "" {
-		return HarnessCheck{Status: HarnessSkipped, Reason: "skipped: " + d.ID + " declares no config path"}
+		return HarnessCheck{Status: harnessSkipped, Reason: "skipped: " + d.ID + " declares no config path"}
 	}
 	for _, h := range d.Hooks {
 		if !entriesRunHook(d.ManagedEntries, h) {

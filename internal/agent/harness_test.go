@@ -1653,7 +1653,7 @@ func TestVerifyHarnessHooksHoldsTheHookListToTheEntries(t *testing.T) {
 
 	skillsOnly := HarnessDescriptor{ID: "opencode", Hooks: []types.HookCommand{check}}
 	got = verifyHarnessHooks(skillsOnly)
-	assert.Equal(t, HarnessCheck{Status: HarnessSkipped, Reason: "skipped: opencode declares no config path"}, got)
+	assert.Equal(t, HarnessCheck{Status: harnessSkipped, Reason: "skipped: opencode declares no config path"}, got)
 	assert.False(t, got.Failing(), "a skipped check did not run, so it fails nothing")
 
 	assert.Equal(t, HarnessCheck{}, verifyHarnessHooks(HarnessDescriptor{ID: "none"}), "no hooks, nothing to check")

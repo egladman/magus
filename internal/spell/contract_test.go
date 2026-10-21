@@ -29,6 +29,21 @@ func TestContractFuncsMatchTheContract(t *testing.T) {
 	}
 }
 
+func TestHarnessFuncsMatchTheHarnessContract(t *testing.T) {
+	rt := reflect.TypeFor[harnessContract]()
+	require.Len(t, decode.HarnessFuncs, rt.NumField(), "decode.HarnessFuncs is stale; regenerate with magus run types-generate")
+	for i := range rt.NumField() {
+		f := rt.Field(i)
+		name, opts, _ := strings.Cut(f.Tag.Get("mgs"), ",")
+		got := decode.HarnessFuncs[i]
+		assert.Equal(t, name, got.Name, "harnessContract.%s", f.Name)
+		assert.Equal(t, f.Name, got.Field, "harnessContract.%s", f.Name)
+		assert.Equal(t, strings.Contains(opts, "required"), got.Required, "harnessContract.%s", f.Name)
+		assert.Equal(t, f.Type.Kind() == reflect.Func, got.Params != "", "harnessContract.%s: only a func field takes parameters", f.Name)
+		assert.NotNil(t, got.Decode, "harnessContract.%s", f.Name)
+	}
+}
+
 // Only mgs_getName is required: every other function is one a spell may leave out, and
 // NameFunc is what Resolve tests for.
 func TestContractRequiresOnlyTheName(t *testing.T) {
