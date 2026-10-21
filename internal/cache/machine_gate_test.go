@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -431,4 +432,91 @@ func TestMachineDeclarationNamesHowSlotsWereSized(t *testing.T) {
 	assert.Equal(t, "it runs test, which claims 6.0 GiB (measured over 5 runs), and takes 6 slots (for its memory)",
 		describeMachineDeclaration(types.MachineClaim{Target: "ci", DeclaredBy: "test", MemoryMB: 6144, Slots: 6,
 			Sizing: types.MemorySizing{Samples: 5, Slots: types.SlotSizing{Source: types.SlotsForMemory}}}))
+}
+
+// composedRun runs composer under a cache admitted by b, and inside it each member as a
+// step of its own, all at once, as one ctx.needs call's members are dispatched. It
+// returns the most that ran at once and the members' joined errors.
+func composedRun(t *testing.T, b *MachineBudget, composer Step, members []Step) (int, error) {
+	t.Helper()
+	t.Setenv("MAGUS_LEVEL", "")
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+	lim := WithLimiter(NewLimiter(8))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	running, widest := 0, 0
+	body := func(context.Context) error {
+		mu.Lock()
+		running++
+		widest = max(widest, running)
+		mu.Unlock()
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+		return nil
+	}
+	var membersErr error
+	_, err = c.RunAside(ctx, composer, func(ctx context.Context) error {
+		ctx = ChildrenClaimTheirOwn(ctx, types.TargetRef{Project: composer.ProjectPath, Target: composer.Target})
+		errs := make([]error, len(members))
+		var wg sync.WaitGroup
+		for i, m := range members {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, errs[i] = c.RunAside(ctx, m, body, lim)
+			}()
+		}
+		wg.Wait()
+		membersErr = errors.Join(errs...)
+		return nil
+	}, lim)
+	require.NoError(t, err, "the composer itself fits")
+	return widest, membersErr
+}
+
+// TestChildrenClaimTheirOwnQueueBesideTheirComposer is entry 94's shape: four members of
+// one call each fit beside their composer, and together they do not. Each claims for
+// itself, so all four run, two at a time.
+func TestChildrenClaimTheirOwnQueueBesideTheirComposer(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	var members []Step
+	for _, name := range []string{"lint", "build", "test", "security"} {
+		members = append(members, Step{ProjectPath: ".", Target: name, MemoryMB: 4000, NoCache: true})
+	}
+
+	widest, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, members)
+	require.NoError(t, err, "16000 summed is over the 10000 budget, but each member waits its turn")
+	assert.LessOrEqual(t, widest, 2, "1000 + 2 x 4000 fits; a third member would not")
+	assert.Equal(t, 0, b.Snapshot().HeldMB, "every claim went back")
+}
+
+// TestChildClaimLargerThanTheMachineNamesItself: a member over the whole budget is
+// refused at once, by its own name, while its siblings run.
+func TestChildClaimLargerThanTheMachineNamesItself(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	_, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, []Step{
+		{ProjectPath: ".", Target: "lint", MemoryMB: 2000, NoCache: true},
+		{ProjectPath: ".", Target: "test", MemoryMB: 12_000, NoCache: true},
+	})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Contains(t, err.Error(), "refusing to start (root) test: it claims 11.7 GiB")
+	assert.Contains(t, err.Error(), "does not fit in this machine's whole build budget")
+	assert.NotContains(t, err.Error(), "lint", "lint fit and ran")
+}
+
+// TestChildClaimBeyondItsComposerIsRefused: a member that fits the budget alone but not
+// beside the composer waiting on it would wait forever, so it is refused by name.
+func TestChildClaimBeyondItsComposerIsRefused(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	_, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 3000, NoCache: true}, []Step{
+		{ProjectPath: ".", Target: "test", MemoryMB: 8000, NoCache: true},
+	})
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Contains(t, err.Error(), "refusing to start (root) test")
+	assert.Contains(t, err.Error(), "(root) ci, which composed it and waits for it, holds 2.9 GiB")
 }

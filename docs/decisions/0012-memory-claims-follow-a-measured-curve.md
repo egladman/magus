@@ -261,3 +261,39 @@ field is added: the profile learns retrospectively, the same way the peak claim 
   the curve lands, before admission changes.
 - Should a refusal across invocations say when the claim would fit? magus never waits on
   another invocation, so the hint must not read as a queue.
+
+## Amendments
+
+### 2026-10-21: a call's members claim their own
+
+The curve did not reach ci. `SizedChainMemory` holds a composed target's peak flat, so
+lint and test carried no curve, and the call summed their peaks. On an 18.0 GiB budget
+across 10 slots, `magus affected ci` was refused every time: ci claimed 18.9 GiB, measured
+over 8 runs, with "lint: no memory curve; summed the peaks of its ctx.needs call".
+
+The members do run at once. `dispatchBuzzTargets` sends one call to `Pool.Dispatch`,
+which submits every member before it waits on any. The sum was honest about that
+concurrency. What it got wrong was the unit: under a skip_cache composer such as ci, the
+run's interceptor already makes each same-project member a cache step of its own
+(`RunAside`), and only `claimMachine`'s "a step beneath a claim takes none" rule kept those
+steps from claiming.
+
+- Each member that `dispatchBuzzTargets` hands to the interceptor takes its own machine
+  claim (`cache.ChildrenClaimTheirOwn`). A member that fits waits for a seat beside its
+  siblings, so four members that each fit and together do not all run, in turn.
+- The composer's claim leaves those members out (`SizedChainMemory`'s `ownClaims`). One
+  predicate, `types.MembersClaimTheirOwn` (the composer's skip_cache), decides both the
+  fold and the dispatch, so a member is never counted twice or left uncovered.
+  Cross-project members still run inline and still fold. ci now claims
+  its own inline work only, not a floor of its largest member. A floor would hold memory
+  no process uses while the member it copies holds its own.
+- The composer keeps its claim while it waits, since giving it back and taking it again can
+  be refused after the children ran. A member that cannot be seated beside its waiting
+  composers, on memory or slots, is refused by name (`beyondComposers`) and does not wait.
+  A member larger than the whole budget is refused by name, as before.
+- `magus doctor`'s gate-fits check sizes ci and every same-project step it reaches with
+  the admission sizer and fails on any step larger than the whole budget.
+
+Any other composer is unchanged: its claim folds its members and covers them, including a
+service, an install-only step and a `--no-cache` run, whose members the interceptor also
+makes steps.

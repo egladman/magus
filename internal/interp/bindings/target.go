@@ -750,16 +750,7 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 // reason it gave. Nil when the caller's project cannot be resolved, which is the bare
 // `magus buzz` script case: no magusfile, no policy, every member gates.
 func advisoryMembers(ctx context.Context, names []string) map[string]string {
-	ws := types.WorkspaceFromContext(ctx)
-	src := interp.SourceFromContext(ctx)
-	if ws == nil || src == nil {
-		return nil
-	}
-	rel, err := filepath.Rel(ws.Root(), src.Dir)
-	if err != nil {
-		return nil
-	}
-	p := ws.Get(filepath.ToSlash(rel))
+	p := callerProject(ctx)
 	if p == nil {
 		return nil
 	}
@@ -777,6 +768,21 @@ func advisoryMembers(ctx context.Context, names []string) map[string]string {
 	return out
 }
 
+// callerProject is the project whose magusfile is running, or nil outside a workspace:
+// a bare `magus buzz` script has no magusfile and no policy.
+func callerProject(ctx context.Context) *types.Project {
+	ws := types.WorkspaceFromContext(ctx)
+	src := interp.SourceFromContext(ctx)
+	if ws == nil || src == nil {
+		return nil
+	}
+	rel, err := filepath.Rel(ws.Root(), src.Dir)
+	if err != nil {
+		return nil
+	}
+	return ws.Get(filepath.ToSlash(rel))
+}
+
 // dispatchBuzzTargets awaits names: via the Buzz VM pool when one is in ctx (parallel,
 // TargetRuns-deduped), else inline sequential.
 func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
@@ -787,7 +793,7 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
 			key := src.Dir + "\x00buzz"
 			p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
-			return buzzDispatchViaPool(callCtx, p, names)
+			return buzzDispatchViaPool(childClaims(callCtx), p, names)
 		}
 	}
 	for _, name := range names {
@@ -803,6 +809,25 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 		}
 	}
 	return nil
+}
+
+// childClaims is ctx for the members of one ctx.needs call. A skip_cache composer's
+// members run as cache steps of their own under the run's interceptor, so each takes its
+// own machine claim (types.MembersClaimTheirOwn); any other composer's claim covers them.
+func childClaims(ctx context.Context) context.Context {
+	if !buzz.HasTargetInterceptor(ctx) {
+		return ctx
+	}
+	p := callerProject(ctx)
+	ancestors := buzz.AncestorsFromContext(ctx)
+	if p == nil || len(ancestors) == 0 {
+		return ctx
+	}
+	composer := types.Normalize(ancestors[len(ancestors)-1])
+	if !types.MembersClaimTheirOwn(p, composer) {
+		return ctx
+	}
+	return cache.ChildrenClaimTheirOwn(ctx, types.TargetRef{Project: p.Path, Target: composer})
 }
 
 // buzzDispatchViaPool fans names out via the Buzz pool, which yields the caller's

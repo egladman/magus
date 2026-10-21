@@ -480,9 +480,9 @@ func (t Target) Key() []string {
 // actually run: its own, and every target it composes with ctx.needs, transitively.
 // It returns the figure and the target that declared it.
 //
-// Without the fold a declaration is INERT for the command people run: only `ci` is
-// scheduled as a step, so the `test` it composes reaches neither the limiter nor
-// machine-wide admission.
+// Without the fold a declaration is INERT for the command people run: a cacheable
+// composer runs its members inline, so they reach neither the limiter nor
+// machine-wide admission except through its figure.
 //
 // A peak, not a maximum: one `ctx.needs(a, b, c)` dispatches all three through the Buzz
 // pool at once and their declarations add, while separate ctx.needs calls run in order,
@@ -494,8 +494,16 @@ func (t Target) Key() []string {
 // contributes nothing rather than a guess. It lives here because admission and
 // doctor must agree on one figure.
 func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string) {
-	c := SizedChainMemory(p, target, lookup, nil)
+	c := SizedChainMemory(p, target, lookup, nil, nil)
 	return c.MB, c.DeclaredBy
+}
+
+// MembersClaimTheirOwn reports whether target's same-project ctx.needs members each take
+// their own machine claim: the run admits a skip_cache composer's members as cache steps
+// of their own, and the dispatch clears the composer's claim from their context. Admission
+// and dispatch both read it, so a member is never counted twice nor left uncovered.
+func MembersClaimTheirOwn(p *Project, target string) bool {
+	return p.TargetPolicies[target].SkipCache
 }
 
 // MemorySizing says where a memory claim's figure came from. The zero value is a
@@ -601,7 +609,12 @@ type ChainMemory struct {
 // The members of one call fold by curve when each has a profile (see composeCall), and
 // by summed peaks otherwise, with Sizing.Fallback naming the member that had none.
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
-func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory {
+//
+// ownClaims reports a composer whose same-project members are admitted as steps of
+// their own (MembersClaimTheirOwn); those members are left out of its fold rather than
+// counted twice. Cross-project members run inline under the composer's claim and still
+// fold. A nil ownClaims folds every member.
+func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer, ownClaims func(p *Project, target string) bool) ChainMemory {
 	seen := map[string]bool{}
 
 	var walk func(proj *Project, name string) ChainMemory
@@ -615,6 +628,7 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		}
 		seen[key] = true
 
+		separate := ownClaims != nil && ownClaims(proj, name)
 		declared := proj.TargetPolicies[name].MemoryMB
 		peak := ChainMemory{MB: declared, DeclaredBy: name}
 		if size != nil {
@@ -641,6 +655,9 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 			if step.CallIndex != callIndex {
 				close()
 				callIndex = step.CallIndex
+			}
+			if separate && step.Project == "" {
+				continue
 			}
 			next := proj
 			if step.Project != "" {

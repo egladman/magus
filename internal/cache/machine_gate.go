@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -115,6 +116,58 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	return release, err
 }
 
+// composersKey carries the steps whose ctx.needs calls dispatched the work under ctx as
+// steps of their own, outermost first.
+type composersKey struct{}
+
+// ChildrenClaimTheirOwn returns ctx for the members composer's ctx.needs call dispatches
+// as cache steps of their own: each takes its own machine claim instead of riding
+// composer's, whose figure leaves them out (types.SizedChainMemory's ownClaims). It is
+// ctx unchanged when composer holds no claim.
+//
+// composer keeps its claim while it waits, so a member that could never be seated
+// beside it would wait forever; the gate refuses that member instead (beyondComposers).
+func ChildrenClaimTheirOwn(ctx context.Context, composer types.TargetRef) context.Context {
+	held := admissionFrom(ctx)
+	if !held.machineClaim {
+		return ctx
+	}
+	held.machineClaim = false
+	composers, _ := ctx.Value(composersKey{}).([]types.TargetRef)
+	ctx = context.WithValue(ctx, composersKey{}, append(slices.Clip(composers), composer))
+	return held.on(ctx)
+}
+
+// beyondComposers refuses c, kept out by its own run, when the composers it was
+// dispatched under hold so much that c could not be seated even once every other
+// claim was released. They are blocked waiting for c, so nothing else frees it.
+func beyondComposers(ctx context.Context, c types.MachineClaim, v types.MachineVerdict) error {
+	composers, _ := ctx.Value(composersKey{}).([]types.TargetRef)
+	if len(composers) == 0 {
+		return nil
+	}
+	pid := os.Getpid()
+	var heldMB, heldSlots int
+	var names []string
+	for _, h := range v.Holders {
+		if h.PID != pid || !slices.Contains(composers, types.TargetRef{Project: h.Project, Target: h.Target}) {
+			continue
+		}
+		heldMB += h.MemoryMB
+		heldSlots += max(h.Slots, 1)
+		names = append(names, displayProject(h.Project)+" "+h.Target)
+	}
+	memory := v.BudgetMB > 0 && c.MemoryMB+heldMB > v.BudgetMB
+	slots := v.BudgetSlots > 0 && max(c.Slots, 1)+heldSlots > v.BudgetSlots
+	if !memory && !slots {
+		return nil
+	}
+	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+		"refusing to start %s %s: %s, and %s, which composed it and waits for it, holds %s and %d slot(s) of this machine's build budget of %s across %d slots, so it could never be seated. Waiting would not help. Run `magus doctor` and read the gate-fits check, then lower the composer's own claim or run %s on its own.",
+		displayProject(c.Project), c.Target, describeMachineDeclaration(c), strings.Join(names, ", "),
+		FormatMB(heldMB), heldSlots, FormatMB(v.BudgetMB), v.BudgetSlots, c.Target)}
+}
+
 // claim is acquire, also returning the id of the claim granted: "" when nothing
 // arbitrates the step.
 func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
@@ -140,7 +193,9 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 		case !v.Fits:
 			return "", nil, machineDoesNotFitError(c, v)
 		case v.OwnRun:
-			// Falls out of the switch to the wait below.
+			if err := beyondComposers(ctx, c, v); err != nil {
+				return "", nil, err
+			}
 		case blindToOwnAncestry(ctx):
 			// A nested magus that cannot name its ancestors cannot be excused from its own
 			// parent's claim, so the refusal names the fix rather than the holders.
