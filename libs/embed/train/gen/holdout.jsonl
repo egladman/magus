@@ -781,10 +781,12 @@
 {"group":"dir:hack/dev","path":"hack/dev/summarize-transcript.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/banned-words.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-glue-is-wired-as-plain-argv.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/buzz-sources-pass-the-static-check.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/cd-runs-agree-across-workflows.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/cli-help-follows-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/code-follows-mined-precedents.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/code-stays-within-the-conformance-ratchet.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/diagnostic-codes-have-docs-pages.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/figure-modules-type-check-strictly.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/generate-drift-throw-names-the-engine-drift-code.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/generated-go-packages-name-their-owner.buzz"}
