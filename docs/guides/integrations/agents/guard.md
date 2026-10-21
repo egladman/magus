@@ -296,7 +296,7 @@ workspace sets any of them to `deny` or `off` with
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
 | [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
-| [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that does not hold it to plain commands |
+| [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that shows a substitution, loop or exec |
 | [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a while or until loop that sleeps; a for loop that sleeps until break  |
 | [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |
 | [`chained-run`](../../../reference/rules/chained-run.md)                       | magus runs sequenced with `&&` or `;`                                  |
@@ -424,10 +424,10 @@ same served command.
   distinct `sed -n` window of one Go, Buzz or Markdown file by one caller,
   counting a host read tool's offset and limit, with the file's map. A window
   inside one declaration or heading is a targeted read and never counts.
-- **A brief for a worker in its own worktree draws advice** unless it says to
-  run one plain command per call (`brief-plain-commands`), or when it shows a
-  command with a `$()`, a loop or an exec. A host that isolates the worker
-  refuses each command it cannot prove stays in the worktree.
+- **A brief for a worker in its own worktree draws advice** when it shows a
+  command with a `$()`, a loop or an exec (`brief-plain-commands`). A host that
+  isolates the worker refuses each command it cannot prove stays in the
+  worktree, and a worker copies the commands its brief shows.
 
 ## Setting a built-in rule
 
