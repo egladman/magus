@@ -351,6 +351,10 @@ func TestAnOverrunSurvivesABrokerRestart(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, v.Granted, "the new broker charges the re-asserted overrun its 7000 peak beside the late 7000")
 	assert.True(t, v.Fits)
+
+	// Holding nothing when the broker stops at cleanup keeps the client from redialing
+	// while redialEvery is restored.
+	c.Release(t.Context(), held.ID)
 }
 
 // replyGate forwards connections from its own socket to a broker, and on every
