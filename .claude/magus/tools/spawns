@@ -1,3 +1,6 @@
 Agent
 SendMessage
 Task
+mcp__ccd_session__hand_off_to_session
+mcp__ccd_session__move_to_cloud
+mcp__ccd_session__start_session
