@@ -516,10 +516,21 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # Go for the table step's `magus run table libs/embed/train`. Ahead of setup-magus
+      # for the reason the publish job gives; cache: false for the same reason too.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: false
+
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: prebuilt
           git-ref: ${{ needs.preflight.outputs.tag }}
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # The credentials under the names GHCR_SPELLS declares. Each token reaches `magus
       # spell ls` and `magus spell push` on stdin, never an argv.
@@ -529,6 +540,19 @@ jobs:
           GHCR_TOKEN: *release_ghcr_token
           CHARMS: ${{ needs.preflight.outputs.charms }}
         run: magus run "spell-publish:$CHARMS" --no-default-charms
+
+      # The embedding table under ghcr.io/egladman/magus-embed:<pin>, write-once: a rerun
+      # keeps a tag that already holds the pin. The conversion runs here on amd64 and the
+      # pin was written on arm64, so a table that hashes elsewhere is a reproducibility
+      # bug: the diff fails the step, and `graph push -table` refuses it again on its own.
+      - name: Publish the embedding table
+        env:
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
+        run: |
+          magus run table libs/embed/train
+          git diff --exit-code -- libs/embed/gen/table.digest
+          printf '%s' "$GHCR_TOKEN" | magus graph push -table --username "$GHCR_USERNAME"
 
   image:
     name: Publish container images
