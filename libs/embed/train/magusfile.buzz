@@ -1,6 +1,7 @@
 import "std";
 import "fs";
 import "env";
+import "vcs";
 import "magus";
 import "project/../../.." as workspace;
 import "../../../hack/magusfile/advisories" as advisories;
@@ -25,6 +26,7 @@ magus\project({
         "teacher": {"skip_cache": "writes teacher shards into the cache root, outside the tree"},
         "train": {"skip_cache": "reads teacher runs from the cache root, outside the tree"},
         "teacher-parity": {"skip_cache": "reads reference vectors from the cache root, outside the tree"},
+        "convert": {"skip_cache": "reads potion and the training texts from the cache root and writes the table there, outside the tree"},
     },
 });
 
@@ -135,6 +137,23 @@ export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
 // -h` lists after --; manual, never part of ci.
 export fun train(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "train"] + args});
+}
+
+// Writes potion-code-16M-v2 over the vocabulary as the cache root's
+// potion-code-16M-v2.table. The table records the last commit that changed this project
+// as its pipeline, so a commit elsewhere leaves its bytes, and the pin, alone.
+export fun convert(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(vocab);
+    fetch(ctx, args: ["potion-code-16M-v2/"]);
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
+    final dir = fs\join(cache, name: "training");
+    final last = vcs\history(1, paths: ["libs/embed/train"]);
+    if (last.len() == 0) {
+        throw "no commit changed libs/embed/train, so the table has no pipeline to record";
+    }
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "convert", "-cache", cache,
+        "-texts", fs\join(dir, name: "texts.jsonl"), "-forced", fs\join(dir, name: "forced.txt"),
+        "-pipeline", last[0].id, "-run", "convert", "-out", fs\join(cache, name: "potion-code-16M-v2.table")] + args});
 }
 
 // The anchor `magus affected ci` keys off.
