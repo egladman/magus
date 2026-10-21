@@ -609,10 +609,17 @@ func TestWorkerRawTool(t *testing.T) {
 	ctx, _ := fleetFixture(t, row)
 	deps := composingWorkspace(t)
 
-	// raw-tool refuses the line first unless a workspace lowered it.
-	v := Judge(ctx, advising(Dependencies{Spells: spellCatalog}, string(denyRuleRawTool)), Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
-		"Judge reaches the rule: %s", v.Reason)
+	// raw-tool denies the same line by default; the check is the remedy a bound worker can
+	// run, so worker-check-only answers first, whatever raw-tool is set to.
+	for _, deps := range []Dependencies{{Spells: spellCatalog}, advising(Dependencies{Spells: spellCatalog}, string(denyRuleRawTool))} {
+		v := Judge(ctx, deps, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
+			"Judge names the check: %s", v.Reason)
+	}
+	lowered := withSetting(string(denyRuleWorkerCheckOnly), builtin.Advise)
+	lowered.Spells = spellCatalog
+	v := Judge(ctx, lowered, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+	assert.Equal(t, string(denyRuleRawTool), judgedAs(v).Rule, "with worker-check-only lowered, raw-tool still refuses")
 
 	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
 	require.NotEmpty(t, reason)

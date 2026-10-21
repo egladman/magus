@@ -1085,6 +1085,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, ""), rankArchitectureUnbriefed); {
 		case v.Deny != "":
+			// A bound worker's raw tool is refused naming its check, the remedy it can run,
+			// rather than raw-tool's generic target.
+			if v.Rule.Name == denyRuleRawTool && preauth == "" {
+				if d := denyWorkerRawTool(ctx, deps, actingLease, input); d.refused() {
+					if refuseWith(denyRuleWorkerCheckOnly, d); verdict.Decision == decisionDeny {
+						break
+					}
+				}
+			}
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
 			// language tool, a relocated checkout. A next magus served would not carry one
