@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28337
-skill_short_bytes: 21290
+skill_full_bytes: 28456
+skill_short_bytes: 21409
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `144` |
+| `agent-skill-version` | `145` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `41471c24c49b` |
+| `skill-content` | `13ccbe9be83e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -89,10 +89,10 @@ verification, and never hands those out. Above the root is the human in the loop
 lands, what is published and what a round may spend are the person's calls: the root
 reports to them and does not decide them.
 
-From its first call the root does no groundwork: no reading, searching or editing of
-source, no test or lint runs of its own. It plans from the graph and moves jobs.
-Groundwork it needs, a read-only scout included, is a job, and so is integration.
-The guard enforces this by role.
+While a row it handed out is live, the root does no groundwork: no reading, searching or editing
+of source, no runs of its own. It plans from the graph and moves jobs; a scout and integration are jobs.
+The guard enforces this by role, and the role is the live lease: the root may take ONE row with
+`magus job exec <row>` until `magus job exit <row>` ([the root's role](reference.md#the-roots-role)).
 
 ## Coalesce what the write sets allow
 
@@ -513,10 +513,10 @@ verification, and never hands those out. Above the root is the human in the loop
 lands, what is published and what a round may spend are the person's calls: the root
 reports to them and does not decide them.
 
-From its first call the root does no groundwork: no reading, searching or editing of
-source, no test or lint runs of its own. It plans from the graph and moves jobs.
-Groundwork it needs, a read-only scout included, is a job, and so is integration.
-The guard enforces this by role.
+While a row it handed out is live, the root does no groundwork: no reading, searching or editing
+of source, no runs of its own. It plans from the graph and moves jobs; a scout and integration are jobs.
+The guard enforces this by role, and the role is the live lease: the root may take ONE row with
+`magus job exec <row>` until `magus job exit <row>` ([the root's role](reference.md#the-roots-role)).
 
 ## Contents
 
