@@ -11,7 +11,7 @@ import "env";
 import "fs";
 import "proc";
 import "time";
-import "lib/hook" as hook;
+import "hook" as hook;
 
 // warn says why nothing was extracted. An adapter that loaded nothing looks exactly like a
 // host nobody used, so every arm that gives up announces itself on stderr.
