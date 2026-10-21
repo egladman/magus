@@ -51,11 +51,11 @@ func (c MachineClaim) Run() string {
 // granted. A Reserved holder is a seat `magus status --wait` sized and holds for PID, the
 // run reading its output, until that run's first claim takes it.
 type MachineClaimant struct {
-	Reserved bool         `json:"reserved,omitzero" yaml:"reserved,omitempty"`
-	Project  string       `json:"project" yaml:"project"`
-	Target   string       `json:"target" yaml:"target"`
-	PID      int          `json:"pid,omitzero" yaml:"pid,omitempty"`
-	MemoryMB int          `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Reserved bool   `json:"reserved,omitzero" yaml:"reserved,omitempty"`
+	Project  string `json:"project" yaml:"project"`
+	Target   string `json:"target" yaml:"target"`
+	PID      int    `json:"pid,omitzero" yaml:"pid,omitempty"`
+	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
 	// Profile is the holder's claimed curve, so a refusal can name when the sum breaches.
 	Profile MemoryProfile `json:"profile,omitzero" yaml:"profile,omitempty"`
 	Sizing  MemorySizing  `json:"sizing,omitzero" yaml:"sizing,omitempty"`

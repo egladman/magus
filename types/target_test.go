@@ -309,10 +309,8 @@ func TestChainCurveSumsOneCallOverTime(t *testing.T) {
 		"lint":  halves(4000, 300, 100_000),
 		"bench": halves(9000, 9000, 100_000),
 	})
-	got := SizedChainMemory(p, "ci", nil, size)
-	assert.Equal(t, 9000, got.MB, "the call after runs alone and is larger")
-	assert.Equal(t, "bench", got.DeclaredBy)
-	assert.Equal(t, MemoryProfile{}, got.Profile, "two calls in turn are not one run's curve")
+	assert.Equal(t, ChainMemory{MB: 9000, DeclaredBy: "bench", Sizing: MemorySizing{Samples: 3}}, SizedChainMemory(p, "ci", nil, size),
+		"the call after runs alone and is larger; two calls in turn are not one run's curve")
 
 	alone := &Project{Path: ".", TargetChains: map[string][]ChainStep{"ci": Needs("bench")}}
 	assert.Equal(t, halves(9000, 9000, 100_000), SizedChainMemory(alone, "ci", nil, size).Profile,
@@ -323,10 +321,12 @@ func TestChainCurveSumsOneCallOverTime(t *testing.T) {
 		TargetChains:   map[string][]ChainStep{"ci": Needs("test", "lint")},
 		TargetPolicies: map[string]Target{"lint": {MemoryMB: 4000}},
 	}
-	got = SizedChainMemory(missing, "ci", nil, curveSizer(map[string]MemoryProfile{"test": halves(500, 7000, 100_000)}))
-	assert.Equal(t, 11000, got.MB, "lint has no curve, so the call sums its peaks")
-	assert.Equal(t, "lint: no memory curve; summed the peaks of its ctx.needs call", got.Sizing.Fallback)
-	assert.Equal(t, MemoryProfile{}, got.Profile, "a folded claim carries no single run's curve")
+	assert.Equal(t, ChainMemory{
+		MB:         11000,
+		DeclaredBy: "test",
+		Sizing:     MemorySizing{Samples: 3, Fallback: "lint: no memory curve; summed the peaks of its ctx.needs call"},
+	}, SizedChainMemory(missing, "ci", nil, curveSizer(map[string]MemoryProfile{"test": halves(500, 7000, 100_000)})),
+		"lint has no curve, so the call sums its peaks and carries no single run's curve")
 }
 
 // TestChainCurveComposesANestedCall: a member that is itself one ctx.needs call, as
@@ -350,26 +350,24 @@ func TestChainCurveComposesANestedCall(t *testing.T) {
 	got := SizedChainMemory(p, "lint", nil, curveSizer(profiles))
 	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "lint_rules", Sizing: MemorySizing{Samples: 3}, Profile: halves(4000, 300, 100_000)}, got)
 
-	got = SizedChainMemory(p, "ci", nil, curveSizer(profiles))
-	assert.Equal(t, 7300, got.MB, "test's late peak meets lint's late 300, not the 11000 summed peaks")
-	assert.Equal(t, halves(4500, 7300, 100_000), got.Profile)
-	assert.Empty(t, got.Sizing.Fallback)
+	assert.Equal(t, ChainMemory{MB: 7300, DeclaredBy: "test", Sizing: MemorySizing{Samples: 3}, Profile: halves(4500, 7300, 100_000)},
+		SizedChainMemory(p, "ci", nil, curveSizer(profiles)), "test's late peak meets lint's late 300, not the 11000 summed peaks")
 
 	wide := halves(1000, 200, 100_000)
 	wide.D10Ms, wide.D90Ms, wide.Runs = 40_000, 200_000, 7
 	profiles["vet"] = wide
 	got = SizedChainMemory(p, "lint", nil, curveSizer(profiles))
-	assert.Equal(t, int64(100_000), got.Profile.D10Ms, "D10 is the members' largest")
-	assert.Equal(t, int64(200_000), got.Profile.D90Ms, "D90 is the members' largest")
-	assert.Equal(t, 3, got.Profile.Runs, "Runs is the members' smallest")
 	assert.LessOrEqual(t, got.MB, 4000, "never above the summed peaks")
 	assert.Equal(t, got.MB, got.Profile.Curve.PeakMB(), "the claim is the composed curve's peak")
+	assert.Equal(t, MemoryProfile{D10Ms: 100_000, D90Ms: 200_000, Runs: 3, Curve: got.Profile.Curve}, got.Profile,
+		"D10 and D90 are the members' largest, Runs their smallest")
 
 	delete(profiles, "vet")
-	got = SizedChainMemory(p, "ci", nil, curveSizer(profiles))
-	assert.Equal(t, 11000, got.MB, "vet has no curve, so lint and then ci sum their peaks")
-	assert.Equal(t, "vet: no memory curve; summed the peaks of its ctx.needs call", got.Sizing.Fallback)
-	assert.Equal(t, MemoryProfile{}, got.Profile)
+	assert.Equal(t, ChainMemory{
+		MB:         11000,
+		DeclaredBy: "test",
+		Sizing:     MemorySizing{Samples: 3, Fallback: "vet: no memory curve; summed the peaks of its ctx.needs call"},
+	}, SizedChainMemory(p, "ci", nil, curveSizer(profiles)), "vet has no curve, so lint and then ci sum their peaks")
 }
 
 // TestChainCurveNeverExceedsSummedPeak: a wide duration band lets peaks overlap, which

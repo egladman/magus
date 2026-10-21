@@ -146,9 +146,9 @@ func newClaimSizer(runs *forecast.MeasuredRuns, shape forecast.Shape, reads func
 	return &claimSizer{runs: runs, shape: shape, reads: reads}
 }
 
-// shapeFor is the sizer's shape keeping the charms target's chain reads. The predicate
+// readShape is the sizer's shape keeping the charms target's chain reads. The predicate
 // also filters every recorded run's charms, so each answer is walked once.
-func (s *claimSizer) shapeFor(proj *types.Project, target string) forecast.Shape {
+func (s *claimSizer) readShape(proj *types.Project, target string) forecast.Shape {
 	read := map[string]bool{}
 	return s.shape.Reading(func(charm string) bool {
 		r, ok := read[charm]
@@ -163,7 +163,7 @@ func (s *claimSizer) shapeFor(proj *types.Project, target string) forecast.Shape
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See
 // sizeMemoryClaim.
 func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing, types.MemoryProfile) {
-	shape := s.shapeFor(proj, target)
+	shape := s.readShape(proj, target)
 	same, all := s.runs.Peak(proj.Path, target, shape)
 	var full forecast.Measurement
 	if shape.Narrowed {
@@ -174,7 +174,7 @@ func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) 
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
 func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
-	same, all := s.runs.Width(proj.Path, target, s.shapeFor(proj, target))
+	same, all := s.runs.Width(proj.Path, target, s.readShape(proj, target))
 	return sizeSlotClaim(same, all, capacity)
 }
 
