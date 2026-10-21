@@ -1106,14 +1106,24 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // vcs\status collapses an untracked directory to one path; recursive hashing is only
     // for declared generated directories.
     final before = drift\vcsHashes(dirtyBefore);
-    gomod\replaceWorkspaceModules(ctx, go, ".");
-    // symbol-digest-generate writes a gitignored file, so it has no drift to gate, and it
-    // builds the full symbol index; the targets reading that file need it themselves.
-    ctx.needs(ctx.glob("*-generate", "!deploy-generate", "!symbol-digest-generate"));
-    if (ctx.hasCharm("rw")) { return; }
-
+    final rw = ctx.hasCharm("rw");
+    final saved = if (rw) "" else drift\saveFiles(dirtyBefore);
     // Not diagnoseDrift: that classifies against one target's declarations.
     var dirtyNow: mut [str] = mut [<str>];
+    try {
+        gomod\replaceWorkspaceModules(ctx, go, ".");
+        // symbol-digest-generate writes a gitignored file, so it has no drift to gate, and it
+        // builds the full symbol index; the targets reading that file need it themselves.
+        ctx.needs(ctx.glob("*-generate", "!deploy-generate", "!symbol-digest-generate"));
+    } catch (err: any) {
+        if (!rw) {
+            foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
+            drift\restore(drift\vcsChangedSince(before, dirtyNow), saved: saved, dirtyBefore: dirtyBefore);
+        }
+        throw err;
+    }
+    if (rw) { return; }
+
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
     final changed = drift\vcsChangedSince(before, dirtyNow);
     if (changed.len() > 0) {
@@ -1127,11 +1137,12 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         if (body != "") {
             magus\log.info("generate: what changed on this runner:\n" + body);
         }
+        drift\restore(changed, saved: saved, dirtyBefore: dirtyBefore);
         // MGS4006 matches types.ClassifyDrift's code for the same condition.
-        // The remedy is commit: the siblings above already wrote the files.
         throw "MGS4006: generate: regeneration changed generated files, and they are "
-            + "already written in this tree; review and commit them. Drift in another "
-            + "project needs `magus affected generate:rw` first" + detail + drift\secondCause;
+            + "left as they were; run `magus run generate:rw` to write them, then commit. "
+            + "Drift in another project needs `magus affected generate:rw` first"
+            + detail + drift\secondCause;
     }
 }
 
