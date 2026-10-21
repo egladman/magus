@@ -14,7 +14,7 @@ A mapped file read window by window, past two windows of it.
 
 ## Why
 
-read-navigation refuses a whole read and serves the file's map; paging through the file instead spends the same lines over several calls. Each caller's windows of each Go, Buzz or Markdown file are counted, and the third distinct one is refused with the map. A window inside one declaration or heading is a targeted read and never counts, nor does a repeat of a window already read, a whole read, or a file short enough for read-navigation to pass whole. It cannot tell a walk through the file from reads of three spans that each cross a declaration's edge.
+read-navigation refuses a whole read and serves the file's map; paging through the file instead spends the same lines over several calls. Each caller's windows of each Go, Buzz or Markdown file are counted, and the third distinct one is refused with the map. A window inside one declaration or heading is a targeted read and never counts, nor does a repeat of a window already read, a whole read, or a file short enough for read-navigation to pass whole. The refusal names one concrete declaration or heading to read, the one holding the refused window's first line or the next one down, as the `sed -n` span or the `refs` command that prints it. Reading that span is a declaration read, so the suggested window never counts as a page; a window one line either side of a declaration (the Read tool's offset and limit land one off) counts as inside it. It cannot tell a walk through the file from reads of three spans that each cross a declaration's edge.
 
 ## Default and override
 

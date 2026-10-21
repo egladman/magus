@@ -1,16 +1,16 @@
 ---
-title: "push-gate: a push the run log does not prove ungated, which names the gate and lets it through"
-description: "An advisory by default: it explains, and blocks nothing, on a push the run log does not prove ungated, which names the gate and lets it through."
+title: "push-gate: a push or `gh pr create` the run log cannot prove ungated; names the gate"
+description: "An advisory by default: it explains, and blocks nothing, on a push or `gh pr create` the run log cannot prove ungated; names the gate."
 tags: [guard, rules, push-gate, advise]
 ---
 
 # push-gate
 
-An advisory by default: it explains, and blocks nothing, on a push the run log does not prove ungated, which names the gate and lets it through.
+An advisory by default: it explains, and blocks nothing, on a push or `gh pr create` the run log cannot prove ungated; names the gate.
 
 ## What it catches
 
-A push the run log does not prove ungated, which names the gate and lets it through.
+A push or `gh pr create` the run log cannot prove ungated; names the gate.
 
 ## Default and override
 

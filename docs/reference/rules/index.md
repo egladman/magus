@@ -72,7 +72,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [output-redirect](output-redirect.md)                 | magus output sent to a file or discarded, which the run log already holds                            |
 | [policy-unloaded](policy-unloaded.md)                 | a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load |
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                             |
-| [push-ungated](push-ungated.md)                       | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
+| [push-ungated](push-ungated.md)                       | a push or `gh pr create` at a commit with no green gate; refused for every session                   |
 | [raw-tool](raw-tool.md)                               | a toolchain command a spell already wraps, run outside the cache                                     |
 | [read-navigation](read-navigation.md)                 | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                          |
 | [read-paging](read-paging.md)                         | a mapped file read window by window, past two windows of it                                          |
@@ -118,7 +118,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [new-file](new-file.md)                                 | a new file in a directory whose naming has settled                                             |
 | [new-source-dir](new-source-dir.md)                     | a new file that opens a directory, which is a boundary rather than a file                      |
 | [precedent-search](precedent-search.md)                 | a hunt for one distinctive name, which refs answers with verified sites                        |
-| [push-gate](push-gate.md)                               | a push the run log does not prove ungated, which names the gate and lets it through            |
+| [push-gate](push-gate.md)                               | a push or `gh pr create` the run log cannot prove ungated; names the gate                      |
 | [read-symbol](read-symbol.md)                           | a bounded read inside one indexed declaration, which refs --definition --source prints checked |
 | [regen-source](regen-source.md)                         | a hand edit to a file a target regenerates                                                     |
 | [release-requested](release-requested.md)               | a job holding write paths another fork was refused for, with a release request open            |
