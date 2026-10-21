@@ -623,7 +623,8 @@ var ruleDocWorkerCheckOnly = types.RuleDoc{
 		"A `magus run` whose target names the rw charm, the check included, is held to the write paths as well: it passes only when every glob that target declares writing (ctx.writesFiles, ctx.modifiesExistingFiles), and every file each target its ctx.needs chain reaches in the same project declares modifying, lies inside them. A needed step's outputs and another project's steps build what the run consumes, and are not counted. A target whose chain declares no write passes, since nothing says what it touches, so a formatter declares the files it rewrites. The refusal names the globs and the same run with neither the charm nor the default charms. A run the workspace's default_charms give rw is judged the same way, unless it passes --no-default-charms. " +
 		"A spell op run on its own under the rw charm (`markdown::dprint:rw`, or a target no magusfile it selects exports) is refused even when the check composes it: an op declares no writes, so it would always pass and what it rewrites shows only after the write, as MGS3001. The refusal names the magusfile target that calls the op, whose declarations are judged, or the run without the charm when none does. An op whose spell declares no rw charm runs unpatched under default_charms [rw] and passes. " +
 		"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`) is not on the list either: there is one binary per base, the integrator builds it and a copy is placed in the worker's checkout. An unbound caller, the checkout's integrator and a row declaring no check are untouched. " +
-		"The same rule grades a spawn or continuation brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists.",
+		"The same rule grades a spawn brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists. " +
+		"A continuation to a worker already bound to a live row is not graded against the row: that worker's own runs are.",
 }
 
 var ruleDocWorkerBackgroundRun = types.RuleDoc{
@@ -707,10 +708,10 @@ var ruleDocHooksOff = types.RuleDoc{
 
 var ruleDocBriefPlainCommands = types.RuleDoc{
 	Name:    string(denyRuleBriefPlainCommands),
-	Catches: "a brief for an isolated worker that does not hold it to one plain command per call",
+	Catches: "a brief for an isolated worker that teaches a substitution, a loop or an exec",
 	Why: "A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. " +
-		"So a spawn into its own worktree must say \"one plain command per call; no `$()`, loops or exec\" (any wording naming one command per call, or plain commands), and must not itself show a command of those shapes. " +
-		"A spawn into a shared checkout passes. It cannot tell a brief that says the same thing in other words from one that never says it.",
+		"A worker writes its commands the way its brief shows them, so a spawn into its own worktree must not show a command of those shapes. " +
+		"A brief need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.",
 }
 
 var ruleDocUnjudgedTool = types.RuleDoc{

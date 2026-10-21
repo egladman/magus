@@ -12,7 +12,7 @@ export final BUILTINS: {str: any} = {
     // 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable.
     "brief-command": "deny",
     // 2026-10-13: Claude Code refused 1,068 compound commands from worktree-isolated
-    // workers whose briefs never said to run one plain command per call.
+    // workers, who copy the command shapes their briefs show.
     "brief-plain-commands": "deny",
     "busy-wait": "deny",
     // Six errors in one session, by an agent with this repository open throughout.
