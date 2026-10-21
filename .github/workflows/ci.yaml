@@ -255,6 +255,78 @@ jobs:
           fi
           magus run generate:rw --race=replay --concurrency-profile aggressive "${projects[@]}"
 
+  # Writes the remote-tier entries the plan's generate pass reads. Every plan run missed
+  # all 21-30 of them: the plan holds no signing key, and main's shards write from inside
+  # a `queue gate` box with its own checkout path and --cache, so no key of theirs is a
+  # plan key. This job runs the plan's generate in the plan's environment, step for step
+  # up to it (checkout, source build, mise with no cache, the pinned Go, scip), so its
+  # keys are the plan's, and signs what it stores.
+  #
+  # main only, and it restores nothing unverified: no history, no mise cache. The key
+  # reaches the generate step alone. The plan job stays keyless, since it restores the
+  # unsigned history.
+  plan-cache:
+    name: magus plan cache
+    needs: [plan]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # A source build, as the plan does, rather than the plan's artifact: it leaves the
+      # environment setup-go and the build leave behind, which the cache keys read.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: false
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      - uses: ./.github/actions/setup-scip
+
+      # Same reason as the shards' step of this name: a `run:` step does not see them.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) {
+                core.warning(`${name} is not set; this job writes no remote-tier entry`)
+                continue
+              }
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
+      # Every project, so a pull request reaching any of them finds main's entries, but
+      # libs/embed/train, which the plan never generates (see the plan step). Without rw,
+      # as the plan runs it: a charm keys every step. continue-on-error because this job
+      # writes a cache and gates nothing: the generators store their entries before root
+      # generate's drift check runs, and the plan and the shards own drift.
+      - name: Store the plan's generate entries
+        continue-on-error: true
+        shell: bash
+        env:
+          MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+        run: |
+          magus ls -o name > "$RUNNER_TEMP/projects"
+          mapfile -t projects < <(grep -vxF libs/embed/train "$RUNNER_TEMP/projects")
+          magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
+
   ci:
     name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
     needs: plan
