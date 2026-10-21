@@ -60,10 +60,13 @@ Rebuild the domain graph only; do not reindex code symbols
 .RS
 .TP
 \fB\-\-ref\fR \fIstring\fR
-The artifact to push to, as <registry>/<repository>:<tag> (required; never derived)
+The artifact to push to, as <registry>/<repository>:<tag> (required; never derived); with \-\-table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus\-embed
 .TP
 \fB\-\-refresh\fR
 Rebuild the graph before pushing instead of exporting what is cached
+.TP
+\fB\-\-table\fR
+Publish the embedding table from the cache instead of the graph, tagged with its pin, write\-once
 .TP
 \fB\-\-username\fR \fIstring\fR
 The registry username; the token is read from stdin, the way docker login \-\-password\-stdin takes one
@@ -75,7 +78,10 @@ The registry username; the token is read from stdin, the way docker login \-\-pa
 Write the graph here instead of stdout
 .TP
 \fB\-\-ref\fR \fIstring\fR
-The artifact to pull (default: derived from the repository's origin remote)
+The artifact to pull (default: derived from the repository's origin remote); with \-\-table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus\-embed
+.TP
+\fB\-\-table\fR
+Fetch the embedding table the binary pins into the cache instead of the graph
 .RE
 .SS graph deps options
 .RS

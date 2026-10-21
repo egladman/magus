@@ -257,10 +257,14 @@ const (
 	FlagGraphPullOut = "out"
 	// graph pull: --ref
 	FlagGraphPullRef = "ref"
+	// graph pull: --table
+	FlagGraphPullTable = "table"
 	// graph push: --ref
 	FlagGraphPushRef = "ref"
 	// graph push: --refresh
 	FlagGraphPushRefresh = "refresh"
+	// graph push: --table
+	FlagGraphPushTable = "table"
 	// graph push: --username
 	FlagGraphPushUsername = "username"
 	// graph stats: --global
@@ -1076,28 +1080,32 @@ type GraphPushFlags struct {
 	Ref      string // --ref
 	Username string // --username
 	Refresh  bool   // --refresh
+	Table    bool   // --table
 }
 
 // BindGraphPush registers `magus graph push`'s flags on fs and returns the destination.
 func BindGraphPush(fs *flag.FlagSet) *GraphPushFlags {
 	var f GraphPushFlags
-	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived)")
+	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed")
 	fs.StringVar(&f.Username, FlagGraphPushUsername, "", "The registry username; the token is read from stdin, the way docker login --password-stdin takes one")
 	fs.BoolVar(&f.Refresh, FlagGraphPushRefresh, false, "Rebuild the graph before pushing instead of exporting what is cached")
+	fs.BoolVar(&f.Table, FlagGraphPushTable, false, "Publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
 	return &f
 }
 
 // GraphPullFlags are the flags declared for `magus graph pull`.
 type GraphPullFlags struct {
-	Ref string // --ref
-	Out string // --out
+	Ref   string // --ref
+	Out   string // --out
+	Table bool   // --table
 }
 
 // BindGraphPull registers `magus graph pull`'s flags on fs and returns the destination.
 func BindGraphPull(fs *flag.FlagSet) *GraphPullFlags {
 	var f GraphPullFlags
-	fs.StringVar(&f.Ref, FlagGraphPullRef, "", "The artifact to pull (default: derived from the repository's origin remote)")
+	fs.StringVar(&f.Ref, FlagGraphPullRef, "", "The artifact to pull (default: derived from the repository's origin remote); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed")
 	fs.StringVar(&f.Out, FlagGraphPullOut, "", "Write the graph here instead of stdout")
+	fs.BoolVar(&f.Table, FlagGraphPullTable, false, "Fetch the embedding table the binary pins into the cache instead of the graph")
 	return &f
 }
 
