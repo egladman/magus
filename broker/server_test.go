@@ -325,6 +325,34 @@ func TestHoldersReassertOnANewBroker(t *testing.T) {
 		"the id the holder kept still releases the claim on the new broker")
 }
 
+// TestAnOverrunSurvivesABrokerRestart: the step that overran is still running past its
+// curve, so the successor must charge it the full peak, not pack against the curve.
+func TestAnOverrunSurvivesABrokerRestart(t *testing.T) {
+	old := redialEvery
+	redialEvery = 20 * time.Millisecond
+	t.Cleanup(func() { redialEvery = old })
+
+	addr := testAddr(t)
+	stopFirst, _ := serve(t, addr, WithCapacity(10_000, 8))
+	c := dial(t, addr)
+	held, err := c.Request(t.Context(), curvedClaim("test", 100, 7000, 1000))
+	require.NoError(t, err)
+	require.True(t, held.Granted)
+	c.Overrun(t.Context(), held.ID)
+
+	stopFirst()
+	serve(t, addr, WithCapacity(10_000, 8))
+	assert.Eventually(t, func() bool {
+		return len(holders(t, addr)) == 1 && c.live() != nil
+	}, 3*time.Second, 20*time.Millisecond, "the holder re-asserts its claim on the new broker")
+
+	stranger := dial(t, addr)
+	v, err := stranger.Request(t.Context(), curvedClaim("lint", 200, 1000, 7000))
+	require.NoError(t, err)
+	assert.False(t, v.Granted, "the new broker charges the re-asserted overrun its 7000 peak beside the late 7000")
+	assert.True(t, v.Fits)
+}
+
 // replyGate forwards connections from its own socket to a broker, and on every
 // connection after the first holds back claim replies until open closes. A reassert
 // the gate is holding is recorded on the broker while the client has not yet read it.
