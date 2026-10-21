@@ -111,6 +111,8 @@ type Magus struct {
 	// output that runs outside a target's capture. Nil for every other format.
 	records slog.Handler
 
+	historySaid sync.Once
+
 	limOnce   sync.Once
 	lim       *cache.Limiter
 	slotWaits cache.SlotWaitMeter

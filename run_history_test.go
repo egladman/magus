@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,11 +24,7 @@ func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelError})))
-	historyUnreadable = sync.Once{}
-	t.Cleanup(func() {
-		slog.SetDefault(prev)
-		historyUnreadable = sync.Once{}
-	})
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	m := &Magus{}
 	m.cfg.Volatility.Enabled = true
