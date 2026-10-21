@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -93,6 +94,14 @@ func Load(ctx context.Context, opts Options) (*embed.Table, error) {
 	}
 	return load(path, pin)
 }
+
+// Cached is Load under the default cache root, run once per process: every later call
+// returns the first call's table or error, so a query never rereads or rehashes the
+// file, and a table pulled after the first call takes effect in the next process.
+// It is safe for concurrent use.
+var Cached = sync.OnceValues(func() (*embed.Table, error) {
+	return Load(context.Background(), Options{})
+})
 
 func load(path, pin string) (*embed.Table, error) {
 	data, err := os.ReadFile(path)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -488,7 +489,7 @@ func (g *Graph) neighborhood(seeds []string, budget int, relations []string) (*G
 // neighborhood subgraph, bounded by budget. It is the unpaged view: every match, in
 // one response: QueryPage with a zero offset and no limit, so the two cannot drift.
 func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
-	return g.QueryPage(input, budget, 0, 0)
+	return g.QueryPage(input, budget, 0, 0, nil)
 }
 
 // QueryPage is Query with a match window: it returns the total MatchCount but only
@@ -498,9 +499,10 @@ func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
 // must be returned across several bounded responses. offset past the end yields an
 // empty page with the true MatchCount, so a caller can stop.
 //
-// It ranks under the shipped weights with no reader context; QueryRanked takes both.
-func (g *Graph) QueryPage(input string, budget, offset, limit int) types.KnowledgeQueryOutput {
-	out, err := g.QueryRanked(input, budget, offset, limit, RetrieveOptions{Weights: ShippedWeights()})
+// It ranks under the shipped weights and table, a loader as RetrieveOptions.Table takes
+// (nil skips the embed list), with no reader context; QueryRanked takes one.
+func (g *Graph) QueryPage(input string, budget, offset, limit int, table func() (*embed.Table, error)) types.KnowledgeQueryOutput {
+	out, err := g.QueryRanked(input, budget, offset, limit, RetrieveOptions{Weights: ShippedWeights(), Table: table})
 	if err != nil {
 		// Only weights the rankers refuse fail Retrieve, and the shipped file is validated.
 		panic(fmt.Sprintf("knowledge: shipped weights refused: %v", err))

@@ -261,7 +261,7 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 	var paged []string
 	limit := 2
 	for offset := 0; offset < all.MatchCount; offset += limit {
-		page := g.QueryPage("kind:target", 50, offset, limit)
+		page := g.QueryPage("kind:target", 50, offset, limit, nil)
 		// The total is stable across pages. The window and its neighborhood are what the next
 		// assertions and the neighborhood tests pin, so they are carried over.
 		want := types.KnowledgeQueryOutput{
@@ -287,7 +287,7 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 func TestQueryPageOffsetPastEnd(t *testing.T) {
 	g := sampleGraph()
 	total := g.Query("kind:target", 50).MatchCount
-	page := g.QueryPage("kind:target", 50, total+10, 5)
+	page := g.QueryPage("kind:target", 50, total+10, 5, nil)
 	assert.Empty(t, page.Matches, "offset past the end yields no matches")
 	assert.Equal(t, total, page.MatchCount, "but still reports the true total so a caller can stop")
 }

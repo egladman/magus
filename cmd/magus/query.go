@@ -20,6 +20,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
@@ -1054,7 +1055,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	stop := tr.phase("query.reader_context")
 	reader, readerErr := workspacegraph.ReaderContext(ctx, ws, ws.Root())
 	stop()
-	ctx = knowledge.WithReader(ctx, reader)
+	ctx = knowledge.WithTable(knowledge.WithReader(ctx, reader), embedtable.Cached)
 	var g *knowledge.Graph
 	var out types.KnowledgeQueryOutput
 	var err error
@@ -1078,7 +1079,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 			return queryResult{}, err
 		}
 		stop = tr.phase("query.search")
-		out, err = g.QueryRanked(read.Input, read.Budget, 0, 0, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights()})
+		out, err = g.QueryRanked(read.Input, read.Budget, 0, 0, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights(), Table: embedtable.Cached})
 		stop()
 		if err != nil {
 			return queryResult{}, err
@@ -1106,7 +1107,7 @@ func measuredCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config)
 // otherwise.
 func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, coverage coverageFunc) queryResult {
 	stop := traceFromContext(ctx).phase("query.search")
-	out := g.Query(read.Input, read.Budget)
+	out := g.QueryPage(read.Input, read.Budget, 0, 0, embedtable.Cached)
 	stop()
 	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/textrank"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
@@ -32,8 +31,8 @@ const pullTable = "magus graph pull -table"
 // paths); each one that names a file or dir node seeds the graph list. Lexical is the
 // stored lexical index; nil ranks over one built in memory from the graph's nodes, which
 // the ranking's Note says. Table loads the embedding table the embed list ranks by; nil
-// reads the table `magus graph pull -table` cached, once per Retrieve. A Table error
-// skips the embed list, which the ranking's Skipped says, and Retrieve never pulls.
+// means no table. A nil Table or a Table error skips the embed list, which the ranking's
+// Skipped says; Retrieve reads no file of its own and never pulls.
 // Limit truncates the matches; 0 keeps every one.
 type RetrieveOptions struct {
 	Reader  []string
@@ -43,12 +42,23 @@ type RetrieveOptions struct {
 	Limit   int
 }
 
-// cachedTable is the Table a RetrieveOptions without one loads.
-var cachedTable = func() (*embed.Table, error) {
-	return embedtable.Load(context.Background(), embedtable.Options{})
+type (
+	readerKey struct{}
+	tableKey  struct{}
+)
+
+// WithTable returns ctx carrying the loader Store.QuerySymbols passes as
+// RetrieveOptions.Table. Its callers' signatures carry no RetrieveOptions, so the loader
+// rides ctx the way WithReader's paths do.
+func WithTable(ctx context.Context, load func() (*embed.Table, error)) context.Context {
+	return context.WithValue(ctx, tableKey{}, load)
 }
 
-type readerKey struct{}
+// tableOn returns the loader WithTable put on ctx, nil when there is none.
+func tableOn(ctx context.Context) func() (*embed.Table, error) {
+	load, _ := ctx.Value(tableKey{}).(func() (*embed.Table, error))
+	return load
+}
 
 // WithReader returns ctx carrying the reader's context paths, which Store.QuerySymbols
 // ranks under. Its callers' signatures carry no RetrieveOptions, so the paths ride ctx.
@@ -306,13 +316,12 @@ func exactList(ix *searchIndex, cands []candidate, phrase string, w textrank.Wei
 
 // embedList is the cands with an embedding under opts.Table, by its cosine with the
 // query's embedding of tokens, ties in lexical order. With no list it returns why: the
-// table did not load, or the query or every cand holds no token of its vocabulary.
+// table is nil or did not load, or the query or every cand holds no token of its vocabulary.
 func embedList(ix *searchIndex, cands []candidate, tokens []string, opts RetrieveOptions) (*textrank.RankedList, string) {
-	load := opts.Table
-	if load == nil {
-		load = cachedTable
+	if opts.Table == nil {
+		return nil, "no table loaded: run `" + pullTable + "`"
 	}
-	table, err := load()
+	table, err := opts.Table()
 	if err != nil {
 		reason := err.Error()
 		if !strings.Contains(reason, pullTable) {

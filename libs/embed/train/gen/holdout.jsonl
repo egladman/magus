@@ -307,6 +307,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_link.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_link_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_registry.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/graph_registry_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_source.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_source_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/graph_test.go"}
@@ -839,6 +840,8 @@
 {"group":"dir:internal/edit","path":"internal/edit/edit_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename_test.go"}
+{"group":"dir:internal/embedtable","path":"internal/embedtable/embedtable.go"}
+{"group":"dir:internal/embedtable","path":"internal/embedtable/embedtable_test.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/eventstream.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/eventstream_test.go"}
 {"group":"dir:internal/eventstream","path":"internal/eventstream/follow.go"}
@@ -1252,6 +1255,7 @@
 {"group":"dir:libs/embed","path":"libs/embed/pin_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search.go"}
 {"group":"dir:libs/embed","path":"libs/embed/search_test.go"}
+{"group":"dir:libs/embed","path":"libs/embed/shipped_golden_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/table.go"}
 {"group":"dir:libs/embed","path":"libs/embed/table_test.go"}
 {"group":"dir:libs/embed","path":"libs/embed/tokens.go"}

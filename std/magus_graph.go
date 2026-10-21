@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
@@ -113,7 +114,7 @@ func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOpti
 		return types.KnowledgeQueryOutput{}, err
 	}
 	reader, readerErr := workspacegraph.ReaderContext(ctx, types.WorkspaceFromContext(ctx), kg.Root())
-	out, err := kg.QueryRanked(query, opts.Budget, opts.Offset, opts.Limit, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights()})
+	out, err := kg.QueryRanked(query, opts.Budget, opts.Offset, opts.Limit, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights(), Table: embedtable.Cached})
 	if err != nil {
 		return types.KnowledgeQueryOutput{}, err
 	}

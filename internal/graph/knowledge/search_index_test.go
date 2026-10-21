@@ -385,7 +385,7 @@ func TestQueryPageMatchesResolve(t *testing.T) {
 	for _, in := range []string{"t003", "kind:target t003", "project=pkg/p00010 kind=file", "relation=references"} {
 		want := g.Resolve(in, 0)
 		require.NotEmptyf(t, want, "%q matches nothing; the comparison would prove little", in)
-		out := g.QueryPage(in, 50, 0, 10)
+		out := g.QueryPage(in, 50, 0, 10, nil)
 		assert.Equalf(t, len(want), out.MatchCount, "MatchCount for %q", in)
 		assert.Equalf(t, want[:min(10, len(want))], out.Matches, "first page for %q", in)
 		require.NotNil(t, out.Ranking)

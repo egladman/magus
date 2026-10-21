@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,17 +25,9 @@ func retrieveIDs(ms []types.KnowledgeMatch) []string {
 	return ids
 }
 
-// The package's tests never read the developer's cached table, which would move every
-// ranking they pin once `magus graph pull -table` ran.
-func init() { cachedTable = noTable }
+func shipped() RetrieveOptions { return RetrieveOptions{Weights: ShippedWeights()} }
 
-func noTable() (*embed.Table, error) {
-	return nil, fmt.Errorf("%w: the test binds none", embedtable.ErrAbsent)
-}
-
-func shipped() RetrieveOptions { return RetrieveOptions{Weights: ShippedWeights(), Table: noTable} }
-
-var noTableSkipped = listEmbed + ": embedtable: no embedding table in the cache: the test binds none: run `" + pullTable + "` to replace it"
+var noTableSkipped = listEmbed + ": no table loaded: run `" + pullTable + "`"
 
 // fixtureTable holds parse and config on axis 0 and yaml on axis 1, so a text of parse
 // and config points where the query parse does and one of parse and yaml at 45 degrees.
