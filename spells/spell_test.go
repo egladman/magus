@@ -218,6 +218,12 @@ func TestSpellInvokerForwards(t *testing.T) {
 	assert.Equal(t, InvokeResponse{Data: "ran:build"}, resp)
 }
 
+// A provider op runs the spell's Buzz source, so a spell built without one has none to run.
+func TestSpellFuncSource(t *testing.T) {
+	assert.Equal(t, "export fun enabled() {}", NewSpell("cache", WithFuncSource("export fun enabled() {}")).FuncSource())
+	assert.Empty(t, NewSpell("go").FuncSource())
+}
+
 func TestSpellServiceTargets(t *testing.T) {
 	s := NewSpell("node", WithTargets("build", "serve"), WithServiceTargets("serve"))
 	assert.True(t, s.IsServiceTarget("serve"), "serve is a service op")

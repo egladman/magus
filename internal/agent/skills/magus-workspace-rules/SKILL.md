@@ -192,13 +192,13 @@ import "ghcr.io/egladman/magus/spells/harness/opencode";
 {{if .Full}}   The import and `{{buzz "harness.provider"}}(cursor)` stay as they are. A copy at a
    path without this entry is never read.{{else}}   Import and `{{buzz "harness.provider"}}(cursor)` unchanged. Copy at path without this entry: never read.{{end}}
 {{if .Full}}3. Edit the workspace spell for whatever the host needs: matchers, managed host-config fragments, the guard
-   command string, skills form, `harness_mcp` (MCP setup hint, docs pointer, host
-   CLI sketch).
+   command string, skills form, `mgs_getMcp` (MCP setup hint, docs pointer, host
+   CLI sketch). The quoting and glue command builders come from `magus/harness`.
    - Every entry's command either runs a template magus ships or ends with the
      shell comment `# magus:harness`, after a space. describe refuses any other: a
      merge retires only entries it can tell are magus's.
    - Do not edit magus Go, the cached copy of a pinned spell (it is re-hashed and
-     replaced), or stamped skills.{{else}}3. Edit workspace spell for whatever host needs: matchers, host-config fragments, guard command, `harness_mcp`.
+     replaced), or stamped skills.{{else}}3. Edit workspace spell for whatever host needs: matchers, host-config fragments, guard command, `mgs_getMcp`.
    - Every entry's command either runs template magus ships or ends with shell comment `# magus:harness`, after space. describe refuses any other: merge retires only entries it can tell are magus's.
    - Do not edit magus Go, cached copy of pinned spell (re-hashed, replaced), or stamped skills.{{end}}
 {{if .Full}}4. Run `{{cmd "describe harness"}} <id>` and have a person read and run the merge

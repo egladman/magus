@@ -81,10 +81,10 @@ func TestOverrideReplacesTheEmbeddedSpell(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	w.Write("spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }
-export fun mgs_listTargets() > any {
-    return {"vet": {"bin": "go", "args": ["vet", "./..."]}};
-}
+	w.Write("spells/go/spell.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "go"; }
+fun vet(t: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"vet": vet}; }
 `)
 	w.Write("magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
 	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{

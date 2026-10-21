@@ -152,10 +152,6 @@ func (reg *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption
 // from a magusfile: Open runs it to add the projects it reports.
 func (reg *WorkspaceRegistry) AddProvider(spellName string) { reg.r.AddProvider(spellName) }
 
-// AddHarness wires the named harness spell, as magus\harness.provider does from a
-// magusfile.
-func (reg *WorkspaceRegistry) AddHarness(spellName string) { reg.r.AddHarness(spellName) }
-
 // WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.
 func WithWorkspaceRegistry(reg *WorkspaceRegistry) Option {
 	return func(o *workspace.Load) { o.Registry = reg.r }

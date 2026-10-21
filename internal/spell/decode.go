@@ -2,7 +2,6 @@ package spell
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -17,136 +16,272 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 )
 
-// obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
-// adapter). Decoupling Decode from the concrete value type keeps the marshaling in
-// one place: obj is the single boundary that knows a spell's shape, and the seam a
-// second authoring backend would implement.
-type obj interface {
-	// Str returns the string at key and whether it was present as a string.
-	Str(key string) (string, bool)
-	// Bool returns the bool at key; absent or non-bool yields false.
-	Bool(key string) bool
-	// Strs returns the list-of-strings at key; absent or empty yields (nil, nil).
-	// A non-string element is an error naming its index: dropping it would shorten
-	// an argv or a source list, and the run would then succeed and cache as though
-	// the declaration had been honored.
-	Strs(key string) ([]string, error)
-	// StrMap returns the string-to-string map at key (a Command's `secrets`: env var
-	// name -> provider reference); absent or empty yields (nil, nil). A present value
-	// that is not a string is an error naming key, since a mistyped entry here would
-	// otherwise resolve nothing at spawn with no signal until the run that needed it.
-	StrMap(key string) (map[string]string, error)
-	// Obj returns the nested record at key and whether it was present as one.
-	Obj(key string) (obj, bool)
-	// Objs returns the list of nested records at key, for a field that is an
-	// array of objects (a charm's JSON Patch ops). Absent or non-array yields nil.
-	Objs(key string) []obj
-	// Keys returns this record's keys, for iterating ops and charms.
-	Keys() []string
-	// CallStrs resolves the field at key to a []string. It accepts either form
-	// the field takes across a spell's life: a function (in a definition,
-	// needs()/provides() are called with args) or an already-resolved list (in a
-	// bound handle, where define/load marshaled the result back as data so
-	// magus.project can decode the spell by value at bind time). Absent yields
-	// (nil, nil). Calling a function is the one genuinely engine-specific act:
-	// Buzz calls through its session.
-	CallStrs(key string, args ...string) ([]string, error)
-}
-
-// decodeScriptRunners reads mgs_listScriptRunners: argv prefixes, never run.
-func decodeScriptRunners(src obj) ([]spells.Command, error) {
-	var out []spells.Command
-	for i, o := range src.Objs("script_runners") {
-		cmd, err := decodeCommand("", "", o)
-		if err != nil {
-			return nil, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
-		}
-		out = append(out, cmd)
+// Descriptor checks what Resolve decoded and assembles the spells.Descriptor. The
+// decoders have already refused a wrong kind, an unknown member and a bad enum case, so
+// what is left is meaning: a valid op name, a charm patch that applies, a lockfile that
+// is one of the manifest's candidates. It registers nothing.
+func (r Resolved) Descriptor() (spells.Descriptor, error) {
+	name := r.Contract.Name
+	if name == "" {
+		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
-	return out, spells.ValidateScriptRunners(out)
+	m, err := r.declared()
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
+	if m.Sandbox != nil {
+		if err := validateSandbox(*m.Sandbox); err != nil {
+			return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
+		}
+	}
+	if err := r.assembleOps(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := applyModeArgs(&m, r.Contract.ModeArgs); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := addSymbolIndexOp(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := synthesizeInstall(&m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	if err := validateTools(m); err != nil {
+		return spells.Descriptor{}, err
+	}
+	return m, nil
 }
 
-// decodeManifests reads the manifests field, which is a list of records rather than
-// the list of strings every other path-bearing field decodes to (see
-// contractEntry.Shape). Each record is a Manifest: the file dependencies are declared
-// in, plus the lockfiles its ecosystem might resolve them into.
-//
-// A record carrying only .value decodes as a manifest with no lock candidates, which
-// is what makes a spell written against the older [Path] contract keep loading. That
-// is the entire compat promise: Path and Manifest agree on .value, and the extra Path
-// fields (base, isDir) are meaningless for a manifest, so ignoring them loses nothing.
-func decodeManifests(src obj) ([]spells.Manifest, error) {
-	objs := src.Objs("manifests")
-	if len(objs) == 0 {
+// declared validates the contract's load-time answers other than the ops and the sandbox,
+// and returns the descriptor they make. Its errors do not name the spell.
+func (r Resolved) declared() (spells.Descriptor, error) {
+	c := r.Contract
+	lang, err := validateLanguage(c.Language)
+	if err != nil {
+		return spells.Descriptor{}, err
+	}
+	tools, err := validateToolDecls(c.Tools)
+	if err != nil {
+		return spells.Descriptor{}, err
+	}
+	ignoreDirs, err := ignoreDirValues(c.IgnoreDirs)
+	if err != nil {
+		return spells.Descriptor{}, err
+	}
+	manifests, err := validateManifests(c.Manifests)
+	if err != nil {
+		return spells.Descriptor{}, err
+	}
+	for i, runner := range c.ScriptRunners {
+		if err := validateCommand("", "", runner); err != nil {
+			return spells.Descriptor{}, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
+		}
+	}
+	if err := spells.ValidateScriptRunners(c.ScriptRunners); err != nil {
+		return spells.Descriptor{}, err
+	}
+	var indexer *spells.SymbolIndexer
+	if c.SymbolIndexer != nil {
+		si := *c.SymbolIndexer
+		if err := validateSymbolIndexer(c.Name, &si); err != nil {
+			return spells.Descriptor{}, err
+		}
+		indexer = &si
+	}
+	return spells.Descriptor{
+		Name:               c.Name,
+		Needs:              globValues(c.RequiredGlobs),
+		Provides:           globValues(c.ProvidedGlobs),
+		IgnoreDirs:         ignoreDirs,
+		Manifests:          manifests,
+		ScriptRunners:      c.ScriptRunners,
+		Tools:              tools,
+		Language:           lang.Name,
+		LanguageExtensions: lang.Extensions,
+		Syntax:             lang.Syntax,
+		SymbolIndexer:      indexer,
+		Sandbox:            c.Sandbox,
+		Opaque:             c.Opaque,
+	}, nil
+}
+
+// addSymbolIndexOp registers m's declared indexer as an op under its reserved name.
+func addSymbolIndexOp(m *spells.Descriptor) error {
+	indexer := m.SymbolIndexer
+	// An authored op under the reserved name collides. Before mgs_getSymbolIndexer,
+	// declaring `scip` WAS the capability, and accepting it would run the indexer with an
+	// unresolved $MAGUS_SYMBOL_INDEX.
+	for _, reserved := range []string{spells.DefaultSymbolIndexOp, indexer.OpName()} {
+		if _, authored := m.Ops[reserved]; authored {
+			return fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer, move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", m.Name, reserved)
+		}
+	}
+	if indexer == nil {
+		return nil
+	}
+	if m.Ops == nil {
+		m.Ops = map[string]spells.Op{}
+	}
+	// Synthesized, so the run, cache and freshness paths reach the indexer as an
+	// ordinary command op; the kind is what the runner matches on.
+	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+	return nil
+}
+
+// assembleOps turns the spell's target and service handlers into m.Ops and m.DocOps.
+func (r Resolved) assembleOps(m *spells.Descriptor) error {
+	c, name := r.Contract, r.Contract.Name
+	ops := map[string]spells.Op{}
+	names := opNames{spell: name, claimed: map[string]string{}}
+	for _, op := range slices.Sorted(maps.Keys(c.Targets)) {
+		canonical, err := names.claim(op)
+		if err != nil {
+			return err
+		}
+		t, err := targetOp(name, canonical, c.Targets[op], r.TargetDocs[op])
+		if err != nil {
+			return err
+		}
+		ops[canonical] = t
+	}
+	for _, op := range slices.Sorted(maps.Keys(c.Services)) {
+		canonical, err := names.claim(op)
+		if err != nil {
+			return err
+		}
+		t, err := serviceOp(name, canonical, c.Services[op], r.TargetDocs[op])
+		if err != nil {
+			return err
+		}
+		ops[canonical] = t
+	}
+	if len(ops) > 0 {
+		m.Ops = ops
+	}
+	if len(names.docOps) > 0 {
+		slices.Sort(names.docOps)
+		m.DocOps = names.docOps
+	}
+	return nil
+}
+
+// opNames claims a spell's op names in their canonical spelling.
+type opNames struct {
+	spell   string
+	claimed map[string]string
+	docOps  []string
+}
+
+func (n *opNames) claim(op string) (string, error) {
+	if err := types.ValidateTargetName(op); err != nil {
+		return "", fmt.Errorf("spell %q op %q: %w", n.spell, op, err)
+	}
+	// Every request reaching dispatch is already kebab-normalized, so an op stored
+	// as go_build would be unreachable. Two spellings can now land on one key, which
+	// is an error naming both rather than a silent overwrite.
+	canonical := types.Normalize(op)
+	if prior, dup := n.claimed[canonical]; dup {
+		return "", fmt.Errorf("spell %q declares ops %q and %q, which are the same op %q, rename one", n.spell, prior, op, canonical)
+	}
+	n.claimed[canonical] = op
+	n.docOps = append(n.docOps, canonical)
+	return canonical, nil
+}
+
+func targetOp(spellName, canonical string, cmd spells.Command, doc string) (spells.Op, error) {
+	if err := validateCommand(spellName, canonical, cmd); err != nil {
+		return spells.Op{}, err
+	}
+	t := spells.Op{Command: cmd, Capture: cmd.Capture, Doc: doc}
+	if diags := ward.Check(canonical, t); len(diags) > 0 {
+		return spells.Op{}, diags[0]
+	}
+	return t, nil
+}
+
+func serviceOp(spellName, canonical string, svc spells.Service, doc string) (spells.Op, error) {
+	if err := validateService(spellName, canonical, svc); err != nil {
+		return spells.Op{}, err
+	}
+	// The op's embedded Command mirrors Command, or Start when set, so the fork,
+	// render and cache paths read every op uniformly.
+	t := spells.Op{Kind: spells.OpKindService, Service: &svc, Command: svc.Command, Doc: doc}
+	if svc.Start.Bin != "" {
+		t.Command = svc.Start
+	}
+	if diags := ward.Check(canonical, t); len(diags) > 0 {
+		return spells.Op{}, diags[0]
+	}
+	return t, nil
+}
+
+// globValues reduces declared Paths to their lexical values: glob matching does not
+// resolve filesystem paths, so a Path's base has nothing to add.
+func globValues(paths []types.Path) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		out[i] = p.Value
+	}
+	return out
+}
+
+func ignoreDirValues(dirs []types.Path) ([]string, error) {
+	for i, d := range dirs {
+		if !d.IsDir {
+			return nil, fmt.Errorf("mgs_listIgnoreDirs[%d] must set isDir = true", i)
+		}
+	}
+	return globValues(dirs), nil
+}
+
+func validateManifests(ms []spells.Manifest) ([]spells.Manifest, error) {
+	if len(ms) == 0 {
 		return nil, nil
 	}
-	out := make([]spells.Manifest, 0, len(objs))
-	for _, o := range objs {
-		value, ok := o.Str("value")
-		if !ok || value == "" {
-			continue
+	out := make([]spells.Manifest, len(ms))
+	for i, m := range ms {
+		if m.Value == "" {
+			return nil, fmt.Errorf("mgs_listManifests[%d].value is required", i)
 		}
-		locks, err := o.Strs("lockCandidates")
+		installs, err := validateInstalls(m)
 		if err != nil {
-			return nil, fmt.Errorf("manifests[%q]: %w", value, err)
+			return nil, err
 		}
-		var installs map[string]spells.Install
-		if src, ok := o.Obj("installs"); ok {
-			if installs, err = decodeInstalls(value, locks, src); err != nil {
-				return nil, err
-			}
-		}
-		if len(installs) == 0 {
-			installs = nil
-		}
-		out = append(out, spells.Manifest{Value: value, LockCandidates: locks, Installs: installs})
+		m.Installs = installs
+		out[i] = m
 	}
 	return out, nil
 }
 
-// decodeInstalls reads one manifest's installs map. Every rule here is a declaration
-// bug knowable at load, so each is an error rather than an install that misbehaves in
-// one project later.
-func decodeInstalls(manifest string, locks []string, src obj) (map[string]spells.Install, error) {
-	out := map[string]spells.Install{}
-	for _, lock := range src.Keys() {
-		rec, ok := src.Obj(lock)
-		if !ok {
-			continue
+// validateInstalls checks one manifest's installs and returns them with each name
+// normalized. Every rule is a declaration bug knowable at load, so each is an error
+// rather than an install that misbehaves in one project later.
+func validateInstalls(m spells.Manifest) (map[string]spells.Install, error) {
+	if len(m.Installs) == 0 {
+		return nil, nil //nolint:nilnil // a manifest that declares no installs is not an error; nil is that answer
+	}
+	out := make(map[string]spells.Install, len(m.Installs))
+	for _, lock := range slices.Sorted(maps.Keys(m.Installs)) {
+		in := m.Installs[lock]
+		where := fmt.Sprintf("manifests[%q].installs[%q]", m.Value, lock)
+		if !slices.Contains(m.LockCandidates, lock) {
+			return nil, fmt.Errorf("%s: %q is not one of this manifest's lockCandidates %v, so no project could ever select it", where, lock, m.LockCandidates)
 		}
-		where := fmt.Sprintf("manifests[%q].installs[%q]", manifest, lock)
-		if !slices.Contains(locks, lock) {
-			return nil, fmt.Errorf("%s: %q is not one of this manifest's lockCandidates %v, so no project could ever select it", where, lock, locks)
-		}
-		name, _ := rec.Str("name")
-		if name == "" {
+		if in.Name == "" {
 			return nil, fmt.Errorf("%s: name is required, the op magus registers this install under", where)
 		}
-		if err := types.ValidateTargetName(name); err != nil {
-			return nil, fmt.Errorf("%s: name %q: %w", where, name, err)
+		if err := types.ValidateTargetName(in.Name); err != nil {
+			return nil, fmt.Errorf("%s: name %q: %w", where, in.Name, err)
 		}
-		name = types.Normalize(name)
-		cmdObj, ok := rec.Obj("command")
-		if !ok {
-			return nil, fmt.Errorf("%s: command is required", where)
-		}
-		cmd, err := decodeCommand("", name, cmdObj)
-		if err != nil {
+		in.Name = types.Normalize(in.Name)
+		if err := validateCommand("", in.Name, in.Command); err != nil {
 			return nil, fmt.Errorf("%s: %w", where, err)
 		}
-		if cmd.Bin == "" {
+		if in.Command.Bin == "" {
 			return nil, fmt.Errorf("%s: command has no bin", where)
-		}
-		in := spells.Install{Name: name, Command: cmd, Relocatable: rec.Bool("relocatable")}
-		in.Dir, _ = rec.Str("dir")
-		if in.Stamps, err = rec.Strs("stamps"); err != nil {
-			return nil, fmt.Errorf("%s: %w", where, err)
-		}
-		if in.Inputs, err = rec.Strs("inputs"); err != nil {
-			return nil, fmt.Errorf("%s: %w", where, err)
-		}
-		if in.Tools, err = rec.Strs("tools"); err != nil {
-			return nil, fmt.Errorf("%s: %w", where, err)
 		}
 		if in.Relocatable && in.Dir == "" {
 			return nil, fmt.Errorf("%s: relocatable names no dir to seed", where)
@@ -213,304 +348,6 @@ func synthesizeInstall(m *spells.Descriptor) error {
 	return nil
 }
 
-// Decode marshals a spell definition record into the canonical spells.Descriptor,
-// resolving needs()/provides() and validating op names and charm strategies. It
-// is the single reader the Buzz engine routes through, so a spell's shape is
-// known in exactly one place. Decode is pure: it neither registers the spell nor
-// touches any global state.
-func Decode(src obj) (spells.Descriptor, error) {
-	name, _ := src.Str("name")
-	if name == "" {
-		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
-	}
-	lang, err := decodeLanguage(src)
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	tools, err := decodeTools(src)
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	ignoreDirs, err := src.Strs("ignore_dirs")
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	manifests, err := decodeManifests(src)
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	runners, err := decodeScriptRunners(src)
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	indexer, err := decodeSymbolIndexer(name, src)
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
-	}
-	sandbox, err := decodeSandbox(src)
-	if err != nil {
-		return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
-	}
-	m := spells.Descriptor{
-		Name:               name,
-		IgnoreDirs:         ignoreDirs,
-		Manifests:          manifests,
-		ScriptRunners:      runners,
-		Tools:              tools,
-		Language:           lang.Name,
-		LanguageExtensions: lang.Extensions,
-		Syntax:             lang.Syntax,
-		SymbolIndexer:      indexer,
-		Sandbox:            sandbox,
-		Opaque:             src.Bool("opaque"),
-	}
-
-	needs, err := src.CallStrs("needs")
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: needs(): %w", name, err)
-	}
-	m.Needs = needs
-
-	provides, err := src.CallStrs("provides")
-	if err != nil {
-		return spells.Descriptor{}, fmt.Errorf("spell %q: provides(): %w", name, err)
-	}
-	m.Provides = provides
-
-	if ops, ok := src.Obj("ops"); ok {
-		opMap := map[string]spells.Op{}
-		// canonical op name -> the spelling that claimed it, for the collision check below.
-		authored := map[string]string{}
-		var docOps []string
-		for _, op := range ops.Keys() {
-			spec, ok := ops.Obj(op)
-			if !ok {
-				continue
-			}
-			if err := types.ValidateTargetName(op); err != nil {
-				return spells.Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
-			}
-			// Canonicalize the key. The charset above admits '_' and uppercase, but
-			// every request reaching dispatchOp has already been kebab-normalized by
-			// ParseTarget, and dispatch is a plain map hit, so an op authored as
-			// go_build was stored under go_build, looked up as go-build, missed, and
-			// swallowed as a fan-out skip at debug level. Declared and unreachable,
-			// with no error anywhere. Normalizing on the way in is the other half of
-			// the rule ParseTarget already applies on the way out.
-			//
-			// Collapsing keys means two spellings can now land on one, so the
-			// collision is checked rather than resolved: `go-build` and `goBuild` in
-			// one spell used to be two ops (one of them unreachable) and would
-			// otherwise become a last-write-wins overwrite: the same silent loss this
-			// normalization exists to end, just moved to the other side. Which one
-			// survives depends on map iteration, so it is a load error naming both.
-			canonical := types.Normalize(op)
-			if prior, dup := authored[canonical]; dup {
-				return spells.Descriptor{}, fmt.Errorf(
-					"spell %q declares ops %q and %q, which are the same op %q, rename one",
-					name, prior, op, canonical)
-			}
-			authored[canonical] = op
-			op = canonical
-			t := spells.Op{Capture: spec.Bool("capture")}
-			if doc, ok := spec.Str("doc"); ok {
-				t.Doc = doc
-			}
-			// A function-authored op (vs a plain {cmd,args} record op) is a candidate
-			// for the doctor doc-comment check; see spells.Descriptor.DocOps.
-			if spec.Bool("handler") {
-				docOps = append(docOps, op)
-			}
-			// A service op is recognized by its `command` or `start` field: a Service
-			// whose `command` is the long-running process, or whose `start` brings up
-			// one that outlives it, with `readiness` and `stop` commands. The op's
-			// embedded Command mirrors whichever of the two is set, so the
-			// fork/render/cache paths read every op uniformly. A command op (the
-			// default) decodes its Command directly.
-			cmdObj, isService := spec.Obj("command")
-			startObj, hasStart := spec.Obj("start")
-			if isService || hasStart {
-				var cmd spells.Command
-				if isService {
-					var err error
-					if cmd, err = decodeCommand(name, op, cmdObj); err != nil {
-						return spells.Descriptor{}, err
-					}
-				}
-				// Secrets on a service op are rejected here, not silently dropped
-				// later: the supervised path rebuilds the command without its env,
-				// so a declared secret would reach a foregrounded service and
-				// vanish from a supervised one: the same op behaving differently
-				// by how it was reached. Until the supervisor threads env through,
-				// refusing at load is the only honest answer.
-				if len(cmd.Secrets) > 0 {
-					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service op yet", name, op)
-				}
-				// Hints are refused on a service op for the same reason and with the
-				// same shape of answer. Reached as a dependency the op is handed to
-				// the supervisor and never runs through runCommand, so its advice
-				// could not fire; run directly it foregrounds and would fire, on
-				// every Ctrl-C shutdown, since that is how a foregrounded service
-				// ends. Advice that depends on how the op was reached, and that
-				// mostly fires on a normal exit, is worse than none.
-				if len(cmd.Hints) > 0 {
-					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service op (a supervised service never reaches the classifier, and a foregrounded one ends by being stopped)", name, op)
-				}
-				svc := &spells.Service{Command: cmd}
-				if hasStart {
-					start, err := decodeCommand(name, op, startObj)
-					if err != nil {
-						return spells.Descriptor{}, err
-					}
-					// Refused for the reasons command refuses them: the supervisor runs
-					// start directly, without the env or the classifier.
-					if len(start.Secrets) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service start command", name, op)
-					}
-					if len(start.Hints) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service start command (the supervisor runs it directly, so they could never fire)", name, op)
-					}
-					svc.Start = start
-				}
-				if readinessObj, ok := spec.Obj("readiness"); ok {
-					readiness, err := decodeCommand(name, op, readinessObj)
-					if err != nil {
-						return spells.Descriptor{}, err
-					}
-					if len(readiness.Secrets) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service readiness command", name, op)
-					}
-					// A readiness probe is polled by the supervisor, not run through
-					// runCommand, so advice declared here can never fire. Refuse it
-					// rather than accept a declaration that does nothing.
-					if len(readiness.Hints) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service readiness command (the supervisor polls it directly, so they could never fire)", name, op)
-					}
-					svc.Readiness = readiness
-				}
-				if stopObj, ok := spec.Obj("stop"); ok {
-					stop, err := decodeCommand(name, op, stopObj)
-					if err != nil {
-						return spells.Descriptor{}, err
-					}
-					if len(stop.Secrets) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service stop command", name, op)
-					}
-					// Same as readiness: the supervisor runs stop, so advice here is inert.
-					if len(stop.Hints) > 0 {
-						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service stop command (the supervisor runs it directly, so they could never fire)", name, op)
-					}
-					svc.Stop = stop
-				}
-				if distinct, ok := spec.Str("distinct"); ok {
-					svc.Distinct = distinct
-				}
-				if idle, ok := spec.Str("idle"); ok {
-					svc.Idle = idle
-				}
-				if err := svc.Validate(); err != nil {
-					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
-				}
-				t.Kind = spells.OpKindService
-				t.Service = svc
-				t.Command = cmd
-				if svc.Start.Bin != "" {
-					t.Command = svc.Start
-				}
-			} else {
-				cmd, err := decodeCommand(name, op, spec)
-				if err != nil {
-					return spells.Descriptor{}, err
-				}
-				t.Command = cmd
-				t.Capture = cmd.Capture
-			}
-			// Kind-coherence wards: reject an op whose argv contradicts its kind
-			// (a detached service, a never-exiting command) at resolution time,
-			// before anything forks.
-			if diags := ward.Check(op, t); len(diags) > 0 {
-				return spells.Descriptor{}, diags[0]
-			}
-			opMap[op] = t
-		}
-		if len(opMap) > 0 {
-			m.Ops = opMap
-		}
-		if len(docOps) > 0 {
-			slices.Sort(docOps)
-			m.DocOps = docOps
-		}
-	}
-	if err := decodeModeArgs(&m, src); err != nil {
-		return spells.Descriptor{}, err
-	}
-	// An AUTHORED op under the reserved name is refused, whether or not the spell also
-	// declares an indexer. magus owns the name (it registers the declared indexer under
-	// it), so the op would collide; and before mgs_getSymbolIndexer existed, declaring
-	// `scip` in mgs_listTargets WAS how a spell claimed the capability. Refusing loudly
-	// is the migration path: accepting it would leave such a spell running its indexer
-	// with an unresolved $MAGUS_SYMBOL_INDEX and dropping out of the symbol graph, with
-	// nothing said. There is no compat shim because the condition to retire one is
-	// "no spell anywhere still declares the op", which magus cannot observe. The op an
-	// indexer declares for itself is refused for the same collision.
-	for _, reserved := range []string{spells.DefaultSymbolIndexOp, indexer.OpName()} {
-		if _, authored := m.Ops[reserved]; authored {
-			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer, move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
-		}
-	}
-	if indexer != nil {
-		if m.Ops == nil {
-			m.Ops = map[string]spells.Op{}
-		}
-		// Synthesized rather than authored, so the run, cache and freshness paths reach
-		// the indexer as an ordinary command op while the spell declares it once, by
-		// name. The kind is what the runner matches on.
-		m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
-	}
-	if err := synthesizeInstall(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	// Checked here rather than at probe time: an unusable component is a declaration
-	// bug knowable without running anything, and discovering it from a cache that
-	// silently never narrows is the failure this prevents.
-	if err := validateTools(m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	return m, nil
-}
-
-// decodeModeArgs reads mgs_getModeArgs onto the ops it names. Each arg must be in the op's
-// own argv: the raw-tool guard denies only invocations carrying all of them, and one magus
-// never renders would leave the op's own spelling allowed.
-func decodeModeArgs(m *spells.Descriptor, src obj) error {
-	modes, ok := src.Obj("mode_args")
-	if !ok {
-		return nil
-	}
-	for _, key := range modes.Keys() {
-		args, err := modes.Strs(key)
-		if err != nil {
-			return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %w", m.Name, key, err)
-		}
-		name := types.Normalize(key)
-		op, ok := m.Ops[name]
-		if !ok {
-			return fmt.Errorf("spell %q mgs_getModeArgs names op %q, which the spell does not declare", m.Name, key)
-		}
-		if len(args) == 0 {
-			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args, drop the entry", m.Name, key)
-		}
-		for _, a := range args {
-			if !slices.Contains(op.Args, a) {
-				return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %q is not in the op's args %q", m.Name, key, a, op.Args)
-			}
-		}
-		op.ModeArgs = args
-		m.Ops[name] = op
-	}
-	return nil
-}
-
 // validEnvName reports whether s is usable as an environment variable name:
 // letters, digits and underscores, not starting with a digit. The POSIX portable
 // set: anything looser differs by platform, and a secret landing under a
@@ -531,144 +368,6 @@ func validEnvName(s string) bool {
 		}
 	}
 	return true
-}
-
-// decodeCommand reads a Command field map (bin/args/charms), validating each charm's
-// RFC 6902 patch. It is shared by a command op and by each of a service op's
-// run/ready/stop commands, so every command shape decodes identically.
-func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
-	// Qualify with spell/op only when named. The by-value entrypoint
-	// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix would
-	// read as a bug in the surfaced message; the engine path always names both.
-	where := ""
-	if spellName != "" || opName != "" {
-		where = fmt.Sprintf("spell %q op %q ", spellName, opName)
-	}
-	args, err := o.Strs("args")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
-	}
-	defaultArgs, err := o.Strs("defaultArgs")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
-	}
-	trailingArgs, err := o.Strs("trailingArgs")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
-	}
-	sources, err := o.Strs("sources")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
-	}
-	c := spells.Command{
-		Args:         args,
-		DefaultArgs:  defaultArgs,
-		TrailingArgs: trailingArgs,
-		Capture:      o.Bool("capture"),
-		Quiet:        o.Bool("quiet"),
-		Sources:      sources,
-		SourcesEach:  o.Bool("sourcesEach"),
-	}
-	if err := c.Validate(); err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
-	}
-	if bin, ok := o.Str("bin"); ok {
-		c.Bin = bin
-	}
-	if msg, ok := o.Str("needsArgs"); ok {
-		c.NeedsArgs = msg
-	}
-	if e, ok := o.Str("external"); ok {
-		c.External = spells.External(e)
-		// Rejected at LOAD, not read leniently at doctor time: an op that meant to say
-		// mutates-external and typed it wrong would otherwise decode as ExternalNone
-		// and be silently exempt from the very check it was declaring itself into.
-		if !c.External.Valid() {
-			return spells.Command{}, fmt.Errorf("%scommand: external is %s, want one of %s",
-				where, c.External, strings.Join(c.External.Values(), ", "))
-		}
-	}
-	secrets, err := o.StrMap("secrets")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand secrets: %w", where, err)
-	}
-	for envName := range secrets {
-		// The key becomes `name=value` in the child environment, so a key carrying
-		// "=" would silently retarget a different variable and an empty key would
-		// emit "=value"; neither is a spelling of anything an author meant.
-		if !validEnvName(envName) {
-			return spells.Command{}, fmt.Errorf("%scommand secrets: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
-		}
-	}
-	if len(secrets) == 0 {
-		// Normalized HERE, once, so "declared nothing" and "declared an empty map"
-		// are one value with one cache spelling, and no obj implementation has to
-		// remember the rule.
-		secrets = nil
-	}
-	c.Secrets = secrets
-	envKeys, err := o.Strs("envKeys")
-	if err != nil {
-		return spells.Command{}, fmt.Errorf("%scommand envKeys: %w", where, err)
-	}
-	for _, envName := range envKeys {
-		if !validEnvName(envName) {
-			return spells.Command{}, fmt.Errorf("%scommand envKeys: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
-		}
-	}
-	c.EnvKeys = envKeys
-	// Failure advice, in declaration order; that order IS the precedence, so it must
-	// survive decode unsorted. A half-written rule is rejected rather than dropped: a
-	// rule with no `contains` matches every string and would advise on every failure of
-	// this command, and one with no `advise` would consume the match and print nothing,
-	// which reads as "magus had no idea" when in fact it matched and had nothing to say.
-	for i, ho := range o.Objs("hints") {
-		var h spells.Hint
-		h.Contains, _ = ho.Str("contains")
-		h.Advise, _ = ho.Str("advise")
-		if h.Contains == "" || h.Advise == "" {
-			return spells.Command{}, fmt.Errorf("%scommand hints[%d]: both contains and advise are required (contains %q, advise %q)", where, i, h.Contains, h.Advise)
-		}
-		c.Hints = append(c.Hints, h)
-	}
-	charms, ok := o.Obj("charms")
-	if !ok {
-		return c, nil
-	}
-	cm := map[string]spells.Charm{}
-	for _, cn := range charms.Keys() {
-		ce, ok := charms.Obj(cn)
-		if !ok {
-			continue
-		}
-		// A charm value is { ops = [ {op, path, value?, from?}, ... ] }, an RFC 6902
-		// patch over the base argv (built by the charm.* constructors at author time).
-		var ch spells.Charm
-		for _, opObj := range ce.Objs("ops") {
-			po := spells.PatchOp{}
-			// Str unwraps a PatchOpKind enum case to its backing string, so both the
-			// enum spelling charm.buzz uses and a bare "add" from a hand-written record
-			// decode the same way.
-			opName, _ := opObj.Str("op")
-			po.Op = spells.PatchOpKind(opName)
-			po.Path, _ = opObj.Str("path")
-			if v, ok := opObj.Str("value"); ok {
-				po.Value = v
-			}
-			if f, ok := opObj.Str("fromPtr"); ok {
-				po.From = f
-			}
-			ch.Ops = append(ch.Ops, po)
-		}
-		if err := spells.ValidatePatch(ch.Ops); err != nil {
-			return spells.Command{}, fmt.Errorf("%scharm %q: %w", where, cn, err)
-		}
-		cm[cn] = ch
-	}
-	if len(cm) > 0 {
-		c.Charms = cm
-	}
-	return c, nil
 }
 
 // validateTools reports the first unusable declaration in a decoded descriptor.
@@ -722,319 +421,158 @@ func validateTools(m spells.Descriptor) error {
 	return nil
 }
 
-// decodeLanguage reads mgs_getLanguage's typed answer: a Language record
-// carrying the canonical name, the extensions that are the language, and,
-// when the spell declares it, the syntax record. Absent means the spell adapts
-// no single source language.
-func decodeLanguage(src obj) (spells.Language, error) {
-	rec, ok := src.Obj("language")
-	if !ok {
+// applyModeArgs puts mgs_getModeArgs onto the ops it names. Each arg must be in the op's
+// own argv: the raw-tool guard denies only invocations carrying all of them, and one magus
+// never renders would leave the op's own spelling allowed.
+func applyModeArgs(m *spells.Descriptor, modes map[string][]string) error {
+	for _, key := range slices.Sorted(maps.Keys(modes)) {
+		args := modes[key]
+		name := types.Normalize(key)
+		op, ok := m.Ops[name]
+		if !ok {
+			return fmt.Errorf("spell %q mgs_getModeArgs names op %q, which the spell does not declare", m.Name, key)
+		}
+		if len(args) == 0 {
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args, drop the entry", m.Name, key)
+		}
+		for _, a := range args {
+			if !slices.Contains(op.Args, a) {
+				return fmt.Errorf("spell %q mgs_getModeArgs[%q]: %q is not in the op's args %q", m.Name, key, a, op.Args)
+			}
+		}
+		op.ModeArgs = args
+		m.Ops[name] = op
+	}
+	return nil
+}
+
+// validateCommand checks a decoded Command: its charm patches apply, its environment
+// names are usable and its hints are whole. It names the spell and op only when given
+// them, since the playground's dry run holds a bare Command.
+func validateCommand(spellName, opName string, c spells.Command) error {
+	where := ""
+	if spellName != "" || opName != "" {
+		where = fmt.Sprintf("spell %q op %q ", spellName, opName)
+	}
+	if err := c.Validate(); err != nil {
+		return fmt.Errorf("%scommand: %w", where, err)
+	}
+	if !c.External.Valid() {
+		return fmt.Errorf("%scommand: external is %s, want one of %s", where, c.External, strings.Join(c.External.Values(), ", "))
+	}
+	for _, envName := range slices.Sorted(maps.Keys(c.Secrets)) {
+		// The key becomes `name=value` in the child environment, so "=" in it would
+		// retarget another variable and an empty key would emit "=value".
+		if !validEnvName(envName) {
+			return fmt.Errorf("%scommand secrets: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
+		}
+	}
+	for _, envName := range c.EnvKeys {
+		if !validEnvName(envName) {
+			return fmt.Errorf("%scommand envKeys: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
+		}
+	}
+	// A rule with no `contains` matches every failure, and one with no `advise` consumes
+	// the match and prints nothing, which reads as "magus had no idea".
+	for i, h := range c.Hints {
+		if h.Contains == "" || h.Advise == "" {
+			return fmt.Errorf("%scommand hints[%d]: both contains and advise are required (contains %q, advise %q)", where, i, h.Contains, h.Advise)
+		}
+	}
+	for _, cn := range slices.Sorted(maps.Keys(c.Charms)) {
+		if err := spells.ValidatePatch(c.Charms[cn].Ops); err != nil {
+			return fmt.Errorf("%scharm %q: %w", where, cn, err)
+		}
+	}
+	return nil
+}
+
+// validateService checks a service op's four commands and refuses what the supervisor
+// cannot honor: it runs them directly, so secrets never reach a supervised service and
+// hints never reach the classifier.
+func validateService(spellName, opName string, s spells.Service) error {
+	where := fmt.Sprintf("spell %q op %q", spellName, opName)
+	for _, part := range []struct {
+		cmd           spells.Command
+		what, hintsBy string
+	}{
+		{s.Command, "a service op yet", "a service op (a supervised service never reaches the classifier, and a foregrounded one ends by being stopped)"},
+		{s.Start, "a service start command", "a service start command (the supervisor runs it directly, so they could never fire)"},
+		{s.Readiness, "a service readiness command", "a service readiness command (the supervisor polls it directly, so they could never fire)"},
+		{s.Stop, "a service stop command", "a service stop command (the supervisor runs it directly, so they could never fire)"},
+	} {
+		if err := validateCommand(spellName, opName, part.cmd); err != nil {
+			return err
+		}
+		if len(part.cmd.Secrets) > 0 {
+			return fmt.Errorf("%s: secrets are not supported on %s", where, part.what)
+		}
+		if len(part.cmd.Hints) > 0 {
+			return fmt.Errorf("%s: hints are not supported on %s", where, part.hintsBy)
+		}
+	}
+	if err := s.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	return nil
+}
+
+// validateLanguage checks mgs_getLanguage's answer. Absent means the spell adapts no
+// single source language.
+func validateLanguage(l *spells.Language) (spells.Language, error) {
+	if l == nil {
 		return spells.Language{}, nil
 	}
-	name, _ := rec.Str("name")
-	if name == "" {
+	if l.Name == "" {
 		return spells.Language{}, fmt.Errorf("language: name is required")
 	}
-	exts, err := rec.Strs("extensions")
-	if err != nil {
-		return spells.Language{}, fmt.Errorf("language.extensions: %w", err)
-	}
-	syn, err := decodeSyntax(rec)
-	if err != nil {
-		return spells.Language{}, fmt.Errorf("language.syntax: %w", err)
-	}
-	if syn != nil && syn.Comments != nil && len(exts) == 0 {
-		return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
-	}
-	return spells.Language{Name: name, Extensions: exts, Syntax: syn}, nil
-}
-
-// decodeSyntax reads the Syntax record inside a Language record, nil when the
-// spell declares none.
-func decodeSyntax(lang obj) (*spells.Syntax, error) {
-	rec, ok := lang.Obj("syntax")
-	if !ok {
-		//nolint:nilnil // declaring no syntax is not an error: neither the classifier nor the splitter needs one.
-		return nil, nil
-	}
-	comments, err := decodeComments(rec)
-	if err != nil {
-		return nil, err
-	}
-	stubs, err := decodeStubs(rec)
-	if err != nil {
-		return nil, err
-	}
-	return &spells.Syntax{Comments: comments, Stubs: stubs}, nil
-}
-
-// decodeSymbolIndexer reads mgs_getSymbolIndexer's typed answer: a SymbolIndexer
-// record naming the index format and the command that writes it. Absent means the
-// spell is not symbol-capable, which is the whole capability test.
-//
-// The format is required. A declaration that names no format would leave ingestion
-// guessing which reader to use, and guessing is what this export exists to end; the
-// message lists the formats magus reads so a spell author fixes it in one edit.
-func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, error) {
-	rec, ok := src.Obj("symbol_indexer")
-	if !ok {
-		return nil, nil //nolint:nilnil // a spell that declares no indexer is not an error; nil is that answer
-	}
-	format, _ := rec.Str("format")
-	f := spells.SymbolFormat(format)
-	if !f.Valid() || f == spells.SymbolFormatNone {
-		return nil, fmt.Errorf("symbol indexer: format is %s, want one of %s", f, strings.Join(f.Values(), ", "))
-	}
-	// Normalized like an authored op, since a request reaches it kebab-cased.
-	var op string
-	if declared, _ := rec.Str("op"); declared != "" {
-		if err := types.ValidateTargetName(declared); err != nil {
-			return nil, fmt.Errorf("symbol indexer: op %q: %w", declared, err)
+	if syn := l.Syntax; syn != nil {
+		if syn.Comments != nil && len(l.Extensions) == 0 {
+			return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
 		}
-		op = types.Normalize(declared)
-	}
-	cmdRec, ok := rec.Obj("command")
-	if !ok {
-		return nil, fmt.Errorf("symbol indexer: command is required")
-	}
-	cmd, err := decodeCommand(spellName, cmp.Or(op, spells.DefaultSymbolIndexOp), cmdRec)
-	if err != nil {
-		return nil, err
-	}
-	if cmd.Bin == "" {
-		return nil, fmt.Errorf("symbol indexer: command.bin is required")
-	}
-	uses, err := rec.Strs("uses")
-	if err != nil {
-		return nil, fmt.Errorf("symbol indexer: uses: %w", err)
-	}
-	envs, err := decodeIndexerEnvs(rec)
-	if err != nil {
-		return nil, err
-	}
-	return &spells.SymbolIndexer{Format: f, Op: op, Command: cmd, Uses: uses, Envs: envs}, nil
-}
-
-// decodeIndexerEnvs reads a symbol indexer's envs, one overlay per run. An empty overlay
-// would index the host twice, and an overlay naming a variable magus sets for the run
-// would aim the indexer somewhere the merge never reads, so both are refused here.
-func decodeIndexerEnvs(rec obj) ([]map[string]string, error) {
-	var envs []map[string]string
-	for i, o := range rec.Objs("envs") {
-		keys := o.Keys()
-		if len(keys) == 0 {
-			return nil, fmt.Errorf("symbol indexer: envs[%d] is empty", i)
-		}
-		env := make(map[string]string, len(keys))
-		for _, k := range keys {
-			if k == symbols.IndexEnvVar || k == symbols.WorkspaceRootEnvVar {
-				return nil, fmt.Errorf("symbol indexer: envs[%d] sets %s, which magus sets for each run", i, k)
+		if syn.Stubs != nil {
+			if err := validateStubs(*syn.Stubs); err != nil {
+				return spells.Language{}, fmt.Errorf("language.syntax: %w", err)
 			}
-			v, ok := o.Str(k)
-			if !ok {
-				return nil, fmt.Errorf("symbol indexer: envs[%d].%s is not a string", i, k)
-			}
-			env[k] = v
-		}
-		envs = append(envs, env)
-	}
-	return envs, nil
-}
-
-// decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.
-//
-// Every rule is checked here, at load, because a grant that cannot be honored is a
-// declaration bug: resolved later, a bad one would quietly grant nothing, and the tool
-// would fail under the sandbox with a permission error naming a path, not the spell.
-func decodeSandbox(src obj) (*spells.Sandbox, error) {
-	rec, ok := src.Obj("sandbox")
-	if !ok {
-		return nil, nil //nolint:nilnil // a spell that needs nothing from the host is not an error; nil is that answer
-	}
-	sb, err := decodeSandboxRecord(rec)
-	if err != nil {
-		return nil, err
-	}
-	return &sb, nil
-}
-
-// decodeSandboxRecord reads one sandbox declaration, a spell's or a target's, and
-// refuses what sandbox.CheckDeclaration refuses. An unknown key is an error too: a
-// misspelled one would leave its entry granting nothing, which looks like a sandbox
-// working.
-func decodeSandboxRecord(rec obj) (spells.Sandbox, error) {
-	var sb spells.Sandbox
-	var errs []error
-	errs = append(errs, unknownKeys("sandbox", rec, "allow", "env", "caches"))
-	for i, o := range rec.Objs("allow") {
-		errs = append(errs, unknownKeys(fmt.Sprintf("allow[%d]", i), o, "name", "env", "base", "bin", "path", "requires", "mode"))
-		var a spells.SandboxAllow
-		a.Name, _ = o.Str("name")
-		a.Env, _ = o.Str("env")
-		a.Base, _ = o.Str("base")
-		a.Bin, _ = o.Str("bin")
-		a.Path, _ = o.Str("path")
-		a.Requires, _ = o.Str("requires")
-		mode, _ := o.Str("mode")
-		a.Mode = spells.SandboxAccess(mode)
-		sb.Allow = append(sb.Allow, a)
-	}
-	if e, ok := rec.Obj("env"); ok {
-		errs = append(errs, unknownKeys("env", e, "passthrough"))
-		pass, err := e.Strs("passthrough")
-		if err != nil {
-			errs = append(errs, fmt.Errorf("env.passthrough: %w", err))
-		}
-		sb.Env.Passthrough = pass
-	}
-	for i, o := range rec.Objs("caches") {
-		where := fmt.Sprintf("caches[%d]", i)
-		errs = append(errs, unknownKeys(where, o, "env", "stampsUse", "skip"))
-		c := spells.SandboxCache{StampsUse: o.Bool("stampsUse")}
-		c.Env, _ = o.Str("env")
-		skip, err := o.Strs("skip")
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s.skip: %w", where, err))
-		}
-		c.Skip = skip
-		sb.Caches = append(sb.Caches, c)
-	}
-	errs = append(errs, sandbox.CheckDeclaration(sb))
-	return sb, errors.Join(errs...)
-}
-
-func unknownKeys(where string, o obj, known ...string) error {
-	var errs []error
-	for _, k := range o.Keys() {
-		if !slices.Contains(known, k) {
-			errs = append(errs, fmt.Errorf("%s: unknown key %q (want one of %s)", where, k, strings.Join(known, ", ")))
 		}
 	}
-	return errors.Join(errs...)
+	return *l, nil
 }
 
-// decodeComments reads the comment/string syntax inside a Syntax record, nil
-// when the spell declares none. The covering extensions live on the Language
-// record; decodeLanguage requires them when comments are declared.
-func decodeComments(syntax obj) (*spells.CommentSyntax, error) {
-	rec, ok := syntax.Obj("comments")
-	if !ok {
-		//nolint:nilnil // declaring no syntax is not an error, and nil is the correct empty value: the classifier treats an unclaimed extension as code.
-		return nil, nil
+// validateStubs requires every field of a stub syntax: a record with no kinds stubs
+// nothing, one with no body has nothing to splice, and an unknown kind or body style
+// makes the splitter skip or misplace every stub with no error anywhere.
+func validateStubs(st spells.StubSyntax) error {
+	if len(st.Kinds) == 0 {
+		return fmt.Errorf(`stubs.kinds is empty, name the SCIP symbol kinds a stub may replace, like "Function" and "Method"`)
 	}
-	syn := &spells.CommentSyntax{Nested: rec.Bool("nested")}
-	var err error
-	if syn.LineComments, err = rec.Strs("lineComments"); err != nil {
-		return nil, fmt.Errorf("comments.lineComments: %w", err)
-	}
-	if syn.Directives, err = rec.Strs("directives"); err != nil {
-		return nil, fmt.Errorf("comments.directives: %w", err)
-	}
-	for _, b := range rec.Objs("blockComments") {
-		open, _ := b.Str("open")
-		cl, _ := b.Str("close")
-		syn.BlockComments = append(syn.BlockComments, spells.CommentBlock{Open: open, Close: cl})
-	}
-	for _, q := range rec.Objs("quotes") {
-		open, _ := q.Str("open")
-		cl, _ := q.Str("close")
-		syn.Quotes = append(syn.Quotes, spells.Quote{Open: open, Close: cl, IgnoreEscape: q.Bool("ignoreEscape")})
-	}
-	return syn, nil
-}
-
-// decodeStubs reads the stub syntax inside a Syntax record, nil when the spell
-// declares none. Every field is required once the record is present: a stub
-// record with no kinds stubs nothing, one with no body has nothing to splice,
-// and an unknown kind or body style would make the splitter skip or misplace
-// every stub with no error anywhere.
-func decodeStubs(syntax obj) (*spells.StubSyntax, error) {
-	rec, ok := syntax.Obj("stubs")
-	if !ok {
-		//nolint:nilnil // declaring no stubs is not an error: the splitter reports such a declaration as needing a stub by hand.
-		return nil, nil
-	}
-	kinds, err := rec.Strs("kinds")
-	if err != nil {
-		return nil, fmt.Errorf("stubs.kinds: %w", err)
-	}
-	if len(kinds) == 0 {
-		return nil, fmt.Errorf(`stubs.kinds is empty, name the SCIP symbol kinds a stub may replace, like "Function" and "Method"`)
-	}
-	for _, k := range kinds {
+	for _, k := range st.Kinds {
 		if v, known := scip.SymbolInformation_Kind_value[k]; !known || v == int32(scip.SymbolInformation_UnspecifiedKind) {
-			return nil, fmt.Errorf(`stubs.kinds: %q is not a SCIP symbol kind, want a SymbolInformation.Kind name like "Function" or "Method"`, k)
+			return fmt.Errorf(`stubs.kinds: %q is not a SCIP symbol kind, want a SymbolInformation.Kind name like "Function" or "Method"`, k)
 		}
 	}
-	style, _ := rec.Str("bodyStyle")
-	if style != spells.StubBodyBrace && style != spells.StubBodyIndent {
-		return nil, fmt.Errorf("stubs.bodyStyle is %q, want %q or %q", style, spells.StubBodyBrace, spells.StubBodyIndent)
+	if st.BodyStyle != spells.StubBodyBrace && st.BodyStyle != spells.StubBodyIndent {
+		return fmt.Errorf("stubs.bodyStyle is %q, want %q or %q", st.BodyStyle, spells.StubBodyBrace, spells.StubBodyIndent)
 	}
-	body, _ := rec.Str("body")
-	if body == "" {
-		return nil, fmt.Errorf("stubs.body is required")
+	if st.Body == "" {
+		return fmt.Errorf("stubs.body is required")
 	}
-	return &spells.StubSyntax{Kinds: kinds, BodyStyle: style, Body: body}, nil
+	return nil
 }
 
-// decodeTools reads the per-binary declarations: what prints its version, what part of
-// that keys the cache, and what proves it is usable. An entry with none of the three is
-// dropped rather than kept as a tool magus knows nothing about.
-func decodeTools(src obj) (map[string]spells.Tool, error) {
-	rec, ok := src.Obj("tools")
-	if !ok {
-		//nolint:nilnil // declaring no tools is not an error, and a nil map is the correct empty value here: every caller ranges it or takes its len, both of which read a nil map fine.
-		return nil, nil
-	}
+// validateToolDecls checks each tool's commands and drops an entry that declares
+// nothing rather than keep a tool magus knows nothing about.
+func validateToolDecls(tools map[string]spells.Tool) (map[string]spells.Tool, error) {
 	var out map[string]spells.Tool
-	for _, name := range rec.Keys() {
-		o, ok := rec.Obj(name)
-		if !ok {
-			continue
-		}
-		t := spells.Tool{}
-		if pr, ok := o.Obj("probe"); ok {
-			cmd, err := decodeCommand("", "", pr)
-			if err != nil {
-				return nil, fmt.Errorf("tools[%q].probe: %w", name, err)
+	for _, name := range slices.Sorted(maps.Keys(tools)) {
+		t := tools[name]
+		for _, part := range []struct {
+			field string
+			cmd   spells.Command
+		}{{"probe", t.Probe}, {"ready", t.Ready}, {"observe", t.Observe}} {
+			if err := validateCommand("", "", part.cmd); err != nil {
+				return nil, fmt.Errorf("tools[%q].%s: %w", name, part.field, err)
 			}
-			t.Probe = cmd
-		}
-		if k, ok := o.Obj("key"); ok {
-			if c, ok := k.Str("const"); ok {
-				t.Key.Const = c
-			}
-			if u, ok := k.Str("upTo"); ok {
-				t.Key.UpTo = spells.VersionComponent(u)
-			}
-		}
-		if s, ok := o.Obj("supported"); ok {
-			if m, ok := s.Str("min"); ok {
-				t.Supported.Min = m
-			}
-			if b, ok := s.Str("below"); ok {
-				t.Supported.Below = b
-			}
-		}
-		if r, ok := o.Obj("ready"); ok {
-			cmd, err := decodeCommand("", "", r)
-			if err != nil {
-				return nil, fmt.Errorf("tools[%q].ready: %w", name, err)
-			}
-			t.Ready = cmd
-		}
-		if ob, ok := o.Obj("observe"); ok {
-			cmd, err := decodeCommand("", "", ob)
-			if err != nil {
-				return nil, fmt.Errorf("tools[%q].observe: %w", name, err)
-			}
-			t.Observe = cmd
-		}
-		if d, ok := o.Str("diagnostics"); ok {
-			t.Diagnostics = spells.DiagnosticFormat(d)
-		}
-		if l, ok := o.Str("lifecycle"); ok {
-			t.Lifecycle = l
 		}
 		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
 			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone && t.Lifecycle == "" {
@@ -1046,4 +584,45 @@ func decodeTools(src obj) (map[string]spells.Tool, error) {
 		out[name] = t
 	}
 	return out, nil
+}
+
+// validateSymbolIndexer checks mgs_getSymbolIndexer's answer and normalizes its op in
+// place. The format is required: a declaration naming none would leave ingestion guessing
+// which reader to use.
+func validateSymbolIndexer(spellName string, si *spells.SymbolIndexer) error {
+	if !si.Format.Valid() || si.Format == spells.SymbolFormatNone {
+		return fmt.Errorf("symbol indexer: format is %s, want one of %s", si.Format, strings.Join(si.Format.Values(), ", "))
+	}
+	if si.Op != "" {
+		if err := types.ValidateTargetName(si.Op); err != nil {
+			return fmt.Errorf("symbol indexer: op %q: %w", si.Op, err)
+		}
+		si.Op = types.Normalize(si.Op)
+	}
+	if err := validateCommand(spellName, cmp.Or(si.Op, spells.DefaultSymbolIndexOp), si.Command); err != nil {
+		return err
+	}
+	if si.Command.Bin == "" {
+		return fmt.Errorf("symbol indexer: command.bin is required")
+	}
+	// An empty overlay would index the host twice, and one naming a variable magus sets
+	// for the run would aim the indexer somewhere the merge never reads.
+	for i, env := range si.Envs {
+		if len(env) == 0 {
+			return fmt.Errorf("symbol indexer: envs[%d] is empty", i)
+		}
+		for _, k := range slices.Sorted(maps.Keys(env)) {
+			if k == symbols.IndexEnvVar || k == symbols.WorkspaceRootEnvVar {
+				return fmt.Errorf("symbol indexer: envs[%d] sets %s, which magus sets for each run", i, k)
+			}
+		}
+	}
+	return nil
+}
+
+// validateSandbox refuses what sandbox.CheckDeclaration refuses: a grant that cannot be
+// honored would quietly grant nothing, and the tool would fail with a permission error
+// naming a path, not the spell.
+func validateSandbox(sb spells.Sandbox) error {
+	return sandbox.CheckDeclaration(sb)
 }

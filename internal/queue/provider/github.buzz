@@ -65,6 +65,7 @@ import "os";
 import "serialize";
 import "std";
 import "mergequeue";
+import "mergequeue/types";
 
 final DEFAULT_API = "https://api.github.com";
 final API_ENV = "GITHUB_API_URL";
@@ -154,8 +155,7 @@ fun slug(remote: str, host: str) > str {
     return parts[0] + "/" + parts[1];
 }
 
-fun remoteRepo(io: {str: any}) > str !> any {
-    final remote = "{io["remote_url"] ?? ""}";
+fun remoteRepo(remote: str) > str !> any {
     final repo = slug(remote, host: apiHost(apiBase()));
     if (repo == "") {
         throw "github: the remote '{remote}' is not a {apiHost(apiBase())} repository";
@@ -322,28 +322,39 @@ fun describeFrom(body: str, rules: str, setup: any, committer: any) > any !> any
     if (methods.len() == 0) {
         throw "github: describe: the repository settings and its rulesets on the base branch allow no merge method in common";
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "required_approvals": requiredFrom(rules),
-        "queue_label": QUEUE_LABEL, "committer": committer, "setup": setup};
+    final caps = mut {<str: any>};
+    caps["stackMerge"] = "atomic";
+    caps["linearStacks"] = true;
+    caps["methods"] = methods;
+    caps["requiredApprovals"] = requiredFrom(rules);
+    caps["queueLabel"] = QUEUE_LABEL;
+    if (committer != null) {
+        caps["committer"] = committer;
+    }
+    if (setup != null) {
+        caps["setup"] = setup;
+    }
+    return caps;
 }
 
 // describe reads the setup only when asked for a status context: planning asks for none,
 // and its token reads nothing more than it needs. The steps cost three more reads, one
 // of them needing checks read, which the apply job's token does not hold.
-export fun describe(io: {str: any}) > any !> any {
+export fun describe(req: QueueDescribeRequest) > any !> any {
     final hdrs = reading("describe");
-    final repo = remoteRepo(io);
+    final repo = remoteRepo(req.remoteURL);
     final body = expect(get(apiBase() + "/repos/" + repo, hdrs: hdrs), status: 200, what: "describe {repo}");
-    final base = "{io["base"] ?? ""}";
+    final base = req.base;
     final rules = fetchSetup(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(base), what: "read the rules on {base}",
         needs: "metadata read on {repo}", hdrs: hdrs);
-    final context = "{io["status_context"] ?? ""}";
+    final context = req.statusContext;
     if (context == "") {
-        return describeFrom(body, rules: rules, setup: null, committer: null);
+        return {"capabilities": describeFrom(body, rules: rules, setup: null, committer: null)};
     }
     final web = "https://" + apiHost(apiBase());
     final owner = repo.split("/")[0];
     final org = serialize\jsonDecode(body).q("owner").q("type").stringValue() == "Organization";
-    final named = parseApp("{io["app"] ?? ""}");
+    final named = parseApp(req.app);
     final slug = named["slug"] ?? "";
     final given = named["id"] ?? "";
     if (slug == "") {
@@ -364,7 +375,7 @@ export fun describe(io: {str: any}) > any !> any {
         }
         return refused(reason + "; it is under About on the app's settings page", url: appsPage(web, owner: owner, org: org) + "/" + slug, app: slug + ":<id>");
     }
-    final steps = "{io["setup_steps"] ?? false}" == "true";
+    final steps = req.setupSteps;
     final branch = fetchSetup(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
         needs: "contents read on {repo}", hdrs: hdrs);
     var reports = [<{str: str}>];
@@ -375,8 +386,8 @@ export fun describe(io: {str: any}) > any !> any {
         rulesets = rulesetNames(repo, checks: checks, hdrs: hdrs);
     }
     final at = {"repo": repo, "base": base, "context": context, "web": web};
-    return describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: requiredChecksFrom(rules, branch: branch),
-        reports: reports, rulesets: rulesets, app: app!, steps: steps), committer: bot);
+    return {"capabilities": describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: requiredChecksFrom(rules, branch: branch),
+        reports: reports, rulesets: rulesets, app: app!, steps: steps), committer: bot)};
 }
 
 // refused is describe declining to describe a setup: reason says what is missing, url
@@ -778,7 +789,7 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
     final settings = [{"name": "allow_auto_merge", "value": "{autoMerge}", "want": "true"}];
     final todo = mut [<any>];
     if (!steps) {
-        return {"status_context": at["context"] ?? "", "credential": credential, "required_checks": required, "settings": settings, "steps": todo};
+        return {"statusContext": at["context"] ?? "", "credential": credential, "requiredChecks": required, "settings": settings, "steps": todo};
     }
     if (!autoMerge) {
         todo.append({"title": "Allow auto-merge (Settings > General > Pull Requests > Allow auto-merge)",
@@ -787,8 +798,8 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
     final slug = app["slug"] ?? "";
     final appPage = appsPage(web, owner: repo.split("/")[0], org: org) + "/" + slug;
     final clientID = app["client_id"] ?? "";
-    final appRecord = {"slug": slug, "id": app["id"] ?? "", "client_id": clientID,
-        "registration_url": registrationURL(web, repo: repo, org: org), "install_url": web + "/apps/" + slug + "/installations/new",
+    final appRecord = {"slug": slug, "id": app["id"] ?? "", "clientID": clientID,
+        "registrationURL": registrationURL(web, repo: repo, org: org), "installURL": web + "/apps/" + slug + "/installations/new",
         "environment": APP_ENVIRONMENT, "variable": APP_VARIABLE, "secret": APP_SECRET};
     todo.append({"title": "Install {slug} on {repo} only", "url": web + "/apps/" + slug + "/installations/new"});
     todo.append({"title": "Create the {APP_ENVIRONMENT} environment, whose secrets only {at["base"] ?? ""} can read, so pull request runs never see the key",
@@ -804,7 +815,7 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
     foreach (s in pinSteps(at, checks: checks, rulesets: rulesets, credential: credential)) {
         todo.append(s);
     }
-    return {"status_context": at["context"] ?? "", "credential": credential, "required_checks": required, "settings": settings, "app": appRecord, "steps": todo};
+    return {"statusContext": at["context"] ?? "", "credential": credential, "requiredChecks": required, "settings": settings, "app": appRecord, "steps": todo};
 }
 
 // id reads an identifier GitHub may send as a number or a string.
@@ -1204,11 +1215,11 @@ fun onlyIn(pages: [str], number: str, repo: str) > [any] !> any {
 // reads the merged ones that one carries instead, and no closed ones: what classifying
 // its approvals takes, at one GraphQL query per 100 of its commits rather than per
 // queued pull request.
-export fun list_changes(io: {str: any}) > any !> any {
+export fun list_changes(req: QueueListChangesRequest) > any !> any {
     final hdrs = reading("list_changes");
-    final repo = remoteRepo(io);
-    final base = "{io["base"] ?? ""}";
-    final only = "{io["only"] ?? ""}";
+    final repo = remoteRepo(req.remoteURL);
+    final base = req.base;
+    final only = req.only;
     final pulls = openPulls(repo, hdrs: hdrs);
     final stacks = mut {<str: str>};
     foreach (top in stackTops(pulls, base: base)) {
@@ -1335,7 +1346,7 @@ fun approvalFrom(pages: [str], commit: str, required: int) > {str: any} !> any {
         }
         approvedCommit = best;
     }
-    return {"approved": reason == "", "head": head, "reason": reason, "approved_commit": approvedCommit};
+    return {"approved": reason == "", "head": head, "reason": reason, "approvedCommit": approvedCommit};
 }
 
 // targetFrom reads where a pull request merges and how: a stack member merges on the
@@ -1432,9 +1443,8 @@ fun reviewPages(parts: [str], number: str, hdrs: {str: str}) > [str] !> any {
     return bodies;
 }
 
-// ownerName splits a change record's owner/name repo for GraphQL.
-fun ownerName(io: {str: any}, op: str) > [str] !> any {
-    final repo = "{io["repo"] ?? ""}";
+// ownerName splits a change's owner/name repo for GraphQL.
+fun ownerName(repo: str, op: str) > [str] !> any {
     final parts = repo.split("/");
     if (parts.len() != 2) {
         throw "github: {op} needs an owner/name repo, got '{repo}'";
@@ -1442,15 +1452,15 @@ fun ownerName(io: {str: any}, op: str) > [str] !> any {
     return parts;
 }
 
-export fun approval_at(io: {str: any}) > any !> any {
+export fun approval_at(req: QueueApprovalRequest) > any !> any {
     final hdrs = reading("approval_at");
-    final repo = "{io["repo"] ?? ""}";
-    final parts = ownerName(io, op: "approval_at");
-    final number = "{io["id"] ?? ""}";
+    final repo = req.repo;
+    final parts = ownerName(repo, op: "approval_at");
+    final number = req.id;
     final prBody = expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "read #{number}");
-    final target = targetFrom(prBody, method: "{io["method"] ?? ""}");
+    final target = targetFrom(prBody, method: req.method);
     final rules = expect(get(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(target["base"] ?? ""), hdrs: hdrs), status: 200, what: "read the rules on {target["base"] ?? ""}");
-    final a = approvalFrom(reviewPages(parts, number: number, hdrs: hdrs), commit: "{io["commit"] ?? ""}", required: requiredFrom(rules));
+    final a = approvalFrom(reviewPages(parts, number: number, hdrs: hdrs), commit: req.commit, required: requiredFrom(rules));
     final pr = serialize\jsonDecode(prBody);
     var shared = [<str>];
     final branch = pr.q("head").q("ref").stringValue();
@@ -1459,8 +1469,8 @@ export fun approval_at(io: {str: any}) > any !> any {
         shared = sharedFrom(pages(apiBase() + "/repos/" + repo + "/pulls?state=open&head=" + escape(owner + ":" + branch), what: "pull requests from {branch}", hdrs: hdrs), number: number);
     }
     return {
-        "approved": a["approved"], "head": a["head"], "reason": a["reason"], "approved_commit": a["approved_commit"],
-        "base": target["base"], "method": target["method"], "queued": intent(prBody, repo: repo, hdrs: hdrs), "shared_with": shared,
+        "approved": a["approved"], "head": a["head"], "reason": a["reason"], "approvedCommit": a["approvedCommit"],
+        "base": target["base"], "method": target["method"], "queued": intent(prBody, repo: repo, hdrs: hdrs), "branchSharedWith": shared,
     };
 }
 
@@ -1479,13 +1489,13 @@ fun reviewsFrom(pages: [str]) > {str: any} !> any {
             approving.append({"id": review["id"] ?? "", "reviewer": who, "commit": review["commit"] ?? ""});
         }
     }
-    return {"head": head, "reviews": approving};
+    return {"head": head, "approving": approving};
 }
 
-export fun reviews(io: {str: any}) > any !> any {
+export fun reviews(req: QueueReviewsRequest) > any !> any {
     final hdrs = reading("reviews");
-    final parts = ownerName(io, op: "reviews");
-    return reviewsFrom(reviewPages(parts, number: "{io["id"] ?? ""}", hdrs: hdrs));
+    final parts = ownerName(req.repo, op: "reviews");
+    return reviewsFrom(reviewPages(parts, number: req.id, hdrs: hdrs));
 }
 
 // dismissal reads GitHub's answer to a dismissal: "done" on 200, "reread" on 422, which
@@ -1511,16 +1521,16 @@ fun dismissedFrom(body: str, review: str) > bool !> any {
     return true;
 }
 
-export fun dismiss_review(io: {str: any}) > bool !> any {
+export fun dismiss_review(req: QueueDismissReviewRequest) > Ack !> any {
     final hdrs = writing("dismiss_review");
-    final review = "{io["review"] ?? ""}";
-    final url = apiBase() + "/repos/{io["repo"] ?? ""}/pulls/{io["id"] ?? ""}/reviews/{escape(review)}";
-    final payload = serialize\jsonEncode({"message": "{io["message"] ?? ""}", "event": "DISMISS"});
+    final review = req.review.id;
+    final url = apiBase() + "/repos/{req.repo}/pulls/{req.id}/reviews/{escape(review)}";
+    final payload = serialize\jsonEncode({"message": req.message, "event": "DISMISS"});
     final res = mergequeue\request("PUT", url: url + "/dismissals", body: payload, headers: hdrs);
     if (dismissal(res, review: review) == "done") {
-        return true;
+        return Ack{ ok = true };
     }
-    return dismissedFrom(expect(get(url, hdrs: hdrs), status: 200, what: "read review {review}"), review: review);
+    return Ack{ ok = dismissedFrom(expect(get(url, hdrs: hdrs), status: 200, what: "read review {review}"), review: review) };
 }
 
 // latestRuns lists the ids of the newest workflow run of each workflow in an
@@ -1587,11 +1597,11 @@ fun checksFrom(required: [{str: str}], jobs: [str], status: str) > [{str: str}] 
 // classic protection, and each one's state at the commit. A job's state comes from the
 // commit's workflow runs rather than its check runs, which need a permission (checks)
 // the queue's app does not hold; actions and statuses it does.
-export fun required_checks(io: {str: any}) > any !> any {
+export fun required_checks(req: QueueRequiredChecksRequest) > any !> any {
     final hdrs = reading("required_checks");
-    final repo = "{io["repo"] ?? ""}";
-    final base = "{io["base"] ?? ""}";
-    final commit = "{io["commit"] ?? ""}";
+    final repo = req.repo;
+    final base = req.base;
+    final commit = req.commit;
     final prefix = apiBase() + "/repos/" + repo;
     final rules = expect(get(prefix + "/rules/branches/" + escape(base), hdrs: hdrs), status: 200, what: "read the rules on {base}");
     final branch = expect(get(prefix + "/branches/" + escape(base), hdrs: hdrs), status: 200, what: "read the protection of {base}");
@@ -1603,7 +1613,7 @@ export fun required_checks(io: {str: any}) > any !> any {
     }
     final status = expect(get(prefix + "/commits/" + escape(commit) + "/status?per_page=100", hdrs: hdrs), status: 200,
         what: "read the statuses on {commit}");
-    return {"checks": checksFrom(requiredChecksFrom(rules, branch: branch), jobs: jobs, status: status)};
+    return checksFrom(requiredChecksFrom(rules, branch: branch), jobs: jobs, status: status);
 }
 
 final GREEN_QUERY = `query($owner: String!, $name: String!, $context: String!, $after: String) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { number headRefOid commits(last: 1) { nodes { commit { oid status { context(name: $context) { state } } } } } } } } }`;
@@ -1637,9 +1647,9 @@ fun greenNext(body: str) > str !> any {
 // list_green lists every open pull request whose head carries the status at success,
 // whatever it targets: a stacked one is retargeted onto the base once the one beneath it
 // merges, and a success it carried then would count.
-export fun list_green(io: {str: any}) > any !> any {
+export fun list_green(req: QueueListGreenRequest) > any !> any {
     final hdrs = reading("list_green");
-    final repo = remoteRepo(io);
+    final repo = remoteRepo(req.remoteURL);
     final parts = repo.split("/");
     final green = mut [<any>];
     var after = "";
@@ -1647,7 +1657,7 @@ export fun list_green(io: {str: any}) > any !> any {
         final vars = mut {<str: any>};
         vars["owner"] = parts[0];
         vars["name"] = parts[1];
-        vars["context"] = "{io["context"] ?? ""}";
+        vars["context"] = req.context;
         if (after != "") {
             vars["after"] = after;
         }
@@ -1660,7 +1670,7 @@ export fun list_green(io: {str: any}) > any !> any {
             break;
         }
     }
-    return {"changes": green};
+    return green;
 }
 
 // statusBody is GitHub's commit-status payload. GitHub rejects a description over 140
@@ -1673,20 +1683,20 @@ fun statusBody(state: str, context: str, description: str) > any {
     return {"state": state, "context": context, "description": desc};
 }
 
-export fun post_status(io: {str: any}) > bool !> any {
+export fun post_status(req: QueueStatusRequest) > Ack !> any {
     final hdrs = writing("post_status");
-    final url = apiBase() + "/repos/{io["repo"] ?? ""}/statuses/{io["commit"] ?? ""}";
-    final payload = statusBody("{io["state"] ?? ""}", context: "{io["context"] ?? ""}", description: "{io["description"] ?? ""}");
+    final url = apiBase() + "/repos/{req.repo}/statuses/{req.commit}";
+    final payload = statusBody(req.state, context: req.context, description: req.description);
     expect(post(url, body: serialize\jsonEncode(payload), hdrs: hdrs), status: 201, what: "post_status");
-    return true;
+    return Ack{ ok = true };
 }
 
-export fun retarget(io: {str: any}) > bool !> any {
+export fun retarget(req: QueueRetargetRequest) > Ack !> any {
     final hdrs = writing("retarget");
-    final url = apiBase() + "/repos/{io["repo"] ?? ""}/pulls/{io["id"] ?? ""}";
-    final res = mergequeue\request("PATCH", url: url, body: serialize\jsonEncode({"base": "{io["base"] ?? ""}"}), headers: hdrs);
+    final url = apiBase() + "/repos/{req.repo}/pulls/{req.id}";
+    final res = mergequeue\request("PATCH", url: url, body: serialize\jsonEncode({"base": req.to}), headers: hdrs);
     expect(res, status: 200, what: "retarget");
-    return true;
+    return Ack{ ok = true };
 }
 
 // mergeBody builds the merge payload: the method the change was queued and validated
@@ -1737,11 +1747,11 @@ fun merged(url: str, commit: str, hdrs: {str: str}) > bool !> any {
 
 // movedFrom names the first pinned member of a stack whose head is no longer the one
 // it was validated at, "" when none moved.
-fun movedFrom(repo: str, through: [serialize\Boxed], hdrs: {str: str}) > str !> any {
+fun movedFrom(repo: str, through: [QueuePinnedChange], hdrs: {str: str}) > str !> any {
     foreach (p in through) {
-        final number = p.q("id").stringValue();
+        final number = p.id;
         final pr = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "read #{number}"));
-        if (pr.q("head").q("sha").stringValue() != p.q("commit").stringValue()) {
+        if (pr.q("head").q("sha").stringValue() != p.commit) {
             return number;
         }
     }
@@ -1793,18 +1803,18 @@ fun mergeFailure(res: {str: any}) > any !> any {
 // the stack up to this one; GitHub pins only the top's head, so every member's head is
 // read first, and the queue checks what merged afterwards. It is polled until this one
 // merged.
-export fun merge_change(io: {str: any}) > any !> any {
+export fun merge_change(req: QueueMergeRequest) > any !> any {
     final hdrs = writing("merge_change");
-    final app = parseApp("{io["app"] ?? ""}")["slug"] ?? "";
+    final app = parseApp(req.app)["slug"] ?? "";
     if (app == "") {
         throw "github: merge_change merges only as the queue's own GitHub App, and names none";
     }
-    final repo = "{io["repo"] ?? ""}";
-    final url = apiBase() + "/repos/" + repo + "/pulls/{io["id"] ?? ""}";
-    final commit = "{io["commit"] ?? ""}";
+    final repo = req.repo;
+    final url = apiBase() + "/repos/" + repo + "/pulls/{req.id}";
+    final commit = req.commit;
     final pr = expect(get(url, hdrs: hdrs), status: 200, what: "merge_change: read the pull request");
-    final payload = serialize\jsonEncode(mergeBody(pr, commit: commit, method: "{io["method"] ?? ""}", message: "{io["message"] ?? ""}"));
-    final through = serialize\Boxed.init(io["through"]).listValue();
+    final payload = serialize\jsonEncode(mergeBody(pr, commit: commit, method: req.method, message: req.message));
+    final through = req.through;
     if (through.len() == 0) {
         if (serialize\jsonDecode(pr).q("auto_merge").q("merge_method").stringValue() != "") {
             var state = awaitFrom(pr, commit: commit);
@@ -1815,7 +1825,7 @@ export fun merge_change(io: {str: any}) > any !> any {
                 state = awaitFrom(expect(get(url, hdrs: hdrs), status: 200, what: "merge_change: read the pull request"), commit: commit);
             }
             if (state["next"] == "merged") {
-                return {"merged": true, "by_provider": true, "reason": ""};
+                return {"merged": true, "byProvider": true, "reason": ""};
             }
             if (state["next"] == "refuse") {
                 return {"merged": false, "reason": state["reason"] ?? ""};
@@ -1823,11 +1833,11 @@ export fun merge_change(io: {str: any}) > any !> any {
         }
         final res = mergequeue\request("PUT", url: url + "/merge", body: payload, headers: hdrs);
         if (res["status"] == 200) {
-            return {"merged": true, "by_provider": false, "reason": ""};
+            return {"merged": true, "byProvider": false, "reason": ""};
         }
         final now = get(url, hdrs: hdrs);
         if (now["status"] == 200 and (awaitFrom("{now["body"]}", commit: commit)["next"] ?? "") == "merged") {
-            return {"merged": true, "by_provider": mergedByOther("{now["body"]}", app: app), "reason": ""};
+            return {"merged": true, "byProvider": mergedByOther("{now["body"]}", app: app), "reason": ""};
         }
         return mergeFailure(res);
     }
@@ -1843,7 +1853,7 @@ export fun merge_change(io: {str: any}) > any !> any {
     var polls = 0;
     while (polls < ASYNC_POLLS) {
         if (merged(url, commit: commit, hdrs: hdrs)) {
-            return {"merged": true, "by_provider": false, "reason": ""};
+            return {"merged": true, "byProvider": false, "reason": ""};
         }
         os\sleep(ASYNC_POLL_MS);
         polls = polls + 1;
@@ -1880,13 +1890,13 @@ fun isKick(body: str) > bool {
 }
 
 // listed is the first MAX_LISTED strings of values.
-fun listed(values: any) > [str] !> any {
+fun listed(values: [str]) > [str] {
     final firsts = mut [<str>];
-    foreach (v in serialize\Boxed.init(values).listValue()) {
+    foreach (v in values) {
         if (firsts.len() == MAX_LISTED) {
             break;
         }
-        firsts.append(v.stringValue());
+        firsts.append(v);
     }
     return firsts;
 }
@@ -1944,25 +1954,25 @@ fun reproduction(number: str, run: {str: str}, repoArg: str, base: str, gate: st
 // last the facts it was rendered from as one JSON line a workflow can read back. web is
 // the provider's web root ("https://github.com"). The claim, the paths and the commits
 // may come from a job that ran the change's code, so each is shown literally.
-fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
-    final number = "{io["id"] ?? ""}";
-    final base = "{io["base"] ?? ""}";
-    final report = "{io["report"] ?? ""}";
+fun kickComment(req: QueueKickBackRequest, web: str, requeue: str) > str !> any {
+    final number = req.id;
+    final base = req.base;
+    final report = req.report;
     final lines = mut ["### Merge queue: kicked back", "", report.trim()];
-    if (io["code"] == "KICK_REGENERATION") {
+    if (req.code == "KICK_REGENERATION") {
         lines.append("");
         lines.append("This is why it carries the label `{MARK_LABELS["needs_regeneration"] ?? ""}`: "
             + "merging it needs generated files regenerated by code it changes, which the queue does not run. "
             + "Merge `{base}` in, regenerate them, and push: then the merge leaves them as they are.");
     }
-    final claim = "{io["claim"] ?? ""}";
+    final claim = req.claim;
     if (claim != "") {
         lines.append("");
         lines.append("The run reported:");
         lines.append("");
         lines.append(mergequeue\codeBlock(claim).trim());
     }
-    final source = "{io["source"] ?? ""}";
+    final source = req.source;
     if (source != "") {
         final run = parseRunSpec(source);
         final host = apiHost(web);
@@ -1972,18 +1982,18 @@ fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
         }
         lines.append("");
         lines.append("[Validation run]({web}/{run["repo"] ?? ""}/actions/runs/{run["id"] ?? ""})");
-        final repro = serialize\Boxed.init(io["reproduce"]);
-        final gate = repro.q("gate").stringValue();
-        if (gate != "") {
-            lines.append("");
-            foreach (line in reproduction(number, run: run, repoArg: repoArg, base: base, gate: gate, regenerate: repro.q("regenerate").stringValue())) {
-                lines.append(line);
+        if (req.reproduce -> repro) {
+            if (repro.gate != "") {
+                lines.append("");
+                foreach (line in reproduction(number, run: run, repoArg: repoArg, base: base, gate: repro.gate, regenerate: repro.regenerate)) {
+                    lines.append(line);
+                }
             }
         }
     }
-    final total = serialize\Boxed.init(io["paths"]).listValue().len();
-    final paths = listed(io["paths"]);
-    final commits = listed(io["with"]);
+    final total = req.paths.len();
+    final paths = listed(req.paths);
+    final commits = listed(req.with);
     if (total > 0) {
         lines.append("");
         lines.append("<details><summary>Files ({total})</summary>");
@@ -2011,10 +2021,10 @@ fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
     }
     lines.append("");
     lines.append(kickMarker({
-        "code": "{io["code"] ?? ""}",
+        "code": req.code,
         "paths": paths,
         "with": commits,
-        "candidate_commit": "{io["candidate_commit"] ?? ""}",
+        "candidate_commit": req.candidateCommit,
     }));
     return lines.join("\n") + "\n";
 }
@@ -2085,10 +2095,10 @@ fun unlabel(repo: str, number: str, label: str, hdrs: {str: str}) > void !> any 
 // a fix. Last it minimizes the earlier kick-backs on the pull request; the comment and
 // the removal already happened, so a failure there is printed to stderr (the apply
 // job's log) and the kick-back still succeeds.
-export fun kick_back(io: {str: any}) > bool !> any {
+export fun kick_back(req: QueueKickBackRequest) > Ack !> any {
     final hdrs = writing("kick_back");
-    final repo = "{io["repo"] ?? ""}";
-    final number = "{io["id"] ?? ""}";
+    final repo = req.repo;
+    final number = req.id;
     final decoded = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "kick_back: read the pull request"));
     final own = queueLabel(decoded);
     final sid = id(decoded.q("stack").q("id"));
@@ -2102,9 +2112,9 @@ export fun kick_back(io: {str: any}) > bool !> any {
         label = own;
         labeled = number;
     }
-    final requeue = requeueLine(number, method: "{io["method"] ?? ""}", fork: io["fork"] == true, label: label, top: labeled);
+    final requeue = requeueLine(number, method: req.method, fork: req.fork, label: label, top: labeled);
     final posted = expect(post(apiBase() + "/repos/" + repo + "/issues/" + number + "/comments",
-        body: serialize\jsonEncode({"body": kickComment(io, web: "https://" + apiHost(apiBase()), requeue: requeue)}), hdrs: hdrs),
+        body: serialize\jsonEncode({"body": kickComment(req, web: "https://" + apiHost(apiBase()), requeue: requeue)}), hdrs: hdrs),
         status: 201, what: "kick_back: comment");
     if (decoded.q("auto_merge").q("merge_method").stringValue() != "") {
         graphql(DISABLE_AUTO_MERGE, variables: {"id": decoded.q("node_id").stringValue()}, hdrs: hdrs);
@@ -2120,7 +2130,7 @@ export fun kick_back(io: {str: any}) > bool !> any {
     } catch (e) {
         std\print("github: kick_back: #{number} was kicked back, but its earlier kick-back comments stay expanded: {e}");
     }
-    return true;
+    return Ack{ ok = true };
 }
 
 // createLabel creates label with its description and colour; a label created by adding it
@@ -2172,13 +2182,13 @@ fun labelCreated(label: str, status: any, body: str) > void !> any {
     throw "github: create the label '{label}': HTTP {status}: {reason}";
 }
 
-// mark leaves the pull request showing the label of io's mark and no other mark's, from
+// mark leaves the pull request showing the label of req's mark and no other mark's, from
 // one read of its labels; a pull request already showing it takes no write.
-export fun mark(io: {str: any}) > bool !> any {
+export fun mark(req: QueueMarkRequest) > Ack !> any {
     final hdrs = writing("mark");
-    final repo = "{io["repo"] ?? ""}";
-    final number = "{io["id"] ?? ""}";
-    final want = "{io["mark"] ?? ""}";
+    final repo = req.repo;
+    final number = req.id;
+    final want = req.mark;
     final issue = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/issues/" + number, hdrs: hdrs), status: 200, what: "mark: read #{number}"));
     foreach (step in markOps(labelNames(issue), want: want)) {
         final label = step["label"] ?? "";
@@ -2190,7 +2200,7 @@ export fun mark(io: {str: any}) > bool !> any {
                 status: 200, what: "mark: label #{number} '{label}'");
         }
     }
-    return true;
+    return Ack{ ok = true };
 }
 
 // parseRunSpec reads "<owner>/<name>/runs/<id>" into {repo, id}, or throws.
@@ -2227,10 +2237,10 @@ fun originFrom(body: str, repo: str) > {str: any} !> any {
     final event = run.q("event").stringValue();
     return {
         "repo": own,
-        "head_repo": run.q("head_repository").q("full_name").stringValue(),
-        "head_branch": run.q("head_branch").stringValue(),
+        "headRepo": run.q("head_repository").q("full_name").stringValue(),
+        "headBranch": run.q("head_branch").stringValue(),
         "event": event,
-        "branch_event": BRANCH_EVENTS.indexOf(event) != null,
+        "branchEvent": BRANCH_EVENTS.indexOf(event) != null,
         "definition": run.q("path").stringValue(),
     };
 }
@@ -2240,9 +2250,9 @@ fun originFrom(body: str, repo: str) > {str: any} !> any {
 // the run and what it ran, which the queue checks before it downloads anything. The
 // headers carry the read credential for the downloads; the queue drops them on a
 // redirect to the storage host.
-export fun list_artifacts(io: {str: any}) > any !> any {
+export fun list_artifacts(req: QueueListArtifactsRequest) > any !> any {
     final hdrs = reading("list_artifacts");
-    final run = parseRunSpec("{io["source"] ?? ""}");
+    final run = parseRunSpec(req.source);
     final base = apiBase();
     final prefix = base + "/repos/" + (run["repo"] ?? "") + "/actions/runs/" + (run["id"] ?? "");
     final view = expect(get(prefix, hdrs: hdrs), status: 200, what: "run {run["id"] ?? ""}");
@@ -2513,7 +2523,7 @@ test "an approval counts only at the commit asked about" {
     assert\equal(atNew["approved"], want: false, message: "not approved at a commit nobody reviewed");
     assert\equal(atNew["head"], want: "new", message: "the current head rides along");
     assert\equal(atNew["reason"], want: "0 of 1 approvals at this commit", message: "says why");
-    assert\equal(atNew["approved_commit"], want: "old", message: "names the commit the approvals stand at");
+    assert\equal(atNew["approvedCommit"], want: "old", message: "names the commit the approvals stand at");
 }
 
 test "the commit approvals carry over from is the one approved most recently" {
@@ -2523,8 +2533,8 @@ test "the commit approvals carry over from is the one approved most recently" {
             {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "first"}},
             {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "c"}, "commit": {"oid": "first"}}
         ]}}}}}`;
-    assert\equal(approvalFrom([body],commit: "new", required: 1)["approved_commit"], want: "second", message: "whatever order the reviewers come in");
-    assert\equal(approvalFrom([body],commit: "new", required: 2)["approved_commit"], want: "first", message: "among the commits holding enough");
+    assert\equal(approvalFrom([body],commit: "new", required: 1)["approvedCommit"], want: "second", message: "whatever order the reviewers come in");
+    assert\equal(approvalFrom([body],commit: "new", required: 2)["approvedCommit"], want: "first", message: "among the commits holding enough");
 }
 
 test "a reviewer's latest decisive review wins, and changes requested blocks" {
@@ -2537,7 +2547,7 @@ test "a reviewer's latest decisive review wins, and changes requested blocks" {
     final got = approvalFrom([body],commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "changes requested blocks");
     assert\equal(got["reason"], want: "changes requested", message: "a comment does not undo an approval, and says why not");
-    assert\equal(got["approved_commit"], want: "", message: "nothing carries over past a change request");
+    assert\equal(got["approvedCommit"], want: "", message: "nothing carries over past a change request");
 }
 
 test "only a reviewer who can push counts, whatever reviewDecision says" {
@@ -2551,7 +2561,7 @@ test "only a reviewer who can push counts, whatever reviewDecision says" {
     final got = approvalFrom([body],commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "a stale APPROVED decision and approvals from accounts that cannot push approve nothing");
     assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "counts the writer's review only, at the commit it covers");
-    assert\equal(got["approved_commit"], want: "old", message: "the writer's approval still stands where it was given");
+    assert\equal(got["approvedCommit"], want: "old", message: "the writer's approval still stands where it was given");
 }
 
 test "reviews lists the approvals approval_at counts, with the id a dismissal takes" {
@@ -2568,7 +2578,7 @@ test "reviews lists the approvals approval_at counts, with the id a dismissal ta
     final got = serialize\Boxed.init(reviewsFrom([body]));
     assert\equal(got.q("head").stringValue(), want: "abc", message: "the head, read with the reviews");
     final seen = mut [<str>];
-    foreach (r in got.q("reviews").listValue()) {
+    foreach (r in got.q("approving").listValue()) {
         seen.append("{r.q("reviewer").stringValue()}:{r.q("id").stringValue()}@{r.q("commit").stringValue()}");
     }
     final listed = seen.join(" ");
@@ -2590,7 +2600,7 @@ test "reviews read every page, a later page's review replacing an earlier one" {
     assert\equal(reviewsNext(first), want: "c1", message: "the first page names where the second starts");
     assert\equal(reviewsNext(second), want: "", message: "the last page names none");
     final seen = mut [<str>];
-    foreach (r in serialize\Boxed.init(reviewsFrom([first, second])).q("reviews").listValue()) {
+    foreach (r in serialize\Boxed.init(reviewsFrom([first, second])).q("approving").listValue()) {
         seen.append(r.q("reviewer").stringValue());
     }
     assert\equal(seen.len(), want: 2, message: "ann's approval was dismissed on the second page: " + seen.join(" "));
@@ -2677,10 +2687,10 @@ test "describe lists the methods the repository allows" {
     final bot = {"name": "q[bot]", "email": "7+q[bot]@users.noreply.github.com"};
     final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`, rules: `[]`, setup: null, committer: bot);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "allowed methods");
-    assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
-    assert\equal(got["queue_label"], want: "merge-queue: ", message: "the label a stack is queued by, before its method");
+    assert\equal(got["stackMerge"], want: "atomic", message: "GitHub merges a stack in one call");
+    assert\equal(got["queueLabel"], want: "merge-queue: ", message: "the label a stack is queued by, before its method");
     assert\equal(got["committer"], want: bot, message: "the app's bot commits");
-    assert\equal(got["required_approvals"], want: 0, message: "no rule requires a review, and describe says so rather than leaving it out");
+    assert\equal(got["requiredApprovals"], want: 0, message: "no rule requires a review, and describe says so rather than leaving it out");
 }
 
 test "the app's bot commits under its noreply address" {
@@ -2692,7 +2702,7 @@ test "an active pull_request ruleset rule narrows methods to what it allows" {
     final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
         rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"], "required_approving_review_count": 1}}]`, setup: null, committer: null);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "the repo settings allow merge too, but the ruleset does not");
-    assert\equal(got["required_approvals"], want: 1, message: "the approvals the same rule requires");
+    assert\equal(got["requiredApprovals"], want: 1, message: "the approvals the same rule requires");
 }
 
 test "a required_linear_history rule drops merge even when settings and rulesets both allow it" {
@@ -2795,13 +2805,13 @@ fun kickFacts(code: str, paths: [str], commits: [str], candidate: str) > str !> 
 }
 
 test "a red gate's kick-back links the run, reproduces it locally and lists the files" {
-    final io = {
-        "id": "300", "base": "main", "method": "squash", "code": "KICK_RED", "candidate_commit": "c0ffee",
-        "report": "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate failed on it and passed without it.\n",
-        "claim": "the gate exited 1",
-        "source": "egladman/magus/runs/123",
-        "reproduce": {"gate": "magus run ci --no-default-charms", "regenerate": "magus run generate:rw"},
-        "paths": ["libs/a.go"], "with": ["abc123 touch a"],
+    final io = QueueKickBackRequest{
+        id = "300", base = "main", method = "squash", code = "KICK_RED", candidateCommit = "c0ffee",
+        report = "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate failed on it and passed without it.\n",
+        claim = "the gate exited 1",
+        source = "egladman/magus/runs/123",
+        reproduce = QueueReproduction{ gate = "magus run ci --no-default-charms", regenerate = "magus run generate:rw" },
+        paths = ["libs/a.go"], with = ["abc123 touch a"],
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("300", method: "squash", fork: false, label: "", top: ""));
     final want = [
@@ -2849,23 +2859,22 @@ test "a red gate's kick-back links the run, reproduces it locally and lists the 
 }
 
 test "a conflict planning found links the run and reproduces nothing" {
-    final io = {
-        "id": "7", "base": "main", "method": "rebase", "code": "KICK_CONFLICT", "candidate_commit": "",
-        "report": "It conflicts.\n\nMerge `main` in.\n", "source": "o/r/runs/9", "paths": [<str>], "with": [<str>],
+    final io = QueueKickBackRequest{
+        id = "7", base = "main", method = "rebase", code = "KICK_CONFLICT",
+        report = "It conflicts.\n\nMerge `main` in.\n", source = "o/r/runs/9",
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("7", method: "rebase", fork: false, label: "", top: ""));
     assert\equal(got, want: "### Merge queue: kicked back\n\nIt conflicts.\n\nMerge `main` in.\n\n[Validation run](https://github.com/o/r/actions/runs/9)\n\n"
         + "Queue it again once fixed: `gh pr merge 7 --auto --rebase`\n\n" + kickFacts("KICK_CONFLICT", paths: [<str>], commits: [<str>], candidate: "") + "\n",
         message: "no reproduce block, no files");
-    assert\equal(kickComment({"id": "7", "report": "r", "paths": [<str>], "with": [<str>]}, web: "https://github.com", requeue: ""),
+    assert\equal(kickComment(QueueKickBackRequest{ id = "7", report = "r" }, web: "https://github.com", requeue: ""),
         want: "### Merge queue: kicked back\n\nr\n\n" + kickFacts("", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "a directory source links nothing");
 }
 
 test "a change needing regeneration names its label and is queued again once regenerated" {
-    final io = {
-        "id": "8", "base": "main", "method": "squash", "code": "KICK_REGENERATION", "candidate_commit": "",
-        "report": "The merge queue cannot merge this change: it changes what regenerates gen/x.go.\n",
-        "paths": [<str>], "with": [<str>],
+    final io = QueueKickBackRequest{
+        id = "8", base = "main", method = "squash", code = "KICK_REGENERATION",
+        report = "The merge queue cannot merge this change: it changes what regenerates gen/x.go.\n",
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("8", method: "squash", fork: false, label: "", top: ""));
     assert\equal(got, want: "### Merge queue: kicked back\n\n"
@@ -2878,10 +2887,10 @@ test "a change needing regeneration names its label and is queued again once reg
 }
 
 test "what a verdict carries renders inert: file names, commits and the run's claim" {
-    final io = {
-        "id": "9", "base": "main", "code": "KICK_RED", "candidate_commit": "", "report": "r",
-        "claim": "``` \n@everyone <!-- x -->\n````",
-        "paths": ["a`b.go", "x\ny.md", "@org/team", "--> <img src=x>", "``` fence"], "with": ["abc @someone"],
+    final io = QueueKickBackRequest{
+        id = "9", base = "main", code = "KICK_RED", report = "r",
+        claim = "``` \n@everyone <!-- x -->\n````",
+        paths = ["a`b.go", "x\ny.md", "@org/team", "--> <img src=x>", "``` fence"], with = ["abc @someone"],
     };
     final got = kickComment(io, web: "https://github.com", requeue: "");
     final marker = kickFacts("KICK_RED", paths: ["a`b.go", "x\ny.md", "@org/team", "--> <img src=x>", "``` fence"], commits: ["abc @someone"], candidate: "");
@@ -2917,7 +2926,7 @@ test "a kick-back lists a bounded number of files" {
         paths.append("f{i}");
         i = i + 1;
     }
-    final lines = kickComment({"id": "9", "report": "r", "paths": paths, "with": [<str>]}, web: "https://github.com", requeue: "").split("\n");
+    final lines = kickComment(QueueKickBackRequest{ id = "9", report = "r", paths = paths }, web: "https://github.com", requeue: "").split("\n");
     assert\equal(lines[4], want: "<details><summary>Files ({MAX_LISTED + 3})</summary>", message: "the count is every file");
     assert\equal(lines[6 + MAX_LISTED], want: "- and 3 more", message: "the list stops at MAX_LISTED");
 }
@@ -2982,20 +2991,20 @@ fun runJSON(event: str, branch: str, headRepo: str) > str {
 test "a run says what started it and what it ran" {
     final push = serialize\Boxed.init(originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
     assert\equal(push.q("repo").stringValue(), want: "acme/widgets", message: "repository");
-    assert\equal(push.q("head_repo").stringValue(), want: "acme/widgets", message: "head repository");
-    assert\equal(push.q("head_branch").stringValue(), want: "main", message: "branch");
+    assert\equal(push.q("headRepo").stringValue(), want: "acme/widgets", message: "head repository");
+    assert\equal(push.q("headBranch").stringValue(), want: "main", message: "branch");
     assert\equal(push.q("event").stringValue(), want: "push", message: "event");
-    assert\equal(push.q("branch_event").booleanValue(), want: true, message: "a push runs the branch's own workflow file");
+    assert\equal(push.q("branchEvent").booleanValue(), want: true, message: "a push runs the branch's own workflow file");
     assert\equal(push.q("definition").stringValue(), want: ".github/workflows/queue.yaml", message: "workflow file");
     final dispatched = serialize\Boxed.init(originFrom(runJSON("workflow_dispatch", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
-    assert\equal(dispatched.q("branch_event").booleanValue(), want: true, message: "so does a dispatch");
+    assert\equal(dispatched.q("branchEvent").booleanValue(), want: true, message: "so does a dispatch");
 }
 
 test "a run a pull request started never runs the branch's own workflow file" {
     foreach (event in ["pull_request", "pull_request_review", "pull_request_target", "workflow_run", "schedule"]) {
         final got = serialize\Boxed.init(originFrom(runJSON(event, branch: "main", headRepo: "mallory/widgets"), repo: "acme/widgets"));
-        assert\equal(got.q("branch_event").booleanValue(), want: false, message: event);
-        assert\equal(got.q("head_repo").stringValue(), want: "mallory/widgets", message: "a fork's head repository is reported as it is");
+        assert\equal(got.q("branchEvent").booleanValue(), want: false, message: event);
+        assert\equal(got.q("headRepo").stringValue(), want: "mallory/widgets", message: "a fork's head repository is reported as it is");
     }
 }
 
@@ -3112,7 +3121,7 @@ test "setup allows auto-merge and pins a context required from anyone to the app
     final setup = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: checks, reports: reports, rulesets: {"9": RULESET_NAME}, app: app, steps: true));
     assert\equal(setup.q("credential").q("id").stringValue(), want: "812", message: "the app posts the status");
     assert\equal(setup.q("settings").listValue()[0].q("value").stringValue(), want: "false", message: "auto-merge is off");
-    assert\equal(setup.q("required_checks").listValue()[1].q("events").listValue()[0].stringValue(), want: "pull_request", message: "the event it was seen on");
+    assert\equal(setup.q("requiredChecks").listValue()[1].q("events").listValue()[0].stringValue(), want: "pull_request", message: "the event it was seen on");
     final steps = setup.q("steps").listValue();
     assert\equal(steps[0].q("title").stringValue(), want: "Allow auto-merge (Settings > General > Pull Requests > Allow auto-merge)", message: "auto-merge first");
     assert\equal(steps.len(), want: 6, message: "auto-merge, install, environment, variable, key, the pin");
@@ -3141,7 +3150,7 @@ test "with an app, setup installs it, stores its credential and moves the pin" {
     final repo = `{"allow_auto_merge": true, "owner": {"type": "Organization"}}`;
     final setup = serialize\Boxed.init(setupFrom(AT, repoBody: repo, checks: checks, reports: [<{str: str}>], rulesets: {"9": RULESET_NAME}, app: app, steps: true));
     assert\equal(setup.q("credential").q("id").stringValue(), want: "812", message: "the app posts the status");
-    assert\equal(setup.q("app").q("install_url").stringValue(), want: "https://github.com/apps/acme-magus-queue/installations/new", message: "install link");
+    assert\equal(setup.q("app").q("installURL").stringValue(), want: "https://github.com/apps/acme-magus-queue/installations/new", message: "install link");
     assert\equal(setup.q("app").q("secret").stringValue(), want: APP_SECRET, message: "the secret setup-magus reads");
     final steps = setup.q("steps").listValue();
     assert\equal(steps.len(), want: 6, message: "install, environment, variable, key, two pins");
@@ -3190,8 +3199,8 @@ test "an app whose client id GitHub hides is stored by gh's own prompt, and pinn
 test "without steps, setup is the facts apply checks" {
     final setup = serialize\Boxed.init(setupFrom(AT, repoBody: `{"allow_auto_merge": true}`, checks: [{"context": "merge-queue", "integration": "812", "ruleset": "9"}],
         reports: [<{str: str}>], rulesets: {<str: str>}, app: {"slug": "q", "id": "812", "name": "q"}, steps: false));
-    assert\equal(setup.q("status_context").stringValue(), want: "merge-queue", message: "the context asked about");
-    assert\equal(setup.q("required_checks").listValue()[0].q("integration").stringValue(), want: "812", message: "the pin apply compares");
+    assert\equal(setup.q("statusContext").stringValue(), want: "merge-queue", message: "the context asked about");
+    assert\equal(setup.q("requiredChecks").listValue()[0].q("integration").stringValue(), want: "812", message: "the pin apply compares");
     assert\equal(setup.q("steps").listValue().len(), want: 0, message: "no steps");
 }
 

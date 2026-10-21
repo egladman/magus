@@ -181,8 +181,8 @@ func TestParseBuzzProjectOpts_TargetSandboxMalformedErrors(t *testing.T) {
 		want       string
 	}{
 		"escaping path": {"path", "../x", `must be a relative path that stays under base xdgData`},
-		"unknown key":   {"access", "rw", `unknown key "access"`},
-		"unknown mode":  {"mode", "RW", `unknown mode "RW"`},
+		"unknown key":   {"access", "rw", `SandboxAllow has no member "access"`},
+		"unknown mode":  {"mode", "RW", `"RW" is not a SandboxAccess case`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			entry := vm.NewMap()

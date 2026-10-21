@@ -5,91 +5,16 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// contractEntry describes one optional entry in the mgs_ spell contract. The
-// resolver (resolve.go) iterates OptionalContract, so the optional functions and
-// the decoder keys they map to live in one canonical list rather than being
-// spelled out at each call site.
-type contractEntry struct {
-	Name  string // exported mgs_ function name
-	Field string // decoder field key the resolved value is stored under
-	// Shape is what the entry's Buzz value is made of, and therefore which reduction
-	// the resolver runs before storing it.
-	//
-	// It lives HERE, on the entry, rather than in a switch over field names in
-	// resolve.go, because a field name spelled in two places is a field name that can
-	// be renamed in one. That is not hypothetical: renaming mgs_listManifests to
-	// mgs_listVersionFiles updated this list, the decoder and all four spell sources,
-	// and the compiled spells exported the new name, but the
-	// switch still said "manifests", so pathValues quietly stopped running, the Path
-	// objects were never reduced to strings, and the decoded field came back EMPTY with
-	// nothing pointing at the cause. The rename was reverted over it. One list means the
-	// next rename carries this behavior along with it.
-	//
-	// An enum rather than a bool per shape: with three of them, a second bool beside the
-	// first encodes "both set" as a reachable state that means nothing.
-	Shape contractShape
-}
-
-// contractShape is the element type of a contract entry's Buzz list value.
-type contractShape uint8
-
-const (
-	// ShapeStrs is the zero value: a [str] stored as-is.
-	ShapeStrs contractShape = iota
-	// ShapePaths is a [Path], reduced to a [str] by pathValues. The Path object's
-	// other fields (base, isDir) are DISCARDED: the cache descriptor wants the
-	// lexical value, because glob matching does not resolve filesystem paths.
-	ShapePaths
-	// ShapeManifests is a [Manifest], kept structured because its lockCandidates
-	// field is data the descriptor needs, not decoration. A spell still returning
-	// [Path] here decodes as manifests declaring no lockfile: both objects carry a
-	// .value and the reduction reads keys structurally, so the pre-Manifest contract
-	// keeps loading rather than failing.
-	ShapeManifests
-)
-
-// OptionalContract is the canonical list of optional mgs_ functions a spell
-// module may export (mgs_getName is required and handled separately by the
-// resolver). Resolve calls each present function and stores its result under
-// Field. Treat as read-only.
-//
-// MGS functions take no arguments. They run while Magus is discovering a spell,
-// before there is a selected target or execution context; a target's magus.Context
-// would therefore be fabricated data at this boundary. Per-invocation typed inputs
-// belong on ordinary exported spell functions instead. Every scalar and list
-// contribution (needs, provides, version_cmd, opaque) resolves uniformly.
-// The "ops" entry (mgs_listTargets) is the exception:
-// resolveOps post-processes it to extract function-valued op handlers into
-// command records (the form the built-in spells use). Record-shaped ops pass
-// through unchanged. See docs/engines.md.
-var OptionalContract = []contractEntry{
-	{Name: "mgs_listRequiredGlobs", Field: "needs", Shape: ShapePaths},
-	{Name: "mgs_listProvidedGlobs", Field: "provides", Shape: ShapePaths},
-	{Name: "mgs_listClaimedGlobs", Field: "claims", Shape: ShapePaths},
-	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs", Shape: ShapePaths},
-	{Name: "mgs_listManifests", Field: "manifests", Shape: ShapeManifests},
-	{Name: "mgs_listScriptRunners", Field: "script_runners"},
-	{Name: "mgs_getTools", Field: "tools"},
-	{Name: "mgs_getLanguage", Field: "language"},
-	{Name: "mgs_getSymbolIndexer", Field: "symbol_indexer"},
-	{Name: "mgs_getSandbox", Field: "sandbox"},
-	{Name: "mgs_isOpaque", Field: "opaque"},
-	{Name: "mgs_getModeArgs", Field: "mode_args"},
-	{Name: "mgs_listTargets", Field: "ops"},
-}
-
 // Contract is a spell's load-time answer, one field per mgs_ function, typed as the
 // Buzz value that function returns. The mgs tag names the function; ",required" marks
 // the one a module must export to be a spell, and ",handler" marks a map whose values a
 // spell writes as `fun(Target) T` and magus calls once to read the T.
 //
-// magus-utils contract reads this declaration from source and generates the signature
-// table the contract check compares each spell against (decode.ContractFuncs) and the
-// reference page docs/reference/spell-contract.md. Each field's doc comment is that
+// magus-utils contract generates from this declaration the decoders Resolve reads each
+// export through (decode.ContractFuncs), the signatures the contract check compares a
+// spell against, and docs/reference/spell-contract.md. A field's doc comment is that
 // page's prose, so it addresses a spell author and does not open with the field name.
-//
-// A pointer field is a function a spell may leave out: its return type is the element
-// type, and absence is not exporting the function.
+// A pointer field is a function a spell may leave out.
 type Contract struct {
 	// The spell's name, the one a magusfile imports it by.
 	Name string `mgs:"mgs_getName,required"`
@@ -130,4 +55,41 @@ type Contract struct {
 	// The spell's long-running ops, keyed by op name, each read the way a target handler
 	// is.
 	Services map[string]spells.Service `mgs:"mgs_listServices,handler"`
+}
+
+// harnessContract is the mgs_ functions a harness spell exports, one field per function
+// typed as what it returns. ",required" marks the one a harness must export; a function
+// it leaves out is a capability its host lacks. magus-utils contract parses it into
+// decode.HarnessFuncs, and nothing constructs it.
+type harnessContract struct {
+	// The workspace-local host JSON document the harness maintains, such as
+	// .cursor/hooks.json, and the defaults it sets there.
+	Config types.HarnessConfig `mgs:"mgs_getHarnessConfig,required"`
+	// Where the host reads installed magus skills, and which form to install.
+	Skills types.HarnessSkills `mgs:"mgs_getSkills"`
+	// The host JSON fragments merged into the config, verbatim: magus does not rewrite a
+	// command field.
+	Entries []types.ManagedEntries `mgs:"mgs_listEntries"`
+	// The hooks the entries run, as data. magus checks each one appears in the entries,
+	// so a hook declared here and missing from the rendered JSON is drift.
+	Hooks []types.HookCommand `mgs:"mgs_listHooks"`
+	// The MCP setup guidance describe prints. magus never writes host MCP client config.
+	MCP types.McpServer `mgs:"mgs_getMcp"`
+	// The host's own tools and what each can do. A tool no row names is one the guard
+	// cannot judge.
+	Tools types.HarnessTools `mgs:"mgs_listTools"`
+	// How long the host waits on a foreground shell command and on one hook.
+	Limits types.Limits `mgs:"mgs_getLimits"`
+	// The models the host runs, with prices in USD per million tokens. A person's
+	// agents.models overrides these row by row.
+	Models []types.ModelRow `mgs:"mgs_listModels"`
+	// Plain host settings kept in place, such as a plugin to enable. A value someone set
+	// differently is left alone and named, never overwritten.
+	Settings []types.Setting `mgs:"mgs_listSettings"`
+	// The subagents magus ships, rendered in the host's format as whole files.
+	RenderAgents func(agents []types.ShippedAgent) []types.AgentFile `mgs:"mgs_renderAgents"`
+	// The host-native approval prompts that carry a guard verdict of ask to the person on
+	// a host whose hooks cannot prompt. humanOnly maps each target the workspace declares
+	// human_only to its reason.
+	RenderPrompts func(humanOnly map[string]string) []types.Prompt `mgs:"mgs_renderPrompts"`
 }

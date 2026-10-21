@@ -95,14 +95,10 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "script-host"; }
 
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return {"path": "hooks.json"};
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = "hooks.json"};
 }
 
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return {"paths": [".claude/skills"], "form": "both"};
-}
-
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [];
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{paths = [".claude/skills"], form = SkillForm.both};
 }

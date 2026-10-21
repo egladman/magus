@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -32,7 +31,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, false))
+	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
 	assert.Contains(t, log.String(), `msg=wrote component="agent harness install"`)
 
 	// An orphan from an earlier release: magus stamped it, so this install prunes it.
@@ -43,7 +42,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 
 	log.Reset()
 	out := captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, false))
+		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
 	})
 	assert.NoDirExists(t, orphan)
 	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
@@ -53,7 +52,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
 		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
+		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true))
 	})
 	assert.DirExists(t, orphan)
 	assert.Contains(t, out, "would remove skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n")
@@ -191,16 +190,16 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "script-host"; }
 
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return {"path": "hooks.json"};
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = "hooks.json"};
 }
 
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return {"paths": [], "form": "short"};
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{form = SkillForm.short};
 }
 
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [{"path": ["hooks", "before"], "entries": [{"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]}]}];
+export fun mgs_listEntries() > [ManagedEntries] {
+    return [ManagedEntries{path = ["hooks", "before"], entries = [{"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]}]}];
 }
 -- hooks.json --
 {

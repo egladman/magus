@@ -464,9 +464,11 @@ state, job leases. See <https://openai.github.io/openai-agents-python/guardrails
 <https://aws.amazon.com/bedrock/guardrails/>, and
 <https://github.com/NVIDIA-NeMo/Guardrails>.
 
-Not "harness" either. Anthropic and OpenAI both use that word for the host's
-own agent loop, the code that reads a model's tool call and decides what runs
-next. magus is not that loop. Martin Bockeler's "outer harness"
+Not "harness" either, in the sense where Anthropic and OpenAI both use that word
+for the host's own agent loop, the code that reads a model's tool call and
+decides what runs next. magus is not that loop. It does supply a
+[harness](glossary.md#harness) in the glossary's sense: the guard hooks, skills,
+MCP tools and job leases around the loop. Martin Bockeler's "outer harness"
 (<https://martinfowler.com/articles/harness-engineering.html>, 2026-04-02) is the
 nearest framing for where magus sits: deterministic guides and sensors placed
 around the loop, not the loop itself.

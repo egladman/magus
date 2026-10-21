@@ -275,8 +275,10 @@ never shifts another's indices.
 
 ## A provider spell
 
-A provider exports **handler ops** instead. They take `(target: Target, cb: fun(any))`,
-fill a payload map by calling `cb`, and return data rather than a `Command`.
+A provider exports **provider ops** instead: `fun <op>(target: Target, req: <Req>) > <Resp>`,
+each request and response an object from `magus/spell`. They return data rather than a
+`Command`, and the signature is checked when the spell loads
+([MGS1051](../reference/codes/magusfile/MGS1051.md)).
 
 Four subsystems accept one, and each detects its ops by name:
 
@@ -310,11 +312,9 @@ export fun mgs_getTools() > {str: Tool} {
     return {"op": Tool{probe = Command{bin = "op", args = ["--version"]}}};
 }
 
-export fun resolve_secret(target: Target, cb: fun(any)) > str {
-    var io = {};
-    cb(io);                       // fills io with the payload; io["ref"] is the reference
-    final ref = "" + io["ref"];
-    return proc\exec("op", args: ["read", "op://" + ref], dir: ".", opts: {}).stdout;
+export fun resolve_secret(target: Target, req: SecretRef) > Secret {
+    final out = proc\exec("op", args: ["read", "op://" + req.ref], dir: ".", opts: {}).stdout;
+    return Secret{ value = out };
 }
 ```
 

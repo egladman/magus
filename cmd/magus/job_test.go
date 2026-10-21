@@ -638,20 +638,16 @@ const limitHostSpell = `import "magus/spell";
 
 export fun mgs_getName() > str { return "limit-host"; }
 
-export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
-    return {"path": "hooks.json"};
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = "hooks.json"};
 }
 
-export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
-    return {"paths": [], "form": "short"};
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{form = SkillForm.short};
 }
 
-export fun harness_entries(target: Target, cb: fun(any)) > [any] {
-    return [];
-}
-
-export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
-    return {"foreground_default_ms": 120000, "foreground_max_ms": 600000};
+export fun mgs_getLimits() > Limits {
+    return Limits{foregroundDefaultMs = 120000, foregroundMaxMs = 600000};
 }
 `
 
@@ -661,16 +657,16 @@ const testTarget = "\nexport fun test(ctx: magus\\Context, args: [str]) > void {
 // A fork notes a check whose last real run took longer than a wired host lets a foreground
 // call wait, naming both numbers, and says nothing when no wired host declares a limit.
 func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
-	// The spell's harness_limits decode is the bindings' own test. Here the loader answers
+	// The spell's mgs_getLimits decode is the bindings' own test. Here the loader answers
 	// for the wired id directly, since another test in this package may have cleared the
 	// spell-backed one.
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		SchemaVersion: 2,
 		ID:            "limit-host",
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        agent.HarnessSkills{Form: agent.FormShort},
-		Config:        agent.HarnessConfig{Path: "hooks.json"},
-		Limits:        agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
+		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
+		Config:        types.HarnessConfig{Path: "hooks.json"},
+		Limits:        types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
 	})
 	for _, tt := range []struct {
 		name, magusfile, want string
@@ -713,8 +709,8 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 		SchemaVersion: 2,
 		ID:            "limit-host",
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        agent.HarnessSkills{Form: agent.FormShort},
-		Config:        agent.HarnessConfig{Path: "hooks.json"},
+		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
+		Config:        types.HarnessConfig{Path: "hooks.json"},
 	}
 	for _, tt := range []struct {
 		name, toolsDir, want string
@@ -724,7 +720,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			wired := harness
-			wired.Tools = &agent.HarnessTools{Dir: tt.toolsDir}
+			wired.Tools = &types.HarnessTools{Dir: tt.toolsDir}
 			fixture.WireHarness(t, wired)
 			resetWorkspaceMemo(t)
 			t.Cleanup(snapshotGlobals())

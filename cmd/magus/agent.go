@@ -196,7 +196,7 @@ func reportRemovedSkills(w io.Writer, removed []string, dryRun bool) {
 // binary no longer ships. Only directories carrying magus's stamp are candidates
 // (see Catalog.StaleSkillDirs), so a hand-authored skill beside them survives.
 // Under dryRun it touches nothing and returns what a run would write and remove.
-func installSkillTree(base, leaf string, force, dryRun bool, form agent.Form) (written, changed, removed []string, err error) {
+func installSkillTree(base, leaf string, force, dryRun bool, form types.SkillForm) (written, changed, removed []string, err error) {
 	if dryRun {
 		if written, err = agentSkills.PlanSkillTree(base, leaf, form); err != nil {
 			return nil, nil, nil, err
@@ -215,7 +215,7 @@ func installSkillTree(base, leaf string, force, dryRun bool, form agent.Form) (w
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(ctx context.Context, dir string, written, changed []string, form agent.Form, dryRun bool) {
+func printAgentInstallNextSteps(ctx context.Context, dir string, written, changed []string, form types.SkillForm, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
@@ -239,7 +239,7 @@ func printAgentInstallNextSteps(ctx context.Context, dir string, written, change
 			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
 	}
 	reportContextCost(ctx, dir, written)
-	if form == agent.FormBoth {
+	if form == types.SkillFormBoth {
 		interactive.Hint(ctx, "both installs the short body under each skill's own name plus an always-full <name>-full reference; pass --skill-form=short or --skill-form=full when one body per skill is required")
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live

@@ -15,24 +15,24 @@ import (
 )
 
 // testToolRows are the rows the tests' host declares: a subset of a real host's table.
-var testToolRows = []agent.HarnessTool{
-	{Name: "Bash", Capability: agent.ToolRuns},
-	{Name: "Monitor", Capability: agent.ToolRuns},
-	{Name: "Read", Capability: agent.ToolReads},
-	{Name: "Glob", Capability: agent.ToolReads},
-	{Name: "Grep", Capability: agent.ToolReads},
-	{Name: "LS", Capability: agent.ToolReads},
-	{Name: "Write", Capability: agent.ToolWrites},
-	{Name: "Edit", Capability: agent.ToolWrites},
-	{Name: "Delete", Capability: agent.ToolWrites},
-	{Name: "apply_patch", Capability: agent.ToolWrites},
-	{Name: "Agent", Capability: agent.ToolSpawns},
-	{Name: "Task", Capability: agent.ToolSpawns},
-	{Name: "spawn_agent", Capability: agent.ToolSpawns},
-	{Name: "mcp__browser__navigate", Capability: agent.ToolNetwork},
-	{Name: "TodoWrite", Capability: agent.ToolInert},
-	{Name: "WebFetch", Capability: agent.ToolInert},
-	{Name: "Skill", Capability: agent.ToolInert},
+var testToolRows = []types.HarnessTool{
+	{Name: "Bash", Capability: types.ToolRuns},
+	{Name: "Monitor", Capability: types.ToolRuns},
+	{Name: "Read", Capability: types.ToolReads},
+	{Name: "Glob", Capability: types.ToolReads},
+	{Name: "Grep", Capability: types.ToolReads},
+	{Name: "LS", Capability: types.ToolReads},
+	{Name: "Write", Capability: types.ToolWrites},
+	{Name: "Edit", Capability: types.ToolWrites},
+	{Name: "Delete", Capability: types.ToolWrites},
+	{Name: "apply_patch", Capability: types.ToolWrites},
+	{Name: "Agent", Capability: types.ToolSpawns},
+	{Name: "Task", Capability: types.ToolSpawns},
+	{Name: "spawn_agent", Capability: types.ToolSpawns},
+	{Name: "mcp__browser__navigate", Capability: types.ToolNetwork},
+	{Name: "TodoWrite", Capability: types.ToolInert},
+	{Name: "WebFetch", Capability: types.ToolInert},
+	{Name: "Skill", Capability: types.ToolInert},
 }
 
 // testTools installs testToolRows the way `magus agent harness install` does and reads them
@@ -40,7 +40,7 @@ var testToolRows = []agent.HarnessTool{
 func testTools(t testing.TB) agent.ToolRows {
 	t.Helper()
 	root := t.TempDir()
-	for _, f := range (agent.HarnessTools{Dir: "tools", Rows: testToolRows}).Files() {
+	for _, f := range agent.ToolFiles(types.HarnessTools{Dir: "tools", Rows: testToolRows}, nil) {
 		path := filepath.Join(root, f.Path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))

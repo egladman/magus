@@ -115,7 +115,7 @@ A hook the host stops waiting for leaves a mark, made before the rules load, and
 session's next judgment reports how many of its checks never finished
 ([`guard-unfinished`](rules/guard-unfinished.md)). The host stopped waiting when the hook
 process it started is gone, or when the judgment ran past the hook timeout the host's
-harness declares in `harness_limits`. A host whose harness declares none is not taken to
+harness declares in `mgs_getLimits`. A host whose harness declares none is not taken to
 have given up on a slow judgment. A workspace cannot set that notice.
 
 When a file the root magusfile's load read differs from the checked-out commit, the rule

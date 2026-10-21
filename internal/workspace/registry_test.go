@@ -18,6 +18,51 @@ func TestNewWorkspaceRegistry(t *testing.T) {
 	require.NotNil(t, r)
 }
 
+// wiringWorkspace is a workspace value a test binds, comparable like the *magus.Magus a
+// load binds.
+type wiringWorkspace struct {
+	types.WorkspaceReader
+	name string
+}
+
+// unkeyableWorkspace holds a slice, so no sync.Map can key it.
+type unkeyableWorkspace struct {
+	types.WorkspaceReader
+	ids []string
+}
+
+// Unknown wiring is an error, never an empty list, and a workspace whose magusfile wired
+// nothing reads as wired-but-empty, distinct from it.
+func TestWiredHarnessesTellsUnknownFromNone(t *testing.T) {
+	unbound := &wiringWorkspace{name: "unbound"}
+	_, err := WiredHarnesses(unbound)
+	require.ErrorIs(t, err, errNoHarnessWiring)
+	_, err = WiredHarnesses(nil)
+	require.ErrorIs(t, err, errNoHarnessWiring)
+	_, err = WiredHarnesses(unkeyableWorkspace{ids: []string{"x"}})
+	require.ErrorIs(t, err, errNoHarnessWiring, "a value no load could have bound is unknown, not a panic")
+
+	none := &wiringWorkspace{name: "none"}
+	BindRegistry(none, NewWorkspaceRegistry())
+	t.Cleanup(func() { UnbindRegistry(none) })
+	ids, err := WiredHarnesses(none)
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, ids, "wired, and empty")
+
+	wired := &wiringWorkspace{name: "wired"}
+	reg := NewWorkspaceRegistry()
+	BindRegistry(wired, reg)
+	reg.AddHarness("codex")
+	reg.AddHarness("claude-code")
+	ids, err = WiredHarnesses(wired)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"codex", "claude-code"}, ids, "read live, in wiring order")
+
+	UnbindRegistry(wired)
+	_, err = WiredHarnesses(wired)
+	require.ErrorIs(t, err, errNoHarnessWiring, "a closed workspace is unbound")
+}
+
 func TestContextWithRegistry_RoundTrip(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	ctx := ContextWithRegistry(context.Background(), r)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/broker"
@@ -212,31 +214,28 @@ func TestWithSpell(t *testing.T) {
 // from a declared one everywhere downstream. The unit-level behaviour of the fold
 // itself is tested in internal/workspace/provider_test.go.
 
-// provider registers a spell whose list_projects answers pp as a Buzz spell would, and
-// returns its name to wire. The engine's own runner invokes it, so these tests cover the
-// decode a real provider's answer goes through.
+// provider registers a Buzz spell whose list_projects answers pp, and returns its name to
+// wire. The engine's own runner calls it, so these tests cover the decode a real
+// provider's answer goes through.
 func provider(t *testing.T, pp ...spells.ProvidedProject) string {
 	t.Helper()
-	list := func(ss []string) []any {
-		out := make([]any, 0, len(ss))
-		for _, s := range ss {
-			out = append(out, s)
+	list := func(ss []string) string {
+		quoted := make([]string, len(ss))
+		for i, s := range ss {
+			quoted[i] = strconv.Quote(s)
 		}
-		return out
+		return "[" + strings.Join(quoted, ", ") + "]"
 	}
-	items := make([]any, 0, len(pp))
+	var appends strings.Builder
 	for _, p := range pp {
-		items = append(items, map[string]any{
-			"path": p.Path, "name": p.Name, "spells": list(p.Spells),
-			"depends_on": list(p.DependsOn), "sources": list(p.Sources), "outputs": list(p.Outputs),
-		})
+		fmt.Fprintf(&appends, "    projects.append(Project{ path = %q, name = %q, spells = %s, depends_on = %s, sources = %s, outputs = %s });\n",
+			p.Path, p.Name, list(p.Spells), list(p.DependsOn), list(p.Sources), list(p.Outputs))
 	}
-	return register.Spell(t, "provider", spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-		if req.Target != spells.ListProjectsContract {
-			return nil, nil
-		}
-		return items, nil
-	}))
+	return register.Spell(t, "provider", spells.WithFuncSource(`import "magus/spell";
+export fun list_projects(target: Target, req: ProjectQuery) > [Project] {
+    final projects = mut [<Project>];
+`+appends.String()+`    return projects;
+}`))
 }
 
 // TestProvidedProjectIsAFullProject is the end-to-end claim the whole mechanism

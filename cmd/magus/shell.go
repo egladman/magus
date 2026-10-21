@@ -402,12 +402,16 @@ func onceInspected[T any](ctx context.Context, inspect func(context.Context) (ty
 }
 
 // harnessModelRows is the lazy reader of the model rows the harnesses wired in the
-// workspace at root publish through harness_models; the first call loads each harness
-// spell. A workspace that does not load, wires no harness or wires none that publishes rows
-// yields no rows, which the guard reads as no facts about a model rather than an error.
+// workspace at root publish through mgs_listModels; the first call loads each harness
+// spell. A workspace that does not load or carries no wiring, wires no harness or wires none
+// that publishes rows yields no rows, which the guard reads as no facts about a model
+// rather than an error.
 func harnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []types.ModelPricing {
 	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []types.ModelPricing {
-		wired := workspaceHarnessNames(ws)
+		wired, err := workspace.WiredHarnesses(ws)
+		if err != nil {
+			return nil
+		}
 		ctx = agent.ContextWithWiredHarnesses(types.WithWorkspace(ctx, ws), wired)
 		var rows []types.ModelPricing
 		for _, id := range wired {

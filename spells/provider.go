@@ -15,10 +15,10 @@ package spells
 //
 // It is deliberately NOT mgs_-prefixed. An mgs_ function takes no arguments and must
 // be pure, because magus calls it before it has selected a target; a provider is
-// neither. Its signature matches every other contract function, and the input
-// callback yields {root}, the absolute workspace root:
+// neither. It is a provider op like every other, and req.root is the absolute
+// workspace root:
 //
-//	fun list_projects(target: Target, cb: fun(any)) > [Project] !> any
+//	fun list_projects(target: Target, req: ProjectQuery) > [Project] !> any
 const ListProjectsContract = "list_projects"
 
 // ProvidedProject is one project a workspace provider supplies: the same facts a

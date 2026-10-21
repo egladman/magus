@@ -131,20 +131,20 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// once; the shipped probe deadline would measure only how loaded the machine is.
 	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
-	// An empty magusfile marks the directory as a workspace root.
-	w.Magusfile("")
+	// The root magusfile wires "brief-host" with magus\harness.provider, and the fixture
+	// loader answers for it the way the spell's harness contract functions would.
+	w.Magusfile("import \"magus\";\nimport \"spells/brief-host\" as host;\nmagus\\harness.provider(host);\n")
+	w.Write("spells/brief-host/spell.buzz", "import \"magus/spell\";\n"+
+		"export fun mgs_getName() > str { return \"brief-host\"; }\n"+
+		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = \"host/hooks.json\"}; }\n")
 	w.Write("AGENTS.md", "# rules\n")
-	// "brief-host" is wired as a harness spell (no harnesses/*.json compat
-	// directory left to write it into): a WorkspaceRegistry records the wiring the
-	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
-	// it the way a real spell's harness_config would.
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		SchemaVersion: 2,
 		ID:            "brief-host",
 		Display:       agent.HarnessDisplay{Name: "Brief Host"},
-		Config:        agent.HarnessConfig{Path: "host/hooks.json"},
-		Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
-		ManagedEntries: []agent.HarnessEntries{{
+		Config:        types.HarnessConfig{Path: "host/hooks.json"},
+		Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
+		ManagedEntries: []types.ManagedEntries{{
 			Path: []string{"hooks", "before"},
 			Entries: []map[string]any{{
 				"match":    "run",
@@ -152,9 +152,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 			}},
 		}},
 	})
-	reg := magus.NewWorkspaceRegistry()
-	reg.AddHarness("brief-host")
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	w.Write("host/hooks.json",
 		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)

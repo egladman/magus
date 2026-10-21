@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -68,7 +69,11 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 }
 
 func (r *runner) checkBoundLease() types.Check {
-	return checkBoundLease(r.runCtx(), r.jobPlace(), workspaceHarnesses(r.ws)...)
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring("bound-lease", err)
+	}
+	return checkBoundLease(r.runCtx(), r.jobPlace(), wired...)
 }
 
 // checkBoundLease grades the lease this checkout is bound to: an unknown id, a

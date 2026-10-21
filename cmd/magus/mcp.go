@@ -133,7 +133,7 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 	defer stop()
 	watchWorkspace(ctx, m)
 
-	slog.InfoContext(ctx, fmt.Sprintf("serving MCP over stdio for %s; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)", m.Root()),
+	slog.InfoContext(ctx, fmt.Sprintf("serving MCP over stdio for %s in-process, so a stopped daemon cannot break it; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)", m.Root()),
 		attr.Notice(""), attr.Component("magus"))
 	return internalmcp.ServeStdio(ctx, internalmcp.Options{
 		Magus:    m,
