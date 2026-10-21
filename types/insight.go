@@ -289,7 +289,10 @@ type CoChange struct {
 	Hidden bool   `json:"hidden,omitempty" yaml:"hidden,omitempty"`
 }
 
+// ALabel names A for a person: AName when declared, else a label derived from its path.
 func (c CoChange) ALabel() string { return ProjectDisplayName(c.A, c.AName, "") }
+
+// BLabel names B for a person: BName when declared, else a label derived from its path.
 func (c CoChange) BLabel() string { return ProjectDisplayName(c.B, c.BName, "") }
 
 // OwnershipOutput reports author concentration per project — the knowledge-risk view.
@@ -315,6 +318,7 @@ type OwnershipEntry struct {
 	LastCommit   time.Time `json:"last_commit,omitempty"  yaml:"last_commit,omitempty"`
 }
 
+// Label names the project for a person: Name when declared, else a label derived from Path.
 func (o OwnershipEntry) Label() string { return ProjectDisplayName(o.Path, o.Name, "") }
 
 // TrendOutput ranks projects by whether their activity is rising or cooling — the
@@ -335,6 +339,7 @@ type TrendEntry struct {
 	Delta   int    `json:"delta"   yaml:"delta"`
 }
 
+// Label names the project for a person: Name when declared, else a label derived from Path.
 func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 
 // InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,

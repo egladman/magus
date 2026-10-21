@@ -27,6 +27,7 @@ const (
 	MergeImportSet MergeKind = 4
 )
 
+// String names the kind for a report; an unknown value prints its number.
 func (k MergeKind) String() string {
 	switch k {
 	case 0:
@@ -50,6 +51,7 @@ type MergeRegion struct {
 	Kind      MergeKind
 }
 
+// String lists the colliding locations, then how the region settled.
 func (r MergeRegion) String() string {
 	names := make([]string, len(r.Locations))
 	for i, l := range r.Locations {
