@@ -496,7 +496,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A line-bounded read already has a range; refs is not the next step.
 		{command: "sed -n '10,40p' cmd/magus/main.go"},
 	}
-	deps := strict(testDependencies())
+	// The context rows are the advisories a workspace lowered to advise.
+	deps := advising(testDependencies(), commandAdvisories...)
 	deps.GraphIDs = diagnosticGraph
 	for _, tt := range tests {
 		v := Evaluate(deps, tt.command)
@@ -948,7 +949,7 @@ func TestPrecisionFixesHoldBesideGitGlobalOptions(t *testing.T) {
 		{command: "git -C /repo status && ./magus run lint . 2>/dev/null", rule: denyRuleOutputRedirect},
 		{command: "git -c core.pager=cat log && gofmt -w x.go", rule: denyRuleRawTool},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		v := Evaluate(advising(testDependencies(), commandAdvisories...), tc.command)
 		if tc.rule == "" {
 			assert.Empty(t, v.Deny, tc.command)
 			continue
@@ -1187,7 +1188,7 @@ func TestGuardAdversarial(t *testing.T) {
 	for _, tt := range allowed {
 		t.Run("allow/"+tt.name, func(t *testing.T) {
 			cmds, _ := ParseCommands(tt.command)
-			assert.Empty(t, Evaluate(strict(testDependencies()), tt.command).Deny,
+			assert.Empty(t, Evaluate(advising(testDependencies(), commandAdvisories...), tt.command).Deny,
 				"%q must not deny (parsed: %+v)", tt.command, cmds)
 		})
 	}
@@ -1402,7 +1403,7 @@ func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
 		"a raw text search exists to be piped")
 	assert.Empty(t, Evaluate(strict(testDependencies()), "magus refs TODO --text > /tmp/hits.txt").Deny,
 		"and to be redirected")
-	assert.Equal(t, advisoryGraphPipe, Evaluate(strict(testDependencies()), "magus refs Open | grep -n Open").Kind,
+	assert.Equal(t, denyRuleName(advisoryGraphPipe), Evaluate(strict(testDependencies()), "magus refs Open | grep -n Open").Rule.Name,
 		"a symbol lookup still renders a structured record -o shapes; only --text is silent")
 }
 
@@ -1439,7 +1440,8 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 		{"magus query output out1a2b | grep cause", ""},
 		{"magus refs TODO --text | grep fixme", ""},
 	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
+		assert.NotEqual(t, advisoryGraphPipe, Evaluate(testDependencies(), tc.command).Kind, "graph-pipe refuses by default: %s", tc.command)
+		v := Evaluate(advising(testDependencies(), string(advisoryGraphPipe)), tc.command)
 		switch tc.want {
 		case "deny":
 			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
@@ -1499,13 +1501,14 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git describe",
 		"git stash create",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
+		assert.Contains(t, Evaluate(testDependencies(), cmd).Deny, "magus vcs checkpoint", "%q is refused by default", cmd)
+		v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), cmd)
+		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
 	// A leading cd is not this rule's business, since nothing after it is magus: the
 	// checkpoint advise still fires.
-	v := Evaluate(strict(testDependencies()), "cd libs/foo && git rev-parse HEAD")
+	v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), "cd libs/foo && git rev-parse HEAD")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus vcs checkpoint")
 
@@ -1556,13 +1559,14 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		"poetry update",
 		"pip-compile",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
+		assert.Contains(t, Evaluate(testDependencies(), cmd).Deny, ":update", "%q is refused by default, naming the charm", cmd)
+		v := Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), cmd)
+		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
 	// A leading cd is not this rule's business, since nothing after it is magus: the
 	// update advise still fires.
-	v := Evaluate(strict(testDependencies()), "cd libs/foo && pnpm add lodash")
+	v := Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), "cd libs/foo && pnpm add lodash")
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, ":update")
 
@@ -1572,7 +1576,7 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	tidy := Evaluate(strict(testDependencies()), "go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
 	assert.Contains(t, tidy.Deny, ":update")
-	assert.Contains(t, Evaluate(strict(testDependencies()), "go test ./... && npm update").Why, ":update",
+	assert.Contains(t, Evaluate(advising(testDependencies(), string(advisoryDependencyUpdate)), "go test ./... && npm update").Why, ":update",
 		"a rewrite later on the line is named in the stored verdict")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
@@ -1596,8 +1600,9 @@ func TestGuardAdvisesInstallOnRawInstalls(t *testing.T) {
 		"cargo fetch",
 		"go mod download",
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "%q must advise, never deny", cmd)
+		assert.Equal(t, installGuardContext, Evaluate(testDependencies(), cmd).Deny, "%q is refused by default", cmd)
+		v := Evaluate(advising(testDependencies(), string(advisoryDependencyInstall)), cmd)
+		assert.Empty(t, v.Deny, "%q advises when set to advise", cmd)
 		assert.Equal(t, installGuardContext, v.Context, cmd)
 	}
 	for _, cmd := range []string{"pnpm install lodash", "go mod download golang.org/x/mod", "npm install", "mise install"} {
@@ -2236,7 +2241,7 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 	}
 }
 
-func TestShellRulesAdviseByDefault(t *testing.T) {
+func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 	for rule, command := range map[denyRuleName]string{
 		denyRuleChainedRun:      "magus run generate . && magus run lint .",
 		denyRuleExitStatusEcho:  `./check.sh; echo $?`,
@@ -2248,7 +2253,7 @@ func TestShellRulesAdviseByDefault(t *testing.T) {
 		denyRuleStageAll:        "git add -A",
 	} {
 		t.Run(string(rule), func(t *testing.T) {
-			requireAdvisedOnce(t, Evaluate(testDependencies(), command), rule)
+			requireAdvisedOnce(t, Evaluate(advising(testDependencies()), command), rule)
 		})
 	}
 }
@@ -2290,13 +2295,13 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 		`bash -c 'grep cause: tasks/abc123.output'`,
 		`LC_ALL=C grep cause: tasks/abc123.output`,
 	} {
-		v := Evaluate(strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
+		v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), cmd)
+		assert.Empty(t, v.Deny, "advise when set to advise: %s", cmd)
 		assert.Equal(t, ShellVerdict{Context: v.Context, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
 	}
 
 	// A deny elsewhere on the line still outranks the advice.
-	v := Evaluate(strict(testDependencies()), `grep cause: tasks/abc123.output; git add -A`)
+	v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), `grep cause: tasks/abc123.output; git add -A`)
 	assert.Equal(t, denyRuleStageAll, v.Rule.Name)
 }
 
@@ -2306,7 +2311,7 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 // The PAIR is what carries the argument: `cause:` is what a filter matches and `output:`
 // is the ref it drops, two lines below it.
 func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), `grep -n "cause:" tasks/abc123.output | head -8`)
+	v := Evaluate(advising(testDependencies(), string(advisoryCaptureFilter)), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
 		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs, said inline")

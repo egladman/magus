@@ -201,8 +201,8 @@ func TestANewDirectoryStillAdvisesWhereLoadsAreNotObserved(t *testing.T) {
 }
 
 // Shipped default: a workspace that sets nothing is told once, and never refused.
-func TestArchitectureUnbriefedAdvisesOnceByDefault(t *testing.T) {
-	s := newArchSession(t, testDependencies(), true)
+func TestArchitectureUnbriefedAdvisesOnceWhenSetToAdvise(t *testing.T) {
+	s := newArchSession(t, advising(testDependencies(), string(denyArchitectureUnbriefed)), true)
 	s.message("where should the retry helper live?")
 
 	v := s.bash("", "echo hello")

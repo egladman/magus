@@ -1178,7 +1178,7 @@ func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 		"npm update":                      advisoryDependencyUpdate,
 		"pnpm install":                    advisoryDependencyInstall,
 	} {
-		v := Evaluate(testDependencies(), command)
+		v := Evaluate(advising(testDependencies()), command)
 		require.NotEmpty(t, v.Context, command)
 		assert.Equal(t, string(want), v.advisoryName(), command)
 		_, ok := Rule(v.advisoryName())
@@ -1241,43 +1241,64 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, rowsOf())
 }
 
-// recoverableRules are the compiled rules that refused before they advised by default.
+// recoverableRules are the compiled rules a caller recovers from by running the command the
+// refusal names. They deny by default (ADR 0013), and a workspace may set one to advise.
 var recoverableRules = []string{
-	"architecture-unbriefed", "brief-command", "buzz-unbriefed", "chained-run", "exit-status-echo",
-	"filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
-	"output-pipe", "output-redirect", "raw-tool", "read-navigation",
-	"scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",
-	"spawn-unbriefed", "stage-all", "symbol-search", "throwaway-copy", "unknown-env",
+	"architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
+	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
+	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
+	"read-paging", "scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",
+	"spawn-unbriefed", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-tool",
+	"unknown-env",
 }
 
-// strict returns deps with every refusing rule set to deny, so a test pins a denial a
-// workspace has to ask for. Advisories keep their defaults: raising them would turn the
-// advisory rows of the same tables into denies.
+// commandAdvisories are the advisories whose text names a command, which deny by default.
+var commandAdvisories = []string{
+	"capture-filter", "check-timeout", "checkpoint-state", "dependency-install", "dependency-update",
+	"gate-repeat", "generated-write", "graph-pipe", "installed-skill", "lease-invalid",
+	"model-tier-context-cap", "spawn-nested-waiter",
+}
+
+// strict returns deps with every rule's setting spelled out, so a test pins the denial
+// whatever deps carried before.
 func strict(deps Dependencies) Dependencies {
 	deps.Builtins = make(map[string]builtin.Setting)
 	for name, d := range builtin.Defaults() {
 		deps.Builtins[name] = builtin.Setting{Decision: d}
 	}
-	for _, name := range recoverableRules {
-		deps.Builtins[name] = builtin.Setting{Decision: builtin.Deny}
-	}
 	return deps
 }
 
-func TestStrictDeniesEveryRecoverableRule(t *testing.T) {
+// advising returns deps with each named rule set to advise, the opt-out a workspace
+// declares by name in magus\guard.builtins. With no names it lowers every rule ADR 0013
+// made deny.
+func advising(deps Dependencies, names ...string) Dependencies {
+	if len(names) == 0 {
+		names = slices.Concat(recoverableRules, commandAdvisories)
+	}
+	builtins := maps.Clone(deps.Builtins)
+	if builtins == nil {
+		builtins = make(map[string]builtin.Setting, len(names))
+	}
+	for _, name := range names {
+		builtins[name] = builtin.Setting{Decision: builtin.Advise}
+	}
+	deps.Builtins = builtins
+	return deps
+}
+
+func TestRecoverableRulesDenyUnlessSetToAdvise(t *testing.T) {
 	t.Parallel()
 	defaults := builtin.Defaults()
-	deps := strict(Dependencies{})
 
-	for _, name := range recoverableRules {
-		require.Contains(t, defaults, name, "a recoverable rule the table does not carry")
-		assert.Equal(t, builtin.Advise, defaults[name], name)
-		assert.Equal(t, builtin.Deny, deps.Builtins[name].Decision, name)
+	for _, name := range slices.Concat(recoverableRules, commandAdvisories) {
+		require.Contains(t, defaults, name, "a rule the table does not carry")
+		assert.Equal(t, builtin.Deny, defaults[name], name)
 	}
-	assert.Len(t, deps.Builtins, len(defaults))
+	assert.Len(t, strict(Dependencies{}).Builtins, len(defaults))
 
-	assert.Empty(t, Evaluate(Dependencies{}, sedInPlace).Deny, "the default advises")
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(deps, sedInPlace).Rule.Name)
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(Dependencies{}, sedInPlace).Rule.Name, "the default denies")
+	assert.Empty(t, Evaluate(advising(Dependencies{}), sedInPlace).Deny, "advise is the opt-out")
 }
 
 // sedInPlace is a recoverable deny on its own line, and nothing else.
@@ -1325,7 +1346,9 @@ func TestGradeDefaultsAndUnknownRules(t *testing.T) {
 	t.Parallel()
 	var deps Dependencies
 
-	assert.True(t, deps.grade(ShellVerdict{Deny: "x", Rule: denyRule{Name: denyRuleSedInPlace}}).demoted, "nil Builtins grades by the defaults")
+	sed := ShellVerdict{Deny: "x", Rule: denyRule{Name: denyRuleSedInPlace}}
+	assert.Equal(t, sed, deps.grade(sed), "nil Builtins grades by the defaults")
+	assert.True(t, advising(deps, string(denyRuleSedInPlace)).grade(sed).demoted, "advise demotes")
 	whole := ShellVerdict{Deny: "x", Rule: denyRule{Name: denyRuleWholeTree}}
 	assert.Equal(t, whole, deps.grade(whole))
 	uncatalogued := ShellVerdict{Deny: "x", Rule: denyRule{Name: "not-a-rule"}}
@@ -1335,12 +1358,12 @@ func TestGradeDefaultsAndUnknownRules(t *testing.T) {
 func TestEvaluateGradesEachSite(t *testing.T) {
 	t.Parallel()
 
-	advised := Evaluate(Dependencies{}, sedInPlace)
+	advised := Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Advise), sedInPlace)
 	assert.Empty(t, advised.Deny)
 	assert.True(t, advised.demoted)
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), advised.Kind)
 
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Deny), sedInPlace).Rule.Name)
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(Dependencies{}, sedInPlace).Rule.Name)
 	assert.Equal(t, ShellVerdict{}, Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
 }
 
@@ -1352,7 +1375,7 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 		"git add -A && git reset --hard",
 		"git add -A && git stash",
 	} {
-		v := Evaluate(Dependencies{}, command)
+		v := Evaluate(advising(Dependencies{}), command)
 		assert.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}
@@ -1361,7 +1384,7 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 func TestDemotedDenyOutranksAdvisories(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(Dependencies{}, sedInPlace+" && git commit -m x")
+	v := Evaluate(advising(Dependencies{}), sedInPlace+" && git commit -m x")
 	assert.True(t, v.demoted, "the held advice outranks the commit advisory")
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), v.Kind)
 
@@ -1372,7 +1395,7 @@ func TestDemotedDenyOutranksAdvisories(t *testing.T) {
 func TestDemotedDenyKeepsThePushGate(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(Dependencies{}, sedInPlace+" && git push")
+	v := Evaluate(advising(Dependencies{}), sedInPlace+" && git push")
 	assert.Equal(t, advisoryPushGate, v.Rule.Name, "Judge upgrades the push gate, so no advice may hide it")
 }
 
@@ -1404,12 +1427,12 @@ func TestRankGraded(t *testing.T) {
 	advisory := ShellVerdict{Context: "a", Kind: advisorySourceRead}
 	deny := ShellVerdict{Deny: "d", Rule: denyRule{Name: denyRuleWholeTree}}
 
-	got := Dependencies{}.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout)
+	lowered := withSetting(string(denyRuleSiblingCheckout), builtin.Advise)
+	got := lowered.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout)
 	assert.True(t, got.demoted, "a demoted sibling checkout outranks an advisory")
-	assert.Equal(t, deny, Dependencies{}.rankGraded(deny, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
+	assert.Equal(t, deny, lowered.rankGraded(deny, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
 
-	strictDeps := withSetting(string(denyRuleSiblingCheckout), builtin.Deny)
-	assert.Equal(t, denyRuleSiblingCheckout, strictDeps.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout).Rule.Name)
+	assert.Equal(t, denyRuleSiblingCheckout, Dependencies{}.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout).Rule.Name)
 	assert.Equal(t, advisory, withSetting(string(denyRuleSiblingCheckout), builtin.Off).rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
 }
 
@@ -1716,7 +1739,7 @@ func TestWritePendingIsOwnerOnly(t *testing.T) {
 // which falls back to the compiled defaults where it says nothing.
 func TestStricterBuiltins(t *testing.T) {
 	defaults := builtin.Defaults()
-	require.Equal(t, builtin.Advise, defaults["capture-filter"], "the cases below assume capture-filter advises by default")
+	require.Equal(t, builtin.Deny, defaults["capture-filter"], "the cases below assume capture-filter denies by default")
 	require.Equal(t, builtin.Deny, defaults["whole-tree"], "the cases below assume whole-tree denies by default")
 
 	cases := []struct {
@@ -1727,10 +1750,11 @@ func TestStricterBuiltins(t *testing.T) {
 		want     builtin.Setting
 	}{
 		{
-			name:    "a tightening applies before approval",
-			working: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
-			rule:    "capture-filter",
-			want:    builtin.Setting{Decision: builtin.Deny},
+			name:     "a tightening applies before approval",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Advise}},
+			working:  map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Deny},
 		},
 		{
 			name:    "a loosening below the default waits",
@@ -1756,7 +1780,7 @@ func TestStricterBuiltins(t *testing.T) {
 			name:     "dropping an approved loosening restores the default at once",
 			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
 			rule:     "capture-filter",
-			want:     builtin.Setting{Decision: builtin.Advise},
+			want:     builtin.Setting{Decision: builtin.Deny},
 		},
 		{
 			name:     "fewer lines is stricter",
@@ -1799,7 +1823,7 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 	got, err = rules.effectiveBuiltins(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
-	assert.Equal(t, builtin.Setting{Decision: builtin.Advise}, got["capture-filter"])
+	assert.Equal(t, builtin.Setting{Decision: builtin.Deny}, got["capture-filter"])
 }
 
 // A builtins declaration is policy: the digest moves with it, and declaring one alone is

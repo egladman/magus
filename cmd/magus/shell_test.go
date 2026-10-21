@@ -1275,10 +1275,10 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
 }
 
-// TestHookCmdAdvisesAnInvalidLeaseOnEveryInput: the notice lived inside gradeLeasedWrite,
+// TestHookCmdRefusesAnInvalidLeaseOnEveryInput: the check lived inside gradeLeasedWrite,
 // which runs on the path input only, so a COMMAND under a typo'd id ran fully un-enrolled
 // with nothing said about it.
-func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
+func TestHookCmdRefusesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	for name, args := range map[string][]string{
 		"the shell-command input": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
@@ -1289,7 +1289,9 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 			ctx, _, _ := fleetFixture(t, narrowLease())
 
 			var out bytes.Buffer
-			require.NoError(t, shellStdin(ctx, strings.NewReader("README.md"), &out, args))
+			var silent reportedExit
+			require.ErrorAs(t, shellStdin(ctx, strings.NewReader("README.md"), &out, args), &silent)
+			assert.Equal(t, guardDenyExitCode, silent.ExitCode())
 			assert.Contains(t, out.String(), "is not a valid lease id")
 		})
 	}
@@ -1567,13 +1569,12 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 	require.Equal(t, "pass\n", out.String(), "a skill load carries nothing to judge")
 }
 
-// TestHookCmd_AdvisesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: with no
-// workspace setting, the first spawn of a session is advised until the multi-agent skill
-// loads, and passes after.
+// TestHookCmd_RefusesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: with no
+// workspace setting, a spawn is refused until the multi-agent skill loads, and passes after.
 //
 // The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
 // so nothing about the handed context should change the verdict either way.
-func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
+func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
@@ -1591,10 +1592,12 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	assert.Equal(t, "pass\n", unobserved.String(),
 		"a wiring that cannot report a skill load must not be held to having reported one")
 
-	var advised bytes.Buffer
-	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &advised,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
-	assert.Equal(t, "advise\n", advised.String())
+	var refused bytes.Buffer
+	var silent reportedExit
+	require.ErrorAs(t, shellStdin(ctx, strings.NewReader(envelope), &refused,
+		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}), &silent)
+	assert.Equal(t, guardDenyExitCode, silent.ExitCode())
+	assert.Equal(t, "deny\n", refused.String())
 
 	loadSkillForTest(t, ctx, dir, "briefless")
 

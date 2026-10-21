@@ -352,7 +352,7 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 func TestReadVerdictWalksPastADemotedRead(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
-	deps := readDeps(root)
+	deps := advising(readDeps(root), string(denyRuleReadNavigation))
 	const line = `cat internal/store/small.go && sed -n 7,30p internal/store/store.go`
 	whole, _ := readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
 	bounded, _ := readVerdictAt(deps, root, `sed -n 7,30p internal/store/store.go`, DialectBash)
@@ -361,16 +361,16 @@ func TestReadVerdictWalksPastADemotedRead(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, whole, v, "the demoted whole read outranks the read-symbol advisory")
 
-	deps.Builtins = map[string]builtin.Setting{string(advisoryReadSymbol): {Decision: builtin.Deny}}
+	deps.Builtins[string(advisoryReadSymbol)] = builtin.Setting{Decision: builtin.Deny}
 	v, ok = readVerdictAt(deps, root, line, DialectBash)
 	require.True(t, ok)
 	assert.Equal(t, bounded, v)
 	assert.Equal(t, ShellVerdict{Deny: bounded.Context, Why: bounded.Why, Rule: denyRule{Name: advisoryReadSymbol}}, deps.grade(v))
 }
 
-func TestReadNavigationAdvisesByDefault(t *testing.T) {
+func TestReadNavigationAdvisesWhenSetToAdvise(t *testing.T) {
 	root := readFixture(t)
-	deps := readDeps(root)
+	deps := advising(readDeps(root), string(denyRuleReadNavigation))
 	deps.callDir = root
 
 	requireAdvisedOnce(t, Evaluate(deps, `cat internal/store/store.go`), denyRuleReadNavigation)

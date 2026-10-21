@@ -227,13 +227,14 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 		return Judge(ctx, deps, Request{Input: toolEnvelope(t, session, root, tool, map[string]any{"ref": "e1"}), Host: "claude-code", Dir: root, Tools: tools})
 	}
 
-	first := call(Dependencies{}, "unjudged-advise", "mcp__browser__click")
+	lowered := withSetting(string(denyRuleUnjudgedTool), builtin.Advise)
+	first := call(lowered, "unjudged-advise", "mcp__browser__click")
 	firstShape, firstText := spoken(first)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedTool)}, firstShape, "the shipped default advises")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedTool)}, firstShape, "set to advise, it advises")
 	assert.Contains(t, firstText, "mcp__browser__click")
-	assert.Equal(t, decisionPass, call(Dependencies{}, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
+	assert.Equal(t, decisionPass, call(lowered, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
 
-	denied := call(withSetting(string(denyRuleUnjudgedTool), builtin.Deny), "unjudged-deny", "mcp__browser__click")
+	denied := call(Dependencies{}, "unjudged-deny", "mcp__browser__click")
 	deniedShape, deniedText := spoken(denied)
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedTool)}, deniedShape)
 	assert.Contains(t, deniedText, "mcp__browser__click")

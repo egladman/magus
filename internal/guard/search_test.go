@@ -210,7 +210,7 @@ func TestGrepReaderDeniesContextReads(t *testing.T) {
 	assert.Contains(t, piped.Deny, "The pipe after the search is not reproduced")
 	// Evaluate reaches it ahead of symbol-search's single-file advice.
 	assert.Equal(t, denyRuleGrepReader, Evaluate(strict(deps), `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`).Rule.Name)
-	requireAdvisedOnce(t, Evaluate(deps, `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`), denyRuleGrepReader)
+	requireAdvisedOnce(t, Evaluate(advising(deps), `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`), denyRuleGrepReader)
 }
 
 // TestJudgeResolvesSearchPathsFromTheCallCwd pins that a relative path resolves from the
@@ -301,7 +301,7 @@ func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
 		"internal/api/config.go":  "package api\n\nfunc ParseConfig() {}\n",
 	})
 	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true}
-	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}
+	deps := advising(Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}, string(denyRuleSymbolSearch))
 	const tree, file = `grep -rn ParseConfig internal`, `grep -n HandleRequest internal/api/handler.go`
 	line := parseForTest(t, tree+" && "+file)
 	read, _ := searchVerdictAt(deps, root, parseForTest(t, file))
@@ -311,7 +311,7 @@ func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
 	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "ParseConfig"}, v.Rule, "the demoted tree search outranks the precedent advisory")
 	assert.Equal(t, ShellVerdict{Context: v.Deny, Why: v.Why, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
 
-	deps.Builtins = map[string]builtin.Setting{string(advisoryPrecedent): {Decision: builtin.Deny}}
+	deps.Builtins[string(advisoryPrecedent)] = builtin.Setting{Decision: builtin.Deny}
 	v, ok = searchVerdictAt(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, read, v)

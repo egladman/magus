@@ -90,8 +90,8 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 // refuses nothing, it is an advisory keyed on rule, and a session hears it once.
 func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 	t.Helper()
-	require.Empty(t, v.Deny, "the default does not refuse")
-	require.True(t, v.demoted, "the default advises")
+	require.Empty(t, v.Deny, "a rule set to advise does not refuse")
+	require.True(t, v.demoted, "a rule set to advise advises")
 	assert.Equal(t, hint.MarkerKind(rule), v.Kind)
 	assert.NotEmpty(t, v.Context)
 
@@ -108,7 +108,7 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 	assert.Equal(t, "pass", again.Decision, "once per session")
 }
 
-func TestSymbolSearchAdvisesByDefault(t *testing.T) {
-	deps := Dependencies{SymbolDefined: func(string) (bool, bool) { return true, true }}
+func TestSymbolSearchAdvisesWhenSetToAdvise(t *testing.T) {
+	deps := advising(Dependencies{SymbolDefined: func(string) (bool, bool) { return true, true }}, string(denyRuleSymbolSearch))
 	requireAdvisedOnce(t, Evaluate(deps, "grep -r HandleRequest internal/"), denyRuleSymbolSearch)
 }

@@ -99,7 +99,7 @@ func TestConflictRewriteDeniesWithoutTheWorkspaceTable(t *testing.T) {
 	assert.NotEmpty(t, v.Deny)
 
 	clean := judgeShellLine(t.Context(), Dependencies{}, at, at.dir, `python3 -c "open('internal/agent/clean.go','w').write(x)"`, DialectBash)
-	assert.Empty(t, clean.Deny, "a clean file stays interpreter-rewrite's advice")
+	assert.Equal(t, denyRuleInterpreterRewrite, clean.Rule.Name, "a clean file stays interpreter-rewrite's")
 }
 
 func TestRankConflictRewrite(t *testing.T) {

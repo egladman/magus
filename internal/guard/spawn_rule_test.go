@@ -196,17 +196,18 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 	}
 }
 
-func TestSpawnUnbriefedAdvisesByDefault(t *testing.T) {
+func TestSpawnUnbriefedAdvisesWhenSetToAdvise(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
+	lowered := advising(Dependencies{}, string(denySpawnUnbriefed))
 
-	first := Judge(ctx, Dependencies{}, req)
+	first := Judge(ctx, lowered, req)
 	// The context is the advice prose; the reason stays empty, which the comparison pins.
 	got := first
 	got.Context, got.Lease, got.LeaseFrom = "", "", ""
 	assert.Equal(t, verdictWithRule("advise", string(denySpawnUnbriefed)), got)
 
-	again := Judge(ctx, Dependencies{}, req)
+	again := Judge(ctx, lowered, req)
 	assert.NotEqual(t, string(denySpawnUnbriefed), again.Rule, "once per session")
 }
 

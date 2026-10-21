@@ -15,30 +15,37 @@ func TestDefaults(t *testing.T) {
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]Decision{
 		"compat-marker":        Advise,
-		"read-navigation":      Advise,
-		"brief-command":        Advise,
-		"stage-all":            Advise,
+		"read-navigation":      Deny,
+		"brief-command":        Deny,
+		"stage-all":            Deny,
 		"whole-tree":           Deny,
 		"lease-write":          Deny,
 		"push-ungated":         Deny,
 		"human-only":           Deny,
 		"lease-state":          Advise,
+		"leased-path":          Advise,
+		"split-run":            Advise,
 		"push-gate":            Advise,
+		"revert-classify":      Advise,
+		"graph-pipe":           Deny,
+		"capture-filter":       Deny,
+		"gate-repeat":          Deny,
 		"sleep-poll":           Deny,
 		"busy-wait":            Deny,
 		"process-poll":         Deny,
-		"read-paging":          Advise,
-		"brief-plain-commands": Advise,
-		"monitor-duplicate":    Advise,
-		"monitor-pile":         Advise,
-		"spawn-waiter":         Advise,
-		"spawn-nested-waiter":  Advise,
+		"read-paging":          Deny,
+		"brief-plain-commands": Deny,
+		"monitor-duplicate":    Deny,
+		"monitor-pile":         Deny,
+		"spawn-waiter":         Deny,
+		"spawn-nested-waiter":  Deny,
 		"heredoc-write":        Deny,
 		"hooks-off":            Deny,
 		"spawn-duplicate":      Deny,
 		"background-left":      Deny,
 		"background-unbounded": Deny,
-		"unjudged-tool":        Advise,
+		"unjudged-tool":        Deny,
+		"guard-unfinished":     Advise,
 
 		"orchestrator-groundwork": Deny,
 		"spawn-above-parent-tier": Deny,
@@ -51,7 +58,7 @@ func TestDefaults(t *testing.T) {
 		"spawn-above-model-tier": Off,
 		"stall":                  Off,
 
-		"model-tier-context-cap": Advise,
+		"model-tier-context-cap": Deny,
 	}
 	have := map[string]Decision{}
 	for name := range want {
@@ -359,12 +366,12 @@ func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
 
 // A rule that only ever explains cannot be declared to refuse.
 func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
-	for _, name := range []string{"compat-marker", "root-context-budget", "root-heavy-command", "root-repeat", "root-result-cap", "spawn-above-model-tier", "stall"} {
+	for _, name := range []string{"compat-marker", "leased-path", "split-run", "root-context-budget", "root-heavy-command", "root-repeat", "root-result-cap", "spawn-above-model-tier", "stall"} {
 		_, err := Resolve(map[string]Setting{name: {Decision: Deny}})
 		var de *types.DiagnosticError
 		require.ErrorAs(t, err, &de, name)
 		assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
-		assert.Equal(t, `built-in rule "`+name+`" never refuses; give off or advise`, de.Msg)
+		assert.Equal(t, `built-in rule "`+name+`" is a notice and never refuses; give off or advise`, de.Msg)
 		assert.NotEmpty(t, types.DiagnosticRationale(err), name)
 
 		_, err = Resolve(map[string]Setting{name: {Decision: Advise}})
@@ -377,7 +384,9 @@ func TestVerdicts(t *testing.T) {
 	both := []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
 	assert.Equal(t, adviseOnly, Verdicts("stall"), "a rule that never refuses")
 	assert.Equal(t, adviseOnly, Verdicts("guard-unfinished"), "a fixed rule")
-	assert.Equal(t, both, Verdicts("stage-all"), "an advisory a workspace may raise")
+	assert.Equal(t, both, Verdicts("stage-all"), "a recoverable rule a workspace may lower")
+	assert.Equal(t, both, Verdicts("graph-pipe"), "an advisory that names a command")
+	assert.Equal(t, adviseOnly, Verdicts("leased-path"), "a notice")
 	assert.Equal(t, both, Verdicts("lease-write"), "a deny rule")
 	assert.Equal(t, adviseOnly, Verdicts("root-repeat"), "a meter only advises")
 	assert.Equal(t, both, Verdicts("spawn-names-model"), "an off rule a level raises to deny")
@@ -433,7 +442,7 @@ func TestResolveProfileExpandsThenDeclared(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Setting{Decision: Advise, Profile: types.GuardProfileStrict}, got[rootContextBudget], "a level stamps its rows")
 	assert.Equal(t, Setting{Decision: Off}, got[rootRepeat], "the declaration overrides the profile")
-	assert.Equal(t, Setting{Decision: Advise}, got["raw-tool"], "a rule neither names keeps its default")
+	assert.Equal(t, Setting{Decision: Deny}, got["raw-tool"], "a rule neither names keeps its default")
 	assert.Len(t, declared, 1, "ResolveProfile leaves declared alone")
 	assert.Len(t, profiles[types.GuardProfileStrict], strict, "ResolveProfile leaves the row alone")
 	for _, s := range profiles[types.GuardProfileStrict] {

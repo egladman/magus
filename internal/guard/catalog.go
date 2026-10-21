@@ -33,7 +33,7 @@ import (
 // decision a row shows is builtin.Defaults', never a literal kept here.
 type ruleDocEntry struct {
 	doc types.RuleDoc
-	// advisory rows only ever EXPLAIN, and are the names a workspace can raise to deny.
+	// advisory rows EXPLAIN unless set to deny, which a notice never is.
 	// Several are agent-shaped by construction (a lease, a focus boundary, host wiring):
 	// they are catalogued anyway, because a reader asking what this workspace enforces is
 	// owed the whole set rather than the half that happens to apply to them today.
@@ -720,7 +720,7 @@ var ruleDocUnjudgedTool = types.RuleDoc{
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
 		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
-		"It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.",
+		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.",
 }
 
 var ruleDocMonitorDuplicate = types.RuleDoc{
@@ -765,7 +765,7 @@ var ruleDocCaptureFilter = types.RuleDoc{
 		"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
 		"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
-		"It ADVISES rather than refuses: most such filters are a search the reader needs, and a refused reader then reads the whole file into context. " +
+		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting. A workspace whose readers need such searches sets it to advise. " +
 		"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture.",
 }
 
@@ -859,8 +859,8 @@ var ruleDocGeneratedWrite = types.RuleDoc{
 var ruleDocGraphPipe = types.RuleDoc{
 	Name:    string(advisoryGraphPipe),
 	Catches: "a read-only graph verb piped into a text filter, when magus projects the record itself",
-	Why: "The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
-		"It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. A reader refused on these verbs tends to go back to `grep -rn`, which answers with less than the graph read it was denied.",
+	Why: "The same answer output-pipe gives: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
+		"It is its own rule on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure, so a workspace whose readers go back to `grep -rn` when refused can set this one to advise and keep output-pipe denying.",
 }
 
 var ruleDocGraphStale = types.RuleDoc{
@@ -926,7 +926,7 @@ var ruleDocSpawnNestedWaiter = types.RuleDoc{
 	Name:    string(advisorySpawnNestedWaiter),
 	Catches: "a subagent spawning a helper whose title or brief opening speaks of waiting or watching",
 	Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends. A worker handing that to a helper of its own stacks a third context on a notice two already get. " +
-		"It advises, once a session, because a worker may also spawn a child to build a watch feature, which the words alone cannot tell apart.",
+		"A worker spawning a child to build a watch feature reads the same and rewords its title; a workspace where that is common sets the rule to advise, which says it once a session.",
 }
 
 var ruleDocPushGate = types.RuleDoc{
@@ -1101,8 +1101,8 @@ var ruleDocModelTierContextCap = types.RuleDoc{
 	Name:    string(advisoryModelTierContextCap),
 	Catches: "a leased worker writing past the context its job's model tier caps",
 	Why: "A model tier's bounds in the workspace's declaration can cap the context a worker at that tier reaches (maxContext), because a smaller model past a large context does worse work and resends all of it every turn. " +
-		"When a leased worker's context, as its host last reported it, passes the cap of the tier its row was forked at, its next write is advised to report what it has and stop. " +
-		"Set to deny, every write under the lease is refused, as a lease past its deadline is. A tier with no cap, a row with no tier, or a host that reports no context is never judged.",
+		"When a leased worker's context, as its host last reported it, passes the cap of the tier its row was forked at, every write under the lease is refused, as a lease past its deadline is, and the refusal says to report what it has and stop. " +
+		"Set to advise, the next write is told so once. A tier with no cap, a row with no tier, or a host that reports no context is never judged.",
 }
 
 var ruleDocCompatMarker = types.RuleDoc{

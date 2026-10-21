@@ -128,6 +128,6 @@ func TestParseTimeoutDuration(t *testing.T) {
 	assert.Equal(t, "1h30m", formatLimit(90*time.Minute))
 }
 
-func TestMagusTimeoutAdvisesByDefault(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(testDependencies(), "timeout 600 magus run test ."), denyRuleMagusTimeout)
+func TestMagusTimeoutAdvisesWhenSetToAdvise(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "timeout 600 magus run test ."), denyRuleMagusTimeout)
 }

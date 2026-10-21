@@ -184,10 +184,15 @@ func TestAdviseCheckTimeoutCoversTheLastRealRun(t *testing.T) {
 		recordRun(t, root, "docs", "diagrams-generate", 5*time.Minute)
 		// A subagent, which holds a worker's lease whatever its row says.
 		req := Request{Input: command, Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
-		first := Judge(ctx, Dependencies{}, req)
+		denied := Judge(ctx, Dependencies{}, req)
+		assert.Equal(t, verdictWithRule("deny", string(advisoryCheckTimeout)), unworded(denied), "refused by default")
+		assert.Contains(t, denied.Reason, "480000 ms")
+
+		lowered := advising(Dependencies{}, string(advisoryCheckTimeout))
+		first := Judge(ctx, lowered, req)
 		assert.Equal(t, verdictWithRule("advise", string(advisoryCheckTimeout)), unworded(first))
 		assert.Contains(t, first.Context, "480000 ms")
-		again := Judge(ctx, Dependencies{}, req)
+		again := Judge(ctx, lowered, req)
 		assert.NotContains(t, again.Context, "480000 ms", "held to one firing per target per session")
 	})
 }

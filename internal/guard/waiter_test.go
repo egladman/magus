@@ -301,14 +301,21 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 		if agent != "" {
 			env["agent_id"] = agent
 		}
-		return Judge(ctx, withSetting(string(denyRuleSpawnWaiter), builtin.Deny), Request{Input: hookJSON(t, env), Host: "claude-code"})
+		return Judge(ctx, withSetting(string(advisorySpawnNestedWaiter), builtin.Advise), Request{Input: hookJSON(t, env), Host: "claude-code"})
 	}
 	v := spawn("", "wait for the workers to finish")
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
 
+	nested := hookJSON(t, map[string]any{
+		"session_id": "nested-default", "hook_event_name": "PreToolUse", "tool_name": "Agent", "agent_id": "a1b2c3",
+		"tool_input": map[string]any{"description": "add the watch flag", "prompt": "Carry it out."},
+	})
+	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(Judge(ctx, Dependencies{}, Request{Input: nested, Host: "claude-code"})),
+		"refused by default")
+
 	v = spawn("a1b2c3", "add the watch flag")
 	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
-		"a worker's helper speaking of watching is advised against")
+		"set to advise, a worker's helper speaking of watching is advised against")
 	assert.Equal(t, "pass", spawn("a1b2c3", "add the watch flag").Decision, "once a session")
 	assert.Equal(t, "pass", spawn("", "add the watch flag").Decision, "the root is not nested")
 }

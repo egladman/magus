@@ -58,6 +58,6 @@ func TestMisconfiguredMagusEnvNamesTheClosestKnownName(t *testing.T) {
 	assert.Contains(t, v.Deny, "did you mean MAGUS_CACHE_DIR")
 }
 
-func TestUnknownMagusEnvAdvisesByDefault(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(testDependencies(), "MAGUS_NO_WAIT=1 ./magus run test ."), denyRuleUnknownEnv)
+func TestUnknownMagusEnvAdvisesWhenSetToAdvise(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "MAGUS_NO_WAIT=1 ./magus run test ."), denyRuleUnknownEnv)
 }

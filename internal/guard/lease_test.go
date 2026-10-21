@@ -609,7 +609,8 @@ func TestWorkerRawTool(t *testing.T) {
 	ctx, _ := fleetFixture(t, row)
 	deps := composingWorkspace(t)
 
-	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+	// raw-tool refuses the line first unless a workspace lowered it.
+	v := Judge(ctx, advising(Dependencies{Spells: spellCatalog}, string(denyRuleRawTool)), Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
 		"Judge reaches the rule: %s", v.Reason)
 
@@ -1897,8 +1898,9 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 
 	b := boundJob(who, at)
 	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+	// sed-in-place lowered, so the line reaches the binding's own refusal.
 	judge := func(command string) types.GuardJudgment {
-		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
+		return Judge(ctx, advising(Dependencies{}, string(denyRuleSedInPlace)), Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
 	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("sed -i s/a/b/ x").Rule, "sed in place is work")
