@@ -96,7 +96,8 @@ func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
 		t.Parallel()
 		kept, err := s.Update(t.Context(), "A", func(cur *types.Job) { cur.WritePaths, cur.SoftPaths = nil, nil })
 		require.NoError(t, err)
-		assert.Equal(t, []string{"a.go"}, releasedPaths(kept), "a.go was held; a_test.go never was")	})
+		assert.Equal(t, []string{"a.go"}, releasedPaths(kept), "a.go was held; a_test.go never was")
+	})
 }
 
 func releasedPaths(row types.Job) []string {
