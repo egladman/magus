@@ -137,7 +137,7 @@ func TestConvertWritesPinnedBytes(t *testing.T) {
 	require.NoError(t, runConvert(f.args(out)))
 	b, err := os.ReadFile(out)
 	require.NoError(t, err)
-	assert.Equal(t, "PENDING", sha256Hex(b))
+	assert.Equal(t, "f0781b6e324068186f3bb9c9a324b0bbead69f41e10e15276a5a7f4230f783c7", sha256Hex(b))
 }
 
 func TestReadVocabRanksByCount(t *testing.T) {
