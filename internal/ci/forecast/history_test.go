@@ -982,7 +982,9 @@ func TestLoad_versionTooNew(t *testing.T) {
 	var h History
 	err = h.Load(context.Background(), path)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported history version")
+	var skew *UnsupportedVersionError
+	require.ErrorAs(t, err, &skew)
+	assert.Equal(t, UnsupportedVersionError{Have: HistoryVersion + 1, Max: HistoryVersion, Path: path}, *skew)
 }
 
 // TestLoad_decodeError names the file and line of a complete line that does not decode,

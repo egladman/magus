@@ -14,6 +14,16 @@ import (
 
 const mb = int64(1) << 20
 
+func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
+	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: 9, Max: 8, Path: "h"})
+	assert.Equal(t, types.CheckAdvice, skew.Status)
+	assert.Contains(t, skew.Message, "version 9")
+	assert.Contains(t, skew.Fix, "go-build")
+
+	other := historyUnreadableCheck("memory-declarations", assert.AnError)
+	assert.Empty(t, other.Fix, "an unknown failure names no fix")
+}
+
 // historyWith writes a history file recording one peak per "<spell>/<target>" key
 // and returns its path.
 func historyWith(t *testing.T, project string, peaks map[string]int64) string {

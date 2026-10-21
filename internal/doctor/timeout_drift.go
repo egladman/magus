@@ -49,13 +49,7 @@ func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.Check
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
-		// Advice, not OK: the check could not RUN, which is a different answer from
-		// "everything agrees" and the reader needs to know which one they got.
-		return types.Check{
-			Name: name, Status: types.CheckAdvice,
-			Message: "run history is unreadable, so declared timeouts could not be checked against what magus measured",
-			Details: []string{err.Error()},
-		}
+		return historyUnreadableCheck(name, err)
 	}
 
 	var declared int

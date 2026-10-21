@@ -2653,13 +2653,19 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 	return sync.OnceValues(func() (*forecast.History, error) {
 		<-done
 		if err != nil {
-			slog.With(attr.Component("magus")).ErrorContext(ctx,
-				"run history is unreadable, so this run sizes claims from declarations and records no history",
-				attr.Error(err))
+			historyUnreadable.Do(func() {
+				slog.With(attr.Component("magus")).ErrorContext(ctx,
+					"run history is unreadable, so this run sizes claims from declarations and records no history",
+					attr.Error(err))
+			})
 		}
 		return &h, err
 	})
 }
+
+// historyUnreadable gates the unreadable-history message to once per process: a graph
+// build starts a sub-run per project, and each would repeat the same file's verdict.
+var historyUnreadable sync.Once
 
 // measuredRuns waits for the history and snapshots its measured runs. nil, when history
 // is disabled or unreadable, leaves every claim at its declaration.

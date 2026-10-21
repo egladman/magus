@@ -52,11 +52,7 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
-		return types.Check{
-			Name: name, Status: types.CheckAdvice,
-			Message: "run history is unreadable, so model tiers could not be checked against the jobs magus recorded",
-			Details: []string{err.Error()},
-		}
+		return historyUnreadableCheck(name, err)
 	}
 
 	records := job.ModelTierRecords(h.Jobs, set)
