@@ -430,7 +430,10 @@ import (
 // 142: magus-multi-agent checks a record with `magus job fork --stdin --dry-run` before
 // forking, and teaches the claim breadth bounds (MGS3043), the outputs a fork refuses to
 // leave unregenerated (MGS3044) and the waivers for both.
-const SkillVersion = 142
+//
+// 143: magus-vcs-hygiene teaches the commit message: read the repository's recent
+// subjects and write in their shape, imposing no style of its own.
+const SkillVersion = 143
 
 const skillLicense = "GPL-3.0-or-later"
 
