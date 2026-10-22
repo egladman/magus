@@ -118,8 +118,8 @@ other templates.
 // plugin intercepts tool calls instead, and throwing from tool.execute.before
 // blocks the call.
 //
-// This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
-// .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
+// This file is the source of truth. Copy it to .opencode/plugins/ in the project, never
+// to ~/.config/opencode/plugins/, and adjust to taste; nothing in it is magus-internal.
 //
 // It encodes no magus rule. Every decision comes from `magus shell`, so
 // this stays host-only glue rather than a second rule set that drifts out of
