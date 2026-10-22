@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -71,22 +70,6 @@ func TestWithDefaultCharms(t *testing.T) {
 			assert.Equal(t, c.want, withDefaultCharms(c.perRun, c.defaults, c.noDefault))
 		})
 	}
-}
-
-// TestMergeDriverRefreshSuppression pins the guard that keeps the merge driver from
-// rewriting the tracked .gitattributes. loadMagus refreshes the merge-driver registration
-// on the memoizing path, and that write lands in the working tree, which, when the caller
-// IS the merge driver running inside the VCS's index manipulation, is the dirty-tree
-// failure that stops `git rebase --continue`. Every other caller must still refresh.
-func TestMergeDriverRefreshSuppression(t *testing.T) {
-	assert.False(t, skipMergeDriverRefresh(context.Background()),
-		"an ordinary command must keep the merge-driver registration honest")
-	assert.True(t, skipMergeDriverRefresh(withoutMergeDriverRefresh(context.Background())),
-		"a load from inside the merge driver must not rewrite .gitattributes")
-	// The marker must not leak backwards onto the parent context.
-	parent := context.Background()
-	_ = withoutMergeDriverRefresh(parent)
-	assert.False(t, skipMergeDriverRefresh(parent), "suppression must not escape the derived context")
 }
 
 // TestSplitOnDashDash pins the forwarding boundary: everything after "--" is the spell's

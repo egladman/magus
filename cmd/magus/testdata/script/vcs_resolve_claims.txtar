@@ -14,7 +14,8 @@ env GIT_COMMITTER_NAME=Ana
 env GIT_COMMITTER_EMAIL=ana@example.com
 cd ws
 exec git init -q -b main
-exec magus ls
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init --vcs git
 exec git add -A
 exec git commit -q -m base
 
@@ -76,7 +77,7 @@ stdout '^vcs resolve: a.go not settled by job claims: no project''s merge_low_ri
 exec git merge --abort
 
 cp $WORK/magusfile.optin.buzz magusfile.buzz
-exec magus ls
+exec magus init --vcs git
 exec git add -A
 exec git commit -q -m 'merge_low_risk covers the Go sources'
 

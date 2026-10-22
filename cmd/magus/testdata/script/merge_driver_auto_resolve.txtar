@@ -1,5 +1,5 @@
-# A low-risk file goes through the merge driver during a plain `git merge`: loading the
-# workspace registers the declared gate_low_risk and merge_low_risk globs in
+# A low-risk file goes through the merge driver during a plain `git merge`:
+# `magus init --vcs git` registers the declared gate_low_risk and merge_low_risk globs in
 # .gitattributes, without the linguist-generated mark an output carries, and the driver
 # settles what the three-way merge settles and the classifier allows.
 # CHANGELOG.md, where both sides only added lines at one place, merges with both;
@@ -11,7 +11,8 @@ exec git config user.email test@example.com
 exec git config user.name Test
 exec git checkout -b main
 
-exec magus ls
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init --vcs git
 grep '^\*\*/\*\.md merge=magus$' .gitattributes
 grep '^fixtures/\*\* merge=magus$' .gitattributes
 ! grep 'md merge=magus linguist-generated' .gitattributes
@@ -21,7 +22,7 @@ stdout 'vcs merge-driver %O %A %B %L %P'
 # A second load finds the registration current and rewrites nothing.
 exec git add magusfile.buzz .gitattributes CHANGELOG.md NOTES.md
 exec git commit -m initial
-exec magus ls
+exec magus init --vcs git
 exec git status --porcelain --untracked-files=no
 ! stdout .
 

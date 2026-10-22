@@ -1,0 +1,28 @@
+# Running a read verb in a repository writes nothing to its VCS metadata: a workspace with
+# a declared output and no `magus init` ends up with no .gitattributes, no merge driver in
+# git config and a clean status.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magusfile.buzz gen
+exec git commit -m initial
+
+exec magus ls
+exec magus describe targets
+exec magus query kind=project
+
+! exists .gitattributes
+! exec git config --get merge.magus.driver
+exec git status --porcelain
+! stdout .
+
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+export fun types_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/*.go");
+}
+-- gen/fs.go --
+package gen

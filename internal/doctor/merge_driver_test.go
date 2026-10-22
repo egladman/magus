@@ -77,8 +77,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
 			"git config diff.yaml.xfuncname",
-			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +
-				"and logs `merge-driver: could not refresh registration` with the cause when it cannot",
+			"install them with `" + hint.Init.With("--vcs", "git") + "`",
 		},
 	}, r.checkMergeDriverLoads())
 

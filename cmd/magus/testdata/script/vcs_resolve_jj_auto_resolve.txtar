@@ -2,7 +2,7 @@
 # on jj auto-resolution happens in `magus vcs resolve`, which runs `jj resolve --tool
 # magus` over each conflicted source file and lets the driver decide. CHANGELOG.md, prose
 # where both sides only added lines at one place, settles with both; NOTES.md, where both
-# edited one line differently, keeps jj's conflict. Loading the workspace registers the
+# edited one line differently, keeps jj's conflict. `magus init --vcs jj` registers the
 # tool in the repository's own config for a person's `jj resolve --tool magus`.
 
 [!exec:jj] skip 'jj not available'
@@ -13,7 +13,7 @@ env JJ_EMAIL=test@example.com
 mkdir $WORK/home/.config
 
 exec jj git init --quiet .
-exec magus ls
+exec magus init --vcs jj
 exec jj config list --repo merge-tools.magus
 stdout '^merge-tools.magus.merge-args = \["vcs", "merge-driver", "\$base", "\$left", "\$right", "\$marker_length", "\$path", "\$output"\]$'
 stdout '^merge-tools.magus.merge-conflict-exit-codes = \[1\]$'

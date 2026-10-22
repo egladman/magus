@@ -10,7 +10,8 @@ exec git config user.name Test
 exec git add magusfile.buzz gen
 exec git commit -m initial
 
-exec magus ls
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init --vcs git
 grep '^gen/\*\.go merge=magus linguist-generated$' .gitattributes
 grep '^gen/boundary_list\.go merge=magus linguist-generated$' .gitattributes
 grep '^gen/modules_test\.go !merge !linguist-generated$' .gitattributes
@@ -30,7 +31,7 @@ stdout '^gen/boundary_list.go: linguist-generated: set$'
 # A second load finds the section current and rewrites nothing.
 exec git add .gitattributes
 exec git commit -m attributes
-exec magus ls
+exec magus init --vcs git
 exec git status --porcelain --untracked-files=no
 ! stdout .
 

@@ -31,8 +31,7 @@ import (
 // strength of the first probe alone.
 //
 // The diff drivers are installed with the merge driver, so a registration missing any of
-// them fails here too. It is read before the probe: the probe runs a magus against this
-// workspace, and that load rewires whatever it finds missing.
+// them fails here too, and the remedy is the init verb that installs them.
 func (r *runner) checkMergeDriverLoads() types.Check {
 	const name = "merge-driver-loads-workspace"
 
@@ -76,8 +75,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 				"hunk headers name no declaration and a footprint cannot say what a change touched",
 			Details: append(missing,
-				"rewire them with `"+hint.Ls.String()+"`: any command that opens the workspace does, "+
-					"and logs `merge-driver: could not refresh registration` with the cause when it cannot"),
+				"install them with `"+hint.Init.With("--vcs", r.vcsName())+"`"),
 		}
 	}
 	return types.Check{Name: name, Status: types.CheckOK,
@@ -99,6 +97,14 @@ func (r *runner) registeredMergeDriver() string {
 	return cmd
 }
 
+// vcsName is the backend the init verb would register, git when none resolves.
+func (r *runner) vcsName() string {
+	if res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions()); err == nil {
+		return res.Name
+	}
+	return "git"
+}
+
 // driverExecutable pulls the program out of a registered driver command, unwrapping the
 // quoting vcs/git.go adds for a path containing spaces.
 func driverExecutable(registered string) string {
@@ -116,8 +122,8 @@ func driverExecutable(registered string) string {
 // checkSettleHooks reports a registered git merge driver whose settle hooks are not all
 // installed. The driver keeps one side of a generated file on the promise that the hooks
 // regenerate it once the merge has the whole tree; without them every merge that touches
-// a generator's input commits stale output. A workspace load refreshes the driver's
-// registration and deliberately not the hooks, so this is where the gap shows.
+// a generator's input commits stale output. Only `magus init --vcs git` installs the
+// hooks, so this is where the gap shows.
 func (r *runner) checkSettleHooks() types.Check {
 	const name = "settle-hooks"
 	ctx := r.runCtx()
