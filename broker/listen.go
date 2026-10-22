@@ -66,7 +66,16 @@ func addrInUse(err error) bool {
 	return err != nil && (errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use"))
 }
 
-func tokenPath(sock string) string { return sock + ".token" }
+func tokenPath(sock string) string { return sockdir.TokenPath(sock) }
+
+// writeToken is sockdir.WriteToken. Serve calls it, not Listen, so a socket a
+// supervisor bound carries a token too.
+func writeToken(sock, token string) error {
+	if err := sockdir.WriteToken(sock, token); err != nil {
+		return fmt.Errorf("broker: %w", err)
+	}
+	return nil
+}
 
 func newToken() (string, error) {
 	b := make([]byte, 32)
@@ -76,31 +85,8 @@ func newToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// writeToken replaces any file a crashed broker left; O_EXCL after the remove refuses to
-// follow anything planted at the path in between. Serve calls it, not Listen, so a
-// socket a supervisor bound carries a token too.
-func writeToken(sock, token string) error {
-	path := tokenPath(sock)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("broker: replace token %s: %w", path, err)
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("broker: write token: %w", err)
-	}
-	_, werr := f.WriteString(token)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(path)
-		return fmt.Errorf("broker: write token %s: %w", path, werr)
-	}
-	return nil
-}
-
 func readToken(sock string) string {
-	b, err := os.ReadFile(tokenPath(sock))
+	b, err := os.ReadFile(sockdir.TokenPath(sock))
 	if err != nil {
 		return ""
 	}
