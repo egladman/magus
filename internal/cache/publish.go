@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"path"
 	"path/filepath"
 	"strings"
@@ -234,7 +235,23 @@ func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBund
 		return nil, OutputBundle{}, err
 	}
 	defer r.Close()
-	return c.readBundle(r)
+	data, b, err := c.readBundle(r)
+	if err != nil {
+		return nil, OutputBundle{}, err
+	}
+	if b.Descriptor.Ref != ref {
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: asked for ref %q, the store answered with %q", ref, b.Descriptor.Ref)
+	}
+	return data, b, nil
+}
+
+// singleSegment errors unless name can be one path element under a directory it is
+// joined to: non-empty, no separator of either kind, and not a dot element.
+func singleSegment(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`+"\x00") {
+		return fmt.Errorf("%q is not a single path segment", name)
+	}
+	return nil
 }
 
 // readBundle parses and authenticates a bundle stream. Nothing is returned unless the
@@ -300,6 +317,10 @@ func (c *Cache) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDesc
 // holds the bytes, and failing to cache them is not a retrieval failure.
 func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBundle) {
 	if c.outputs == nil || b.Descriptor.Key == "" || b.Descriptor.Attempt == "" {
+		return
+	}
+	if err := errors.Join(singleSegment(b.Descriptor.Key), singleSegment(b.Descriptor.Attempt)); err != nil {
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("not filing fetched output bundle %s: %v", b.Descriptor.Ref, err)))
 		return
 	}
 	// Replaced by rename, as Persist writes them: newestAttemptBlob can pick a blob

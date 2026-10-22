@@ -232,18 +232,25 @@ func expandOutputGlobs(globs []types.Glob, root string, nested []string) ([]relA
 // not trusted to have been snapshotted under these rules (a remote tier, an older binary,
 // a declaration that gained an exclusion), so a hit enforces them again: replay must
 // never write over a file the declaration carves out. It returns m itself when nothing
-// drops.
+// drops. A record outside a nested project that no glob claims at all stays, flagged
+// unclaimedBlob, and replayFrom refuses it: a manifest can come from a remote tier or an
+// imported archive, and replay would otherwise write any workspace path it names. The
+// flag rides the record because this function's callers have no error to return.
 func ownedOutputs(m *Manifest, s Step) *Manifest {
-	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g types.Glob) bool { return len(g.Except) > 0 }) {
-		return m
-	}
 	kept := make([]OutputRecord, 0, len(m.Outputs))
+	changed := false
 	for _, rec := range m.Outputs {
-		if ownsRecord(s, rec.Path) {
+		switch ownership(s, rec.Path) {
+		case ownedRecord:
 			kept = append(kept, rec)
+		case unclaimedRecord:
+			changed = true
+			kept = append(kept, OutputRecord{Path: rec.Path, Blob: unclaimedBlob})
+		default:
+			changed = true
 		}
 	}
-	if len(kept) == len(m.Outputs) {
+	if !changed {
 		return m
 	}
 	narrowed := *m
@@ -251,21 +258,34 @@ func ownedOutputs(m *Manifest, s Step) *Manifest {
 	return &narrowed
 }
 
-// ownsRecord reports whether s's outputs own the recorded path rel. A record no glob
-// claims is kept outside a nested project, as a hit always has been.
-func ownsRecord(s Step, rel string) bool {
-	nested := types.NestedOwner(rel, s.NestedDirs) != ""
+// unclaimedBlob marks a record no output glob claims; no sha256 hex digest can equal it.
+const unclaimedBlob = "unclaimed"
+
+type recordOwnership int
+
+const (
+	ownedRecord recordOwnership = iota
+	droppedRecord
+	unclaimedRecord
+)
+
+// ownership classifies the recorded path rel against s's outputs: owned, dropped (excluded
+// or inside a nested project), or unclaimed by every glob outside a nested project.
+func ownership(s Step, rel string) recordOwnership {
 	claimed := false
 	for _, g := range s.Outputs {
 		if !(types.Glob{Pattern: g.Pattern}).Match(rel) || !types.GlobClaims(g.Pattern, rel, s.NestedDirs) {
 			continue
 		}
 		if !g.Excludes(rel) {
-			return true
+			return ownedRecord
 		}
 		claimed = true
 	}
-	return !claimed && !nested
+	if claimed || types.NestedOwner(rel, s.NestedDirs) != "" {
+		return droppedRecord
+	}
+	return unclaimedRecord
 }
 
 // replay restores a manifest's outputs from the local store.
@@ -276,6 +296,11 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 // replayFrom restores a manifest's outputs into root from the blobs under store (the
 // local store, or a remote hit's staging root): reflink, else byte copy.
 func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string) ([]string, error) {
+	for _, rec := range m.Outputs {
+		if rec.Blob == unclaimedBlob {
+			return nil, fmt.Errorf("manifest records %q, which no output glob of the step claims", rec.Path)
+		}
+	}
 	var paths []string
 	for _, rec := range m.Outputs {
 		if err := ctx.Err(); err != nil {

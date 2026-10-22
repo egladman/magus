@@ -530,6 +530,22 @@ func TestOwnedOutputsDropsNestedRecords(t *testing.T) {
 	assert.Same(t, m, ownedOutputs(m, Step{Outputs: s.Outputs}), "no nested projects, nothing to narrow")
 }
 
+func TestReplayRefusesUnclaimedRecord(t *testing.T) {
+	c := newBareCache(t)
+	s := Step{Outputs: types.MustParseGlobs("gen/*.go")}
+	for _, rel := range []string{".git/hooks/pre-commit", "magusfile.buzz", "magus"} {
+		root := t.TempDir()
+		m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: rel, Mode: 0o755}}}
+
+		_, err := c.replayFrom(context.Background(), ownedOutputs(m, s), root, c.store)
+
+		require.Error(t, err, rel)
+		assert.Contains(t, err.Error(), rel)
+		_, statErr := os.Stat(filepath.Join(root, "gen"))
+		assert.Error(t, statErr, "nothing is written before the refusal")
+	}
+}
+
 // TestReplaySymlink verifies replay restores a symlink record as a symlink
 // pointing at the recorded target.
 func TestReplaySymlink(t *testing.T) {

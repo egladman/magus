@@ -140,13 +140,12 @@ func TestExcludedOutputIsNeverStoredOrReplayed(t *testing.T) {
 // snapshotted before the declaration gained its exclusion, or by a binary that did not
 // know the syntax. A hit re-applies the exclusion rather than trusting the entry.
 func TestOwnedOutputsDropsAnExcludedRecord(t *testing.T) {
-	m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: "gen/runtime.go"}, {Path: "other.txt"}}}
+	m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: "gen/runtime.go"}}}
 	s := Step{Outputs: types.MustParseGlobs("gen/*.go", "!gen/runtime.go")}
 
 	got := ownedOutputs(m, s)
 
-	assert.Equal(t, []OutputRecord{{Path: "gen/fs.go"}, {Path: "other.txt"}}, got.Outputs,
-		"a record no glob claims stays, as it always has outside a nested project")
+	assert.Equal(t, []OutputRecord{{Path: "gen/fs.go"}}, got.Outputs)
 	assert.Same(t, m, ownedOutputs(m, Step{Outputs: types.MustParseGlobs("gen/*.go")}), "no exclusion, nothing to narrow")
 }
 
