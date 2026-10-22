@@ -525,7 +525,7 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, dir 
 	if deps.lease == "" {
 		return denial{}
 	}
-	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegratorFor(ctx, deps, me, command) {
+	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegrator(ctx, deps, me, command) {
 		return denial{}
 	}
 	if ownsCheckout(ctx, deps, hookLocation(ctx, deps), dir) {

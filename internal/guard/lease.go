@@ -328,7 +328,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegratorFor(ctx, deps, me, command) || gatesInHeldCheckout(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegrator(ctx, deps, me, command) || gatesInHeldCheckout(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
 	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands. The holder of a row forked with `job fork --checkout` gates in that checkout too."
@@ -397,7 +397,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegratorFor(ctx, deps, me, command) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
+	if !ok || actingIntegrator(ctx, deps, me, command) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -640,7 +640,7 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) {
+	if !ok || actingIntegrator(ctx, deps, me, command) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -2111,14 +2111,8 @@ func magusCallDir(c locatedCall) (string, bool) {
 }
 
 // actingIntegrator reports whether the caller of this judgment, acting under me, integrates
-// the checkout the call runs in.
-func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job) bool {
-	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), hookLocation(ctx, deps).workspace)
-}
-
-// actingIntegratorFor is actingIntegrator for a magus line, judged in the workspace its
-// calls run in rather than the one the host started in.
-func actingIntegratorFor(ctx context.Context, deps Dependencies, me types.Job, command string) bool {
+// the checkout command's magus calls run in, or the host's when the line places none.
+func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job, command string) bool {
 	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), placedLocation(ctx, deps, command).workspace)
 }
 
