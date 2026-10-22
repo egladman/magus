@@ -253,3 +253,36 @@ func TestConsoleServesTheBuzzRuntime(t *testing.T) {
 	assert.Contains(t, csp, "script-src 'self' 'wasm-unsafe-eval';")
 	assert.NotContains(t, csp, "'unsafe-eval'", "wasm compilation only, never eval")
 }
+
+func TestSymlinksLeavingTheConsoleDirAreNotServed(t *testing.T) {
+	dir := consoleDir(t)
+	outside := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "secret.js"), []byte("SECRET"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "index.html"), []byte("<html><head></head>SECRET</html>"), 0o600))
+	if err := os.Symlink(filepath.Join(outside, "secret.js"), filepath.Join(dir, "leak.js")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "linked")))
+	require.NoError(t, os.Remove(filepath.Join(dir, KnownApps[0], "index.html")))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "index.html"), filepath.Join(dir, KnownApps[0], "index.html")))
+	h := StaticHandler(dir)
+
+	for _, p := range []string{"/console/leak.js", "/console/linked/secret.js", "/console/linked/", "/console/" + KnownApps[0] + "/"} {
+		w := get(t, h, p)
+		assert.NotContains(t, w.Body.String(), "SECRET", p)
+		assert.NotEqual(t, http.StatusOK, w.Code, p)
+	}
+	assert.False(t, isShellFile(dir, "/console/leak.js"))
+	assert.False(t, isShellFile(dir, "/console/linked/secret.js"))
+}
+
+func TestSymlinksInsideTheConsoleDirAreServed(t *testing.T) {
+	dir := consoleDir(t)
+	write(t, dir, "real/app.js", "ok")
+	if err := os.Symlink(filepath.Join("real", "app.js"), filepath.Join(dir, "alias.js")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	w := get(t, StaticHandler(dir), "/console/alias.js")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "ok", w.Body.String())
+}
