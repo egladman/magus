@@ -435,7 +435,7 @@ func TestDecodeStdinDeclarationTakesTheCurrentVersionWhenTheRecordNamesNone(t *t
 	row, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
 	require.NoError(t, err)
 	assert.True(t, defaulted, "the caller says it defaulted")
-	assert.Equal(t, types.Declaration{Version: types.JobSchemaVersion, ID: "a", ReadOnly: true}, row)
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "a", ReadOnly: true}, row)
 
 	_, defaulted, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
 	require.NoError(t, err)
