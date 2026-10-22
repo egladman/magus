@@ -74,8 +74,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Status: types.CheckFail,
 			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 				"hunk headers name no declaration and a footprint cannot say what a change touched",
-			Details: append(missing,
-				"install them with `"+hint.Init.With("--vcs", r.vcsName())+"`"),
+			Details: append(missing, r.installRemedy()),
 		}
 	}
 	return types.Check{Name: name, Status: types.CheckOK,
@@ -97,12 +96,14 @@ func (r *runner) registeredMergeDriver() string {
 	return cmd
 }
 
-// vcsName is the backend the init verb would register, git when none resolves.
-func (r *runner) vcsName() string {
-	if res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions()); err == nil {
-		return res.Name
+// installRemedy names the init command that installs the diff drivers; when no VCS
+// resolves it says so rather than guessing a backend.
+func (r *runner) installRemedy() string {
+	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	if err != nil {
+		return "no VCS resolved for this workspace, so there is no backend to install them for: " + err.Error()
 	}
-	return "git"
+	return "install them with `" + hint.Init.With("--vcs", res.Name) + "`"
 }
 
 // driverExecutable pulls the program out of a registered driver command, unwrapping the

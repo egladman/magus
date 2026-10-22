@@ -89,6 +89,14 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads())
 }
 
+// With no VCS resolving, the remedy says so; it never names a guessed backend.
+func TestInstallRemedyNamesNoGuessedBackend(t *testing.T) {
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: t.TempDir()}}}
+	got := r.installRemedy()
+	assert.Contains(t, got, "no VCS resolved")
+	assert.NotContains(t, got, "--vcs")
+}
+
 // A registered driver without its settle hooks fails naming each missing hook and the
 // command that writes them; installed, the same registration passes.
 func TestCheckSettleHooksReportsTheMissingOnes(t *testing.T) {
