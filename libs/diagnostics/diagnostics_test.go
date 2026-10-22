@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -225,6 +226,28 @@ func TestWhyNeverRenders(t *testing.T) {
 	}
 	if got := d.Errorf(Code("TST0006"), "outer: %v", err).Error(); strings.Contains(got, why) {
 		t.Errorf("nested Errorf = %q, carries the why", got)
+	}
+}
+
+func TestFixCrossesIntoBuzzOnly(t *testing.T) {
+	d := New(testURL)
+	const fix = "run magus graph build"
+	err := d.Errorf(Code("TST0010"), "index is stale").WithFix(fix)
+
+	if got := err.Error(); strings.Contains(got, fix) {
+		t.Errorf("Error() = %q, carries the fix", got)
+	}
+	want := map[string]string{
+		"code":    "TST0010",
+		"message": "index is stale",
+		"url":     "https://example/docs/TST0010.md",
+		"fix":     fix,
+	}
+	if got := err.BuzzError(); !maps.Equal(got, want) {
+		t.Errorf("BuzzError = %v, want %v", got, want)
+	}
+	if _, ok := d.Errorf(Code("TST0010"), "no fix").BuzzError()["fix"]; ok {
+		t.Error("BuzzError carries fix for an error without one")
 	}
 }
 

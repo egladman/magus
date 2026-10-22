@@ -1294,4 +1294,7 @@ type Diagnostic struct {
 	// that chooses what to show. Not mirrored into Buzz: a caught error's map carries no
 	// why, and this type mirrors that map.
 	Why string `json:"why,omitempty" yaml:"why,omitempty" buzz:"-"`
+	// Fix is the action that clears the diagnostic ([diagnostics.Error.Fix]), omitted when
+	// the error named none.
+	Fix string `json:"fix,omitempty" yaml:"fix,omitempty" buzz:"fix"`
 }

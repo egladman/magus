@@ -38,7 +38,11 @@ type Error struct {
 	// Why is the reasoning behind the diagnostic, for a reader who wants it: what the check
 	// protects, or why the obvious alternative is wrong. It is never part of the rendered
 	// error; a display that has room for it asks [Rationale].
-	Why   string
+	Why string
+	// Fix is the action that clears the diagnostic, stated for the reader to take: a
+	// command to run or a declaration to change. Like Why it is never rendered by Error;
+	// it crosses into Buzz through BuzzError.
+	Fix   string
 	url   string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
 	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
 }
@@ -46,6 +50,12 @@ type Error struct {
 // WithWhy sets e's [Error.Why] and returns e, so it chains off Errorf and Wrapf.
 func (e *Error) WithWhy(why string) *Error {
 	e.Why = why
+	return e
+}
+
+// WithFix sets e's [Error.Fix] and returns e, so it chains off Errorf and Wrapf.
+func (e *Error) WithFix(fix string) *Error {
+	e.Fix = fix
 	return e
 }
 
@@ -72,7 +82,7 @@ func Rationale(err error) string {
 //	catch (e) { if (e.code == "MGS2001") { ... } }
 //
 // url is included when the domain captured one, so a magusfile can surface the same link
-// the CLI prints rather than reconstructing it.
+// the CLI prints rather than reconstructing it, and fix when the error carries one.
 func (e *Error) BuzzError() map[string]string {
 	f := map[string]string{
 		"code":    string(e.Code),
@@ -80,6 +90,9 @@ func (e *Error) BuzzError() map[string]string {
 	}
 	if e.url != "" {
 		f["url"] = e.url
+	}
+	if e.Fix != "" {
+		f["fix"] = e.Fix
 	}
 	return f
 }
