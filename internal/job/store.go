@@ -258,7 +258,8 @@ func (s *Store) refuseDocument() error {
 	return nil
 }
 
-// shellQuote is p as one POSIX shell word.
+// shellQuote is p as one POSIX shell word. A copy: internal/guard's shellWord sits in
+// a package that imports this one, and cmd/magus's in package main.
 func shellQuote(p string) string {
 	if p != "" && strings.Trim(p, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+@:,") == "" {
 		return p
