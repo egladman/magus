@@ -1865,3 +1865,53 @@ func TestCheck_ObjectLiteralMissingRequiredField(t *testing.T) {
 		assert.Contains(t, err.Error(), string(ArgumentError))
 	})
 }
+
+const resultDecl = `object Failure { message: str = "" }
+object Result::<T> { value: T? = null, err: Failure? = null }
+`
+
+func TestGenericObjectFieldTakesTheInstanceArgument(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun port() > Result::<int> { return Result::<int>{ value = 80 }; }
+final r = port();
+if (r.value -> v) { final _n: int = v + 1; }
+if (r.err -> e) { final _m: str = e.message; }
+final lst: Result::<[int]> = Result::<[int]>{ value = [1, 2] };
+if (lst.value -> l) { final _first: int = l[0]; }
+`)
+	checkError(t, resultDecl+`final r = Result::<int>{ value = 1 }; if (r.value -> v) { final _s: str = v; }`,
+		"cannot assign int to str")
+}
+
+func TestGenericObjectInstancesOfDifferentArgumentsMismatch(t *testing.T) {
+	checkError(t, resultDecl+`fun f() > Result::<int> { return Result::<str>{ value = "nope" }; }`,
+		"return type mismatch: got Result::<str>, want Result::<int>")
+	checkError(t, resultDecl+`final _r: Result::<int> = Result::<str>{};`,
+		"cannot assign Result::<str> to Result::<int>")
+	checkError(t, resultDecl+`final _r = Result::<int>{ value = "nope" };`,
+		"wrong property type: field Result.value is int, got str")
+}
+
+func TestGenericObjectMethodReturnTakesTheInstanceArgument(t *testing.T) {
+	checkError(t, `object Box::<T> {
+    item: T,
+    fun get() > T { return this.item; }
+}
+final b = Box::<int>{ item = 1 };
+final _s: str = b.get();`, "cannot assign int to str")
+}
+
+// A generic function's own parameters stay erased, so Result::<T> matches any instance.
+func TestGenericObjectInsideAGenericFunctionStaysErased(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun wrap::<T>(x: T) > Result::<T> { return Result::<T>{ value = x }; }
+final _r: Result::<int> = wrap(1);
+`)
+}
+
+func TestGenericObjectWithoutArgumentsMatchesAnyInstance(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun f() > Result::<int> { return Result{}; }
+final _raw: Result = Result::<str>{};
+`)
+}

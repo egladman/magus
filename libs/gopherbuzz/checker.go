@@ -696,7 +696,7 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	ot := &types.ObjectType{
 		Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{},
-		IsProtocol: v.IsProtocol,
+		IsProtocol: v.IsProtocol, TypeParams: v.TypeParams,
 	}
 	// types.Compat names a protocol by its bare name, as it names every object.
 	for _, name := range v.Conforms {
@@ -797,17 +797,24 @@ func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Typ
 		if c.typeRefs != nil {
 			c.typeRefs[v.Name] = true
 		}
+		var args []types.Type
+		if len(v.Args) > 0 {
+			args = make([]types.Type, len(v.Args))
+			for i, a := range v.Args {
+				args[i] = c.resolveTypeIn(a, quals)
+			}
+		}
 		if qual := quals[v.Name]; qual != "" {
 			if member := c.declImportedType(qual, v.Name); member != nil {
-				return member
+				return instantiate(member, args)
 			}
 		} else if own, ok := c.nsTypes[v.Name]; ok {
-			return own
+			return instantiate(own, args)
 		}
 		if qual := quals[v.Name]; qual != "" && c.typeRefs == nil {
 			if member, known := c.namespaceMemberType(qual, v.Name); known {
 				if member != nil {
-					return member
+					return instantiate(member, args)
 				}
 				return v
 			}
@@ -816,7 +823,7 @@ func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Typ
 			}
 		}
 		if resolved, ok := c.namedType(v.Name); ok {
-			return resolved
+			return instantiate(resolved, args)
 		}
 		return v
 	case *types.ListType:
@@ -2212,6 +2219,15 @@ func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, wan
 	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as %s of type %s", got.TypeName(), slot, want.TypeName())
 }
 
+// instantiate substitutes args into t when t is a generic object type; any
+// other type has no parameters to fill and comes back unchanged.
+func instantiate(t types.Type, args []types.Type) types.Type {
+	if ot, ok := t.(*types.ObjectType); ok && len(args) > 0 {
+		return types.Instantiate(ot, args)
+	}
+	return t
+}
+
 // hasErasedType reports whether t still carries a NamedType resolveType could not
 // resolve, at any depth. `list: [T]` inside a generic function is the shape that
 // matters: the element is erased even though the list itself is concrete.
@@ -2376,9 +2392,8 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	// (e.g. Boxed from a synthetic Go module) returns Unknown rather than Any so
 	// chained member access on synthetic-module values doesn't fire E28.
 	if nt, ok := ot.(*types.NamedType); ok {
-		if resolved, ok2 := c.namedType(nt.Name); ok2 {
-			ot = resolved
-		} else {
+		ot = c.resolveType(nt)
+		if _, unresolved := ot.(*types.NamedType); unresolved {
 			return types.Unknown
 		}
 	}
@@ -2733,6 +2748,9 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		c.errorf(v.Pos, "%s is not an object type", v.TypeName)
 		return types.Any
 	}
+	if v.TypeArgs != "" {
+		ot = types.Instantiate(ot, c.literalTypeArgs(v.TypeArgs))
+	}
 	for i, key := range v.Keys {
 		ft, exists := ot.Fields[key]
 		if !exists {
@@ -2807,6 +2825,21 @@ func (c *checker) enumGotPrimitive(want, got types.Type) bool {
 	return false
 }
 
+// literalTypeArgs resolves the comma-separated `::<A, B>` text of an object
+// literal into its type arguments.
+func (c *checker) literalTypeArgs(text string) []types.Type {
+	nt, ok := types.ParseAnnot("_::<" + text + ">").(*types.NamedType)
+	if !ok {
+		return nil
+	}
+	quals := qualifiedTypeNames(text)
+	args := make([]types.Type, len(nt.Args))
+	for i, a := range nt.Args {
+		args[i] = c.resolveTypeIn(a, quals)
+	}
+	return args
+}
+
 // canonicalTypeName is the SINGLE source of the spelling a type value carries.
 // Both sides of `typeof x == <T>` route through it (the checker for the typeof
 // operand, the compiler for the literal's annotation), so the two can never
@@ -2818,6 +2851,9 @@ func canonicalTypeName(t types.Type) string {
 		return fmt.Sprintf("%s[%s]", mutSpelling(v.Mut), canonicalTypeName(v.Elem))
 	case *types.MapType:
 		return fmt.Sprintf("%s{%s: %s}", mutSpelling(v.Mut), canonicalTypeName(v.Key), canonicalTypeName(v.Val))
+	case *types.ObjectType:
+		// The VM erases type arguments, so a type value names the bare object.
+		return v.Name
 	case nil:
 		return "any"
 	}

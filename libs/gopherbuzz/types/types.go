@@ -136,9 +136,97 @@ type ObjectType struct {
 	// Compat consults it, so an object is assignable to a protocol only when it said
 	// so -- matching upstream, where conformance is declared and not inferred.
 	Conforms []string
+	// TypeParams names the declaration's `object Name::<K, V>` parameters.
+	TypeParams []string
+	// Args holds the type arguments of an instantiation (`Name::<str, int>`); nil
+	// for the declaration itself and for a use that wrote none.
+	Args []Type
 }
 
-func (o *ObjectType) TypeName() string { return o.Name }
+func (o *ObjectType) TypeName() string { return o.Name + argsSpelling(o.Args) }
+
+// argsSpelling renders a `::<A, B>` type-argument list, "" when there is none.
+func argsSpelling(args []Type) string {
+	if len(args) == 0 {
+		return ""
+	}
+	names := make([]string, len(args))
+	for i, a := range args {
+		names[i] = a.TypeName()
+	}
+	return "::<" + strings.Join(names, ", ") + ">"
+}
+
+// Instantiate returns o with its type parameters replaced by args in every field
+// and method, as upstream's populateGenerics does. Like upstream, a parameter
+// with no argument at its index stays unsubstituted. o itself is not modified.
+func Instantiate(o *ObjectType, args []Type) *ObjectType {
+	if len(o.TypeParams) == 0 || len(args) == 0 {
+		return o
+	}
+	subst := make(map[string]Type, len(o.TypeParams))
+	for i, name := range o.TypeParams {
+		if i < len(args) {
+			subst[name] = args[i]
+		}
+	}
+	inst := *o
+	inst.Args = args
+	inst.Fields = make(map[string]Type, len(o.Fields))
+	for name, t := range o.Fields {
+		inst.Fields[name] = Substitute(t, subst)
+	}
+	inst.Methods = make(map[string]*FuncType, len(o.Methods))
+	for name, m := range o.Methods {
+		inst.Methods[name] = Substitute(m, subst).(*FuncType)
+	}
+	return &inst
+}
+
+// Substitute replaces each NamedType in t whose name subst maps, at any depth.
+// It returns t itself when nothing was replaced.
+func Substitute(t Type, subst map[string]Type) Type {
+	switch v := t.(type) {
+	case *NamedType:
+		if r, ok := subst[v.Name]; ok && len(v.Args) == 0 {
+			return r
+		}
+		if len(v.Args) == 0 {
+			return v
+		}
+		return &NamedType{Name: v.Name, Args: substituteAll(v.Args, subst)}
+	case *ObjectType:
+		if len(v.Args) == 0 {
+			return v
+		}
+		return Instantiate(v, substituteAll(v.Args, subst))
+	case *ListType:
+		return &ListType{Elem: Substitute(v.Elem, subst), Mut: v.Mut}
+	case *MapType:
+		return &MapType{Key: Substitute(v.Key, subst), Val: Substitute(v.Val, subst), Mut: v.Mut, Tuple: v.Tuple}
+	case *FibType:
+		return &FibType{Yield: Substitute(v.Yield, subst), Return: Substitute(v.Return, subst)}
+	case *FuncType:
+		ft := *v
+		ft.Params = substituteAll(v.Params, subst)
+		if v.Ret != nil {
+			ft.Ret = Substitute(v.Ret, subst)
+		}
+		if v.Yield != nil {
+			ft.Yield = Substitute(v.Yield, subst)
+		}
+		return &ft
+	}
+	return t
+}
+
+func substituteAll(ts []Type, subst map[string]Type) []Type {
+	out := make([]Type, len(ts))
+	for i, t := range ts {
+		out[i] = Substitute(t, subst)
+	}
+	return out
+}
 
 // EnumType is a named enum type.
 type EnumType struct {
@@ -163,10 +251,15 @@ func (e *EnumType) backingType() Type {
 
 func (e *EnumType) TypeName() string { return e.Name }
 
-// NamedType is an unresolved reference to a user-defined type.
-type NamedType struct{ Name string }
+// NamedType is an unresolved reference to a user-defined type. Args carries the
+// type arguments the annotation wrote (`Result::<int>`), for the checker to
+// instantiate once the name resolves.
+type NamedType struct {
+	Name string
+	Args []Type
+}
 
-func (n *NamedType) TypeName() string { return n.Name }
+func (n *NamedType) TypeName() string { return n.Name + argsSpelling(n.Args) }
 
 // ParseAnnot parses a compact type annotation string like "int", "[str]", "fun(int)bool".
 // Returns Any when the string is empty or cannot be parsed.
@@ -250,6 +343,13 @@ func Compat(got, want Type) bool {
 	if gmOK && wmOK {
 		return (gm.Mut || !wm.Mut) && Compat(gm.Key, wm.Key) && Compat(gm.Val, wm.Val)
 	}
+	// Two instantiations of one generic object are compatible when their type
+	// arguments are; one without arguments (a raw `Name`) matches any of them.
+	if gotObj, gOK := got.(*ObjectType); gOK {
+		if wantObj, wOK := want.(*ObjectType); wOK && gotObj.Name == wantObj.Name && !gotObj.IsNamespace {
+			return argsCompat(gotObj.Args, wantObj.Args)
+		}
+	}
 	if got.TypeName() == want.TypeName() {
 		return true
 	}
@@ -276,6 +376,29 @@ func Compat(got, want Type) bool {
 		}
 	}
 	return false
+}
+
+// argsCompat compares type arguments pairwise. An unresolved NamedType is an
+// erased type parameter (`Result::<T>` inside a generic function), which the
+// checker cannot see through, so it matches anything.
+func argsCompat(got, want []Type) bool {
+	if len(got) == 0 || len(want) == 0 {
+		return true
+	}
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		_, gErased := got[i].(*NamedType)
+		_, wErased := want[i].(*NamedType)
+		if gErased || wErased {
+			continue
+		}
+		if !Compat(got[i], want[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 type annotParser struct {
@@ -476,6 +599,10 @@ func (p *annotParser) parseUnmodified() Type {
 			}
 			name = seg
 		}
+		var args []Type
+		if name != "fib" {
+			args = p.parseTypeArgs()
+		}
 		if p.peek() == '?' {
 			p.advance()
 		}
@@ -528,10 +655,37 @@ func (p *annotParser) parseUnmodified() Type {
 			}
 			return Fib
 		default:
-			p.skipGeneric()
-			return &NamedType{Name: name}
+			return &NamedType{Name: name, Args: args}
 		}
 	}
+}
+
+// parseTypeArgs reads a `::<A, B>` (or bare `<A, B>`) type-argument list, nil
+// when none follows.
+func (p *annotParser) parseTypeArgs() []Type {
+	if strings.HasPrefix(p.s[p.pos:], "::<") {
+		p.pos += 2
+	}
+	if p.peek() != '<' {
+		return nil
+	}
+	p.advance()
+	var args []Type
+	for p.peek() != '>' && p.peek() != 0 {
+		before := p.pos
+		if t := p.parse(); t != nil {
+			args = append(args, t)
+		}
+		if p.peek() == ',' {
+			p.advance()
+		} else if p.pos == before {
+			p.advance()
+		}
+	}
+	if p.peek() == '>' {
+		p.advance()
+	}
+	return args
 }
 
 func isIdentContinue(r rune) bool {
