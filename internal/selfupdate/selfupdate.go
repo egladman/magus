@@ -173,7 +173,7 @@ type ReleaseIndex struct {
 	// ExpiresAt bounds the one hole revocation cannot close: an attacker holding a
 	// compromised key serving an OLD index that names no revocation. Past it the client
 	// refuses the file rather than trusting a stale one, turning an indefinite
-	// compromise into a denial of service. RFC3339; empty means no bound.
+	// compromise into a denial of service. RFC3339; required, an index without it is refused.
 	ExpiresAt string         `json:"expires_at,omitzero"`
 	Releases  []IndexRelease `json:"releases"`
 	// Prereleases lists release candidates apart from Releases, because every binary
@@ -256,12 +256,13 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	return &idx, nil
 }
 
-// checkNotExpired refuses an index past its declared lifetime. An unparsable
-// expires_at is refused too: the field exists to bound how long a stale index can be
-// replayed, so a client that cannot read it has no bound at all.
+// checkNotExpired refuses an index past its declared lifetime. An absent or
+// unparsable expires_at is refused too: the field exists to bound how long a stale index
+// can be replayed, so an index that omits it, or a client that cannot read it, has no bound
+// at all.
 func checkNotExpired(expiresAt string) error {
 	if expiresAt == "" {
-		return nil
+		return errors.New("release index has no expires_at: an index with no lifetime can be replayed forever, so it is refused")
 	}
 	deadline, err := time.Parse(time.RFC3339, expiresAt)
 	if err != nil {

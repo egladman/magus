@@ -38,11 +38,14 @@ func makeTestKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 	return pub, priv
 }
 
+// testExpiry is far enough out that no fixture index expires while a test runs.
+const testExpiry = "2999-01-01T00:00:00Z"
+
 // buildIndex builds a minimal ReleaseIndex JSON body and signs it with priv.
 // Returns the JSON bytes and signature bytes.
 func buildIndex(t *testing.T, priv ed25519.PrivateKey, releases []IndexRelease) ([]byte, []byte) {
 	t.Helper()
-	idx := ReleaseIndex{SchemaVersion: 1, Releases: releases}
+	idx := ReleaseIndex{SchemaVersion: 1, ExpiresAt: testExpiry, Releases: releases}
 	data, err := json.Marshal(idx)
 	require.NoError(t, err)
 	sig := ed25519.Sign(priv, data)
@@ -90,6 +93,7 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ReleaseIndex{
 		SchemaVersion: 1,
+		ExpiresAt:     testExpiry,
 		Releases:      releases,
 	}, *idx)
 }
@@ -168,6 +172,20 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema_version")
+}
+
+func TestFetchAndVerifyIndex_RefusesAnIndexWithoutExpiry(t *testing.T) {
+	t.Parallel()
+	pub, priv := makeTestKey(t)
+
+	data, err := json.Marshal(ReleaseIndex{SchemaVersion: 1, Releases: []IndexRelease{{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}}}})
+	require.NoError(t, err)
+	srv := startIndexServer(t, data, ed25519.Sign(priv, data))
+
+	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	_, err = FetchAndVerifyIndex(context.Background(), opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no expires_at")
 }
 
 func TestSelectRelease_Latest(t *testing.T) {
