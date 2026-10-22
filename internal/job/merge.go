@@ -45,6 +45,8 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	str("criteria", &put.Criteria)
 	str("checkpoint", &put.Checkpoint)
 	str("model", &put.Model)
+	str("follows", &put.Follows)
+	str("fresh_reason", &put.FreshReason)
 	if v, ok, e := mergeString(params, "brief_format"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
@@ -155,6 +157,14 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 	if p.Model != nil {
 		v := strings.TrimSpace(*p.Model)
 		set = append(set, func(u *types.Job) { u.Model = v })
+	}
+	if p.Follows != nil {
+		v := strings.TrimSpace(*p.Follows)
+		set = append(set, func(u *types.Job) { u.Follows = v })
+	}
+	if p.FreshReason != nil {
+		v := strings.TrimSpace(*p.FreshReason)
+		set = append(set, func(u *types.Job) { u.FreshReason = v })
 	}
 	if p.BriefFormat != nil {
 		if f := *p.BriefFormat; f != "" && !f.Valid() {
@@ -271,7 +281,7 @@ func declaredKeys(p types.JobPut) []string {
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
-		{"max_attempts", p.MaxAttempts != nil},
+		{"max_attempts", p.MaxAttempts != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
 	} {
 		if f.set {
 			keys = append(keys, f.key)
@@ -285,7 +295,7 @@ func declaredKeys(p types.JobPut) []string {
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "waivers", "state", "read_only",
-	"timeout", "max_attempts", "enter",
+	"timeout", "max_attempts", "enter", "follows", "fresh_reason",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly

@@ -14,6 +14,9 @@ type JobPut struct {
 	Model      *string `json:"model,omitempty"`
 	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
 	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
+	// Follows and FreshReason set the row's link to the job it continues; see [Job.Follows].
+	Follows     *string `json:"follows,omitempty"`
+	FreshReason *string `json:"fresh_reason,omitempty"`
 	// Timeout is a length such as "45m", never an instant: the deadline is stamped when
 	// the store applies the put. "0" or "" clears it.
 	Timeout *string `json:"timeout,omitempty"`
