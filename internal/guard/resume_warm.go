@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
@@ -81,8 +82,8 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 // findWarmWorker is the warm worker row continues: a spawn record of facts whose job ended
 // within ttl of now and that row names in Follows or shares a write path with. False when
 // row carries a FreshReason, when the worker's spawn title has another role than title (a
-// reviewer is not the writer's continuation), or when every such worker is near its model's
-// price step.
+// reviewer is not the writer's continuation), when row is bound to another checkout than
+// the worker's, or when every such worker is near its model's price step.
 func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title string, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
 	if row.FreshReason != "" || ttl <= 0 {
 		return warmWorker{}, false
@@ -102,7 +103,7 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title stri
 			continue
 		}
 		link := continuationLink(row, ended)
-		if link == "" {
+		if link == "" || !sameCheckout(row, ended) {
 			continue
 		}
 		since := time.Unix(ended.Updated, 0)
@@ -116,6 +117,16 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title stri
 		return warmWorker{agent: agent, job: ended.ID, link: link, idle: idle, left: ttl - idle}, true
 	}
 	return warmWorker{}, false
+}
+
+// sameCheckout reports whether ended's worker may take row where it worked: a resumed worker
+// stays bound to its checkout, and a row a fork made a checkout for is taken only there.
+func sameCheckout(row, ended types.Job) bool {
+	there := ended.CheckoutRoot
+	if there == "" && ended.Worktree.Standing() {
+		there = ended.Worktree.Root
+	}
+	return there == "" || job.WrongCheckout(row, there) == nil
 }
 
 // spawnTitleRole is the role of a `<parent>/<role> <job>` spawn title, "" for any other shape.

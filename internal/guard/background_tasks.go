@@ -95,25 +95,23 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 	if err != nil {
 		return types.GuardJudgment{}, false
 	}
-	var listing string
-	if subagent {
-		listing = describeTasks(tasks, now)
-	} else {
+	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
 			return now.Sub(t.Started) < rootBackgroundAge || said.MarkFired(backgroundAdvisedKey(t))
 		})
-		listing = stoppableTasks(tasks, now)
 	}
 	if len(tasks) == 0 {
 		return types.GuardJudgment{}, false
 	}
+	listing := stoppableTasks(tasks, now)
+	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
 		return types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      decisionDeny,
 			Rule:          string(denyRuleBackgroundLeft),
-			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each by its id, or wait for its completion notice, before you finish:\n%s",
+			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s",
 				plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
 		}, true
 	}
