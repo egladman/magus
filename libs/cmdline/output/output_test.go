@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -80,8 +81,45 @@ func TestWriteTemplateReadsTheJSONNames(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 	err := writer.Write(&bytes.Buffer{}, Options{Format: Template, Template: "{{.Path}}"}, ref{Path: "web"})
-	if err == nil || !strings.Contains(err.Error(), "top-level fields are path") {
+	if err == nil || !strings.Contains(err.Error(), "fields are .path ") {
 		t.Errorf("got %v, want the record's fields named", err)
+	}
+}
+
+func TestWriteTemplateErrorNamesNestedFieldPaths(t *testing.T) {
+	type gate struct {
+		ID        string `json:"id"`
+		OutputRef string `json:"output_ref"`
+	}
+	type deep struct {
+		C struct {
+			D string `json:"d"`
+		} `json:"c"`
+	}
+	type status struct {
+		Job struct {
+			State string `json:"state"`
+			B     deep   `json:"b"`
+		} `json:"job"`
+		Gates []gate `json:"gates"`
+	}
+	err := writer.Write(&bytes.Buffer{}, Options{Format: Template, Template: "{{.State}}"}, status{Gates: []gate{{}}})
+	if err == nil {
+		t.Fatal("a missing field rendered")
+	}
+	want := "fields are .gates, .gates[].id, .gates[].output_ref, .job, .job.b, .job.b.c, .job.state "
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("got %v, want %q: nested paths, three levels deep at most", err, want)
+	}
+}
+
+func TestRecordFieldsCountsWhatItCannotList(t *testing.T) {
+	record := map[string]any{}
+	for i := range maxFieldPaths + 2 {
+		record[fmt.Sprintf("f%02d", i)] = 1
+	}
+	if got := recordFields(record); !strings.Contains(got, ".f39 and 2 more") {
+		t.Errorf("got %q, want the overflow counted", got)
 	}
 }
 
