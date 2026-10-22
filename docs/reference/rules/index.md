@@ -54,6 +54,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [inline-alias](inline-alias.md)                       | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                   |
 | [installed-skill](installed-skill.md)                 | a write to an installed skill copy, which re-installing discards                                     |
 | [interpreter-rewrite](interpreter-rewrite.md)         | an inline interpreter rewriting a file this tree already carries                                     |
+| [lease-checkout](lease-checkout.md)                   | a worker holding a checkout running magus outside it                                                 |
 | [lease-gate](lease-gate.md)                           | a leased worker running the gate instead of the check it was assigned                                |
 | [lease-harness](lease-harness.md)                     | a leased worker rewriting the harness skill trees that steer it                                      |
 | [lease-invalid](lease-invalid.md)                     | a call naming a lease this workspace's job store does not declare                                    |
