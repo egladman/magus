@@ -55,7 +55,6 @@ func TestEndedReasonSaysWhichEnd(t *testing.T) {
 		byHolder bool
 		want     string
 	}{
-		{"a read-only scout that filed a result", types.Job{ID: "s", ReadOnly: true, Registered: 1, Result: filed}, true, "returned ungraded"},
 		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, true, "ended ungraded"},
 		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1, Result: filed}, false, "ended unverified"},
 		{"a row nobody took", types.Job{ID: "w", Check: check}, false, "before any holder ran"},
@@ -64,6 +63,28 @@ func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	} {
 		assert.Contains(t, endedReason(tt.row, tt.byHolder), tt.want, tt.name)
 	}
+}
+
+// A read-only scout declaring no check or goal used to end no_return "returned ungraded"
+// even when its holder filed a result. Nothing but that result can grade it, so filing one
+// records pass; a scout with a script check still waits to be graded.
+func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	seed(t, s, types.Job{ID: "notes", ReadOnly: true, State: types.StateRunning, Registered: 1})
+	seed(t, s, types.Job{ID: "probe", ReadOnly: true, State: types.StateRunning, Registered: 1, Check: &types.LeaseCheck{Script: "probe.buzz"}})
+	none := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+
+	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
+	require.NoError(t, err)
+	assert.Equal(t, types.StatePass, notes.State)
+	assert.Equal(t, returnedReason, notes.EndReason)
+
+	probe, err := Exit(t.Context(), s, "probe", &types.JobResult{}, none)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, probe.State, "a check grades it at wait")
+	assert.Empty(t, probe.EndReason)
 }
 
 // observeClaim is an observer whose diff shows exactly what rep claims.

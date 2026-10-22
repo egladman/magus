@@ -1683,6 +1683,9 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Do the work first, then file this. It is a record of what happened, not a form to")
 			fmt.Fprintln(os.Stderr, "fill in while you are still deciding what to do.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A read-only job declaring no check or goal has nothing `magus job wait` could")
+			fmt.Fprintln(os.Stderr, "grade, so filing its result records it "+string(types.StatePass)+" and ends it.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no --stdin each named job is ended and recorded "+string(types.StateNoReturn)+", which is")
 			fmt.Fprintln(os.Stderr, "not the same as returning it and failing. Its end_reason says which end it was: a")
 			fmt.Fprintln(os.Stderr, "read-only row with nothing to grade, a result nobody verified, a holder that")
@@ -1744,16 +1747,26 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	out := io.Writer(os.Stderr)
 	switch opts.Format {
 	case outputName:
-		return emitNames(os.Stdout, []string{stored.ID})
+		err = emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
-		fmt.Printf("exited %s, recorded %s, with its result filed. Whoever forked it verifies with `%s`\n",
-			stored.ID, stored.State, hint.JobWait.With(stored.ID))
-		return nil
+		out = os.Stdout
+		if stored.State.Terminal() {
+			fmt.Printf("exited %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
+		} else {
+			fmt.Printf("exited %s, recorded %s, with its result filed. Whoever forked it verifies with `%s`\n",
+				stored.ID, stored.State, hint.JobWait.With(stored.ID))
+		}
 	default:
-		return emitFormatted(opts, stored)
+		err = emitFormatted(opts, stored)
 	}
+	// A row the result ended (a read-only one nothing else grades) gives its checkout back now.
+	if err == nil && stored.State.Terminal() {
+		err = endWorktrees(ctx, out, store, stored.ID)
+	}
+	return err
 }
 
 // abandonJobs ends every named job as no_return (see [job.Abandon]), printing one line per
