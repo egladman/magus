@@ -17,6 +17,7 @@ import {
 } from "./api";
 import { decodeFigureLink } from "./figure-link";
 import { attachFigure, readEdges, neighbours, type FigureController } from "./interact";
+import { attachFlow, type Flow } from "./flow";
 import {
   EMPTY_LENS,
   fragmentForView,
@@ -304,6 +305,7 @@ export function activate(host: HTMLElement): AppInstance {
   let runtimeState: RuntimeState = { kind: "off" };
   let base: Base | null = null;
   let controller: FigureController | null = null;
+  let flow: Flow | null = null;
   let current: AbortController | null = null;
   let lastNode: string | null = null;
   let stale = false;
@@ -392,6 +394,8 @@ export function activate(host: HTMLElement): AppInstance {
       refs.frame.replaceChildren(svg);
       controller = attachFigure({ frame: refs.frame, svg, reducedMotion, onFocusChange });
     }
+    flow?.stop();
+    flow = attachFlow(svg, { reducedMotion });
     refs.caption.textContent = rendered.title;
     renderNodeList(refs.nodes, {
       nodes: rendered.nodes,
@@ -405,6 +409,8 @@ export function activate(host: HTMLElement): AppInstance {
   const clearFigure = (): void => {
     controller?.destroy();
     controller = null;
+    flow?.stop();
+    flow = null;
     refs.frame.replaceChildren();
     refs.caption.textContent = "";
     refs.nodes.replaceChildren();
@@ -716,6 +722,7 @@ export function activate(host: HTMLElement): AppInstance {
       window.removeEventListener("hashchange", onHashChange);
       current?.abort();
       controller?.destroy();
+      flow?.stop();
       unsubscribeHost();
     },
   };

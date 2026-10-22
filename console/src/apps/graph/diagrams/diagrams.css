@@ -140,6 +140,16 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
 .console-diagrams__frame [data-edge][data-lit] { stroke: var(--magus-diagram-accent); }
 .console-diagrams__frame a[data-node] { cursor: pointer; }
 .console-diagrams__frame [data-node]:focus-visible { outline-offset: var(--pf-t--global--spacer--xs); }
+/* Edge flow (flow.ts): accent dashes travelling over each solid connector. They follow their edge
+   into the dim. */
+.console-diagrams__frame .console-diagrams__flow {
+  fill: none;
+  stroke: var(--magus-diagram-accent);
+  stroke-width: 1.4px;
+  pointer-events: none;
+  transition: opacity var(--console-motion-fast) var(--console-ease);
+}
+.console-diagrams__frame [data-edge][data-dim] + .console-diagrams__flow { opacity: 0.18; }
 
 /* A dimmed node keeps contrast through the subtle text colour; half opacity dropped the text under
    the minimum. */
@@ -159,10 +169,12 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
   .console-diagrams__frame > svg,
   .console-diagrams__frame [data-node],
   .console-diagrams__frame [data-edge] { transition: none; }
+  .console-diagrams__frame .console-diagrams__flow { display: none; }
 }
 :root[data-motion="reduced"] .console-diagrams__frame > svg,
 :root[data-motion="reduced"] .console-diagrams__frame [data-node],
 :root[data-motion="reduced"] .console-diagrams__frame [data-edge] { transition: none; }
+:root[data-motion="reduced"] .console-diagrams__frame .console-diagrams__flow { display: none; }
 
 /* A narrow pane stacks the node list under the figure, asking the Graph's pane root (graph.css). */
 @container graph (max-width: 47.99rem) {
