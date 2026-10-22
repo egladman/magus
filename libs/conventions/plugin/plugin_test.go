@@ -9,8 +9,9 @@ import (
 )
 
 // TestPluginsRegister builds every plugin from a yaml-shaped settings block, the
-// path production runs, and checks the registered name matches the analyzer's:
-// golangci-lint's settings key, enable entry and //nolint name all have to agree.
+// path production runs, and checks the analyzer name starts with the registered name (the filenames
+// analyzer appends a vocabulary digest). The settings key, enable entry and
+// //nolint name all use the registered name.
 func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
