@@ -1175,6 +1175,9 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	encoded, err = json.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
+
+	fixed := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithFix("magus graph build"))
+	assert.Equal(t, "magus graph build", fixed.Fix)
 }
 
 // An entry for sources the tree went back to replays the index those sources built, never

@@ -902,13 +902,13 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 	return out
 }
 
-// toDiagnostic is err as a Diagnostic: its MGS code, message and docs link when err carries a
-// code, and the bare message otherwise. Its Why is the chain's rationale either way.
+// toDiagnostic is err as a Diagnostic: its MGS code, message, docs link and fix when err
+// carries a code, and the bare message otherwise. Its Why is the chain's rationale either way.
 func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()
-		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Why: types.DiagnosticRationale(err)}
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Fix: f["fix"], Why: types.DiagnosticRationale(err)}
 	}
 	return types.Diagnostic{Message: err.Error(), Why: types.DiagnosticRationale(err)}
 }
