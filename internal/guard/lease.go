@@ -2029,7 +2029,8 @@ type placedCall struct {
 }
 
 // placeMagusCalls places every call on command that match accepts, in line order. False
-// when the line does not parse.
+// when the line does not parse. It is not magusCdTargets: a call it cannot follow stays
+// unplaced, since a guessed checkout would judge the wrong tree.
 func placeMagusCalls(ctx context.Context, deps Dependencies, command string, match func(hint.Invocation) bool) ([]placedCall, bool) {
 	at := hookLocation(ctx, deps)
 	cwd := cmp.Or(deps.callDir, at.dir, at.workspace)

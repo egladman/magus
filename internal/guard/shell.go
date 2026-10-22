@@ -1048,7 +1048,8 @@ var assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'
 // one that merely names a directory.
 //
 // Each target is placed where the shell lands, from callDir and the cds before it, with `~`
-// and $HOME the home's; one that cannot be placed is left out.
+// and $HOME the home's; one that cannot be placed is left out. Unlike placeMagusCalls it
+// keeps a cd inside a conditional: its rules deny on any target, and placement must not guess.
 func magusCdTargets(command string, d Dialect, callDir, home string) []string {
 	if !mentionsMagusCommand(command, d) {
 		return nil
