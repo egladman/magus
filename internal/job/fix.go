@@ -36,7 +36,7 @@ func FixFork(ctx context.Context, store *Store, row types.Declaration, merge fun
 				edits = append(edits, types.JobEdit{RefreshCheckpoint: rev})
 			}
 		}
-		made := ApplyEdits(&row, edits)
+		made := applyEdits(&row, edits)
 		if len(made) == 0 {
 			break
 		}
@@ -65,7 +65,7 @@ func FixApply(ctx context.Context, store *Store, records []types.Declaration, li
 		changed := false
 		for _, v := range validations {
 			i := slices.Index(ids, v.Job.ID)
-			if made := ApplyEdits(&records[i], problemEdits(v.Problems)); len(made) > 0 {
+			if made := applyEdits(&records[i], problemEdits(v.Problems)); len(made) > 0 {
 				applied[v.Job.ID] = append(applied[v.Job.ID], made...)
 				changed = true
 			}
@@ -78,7 +78,7 @@ func FixApply(ctx context.Context, store *Store, records []types.Declaration, li
 }
 
 // ApplyEdits makes each edit on row and returns the ones that changed it.
-func ApplyEdits(row *types.Declaration, edits []types.JobEdit) []types.JobEdit {
+func applyEdits(row *types.Declaration, edits []types.JobEdit) []types.JobEdit {
 	var made []types.JobEdit
 	for _, e := range edits {
 		if e.Apply(row) {

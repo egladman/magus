@@ -551,7 +551,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		validated bool
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
-			row, err := DecodeDeclaration(strings.NewReader(fmt.Sprintf(
+			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
 				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobSchemaVersion, checkpoint)))
 			require.NoError(t, err)

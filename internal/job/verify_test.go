@@ -513,7 +513,7 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_default_charms: true")
 
-	decl, err := DecodeDeclaration(declaration(`"id":"adj/drift"`,
+	decl, err := decodeDeclaration(declaration(`"id":"adj/drift"`,
 		`"check":{"target":"generate","project":".","no_default_charms":true}`))
 	require.NoError(t, err)
 	var row types.Job
