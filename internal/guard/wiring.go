@@ -3,6 +3,7 @@ package guard
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -33,28 +34,39 @@ import (
 var hookWiringFiles = []struct {
 	match string
 	what  string
+	// root matches the path only at the workspace root, where no other checkout or home
+	// directory holds the same name.
+	root bool
 }{
-	{".claude/settings.json", "a host's hook wiring"},
-	{".claude/settings.local.json", "a host's per-checkout hook wiring"},
-	{".claude/hooks/", "a guard script a host's hooks run"},
-	{".cursor/hooks.json", "a host's hook wiring"},
-	{".cursor/hooks/", "a guard script a host's hooks run"},
-	{".codex/hooks.json", "a host's hook wiring"},
-	{".opencode/plugins/", "a host plugin carrying both the file-write and shell-command guards"},
-	{".config/opencode/plugins/", "a host plugin carrying both the file-write and shell-command guards"},
+	{match: "magus", what: "the guard binary every hook runs", root: true},
+	{match: ".claude/settings.json", what: "a host's hook wiring"},
+	{match: ".claude/settings.local.json", what: "a host's per-checkout hook wiring"},
+	{match: ".claude/hooks/", what: "a guard script a host's hooks run"},
+	{match: ".cursor/hooks.json", what: "a host's hook wiring"},
+	{match: ".cursor/hooks/", what: "a guard script a host's hooks run"},
+	{match: ".codex/hooks.json", what: "a host's hook wiring"},
+	{match: ".opencode/plugins/", what: "a host plugin carrying both the file-write and shell-command guards"},
+	{match: ".config/opencode/plugins/", what: "a host plugin carrying both the file-write and shell-command guards"},
 }
 
-// hookWiringSubject names what a path IS when it is host guard wiring, or "" otherwise.
+// hookWiringSubject names what a path IS when it is host guard wiring, or "" otherwise. A
+// root entry reads a relative path against workspace and matches nothing without one.
 //
 // Slash-separated and compared against the tail of the path, so an absolute path from a
 // host's editor tool, a workspace-relative one, and a home-directory one all read the
 // same. A directory entry matches everything beneath it; a file entry matches exactly.
-func hookWiringSubject(writePath string) string {
+func hookWiringSubject(workspace, writePath string) string {
 	clean := path.Clean(strings.ReplaceAll(strings.TrimSpace(writePath), "\\", "/"))
 	if clean == "" || clean == "." {
 		return ""
 	}
 	for _, w := range hookWiringFiles {
+		if w.root {
+			if workspace != "" && atWorkspaceRoot(workspace, writePath, w.match) {
+				return w.what
+			}
+			continue
+		}
 		if strings.HasSuffix(w.match, "/") {
 			if strings.Contains(clean+"/", "/"+w.match) || strings.HasPrefix(clean, w.match) {
 				return w.what
@@ -66,6 +78,14 @@ func hookWiringSubject(writePath string) string {
 		}
 	}
 	return ""
+}
+
+// atWorkspaceRoot reports writePath as name directly under workspace.
+func atWorkspaceRoot(workspace, writePath, name string) bool {
+	if !filepath.IsAbs(writePath) {
+		writePath = filepath.Join(workspace, writePath)
+	}
+	return filepath.Clean(writePath) == filepath.Join(workspace, name)
 }
 
 // gradeHookWiringWrite judges a write to the guard's own installation: a deny under any
@@ -81,8 +101,8 @@ func hookWiringSubject(writePath string) string {
 // getting it wrong is invisible rather than loud.
 //
 // It says nothing at all about any other path, like every rule here.
-func gradeHookWiringWrite(actingLease string, agentAttributed bool, writePath string) writeGrade {
-	what := hookWiringSubject(writePath)
+func gradeHookWiringWrite(workspace, actingLease string, agentAttributed bool, writePath string) writeGrade {
+	what := hookWiringSubject(workspace, writePath)
 	if what == "" {
 		return writeGrade{}
 	}

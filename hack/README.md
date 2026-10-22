@@ -36,6 +36,34 @@ script read its argv with `flags\parse`.
 Each script's work is an exported, typed function that `main` only calls, so the
 scripts are also reference to copy: read one before reaching for python, sed or jq.
 
+## By task
+
+Find the script by what you are doing; each row's flags are in its row under `dev/`.
+
+| you want to | run |
+| --- | --- |
+| run the gate and see what failed | `hack/dev/run-gate.buzz` |
+| read a failed Go test run as `file:line: message` | `hack/dev/ls-test-failures.buzz` |
+| free disk, or clear finished worktrees | `hack/dev/prune-worktrees.buzz` |
+| see every worktree, its uncommitted files and unpushed commits | `hack/dev/ls-worktrees.buzz` |
+| see uncommitted files by owning project | `hack/dev/ls-uncommitted.buzz` |
+| merge job branches or a split stack | `hack/dev/merge-job-branches.buzz` |
+| open a pull request from commits, with CI's hygiene checks run first | `hack/dev/land-commits.buzz` |
+| bring a stack of branches up to date, in order | `hack/dev/update-stack.buzz` |
+| split the working change into stacked branches | `hack/dev/split-into-branches.buzz` |
+| settle a file's merge conflict hunks | `hack/dev/resolve-conflicts.buzz` |
+| build `./magus` in a checkout, or restart the daemon on it | `hack/dev/bootstrap-checkout.buzz` |
+| set up a job's worktree | `hack/dev/bootstrap-worktree.buzz` |
+| install the wired harnesses' skills and config | `hack/dev/bootstrap-harnesses.buzz` |
+| rename a symbol everywhere | `hack/dev/rename-symbol.buzz` |
+| read a worker's brief, or a session's cost, transcript or figure | `hack/dev/render-brief.buzz`, `hack/dev/summarize-root-cost.buzz`, `hack/dev/summarize-transcript.buzz`, `hack/dev/show-session-figure.buzz` |
+| resume a session that hit a limit or crashed | `hack/dev/show-interrupted-session.buzz` |
+| see what the guard refused, and mark the verdicts | `hack/dev/count-refusals.buzz`, `hack/dev/show-feedback.buzz`, `hack/dev/mark-feedback.buzz`, `hack/dev/count-feedback.buzz` |
+| check the hooks still block what they should | `hack/dev/check-guard-blocks.buzz` |
+| see which processes the OS killed under memory pressure | `hack/dev/show-memory-kills.buzz` |
+| review a change with its callers, callees and tests | `hack/dev/show-review-context.buzz` |
+| compare two trees | `hack/dev/diff-dirs.buzz` |
+
 ## dev/
 
 | script | effect | cost |
@@ -46,9 +74,12 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]` | plans which git worktrees and agent branches can go, largest first, with every reason a kept one stays; dry run by default | a git status and rev-list per worktree, one lsof, and a du per removable worktree |
 | `magus buzz hack/dev/prune-changelog-fragments.buzz -- [-o json] [--apply]` | plans which unreleased changelog fragments are superseded, obsolete or duplicate from the history of the lines their commits wrote; dry run by default | a git blame per changed path, then a nested magus diff of about 13s per duplicate candidate |
 | `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> [--take <n\|all>=ours\|theirs\|both\|base]... [--text <n>=<file>]... [--apply]` | lists a file's merge conflict hunks, or resolves the chosen ones and prints the diff; refuses an empty result or stray markers, writes through a same-directory rename, and only with `--apply` | none; reads and writes one file |
+| `magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <sha,...\|ref> --title <text> --body-file <file> [--dry-run]` | refuses a branch name taken locally or on origin, switches to it from a fresh origin/main, cherry-picks the commits, runs the pr-title, pr-description and pr-changelog targets, then pushes and runs `gh pr create`; stops at the first failed step, never enables auto-merge; `--dry-run` prints the steps | a fetch, three targets, a push |
+| `magus buzz hack/dev/update-stack.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]` | per branch in order: switches to it, runs `magus vcs resolve --against` the previous branch (the first, `--base`, default origin/main), commits the merge and pushes; stops at the first source conflict and lists the files; refuses a dirty tree | one merge, one regeneration and a push per branch |
 | `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: magus's results as typed Buzz values, where a shell pipes `-o json` into jq | needs the code index |
 | `magus buzz hack/dev/ls-uncommitted.buzz` | read-only: uncommitted files by owning project and declared role | grows with tree size |
 | `magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]` | read-only: every worktree with its uncommitted files, unpushed commits and job | grows with the number of worktrees |
+| `magus buzz hack/dev/run-gate.buzz -- [--timeout <duration>] [--slots <n>] [--wait <seconds>] [--lines <n>]` | runs `magus affected ci` under `job exec --timeout` once the broker has the slots free (polling `broker status` up to `--wait` seconds), then prints each failed member's output ref and its first failing lines; the guard judges it as the gate | the whole gate, plus the seat wait |
 | `magus buzz hack/dev/ls-test-failures.buzz -- [--ref <output-ref>]` | read-only: a failed Go test run as `file:line: message` lines | none |
 | `magus buzz hack/dev/show-interrupted-session.buzz -- [--host <host>] [--session <id>]` | read-only: a session that hit a usage limit or crashed, its checkout's state, and the commands that carry its work here | none |
 | `magus buzz hack/dev/show-memory-kills.buzz -- [--since <duration\|timestamp>] [--until <timestamp>] [--name <substring>] [--all]` | read-only: the processes the OS killed or suspended under memory pressure in a window, and the swap state around them | none; reads the OS log |
@@ -60,7 +91,7 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/count-feedback.buzz -- [--since <duration>] [-o json]` | read-only: every mark across sessions folded into a ranked guard backlog | none |
 | `magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since ...] [--all] [-o svg] [--theme light\|dark] [--console <base>]` | read-only: a session's job hierarchy as a summary and the console link that explores it; `-o svg` prints the figure for you to redirect | every checkout's trail that changed in the window, and the job store |
 | `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> \| --build-from <checkout>] \| --check --from <checkout>)` | places the orchestrator's ./magus (builds one only under `--build-from`), refreshes the wired harness skills, builds the graph, then takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` (default: the main checkout) names the checkout whose ./magus it copies, only when no Go build input differs from the commit that binary was built at; otherwise it refuses and prints the one build to run in the root. `--build-from` runs `<checkout>/magus --root <checkout> run go-build .` first and is refused under a job lease. `--check` prints that verdict and writes nothing | a graph build; seconds for the copy |
-| `magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout <dir>` | builds ./magus in a job's checkout at the checkout's own revision, for a fork made at a checkpoint no built binary matches: runs `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` there and checks that `<dir>/magus version` names its HEAD; refuses a checkout holding uncommitted changes. The guard lets the root and the job holding that checkout run it | two Go compiles of magus |
+| `magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> \| --here) [--restart]` | builds ./magus in a job's checkout at the checkout's own revision, for a fork made at a checkpoint no built binary matches: runs `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` there and checks that `<dir>/magus version` names its HEAD; refuses a checkout holding uncommitted changes. `--here` builds in the current checkout. `--restart` stops and starts the daemon with the new binary and checks `version` names HEAD. It runs `mise trust <dir>/mise.toml` first when that file exists and mise is on PATH The guard lets the root and the job holding that checkout run it | two Go compiles of magus |
 | `magus buzz hack/dev/bootstrap-harnesses.buzz -- [--id <harness>]` | installs the wired harnesses' skills, then merges each one's host config as `magus describe harness` plans it (content written whole, a fragment deep-merged or written new); prints a line per file changed or `no change`; refuses, naming the files, while `spells/harness/`, `docs/guides/integrations/agents/` or `hack/policy/` differ from HEAD. `bootstrap-worktree.buzz` runs it when no lease is bound | one skill install and a plan read per harness |
 | `magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]` | read-only: a worker's complete brief from its job row | two job-store reads |
 | `magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |

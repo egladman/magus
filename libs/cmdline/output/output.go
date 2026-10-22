@@ -252,19 +252,64 @@ func (wr Writer) writeTemplate(w io.Writer, v any, body string) error {
 	}
 	if err := t.Execute(w, shaped); err != nil {
 		return fmt.Errorf("execute template: template fields are the -o json names, not the Go field names (.name, not .Name): "+
-			"%sto list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", topLevelFields(shaped), err)
+			"%sto list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", recordFields(shaped), err)
 	}
 	return nil
 }
 
-// topLevelFields names the keys the template ran against, as a clause ending in ": ".
+const (
+	// maxFieldDepth is how deep recordFields names fields: the record's own and two levels
+	// below, which reaches `.job.state` and `.gates[].output_ref`.
+	maxFieldDepth = 3
+	// maxFieldPaths is how many field paths one error names before it counts the rest.
+	maxFieldPaths = 40
+)
+
+// recordFields names the field paths the template ran against, as a clause ending in ": ".
 // It is empty when the record is not an object.
-func topLevelFields(shaped any) string {
+func recordFields(shaped any) string {
 	record, ok := shaped.(map[string]any)
 	if !ok || len(record) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("this record's top-level fields are %s: ", strings.Join(slices.Sorted(maps.Keys(record)), ", "))
+	paths := fieldPaths("", record, 1)
+	listed := strings.Join(paths, ", ")
+	if len(paths) > maxFieldPaths {
+		listed = fmt.Sprintf("%s and %d more", strings.Join(paths[:maxFieldPaths], ", "), len(paths)-maxFieldPaths)
+	}
+	return fmt.Sprintf("this record's fields are %s (`[]` is each element of a list): ", listed)
+}
+
+// fieldPaths is every field path under v at depth and below, sorted within each object and
+// each parent before its children. A list's path ends in `[]`, followed by the fields any of
+// its object elements carries.
+func fieldPaths(prefix string, v any, depth int) []string {
+	var paths []string
+	switch node := v.(type) {
+	case map[string]any:
+		for _, k := range slices.Sorted(maps.Keys(node)) {
+			p := prefix + "." + k
+			paths = append(paths, p)
+			if depth < maxFieldDepth {
+				paths = append(paths, fieldPaths(p, node[k], depth+1)...)
+			}
+		}
+	case []any:
+		merged := map[string]any{}
+		for _, el := range node {
+			if m, ok := el.(map[string]any); ok {
+				for k, x := range m {
+					if merged[k] == nil {
+						merged[k] = x
+					}
+				}
+			}
+		}
+		if len(merged) > 0 {
+			paths = fieldPaths(prefix+"[]", merged, depth)
+		}
+	}
+	return paths
 }
 
 // Fields writes the fields of v's type that -o json and -o template name, by json

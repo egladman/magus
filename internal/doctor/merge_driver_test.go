@@ -77,8 +77,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			"git config diff.typescript.xfuncname",
 			"git config diff.buzz.xfuncname",
 			"git config diff.yaml.xfuncname",
-			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +
-				"and logs `merge-driver: could not refresh registration` with the cause when it cannot",
+			"install them with `" + hint.Init.With("--vcs", "git") + "`",
 		},
 	}, r.checkMergeDriverLoads())
 
@@ -88,6 +87,14 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 	register() // the install points the driver at a real magus; the probe needs `true`
 	assert.Equal(t, types.Check{Name: "merge-driver-loads-workspace", Status: types.CheckOK,
 		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads())
+}
+
+// With no VCS resolving, the remedy says so; it never names a guessed backend.
+func TestInstallRemedyNamesNoGuessedBackend(t *testing.T) {
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: t.TempDir()}}}
+	got := r.installRemedy()
+	assert.Contains(t, got, "no VCS resolved")
+	assert.NotContains(t, got, "--vcs")
 }
 
 // A registered driver without its settle hooks fails naming each missing hook and the

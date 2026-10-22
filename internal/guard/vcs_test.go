@@ -367,3 +367,25 @@ func TestNonGitVCSGuardReadsPastGlobalOptions(t *testing.T) {
 		assert.Equal(t, string(advisoryPushGate), Evaluate(strict(testDependencies()), command).RuleName(), "%q", command)
 	}
 }
+
+func TestWrappedPushKeepsArgs(t *testing.T) {
+	t.Parallel()
+	for _, line := range []string{
+		"git push origin main",
+		"env git push origin main",
+		"env FOO=1 git push origin main",
+		"exec git push origin main",
+		"command git push origin main",
+		"time git push origin main",
+		"nohup git push origin main",
+		"sudo git push origin main",
+		"timeout 5 git push origin main",
+		"nice -n 5 git push origin main",
+		"find . -maxdepth 0 -exec git push origin main ;",
+	} {
+		calls, ok := locateCalls(line, DialectBash, "/repo", isPush, false)
+		require.True(t, ok, line)
+		require.Len(t, calls, 1, line)
+		assert.Equal(t, []string{"push", "origin", "main"}, literalWords(calls[0].pushArgs()), "the push gate reads the branch off these words: "+line)
+	}
+}

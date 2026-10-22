@@ -140,14 +140,16 @@ func TestExcludedOutputIsNeverStoredOrReplayed(t *testing.T) {
 // snapshotted before the declaration gained its exclusion, or by a binary that did not
 // know the syntax. A hit re-applies the exclusion rather than trusting the entry.
 func TestOwnedOutputsDropsAnExcludedRecord(t *testing.T) {
-	m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: "gen/runtime.go"}, {Path: "other.txt"}}}
+	m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: "gen/runtime.go"}}}
 	s := Step{Outputs: types.MustParseGlobs("gen/*.go", "!gen/runtime.go")}
 
-	got := ownedOutputs(m, s)
+	got, err := ownedOutputs(m, s)
+	require.NoError(t, err)
+	assert.Equal(t, []OutputRecord{{Path: "gen/fs.go"}}, got.Outputs)
 
-	assert.Equal(t, []OutputRecord{{Path: "gen/fs.go"}, {Path: "other.txt"}}, got.Outputs,
-		"a record no glob claims stays, as it always has outside a nested project")
-	assert.Same(t, m, ownedOutputs(m, Step{Outputs: types.MustParseGlobs("gen/*.go")}), "no exclusion, nothing to narrow")
+	same, err := ownedOutputs(m, Step{Outputs: types.MustParseGlobs("gen/*.go")})
+	require.NoError(t, err)
+	assert.Same(t, m, same, "no exclusion, nothing to narrow")
 }
 
 // TestOwnedOutputsExcludesALiteralDirectoryTree: a literal output directory claims its
@@ -155,8 +157,9 @@ func TestOwnedOutputsDropsAnExcludedRecord(t *testing.T) {
 func TestOwnedOutputsExcludesALiteralDirectoryTree(t *testing.T) {
 	m := &Manifest{Outputs: []OutputRecord{{Path: "dist/app.js"}, {Path: "dist/vendor/lib.js"}}}
 
-	got := ownedOutputs(m, Step{Outputs: types.MustParseGlobs("dist", "!dist/vendor")})
+	got, err := ownedOutputs(m, Step{Outputs: types.MustParseGlobs("dist", "!dist/vendor")})
 
+	require.NoError(t, err)
 	assert.Equal(t, []OutputRecord{{Path: "dist/app.js"}}, got.Outputs)
 }
 

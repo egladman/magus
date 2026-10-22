@@ -35,6 +35,30 @@ Four design intents follow from that:
 
 What the sandbox does **not** claim to stop in its current form is spelled out under [What the sandbox does not confine](#what-the-sandbox-does-not-confine). Being precise about the gaps is part of the model.
 
+## Running magus runs the code in the repository
+
+A magusfile is a program. Opening a workspace evaluates its magusfiles and local spells with your authority, and `ls`, `query` and `doctor` open it the same way `run` does. The sandbox narrows what a target's processes touch. It does not make a hostile magusfile safe to evaluate. Read a repository you do not trust before you run magus in it.
+
+This is the same consent `make`, `gradle tasks`, `./gradlew`, cargo's `build.rs` and npm scripts ask for: running the tool in the repository is the consent, and magus keeps no trust store, trust subcommand or trust setting. See [ADR 0014](../decisions/0014-running-magus-is-the-consent.md) for why.
+
+The other half of the rule is what magus never does passively, meaning without a command you typed or a tool call that names the workspace:
+
+- Only `magus init --vcs <name>` writes `.gitattributes`, `.git/config` and hooks. `magus doctor` names a stale registration and the command that repairs it.
+- The merge driver and a hook's binary are never a file the repository tracks. A hook spelled `./magus` runs only a build git does not track.
+- magus installs no hook into a `core.hooksPath` that other repositories share.
+- The server opens a workspace only when a command or tool call names it.
+
+### Agent hosts gate the folder, not magus
+
+The host decides whether a repository's hooks run, and the hosts differ:
+
+- **Claude Code** asks once per folder in an interactive session. It runs project hooks without asking under `claude -p`, under the SDK and in a folder under a trusted parent ([security](https://code.claude.com/docs/en/security), [permissions](https://code.claude.com/docs/en/permissions)).
+- **Codex** loads a project's `.codex` layer only once the project is trusted, and reviews each hook by its hash.
+- **Cursor** runs project hooks in a trusted workspace ([hooks](https://cursor.com/docs/agent/hooks)). Reports say it ships workspace trust off; that is reported, not confirmed.
+- **OpenCode** loads `.opencode/plugins/` at startup ([plugins](https://opencode.ai/docs/plugins/)).
+
+Wire the guard per project and never as a user-level plugin: a user-level plugin runs magus in every folder the host opens, including ones you have not read.
+
 ## Modes
 
 `sandbox.mode` (`MAGUS_SANDBOX`, `--sandbox`) takes one of three values, ordered from weakest to strongest:
@@ -234,7 +258,7 @@ This holds **regardless of `sandbox.mode`**, and that distinction matters becaus
 
 The one case that keeps them is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs daemon coordination. For that case magus re-injects the vars as explicit overrides on the child (also logged under [MGS2008](../reference/codes/sandbox/MGS2008.md)).
 
-Reaching the socket is not enough to use it. Every request must carry the socket's token: `MAGUS_PROC_TOKEN` for a nested magus, or the `<socket>.token` file (mode 0600) beside the socket for a client that found it on disk. The socket directory is `$XDG_RUNTIME_DIR/magus/`, else `<user cache dir>/magus/run/`, and only with neither `/tmp/magus-<uid>/` (never `$TMPDIR`, which a harness may point inside the workspace). None of the first two is granted to a sandboxed run, so a confined child can neither read the token file nor unlink the socket and bind its own in its place.
+Reaching the socket is not enough to use it, but only part of it is tokened. On the daemon socket, the `/proc/` endpoints (the ones that run work) require the socket's token: `MAGUS_PROC_TOKEN` for a nested magus, or the `<socket>.token` file (mode 0600) beside the socket for a client that found it on disk. The rest of the daemon socket is guarded by the kernel's report of the peer's uid, so anything running as you reaches it. The machine-wide broker socket (`broker.sock`) opens every connection with a handshake instead: the broker writes `broker.sock.handshake` (mode 0600) beside it before it accepts, including when a supervisor bound the socket, sends a handshake frame, and refuses a hello that does not carry the value in that file. The socket directory is `$XDG_RUNTIME_DIR/magus/`, else `<user cache dir>/magus/run/`, and only with neither `/tmp/magus-<uid>/` (never `$TMPDIR`, which a harness may point inside the workspace). None of the first two is granted to a sandboxed run, so a confined child can neither read the token or handshake file nor unlink the socket and bind its own in its place.
 
 ## How a target's declared footprint becomes the allowlist
 

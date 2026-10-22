@@ -595,3 +595,63 @@ func TestPushAfterACommitStandsDownWithNoRunLog(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: "git commit -m x && git push", RendersAsk: true})
 	assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision)
 }
+
+func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gated, replayed string) {
+	t.Helper()
+	testkit.Isolate(t)
+	repo = testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	cacheDir := filepath.Join(repo.Root(), ".magus")
+	require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, cache.RunsDir), 0o755))
+	dir, err := sessions.Dir(repo.Root())
+	require.NoError(t, err)
+	gated = repo.Head()
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green",
+	}, sessions.InvocationStart{Workspace: repo.Root()}))
+	fixtureGit(t, repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
+	replayed = fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
+	require.NotEqual(t, gated, replayed)
+	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo, gated, replayed
+}
+
+func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return commit[:12] }}
+	cover, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
+	return cover
+}
+
+func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
+	ctx, repo, gated, replayed := replayedBranch(t)
+
+	rec, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), replayed)
+	require.True(t, ok)
+	assert.Equal(t, sessions.GateRecord{
+		GateResult: sessions.GateResult{Target: types.TargetCI, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green"},
+		At:         rec.At,
+	}, rec)
+
+	assert.Equal(t, gatePassed, coverageAtPush(ctx, repo, replayed))
+}
+
+func TestPushCoverageNamesTheReplayedRun(t *testing.T) {
+	ctx, repo, _, replayed := replayedBranch(t)
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return replayed[:12] }}
+	at := location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}
+
+	cover, _, _, replay := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
+	assert.Equal(t, gatePassed, cover)
+	assert.Equal(t, "inv-green", replay.Inv)
+
+	v := Judge(ctx, deps, Request{Input: "git push", RendersAsk: true})
+	assert.Contains(t, v.Context, "run inv-green")
+}
+
+func TestPushGateStillNeedsItsOwnGateForADifferentTree(t *testing.T) {
+	ctx, repo, _, _ := replayedBranch(t)
+	repo.Commit("more", map[string]string{"b.go": "package a\n"})
+	changed := fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
+
+	_, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), changed)
+	assert.False(t, ok)
+	assert.Equal(t, gateAbsent, coverageAtPush(ctx, repo, changed))
+}

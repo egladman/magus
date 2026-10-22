@@ -280,12 +280,7 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration", hint.ServerStop), attr.Notice(""), attr.Component("magus"))
 
-	installVCSHook(ctx, types.VCSDriver.InstallRefreshHook, hint.JobRun.With("sync-graph"),
-		"could not install VCS refresh hook",
-		"installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically")
-	installVCSHook(ctx, types.VCSDriver.InstallDriftHook, hint.JobRun.With(job.NameCheckDrift),
-		"could not install VCS drift-notice hook",
-		"installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically")
+	refreshVCSHooks(ctx)
 
 	// serverProvider was built by startServer (which runs before this command handler)
 	// so the bridge Magus shares the same OTel instruments the per-workspace builds record
@@ -937,13 +932,14 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 	return nil
 }
 
-// installVCSHook installs a hook that pokes this server on a VCS event. Best-effort: a
-// non-git tree, a VCS with no hook support (jj) or a write failure is logged, never fatal
-// to starting the server. installedFmt takes the VCS name and the hook labels.
-func installVCSHook(ctx context.Context, install func(types.VCSDriver, context.Context, string, string) ([]string, error), command, failed, installedFmt string) {
+// refreshVCSHooks rewrites each hook section magus already installed, and never a first
+// one: `magus init --vcs` does, so a repository holding neither (or jj, which has no
+// section reader) gets one notice naming that command. Best-effort: a failure is logged,
+// never fatal to starting the server.
+func refreshVCSHooks(ctx context.Context) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the working directory; no VCS hook installed", attr.Error(err))
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the working directory; no VCS hook refreshed", attr.Error(err))
 		return
 	}
 	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
@@ -954,7 +950,57 @@ func installVCSHook(ctx context.Context, install func(types.VCSDriver, context.C
 	if err != nil {
 		root = cwd
 	}
-	installed, err := install(res.VCS, ctx, root, command)
+	refresh, drift, err := installedVCSHooks(ctx, res.Name, root)
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return
+	}
+	if err != nil {
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the installed VCS hooks; none refreshed", attr.Error(err))
+		return
+	}
+	if !refresh && !drift {
+		slog.InfoContext(ctx, fmt.Sprintf("no magus VCS hooks are installed, so history changes do not reconcile the graph and generated drift goes unnoticed; `%s` installs them", hint.Init.With("--vcs", res.Name)), attr.Notice(""), attr.Component("magus"))
+		return
+	}
+	if refresh {
+		refreshVCSHook(ctx, res.VCS, res.Name, root, types.VCSDriver.InstallRefreshHook, hint.JobRun.With("sync-graph"),
+			"could not refresh VCS refresh hook",
+			"refreshed %s refresh hook(s) [%s]")
+	}
+	if drift {
+		refreshVCSHook(ctx, res.VCS, res.Name, root, types.VCSDriver.InstallDriftHook, hint.JobRun.With(job.NameCheckDrift),
+			"could not refresh VCS drift-notice hook",
+			"refreshed %s drift-notice hook(s) [%s]")
+	}
+}
+
+// installedVCSHooks reports which managed sections magus installed in root under the
+// named VCS. A VCS with no section reader reports neither.
+func installedVCSHooks(ctx context.Context, name, root string) (refresh, drift bool, err error) {
+	switch name {
+	case "git":
+		if _, refresh, err = vcs.ReadGitRefreshHook(ctx, root); err != nil {
+			return false, false, err
+		}
+		_, drift, err = vcs.ReadGitDriftHook(ctx, root)
+	case "hg":
+		if _, refresh, err = vcs.ReadHgRefreshHook(root); err != nil {
+			return false, false, err
+		}
+		_, drift, err = vcs.ReadHgDriftHook(root)
+	case "sl":
+		if _, refresh, err = vcs.ReadSaplingRefreshHook(root); err != nil {
+			return false, false, err
+		}
+		_, drift, err = vcs.ReadSaplingDriftHook(root)
+	}
+	return refresh, drift, err
+}
+
+// refreshVCSHook rewrites one hook kind's managed sections in root. refreshedFmt takes the
+// VCS name and the hook labels.
+func refreshVCSHook(ctx context.Context, driver types.VCSDriver, name, root string, install func(types.VCSDriver, context.Context, string, string) ([]string, error), command, failed, refreshedFmt string) {
+	changed, err := install(driver, ctx, root, command)
 	if errors.Is(err, types.ErrVCSUnsupported) {
 		return // this VCS has no hook support
 	}
@@ -962,8 +1008,8 @@ func installVCSHook(ctx context.Context, install func(types.VCSDriver, context.C
 		slog.With(attr.Component("server start")).WarnContext(ctx, failed, attr.Error(err))
 		return
 	}
-	if len(installed) > 0 {
-		slog.InfoContext(ctx, fmt.Sprintf(installedFmt, res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
+	if len(changed) > 0 {
+		slog.InfoContext(ctx, fmt.Sprintf(refreshedFmt, name, strings.Join(changed, ", ")), attr.Notice(""), attr.Component("magus"))
 	}
 }
 

@@ -113,6 +113,8 @@ type mainCall struct {
 	work types.DelegableClass
 	// spawnBroken is why no worker spawn would pass the spawn rules, "" when one would.
 	spawnBroken string
+	// root is the workspace root, "" when unknown.
+	root string
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -194,12 +196,31 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	if c.spawnBroken != "" {
 		say = fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork, but spawning is broken: %s; take a row with `./magus job exec <row>` and do it as its holder.", work, c.spawnBroken)
 	}
+	say += integrationScriptNote(c)
 	return costFinding{
 		rule: denyRuleOrchestratorGroundwork,
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
 		say:  say,
 	}, true
+}
+
+var mergeJobBranchesScript = referenceScript{
+	lead: "Merging job branches?",
+	argv: []string{"hack/dev/merge-job-branches.buzz"},
+}
+
+// integrationScriptNote names the merge script after a merge or cherry-pick, in the
+// finding's first line so the once-per-session advice keeps it.
+func integrationScriptNote(c mainCall) string {
+	if c.work != delegableIntegrate || (!strings.Contains(c.line, "git merge") && !strings.Contains(c.line, "git cherry-pick")) {
+		return ""
+	}
+	note := mergeJobBranchesScript.note(c.root)
+	if note == "" {
+		return ""
+	}
+	return " " + strings.TrimPrefix(note, "\n")
 }
 
 // spawnBroken is why a spawn by host would be refused whatever its brief: at a deny
@@ -272,7 +293,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	}
 	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
 	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command,
-		orchestration: orchestration(st, from)}
+		orchestration: orchestration(st, from), root: at.workspace}
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)
 	}

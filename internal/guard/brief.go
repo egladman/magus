@@ -213,19 +213,41 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 	if v := briefHumanOnly(ctx, deps, at.workspace, workspace, graded[0], runs); v.Deny != "" {
 		return v
 	}
-	var notes []string
-	// A worker starts at its checkout's root, wherever the spawn was made from.
+	return gradeBriefRuns(ctx, deps, at, workspace, graded, runs)
+}
+
+// gradeBriefRuns holds each of runs to each graded row's check, judging a run where its
+// line moves the worker; a worker starts at its checkout's root, wherever the spawn was
+// made from.
+func gradeBriefRuns(ctx context.Context, deps Dependencies, at location, workspace func() (types.WorkspaceRepository, error), graded []types.Job, runs []briefRun) ShellVerdict {
 	at.dir = at.workspace
+	workerCtx := context.WithValue(ctx, locationKey{}, at)
+	workerDeps := deps
+	workerDeps.callDir = at.workspace
+	workspaces := map[string]func() (types.WorkspaceRepository, error){at.workspace: workspace}
+	var notes []string
 	for _, row := range graded {
-		judge := newRowJudge(ctx, deps, row, at, workspace)
-		if off, v, found := briefOffCheck(runs, judge); found {
-			return ShellVerdict{
-				Deny: briefOffCheckDeny(row, off, v),
-				Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
-				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+		judges := map[string]rowJudge{}
+		for _, r := range runs {
+			placed := placedLocation(workerCtx, workerDeps, r.line)
+			judge, ok := judges[placed.workspace]
+			if !ok {
+				if workspaces[placed.workspace] == nil {
+					workspaces[placed.workspace] = lazyWorkspace(ctx, deps, placed.workspace)
+				}
+				judge = newRowJudge(ctx, deps, row, placed, workspaces[placed.workspace])
+				judges[placed.workspace] = judge
 			}
+			one := []briefRun{r}
+			if off, v, found := briefOffCheck(one, judge); found {
+				return ShellVerdict{
+					Deny: briefOffCheckDeny(row, off, v),
+					Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
+					Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+				}
+			}
+			notes = append(notes, briefPassNotes(one, judge)...)
 		}
-		notes = append(notes, briefPassNotes(runs, judge)...)
 	}
 	return briefPassVerdict(notes)
 }

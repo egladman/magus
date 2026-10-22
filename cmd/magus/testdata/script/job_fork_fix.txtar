@@ -1,0 +1,73 @@
+# `magus job fork --fix` makes every edit a problem names without judgment, validating
+# again until none is left, says each one, and refuses with only the problems that need a
+# person: here the ci gate over the docs is added as a goal, and the directory write path
+# stays (MGS3018). Without --fix the list says how many --fix would apply. A --stdin record
+# naming no schema_version takes this magus's version and says so.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'pricing and its guide'
+
+! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .'
+stderr '^\[error\] 2 problems:$'
+stderr '\[MGS3018\] write_paths\[1\]'
+stderr '\[MGS3045\] goals: ci runs `check-docs \.`'
+stderr '^--fix would apply 1 of them$'
+
+! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .' --fix
+stderr '^fixed: added the goal "check-docs" \(magus run check-docs \.\)$'
+stderr '^\[error\] 1 problem:$'
+stderr '\[MGS3018\] write_paths\[1\]'
+! stderr 'MGS3045'
+! stderr '--fix would apply'
+exec magus ls jobs -o name
+! stdout .
+
+exec magus job fork pricing --write-paths 'docs/guide.md,pricing/total.sh' --check 'test .' --fix
+stderr '^fixed: added the goal "check-docs"'
+stdout '^forked pricing, declared, with 2 write path\(s\)\.'
+exec magus describe job pricing -o json
+stdout '"id": "check-docs"'
+
+stdin $WORK/guide.json
+exec magus job fork --stdin --fix
+stderr '^note: the record names no schema_version, so it was read as version [0-9]+$'
+stderr '^fixed: added the goal "check-docs"'
+stdout '^forked guide, declared, with 1 write path\(s\)\.'
+
+-- guide.json --
+{"id": "guide", "write_paths": ["docs/faq.md"], "check": {"target": "test", "project": "."}}
+-- .gitignore --
+.magus/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// check_docs reads the guides.
+export fun check_docs(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("docs/**/*.md");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+// test runs the pricing scripts.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(check_docs, test);
+}
+-- docs/guide.md --
+# pricing
+-- docs/faq.md --
+# faq
+-- pricing/total.sh --
+echo 0

@@ -178,6 +178,13 @@ directory the call runs in from the event and resolves the binary from there. Th
 `SessionStart` entry does the same: it puts the root above the event's `cwd` on PATH,
 not the one `-C` names.
 
+A subagent's `cd` never persists between Bash calls, as Claude Code documents
+for the Bash tool
+([Bash tool behavior](https://code.claude.com/docs/en/tools-reference#bash-tool-behavior)).
+A worker in a linked checkout therefore names it on every magus line with `-C <root>`
+or a `cd` in the same command, and the guard's `lease-checkout` rule judges the call
+where that line puts it.
+
 `magus doctor`'s `guard-binary` check runs the interpreter a hook would run, from the
 root and from every project directory, and fails when one is a different build from the
 doctor's own, cannot print its version, or does not exist. It also fails a linked

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -109,7 +108,12 @@ func StaticHandler(consoleDir string) http.Handler {
 type shellDir struct{ dir http.Dir }
 
 func (d shellDir) Open(name string) (http.File, error) {
-	f, err := d.dir.Open(name)
+	root, err := os.OpenRoot(string(d.dir))
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	f, err := root.Open(rootRelative(name))
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +158,7 @@ func appRoute(consoleDir, seg string) (string, bool) {
 		if !e.IsDir() || e.Name() != seg {
 			continue
 		}
-		fi, err := os.Stat(filepath.Join(consoleDir, e.Name(), "index.html"))
+		fi, err := statInRoot(consoleDir, e.Name()+"/index.html")
 		if err != nil || !fi.Mode().IsRegular() {
 			return "", false
 		}
@@ -179,7 +183,7 @@ func isShellFile(consoleDir, urlPath string) bool {
 	case !shellExtensions[strings.ToLower(path.Ext(name))]:
 		return false
 	}
-	fi, err := os.Stat(filepath.Join(consoleDir, filepath.FromSlash(name)))
+	fi, err := statInRoot(consoleDir, rootRelative(name))
 	return err == nil && fi.Mode().IsRegular()
 }
 
@@ -192,7 +196,7 @@ func isShellFile(consoleDir, urlPath string) bool {
 // URL, so they are unaffected.) The hosted static host (which has no such fallback) gets the
 // same effect from the per-app index.html stubs the console build emits into gen/<app>/.
 func serveConsoleShell(w http.ResponseWriter, r *http.Request, consoleDir string) {
-	raw, err := os.ReadFile(filepath.Join(consoleDir, "index.html"))
+	raw, err := readInRoot(consoleDir, "index.html")
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -230,4 +234,29 @@ func (w *cspHTMLWriter) WriteHeader(code int) {
 func (w *cspHTMLWriter) Write(b []byte) (int, error) {
 	w.stamp()
 	return w.ResponseWriter.Write(b)
+}
+
+func rootRelative(name string) string {
+	if rel := strings.TrimPrefix(path.Clean("/"+name), "/"); rel != "" {
+		return rel
+	}
+	return "."
+}
+
+func statInRoot(dir, name string) (fs.FileInfo, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Stat(name)
+}
+
+func readInRoot(dir, name string) ([]byte, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.ReadFile(name)
 }

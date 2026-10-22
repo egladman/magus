@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -16,20 +17,40 @@ type conn struct {
 
 	mu      sync.Mutex
 	pending map[uint64]chan frame
-	dead    chan struct{}
-	err     error
+	// handshake receives the broker's first frame, which carries ID 0.
+	handshake chan frame
+	dead      chan struct{}
+	err       error
 }
 
 // newConn starts reading nc. onLost runs once, after the connection closes.
 func newConn(nc net.Conn, onLost func(*conn)) *conn {
 	cn := &conn{
-		nc:      nc,
-		w:       &frameWriter{w: nc},
-		pending: map[uint64]chan frame{},
-		dead:    make(chan struct{}),
+		nc:        nc,
+		w:         &frameWriter{w: nc},
+		pending:   map[uint64]chan frame{},
+		handshake: make(chan frame, 1),
+		dead:      make(chan struct{}),
 	}
+	cn.pending[0] = cn.handshake
 	go cn.read(onLost)
 	return cn
+}
+
+// awaitHandshake waits for the broker's handshake frame. Once it arrives the broker's
+// handshake file exists and holds the value this connection's hello must carry.
+func (cn *conn) awaitHandshake(ctx context.Context) error {
+	select {
+	case f := <-cn.handshake:
+		if f.Type != typeHandshake {
+			return fmt.Errorf("the first frame was %q, not a handshake", f.Type)
+		}
+		return nil
+	case <-cn.dead:
+		return errors.New("the connection closed before the broker's handshake frame")
+	case <-ctx.Done():
+		return fmt.Errorf("no handshake frame from the broker (a broker from an older magus sends none): %w", ctx.Err())
+	}
 }
 
 func (cn *conn) read(onLost func(*conn)) {

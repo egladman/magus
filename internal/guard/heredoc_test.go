@@ -103,7 +103,7 @@ func TestEveryPathOfAPatchIsJudged(t *testing.T) {
 		return types.GuardVerdict{Decision: types.GuardAllow}, nil
 	}}
 	patch := "*** Begin Patch\n*** Add File: first.go\n+package a\n*** Update File: second.go\n@@\n-x\n+y\n*** End Patch\n"
-	v := Judge(ctx, deps, Request{Host: "codex", Input: hookJSON(t, map[string]any{
+	v := Judge(ctx, deps, Request{Host: "codex", Tools: testTools(t), Input: hookJSON(t, map[string]any{
 		"session_id": "patch", "cwd": root, "hook_event_name": "PreToolUse", "tool_name": "apply_patch",
 		"tool_input": map[string]any{"command": patch},
 	})})

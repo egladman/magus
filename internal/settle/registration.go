@@ -13,19 +13,13 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// EnsureDriver keeps the VCS merge-driver registration in step with the workspace's
-// declared outputs, and is called on the normal run path rather than only from `magus
-// init`.
+// EnsureDriver refreshes an existing merge-driver registration so it follows the workspace's
+// declared outputs, and does nothing when none is registered.
 //
 // The globs derive from every project's declared outputs, so they move whenever a project
-// does. Wiring them once at init freezes them, and a clone that never ran `init --vcs` has
-// no registration at all; either way the next merge conflicts every generated file by
-// hand, which reads as a merge problem rather than a setup one.
-//
-// The settle hooks are NOT touched here. They live in the repository's shared hooks
-// dir, which every worktree's magus would rewrite in turn on each load, and unlike the
-// attributes they run a generator: installing them is `magus init --vcs git`'s, once,
-// and `magus doctor` reports a registered driver whose hooks are missing.
+// does. First install is `magus init --vcs <name>`'s alone: running magus in a repository
+// is consent to run its code, but no read verb writes VCS metadata, and the settle hooks
+// that init installs beside the driver are not touched here either.
 //
 // Best-effort by design: a read-only checkout, an unsupported VCS, or a workspace with no
 // declared outputs are all normal, and none of them should fail the command the user
@@ -38,6 +32,9 @@ func EnsureDriver(ctx context.Context, m *magus.Magus) {
 	name := res.Name
 	installer, ok := vcs.Installer(name)
 	if !ok {
+		return
+	}
+	if registered, err := res.VCS.MergeDriverCommand(ctx, m.Root()); err != nil || registered == "" {
 		return
 	}
 	globs, err := DriverGlobs(ctx, m)

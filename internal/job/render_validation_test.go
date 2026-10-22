@@ -81,3 +81,30 @@ func TestRenderValidationNamesTheWaiverAndWhatWasNotChecked(t *testing.T) {
 		"not checked:\n"+
 		"  write path breadth: the workspace did not load\n", buf.String())
 }
+
+func TestRenderValidationCountsWhatFixWouldApply(t *testing.T) {
+	t.Parallel()
+
+	v := types.JobValidation{Problems: types.JobProblems{
+		{Code: types.GateNotRun, Message: "nothing runs lint", Edit: &types.JobEdit{AddGoal: &types.Goal{ID: "lint"}}},
+		{Code: types.WritePathIsDirectory, Message: "cli is a directory"},
+	}}
+	var buf bytes.Buffer
+	RenderValidation(&buf, v, false)
+	assert.Equal(t, "2 problems:\n"+
+		"  1. [MGS3045] nothing runs lint\n"+
+		"  2. [MGS3018] cli is a directory\n"+
+		"--fix would apply 1 of them\n", buf.String())
+}
+
+func TestApplyValidationsKeepsEachProblemsEdit(t *testing.T) {
+	t.Parallel()
+
+	edit := &types.JobEdit{AddWritePath: "docs/x.md"}
+	err := prefixed("a", types.JobProblems{{Code: types.OutputOutsideWritePaths, Message: "x regenerates docs/x.md", Edit: edit}}).Err()
+
+	got, ok := ApplyValidations(err, []string{"a"})
+
+	require.True(t, ok)
+	assert.Same(t, edit, got[0].Problems[0].Edit)
+}

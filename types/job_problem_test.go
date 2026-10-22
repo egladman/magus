@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
@@ -74,4 +76,45 @@ func TestWaiveNeverWaivesAnUnwaivableCode(t *testing.T) {
 
 	assert.Equal(t, ps, kept)
 	assert.Empty(t, waived)
+}
+
+func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
+	edit := &JobEdit{AddWritePath: "docs/x.md"}
+	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it", Edit: edit}}.Err()
+
+	var carried *JobProblemError
+	require.ErrorAs(t, err, &carried)
+	assert.Same(t, edit, carried.Problem.Edit)
+	var diag *DiagnosticError
+	require.ErrorAs(t, err, &diag)
+	assert.Equal(t, "x: add it", diag.Msg)
+}
+
+func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
+	goal := Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}
+	waiver := JobWaiver{Code: OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: "the integrator regenerates it"}
+	edits := []JobEdit{{AddWritePath: "docs/x.md"}, {AddGoal: &goal}, {AddWaiver: &waiver}, {RefreshCheckpoint: "abc"}}
+	var d Declaration
+
+	for _, e := range edits {
+		assert.True(t, e.Apply(&d), "%s changes the record", e)
+		assert.False(t, e.Apply(&d), "%s a second time changes nothing", e)
+	}
+	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Waivers: []JobWaiver{waiver}, Checkpoint: "abc"}, d)
+	assert.False(t, JobEdit{AddGoal: &Goal{ID: "lint"}}.Apply(&d), "a goal id the record uses is left alone")
+	assert.False(t, JobEdit{}.Apply(&d))
+}
+
+func TestJobEditRoundTripsThroughJSON(t *testing.T) {
+	p := JobProblem{Code: GateNotRun, Message: "m", Fix: "f", Edit: &JobEdit{AddGoal: &Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}}}
+
+	raw, err := json.Marshal(p)
+	require.NoError(t, err)
+	var back JobProblem
+	require.NoError(t, json.Unmarshal(raw, &back))
+	assert.Equal(t, p.Edit, back.Edit)
+
+	raw, err = json.Marshal(JobProblem{Code: GateNotRun})
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "edit", "a problem with no edit carries no member")
 }

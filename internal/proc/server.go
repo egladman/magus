@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/internal/proc/sockdir"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
@@ -213,7 +214,7 @@ func (s *Server) Close() {
 		// Shutdown waits for handlers, and each one runs on the context cancelled above.
 		_ = s.http.Shutdown(context.Background())
 		_ = os.Remove(s.ep.Addr)
-		_ = os.Remove(tokenPath(s.ep.Addr))
+		_ = os.Remove(sockdir.TokenPath(s.ep.Addr))
 		close(s.closed)
 	})
 	<-s.closed
@@ -382,7 +383,7 @@ func (s *Server) Start() error {
 			strings.Contains(opErr.Err.Error(), "bind: address already in use")) {
 			if !isSocketLive(s.svc.parentCtx, s.ep.Addr) {
 				_ = os.Remove(s.ep.Addr)
-				_ = os.Remove(tokenPath(s.ep.Addr))
+				_ = os.Remove(sockdir.TokenPath(s.ep.Addr))
 				ln, err = s.ep.Listen()
 			}
 		}
@@ -393,7 +394,7 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
-	if err := writeToken(s.ep.Addr, s.token); err != nil {
+	if err := sockdir.WriteToken(s.ep.Addr, s.token); err != nil {
 		_ = ln.Close()
 		s.cancel()
 		return err
@@ -409,32 +410,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// tokenPath is where the token for the socket at sock is kept: beside it, in the same
-// private directory, so a client that found the socket by discovery can present it.
-func tokenPath(sock string) string { return sock + ".token" }
-
-// writeToken publishes token for the socket at sock, readable by this user alone. A file
-// left by a server that crashed is replaced; O_EXCL after the remove refuses to follow
-// anything planted at the path in between.
-func writeToken(sock, token string) error {
-	path := tokenPath(sock)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("replace token %s: %w", path, err)
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("write token: %w", err)
-	}
-	_, werr := f.WriteString(token)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(path)
-		return fmt.Errorf("write token %s: %w", path, werr)
-	}
-	return nil
-}
+func tokenPath(sock string) string { return sockdir.TokenPath(sock) }
 
 // isSocketLive probes addr; returns false for stale sockets. 100 ms hard cap prevents blocking.
 func isSocketLive(ctx context.Context, addr string) bool {

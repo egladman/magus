@@ -181,7 +181,7 @@ func TestExportRevisionBadRev(t *testing.T) {
 func TestWriteManagedHookNewFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-checkout")
 	body := gitHookBody("post-checkout", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 
@@ -192,10 +192,10 @@ func TestWriteManagedHookNewFile(t *testing.T) {
 
 func TestWriteManagedHookIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-merge")
-	_, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
+	_, err := writeManagedSection(filepath.Dir(path), path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 
-	changed, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed, "re-installing an unchanged section is a no-op")
 }
@@ -205,7 +205,7 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'my own hook'\n"), 0o755))
 
 	body := gitHookBody("post-rewrite", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assertFile(t, path, "#!/bin/sh\necho 'my own hook'\n\n"+refreshMarkers.section(body), 0o755)
@@ -238,7 +238,7 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 func TestInstallDriftHookRewritesAnOlderSection(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	prePush := filepath.Join(dir, ".git", "hooks", "pre-push")
-	_, err := writeManagedSection(prePush, driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
+	_, err := writeManagedSection(filepath.Dir(prePush), prePush, driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
 
 	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
@@ -287,7 +287,7 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift, 0o755)
 
 	refresh := refreshMarkers.section("magus job run sync-graph >/dev/null 2>&1 || true\n")
-	_, err = writeManagedSection(postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
+	_, err = writeManagedSection(filepath.Dir(postCommit), postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
@@ -1813,16 +1813,16 @@ func TestDriverIsPreferredHere(t *testing.T) {
 	root := t.TempDir()
 	release := "/usr/local/bin/magus" + gitDriverArgs
 
-	assert.True(t, driverIsPreferredHere(root, release),
+	assert.True(t, driverIsPreferredHere(t.Context(), root, release, untracked),
 		"with no local build there is nothing better to offer, so PATH keeps its registration")
 
 	local := filepath.Join(root, "magus")
 	require.NoError(t, os.WriteFile(local, []byte("#!/bin/sh\n"), 0o755))
 
-	assert.False(t, driverIsPreferredHere(root, release),
+	assert.False(t, driverIsPreferredHere(t.Context(), root, release, untracked),
 		"a local build must displace a registration pointing outside the worktree")
-	assert.True(t, driverIsPreferredHere(root, local+gitDriverArgs))
-	assert.True(t, driverIsPreferredHere(root, filepath.Join(root, "magus-dev")+gitDriverArgs),
+	assert.True(t, driverIsPreferredHere(t.Context(), root, local+gitDriverArgs, untracked))
+	assert.True(t, driverIsPreferredHere(t.Context(), root, filepath.Join(root, "magus-dev")+gitDriverArgs, untracked),
 		"a deliberate pinned registration is from this worktree and must survive")
 }
 
@@ -4084,4 +4084,117 @@ func TestRegionsConfigFollowsAttributeFilesOutsideTheTree(t *testing.T) {
 	assert.NotEqual(t, local, written, "core.attributesFile")
 	require.NoError(t, os.WriteFile(global, []byte("*.go -diff\n"), 0o644))
 	assert.NotEqual(t, written, read(), "an edit to core.attributesFile")
+}
+
+func untracked(context.Context, string, string) bool { return false }
+
+// sentinelMagus writes an executable magus at dir that creates the returned path when run.
+func sentinelMagus(t *testing.T, dir string) string {
+	t.Helper()
+	sentinel := filepath.Join(t.TempDir(), "ran")
+	exe := filepath.Join(dir, "magus")
+	require.NoError(t, os.WriteFile(exe, []byte("#!/bin/sh\ntouch '"+sentinel+"'\n"), 0o755))
+	require.NoError(t, os.Chmod(exe, 0o755), "WriteFile keeps an existing file's mode")
+	return sentinel
+}
+
+// A magus the branch commits is never probed or registered; an untracked build still wins.
+func TestLocalDriverExeSkipsATrackedBinary(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"magus": "", "a.txt": "a\n"})
+	sentinel := sentinelMagus(t, dir)
+
+	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), dir, types.MergeDriverGlobs{Outputs: []string{"gen/**"}}))
+	cfg, err := gitManagedConfig(t.Context(), dir)
+	require.NoError(t, err)
+	exe, _ := splitDriver(cfg[gitMergeDriverKey])
+
+	assert.NoFileExists(t, sentinel, "the tracked binary ran")
+	want, err := os.Executable()
+	require.NoError(t, err)
+	if path, err := exec.LookPath("magus"); err == nil && driverExeAnswers(t.Context(), path) {
+		want = path
+	}
+	assert.Equal(t, want, exe, "PATH's magus or this process, never the committed one")
+	assert.True(t, driverIsPreferredHere(t.Context(), dir, cfg[gitMergeDriverKey], gitTracks))
+
+	gitRun(t, dir, "rm", "-q", "--cached", "magus")
+	assert.Equal(t, filepath.Join(dir, "magus"), localDriverExe(t.Context(), dir, gitTracks))
+}
+
+func TestHookBodySkipsATrackedRelativeBinary(t *testing.T) {
+	for name, body := range map[string]string{
+		"refresh": gitHookBody("post-merge", "./magus job run sync-graph"),
+		"drift":   gitDriftHookBody("post-commit", "./magus job run check-drift"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+			sentinel := sentinelMagus(t, dir)
+			runHookBody(t, dir, body)
+			assert.FileExists(t, sentinel, "an untracked local build runs")
+
+			require.NoError(t, os.Remove(sentinel))
+			gitRun(t, dir, "add", "magus")
+			gitRun(t, dir, "commit", "-q", "-m", "commit magus")
+			stderr := runHookBody(t, dir, body)
+			assert.NoFileExists(t, sentinel, "the committed binary ran")
+			assert.Contains(t, stderr, "this branch commits ./magus, so the hook will not run it; run 'magus job run")
+		})
+	}
+}
+
+func runHookBody(t *testing.T, dir, body string) string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", body)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), stderr.String())
+	return stderr.String()
+}
+
+func TestSkipTrackedBinaryGuardsOnlyARelativeBinary(t *testing.T) {
+	assert.Equal(t, "magus job run x >/dev/null 2>&1 || true\n", gitHookBody("post-merge", "magus job run x"))
+	assert.Equal(t, "/usr/bin/magus job run x >/dev/null 2>&1 || true\n", gitHookBody("post-merge", "/usr/bin/magus job run x"))
+	assert.Equal(t, "if git ls-files --error-unmatch -- ./magus >/dev/null 2>&1; then echo \"magus: this branch commits ./magus, so the hook will not run it; run 'magus job run x' with your own build\" >&2; else ./magus job run x >/dev/null 2>&1 || true; fi\n",
+		gitHookBody("post-merge", "./magus job run x"))
+	assert.Contains(t, gitSettleHookBody(HookPostCommit, "./magus vcs resolve --hook"),
+		"if git ls-files --error-unmatch -- ./magus >/dev/null 2>&1; then echo \"magus: this branch commits ./magus, so the hook will not run it; run 'magus vcs resolve' with your own build\" >&2; else ./magus vcs resolve --hook post-commit; fi\n")
+}
+
+// A core.hooksPath outside the repository would run magus in every repository sharing it.
+func TestHookInstallRefusesASharedHooksPath(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	shared := t.TempDir()
+	gitRun(t, dir, "config", "core.hooksPath", shared)
+	_, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
+	require.ErrorContains(t, err, "vcs: core.hooksPath is "+shared+", which other repositories share")
+	assert.ErrorContains(t, err, "rerun magus init --vcs git")
+	assert.NoFileExists(t, filepath.Join(shared, "post-checkout"))
+
+	gitRun(t, dir, "config", "core.hooksPath", ".githooks")
+	installed, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
+	require.NoError(t, err)
+	assert.NotEmpty(t, installed)
+	assert.FileExists(t, filepath.Join(dir, ".githooks", "post-checkout"))
+}
+
+func TestReadGitDriftHook(t *testing.T) {
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
+	_, installed, err := ReadGitDriftHook(t.Context(), dir)
+	require.NoError(t, err)
+	assert.False(t, installed, "no drift section yet")
+
+	for _, command := range []string{"./magus job run check-drift", "magus job run check-drift"} {
+		_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, command)
+		require.NoError(t, err)
+		got, installed, err := ReadGitDriftHook(t.Context(), dir)
+		require.NoError(t, err)
+		assert.True(t, installed)
+		assert.Equal(t, command, got)
+	}
+
+	_, _, err = ReadGitDriftHook(t.Context(), t.TempDir())
+	assert.ErrorIs(t, err, types.ErrVCSUnsupported)
 }

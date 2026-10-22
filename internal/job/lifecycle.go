@@ -30,19 +30,26 @@ import (
 // job rows live per repository.
 type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
 
+// gradedByHolder reports whether row is read-only and declares no check or goal: magus has
+// nothing to grade it by, so the result its holder files is the grade, and [Exit] records
+// pass on it.
+func gradedByHolder(row types.Job) bool {
+	return row.ReadOnly && row.Check == nil && len(row.Goals) == 0
+}
+
+// returnedReason is the end_reason of a row [gradedByHolder] passed.
+const returnedReason = "returned: its holder filed a result, and a read-only row declaring no check or goal passes on it"
+
 // endedReason says which end a write recording no_return on the live row prev is, so a
 // row its holder returned with nothing to grade never reads as one nobody returned. byHolder
 // is a write under the row's lease or from the checkout its holder took it in.
 func endedReason(prev types.Job, byHolder bool) string {
-	ungradable := prev.Check == nil && len(prev.Goals) == 0
 	switch {
-	case prev.ReadOnly && ungradable && prev.Result != nil:
-		return "returned ungraded: its holder filed a result, and a read-only row declaring no check or goal has nothing magus can grade"
 	case prev.Result != nil:
 		return "ended unverified: its holder filed a result and nobody ran `" + hint.JobWait.With(prev.ID) + "` on it"
 	case prev.Registered == 0:
 		return "ended with no result filed, before any holder ran `" + hint.JobExec.With(prev.ID) + "` on it"
-	case prev.ReadOnly && ungradable:
+	case gradedByHolder(prev):
 		return "ended ungraded: a read-only row declaring no check or goal has nothing magus can grade, so what it found went only to its caller"
 	case byHolder:
 		return "abandoned by its holder, which filed no result"
@@ -56,6 +63,7 @@ func endedReason(prev types.Job, byHolder bool) string {
 // the output attempt resolved in the worker's checkout, so a verifier in another
 // worktree does not need that checkout's cache to reopen the evidence, and the row's write
 // paths narrow to the entries covering a path the result names. An abandonment keeps them.
+// A result on a row [gradedByHolder] records pass, since no wait could grade it.
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
@@ -124,6 +132,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.Attempt = nil
 		}
 		row.State = types.StateExited
+		if gradedByHolder(prev) {
+			row.State = types.StatePass
+		}
 	})
 }
 

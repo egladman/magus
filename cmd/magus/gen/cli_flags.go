@@ -287,6 +287,8 @@ const (
 	FlagInitVCS = "vcs"
 	// job apply: --f
 	FlagJobApplyF = "f"
+	// job apply: --fix
+	FlagJobApplyFix = "fix"
 	// job exec: --slots
 	FlagJobExecSlots = "slots"
 	// job exec: --timeout
@@ -309,6 +311,8 @@ const (
 	FlagJobForkDenyPaths = "deny-paths"
 	// job fork: --depends-on
 	FlagJobForkDependsOn = "depends-on"
+	// job fork: --fix
+	FlagJobForkFix = "fix"
 	// job fork: --model
 	FlagJobForkModel = "model"
 	// job fork: --parent
@@ -1373,6 +1377,7 @@ type JobForkFlags struct {
 	BriefFormat string        // --brief-format
 	ReadOnly    bool          // --read-only
 	Checkout    string        // --checkout
+	Fix         bool          // --fix
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1389,18 +1394,21 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
+	fs.BoolVar(&f.Fix, FlagJobForkFix, false, "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's waiver), validating again until none is left, and list only the problems that remain")
 	return &f
 }
 
 // JobApplyFlags are the flags declared for `magus job apply`.
 type JobApplyFlags struct {
-	F string // -f
+	F   string // -f
+	Fix bool   // --fix
 }
 
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
 func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
 	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or `-` for stdin; one JSON job, a JSON array, or one job per line")
+	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 	return &f
 }
 

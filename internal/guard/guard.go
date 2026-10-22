@@ -11,6 +11,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -934,7 +935,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		if verdict.Decision != decisionDeny {
-			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
+			switch g := gradeHookWiringWrite(location.workspace, actingLease, who.Agent != "", input); g.Decision {
 			case decisionDeny:
 				refuse(denyRuleHookWiringWrite, g.Reason)
 			case decisionAdvise:
@@ -1136,6 +1137,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				whys[v.Context] = v.Why
 			}
 		}
+		// The shell half of hook-wiring-write: a redirect, cp or mv reaches the same files a
+		// write tool does. Only the deny arm, so a person's own session keeps its allowance.
+		if verdict.Decision != decisionDeny {
+			if reason := denyHookWiringCommand(location, callDir, actingLease, who.Agent != "", input, shellD); reason != "" {
+				refuse(denyRuleHookWiringWrite, reason)
+			}
+		}
 		denyUndeclared(input)
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
@@ -1227,7 +1235,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover, commit, moved := pushCoverage(ctx, deps, location, input, shellD, callDir)
+			cover, commit, moved, replay := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so its refusal names no orchestrator. A row that cannot be read
 			// stays a worker.
@@ -1247,6 +1255,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if decision == decisionDeny {
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRulePushUngated)
+			} else if replay.Inv != "" && !moved {
+				verdict.Context = fmt.Sprintf("magus workspace: %s is covered by `%s` at %s on the identical tree (%s).", commit, types.TargetCI, replay.Commit, gateRunRef(replay))
 			}
 		}
 		if preauth == "" {
@@ -1453,8 +1463,63 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
+	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
+}
+
+// denyRuleUnreadCommand is a command word the shell computes, which no rule can read.
+const denyRuleUnreadCommand denyRuleName = "unread-command"
+
+// denyUnreadCommand is unread-command's refusal, or "" when every command word on line is
+// plain. Every rule reads the program and subcommand as written, so a word the shell rewrites
+// first (`\git`, `$x`, `{git,push}`) runs a command none of them judged.
+func denyUnreadCommand(line string, d Dialect) string {
+	word, ok := unreadCommandWord(line, d)
+	if !ok {
+		return ""
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: spell the command plainly; the shell computes `%s` before it runs.", word),
+		Why: "Every rule reads the program and its subcommand as written, so a word the shell rewrites first runs a command no rule judged. Quotes that change nothing and expansions in arguments are fine.",
+	}.full()
+}
+
+// rankUnreadCommand outranks only a pass or an advisory: a deny already stops the line.
+func rankUnreadCommand(v ShellVerdict, reason string) ShellVerdict {
+	if reason == "" || v.Deny != "" {
+		return v
+	}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleUnreadCommand}}
+}
+
+// denyHookWiringCommand is hook-wiring-write on a shell line: the refusal for the first
+// word the line writes, moves or removes that is the guard's installation, or "".
+//
+// A line running go is left to raw-tool, which advises the one relink of ./magus a checkout
+// that cannot load its sources needs (MGS1021) and refuses every other build of it.
+func denyHookWiringCommand(at location, callDir, actingLease string, agentAttributed bool, line string, d Dialect) string {
+	if actingLease == "" && !agentAttributed {
+		return ""
+	}
+	workspace := at.workspace
+	if cmds, _ := ParseCommandsDialect(line, d); slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return c.Name == "go" }) {
+		workspace = ""
+	}
+	home := userHome()
+	for _, c := range placedWriteCandidates(line, d, cmp.Or(callDir, at.dir, at.workspace), home) {
+		if strings.HasPrefix(c.word, "-") {
+			continue
+		}
+		target, placed := c.place(home)
+		if !placed {
+			target = c.word
+		}
+		if g := gradeHookWiringWrite(workspace, actingLease, agentAttributed, target); g.Decision == decisionDeny {
+			return g.Reason
+		}
+	}
+	return ""
 }
 
 // roleScopedRule is a command rule that reads the acting lease's row, with the name its
@@ -1469,6 +1534,7 @@ type roleScopedRule struct {
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
+		{denyRuleLeaseCheckout, denyLeaseCheckout},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryGateRepeat), denyRepeatGate},
@@ -1605,7 +1671,7 @@ func envelopeEdits(input map[string]any) []textEdit {
 // A patch names its files in its own text, so the first of those wins over any key; the
 // rest are judgePatchRest's.
 func envelopeWritePath(input map[string]any) string {
-	if files, _ := envelopePatch(input); len(files) > 0 {
+	if files, _ := envelopePatch(input, false); len(files) > 0 {
 		return files[0].Path
 	}
 	if p := envelopeString(input, "file_path"); p != "" {
@@ -1681,7 +1747,12 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
-	files, isPatch := envelopePatch(env.ToolInput)
+	capability := tools.Capability(env.ToolName)
+	files, isPatch := envelopePatch(env.ToolInput, capability == types.ToolWrites)
+	// A tool its row names as anything but a writer carries no patch in any field.
+	if capability != "" && capability != types.ToolWrites {
+		isPatch = false
+	}
 	command := cmp.Or(envelopeString(env.ToolInput, "command"), envelopeString(env.ToolInput, "cmd"))
 	switch {
 	case tool != "":
@@ -1691,7 +1762,10 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// traffic rather than stop it. Judged on the TOOL NAME rather than on a param
 		// being present: requiring `op` left the tools that do not carry one,
 		// client and status among them, reaching no rule at all.
-		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
+		// No workspace at cwd leaves root empty, and a client script named by path then reads
+		// as unread.
+		root, _ := workspace.FindRoot(env.Cwd)
+		req.Value = buildCall(tool, env.ToolInput, root)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
 	case tools.Capability(env.ToolName) == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that

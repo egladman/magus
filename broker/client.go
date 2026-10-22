@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -127,15 +128,38 @@ func NewClient(addr string, opts ...ClientOption) *Client {
 	return c
 }
 
-// Dial returns a client already connected to the broker at addr, or an error wrapping
-// ErrUnavailable when none answers.
+// Dial returns a client whose handshake with the broker at addr is done, or an error
+// wrapping ErrUnavailable when none answers or, as a *HandshakeError, none admits it.
 func Dial(ctx context.Context, addr string, opts ...ClientOption) (*Client, error) {
 	c := NewClient(addr, opts...)
-	if _, err := c.connect(ctx); err != nil {
+	if err := c.Handshake(ctx); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
+
+// Handshake connects to the broker unless the client already holds a live connection.
+// Every request runs it first, so calling it is only for learning early whether the
+// broker admits this process. It is safe to call more than once. A failure wraps
+// ErrUnavailable; a broker that answered without admitting this client is also a
+// *HandshakeError.
+func (c *Client) Handshake(ctx context.Context) error {
+	_, err := c.connect(ctx)
+	return err
+}
+
+// HandshakeError is a broker that answered a connection without admitting it: it sent
+// no handshake frame, its handshake file could not be read, or it refused the value
+// read. A refusal's Err is an *Error with CodeHandshake.
+type HandshakeError struct {
+	// Path is the handshake file beside the broker socket.
+	Path string
+	Err  error
+}
+
+func (e *HandshakeError) Error() string { return "handshake via " + e.Path + ": " + e.Err.Error() }
+
+func (e *HandshakeError) Unwrap() error { return e.Err }
 
 // QueryStatus dials the broker at addr, reads its status and hangs up. The error wraps
 // ErrUnavailable when none answers.
@@ -367,6 +391,42 @@ func (c *Client) open(ctx context.Context) (*conn, error) {
 	return c.connect(ctx)
 }
 
+// dialHello connects and says hello once. The hello carries the handshake read after the
+// broker's handshake frame, so a refusal is final: it names why and is not retried.
+func (c *Client) dialHello(ctx context.Context, ep endpoint.Endpoint) (net.Conn, *conn, error) {
+	nc, err := ep.Dial(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
+	}
+	cn := newConn(nc, c.lost)
+	if err := c.sayHello(ctx, cn, ep.Addr); err != nil {
+		_ = nc.Close()
+		return nil, nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return nc, cn, nil
+}
+
+func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
+	refused := func(err error) error { return &HandshakeError{Path: handshakePath(sock), Err: err} }
+	if err := cn.awaitHandshake(ctx); err != nil {
+		return refused(err)
+	}
+	h := c.hello
+	var err error
+	if h.Handshake, err = readHandshake(sock); err != nil {
+		return refused(err)
+	}
+	var hr helloReply
+	if err := cn.roundTrip(ctx, c.next(), typeHello, h, typeHelloReply, &hr, nil); err != nil {
+		var refusal *Error
+		if errors.As(err, &refusal) && refusal.Code == CodeHandshake {
+			return refused(err)
+		}
+		return fmt.Errorf("hello: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if cn := c.live(); cn != nil {
 		return cn, nil
@@ -392,16 +452,9 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	nc, err := ep.Dial(dctx)
+	nc, cn, err := c.dialHello(dctx, ep)
 	if err != nil {
-		return nil, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
-	}
-	cn := newConn(nc, c.lost)
-	var hr helloReply
-	if err := cn.roundTrip(dctx, c.next(), typeHello, c.hello, typeHelloReply, &hr, nil); err != nil {
-		_ = nc.Close()
-		// A broker speaking another protocol is no arbiter for this client either.
-		return nil, fmt.Errorf("%w: hello: %w", ErrUnavailable, err)
+		return nil, err
 	}
 
 	c.mu.Lock()

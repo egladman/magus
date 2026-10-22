@@ -1009,8 +1009,8 @@ type PriorAttempt struct {
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 //
 // Registered in cmd/magus-utils/boundary_types.go with no RuntimeObject: a magusfile can
-// construct one, but nothing hands one back out to Buzz; job.DecodeDeclaration is the only
-// decoder, and it reads JSON, not a Buzz value.
+// construct one, but nothing hands one back out to Buzz; the job package's decoders, all
+// through its decodeDeclaration, read JSON, not a Buzz value.
 type Declaration struct {
 	// Schema is the row shape this record is written in. The version is required, and one
 	// newer than this magus is rejected by name. See JobSchemaVersion.
@@ -1105,8 +1105,8 @@ type Declaration struct {
 }
 
 // FoldLegacyNames moves a field declared under its old name onto the one that carries it,
-// refusing a row that names the same field twice. Exported for job.DecodeDeclaration, the
-// one caller outside this package: it runs between the JSON decode and Validate.
+// refusing a row that names the same field twice. Exported for the job package's
+// decodeDeclaration, the one caller outside this package: it runs between the JSON decode and Validate.
 //
 // compat: see the legacy fields on [Declaration].
 func (r *Declaration) FoldLegacyNames() error {

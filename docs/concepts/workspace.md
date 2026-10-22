@@ -58,6 +58,8 @@ Discovery is cached against directory mtimes, so a repeat open on an unchanged t
 
 ## The magusfile
 
+A magusfile is a program that magus evaluates whenever it opens the workspace; see [Running magus runs the code in the repository](sandbox.md#running-magus-runs-the-code-in-the-repository).
+
 A project's magusfile is `magusfile.buzz` (or the split `magusfiles/*.buzz` form). Its **mere presence registers the project on defaults**: a magusfile that only exports target functions is complete:
 
 ```buzz

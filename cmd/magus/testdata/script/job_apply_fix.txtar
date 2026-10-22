@@ -1,0 +1,67 @@
+# `magus job apply --fix` makes the edits each record's problems name without judgment,
+# says each one under its record's id, and applies the records; a problem that needs a
+# person is still listed and nothing is written. Without --fix the list says how many --fix
+# would apply.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'pricing and its guide'
+
+! exec magus job apply -f $WORK/guide.jsonl
+stderr '^\[error\] guide:$'
+stderr '\[MGS3045\] ci runs `check-docs \.`'
+stderr '^--fix would apply 1 of them$'
+exec magus ls jobs -o name
+! stdout .
+
+! exec magus job apply -f $WORK/both.jsonl --fix
+stderr '^fixed: guide: added the goal "check-docs" \(magus run check-docs \.\)$'
+stderr '^\[error\] pricing:$'
+stderr '\[MGS3018\]'
+! stderr 'MGS3045'
+exec magus ls jobs -o name
+! stdout .
+
+exec magus job apply -f $WORK/guide.jsonl --fix
+stderr '^fixed: guide: added the goal "check-docs"'
+stdout '^created guide, declared, with 1 write path\(s\)$'
+exec magus describe job guide -o json
+stdout '"id": "check-docs"'
+
+-- guide.jsonl --
+{"schema_version": 11, "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
+-- both.jsonl --
+{"schema_version": 11, "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
+{"schema_version": 11, "id": "pricing", "write_paths": ["pricing"], "check": {"target": "test", "project": "."}}
+-- .gitignore --
+.magus/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// check_docs reads the guides.
+export fun check_docs(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("docs/**/*.md");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+// test runs the pricing scripts.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(check_docs, test);
+}
+-- docs/guide.md --
+# pricing
+-- pricing/total.sh --
+echo 0

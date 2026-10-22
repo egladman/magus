@@ -2,6 +2,7 @@ package types
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -22,6 +23,64 @@ type JobProblem struct {
 	Message string `json:"message"`
 	// Fix is the edit to the record that clears the problem.
 	Fix string `json:"fix"`
+	// Edit is Fix as data, set only where the fix needs no judgment: `--fix` applies it. A
+	// problem without one is the caller's to decide.
+	Edit *JobEdit `json:"edit,omitempty"`
+}
+
+// JobEdit is one mechanical change to a record. Exactly one field is set.
+type JobEdit struct {
+	AddWritePath string     `json:"add_write_path,omitempty"`
+	AddGoal      *Goal      `json:"add_goal,omitempty"`
+	AddWaiver    *JobWaiver `json:"add_waiver,omitempty"`
+	// RefreshCheckpoint is the revision a moved checkpoint is replaced by. No problem carries
+	// it: only a fork into its own checkout may start from the forker's HEAD instead.
+	RefreshCheckpoint string `json:"refresh_checkpoint,omitempty"`
+}
+
+// Apply makes e on d and reports whether d changed: an entry d already holds, or a goal id
+// it already uses, is left alone.
+func (e JobEdit) Apply(d *Declaration) bool {
+	switch {
+	case e.AddWritePath != "":
+		if slices.Contains(d.WritePaths, e.AddWritePath) {
+			return false
+		}
+		d.WritePaths = append(d.WritePaths, e.AddWritePath)
+	case e.AddGoal != nil:
+		if slices.ContainsFunc(d.Goals, func(g Goal) bool { return g.ID == e.AddGoal.ID }) {
+			return false
+		}
+		d.Goals = append(d.Goals, *e.AddGoal)
+	case e.AddWaiver != nil:
+		if slices.Contains(d.Waivers, *e.AddWaiver) {
+			return false
+		}
+		d.Waivers = append(d.Waivers, *e.AddWaiver)
+	case e.RefreshCheckpoint != "":
+		if d.Checkpoint == e.RefreshCheckpoint {
+			return false
+		}
+		d.Checkpoint = e.RefreshCheckpoint
+	default:
+		return false
+	}
+	return true
+}
+
+// String is e as a person reads it in a list of what `--fix` did.
+func (e JobEdit) String() string {
+	switch {
+	case e.AddWritePath != "":
+		return fmt.Sprintf("added %q to write_paths", e.AddWritePath)
+	case e.AddGoal != nil:
+		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
+	case e.AddWaiver != nil:
+		return fmt.Sprintf("waived %s %q (%s)", e.AddWaiver.Code, e.AddWaiver.Subject, e.AddWaiver.Reason)
+	case e.RefreshCheckpoint != "":
+		return fmt.Sprintf("refreshed the checkpoint to %s, this checkout's HEAD", e.RefreshCheckpoint)
+	}
+	return "no edit"
 }
 
 // Err renders p as a DiagnosticError, so errors.Is matches its code. The text is the
@@ -36,16 +95,37 @@ func (p JobProblem) Err() *DiagnosticError {
 // JobProblems are the problems of one record, in record order.
 type JobProblems []JobProblem
 
-// Err joins each problem's Err in record order, or returns nil when there are none.
+// Err joins each problem as a [*JobProblemError] in record order, or returns nil when there
+// are none.
 func (ps JobProblems) Err() error {
 	if len(ps) == 0 {
 		return nil
 	}
 	errs := make([]error, len(ps))
 	for i, p := range ps {
-		errs[i] = p.Err()
+		errs[i] = &JobProblemError{Problem: p}
 	}
 	return errors.Join(errs...)
+}
+
+// JobProblemError is a problem as an error that keeps the problem, so a caller handed the
+// joined error recovers each one's Edit. It reads and unwraps as [JobProblem.Err].
+type JobProblemError struct {
+	Problem JobProblem
+}
+
+func (e *JobProblemError) Error() string { return e.Problem.Err().Error() }
+func (e *JobProblemError) Unwrap() error { return e.Problem.Err() }
+
+// Fixable counts the problems of ps that carry an Edit.
+func (ps JobProblems) Fixable() int {
+	n := 0
+	for _, p := range ps {
+		if p.Edit != nil {
+			n++
+		}
+	}
+	return n
 }
 
 // Waive splits ps into the problems a waiver in ws matches by code and subject and the

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"os"
 	"path"
@@ -290,10 +291,10 @@ const movedPushReason = "this line pushes after a command that changes what is p
 // the line relocates the push somewhere this cannot name, so the push keeps its advisory:
 // refusing it would grade a tree nobody proved it publishes. moved reports a push whose
 // line moves the revision first (movedPushReason), and then commit is "".
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool) {
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool, replay sessions.GateRecord) {
 	push, located := locatePush(command, d, cwd)
 	if !located {
-		return gateUnknown, "", false
+		return gateUnknown, "", false, replay
 	}
 	at := hook
 	if push.relocated {
@@ -304,12 +305,18 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	if cover == gateUnknown {
 		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
 	}
+	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
+	if cover != gatePassed {
+		if rec, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), commit); replayed {
+			cover, replay = gatePassed, rec
+		}
+	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
 	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
-		return cover, "", true
+		return cover, "", true, replay
 	}
-	return cover, commit, false
+	return cover, commit, false, replay
 }
 
 // revisionMovesBeforePush reports a push on command that runs after a command that changes
@@ -382,6 +389,15 @@ func locateCheckout(command string, d Dialect, cwd string) (pushSite, bool) {
 	return pushSite{dir: site.dir, relocated: site.relocated}, located
 }
 
+// pushArgs are the words the call runs with, read through a wrapper too: env, exec or
+// timeout change nothing about which branch a push publishes.
+func (c locatedCall) pushArgs() []*syntax.Word {
+	if c.args != nil {
+		return c.args
+	}
+	return c.wrapped
+}
+
 // locateFirst locates the first invocation on command that match accepts. found reports
 // one was seen, located that its directory is known without running anything.
 func locateFirst(command string, d Dialect, cwd string, match func(hint.Invocation) bool) (site pushSite, found, located bool) {
@@ -390,16 +406,17 @@ func locateFirst(command string, d Dialect, cwd string, match func(hint.Invocati
 		return pushSite{}, false, false
 	}
 	c := calls[0]
+	args := c.pushArgs()
 	switch {
 	case c.unfollowed:
 		return pushSite{}, true, false
-	case c.args == nil:
+	case args == nil:
 		if !c.at.known || vcsRelocates(c.inv.Name, c.inv.Args) {
 			return pushSite{}, true, false
 		}
 		site = pushSite{dir: c.at.dir, relocated: c.at.moved}
 	default:
-		if site, ok = pushFrom(c.inv.Name, c.args, c.at); !ok {
+		if site, ok = pushFrom(c.inv.Name, args, c.at); !ok {
 			return pushSite{}, true, false
 		}
 	}
@@ -446,6 +463,9 @@ type locatedCall struct {
 	// args are the call's words after the program, nil when the invocation was reached
 	// through a wrapper, whose arguments arrive only as rendered text.
 	args []*syntax.Word
+	// wrapped are the words a wrapper handed the call, nil when none did. Apart from args
+	// because the worktree and lease rules refuse a wrapped call outright.
+	wrapped []*syntax.Word
 	// unfollowed is set for a call inside a conditional, function or loop other than a
 	// literalLoop, which the walk finds but does not locate.
 	unfollowed bool
@@ -531,6 +551,9 @@ func (w *callWalk) cmd(c syntax.Command, at shellDir) shellDir {
 	case *syntax.Subshell:
 		w.stmts(c.Stmts, at)
 		return at
+	case *syntax.TimeClause:
+		// `time` is a keyword wrapping a statement, not a wrapper program.
+		return w.stmt(c.Stmt, at)
 	case *syntax.Block:
 		return w.stmts(c.Stmts, at)
 	case *syntax.ForClause:
@@ -588,13 +611,27 @@ func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 		case changesDir(inv):
 			at.known = false
 		case w.match(inv):
-			w.calls = append(w.calls, locatedCall{inv: inv, at: at})
+			w.calls = append(w.calls, locatedCall{inv: inv, at: at, wrapped: wrappedArgs(args, words, inv)})
 			if w.done() {
 				return at
 			}
 		}
 	}
 	return at
+}
+
+// wrappedArgs are the words a wrapper hands inv, found as the run of words that spells it:
+// env, exec, timeout and the like pass the program its own words unchanged, and find -exec
+// passes the ones before its terminator. Nil when no run spells it, as for a `sh -c` script,
+// whose words arrive only as rendered text.
+func wrappedArgs(args []*syntax.Word, words []string, inv hint.Invocation) []*syntax.Word {
+	for i := range words {
+		end := i + 1 + len(inv.Args)
+		if end <= len(words) && path.Base(words[i]) == inv.Name && slices.Equal(words[i+1:end], inv.Args) {
+			return args[i+1 : end]
+		}
+	}
+	return nil
 }
 
 // bound is words with each plain $NAME or ${NAME} of a bound loop variable replaced by its

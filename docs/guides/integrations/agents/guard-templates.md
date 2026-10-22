@@ -1895,7 +1895,9 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 // Cursor's stop event carries no reply, so the hook reads it from the conversation's
 // transcript_path: the last assistant message that has text, stopping at the last user
-// message. A host this file has no shape for is named on stderr and answered with nothing.
+// message. A host this file has no shape for is named on stderr and answered with nothing,
+// and so is an event that is a tool call rather than a stop: the hook is wired to the wrong
+// event.
 //
 // It prints nothing when
 //
@@ -1971,6 +1973,8 @@ fun knownHost(host: str) > bool {
 object Stop {
     reply: str,
     again: bool,
+    // tool names the tool when the event is a tool call, not a stop.
+    tool: str = "",
 }
 
 // Finding is one proofread finding; line counts from the reply's first line, 0 when the
@@ -2029,6 +2033,8 @@ fun readCursorStop(doc: {str: any}) > Stop {
 // readStop reads the envelope host sent. One it cannot read is a stop with no reply.
 fun readStop(input: str, host: str) > Stop {
     final doc: {str: any} = json\parse(input) catch {<str: any>};
+    final tool = hook\field(doc, dotPath: "tool_name");
+    if (tool != "") { return Stop{ reply = "", again = false, tool = tool }; }
     if (host == CURSOR) { return readCursorStop(doc); }
     final reply: str = doc["last_assistant_message"] ?? "";
     final again: bool = doc["stop_hook_active"] ?? false;
@@ -2162,6 +2168,10 @@ fun main(args: [str]) > void {
     if (decisions == "") { decisions = hook\envOr("__PROOFREAD_DECISIONS", fallback: ""); }
 
     final stop = readStop(io\stdin.readAll() catch "", host: host);
+    if (stop.tool != "") {
+        warn("the event is a call to tool \"{stop.tool}\", not a stop, so nothing was judged. Wire this hook to the host's stop event.");
+        return;
+    }
     if (stop.again) { return; }
     final bin = resolveBin(parsed!.values[PROOFREAD_FLAG] ?? "");
     if (bin == "") { return; }
@@ -2224,6 +2234,14 @@ test "opencode findings go back as a prompt to send again" {
     std\assert(prompt.indexOf("- closing-offer (line 3): End on the result") != null, message: printed);
     std\assert(prompt.indexOf("Send the reply again") != null, message: prompt);
     std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null and doc["followup_message"] == null, message: printed);
+}
+
+test "a tool call is not a stop on any host" {
+    foreach (host in [CLAUDE_CODE, CODEX, CURSOR, OPENCODE]) {
+        final stop = readStop(`{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}`, host: host);
+        std\assert(stop.tool == "Bash" and stop.reply == "" and !stop.again, message: "{host}: {stop.tool}");
+    }
+    std\assert(readStop("\{\"last_assistant_message\":\"Done.\"}", host: CODEX).tool == "", message: "a stop names no tool");
 }
 
 test "an opencode idle envelope is read like codex's stop" {
@@ -2325,11 +2343,12 @@ not a call.
 //
 // Contract: reads the host's event as JSON on stdin and takes the written path from
 // tool_input.file_path, else tool_input.path, else the Add File and Update File lines of an
-// apply_patch input. A path that is not a .buzz file is skipped. A magusfile.buzz, and
-// anything under magusfiles/, spells/ or hack/, is checked with --embedded, the mode the
-// engine loads it in; any other .buzz file is checked strict. A failure prints
-// {"decision":"block","reason":...} on stdout, which the host hands the agent as the reason
-// to fix the file; a pass prints nothing. It always exits 0.
+// apply_patch input. A path that is not a .buzz file is skipped. An event that names no
+// written file is named on stderr, since the hook is wired after a tool that writes none. A
+// magusfile.buzz, and anything under magusfiles/, spells/ or hack/, is checked with
+// --embedded, the mode the engine loads it in; any other .buzz file is checked strict. A
+// failure prints {"decision":"block","reason":...} on stdout, which the host hands the agent
+// as the reason to fix the file; a pass prints nothing. It always exits 0.
 //
 // REQUIRED argument: `-- --agent-name <host>`, named like every glue entry. Without it the
 // check still runs, and MGS3024 goes to stderr.
@@ -2391,6 +2410,13 @@ fun writtenPaths(event: any?) > [str] {
     return paths;
 }
 
+// unjudged is the stderr note for an event that names no written file.
+fun unjudged(event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    final source = if (tool != "") "tool \"{tool}\"" else "the event";
+    return "{source} names no written file, so nothing was checked. Wire this hook after the tools that write a file.";
+}
+
 // relativeTo is path under root, or path itself when it is already relative or elsewhere.
 fun relativeTo(path: str, root: str) > str {
     if (root != "" and path.startsWith(root + "/")) { return path.sub(root.len() + 1, len: path.len() - root.len() - 1); }
@@ -2412,13 +2438,18 @@ fun main(args: [str]) > void {
         warn("[MGS3024] this hook was not given --agent-name. Merge what `magus describe harness` prints into the host's hook configuration.");
     }
     final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final written = writtenPaths(event);
+    if (written.len() == 0) {
+        warn(unjudged(event));
+        return;
+    }
     final cwd = hook\field(event, dotPath: "cwd");
     final root = hook\workspaceRootAt(if (cwd != "") cwd else ".");
     final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     final failures = mut [<str>];
-    foreach (path in writtenPaths(event)) {
+    foreach (path in written) {
         if (!path.endsWith(".buzz")) { continue; }
         final rel = relativeTo(path, root: root);
         final check = mut ["buzz", "--check"];
@@ -2439,6 +2470,13 @@ test "a written path comes from the field the host names it in" {
     std\assert(writtenPaths({"tool_input": {"command": "*** Begin Patch\n*** Update File: hack/a.buzz\n@@\n*** Add File: b.go\n"}}).join(",")
         == "hack/a.buzz,b.go", message: "an apply_patch input");
     std\assert(writtenPaths({"tool_input": {}}).len() == 0, message: "nothing written");
+}
+
+test "an event that names no written file is answered with a note naming its tool" {
+    final shell = {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}};
+    std\assert(writtenPaths(shell).len() == 0, message: "a shell call writes nothing");
+    std\assert(unjudged(shell).startsWith("tool \"Bash\" names no written file"), message: unjudged(shell));
+    std\assert(unjudged(null).startsWith("the event names no written file"), message: unjudged(null));
 }
 
 test "the engine's own Buzz is checked embedded and everything else strict" {

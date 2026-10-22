@@ -343,16 +343,23 @@ func lockedWrite(ctx context.Context, metaDir string, write func() (bool, error)
 // writeManagedSection brings the m section of path to body, creating path when absent,
 // and reports whether path changed. It is the one writer for every managed section:
 // .gitattributes, .hg/hgrc, .sl/config and shell hooks. The caller holds withRepoLock.
+// A config file that is a symlink is written only when it resolves inside root, the
+// repository it configures.
 //
 // A file that already holds the wanted bytes is not rewritten. Any other write replaces
 // path atomically and keeps its mode; a hookFile always ends executable. A section a
 // magus newer than j.Self wrote is refused with a *stamp.DowngradeError.
-func writeManagedSection(path string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (bool, error) {
+func writeManagedSection(root, path string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (bool, error) {
 	// A hook managed by another tool is often a symlink, and renaming over the link would
 	// replace it with a copy.
 	target := path
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		target = resolved
+	}
+	if kind != hookFile && target != path {
+		if _, err := file.Within(root, target); err != nil {
+			return false, fmt.Errorf("vcs: refusing to write %s, a symlink: %w", path, err)
+		}
 	}
 
 	mode := fs.FileMode(0o644)

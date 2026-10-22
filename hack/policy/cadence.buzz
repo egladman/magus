@@ -3,6 +3,7 @@ namespace agentpolicy\cadence;
 
 import "std";
 import "magus";
+import "path";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 
@@ -17,7 +18,8 @@ final gateDenial = "a worker mid-change does not run the gate; finish with the n
 
 // Caller is who runs a command: role is root, worker (a lease binds it) or integrator, and title is
 // the description it was itself spawned with, empty for a person or the orchestrator. holdsCheckout
-// is true for the holder of a live `job fork --checkout` row run from that row's own checkout.
+// is true for the holder of a live `job fork --checkout` row whose gate calls all run in that
+// row's own checkout (gatesInHeldCheckout).
 export object Caller {
     role: str,
     title: str,
@@ -56,22 +58,106 @@ fun mayGate(caller: Caller) > bool {
     return caller.role == "integrator" or caller.holdsCheckout;
 }
 
-// holdsCheckout: a live row (declared, running or exited) taken with `job fork --checkout`
-// in the workspace the line runs in.
-export fun holdsCheckout(lease: magus\Job?, workspace: str) > bool {
+// liveCheckoutRoot: the checkout of a live row (declared, running or exited) taken with
+// `job fork --checkout`, "" for any other.
+fun liveCheckoutRoot(lease: magus\Job?) > str {
     if (lease == null or lease!.worktree == null) {
-        return false;
+        return "";
     }
     final live = lease!.state == "declared" or lease!.state == "running" or lease!.state == "exited";
-    return live and workspace != "" and lease!.checkoutRoot == workspace;
+    if (!live) {
+        return "";
+    }
+    return lease!.checkoutRoot;
 }
 
-// runsGate: `magus affected ci` or `magus run ci`, with or without a charm, and not the
-// --plan form, which runs nothing.
+// holdsCheckout: a live row taken with `job fork --checkout` in the workspace given.
+export fun holdsCheckout(lease: magus\Job?, workspace: str) > bool {
+    final root = liveCheckoutRoot(lease);
+    return root != "" and workspace != "" and root == workspace;
+}
+
+// gatesInHeldCheckout: the row holds a checkout and every gate call on the line runs inside
+// it, judged where the call runs (a cd earlier on the line, then its -C or --root) and not
+// where the host started. dir is the host's directory, workspace the root holding it.
+// A line with no gate call is judged by workspace alone.
+export fun gatesInHeldCheckout(lease: magus\Job?, programs: [helpers\Program], dir: str, workspace: str) > bool {
+    final root = liveCheckoutRoot(lease);
+    if (root == "") {
+        return false;
+    }
+    var cwd = dir;
+    if (cwd == "") {
+        cwd = workspace;
+    }
+    var gates = 0;
+    foreach (p in programs) {
+        if (p.name == "cd" or p.name == "pushd") {
+            final ops = helpers\stripFlags(p.args, valueFlags: [<str>]);
+            if (ops.len() == 1) {
+                cwd = moved(cwd, to: ops[0]);
+            } else {
+                cwd = "";
+            }
+        } else if (p.name == "popd") {
+            cwd = "";
+        } else if (runsGate([p])) {
+            gates = gates + 1;
+            if (!within(root, dir: relocated(cwd, args: p.args))) {
+                return false;
+            }
+        }
+    }
+    if (gates == 0) {
+        return holdsCheckout(lease, workspace: workspace);
+    }
+    return true;
+}
+
+// moved is to taken from cwd, "" when either is unknown.
+fun moved(cwd: str, to: str) > str {
+    if (to == "" or to.startsWith("~") or to.startsWith("$")) {
+        return "";
+    }
+    if (path\isAbs(to)) {
+        return path\clean(to);
+    }
+    if (cwd == "") {
+        return "";
+    }
+    return path\clean("{cwd}/{to}");
+}
+
+// relocated is cwd moved by each -C or --root among a magus call's args, in order.
+fun relocated(cwd: str, args: [str]) > str {
+    var at = cwd;
+    var next = false;
+    foreach (a in args) {
+        if (next) {
+            at = moved(at, to: a);
+            next = false;
+        } else if (a == "-C" or a == "--root") {
+            next = true;
+        } else if (a.startsWith("--root=")) {
+            at = moved(at, to: a.sub(7));
+        }
+    }
+    return at;
+}
+
+fun within(root: str, dir: str) > bool {
+    return dir != "" and (dir == root or dir.startsWith(root + "/"));
+}
+
+// runsGate: `magus affected ci`, `magus run ci` or the `magus buzz hack/dev/run-gate.buzz` script
+// that runs it, with or without a charm, and not the --plan form, which runs nothing.
 fun runsGate(programs: [helpers\Program]) > bool {
     foreach (p in programs) {
         if (p.name == "magus") {
-            final ops = helpers\magusOperands(p.args);
+            final ops = helpers\magusOperands(withoutDirFlag(p.args));
+            if (ops.len() > 1 and ops[0] == "buzz" and ops[1].endsWith("hack/dev/run-gate.buzz")) {
+                return true;
+            }
             if (ops.len() > 1 and (ops[0] == "affected" or ops[0] == "run")
                 and (ops[1] == "ci" or ops[1].startsWith("ci:"))
                 and !helpers\hasFlag(p.args, long: "--plan")) {
@@ -80,6 +166,22 @@ fun runsGate(programs: [helpers\Program]) > bool {
         }
     }
     return false;
+}
+
+// withoutDirFlag is args with each -C and its value left out, which magusOperands does not know.
+fun withoutDirFlag(args: [str]) > [str] {
+    final kept = mut [<str>];
+    var skip = false;
+    foreach (a in args) {
+        if (skip) {
+            skip = false;
+        } else if (a == "-C") {
+            skip = true;
+        } else {
+            kept.append(a);
+        }
+    }
+    return kept;
 }
 
 // The git push flags that take the next word as their value.
@@ -150,6 +252,21 @@ test "a worker whose role is not integrate may not run the gate" {
     }
 }
 
+test "the gate script is judged as the gate" {
+    final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
+    foreach (argv in [
+        ["magus", "buzz", "hack/dev/run-gate.buzz"],
+        ["magus", "buzz", "hack/dev/run-gate.buzz", "--", "--timeout", "30m"],
+    ]) {
+        final v = judged(helpers\request([argv]), caller: worker, checkout: null);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
+    }
+    final person = Caller{ role = "person", title = "" };
+    std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/run-gate.buzz"]]), caller: person, checkout: null).decision != "deny", message: "a person may run it");
+    std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/ls-test-failures.buzz"]]), caller: worker, checkout: null).decision != "deny", message: "other scripts are not the gate");
+}
+
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
     std\assert(judged(gate, caller: person(), checkout: null).decision == "allow", message: "an unattributed caller");
@@ -178,6 +295,27 @@ test "a row is held in its checkout only when live, with a worktree, and run fro
     std\assert(!holdsCheckout(magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a" }, workspace: "/w/a"), message: "no worktree");
     std\assert(!holdsCheckout(magus\Job{ id = "a", state = "failed", checkoutRoot = "/w/a", worktree = worktree }, workspace: "/w/a"), message: "not live");
     std\assert(!holdsCheckout(null, workspace: "/w/a"), message: "no lease");
+}
+
+test "a holder's gate is judged where the call runs, not where the host started" {
+    final worktree = magus\JobWorktree{ root = "/w/a" };
+    final row = magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a", worktree = worktree };
+    final held = fun (argvs: [[str]], dir: str) > bool {
+        return gatesInHeldCheckout(row, programs: helpers\request(argvs), dir: dir, workspace: dir);
+    };
+    std\assert(held([["magus", "affected", "ci"]], dir: "/w/a"), message: "from the checkout");
+    std\assert(held([["magus", "affected", "ci"]], dir: "/w/a/docs"), message: "from a directory inside it");
+    std\assert(!held([["magus", "affected", "ci"]], dir: "/w/b"), message: "from another checkout");
+    std\assert(held([["cd", "/w/a"], ["magus", "affected", "ci"]], dir: "/w/b"), message: "a cd into it");
+    std\assert(held([["cd", "../a"], ["magus", "affected", "ci"]], dir: "/w/b"), message: "a relative cd into it");
+    std\assert(!held([["cd", "/w/b"], ["magus", "affected", "ci"]], dir: "/w/a"), message: "a cd out of it");
+    std\assert(held([["magus", "-C", "/w/a", "affected", "ci"]], dir: "/w/b"), message: "a -C into it");
+    std\assert(held([["magus", "--root=/w/a", "run", "ci", "."]], dir: "/w/b"), message: "a --root into it");
+    std\assert(!held([["magus", "-C", "/w/b", "affected", "ci"]], dir: "/w/a"), message: "a -C out of it");
+    std\assert(!held([["magus", "-C", "", "affected", "ci"]], dir: "/w/a"), message: "a -C naming nothing known");
+    std\assert(!held([["cd", "/w/a"], ["magus", "affected", "ci"], ["cd", "/w/b"], ["magus", "affected", "ci"]], dir: "/w/a"), message: "every gate call counts");
+    std\assert(held([["magus", "run", "go-test", "."]], dir: "/w/a"), message: "no gate call falls back to the workspace");
+    std\assert(!gatesInHeldCheckout(null, programs: helpers\request([["magus", "affected", "ci"]]), dir: "/w/a", workspace: "/w/a"), message: "no lease");
 }
 
 test "a detached push to a branch the remote lacks is denied, naming the full ref" {

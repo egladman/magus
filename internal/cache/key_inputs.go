@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,9 @@ func DigestEnvValues(inputs []string) []string {
 func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inputs []string) error {
 	if len(inputs) == 0 {
 		return nil
+	}
+	if err := singleSegment(cacheKey); err != nil {
+		return fmt.Errorf("key inputs: %w", err)
 	}
 	dir := filepath.Join(s.outputsDir(), cacheKey)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

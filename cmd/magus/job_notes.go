@@ -36,6 +36,40 @@ func refuseFork(v types.JobValidation) error {
 	return listedProblems{list: list.String(), err: v.Err()}
 }
 
+// judgedMerge is row's merge as validation reads it. A job that works in its own checkout
+// shares none, which the standing placeholder says before the worktree exists.
+func judgedMerge(row types.Declaration) func(*types.Job) {
+	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
+	if row.Checkout == "" {
+		return merge
+	}
+	return func(u *types.Job) {
+		merge(u)
+		u.Worktree = &types.JobWorktree{Root: row.Checkout}
+	}
+}
+
+// fixFork is [job.FixFork] over the merge a fork validates, noting each edit it made. Only a
+// fork into its own checkout refreshes a checkpoint.
+func fixFork(ctx context.Context, store *job.Store, row types.Declaration, read job.SymbolReader) (types.Declaration, error) {
+	fixed, edits, err := job.FixFork(ctx, store, row, judgedMerge, globalCfg.Jobs, read, row.Checkout != "")
+	for _, e := range edits {
+		slog.InfoContext(ctx, e.String(), attr.Notice("fixed"))
+	}
+	return fixed, err
+}
+
+// fixApply is [job.FixApply], noting each edit it made under its record's id.
+func fixApply(ctx context.Context, store *job.Store, records []types.Declaration, read job.SymbolReader, checkpoint func() string) []types.Declaration {
+	fixed, edits := job.FixApply(ctx, store, records, globalCfg.Jobs, read, checkpoint)
+	for _, rec := range fixed {
+		for _, e := range edits[rec.ID] {
+			slog.InfoContext(ctx, rec.ID+": "+e.String(), attr.Notice("fixed"))
+		}
+	}
+	return fixed
+}
+
 // listedProblems is a refusal whose text is its problems as [job.RenderValidation] lists
 // them, so the one error record carries the whole list. It unwraps to the problems.
 type listedProblems struct {

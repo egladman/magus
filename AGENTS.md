@@ -67,6 +67,8 @@ magus builds itself. Learn the layout from the graph (`magus ls`, `magus explain
 <path>`, MAGUS.md). This section holds only what no tool says yet; when one starts
 saying it, delete it here.
 
+- Scripts by task: [hack/README.md](hack/README.md#by-task).
+
 ## Binary
 
 - A fresh worktree has no `./magus`, and the guard names the bootstrap. After it,

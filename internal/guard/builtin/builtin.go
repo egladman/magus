@@ -206,6 +206,7 @@ var defaults = map[string]Decision{
 	"throwaway-copy":         Deny,
 	"unjudged-tool":          Deny,
 	"unknown-env":            Deny,
+	"unread-command":         Deny,
 
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,
@@ -222,6 +223,7 @@ var defaults = map[string]Decision{
 	"hooks-off":             Deny,
 	"human-only":            Deny,
 	"inline-alias":          Deny,
+	"lease-checkout":        Deny,
 	"lease-gate":            Deny,
 	"lease-harness":         Deny,
 	"lease-rebind":          Deny,

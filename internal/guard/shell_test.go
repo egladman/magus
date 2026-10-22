@@ -1695,13 +1695,15 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal"), 0o755))
-	for _, f := range []string{"hack/dev/rename-symbol.buzz", "hack/dev/example-typed-results.buzz", "internal/x.go"} {
+	for _, f := range []string{"hack/dev/rename-symbol.buzz", "hack/dev/example-typed-results.buzz", "hack/dev/prune-worktrees.buzz", "hack/dev/resolve-conflicts.buzz", "internal/x.go"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, f), nil, 0o644))
 	}
 	carries := strict(Dependencies{scope: workspaceScope{root: root}})
 	bare := strict(Dependencies{scope: workspaceScope{root: t.TempDir()}})
 	rename := "\nRenaming a symbol from a script? `" + hint.Buzz.With("hack/dev/rename-symbol.buzz", "--", "--symbol", "<old>", "--to", "<new>") + "`"
 	typed := "\nReading magus output in a script? `" + hint.Buzz.With("hack/dev/example-typed-results.buzz") + "`"
+	prune := "\nFreeing disk or clearing finished worktrees? `" + hint.Buzz.With("hack/dev/prune-worktrees.buzz", "--", "--go-cache") + "`"
+	resolve := "\nSettling a conflicted file? `" + hint.Buzz.With("hack/dev/resolve-conflicts.buzz") + "`"
 	for _, tt := range []struct {
 		command string
 		rule    denyRuleName
@@ -1711,6 +1713,8 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 		{"perl -pi -e 's/a/b/' f.go", denyRuleScriptedRewrite, rename},
 		{"magus ls targets . | wc -l", denyRuleOutputPipe, typed},
 		{"magus run lint . > /tmp/x.txt", denyRuleOutputRedirect, typed},
+		{"jj --no-pager workspace forget", denyRuleWorktreeRemove, prune},
+		{"git checkout MERGE_HEAD -- a.go", denyRuleMergeSideCheckout, resolve},
 	} {
 		v := Evaluate(carries, tt.command)
 		require.Equal(t, tt.rule, v.Rule.Name, tt.command)

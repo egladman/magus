@@ -55,3 +55,38 @@ func TestShellDialectFromRules(t *testing.T) {
 		{Dialect: "zsh"},
 	}))
 }
+
+func TestEscapedCommandWordIsUnread(t *testing.T) {
+	t.Parallel()
+	deps := testDependencies()
+	for _, line := range []string{
+		`\git push origin main`,
+		`g\it push origin main`,
+		`$'g\x69t' push origin main`,
+		`{git,push} origin main`,
+		`x=git; $x push origin main`,
+		`GIT=git; "$GIT" push origin main`,
+		`${x}git push origin main`,
+		`$(echo git) push origin main`,
+		`/usr/bin/gi? push origin main`,
+		`env \git push origin main`,
+		`bash -c '\git push origin main'`,
+		`git $(echo push) origin main`,
+		`git ${x}push origin main`,
+	} {
+		v := judgeShellLine(t.Context(), deps, location{}, "", line, DialectBash)
+		assert.Equal(t, denyRuleUnreadCommand, v.Rule.Name, line)
+		assert.Contains(t, v.Deny, "spell the command plainly", line)
+	}
+	for _, line := range []string{
+		`git commit -m "$msg"`,
+		`cd "$dir"`,
+		`echo $'a\tb'`,
+		`[ -f x ]`,
+		`git -C "$dir" status`,
+		`$'git' status`,
+		`"git" status`,
+	} {
+		assert.NotEqual(t, denyRuleUnreadCommand, judgeShellLine(t.Context(), deps, location{}, "", line, DialectBash).Rule.Name, line)
+	}
+}

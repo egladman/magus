@@ -1,0 +1,167 @@
+// Cost: one merge and one regeneration per branch, and a push each.
+//
+// Brings a stack of branches up to date, in order. Each branch is switched to and merged with
+// the previous branch (the first with --base), `magus vcs resolve --against` settling the
+// generated files the merge conflicts in, then committed and pushed before the next. It stops
+// at the first branch holding a conflict in a source file and lists the files. The tree must be
+// clean. --dry-run prints the steps and runs none.
+//
+//	magus buzz hack/dev/update-stack.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]
+namespace updatestack;
+
+import "flags";
+import "magus";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/update-stack.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]";
+final HELP = "cost: one merge and regeneration per branch, and a push each\n{USAGE}";
+
+export object Step {
+    branch: str,
+    against: str,
+}
+
+// steps pairs each branch with what it merges: base for the first, the previous branch after.
+export fun steps(branches: [str], base: str) > [Step] {
+    final found = mut [<Step>];
+    var previous = base;
+    foreach (branch in branches) {
+        found.append(Step{ branch = branch, against = previous });
+        previous = branch;
+    }
+    return found;
+}
+
+// branchesProblem is why the list names no stack, "" when it does.
+export fun branchesProblem(branches: [str]) > str {
+    if (branches.len() == 0) {
+        return "update-stack: --branches is required";
+    }
+    final seen = mut {"": true};
+    foreach (branch in branches) {
+        if (branch == "") {
+            return "update-stack: --branches holds an empty name";
+        }
+        if (seen[branch] ?? false) {
+            return "update-stack: {branch} appears twice in --branches";
+        }
+        seen[branch] = true;
+    }
+    return "";
+}
+
+export fun resolveArgv(against: str) > [str] {
+    return ["vcs", "resolve", "--against", against];
+}
+
+// plan is the commands of a step, as the lines --dry-run prints.
+export fun plan(s: Step) > [str] {
+    return [
+        "git switch {s.branch}",
+        "magus {resolveArgv(s.against).join(" ")}",
+        "git commit --no-edit (when the merge is in progress)",
+        "git push origin {s.branch}",
+    ];
+}
+
+// conflictRefusal names the source files a merge left conflicted, "" when it left none.
+export fun conflictRefusal(s: Step, unmerged: [str]) > str {
+    if (unmerged.len() == 0) {
+        return "";
+    }
+    return "update-stack: merging {s.against} into {s.branch} left {unmerged.len()} source conflict(s): {unmerged.join(", ")}; "
+        + "settle each with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, commit the merge, then run this again from {s.branch}";
+}
+
+fun git(args: [str]) > str !> any {
+    return vcs\cmd(args, opts: {"quiet": true}).stdout;
+}
+
+fun update(s: Step) > void !> any {
+    git(["switch", s.branch]);
+    final resolved = magus\cmd("vcs", args: resolveArgv(s.against).sub(1), opts: {"quiet": true, "allow_failure": true});
+    final unmerged = mut [<str>];
+    foreach (path in git(["diff", "--name-only", "--diff-filter=U"]).split("\n")) {
+        if (path.trim() != "") {
+            unmerged.append(path.trim());
+        }
+    }
+    final refused = conflictRefusal(s, unmerged: unmerged);
+    if (refused != "") {
+        throw refused;
+    }
+    if (!resolved.ok) {
+        throw "update-stack: `magus {resolveArgv(s.against).join(" ")}` failed on {s.branch}:\n{resolved.stdout}{resolved.stderr}";
+    }
+    if (vcs\cmd(["rev-parse", "-q", "--verify", "MERGE_HEAD"], opts: {"quiet": true, "allow_failure": true}).ok) {
+        git(["commit", "--no-edit"]);
+    }
+    git(["push", "origin", s.branch]);
+    std\print("updated {s.branch} against {s.against}");
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--dry-run"], valued: ["--branches", "--base"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "update-stack: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final named = parsed.values["--branches"] ?? "";
+    final branches = if (named == "") [<str>] else named.split(",").map(fun (index: int, b: str) > str => b.trim());
+    final problem = branchesProblem(branches);
+    if (problem != "") {
+        throw "{problem}\n{USAGE}";
+    }
+    final stack = steps(branches, base: parsed.values["--base"] ?? "origin/main");
+    if (parsed.values["--dry-run"] != null) {
+        std\print("dry run: nothing changes");
+        foreach (s in stack) {
+            foreach (line in plan(s)) {
+                std\print(line);
+            }
+        }
+        return;
+    }
+    if (vcs\isDirty()) {
+        throw "update-stack: the tree holds uncommitted changes; commit or drop them first";
+    }
+    foreach (s in stack) {
+        update(s);
+    }
+}
+
+test "each branch merges the one before it, the first merges the base" {
+    final got = steps(["a", "b", "c"], base: "origin/main");
+    assert\equal(got.map(fun (index: int, s: Step) > str => "{s.branch}<-{s.against}"), want: ["a<-origin/main", "b<-a", "c<-b"], message: "order");
+}
+
+test "an empty, blank or repeated branch list is refused" {
+    assert\equal(branchesProblem(["a", "b"]), want: "", message: "ok");
+    assert\equal(branchesProblem([]), want: "update-stack: --branches is required", message: "none");
+    assert\equal(branchesProblem(["a", ""]), want: "update-stack: --branches holds an empty name", message: "blank");
+    assert\equal(branchesProblem(["a", "a"]), want: "update-stack: a appears twice in --branches", message: "twice");
+}
+
+test "a step's argv and plan name the branch and what it merges" {
+    assert\equal(resolveArgv("origin/main"), want: ["vcs", "resolve", "--against", "origin/main"], message: "argv");
+    assert\equal(plan(Step{ branch = "b", against = "a" }), want: [
+        "git switch b",
+        "magus vcs resolve --against a",
+        "git commit --no-edit (when the merge is in progress)",
+        "git push origin b",
+    ], message: "plan");
+}
+
+test "source conflicts stop the stack, listing each file and the way forward" {
+    final s = Step{ branch = "b", against = "a" };
+    assert\equal(conflictRefusal(s, unmerged: []), want: "", message: "clean");
+    final why = conflictRefusal(s, unmerged: ["x.go", "y.go"]);
+    assert\equal(why.indexOf("left 2 source conflict(s): x.go, y.go") != null, want: true, message: why);
+    assert\equal(why.indexOf("resolve-conflicts.buzz") != null, want: true, message: why);
+}

@@ -268,10 +268,10 @@ magus job fork --stdin <<'EOF'
 EOF
 ```
 
-A scout whose output is prose has no check, so it cannot pass. The root ends it with
-`{{cmd "job exit"}} <job>`, recorded no_return with the end reason "returned ungraded"
-or "ended ungraded", never "abandoned". That is the expected end for such a scout, not a
-failure.
+A scout whose output is prose has no check. When it files a result with
+`{{cmd "job exit"}} <job> --stdin`, the job is recorded pass with the end reason
+"returned". One ended with no result is recorded no_return, "ended ungraded", never
+"abandoned"; that is not a failure.
 
 Every row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state

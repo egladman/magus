@@ -523,11 +523,27 @@ func TestOwnedOutputsDropsNestedRecords(t *testing.T) {
 	}}
 	s := Step{Outputs: types.MustParseGlobs("**/gen/*.go", "leaf/out/*.go"), NestedDirs: []string{"leaf"}}
 
-	got := ownedOutputs(m, s)
-
+	got, err := ownedOutputs(m, s)
+	require.NoError(t, err)
 	assert.Equal(t, []OutputRecord{{Path: "gen/own.go"}, {Path: "leaf/out/x.go"}}, got.Outputs)
 	assert.Len(t, m.Outputs, 3, "the stored manifest is not mutated")
-	assert.Same(t, m, ownedOutputs(m, Step{Outputs: s.Outputs}), "no nested projects, nothing to narrow")
+
+	same, err := ownedOutputs(m, Step{Outputs: s.Outputs})
+	require.NoError(t, err)
+	assert.Same(t, m, same, "no nested projects, nothing to narrow")
+}
+
+func TestOwnedOutputsRefusesUnclaimedRecord(t *testing.T) {
+	s := Step{Outputs: types.MustParseGlobs("gen/*.go")}
+	for _, rel := range []string{".git/hooks/pre-commit", "magusfile.buzz", "magus"} {
+		m := &Manifest{Outputs: []OutputRecord{{Path: "gen/fs.go"}, {Path: rel, Mode: 0o755}}}
+
+		got, err := ownedOutputs(m, s)
+
+		require.Error(t, err, rel)
+		assert.Contains(t, err.Error(), rel)
+		assert.Nil(t, got)
+	}
 }
 
 // TestReplaySymlink verifies replay restores a symlink record as a symlink

@@ -31,8 +31,7 @@ import (
 // strength of the first probe alone.
 //
 // The diff drivers are installed with the merge driver, so a registration missing any of
-// them fails here too. It is read before the probe: the probe runs a magus against this
-// workspace, and that load rewires whatever it finds missing.
+// them fails here too, and the remedy is the init verb that installs them.
 func (r *runner) checkMergeDriverLoads() types.Check {
 	const name = "merge-driver-loads-workspace"
 
@@ -75,9 +74,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Status: types.CheckFail,
 			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 				"hunk headers name no declaration and a footprint cannot say what a change touched",
-			Details: append(missing,
-				"rewire them with `"+hint.Ls.String()+"`: any command that opens the workspace does, "+
-					"and logs `merge-driver: could not refresh registration` with the cause when it cannot"),
+			Details: append(missing, r.installRemedy()),
 		}
 	}
 	return types.Check{Name: name, Status: types.CheckOK,
@@ -99,6 +96,19 @@ func (r *runner) registeredMergeDriver() string {
 	return cmd
 }
 
+// installRemedy names the init command that installs the diff drivers; when no VCS
+// resolves it says so rather than guessing a backend.
+func (r *runner) installRemedy() string {
+	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	if err != nil {
+		return "no VCS resolved for this workspace, so there is no backend to install them for: " + err.Error()
+	}
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
+		return "no VCS resolved for this workspace (nothing claims it and none is named), so there is no backend to install them for"
+	}
+	return "install them with `" + hint.Init.With("--vcs", res.Name) + "`"
+}
+
 // driverExecutable pulls the program out of a registered driver command, unwrapping the
 // quoting vcs/git.go adds for a path containing spaces.
 func driverExecutable(registered string) string {
@@ -116,8 +126,8 @@ func driverExecutable(registered string) string {
 // checkSettleHooks reports a registered git merge driver whose settle hooks are not all
 // installed. The driver keeps one side of a generated file on the promise that the hooks
 // regenerate it once the merge has the whole tree; without them every merge that touches
-// a generator's input commits stale output. A workspace load refreshes the driver's
-// registration and deliberately not the hooks, so this is where the gap shows.
+// a generator's input commits stale output. Only `magus init --vcs git` installs the
+// hooks, so this is where the gap shows.
 func (r *runner) checkSettleHooks() types.Check {
 	const name = "settle-hooks"
 	ctx := r.runCtx()

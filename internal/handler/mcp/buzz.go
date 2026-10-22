@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/json"
@@ -157,21 +158,12 @@ func readWorkspaceScript(root, path string, tool hint.ToolName, code types.Diagn
 	if !strings.EqualFold(filepath.Ext(path), ".buzz") {
 		return "", types.DiagnosticErrorf(code, "%s: path %q must name a .buzz file", tool, path)
 	}
-	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", types.DiagnosticErrorf(code, "%s: resolve workspace root: %v", tool, err)
-	}
-	name := path
-	if !filepath.IsAbs(name) {
-		name = filepath.Join(resolved, name)
-	}
-	name, err = filepath.EvalSymlinks(name)
-	if err != nil {
-		return "", types.DiagnosticErrorf(code, "%s: resolve script %q: %v", tool, path, err)
-	}
-	rel, err := filepath.Rel(resolved, name)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	name, err := file.Within(root, path)
+	switch {
+	case errors.Is(err, file.ErrOutsideRoot):
 		return "", types.DiagnosticErrorf(code, "%s: path %q is outside the workspace; use an inline script instead", tool, path)
+	case err != nil:
+		return "", types.DiagnosticErrorf(code, "%s: %v", tool, err)
 	}
 	info, err := os.Stat(name)
 	if err != nil {

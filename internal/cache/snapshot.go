@@ -232,40 +232,52 @@ func expandOutputGlobs(globs []types.Glob, root string, nested []string) ([]relA
 // not trusted to have been snapshotted under these rules (a remote tier, an older binary,
 // a declaration that gained an exclusion), so a hit enforces them again: replay must
 // never write over a file the declaration carves out. It returns m itself when nothing
-// drops.
-func ownedOutputs(m *Manifest, s Step) *Manifest {
-	if len(s.NestedDirs) == 0 && !slices.ContainsFunc(s.Outputs, func(g types.Glob) bool { return len(g.Except) > 0 }) {
-		return m
-	}
+// drops. A record outside a nested project that no glob claims at all is an error: a
+// manifest can come from a remote tier or an imported archive, and replay would
+// otherwise write any workspace path it names.
+func ownedOutputs(m *Manifest, s Step) (*Manifest, error) {
 	kept := make([]OutputRecord, 0, len(m.Outputs))
 	for _, rec := range m.Outputs {
-		if ownsRecord(s, rec.Path) {
+		switch ownership(s, rec.Path) {
+		case ownedRecord:
 			kept = append(kept, rec)
+		case unclaimedRecord:
+			return nil, fmt.Errorf("manifest records %q, which no output glob of the step claims", rec.Path)
 		}
 	}
 	if len(kept) == len(m.Outputs) {
-		return m
+		return m, nil
 	}
 	narrowed := *m
 	narrowed.Outputs = kept
-	return &narrowed
+	return &narrowed, nil
 }
 
-// ownsRecord reports whether s's outputs own the recorded path rel. A record no glob
-// claims is kept outside a nested project, as a hit always has been.
-func ownsRecord(s Step, rel string) bool {
-	nested := types.NestedOwner(rel, s.NestedDirs) != ""
+type recordOwnership int
+
+const (
+	ownedRecord recordOwnership = iota
+	droppedRecord
+	unclaimedRecord
+)
+
+// ownership classifies the recorded path rel against s's outputs: owned, dropped (excluded
+// or inside a nested project), or unclaimed by every glob outside a nested project.
+func ownership(s Step, rel string) recordOwnership {
 	claimed := false
 	for _, g := range s.Outputs {
 		if !(types.Glob{Pattern: g.Pattern}).Match(rel) || !types.GlobClaims(g.Pattern, rel, s.NestedDirs) {
 			continue
 		}
 		if !g.Excludes(rel) {
-			return true
+			return ownedRecord
 		}
 		claimed = true
 	}
-	return !claimed && !nested
+	if claimed || types.NestedOwner(rel, s.NestedDirs) != "" {
+		return droppedRecord
+	}
+	return unclaimedRecord
 }
 
 // replay restores a manifest's outputs from the local store.

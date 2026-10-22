@@ -307,10 +307,10 @@ the worktree's git directory. Fifty kept files of one target are one entry.
 The regeneration itself happens in the settle hooks, which `magus init --vcs git`
 writes beside the driver: a managed section `magus-regenerate` in `pre-merge-commit`,
 `pre-commit`, `post-commit`, `post-rewrite` and `post-applypatch`, each running
-`magus vcs resolve --hook <name>`. A workspace load refreshes the driver's
-registration and deliberately not the hooks: the hooks dir is shared by every worktree
-of the repository, and a hook that runs a generator is written once, on request, not
-by whichever worktree's magus loaded last. `magus doctor` reports a registered driver
+`magus vcs resolve --hook <name>`. Neither the driver's registration nor the hooks change
+when a workspace loads: the hooks dir is shared by every worktree of the repository, and
+a hook that runs a generator is written once, on request, not by whichever worktree's
+magus loaded last. `magus doctor` reports a registered driver
 whose hooks are missing under `settle-hooks`. Each hook fires once the tree is whole, and the hook
 regenerates more than the driver kept: every project whose declared sources or outputs
 the operation changed runs its `generate` target, and so does each target the driver
@@ -504,11 +504,10 @@ it predates the subcommand the registration names), the driver exits non-zero, a
 a non-zero driver as _conflict_. Every file routed to it is then reported as conflicted
 whether it is or not, which inflates the count rather than raising an error.
 
-magus rewrites the registration whenever it opens a workspace, so running a command that
-loads one repairs it; `magus ls` is enough. Two things stop that happening on their own: a
-magus that cannot load this workspace never reaches the refresh, and the `vcs` verbs skip it
-on purpose, because the refresh writes the tracked `.gitattributes` and those verbs run while
-that file may itself be unmerged.
+The registration changes only on `magus init --vcs git`, which rewrites it; `magus doctor`
+names a stale one and the command that repairs it. No other command writes it, so opening a
+workspace never touches `.gitattributes` or `.git/config`, and the `vcs` verbs run safely
+while `.gitattributes` is itself unmerged.
 
 `magus vcs resolve` does not depend on the driver: it reads the conflicted paths from git
 and regenerates, so it settles the inflated list too. A broken driver makes a conflict look

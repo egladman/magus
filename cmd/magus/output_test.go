@@ -121,7 +121,7 @@ func TestWriteTemplateMissingFieldListsRecordFields(t *testing.T) {
 		v    any
 		want string
 	}{
-		{"object lists its sorted fields", record, "this record's top-level fields are count, target, workspace: "},
+		{"object lists its sorted fields", record, "this record's fields are .count, .target, .workspace "},
 		{"a list has no fields to offer", []string{"a"}, ""},
 	}
 	for _, tc := range cases {
@@ -131,7 +131,7 @@ func TestWriteTemplateMissingFieldListsRecordFields(t *testing.T) {
 
 			require.Error(t, err)
 			if tc.want == "" {
-				assert.NotContains(t, err.Error(), "top-level fields")
+				assert.NotContains(t, err.Error(), "record's fields")
 			} else {
 				assert.Contains(t, err.Error(), tc.want)
 			}

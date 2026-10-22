@@ -306,7 +306,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 			return !slices.ContainsFunc(whole, func(w RegeneratedOutput) bool { return w.Output == o.Output && w.Target == o.Target })
 		})
 	}
-	ps = append(ps, regeneratedProblems(regenerated)...)
+	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
 	ps = append(ps, unrunGateProblems(UnrunGates(store.root, gated, ws.Projects, regenerated))...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
@@ -402,30 +402,52 @@ func listNames(names []string) string {
 }
 
 // regeneratedProblems is each output as OutputOutsideWritePaths, its Subject the output.
-func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
+// One a deny path touches carries no Edit: the record kept it from the job on purpose.
+func regeneratedProblems(outputs []RegeneratedOutput, deny []string) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(outputs))
 	for _, o := range outputs {
-		ps = append(ps, types.JobProblem{
+		p := types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "write_paths", Subject: o.Output,
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
 			Fix: fmt.Sprintf(`add %q to write_paths, or waive it in waivers: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
-		})
+		}
+		glob, _, _ := strings.Cut(o.Output, " !")
+		if !slices.ContainsFunc(deny, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+			p.Edit = regeneratedEdit(o.Output)
+		}
+		ps = append(ps, p)
 	}
 	return ps
 }
 
-// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`.
+// regeneratedEdit adds output to the write paths, or waives it for the integrator when it
+// carries an exclusion (`gen/*.go !gen/*_test.go`), which no write path can spell.
+func regeneratedEdit(output string) *types.JobEdit {
+	if strings.Contains(output, " !") {
+		return &types.JobEdit{AddWaiver: &types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: output, Reason: integratorRegenerates}}
+	}
+	return &types.JobEdit{AddWritePath: output}
+}
+
+// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. The goal a
+// lint gate's Edit adds skips default charms, as [lintGoals] adds it, so lint run by --fix
+// reports instead of rewriting the worker's tree.
 func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
 		subject := g.Target + " " + g.Project
+		add := g.Goal
+		if g.Target == lintTarget {
+			add.Check.NoDefaultCharms = true
+		}
 		goal, _ := json.Marshal(g.Goal)
 		ps = append(ps, types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
 			Fix: fmt.Sprintf(`add the goal %s to goals, or waive it in waivers: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
+			Edit: &types.JobEdit{AddGoal: &add},
 		})
 	}
 	return ps

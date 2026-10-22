@@ -138,6 +138,9 @@ func TestActivationServesTheSupervisorsSocket(t *testing.T) {
 	st, err := c.Status(t.Context())
 	require.NoError(t, err, stderr.String())
 	assert.Equal(t, cmd.Process.Pid, st.PID, "the broker the supervisor started answers on the supervisor's socket")
+	info, err := os.Stat(handshakePath(path))
+	require.NoError(t, err, "a socket the supervisor bound carries a handshake too")
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	require.NoError(t, c.Shutdown(t.Context()))
 	select {
 	case err := <-exited:
@@ -146,4 +149,5 @@ func TestActivationServesTheSupervisorsSocket(t *testing.T) {
 		t.Fatal("the activated broker did not stop")
 	}
 	assert.FileExists(t, path, "the supervisor's socket outlives the broker it started")
+	assert.NoFileExists(t, handshakePath(path), "the handshake goes with the broker that wrote it")
 }

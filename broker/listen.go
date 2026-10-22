@@ -2,6 +2,8 @@ package broker
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/sockdir"
 )
@@ -61,6 +64,41 @@ func Listen(ctx context.Context, addr string) (net.Listener, error) {
 // WSA error that syscall.EADDRINUSE does not match.
 func addrInUse(err error) bool {
 	return err != nil && (errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use"))
+}
+
+// handshakePath is where a broker keeps the handshake for the socket at sock: beside it,
+// in the same private directory.
+func handshakePath(sock string) string { return sock + ".handshake" }
+
+// newHandshake names one broker process, so a file a dead broker left never matches its
+// successor.
+func newHandshake() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("broker: generate handshake: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// writeHandshake publishes handshake for the socket at sock, readable by this user
+// alone. Serve calls it, not Listen, so a socket a supervisor bound carries one too. The
+// rename replaces whatever sits at the path, a planted link included, and a client never
+// reads a partial value. It skips the fsync: a crash loses only a value the next broker
+// replaces.
+func writeHandshake(sock, handshake string) error {
+	path := handshakePath(sock)
+	if err := file.ReplaceFile(path, []byte(handshake), 0o600); err != nil {
+		return fmt.Errorf("broker: write handshake %s: %w", path, err)
+	}
+	return nil
+}
+
+func readHandshake(sock string) (string, error) {
+	b, err := os.ReadFile(handshakePath(sock))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 // Live reports whether something accepts connections on addr, within 100ms.

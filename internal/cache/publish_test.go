@@ -388,3 +388,67 @@ func TestStoreFetchedBundleReplacesByRename(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "second", string(got))
 }
+
+type swappedRefBackend struct {
+	types.CacheBackend
+	asked, served string
+}
+
+func (b swappedRefBackend) GetArtifact(ctx context.Context, project, key string) (io.ReadCloser, error) {
+	if key == b.asked {
+		key = b.served
+	}
+	return b.CacheBackend.GetArtifact(ctx, project, key)
+}
+
+func TestFetchedBundleBindsRef(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+	rootA, cA := openSigned(t, remote, seed, trusted)
+	r, _ := buildCanonical(t, rootA, cA)
+	_, err = cA.PublishOutput(context.Background(), r.Ref)
+	require.NoError(t, err)
+
+	const asked = "out000000000000"
+	_, cB := openSigned(t, swappedRefBackend{CacheBackend: remote, asked: asked, served: r.Ref}, nil, trusted)
+
+	_, _, err = cB.OutputByRef(context.Background(), asked)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), asked)
+	assert.Contains(t, err.Error(), r.Ref)
+	_, _, err = cB.outputs.ByRef(asked)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "nothing is filed for the ref that was refused")
+}
+
+func TestBundleKeyIsOnePathSegment(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	_, c := openSigned(t, remote, nil, nil)
+	outputs := c.outputs.outputsDir()
+
+	for _, bad := range []string{"..", "../escaped", "a/b", `a\b`, "/abs"} {
+		t.Run(bad, func(t *testing.T) {
+			c.storeFetchedBundle(t.Context(), []byte("x"), OutputBundle{
+				Descriptor: OutputDescriptor{Key: bad, Attempt: "a1"},
+				KeyInputs:  []string{"src:x"},
+			})
+			c.storeFetchedBundle(t.Context(), []byte("x"), OutputBundle{
+				Descriptor: OutputDescriptor{Key: "k1", Attempt: bad},
+			})
+			assert.Error(t, c.outputs.PersistKeyInputs(t.Context(), bad, []string{"src:x"}))
+		})
+	}
+	assert.Error(t, c.outputs.PersistKeyInputs(t.Context(), "", []string{"src:x"}))
+
+	var files []string
+	_ = filepath.WalkDir(filepath.Dir(outputs), func(p string, d os.DirEntry, werr error) error {
+		if werr == nil && !d.IsDir() && (strings.HasSuffix(p, outExt) || strings.HasSuffix(p, descExt) || strings.HasSuffix(p, keyInputsName)) {
+			files = append(files, p)
+		}
+		return nil
+	})
+	assert.Empty(t, files)
+}

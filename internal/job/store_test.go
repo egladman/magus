@@ -551,7 +551,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		validated bool
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
-			row, err := DecodeDeclaration(strings.NewReader(fmt.Sprintf(
+			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
 				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobSchemaVersion, checkpoint)))
 			require.NoError(t, err)
@@ -839,6 +839,7 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	_, err = s.List()
 	require.ErrorIs(t, err, file.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
+	require.ErrorContains(t, err, "set it aside with `mv "+old+" "+old+".old`", "the refusal names the move made below")
 	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
 	require.ErrorIs(t, err, file.ErrLegacyStore, "a write is refused too")
 	raw, err := os.ReadFile(old)
@@ -848,6 +849,13 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 
 	require.NoError(t, os.Rename(old, old+".old"))
 	seed(t, s, lease("a"))
+}
+
+func TestShellQuoteKeepsAPathOneWord(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "/state/jobs/jobs.json", shellQuote("/state/jobs/jobs.json"))
+	assert.Equal(t, `'/my state/it'\''s/jobs.json'`, shellQuote("/my state/it's/jobs.json"))
 }
 
 func TestStoreClear(t *testing.T) {

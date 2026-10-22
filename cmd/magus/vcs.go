@@ -125,11 +125,7 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Loading the workspace must not re-wire the merge driver: EnsureMergeDriver writes the
-	// TRACKED .gitattributes, and doing that here (inside the VCS's index manipulation, once
-	// per conflicted file) is the same dirty-tree failure this driver was changed to stop
-	// causing.
-	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
+	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return fmt.Errorf("merge-driver: load workspace: %w", err)
 	}
@@ -248,12 +244,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
 	}
 
-	// Not the load dispatch would do: opening a workspace refreshes the merge-driver
-	// registration, which writes the tracked .gitattributes. During a merge that file may
-	// be unmerged, so the refresh would splice a section between conflict markers. It runs
-	// after the markers are gone instead.
-	loadCtx := withoutMergeDriverRefresh(ctx)
-	m, err := loadMagus(loadCtx, root)
+	m, err := loadMagus(ctx, root)
 	// A magusfile carrying this merge's conflict markers is not a magusfile magus can parse,
 	// and the declarations it holds are the whole basis for settling anything. The committed
 	// side is a complete copy of those declarations, so retry against it rather than
@@ -265,7 +256,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		if len(overlay) == 0 {
 			return err
 		}
-		m, err = loadMagus(interp.WithOverlay(loadCtx, overlay), root)
+		m, err = loadMagus(interp.WithOverlay(ctx, overlay), root)
 		if err != nil {
 			return err
 		}
@@ -810,7 +801,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 		}
 	}
 
-	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
+	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
 	}

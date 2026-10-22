@@ -7,7 +7,7 @@ import (
 
 // ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
@@ -18,6 +18,10 @@ const helloMagic = "magus-broker-v1"
 // connection carries any number of requests at once. A later wait frame for a queued
 // claim has room here: it would share the claim's ID and precede its reply.
 const (
+	// typeHandshake is the broker's first frame on every connection, with ID 0 and no
+	// body. It is sent only once the handshake file exists, so a client that reads the
+	// file after it reads the current one.
+	typeHandshake      = "handshake"
 	typeHello          = "hello"
 	typeHelloReply     = "hello.reply"
 	typeClaim          = "claim"
@@ -75,6 +79,9 @@ type hello struct {
 	// at once. Zero is no cap.
 	Tree           string `json:"tree,omitempty"`
 	MaxValidations int    `json:"max_validations,omitzero"`
+	// Handshake is the value the broker keeps beside its socket, read after the broker's
+	// handshake frame; a hello carrying another gets CodeHandshake.
+	Handshake string `json:"handshake,omitempty"`
 }
 
 // helloReply is the broker's own identity.
@@ -191,6 +198,9 @@ type ErrorCode string
 const (
 	// CodeProtocol is a hello with the wrong magic or protocol version.
 	CodeProtocol ErrorCode = "protocol"
+	// CodeHandshake is a hello whose handshake is not the one the broker keeps beside its
+	// socket.
+	CodeHandshake ErrorCode = "handshake"
 	// CodeMalformed is a frame the broker could not decode.
 	CodeMalformed ErrorCode = "malformed"
 	// CodeUnknownType is a frame type the broker does not speak.

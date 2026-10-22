@@ -226,3 +226,28 @@ func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(v))
 	assert.Contains(t, v.Reason, "`retry.sh`: ", "the verdict names the script it was judged from")
 }
+
+func TestClientPathResolvesAgainstRoot(t *testing.T) {
+	t.Parallel()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";`)
+	w.Write("gate.buzz", `import "magus"; magus\run(["ci"]);`)
+	w.Write("sub/gate.buzz", `import "magus";`)
+	sub := w.Path("sub")
+	outside := filepath.Join(t.TempDir(), "gate.buzz")
+	require.NoError(t, os.WriteFile(outside, []byte(`import "magus"; magus\run(["ci"]);`), 0o644))
+	require.NoError(t, os.Symlink(outside, w.Path("link.buzz")))
+	envelope := func(path string) string {
+		return toolEnvelope(t, "s", sub, "mcp__magus__client", map[string]any{"path": path})
+	}
+
+	req, ok := decodeTestEnvelope(t, envelope("gate.buzz"))
+	require.True(t, ok)
+	assert.Equal(t, "magus run ci", req.Value, "the server reads a relative path against its root, not the hook's cwd")
+
+	for _, path := range []string{"link.buzz", outside, "../outside.buzz", "missing.buzz"} {
+		req, ok := decodeTestEnvelope(t, envelope(path))
+		require.True(t, ok)
+		assert.Equal(t, unreadClientCall(), req.Value, path)
+	}
+}

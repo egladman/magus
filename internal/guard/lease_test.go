@@ -204,7 +204,7 @@ func gateRepeatRepo(t *testing.T, runs int, outcome string) (context.Context, *t
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome,
+		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: repo.Root()}))
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
 }
@@ -226,6 +226,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		d := denyRepeatGate(ctx, Dependencies{}, "", gate)
 		require.NotEmpty(t, d)
 		assert.Contains(t, d.Say, "`ci` passed on this branch")
+		assert.Contains(t, d.Say, "run inv-green", "the refusal names the passing run")
 		assert.Contains(t, d.Say, "nothing changed since")
 		assert.Contains(t, d.Why, repo.Head(), "the rationale names the verdict's commit")
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
@@ -255,6 +256,29 @@ func TestDenyRepeatGate(t *testing.T) {
 	t.Run("the second gate", func(t *testing.T) {
 		ctx, _ := gateRepeatRepo(t, 1, sessions.OutcomePass)
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a gate placed in another checkout with its own changes", func(t *testing.T) {
+		ctx, landing := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		other := testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n", "magusfile.buzz": "\n"})
+		otherRuns := filepath.Join(other.Root(), ".magus", "runs")
+		require.NoError(t, os.MkdirAll(otherRuns, 0o755))
+		for i := range 2 {
+			writeRun(t, otherRuns, "other-"+strconv.Itoa(i), time.Now().Add(-time.Duration(30-i)*time.Minute), time.Minute, "affected", "ci")
+		}
+		otherDir, err := sessions.Dir(other.Root())
+		require.NoError(t, err)
+		require.NoError(t, sessions.RecordGate(otherDir, sessions.GateResult{
+			Target: types.TargetCI, Ref: "main", Commit: other.Head(), Outcome: sessions.OutcomePass, Inv: "inv-other",
+		}, sessions.InvocationStart{Workspace: other.Root()}))
+		other.Write("b.go", "package a\n")
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(other.Path("b.go"), after, after))
+
+		placed := other.Root() + "/magus -C " + other.Root() + " affected ci"
+		assert.NotEmpty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus -C "+landing.Root()+" affected ci"),
+			"the landing checkout's own unchanged green tree is still refused")
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", placed),
+			"the landing branch's verdict does not judge a gate that runs in another checkout")
 	})
 	t.Run("a command that is not the gate", func(t *testing.T) {
 		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomePass)
@@ -439,6 +463,134 @@ func TestACheckoutHolderGatesInItsOwnCheckout(t *testing.T) {
 	ctx, deps = integratorFixture(t, elsewhere, "root/feat "+row.ID)
 	recordCheckout(ctx)
 	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").refused(), "a row taken in another checkout")
+}
+
+func TestACheckoutHolderGatesWhereTheCallRuns(t *testing.T) {
+	workspaceDir := func() string {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+		return dir
+	}
+	held, other := workspaceDir(), workspaceDir()
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	row.CheckoutRoot = held
+	ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: held})
+	require.NoError(t, err)
+
+	for _, command := range []string{
+		"cd " + held + " && ./magus affected ci",
+		"./magus -C " + held + " affected ci",
+		"./magus --root " + held + " run ci .",
+		"cd " + other + " && ./magus -C " + held + " affected ci",
+		"cd " + held + " && ./magus affected ci && ./magus run ci .",
+	} {
+		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), command)
+	}
+	for _, command := range []string{
+		"./magus affected ci",
+		"cd " + other + " && ./magus affected ci",
+		"./magus -C " + other + " affected ci",
+		"cd " + held + " && ./magus -C " + other + " affected ci",
+		"cd " + held + " && ./magus affected ci && cd " + other + " && ./magus affected ci",
+		"cd " + held + " && ./magus -C $DIR affected ci",
+		"cd " + held + " || ./magus affected ci",
+	} {
+		assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+	}
+}
+
+func markedWorkspace(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+	return dir
+}
+
+// heldRowFixture seeds a worker row taken in held, titled for role, and returns its
+// context, with the worktree recorded at worktreeRoot unless that is empty.
+func heldRowFixture(t *testing.T, held, worktreeRoot, role string) (context.Context, Dependencies, types.Job) {
+	t.Helper()
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	row.CheckoutRoot = held
+	ctx, deps := integratorFixture(t, row, "root/"+role+" "+row.ID)
+	if worktreeRoot != "" {
+		at, ok := ctx.Value(locationKey{}).(location)
+		require.True(t, ok)
+		_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: worktreeRoot})
+		require.NoError(t, err)
+	}
+	return ctx, deps, row
+}
+
+func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
+	held, other := markedWorkspace(t), markedWorkspace(t)
+	ctx, deps, row := heldRowFixture(t, held, held, "feat")
+
+	for _, command := range []string{
+		"cd " + held + " && ./magus run go-test .",
+		"./magus -C " + held + " run go-test .",
+		"./magus --root=" + held + " run go-test .",
+		"cd " + other + " && ./magus -C " + held + " run go-test .",
+		"./magus run go-test . --plan",
+		"./magus run go-test . --dry-run",
+		"./magus --help",
+		"echo ./magus run go-test .",
+	} {
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, command), command)
+	}
+
+	for _, command := range []string{
+		"./magus run go-test .",
+		"cd " + other + " && ./magus run go-test .",
+		"./magus -C " + other + " run go-test .",
+		"cd " + held + " && ./magus -C " + other + " run go-test .",
+		"cd $WORKTREE && ./magus run go-test .",
+	} {
+		got := denyLeaseCheckout(ctx, deps, row.ID, command)
+		require.True(t, got.refused(), command)
+		assert.Contains(t, got.Say, "`"+filepath.Join(held, "magus")+" -C "+held+" run go-test .`", command)
+	}
+}
+
+func TestDenyLeaseCheckoutStaysQuiet(t *testing.T) {
+	held := markedWorkspace(t)
+
+	t.Run("no lease", func(t *testing.T) {
+		ctx, deps, _ := heldRowFixture(t, held, held, "feat")
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, "", "./magus run go-test ."))
+	})
+	t.Run("a row with no worktree", func(t *testing.T) {
+		ctx, deps, row := heldRowFixture(t, held, "", "feat")
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus run go-test ."))
+	})
+	t.Run("a checkout the envelope is in", func(t *testing.T) {
+		ctx, deps, row := heldRowFixture(t, held, "", "feat")
+		at, ok := ctx.Value(locationKey{}).(location)
+		require.True(t, ok)
+		_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: at.workspace})
+		require.NoError(t, err)
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus run go-test ."))
+	})
+}
+
+func TestAnIntegratorIsJudgedWhereItsLineRuns(t *testing.T) {
+	held := markedWorkspace(t)
+	ctx, deps, row := heldRowFixture(t, held, "", "integrate")
+
+	assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, "cd "+held+" && ./magus run go-build ."), "the integrator's checkout, named on the line")
+	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run go-build .").refused(), "the same call from the envelope's checkout")
+
+	_, worker := workerRuns(ctx, deps, row.ID, "cd "+held+" && ./magus run go-test .")
+	assert.False(t, worker, "the integrator's background run, named on the line, is not a worker's")
+	_, worker = workerRuns(ctx, deps, row.ID, "./magus run go-test .")
+	assert.True(t, worker, "the same run from the envelope's checkout is a worker's")
 }
 
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for

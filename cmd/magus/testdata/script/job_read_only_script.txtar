@@ -1,7 +1,8 @@
 # A read-only scout passes `magus job wait` only through a script check: the record's
 # check names a Buzz script, the holder runs it with `magus buzz --record` after the fork,
-# and the result cites the ref that run printed. The same scout with no check is refused,
-# and its holder ends it with `magus job exit`, recorded no_return.
+# and the result cites the ref that run printed. The same scout with no check passes on
+# the result its holder files with `magus job exit --stdin`, and without one is recorded
+# no_return.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -31,17 +32,17 @@ exec magus job wait scout/pricing
 stdout '^verified scout/pricing, recorded pass$'
 stdout 'goal check: verified \(out[0-9a-f]{12}\)'
 
-# A check-less scout has nothing a run can bind to, so wait refuses it even citing a
-# recorded run. A scout whose output is prose ends by `magus job exit`, recorded no_return
-# with an end_reason saying it returned ungraded rather than that nobody returned it.
+# A check-less scout has nothing a wait could grade, so the result its holder files is the
+# grade: `magus job exit --stdin` records it pass and ends it. One ending with no result is
+# recorded no_return, with an end_reason saying it was ungraded rather than abandoned.
 exec magus job fork scout/notes --read-only --criteria 'list the tax rules'
 exec magus job exec scout/notes
 stdin $WORK/notes.json
 exec magus job exit scout/notes --stdin
-! exec magus job wait scout/notes
-stdout 'declares no check and no goal'
-exec magus job exit scout/notes
-stdout '^ended scout/notes, recorded no_return: returned ungraded: its holder filed a result'
+stdout '^exited scout/notes, recorded pass: returned: its holder filed a result'
+! stdout 'job wait'
+! exec magus job exit scout/notes
+stderr 'scout/notes already ended pass'
 
 exec magus job fork scout/prose --read-only --criteria 'summarize the tests'
 exec magus job exec scout/prose

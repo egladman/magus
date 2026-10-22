@@ -10,7 +10,8 @@ exec git config user.email test@example.com
 exec git config user.name Test
 exec git add .
 exec git commit -m initial
-exec magus ls
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init --vcs git
 exec git add -A
 exec git commit --allow-empty -m settled
 

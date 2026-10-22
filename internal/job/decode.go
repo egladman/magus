@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -27,7 +29,7 @@ var DeclarationSchema string
 // into stdin from being read into memory before it is rejected.
 const maxInputBytes = 1 << 20
 
-// DecodeResult reads a holder's result, and DecodeDeclaration one declared job, from r.
+// DecodeResult reads a holder's result, and decodeDeclaration one declared job, from r.
 //
 // STRICT AND VERSIONED, in that order of reporting: a sender a release ahead is told which
 // versions this magus knows instead of learning that one of its fields is unknown, and
@@ -53,13 +55,13 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 	return rep, nil
 }
 
-// DecodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
+// decodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
 // same two passes over the job's schema. A record that is not a job (blank, too large, no
 // schema_version, an unknown member) fails as JobRecordInvalid problems, each unknown member
 // its own, and a job that decodes fails with every problem [types.Declaration.Problems]
 // finds. A newer schema_version, or a requirement this magus lacks, is no defect of the
 // record and fails as a plain error naming the update.
-func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
+func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	raw, err := readInput(r, "job")
 	switch {
 	case err != nil:
@@ -78,6 +80,28 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 		return types.Declaration{}, memberProblems(raw, err).Err()
 	}
 	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
+}
+
+// DecodeStdinDeclaration is [decodeDeclaration] for the one record `magus job fork --stdin`
+// reads, where a JSON object naming no schema_version member takes this magus's version.
+// defaulted reports that it did, for the caller to say so. A schema_version the record
+// names, 0 included, is held to decodeDeclaration's rules.
+func DecodeStdinDeclaration(r io.Reader) (row types.Declaration, defaulted bool, err error) {
+	raw, err := readInput(r, "job")
+	if err != nil {
+		return types.Declaration{}, false, asRecordInvalid(err)
+	}
+	if members, isObject := objectMembers(raw); isObject {
+		if _, named := members["schema_version"]; !named {
+			members["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
+			if raw, err = json.Marshal(members); err != nil {
+				return types.Declaration{}, false, err
+			}
+			defaulted = true
+		}
+	}
+	row, err = decodeDeclaration(bytes.NewReader(raw))
+	return row, defaulted, err
 }
 
 // recordInvalid is err, the reason a record could not be read as a job, as its one problem.
@@ -117,7 +141,7 @@ func memberProblems(raw []byte, err error) types.JobProblems {
 // storeStamped are the members of a stored row that the store computes and a declaration
 // cannot carry. `magus describe job -o json` prints them beside the declared ones, and the
 // edit loop (describe, edit, apply) hands that record back, so [DecodeDeclarations] drops
-// them rather than refusing the loop at its second step. [DecodeDeclaration] still refuses
+// them rather than refusing the loop at its second step. [decodeDeclaration] still refuses
 // them, as `magus job fork` should: a caller declaring a creation time is wrong, while one
 // re-applying a record it read back is not. Any other unknown member is an error in both.
 var storeStamped = jobOnlyMembers()
@@ -148,7 +172,7 @@ func jsonMembers(t reflect.Type) []string {
 // status a described row prints and apply never writes; and without `validation` beside a
 // `check`: a stored row renders its check into that line, and a declaration carrying both
 // is refused. A record that is not an object comes back as it was, for
-// [DecodeDeclaration] to refuse in its own words.
+// [decodeDeclaration] to refuse in its own words.
 func dropStoreStamped(raw []byte) ([]byte, error) {
 	members, isObject := objectMembers(raw)
 	if !isObject {
@@ -183,7 +207,7 @@ func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
 }
 
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
-// array of them, or one object per line. Each is held to [DecodeDeclaration]'s rules, and a
+// array of them, or one object per line. Each is held to [decodeDeclaration]'s rules, and a
 // failure names the record by its position, so nothing is applied from a stream with one
 // bad record in it.
 func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
@@ -217,7 +241,7 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 		if err != nil {
 			return nil, fmt.Errorf("record %d: %w", i+1, err)
 		}
-		row, err := DecodeDeclaration(strings.NewReader(string(declared)))
+		row, err := decodeDeclaration(strings.NewReader(string(declared)))
 		if err != nil {
 			return nil, fmt.Errorf("record %d: %w", i+1, err)
 		}

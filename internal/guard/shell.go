@@ -1048,7 +1048,8 @@ var assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'
 // one that merely names a directory.
 //
 // Each target is placed where the shell lands, from callDir and the cds before it, with `~`
-// and $HOME the home's; one that cannot be placed is left out.
+// and $HOME the home's; one that cannot be placed is left out. Unlike placeMagusCalls it
+// keeps a cd inside a conditional: its rules deny on any target, and placement must not guess.
 func magusCdTargets(command string, d Dialect, callDir, home string) []string {
 	if !mentionsMagusCommand(command, d) {
 		return nil
@@ -2543,12 +2544,22 @@ var (
 		lead: "Reading magus output in a script?",
 		argv: []string{"hack/dev/example-typed-results.buzz"},
 	}
+	pruneWorktreesScript = referenceScript{
+		lead: "Freeing disk or clearing finished worktrees?",
+		argv: []string{"hack/dev/prune-worktrees.buzz", "--", "--go-cache"},
+	}
+	resolveConflictsScript = referenceScript{
+		lead: "Settling a conflicted file?",
+		argv: []string{"hack/dev/resolve-conflicts.buzz"},
+	}
 	referenceScripts = map[denyRuleName]referenceScript{
 		denyRuleSedInPlace:         renameScript,
 		denyRuleScriptedRewrite:    renameScript,
 		denyRuleInterpreterRewrite: renameScript,
 		denyRuleOutputPipe:         typedResultScript,
 		denyRuleOutputRedirect:     typedResultScript,
+		denyRuleWorktreeRemove:     pruneWorktreesScript,
+		denyRuleMergeSideCheckout:  resolveConflictsScript,
 	}
 )
 
@@ -2557,7 +2568,14 @@ var (
 // there is advice nobody can take.
 func referenceScriptNote(root string, rule denyRuleName) string {
 	s, ok := referenceScripts[rule]
-	if !ok || root == "" {
+	if !ok {
+		return ""
+	}
+	return s.note(root)
+}
+
+func (s referenceScript) note(root string) string {
+	if root == "" {
 		return ""
 	}
 	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {

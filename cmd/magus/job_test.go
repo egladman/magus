@@ -421,7 +421,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
-	piped, err := job.DecodeDeclaration(strings.NewReader(fmt.Sprintf(`{
+	piped, _, err := job.DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
 	  "schema_version": %d,
 	  "id": "adj/store",`, types.JobSchemaVersion) + `
 	  "parent": "adjacency",

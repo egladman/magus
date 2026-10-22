@@ -1147,7 +1147,7 @@ func (v jjVCS) RunMergeDriver(ctx context.Context, root string, paths []string) 
 	for _, kv := range jjMergeTool {
 		value := kv.value
 		if kv.key == "merge-tools.magus.program" {
-			value = strconv.Quote(driverExe(ctx, root))
+			value = strconv.Quote(driverExe(ctx, root, jjTracks))
 		}
 		config = append(config, "--config", kv.key+"="+value)
 	}
@@ -1166,6 +1166,16 @@ func (v jjVCS) RunMergeDriver(ctx context.Context, root string, paths []string) 
 		return fmt.Errorf("jj resolve --tool magus %s: %w", p, withOutput(err, said))
 	}
 	return nil
+}
+
+// jjTracks is jj's tracksFunc, read from the working-copy commit as last snapshotted:
+// a snapshot would start tracking an unignored local build, the one case that must not
+// count.
+func jjTracks(ctx context.Context, root, rel string) bool {
+	cmd := vcsExec(ctx, "jj", "file", "list", "--ignore-working-copy", "-r", "@", "--", "root-file:"+strconv.Quote(rel))
+	cmd.Dir = root
+	out, err := cmd.Output()
+	return err != nil || strings.TrimSpace(string(out)) != ""
 }
 
 // repoMergeTool is the magus tool as the repository's own config holds it, one sorted

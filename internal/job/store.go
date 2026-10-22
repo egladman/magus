@@ -247,12 +247,25 @@ const (
 
 // refuseDocument fails when the store's directory still holds the plan an older magus kept
 // as one JSON document. Reading past it would show an empty plan while the rows sit beside
-// it, and the guard reads an empty plan as nothing leased.
+// it, and the guard reads an empty plan as nothing leased. The refusal names the move that
+// sets the document aside once no older magus writes it; nothing reads it after that.
 func (s *Store) refuseDocument() error {
-	if err := file.RefuseOld(filepath.Join(filepath.Dir(s.path), documentFileName)); err != nil {
-		return fmt.Errorf("cannot open job plan %s: %w", s.path, err)
+	old := filepath.Join(filepath.Dir(s.path), documentFileName)
+	if err := file.RefuseOld(old); err != nil {
+		err = fmt.Errorf("cannot open job plan %s: %w", s.path, err)
+		return fmt.Errorf("%w: once no older magus writes it, set it aside with `mv %s %s.old`",
+			err, shellQuote(old), shellQuote(old))
 	}
 	return nil
+}
+
+// shellQuote is p as one POSIX shell word. A copy: internal/guard's shellWord sits in
+// a package that imports this one, and cmd/magus's in package main.
+func shellQuote(p string) string {
+	if p != "" && strings.Trim(p, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+@:,") == "" {
+		return p
+	}
+	return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
 }
 
 // Path is the JSON Lines file this Store reads and writes, for a reader that has to name
@@ -667,13 +680,16 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 				i >= 0 && slices.Contains(prev.WritePaths, p) && !slices.Contains(prev.SoftPaths, p)
 		})
 		// The store writes every reason: the sweep's, and the one a write ending a live row
-		// as no_return gets from what the row had become. A row brought back to life has none.
+		// as no_return gets from what the row had become, and a pass its holder's result made.
+		// A row brought back to life has none.
 		row.EndReason = prev.EndReason
 		switch {
 		case row.State.Live():
 			row.EndReason = ""
 		case i >= 0 && prev.State.Live() && row.State == types.StateNoReturn:
 			row.EndReason = endedReason(prev, actor.Lease == id || (prev.CheckoutRoot != "" && prev.CheckoutRoot == s.root))
+		case i >= 0 && prev.State.Live() && row.State == types.StatePass && gradedByHolder(prev):
+			row.EndReason = returnedReason
 		}
 		row.Updated = now
 		// A wait that refuses records why and leaves the row where it was, heartbeat

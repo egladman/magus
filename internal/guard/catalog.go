@@ -84,9 +84,11 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocThrowawayCopy},
 	{doc: ruleDocVcsOffSwitch},
 	{doc: ruleDocUnknownEnv},
+	{doc: ruleDocUnreadCommand},
 	{doc: ruleDocBriefCommand},
 	{doc: ruleDocFocusRead},
 	{doc: ruleDocHookWiringWrite},
+	{doc: ruleDocLeaseCheckout},
 	{doc: ruleDocLeaseGate},
 	{doc: ruleDocLeaseHarness},
 	{doc: ruleDocLeaseRebind},
@@ -543,6 +545,14 @@ var ruleDocUnknownEnv = types.RuleDoc{
 		"It fires on the names a command's environment receives: a `NAME=value` prefix, `env NAME=value`, `env -u NAME`, and `export`. It asks config.EnvVarProblem, the check magus's own startup refuses on (MGS1046), so a name the guard denies is one the binary would refuse, and one it cannot prove wrong passes both.",
 }
 
+var ruleDocUnreadCommand = types.RuleDoc{
+	Name:    string(denyRuleUnreadCommand),
+	Catches: "a program or VCS subcommand the shell computes before it runs, which no rule can read",
+	Why: "Every shell rule reads the program and its subcommand as written, and the shell rewrites some words first: `\\git` and `g\\it` drop the escape, `$'g\\x69t'` decodes it, `{git,push}` and `gi?` expand, `$x`, `${x}` and `$(echo git)` substitute. Each runs a command none of the rules judged. " +
+		"Spell the command plainly. Quotes are fine, since removing them changes nothing (`\"git\"`, `'git'`, `$'git'`), and so is an expansion in an argument (`git commit -m \"$msg\"`, `cd \"$dir\"`): only the words that pick what runs are read. " +
+		"A wrapper's program (`env \\git`), a `sh -c` script and an `eval` are read the same way.",
+}
+
 var ruleDocBriefCommand = types.RuleDoc{
 	Name:    string(denyRuleBriefCommand),
 	Catches: "a spawn or continuation brief that teaches a command the guard denies",
@@ -557,7 +567,18 @@ var ruleDocFocusRead = types.RuleDoc{
 
 var ruleDocHookWiringWrite = types.RuleDoc{
 	Name:    string(denyRuleHookWiringWrite),
-	Catches: "a leased or agent-attributed write to the hook wiring the guard is installed by",
+	Catches: "a leased or agent-attributed write to the host hook wiring or the workspace's ./magus",
+	Why: "The wiring and the binary it runs decide whether any rule runs at all from the host's next call or session on, so no scope anybody hands out includes them. " +
+		"A write tool and a shell line are judged alike: a redirect, `cp`, `mv`, `ln`, `tee`, `dd of=`, `install` or `rm` whose target is `.claude/settings.json`, `.claude/settings.local.json`, another host's hook file or the workspace root's `magus` is refused, after the line's `cd`s. " +
+		"A person's own session goes ahead, told which wiring file it is editing. A line that runs `go` is left to raw-tool, which advises the one relink of `./magus` a checkout that cannot load its sources needs.",
+}
+
+var ruleDocLeaseCheckout = types.RuleDoc{
+	Name:    string(denyRuleLeaseCheckout),
+	Catches: "a worker holding a checkout running magus outside it",
+	Why: "A host shell can start a subagent in its parent directory, and a cd never persists between calls, so the guard places each magus call by its line and judges it there. " +
+		"The holder of a row with a standing checkout runs magus in that checkout: name it on the line with `-C <root>` or a cd before the call, and the refusal quotes that line. " +
+		"A call whose directory cannot be read is placed where the host started. A plan, a dry run, a graph or help runs nothing and passes, and so does a caller with no lease, a row with no checkout and the root session.",
 }
 
 var ruleDocLeaseGate = types.RuleDoc{
