@@ -3375,6 +3375,7 @@ github.com/egladman/magus/types.McpTransport type string
 github.com/egladman/magus/types.McpTransport.String method func() string
 github.com/egladman/magus/types.McpTransport.Valid method func() bool
 github.com/egladman/magus/types.McpTransport.Values method func() []string
+github.com/egladman/magus/types.MembersClaimTheirOwn func(p *Project, target string) bool
 github.com/egladman/magus/types.MemoryCurve type [20]uint32
 github.com/egladman/magus/types.MemoryCurve.MarshalJSON method(ptr) func() ([]byte, error)
 github.com/egladman/magus/types.MemoryCurve.PeakMB method func() int
@@ -4273,7 +4274,7 @@ github.com/egladman/magus/types.SignAlgorithm.String method func() string
 github.com/egladman/magus/types.SignAlgorithm.Valid method func() bool
 github.com/egladman/magus/types.SignAlgorithm.Values method func() []string
 github.com/egladman/magus/types.SignEd25519 const SignAlgorithm = "ed25519"
-github.com/egladman/magus/types.SizedChainMemory func(p *Project, target string, lookup func(path string) *Project, size MemorySizer) ChainMemory
+github.com/egladman/magus/types.SizedChainMemory func(p *Project, target string, lookup func(path string) *Project, size MemorySizer, ownClaims func(p *Project, target string) bool) ChainMemory
 github.com/egladman/magus/types.Skill type struct
 github.com/egladman/magus/types.Skill.Body field string
 github.com/egladman/magus/types.Skill.Current field bool
