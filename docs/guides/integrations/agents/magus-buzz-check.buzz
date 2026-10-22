@@ -8,11 +8,12 @@
 //
 // Contract: reads the host's event as JSON on stdin and takes the written path from
 // tool_input.file_path, else tool_input.path, else the Add File and Update File lines of an
-// apply_patch input. A path that is not a .buzz file is skipped. A magusfile.buzz, and
-// anything under magusfiles/, spells/ or hack/, is checked with --embedded, the mode the
-// engine loads it in; any other .buzz file is checked strict. A failure prints
-// {"decision":"block","reason":...} on stdout, which the host hands the agent as the reason
-// to fix the file; a pass prints nothing. It always exits 0.
+// apply_patch input. A path that is not a .buzz file is skipped. An event that names no
+// written file is named on stderr, since the hook is wired after a tool that writes none. A
+// magusfile.buzz, and anything under magusfiles/, spells/ or hack/, is checked with
+// --embedded, the mode the engine loads it in; any other .buzz file is checked strict. A
+// failure prints {"decision":"block","reason":...} on stdout, which the host hands the agent
+// as the reason to fix the file; a pass prints nothing. It always exits 0.
 //
 // REQUIRED argument: `-- --agent-name <host>`, named like every glue entry. Without it the
 // check still runs, and MGS3024 goes to stderr.
@@ -74,6 +75,13 @@ fun writtenPaths(event: any?) > [str] {
     return paths;
 }
 
+// unjudged is the stderr note for an event that names no written file.
+fun unjudged(event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    final source = if (tool != "") "tool \"{tool}\"" else "the event";
+    return "{source} names no written file, so nothing was checked. Wire this hook after the tools that write a file.";
+}
+
 // relativeTo is path under root, or path itself when it is already relative or elsewhere.
 fun relativeTo(path: str, root: str) > str {
     if (root != "" and path.startsWith(root + "/")) { return path.sub(root.len() + 1, len: path.len() - root.len() - 1); }
@@ -95,13 +103,18 @@ fun main(args: [str]) > void {
         warn("[MGS3024] this hook was not given --agent-name. Merge what `magus describe harness` prints into the host's hook configuration.");
     }
     final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final written = writtenPaths(event);
+    if (written.len() == 0) {
+        warn(unjudged(event));
+        return;
+    }
     final cwd = hook\field(event, dotPath: "cwd");
     final root = hook\workspaceRootAt(if (cwd != "") cwd else ".");
     final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     final failures = mut [<str>];
-    foreach (path in writtenPaths(event)) {
+    foreach (path in written) {
         if (!path.endsWith(".buzz")) { continue; }
         final rel = relativeTo(path, root: root);
         final check = mut ["buzz", "--check"];
@@ -122,6 +135,13 @@ test "a written path comes from the field the host names it in" {
     std\assert(writtenPaths({"tool_input": {"command": "*** Begin Patch\n*** Update File: hack/a.buzz\n@@\n*** Add File: b.go\n"}}).join(",")
         == "hack/a.buzz,b.go", message: "an apply_patch input");
     std\assert(writtenPaths({"tool_input": {}}).len() == 0, message: "nothing written");
+}
+
+test "an event that names no written file is answered with a note naming its tool" {
+    final shell = {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}};
+    std\assert(writtenPaths(shell).len() == 0, message: "a shell call writes nothing");
+    std\assert(unjudged(shell).startsWith("tool \"Bash\" names no written file"), message: unjudged(shell));
+    std\assert(unjudged(null).startsWith("the event names no written file"), message: unjudged(null));
 }
 
 test "the engine's own Buzz is checked embedded and everything else strict" {
