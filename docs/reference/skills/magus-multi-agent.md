@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28456
-skill_short_bytes: 21409
+skill_full_bytes: 28715
+skill_short_bytes: 21668
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `145` |
+| `agent-skill-version` | `146` |
 | `knowledge-schema-version` | `23` |
-| `skill-content` | `13ccbe9be83e` |
+| `skill-content` | `3ae226a5be4f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -347,8 +347,7 @@ binds its child to nothing.
 
    Before every fork, run `magus job fork --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `magus job fork --schema` prints every field and the newest `schema_version`.
-3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
-   first a parent id and a role joined by `/`, the second the job id.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).
    - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
@@ -356,6 +355,7 @@ binds its child to nothing.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
+   - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
 Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)
@@ -835,8 +835,7 @@ an editor magus cannot attribute.
 
    Before every fork, run `magus job fork --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `magus job fork --schema` prints every field and the newest `schema_version`.
-3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
-   first a parent id and a role joined by `/`, the second the job id.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).
    - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
@@ -844,6 +843,7 @@ an editor magus cannot attribute.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
+   - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
 Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)

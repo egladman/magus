@@ -98,6 +98,15 @@
       "enum": ["", "markdown", "buzz"],
       "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
     },
+    "follows": {
+      "type": "string",
+      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "maxLength": 128,
+      "description": "Follows and FreshReason name the job this one continues and why its worker is not resumed for it. See [Job.Follows]."
+    },
+    "fresh_reason": {
+      "type": "string"
+    },
     "checkout": {
       "type": "string",
       "pattern": "^/",
