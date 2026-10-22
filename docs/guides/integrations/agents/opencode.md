@@ -16,7 +16,7 @@ window. One file carries all of it. Everything below was checked against OpenCod
 | what            | where                                                                                          |
 | --------------- | ---------------------------------------------------------------------------------------------- |
 | skills          | `.opencode/skills/` (it also reads `.claude/skills/`)                                          |
-| guard wiring    | `.opencode/plugins/`, per project; never `~/.config/opencode/plugins/`                          |
+| guard wiring    | `.opencode/plugins/`, per project; never `~/.config/opencode/plugins/`                         |
 | shell commands  | `bash`: deny and advise both reach the model                                                   |
 | file writes     | `edit`, `write` and `apply_patch`: deny and advise both reach the model                        |
 | MCP calls       | the magus server's tools, matched by the `<server>_<tool>` id: deny and advise reach the model |
