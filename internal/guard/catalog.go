@@ -88,6 +88,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBriefCommand},
 	{doc: ruleDocFocusRead},
 	{doc: ruleDocHookWiringWrite},
+	{doc: ruleDocLeaseCheckout},
 	{doc: ruleDocLeaseGate},
 	{doc: ruleDocLeaseHarness},
 	{doc: ruleDocLeaseRebind},
@@ -570,6 +571,14 @@ var ruleDocHookWiringWrite = types.RuleDoc{
 	Why: "The wiring and the binary it runs decide whether any rule runs at all from the host's next call or session on, so no scope anybody hands out includes them. " +
 		"A write tool and a shell line are judged alike: a redirect, `cp`, `mv`, `ln`, `tee`, `dd of=`, `install` or `rm` whose target is `.claude/settings.json`, `.claude/settings.local.json`, another host's hook file or the workspace root's `magus` is refused, after the line's `cd`s. " +
 		"A person's own session goes ahead, told which wiring file it is editing. A line that runs `go` is left to raw-tool, which advises the one relink of `./magus` a checkout that cannot load its sources needs.",
+}
+
+var ruleDocLeaseCheckout = types.RuleDoc{
+	Name:    string(denyRuleLeaseCheckout),
+	Catches: "a worker holding a checkout running magus outside it",
+	Why: "A host shell can start a subagent in its parent directory, and a cd never persists between calls, so the guard places each magus call by its line and judges it there. " +
+		"The holder of a row with a standing checkout runs magus in that checkout: name it on the line with `-C <root>` or a cd before the call, and the refusal quotes that line. " +
+		"A call whose directory cannot be read is placed where the host started. A plan, a dry run, a graph or help runs nothing and passes, and so does a caller with no lease, a row with no checkout and the root session.",
 }
 
 var ruleDocLeaseGate = types.RuleDoc{

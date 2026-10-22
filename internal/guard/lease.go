@@ -328,7 +328,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || gatesInHeldCheckout(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegratorFor(ctx, deps, me, command) || gatesInHeldCheckout(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
 	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands. The holder of a row forked with `job fork --checkout` gates in that checkout too."
@@ -397,14 +397,14 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
+	if !ok || actingIntegratorFor(ctx, deps, me, command) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
 		return denial{}
 	}
 	checks := rowChecks(me)
 	if len(checks) == 0 {
 		return denial{}
 	}
-	at := hookLocation(ctx, deps)
+	at := placedLocation(ctx, deps, command)
 	judge := newRowJudge(ctx, deps, me, at, lazyWorkspace(ctx, deps, at.workspace))
 	for _, r := range runs {
 		v := judge.verdict(r)
@@ -2010,28 +2010,65 @@ func holdsCheckout(row types.Job, workspace string) bool {
 // holds, judged where the call runs (a leading cd, then its -C or --root) rather than where
 // the envelope started. False when a call's directory cannot be read without running it.
 func gatesInHeldCheckout(ctx context.Context, deps Dependencies, row types.Job, command string) bool {
-	at := hookLocation(ctx, deps)
-	cwd := cmp.Or(deps.callDir, at.dir, at.workspace)
-	calls, ok := locateCalls(command, effectiveDialect(deps.ShellDialect), cwd, isGateInvocation, false)
+	calls, ok := placeMagusCalls(ctx, deps, command, isGateInvocation)
 	if !ok || len(calls) == 0 {
 		return false
 	}
-	for _, c := range calls {
-		dir, ok := gateDir(c)
-		if !ok || !holdsCheckout(row, gateWorkspace(at, dir)) {
-			return false
-		}
-	}
-	return true
+	return !slices.ContainsFunc(calls, func(c placedCall) bool { return !holdsCheckout(row, c.root) })
 }
 
 func isGateInvocation(c hint.Invocation) bool {
 	return c.Name == "magus" && isGateCommand(c.Args)
 }
 
-// gateWorkspace takes the hook's own workspace for a dir inside it, so a pinned location
+// placedCall is a magus call on a line and the workspace root it runs in, "" when that
+// cannot be read without running the line.
+type placedCall struct {
+	inv  hint.Invocation
+	root string
+}
+
+// placeMagusCalls places every call on command that match accepts, in line order. False
+// when the line does not parse.
+func placeMagusCalls(ctx context.Context, deps Dependencies, command string, match func(hint.Invocation) bool) ([]placedCall, bool) {
+	at := hookLocation(ctx, deps)
+	cwd := cmp.Or(deps.callDir, at.dir, at.workspace)
+	calls, ok := locateCalls(command, effectiveDialect(deps.ShellDialect), cwd, match, false)
+	if !ok {
+		return nil, false
+	}
+	placed := make([]placedCall, len(calls))
+	for i, c := range calls {
+		placed[i] = placedCall{inv: c.inv}
+		if dir, ok := magusCallDir(c); ok {
+			placed[i].root = workspaceHolding(at, dir)
+		}
+	}
+	return placed, true
+}
+
+// placedLocation is the hook's location moved to the workspace the line's magus calls run
+// in, or the hook's own when the calls disagree or one cannot be placed.
+func placedLocation(ctx context.Context, deps Dependencies, command string) location {
+	at := hookLocation(ctx, deps)
+	calls, ok := placeMagusCalls(ctx, deps, command, isMagusInvocation)
+	if !ok || len(calls) == 0 {
+		return at
+	}
+	root := calls[0].root
+	if slices.ContainsFunc(calls, func(c placedCall) bool { return c.root == "" || !samePath(c.root, root) }) || samePath(root, at.workspace) {
+		return at
+	}
+	if there := hookLocationAt(deps, root); there.cacheDir != "" {
+		return there
+	}
+	at.workspace, at.dir = root, root
+	return at
+}
+
+// workspaceHolding takes the hook's own workspace for a dir inside it, so a pinned location
 // needs no marker on disk, and the nearest root above dir otherwise.
-func gateWorkspace(at location, dir string) string {
+func workspaceHolding(at location, dir string) string {
 	if at.workspace != "" && (dir == at.workspace || strings.HasPrefix(dir, at.workspace+string(filepath.Separator))) {
 		return at.workspace
 	}
@@ -2042,9 +2079,9 @@ func gateWorkspace(at location, dir string) string {
 	return root
 }
 
-// gateDir is where a located gate call runs: the line's directory moved by the call's -C
-// and --root in order.
-func gateDir(c locatedCall) (string, bool) {
+// magusCallDir is where a located magus call runs: the line's directory moved by the
+// call's -C and --root in order.
+func magusCallDir(c locatedCall) (string, bool) {
 	if c.unfollowed || !c.at.known || !filepath.IsAbs(c.at.dir) {
 		return "", false
 	}
@@ -2076,6 +2113,71 @@ func gateDir(c locatedCall) (string, bool) {
 // the checkout the call runs in.
 func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job) bool {
 	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), hookLocation(ctx, deps).workspace)
+}
+
+// actingIntegratorFor is actingIntegrator for a magus line, judged in the workspace its
+// calls run in rather than the one the host started in.
+func actingIntegratorFor(ctx context.Context, deps Dependencies, me types.Job, command string) bool {
+	return integrates(me, spawnedAs(deps.facts, deps.caller.Agent), placedLocation(ctx, deps, command).workspace)
+}
+
+const denyRuleLeaseCheckout denyRuleName = "lease-checkout"
+
+// denyLeaseCheckout refuses the holder of a row with a standing checkout a magus call that
+// runs outside it. The call is placed by its line (a cd, -C or --root), and one whose
+// directory cannot be read is placed where the host started. Reports pass, and so does
+// everything for a caller with no lease, a row with no checkout, and the root.
+func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if actingLease == "" {
+		return denial{}
+	}
+	runs := func(c hint.Invocation) bool { return isMagusInvocation(c) && !reportsOnly(c.Args) }
+	calls, ok := placeMagusCalls(ctx, deps, command, runs)
+	if !ok || len(calls) == 0 {
+		return denial{}
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || me.Worktree == nil || me.Worktree.Root == "" || workerRole(me, deps.caller) == "" {
+		return denial{}
+	}
+	root := me.Worktree.Root
+	envelope := hookLocation(ctx, deps).workspace
+	for _, c := range calls {
+		if there := cmp.Or(c.root, envelope); there == "" || samePath(there, root) {
+			continue
+		}
+		args := withoutRelocation(c.inv.Args)
+		remedy := strings.Join(slices.Concat([]string{filepath.Join(root, "magus"), "-C", root}, args), " ")
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` runs outside lease %s's checkout %s; run it there: `%s`.", elideCommand(command), me.ID, root, remedy),
+			Why: "A host shell can start a subagent's call in its parent's directory, and a cd does not persist between calls, so a worker's magus run lands in a tree its row does not own and is graded against that tree. " +
+				"Naming the checkout on the line places the call there, and that checkout's binary judges it with the sources it was linked from.",
+		}
+	}
+	return denial{}
+}
+
+// reportsOnly reports magus args that run nothing: a plan, a dry run, a graph or help.
+func reportsOnly(args []string) bool {
+	return magusHelpRequest(args) || slices.ContainsFunc(args, func(a string) bool {
+		return slices.Contains([]string{"--plan", "--dry-run", "--graph", "--help", "-h"}, a)
+	})
+}
+
+// withoutRelocation is args with each -C and --root left out, for a call re-aimed at a
+// checkout by the caller's own -C.
+func withoutRelocation(args []string) []string {
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		switch {
+		case (args[i] == "-C" || args[i] == "--root") && i+1 < len(args):
+			i++
+		case strings.HasPrefix(args[i], "--root="):
+		default:
+			kept = append(kept, args[i])
+		}
+	}
+	return kept
 }
 
 // LeaseGateSource reports which of a row's declarations names the gate, so a refusal can

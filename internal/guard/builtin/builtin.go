@@ -223,6 +223,7 @@ var defaults = map[string]Decision{
 	"hooks-off":             Deny,
 	"human-only":            Deny,
 	"inline-alias":          Deny,
+	"lease-checkout":        Deny,
 	"lease-gate":            Deny,
 	"lease-harness":         Deny,
 	"lease-rebind":          Deny,

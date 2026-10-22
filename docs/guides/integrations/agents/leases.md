@@ -494,6 +494,7 @@ file write and every command. It denies:
 | an edit landing in a declaration another live job claims     | `write_paths` (that job's `#`)   |
 | a write outside every entry in this job's own write list     | `write_paths`                    |
 | a command running the `ci` gate                              | `check`                          |
+| a magus call running outside the job's checkout              | `worktree`                       |
 | a READ of a path outside the projects this job may read      | `read_paths`, else `write_paths` |
 
 It advises on one more: your own path, written from a base that diverges from
@@ -504,6 +505,15 @@ are what steer the holder, so only an unbound caller rewrites them. magus writes
 no hook wiring at all; `magus describe harness` prints it for a person to merge.
 The command refuses itself under the checkout's binding or a `BAGGAGE` claim; the
 guard adds the subagent and session sources a command cannot see.
+
+A worker holding a checkout names it on every magus line: `<root>/magus -C <root> run
+go-test .`, or a `cd <root> &&` before the call. The guard places each magus call by
+its line, not by the directory the host started the shell in, and refuses a call that
+resolves outside the checkout under `lease-checkout`, quoting the line to run instead.
+The host does not carry the line's directory for you: a subagent's shell can start in
+the parent's directory and a `cd` does not persist between calls, so a bare `./magus run`
+would run in the parent's tree and be judged against it. A plan, a dry run, a graph and
+help run nothing and pass from anywhere.
 
 A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any

@@ -480,6 +480,90 @@ func TestACheckoutHolderGatesWhereTheCallRuns(t *testing.T) {
 	}
 }
 
+func markedWorkspace(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+	return dir
+}
+
+// heldRowFixture seeds a worker row taken in held, titled for role, and returns its
+// context, with the worktree recorded at worktreeRoot unless that is empty.
+func heldRowFixture(t *testing.T, held, worktreeRoot, role string) (context.Context, Dependencies, types.Job) {
+	t.Helper()
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	row.CheckoutRoot = held
+	ctx, deps := integratorFixture(t, row, "root/"+role+" "+row.ID)
+	if worktreeRoot != "" {
+		at, ok := ctx.Value(locationKey{}).(location)
+		require.True(t, ok)
+		_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: worktreeRoot})
+		require.NoError(t, err)
+	}
+	return ctx, deps, row
+}
+
+func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
+	held, other := markedWorkspace(t), markedWorkspace(t)
+	ctx, deps, row := heldRowFixture(t, held, held, "feat")
+
+	for _, command := range []string{
+		"cd " + held + " && ./magus run go-test .",
+		"./magus -C " + held + " run go-test .",
+		"./magus --root=" + held + " run go-test .",
+		"cd " + other + " && ./magus -C " + held + " run go-test .",
+		"./magus run go-test . --plan",
+		"./magus run go-test . --dry-run",
+		"./magus --help",
+		"echo ./magus run go-test .",
+	} {
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, command), command)
+	}
+
+	for _, command := range []string{
+		"./magus run go-test .",
+		"cd " + other + " && ./magus run go-test .",
+		"./magus -C " + other + " run go-test .",
+		"cd " + held + " && ./magus -C " + other + " run go-test .",
+		"cd $WORKTREE && ./magus run go-test .",
+	} {
+		got := denyLeaseCheckout(ctx, deps, row.ID, command)
+		require.True(t, got.refused(), command)
+		assert.Contains(t, got.Say, "`"+filepath.Join(held, "magus")+" -C "+held+" run go-test .`", command)
+	}
+}
+
+func TestDenyLeaseCheckoutStaysQuiet(t *testing.T) {
+	held := markedWorkspace(t)
+
+	t.Run("no lease", func(t *testing.T) {
+		ctx, deps, _ := heldRowFixture(t, held, held, "feat")
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, "", "./magus run go-test ."))
+	})
+	t.Run("a row with no worktree", func(t *testing.T) {
+		ctx, deps, row := heldRowFixture(t, held, "", "feat")
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus run go-test ."))
+	})
+	t.Run("a checkout the envelope is in", func(t *testing.T) {
+		ctx, deps, row := heldRowFixture(t, held, "", "feat")
+		at, ok := ctx.Value(locationKey{}).(location)
+		require.True(t, ok)
+		_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: at.workspace})
+		require.NoError(t, err)
+		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, "./magus run go-test ."))
+	})
+}
+
+func TestAnIntegratorIsJudgedWhereItsLineRuns(t *testing.T) {
+	held := markedWorkspace(t)
+	ctx, deps, row := heldRowFixture(t, held, "", "integrate")
+
+	assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, "cd "+held+" && ./magus run go-build ."), "the integrator's checkout, named on the line")
+	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run go-build .").refused(), "the same call from the envelope's checkout")
+}
+
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
 // harnesses that opt in: each of these is a case where nothing declared the gate to be
 // out of scope, and a guard that cannot evaluate a rule must not block a tool call.
