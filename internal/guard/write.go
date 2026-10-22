@@ -830,38 +830,40 @@ func adviseMalformedDeclaration(err error) writeGrade {
 }
 
 // leaseCheckout is the checkout the acting lease's paths are relative to: the one its row
-// records it was taken in, or the hook's when the lease records none or is not live. A
-// worker isolated in its own worktree has its hooks resolve the session's checkout, where
-// every one of its paths would read as outside its lease.
+// records it was taken in, whatever its state, or the hook's when it records none. A holder
+// continued after returning its job still writes there, and a widening moves nothing.
 func leaseCheckout(ctx context.Context, at location, lease string) string {
-	if lease == "" {
-		return at.workspace
-	}
-	rows, err := leaseRows(ctx, at)
-	if err != nil {
-		return at.workspace
-	}
-	if me, live := liveLease(liveLeases(rows), lease); live && me.CheckoutRoot != "" {
+	if me, ok := leaseRow(ctx, at, lease); ok && me.CheckoutRoot != "" {
 		return me.CheckoutRoot
 	}
 	return at.workspace
 }
 
 // leaseWorktree is the standing checkout the acting lease's fork made for it, "" when it
-// has none or is not live. A worker bound by its spawn is taken in the session's
+// has none, whatever the row's state. A worker bound by its spawn is taken in the session's
 // checkout, so its row records that checkout while its editor writes land in this one.
 func leaseWorktree(ctx context.Context, at location, lease string) string {
-	if lease == "" {
-		return ""
-	}
-	rows, err := leaseRows(ctx, at)
-	if err != nil {
-		return ""
-	}
-	if me, live := liveLease(liveLeases(rows), lease); live && me.Worktree.Standing() {
+	if me, ok := leaseRow(ctx, at, lease); ok && me.Worktree.Standing() {
 		return me.Worktree.Root
 	}
 	return ""
+}
+
+// leaseRow is the acting lease's row in the store, live or not; false for no lease, an
+// unreadable store, or an id no row carries.
+func leaseRow(ctx context.Context, at location, lease string) (types.Job, bool) {
+	if lease == "" {
+		return types.Job{}, false
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return types.Job{}, false
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
+	if i < 0 {
+		return types.Job{}, false
+	}
+	return rows[i], true
 }
 
 // denyOtherCheckout refuses a lease's write into a magus checkout other than the one its
