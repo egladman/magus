@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -658,6 +659,76 @@ func TestRefreshVCSHooksRewritesAnOlderSection(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(data), "old-magus", "the older refresh command survived")
 	assert.Contains(t, string(data), "# BEGIN magus-refresh")
-	assert.Contains(t, hookSections(t, dir), "post-commit", "the drift section is refreshed with it")
+	assert.NotContains(t, hookSections(t, dir), "post-commit", "server start first-installed the drift hook")
 	assert.NotContains(t, logs.String(), "magus init --vcs", "a repository with hooks gets no first-install notice")
+}
+
+func TestRefreshVCSHooksRewritesADriftSectionAlone(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
+	t.Chdir(dir)
+	res, err := vcs.Resolve(t.Context(), dir, "", types.VCSOptions{})
+	require.NoError(t, err)
+	_, err = res.VCS.InstallDriftHook(t.Context(), dir, "old-magus job run check-drift")
+	require.NoError(t, err)
+	_, ok, err := vcs.ReadGitDriftHook(t.Context(), dir)
+	require.NoError(t, err)
+	require.True(t, ok, "the fixture must read as an installed drift section")
+	logs := captureNotices(t)
+
+	refreshVCSHooks(t.Context())
+
+	data, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-commit"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "old-magus", "the older drift command survived")
+	assert.NotContains(t, hookSections(t, dir), "post-checkout", "server start first-installed the refresh hook")
+	assert.NotContains(t, logs.String(), "magus init --vcs", "a repository with hooks gets no first-install notice")
+}
+
+func TestRefreshVCSHooksRefreshesHgFamilySections(t *testing.T) {
+	for _, tc := range []struct {
+		prog, config           string
+		readRefresh, readDrift func(string) (string, bool, error)
+	}{
+		{"hg", filepath.Join(".hg", "hgrc"), vcs.ReadHgRefreshHook, vcs.ReadHgDriftHook},
+		{"sl", filepath.Join(".sl", "config"), vcs.ReadSaplingRefreshHook, vcs.ReadSaplingDriftHook},
+	} {
+		t.Run(tc.prog, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.prog); err != nil {
+				t.Skip(tc.prog + " not available")
+			}
+			t.Setenv("HGRCPATH", "")
+			t.Setenv("HGPLAIN", "1")
+			dir := t.TempDir()
+			require.NoError(t, exec.Command(tc.prog, "init", dir).Run())
+			t.Chdir(dir)
+			logs := captureNotices(t)
+
+			refreshVCSHooks(t.Context())
+
+			_, refresh, err := tc.readRefresh(dir)
+			require.NoError(t, err)
+			_, drift, err := tc.readDrift(dir)
+			require.NoError(t, err)
+			assert.False(t, refresh || drift, "server start first-installed a hook")
+			assert.Equal(t, 1, strings.Count(logs.String(), "magus init --vcs "+tc.prog), "want one notice naming the command:\n%s", logs)
+
+			res, err := vcs.Resolve(t.Context(), dir, "", types.VCSOptions{})
+			require.NoError(t, err)
+			_, err = res.VCS.InstallDriftHook(t.Context(), dir, "old-magus job run check-drift")
+			require.NoError(t, err)
+			_, drift, err = tc.readDrift(dir)
+			require.NoError(t, err)
+			require.True(t, drift, "the fixture must read as an installed drift section")
+
+			refreshVCSHooks(t.Context())
+
+			data, err := os.ReadFile(filepath.Join(dir, tc.config))
+			require.NoError(t, err)
+			assert.NotContains(t, string(data), "old-magus", "the older drift command survived")
+			_, refresh, err = tc.readRefresh(dir)
+			require.NoError(t, err)
+			assert.False(t, refresh, "server start first-installed the refresh hook")
+		})
+	}
 }
