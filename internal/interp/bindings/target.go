@@ -502,8 +502,8 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 			// pointing one way, and DependencyWait.Do times it without this site having
 			// to remember to.
 			//
-			// The marker matches the inline branch below. The driver returns this error
-			// as the body's, and the reporter reads the marker to tell a dependent
+			// The marker matches the inline branch below. The driver throws this error
+			// at this call; uncaught, it is the body's, and the reporter reads the marker to tell a dependent
 			// restating its dependency's failure from a target failing on its own.
 			w.Request(func(runCtx context.Context) error {
 				if err := runBuzzDependencies(runCtx, targets, names); err != nil {
