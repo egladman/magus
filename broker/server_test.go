@@ -376,9 +376,9 @@ func newReplyGate(t *testing.T, upstream string) *replyGate {
 	require.NoError(t, err)
 	gate, err := endpoint.Parse(g.addr)
 	require.NoError(t, err)
-	// A client reads the token beside the socket it dials, so the gate's points at the
-	// token of whichever broker serves upstream.
-	require.NoError(t, os.Symlink(tokenPath(up.Addr), tokenPath(gate.Addr)))
+	// A client reads the handshake beside the socket it dials once the upstream broker's
+	// handshake frame arrives through the gate, so the gate's points at that broker's.
+	require.NoError(t, os.Symlink(handshakePath(up.Addr), handshakePath(gate.Addr)))
 	var once sync.Once
 	go func() {
 		for n := 0; ; n++ {
@@ -671,9 +671,12 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	conn, err := endpoint.DialUnix(t.Context(), addr[len("unix://"):])
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
-	w := &frameWriter{w: conn}
+	r, w := newFrameReader(conn), &frameWriter{w: conn}
+	f, err := r.read()
+	require.NoError(t, err)
+	require.Equal(t, typeHandshake, f.Type)
 	require.NoError(t, w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion + 1}))
-	f, err := newFrameReader(conn).read()
+	f, err = r.read()
 	require.NoError(t, err)
 	assert.Equal(t, typeError, f.Type)
 	var er errorReply
@@ -681,39 +684,99 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	assert.Equal(t, CodeProtocol, er.Code)
 }
 
-func TestBrokerRefusesPeerWithoutToken(t *testing.T) {
+// TestAHelloWithAnotherHandshakeIsRefused pins what a hello must carry: the value the
+// broker wrote beside its socket, which a client reads after the broker's handshake frame.
+func TestAHelloWithAnotherHandshakeIsRefused(t *testing.T) {
 	addr := testAddr(t)
 	path := addr[len("unix://"):]
 	stop, _ := serve(t, addr)
 
-	require.Eventually(t, func() bool { return readToken(path) != "" }, 3*time.Second, 5*time.Millisecond)
-	info, err := os.Stat(tokenPath(path))
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-
-	hello1 := func(token string) frame {
+	hello1 := func(pick func(current string) string) frame {
 		conn, err := endpoint.DialUnix(t.Context(), path)
 		require.NoError(t, err)
 		defer func() { _ = conn.Close() }()
-		require.NoError(t, (&frameWriter{w: conn}).write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion, Token: token}))
-		f, err := newFrameReader(conn).read()
+		r := newFrameReader(conn)
+		f, err := r.read()
+		require.NoError(t, err)
+		require.Equal(t, typeHandshake, f.Type)
+		current, err := readHandshake(path)
+		require.NoError(t, err, "the handshake file exists once its frame arrives")
+		require.NoError(t, (&frameWriter{w: conn}).write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion, Handshake: pick(current)}))
+		f, err = r.read()
 		require.NoError(t, err)
 		return f
 	}
-	for name, token := range map[string]string{"no token": "", "a wrong token": "not-the-token"} {
+	for name, pick := range map[string]func(string) string{
+		"no handshake":               func(string) string { return "" },
+		"another broker's handshake": func(string) string { return "not-this-one" },
+	} {
 		t.Run(name, func(t *testing.T) {
-			f := hello1(token)
+			f := hello1(pick)
 			require.Equal(t, typeError, f.Type)
 			var er errorReply
 			require.NoError(t, decodeBody(f, &er))
-			assert.Equal(t, CodeAuth, er.Code)
-			assert.Contains(t, er.Message, tokenPath(path), "the refusal says where the token is kept")
+			assert.Equal(t, CodeHandshake, er.Code)
+			assert.Contains(t, er.Message, handshakePath(path), "the refusal says where the handshake is kept")
 		})
 	}
-	assert.Equal(t, typeHelloReply, hello1(readToken(path)).Type)
+	assert.Equal(t, typeHelloReply, hello1(func(current string) string { return current }).Type)
+	info, err := os.Stat(handshakePath(path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 	stop()
-	assert.NoFileExists(t, tokenPath(path))
+	assert.NoFileExists(t, handshakePath(path))
+}
+
+// TestARefusedHandshakeIsATypedError pins what a client does with a refusal: one
+// handshake, then an error that names the file and the broker's code, never a retry.
+func TestARefusedHandshakeIsATypedError(t *testing.T) {
+	addr := testAddr(t)
+	path := addr[len("unix://"):]
+	serve(t, addr)
+	require.NoError(t, dial(t, addr).Handshake(t.Context()), "a live client's handshake is already done")
+	require.NoError(t, writeHandshake(path, "not-this-broker"))
+
+	_, err := Dial(t.Context(), addr)
+	require.ErrorIs(t, err, ErrUnavailable)
+	var hs *HandshakeError
+	require.ErrorAs(t, err, &hs)
+	assert.Equal(t, handshakePath(path), hs.Path)
+	var refusal *Error
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, CodeHandshake, refusal.Code)
+}
+
+// TestNothingAnswersBeforeTheHandshakeExists pins the order Serve keeps. The kernel
+// accepts a connection as soon as the socket listens, but the broker sends no frame until
+// its handshake file exists, so no client can say hello before a hello can succeed.
+func TestNothingAnswersBeforeTheHandshakeExists(t *testing.T) {
+	addr := testAddr(t)
+	path := addr[len("unix://"):]
+	ln, err := Listen(t.Context(), addr)
+	require.NoError(t, err)
+	conn, err := endpoint.DialUnix(t.Context(), path)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	r := newFrameReader(conn)
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(100*time.Millisecond)))
+	_, err = r.read()
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded, "a listening socket with no Serve sends nothing")
+	assert.NoFileExists(t, handshakePath(path))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_ = Serve(ctx, ln)
+		close(done)
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(3*time.Second)))
+	f, err := r.read()
+	require.NoError(t, err)
+	assert.Equal(t, typeHandshake, f.Type)
+	assert.FileExists(t, handshakePath(path), "the handshake frame follows the file")
 }
 
 func TestShutdownStopsTheBroker(t *testing.T) {

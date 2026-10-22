@@ -3,7 +3,6 @@ package broker
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -66,35 +65,50 @@ func addrInUse(err error) bool {
 	return err != nil && (errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use"))
 }
 
-func tokenPath(sock string) string { return sockdir.TokenPath(sock) }
+// handshakePath is where a broker keeps the handshake for the socket at sock: beside it,
+// in the same private directory.
+func handshakePath(sock string) string { return sock + ".handshake" }
 
-// writeToken is sockdir.WriteToken. Serve calls it, not Listen, so a socket a
-// supervisor bound carries a token too.
-func writeToken(sock, token string) error {
-	if err := sockdir.WriteToken(sock, token); err != nil {
-		return fmt.Errorf("broker: %w", err)
-	}
-	return nil
-}
-
-func newToken() (string, error) {
-	b := make([]byte, 32)
+// newHandshake names one broker process, so a file a dead broker left never matches its
+// successor.
+func newHandshake() (string, error) {
+	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("broker: generate token: %w", err)
+		return "", fmt.Errorf("broker: generate handshake: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
 
-func readToken(sock string) string {
-	b, err := os.ReadFile(sockdir.TokenPath(sock))
+// writeHandshake publishes handshake for the socket at sock, readable by this user
+// alone. Serve calls it, not Listen, so a socket a supervisor bound carries one too. The
+// rename replaces whatever sits at the path, a planted link included, and a client never
+// reads a partial value.
+func writeHandshake(sock, handshake string) error {
+	path := handshakePath(sock)
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
 	if err != nil {
-		return ""
+		return fmt.Errorf("broker: write handshake: %w", err)
 	}
-	return strings.TrimSpace(string(b))
+	_, werr := f.WriteString(handshake)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(f.Name(), path)
+	}
+	if werr != nil {
+		_ = os.Remove(f.Name())
+		return fmt.Errorf("broker: write handshake %s: %w", path, werr)
+	}
+	return nil
 }
 
-func tokenMatches(want, got string) bool {
-	return want != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
+func readHandshake(sock string) (string, error) {
+	b, err := os.ReadFile(handshakePath(sock))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 // Live reports whether something accepts connections on addr, within 100ms.

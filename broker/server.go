@@ -94,19 +94,21 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	}
 	o.log = o.log.With(attr.Component("broker"))
 	exe, _ := os.Executable()
-	token, err := newToken()
+	handshake, err := newHandshake()
 	if err != nil {
 		_ = ln.Close()
 		return err
 	}
+	// Written before the accept loop starts: a connection the kernel queued earlier waits
+	// for its handshake frame, which handle sends only after this file exists.
 	sock := ln.Addr().String()
-	if err := writeToken(sock, token); err != nil {
+	if err := writeHandshake(sock, handshake); err != nil {
 		_ = ln.Close()
 		return err
 	}
-	defer func() { _ = os.Remove(tokenPath(sock)) }()
+	defer func() { _ = os.Remove(handshakePath(sock)) }()
 	s := &server{
-		token:      token,
+		handshake:  handshake,
 		opts:       o,
 		budget:     cache.NewMachineBudget(o.budgetMB, o.budgetSlots),
 		socket:     "unix://" + ln.Addr().String(),
@@ -186,7 +188,7 @@ type server struct {
 	opts       serveOptions
 	budget     *cache.MachineBudget
 	socket     string
-	token      string
+	handshake  string
 	executable string
 	started    time.Time
 	ctx        context.Context
@@ -340,6 +342,10 @@ func (s *server) handle(conn net.Conn) {
 	}()
 	r := newFrameReader(rd)
 	w := &frameWriter{w: conn}
+	if w.write(typeHandshake, 0, nil) != nil {
+		s.forget(conn, nil)
+		return
+	}
 	_ = conn.SetReadDeadline(time.Now().Add(helloTimeout))
 	first, err := r.read()
 	if err != nil {
@@ -353,9 +359,10 @@ func (s *server) handle(conn net.Conn) {
 		s.forget(conn, nil)
 		return
 	}
-	if !tokenMatches(s.token, h.Token) {
-		_ = w.write(typeError, first.ID, errorReply{Code: CodeAuth,
-			Message: "broker: the hello carried no valid token; the broker keeps it in " + tokenPath(strings.TrimPrefix(s.socket, "unix://")) + ", readable by its owner only"})
+	if h.Handshake != s.handshake {
+		_ = w.write(typeError, first.ID, errorReply{Code: CodeHandshake, Message: fmt.Sprintf(
+			"broker: the hello carried handshake %q, not the one this broker (pid %d) wrote to %s; a client reads that file after the broker's handshake frame",
+			h.Handshake, os.Getpid(), handshakePath(strings.TrimPrefix(s.socket, "unix://")))})
 		s.forget(conn, nil)
 		return
 	}

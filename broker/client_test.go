@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -14,6 +15,23 @@ import (
 
 	"github.com/egladman/magus/types"
 )
+
+// acceptStandIn accepts one connection for a stand-in broker after doing what Serve does
+// first: it writes the handshake file, then sends the handshake frame.
+func acceptStandIn(ln net.Listener) (net.Conn, error) {
+	if err := writeHandshake(ln.Addr().String(), "stand-in"); err != nil {
+		return nil, err
+	}
+	nc, err := ln.Accept()
+	if err != nil {
+		return nil, err
+	}
+	if err := (&frameWriter{w: nc}).write(typeHandshake, 0, nil); err != nil {
+		_ = nc.Close()
+		return nil, err
+	}
+	return nc, nil
+}
 
 // A claim released while the client is re-asserting it on a new broker must still be
 // released there. The stand-in broker below calls Release after the re-assert arrives and
@@ -37,7 +55,7 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 	t.Cleanup(func() { _ = ln.Close() })
 	released := make(chan string, 1)
 	go func() {
-		nc, err := ln.Accept()
+		nc, err := acceptStandIn(ln)
 		if err != nil {
 			return
 		}
@@ -87,7 +105,7 @@ func TestOverrunRoundTripAndAnOlderBroker(t *testing.T) {
 	t.Cleanup(func() { _ = ln.Close() })
 	overruns := make(chan string, 4)
 	go func() {
-		nc, err := ln.Accept()
+		nc, err := acceptStandIn(ln)
 		if err != nil {
 			return
 		}
