@@ -57,48 +57,31 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		seen[key] = true
 
 		separate := proj == p && name == target && ownClaims != nil && ownClaims(proj, name)
-		declared := proj.TargetPolicies[name].MemoryMB
-		peak := ChainMemory{MB: declared, DeclaredBy: name}
-		if size != nil {
-			peak.MB, peak.Sizing, peak.Profile = size(proj, name, declared)
-		}
-		contributors := 1
-		if peak.MB <= 0 {
-			peak, contributors = ChainMemory{}, 0
+		peak := ownPeak(proj, name, size)
+		contributors := 0
+		if peak.MB > 0 {
+			contributors = 1
 		}
 		// One fold per call; a call's members run together, and the calls run in turn.
-		var members []ChainMemory
-		var names []string
-		callIndex := 0
-		close := func() {
-			if len(members) > 0 {
-				contributors++
-				if call := foldCall(members, names); call.MB > peak.MB {
-					peak = call
-				}
-			}
-			members, names = nil, nil
-		}
-		for _, step := range proj.TargetChains[name] {
-			if step.CallIndex != callIndex {
-				close()
-				callIndex = step.CallIndex
-			}
-			if separate && step.Project == "" {
-				continue
-			}
-			next := proj
-			if step.Project != "" {
-				if lookup == nil {
+		for _, call := range chainCalls(proj.TargetChains[name]) {
+			var members []ChainMemory
+			var names []string
+			for _, step := range call {
+				next, ok := stepProject(proj, step.Project, lookup)
+				if !ok || (separate && step.Project == "") {
 					continue
 				}
-				next = lookup(step.Project)
+				if member := walk(next, step.Target); member.MB > 0 {
+					members, names = append(members, member), append(names, step.Target)
+				}
 			}
-			if member := walk(next, step.Target); member.MB > 0 {
-				members, names = append(members, member), append(names, step.Target)
+			if len(members) > 0 {
+				contributors++
+				if folded := foldCall(members, names); folded.MB > peak.MB {
+					peak = folded
+				}
 			}
 		}
-		close()
 		// Calls in turn, or a body and its call, compose no one curve: the larger peak is held flat.
 		if contributors > 1 {
 			peak.Profile = MemoryProfile{}
@@ -106,4 +89,41 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		return peak
 	}
 	return walk(p, target)
+}
+
+// ownPeak is name's own declaration passed through size, or zero when it claims nothing.
+func ownPeak(proj *Project, name string, size MemorySizer) ChainMemory {
+	declared := proj.TargetPolicies[name].MemoryMB
+	peak := ChainMemory{MB: declared, DeclaredBy: name}
+	if size != nil {
+		peak.MB, peak.Sizing, peak.Profile = size(proj, name, declared)
+	}
+	if peak.MB <= 0 {
+		return ChainMemory{}
+	}
+	return peak
+}
+
+// chainCalls groups steps into one slice per ctx.needs call, in order.
+func chainCalls(steps []ChainStep) [][]ChainStep {
+	var calls [][]ChainStep
+	for i, step := range steps {
+		if i == 0 || step.CallIndex != steps[i-1].CallIndex {
+			calls = append(calls, nil)
+		}
+		calls[len(calls)-1] = append(calls[len(calls)-1], step)
+	}
+	return calls
+}
+
+// stepProject resolves a step's project: proj for a same-project step, lookup's answer
+// for another, and false when there is no lookup to ask.
+func stepProject(proj *Project, path string, lookup func(path string) *Project) (*Project, bool) {
+	if path == "" {
+		return proj, true
+	}
+	if lookup == nil {
+		return nil, false
+	}
+	return lookup(path), true
 }
