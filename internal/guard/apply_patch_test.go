@@ -109,3 +109,20 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 		assert.Equal(t, "internal/guard/new.go", envelopeWritePath(map[string]any{"patchText": multiFilePatch}))
 	})
 }
+
+func TestPatchMarkerInBashIsShell(t *testing.T) {
+	t.Parallel()
+	line := "*** Begin Patch\ngit push origin main"
+	body, err := json.Marshal(map[string]any{
+		"session_id": "s", "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": line},
+	})
+	require.NoError(t, err)
+	req, ok := decodeTestEnvelope(t, string(body))
+	require.True(t, ok)
+	assert.Equal(t, hookRequest{
+		Cwd:   "/Users/dev/repo",
+		Who:   hookAttribution{Session: "s", Event: "PreToolUse"},
+		Value: line,
+	}, req, "only a tool whose row says it writes carries a patch")
+}

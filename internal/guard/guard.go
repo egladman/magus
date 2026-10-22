@@ -11,6 +11,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -934,7 +935,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		if verdict.Decision != decisionDeny {
-			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
+			switch g := gradeGuardInstallWrite(location.workspace, actingLease, who.Agent != "", input); g.Decision {
 			case decisionDeny:
 				refuse(denyRuleHookWiringWrite, g.Reason)
 			case decisionAdvise:
@@ -1134,6 +1135,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				verdict.Context = held
 				verdict.Rule = v.advisoryName()
 				whys[v.Context] = v.Why
+			}
+		}
+		// The shell half of hook-wiring-write: a redirect, cp or mv reaches the same files a
+		// write tool does. Only the deny arm, so a person's own session keeps its allowance.
+		if verdict.Decision != decisionDeny {
+			if reason := denyGuardInstallCommand(location, callDir, actingLease, who.Agent != "", input, shellD); reason != "" {
+				refuse(denyRuleHookWiringWrite, reason)
 			}
 		}
 		denyUndeclared(input)
@@ -1457,6 +1465,65 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
 }
 
+// gradeGuardInstallWrite is gradeHookWiringWrite with the workspace's own ./magus added: the
+// binary every hook runs, so replacing, moving or removing it disarms the guard as surely as
+// rewiring the host. The binary has no advisory arm: a person's session rebuilds it.
+func gradeGuardInstallWrite(workspace, actingLease string, agentAttributed bool, writePath string) writeGrade {
+	if g := gradeHookWiringWrite(actingLease, agentAttributed, writePath); g.Decision != "" {
+		return g
+	}
+	if (actingLease == "" && !agentAttributed) || !namesGuardBinary(workspace, writePath) {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: decisionDeny, Reason: denial{
+		Say: fmt.Sprintf("magus workspace: %s is the guard binary every hook runs, the guard's own installation; "+leaseActorClause("replace it"), writePath),
+		Why: "The host's hooks run this file to judge every call, so whatever replaces it decides what the guard allows from the next call on. " +
+			"A worker gets its base's binary placed by the root, and the checkout's integrator rebuilds it with `" + hint.Run.With("go-build", ".") + "`.\n" +
+			leaseActorWhy,
+	}.full()}
+}
+
+// namesGuardBinary reports writePath as the workspace's ./magus. A relative path is read
+// against the workspace root.
+func namesGuardBinary(workspace, writePath string) bool {
+	if workspace == "" || strings.TrimSpace(writePath) == "" {
+		return false
+	}
+	if !filepath.IsAbs(writePath) {
+		writePath = filepath.Join(workspace, writePath)
+	}
+	return filepath.Clean(writePath) == filepath.Join(workspace, "magus")
+}
+
+// denyGuardInstallCommand is hook-wiring-write on a shell line: the refusal for the first
+// word the line writes, moves or removes that is the guard's installation, or "".
+//
+// A line running go is left to raw-tool, which advises the one relink of ./magus a checkout
+// that cannot load its sources needs (MGS1021) and refuses every other build of it.
+func denyGuardInstallCommand(at location, callDir, actingLease string, agentAttributed bool, line string, d Dialect) string {
+	if actingLease == "" && !agentAttributed {
+		return ""
+	}
+	workspace := at.workspace
+	if cmds, _ := ParseCommandsDialect(line, d); slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return c.Name == "go" }) {
+		workspace = ""
+	}
+	home := userHome()
+	for _, c := range placedWriteCandidates(line, d, cmp.Or(callDir, at.dir, at.workspace), home) {
+		if strings.HasPrefix(c.word, "-") {
+			continue
+		}
+		target, placed := c.place(home)
+		if !placed {
+			target = c.word
+		}
+		if g := gradeGuardInstallWrite(workspace, actingLease, agentAttributed, target); g.Decision == decisionDeny {
+			return g.Reason
+		}
+	}
+	return ""
+}
+
 // roleScopedRule is a command rule that reads the acting lease's row, with the name its
 // refusal is recorded under.
 type roleScopedRule struct {
@@ -1682,6 +1749,12 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
 	files, isPatch := envelopePatch(env.ToolInput)
+	// A tool its row names as anything but a writer carries no patch: a shell line that opens
+	// with the marker is still the line bash runs, and the marker on its first line is a glob.
+	// A tool no row names is read by shape, as every call is without rows.
+	if capability := tools.Capability(env.ToolName); capability != "" && capability != types.ToolWrites {
+		isPatch = false
+	}
 	command := cmp.Or(envelopeString(env.ToolInput, "command"), envelopeString(env.ToolInput, "cmd"))
 	switch {
 	case tool != "":
@@ -1691,7 +1764,10 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// traffic rather than stop it. Judged on the TOOL NAME rather than on a param
 		// being present: requiring `op` left the tools that do not carry one,
 		// client and status among them, reaching no rule at all.
-		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
+		// No workspace at cwd leaves root empty, and a client script named by path then reads
+		// as unread.
+		root, _ := workspace.FindRoot(env.Cwd)
+		req.Value = buildCall(tool, env.ToolInput, root)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
 	case tools.Capability(env.ToolName) == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that

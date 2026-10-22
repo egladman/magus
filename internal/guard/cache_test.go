@@ -224,3 +224,37 @@ func TestCacheDirDenyNamesTheVerbs(t *testing.T) {
 	assert.Contains(t, reason, "lease", "the deny must say what the marker is")
 	assert.Contains(t, reason, "advisories")
 }
+
+func TestShellWriteToHookWiringDenied(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	at := location{workspace: root, dir: root}
+	for _, line := range []string{
+		`echo '{"disableAllHooks":true}' > .claude/settings.local.json`,
+		"cp /dev/null .claude/settings.local.json",
+		"echo {} | tee .claude/settings.json",
+		"dd if=/dev/null of=.claude/settings.json",
+		"install -m 644 x .claude/settings.local.json",
+		"rm .claude/settings.local.json",
+		"cd .claude && echo {} > settings.local.json",
+		"mv magus magus.bak",
+		"cp /bin/true ./magus",
+		"ln -sf /bin/true magus",
+		"rm -f " + filepath.Join(root, "magus"),
+		"echo x > magus",
+	} {
+		reason := denyGuardInstallCommand(at, root, "", true, line, DialectBash)
+		assert.Contains(t, reason, "the guard's own installation", "a subagent: %s", line)
+		assert.Contains(t, denyGuardInstallCommand(at, root, "job-a", false, line, DialectBash), "the guard's own installation", "a leased worker: %s", line)
+		assert.Empty(t, denyGuardInstallCommand(at, root, "", false, line, DialectBash), "a person's own session: %s", line)
+	}
+	for _, line := range []string{
+		"cat .claude/settings.json",
+		"./magus run test .",
+		"cp magus /tmp/magus-copy",
+		"mv sub/magus sub/magus.bak",
+		"go build -o magus ./cmd/magus",
+	} {
+		assert.Empty(t, denyGuardInstallCommand(at, root, "", true, line, DialectBash), line)
+	}
+}

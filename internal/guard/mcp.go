@@ -93,10 +93,11 @@ func mcpReadsOnly(name string, input map[string]any) bool {
 }
 
 // buildCall is the command line a magus tool call is judged as. The trail
-// records this same string, so a later audit reads what was graded.
-func buildCall(name string, input map[string]any, cwd string) string {
+// records this same string, so a later audit reads what was graded. root is the workspace
+// the daemon serving the call runs in, which a client script's path is read against.
+func buildCall(name string, input map[string]any, root string) string {
 	if name == hint.ToolClient.String() {
-		return clientCall(input, cwd)
+		return clientCall(input, root)
 	}
 	cli, ok := mcpCLIEquivalents[hint.ToolName(name)]
 	if !ok {
@@ -120,9 +121,12 @@ func buildCall(name string, input map[string]any, cwd string) string {
 // variable holding the argv read as what they are. What the parse cannot settle
 // reads as the refusing answer: a computed argv as unreadRun, a computed id or value
 // as unreadValue, and a script that does not parse, or a path that cannot be read,
-// as both unreadRun and an unread job call. A relative path resolves against cwd,
-// the process's own when empty.
-func clientCall(input map[string]any, cwd string) string {
+// as both unreadRun and an unread job call.
+//
+// A path is read as the daemon reads it (internal/handler/mcp/buzz.go#readWorkspaceScript):
+// relative to root, and only inside it once symlinks resolve. Read against the hook's cwd, a
+// call from a subdirectory or another checkout judged one file while the daemon ran another.
+func clientCall(input map[string]any, root string) string {
 	name := hint.ToolClient.String()
 	script := valueString(input["script"])
 	if script == "" {
@@ -130,11 +134,8 @@ func clientCall(input map[string]any, cwd string) string {
 		if path == "" {
 			return name
 		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(cwd, path)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
+		data, ok := readClientScript(root, path)
+		if !ok {
 			return unreadClientCall()
 		}
 		script = string(data)
@@ -147,6 +148,35 @@ func clientCall(input map[string]any, cwd string) string {
 		return name
 	}
 	return strings.Join(lines, "\n")
+}
+
+// readClientScript reads the script at path under root, false when it is not a regular file
+// inside root. A copy of readWorkspaceScript's resolution rather than a call: the guard
+// answers yes or no where the handler words a diagnostic, and imports no handler.
+func readClientScript(root, path string) ([]byte, bool) {
+	if root == "" {
+		return nil, false
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(resolved, path)
+	}
+	name, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, false
+	}
+	rel, err := filepath.Rel(resolved, name)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, false
+	}
+	if info, err := os.Stat(name); err != nil || !info.Mode().IsRegular() {
+		return nil, false
+	}
+	data, err := os.ReadFile(name)
+	return data, err == nil
 }
 
 func unreadClientCall() string {

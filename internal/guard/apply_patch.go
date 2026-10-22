@@ -47,7 +47,8 @@ var patchTexts = []string{"patchText", "command"}
 
 // envelopePatch reads the files a patch tool_input names. ok reports that tool_input holds
 // a patch at all, which may name no file. A field is a patch only when it opens with the
-// patch marker, so a shell line in `command` is never mistaken for one.
+// patch marker, and a tool its row names as anything but a writer carries none:
+// decodeHookEnvelope asks the row, since a shell line in `command` can open with the marker.
 //
 // A section that moves a file yields two entries, the source and the destination, since
 // both are written.
