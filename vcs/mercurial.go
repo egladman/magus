@@ -56,7 +56,7 @@ func hgUsername(as types.Person) ([]string, error) {
 // both the same way; it ships ui.merge = internal:merge, which outranks the fallback, so
 // it never picked magus that way, and the setting is harmless there. Verified against
 // hg 7.2.4 and sl 0.2.20260811.
-func writeHgMergeDriverSection(path string, globs types.MergeDriverGlobs, j stamp.Judge) (bool, error) {
+func writeHgMergeDriverSection(root, path string, globs types.MergeDriverGlobs, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[merge-patterns]\n")
 	for i, glob := range globs.AutoResolve {
@@ -78,7 +78,7 @@ func writeHgMergeDriverSection(path string, globs types.MergeDriverGlobs, j stam
 	body.WriteString("magus.premerge = False\n")
 	body.WriteString("magus.gui = False\n")
 	body.WriteString("magus.disabled = True\n")
-	return writeManagedSection(path, generatedMarkers, body.String(), configFile, j)
+	return writeManagedSection(root, path, generatedMarkers, body.String(), configFile, j)
 }
 
 // hgMergeDriverCommand is MergeDriverCommand for hg and Sapling: the merge tool
@@ -100,21 +100,21 @@ func hgMergeDriverCommand(ctx context.Context, prog, root string) (string, error
 }
 
 // writeHgRefreshSection registers an `update` hook running command in the
-// hg-family config at path. The caller holds withRepoLock.
-func writeHgRefreshSection(path, command string, j stamp.Judge) (bool, error) {
+// hg-family config at path, of the repository at root. The caller holds withRepoLock.
+func writeHgRefreshSection(root, path, command string, j stamp.Judge) (bool, error) {
 	body := fmt.Sprintf("[hooks]\nupdate.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
-	return writeManagedSection(path, refreshMarkers, body, configFile, j)
+	return writeManagedSection(root, path, refreshMarkers, body, configFile, j)
 }
 
 // writeHgDriftSection registers each of hgDriftHooks to run command in the
-// hg-family config at path. The caller holds withRepoLock.
-func writeHgDriftSection(path, command string, j stamp.Judge) (bool, error) {
+// hg-family config at path, of the repository at root. The caller holds withRepoLock.
+func writeHgDriftSection(root, path, command string, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[hooks]\n")
 	for _, name := range hgDriftHooks {
 		fmt.Fprintf(&body, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
 	}
-	return writeManagedSection(path, driftMarkers, body.String(), configFile, j)
+	return writeManagedSection(root, path, driftMarkers, body.String(), configFile, j)
 }
 
 // hgGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two

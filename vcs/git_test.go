@@ -181,7 +181,7 @@ func TestExportRevisionBadRev(t *testing.T) {
 func TestWriteManagedHookNewFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-checkout")
 	body := gitHookBody("post-checkout", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path,refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 
@@ -192,10 +192,10 @@ func TestWriteManagedHookNewFile(t *testing.T) {
 
 func TestWriteManagedHookIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-merge")
-	_, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
+	_, err := writeManagedSection(filepath.Dir(path), path,refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 
-	changed, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path,refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed, "re-installing an unchanged section is a no-op")
 }
@@ -205,7 +205,7 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'my own hook'\n"), 0o755))
 
 	body := gitHookBody("post-rewrite", "magus server sync")
-	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path,refreshMarkers, body, hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assertFile(t, path, "#!/bin/sh\necho 'my own hook'\n\n"+refreshMarkers.section(body), 0o755)
@@ -238,7 +238,7 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 func TestInstallDriftHookRewritesAnOlderSection(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	prePush := filepath.Join(dir, ".git", "hooks", "pre-push")
-	_, err := writeManagedSection(prePush, driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
+	_, err := writeManagedSection(filepath.Dir(prePush), prePush,driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
 
 	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
@@ -287,7 +287,7 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift, 0o755)
 
 	refresh := refreshMarkers.section("magus job run sync-graph >/dev/null 2>&1 || true\n")
-	_, err = writeManagedSection(postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
+	_, err = writeManagedSection(filepath.Dir(postCommit), postCommit,refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
 	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)

@@ -343,11 +343,13 @@ func lockedWrite(ctx context.Context, metaDir string, write func() (bool, error)
 // writeManagedSection brings the m section of path to body, creating path when absent,
 // and reports whether path changed. It is the one writer for every managed section:
 // .gitattributes, .hg/hgrc, .sl/config and shell hooks. The caller holds withRepoLock.
+// A config file that is a symlink is written only when it resolves inside root, the
+// repository it configures.
 //
 // A file that already holds the wanted bytes is not rewritten. Any other write replaces
 // path atomically and keeps its mode; a hookFile always ends executable. A section a
 // magus newer than j.Self wrote is refused with a *stamp.DowngradeError.
-func writeManagedSection(path string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (bool, error) {
+func writeManagedSection(root, path string, m managedMarkers, body string, kind managedFileKind, j stamp.Judge) (bool, error) {
 	// A hook managed by another tool is often a symlink, and renaming over the link would
 	// replace it with a copy.
 	target := path
@@ -355,8 +357,8 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 		target = resolved
 	}
 	if kind != hookFile && target != path {
-		if err := withinDir(filepath.Dir(path), path, target); err != nil {
-			return false, err
+		if _, err := file.Within(root, target); err != nil {
+			return false, fmt.Errorf("vcs: refusing to write %s, a symlink: %w", path, err)
 		}
 	}
 
@@ -397,20 +399,6 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 		return false, fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return true, nil
-}
-
-// withinDir refuses a path whose symlink target lies outside dir: a committed link would
-// otherwise aim a managed write at any file the user owns.
-func withinDir(dir, path, target string) error {
-	root, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return fmt.Errorf("vcs: resolve %s: %w", dir, err)
-	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("vcs: refusing to write %s: it is a symlink to %s, outside %s", path, target, dir)
-	}
-	return nil
 }
 
 // renderManagedFile returns current with its m section set to body. path only names the

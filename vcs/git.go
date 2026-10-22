@@ -1454,7 +1454,7 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, globs types
 	}
 	return withRepoLock(ctx, paths.commonDir, func() error {
 		j := WriteJudge(ctx, root)
-		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile, j); err != nil {
+		if _, err := writeManagedSection(root, filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(globs), configFile, j); err != nil {
 			return err
 		}
 		return v.writeGitConfig(ctx, root, j)
@@ -2135,7 +2135,7 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 	j := WriteJudge(ctx, root)
 	err = withRepoLock(ctx, paths.commonDir, func() error {
 		for _, name := range names {
-			changed, err := writeManagedSection(filepath.Join(paths.hooksDir, name), m, body(name), hookFile, j)
+			changed, err := writeManagedSection(root, filepath.Join(paths.hooksDir, name), m, body(name), hookFile, j)
 			if err != nil {
 				return err
 			}
