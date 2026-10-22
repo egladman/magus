@@ -105,6 +105,25 @@ judged as any session is.
   `./magus run go-build .` or the bootstrap, alone on its line.
 - A refusal repeated after a role change or a rebuild prints its new remedy in full.
 
+## Resume the warm worker
+
+Follow-up work on code a worker just wrote, a regression fix or a review round, goes back
+to that worker as a message while its prompt cache is warm. Context size is not cost: a
+resumed worker reads its context at the cache-read price and has already oriented, while a
+fresh agent pays the prefix and the orientation again.
+
+- Name the link: `follows: <job>` in the new job's record. A job sharing a write path with
+  an ended job is linked without it.
+- The guard refuses a fresh spawn for a linked job while the ended job's worker is inside
+  the prompt-cache TTL (`spawn-warm-worker`). The refusal names the agent to message and the
+  TTL left, and says where the TTL came from.
+- A fresh spawn passes once the TTL has passed, or when the warm worker's context is within
+  10% of its model's long-context price step.
+- When the old context is wrong for the job (it read code the job replaces, or it is
+  stuck), put the reason in `fresh_reason` on the record. A context that is only large is
+  not a reason{{if .Full}}: at 300k tokens read from cache a resumed worker still costs less
+  than a fresh one at 70k written{{end}}.
+
 ## After the spawn
 
 The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a

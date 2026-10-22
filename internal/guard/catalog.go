@@ -109,6 +109,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSpawnWaiter},
 	{doc: ruleDocSpawnDuplicate},
 	{doc: ruleDocSpawnUnvalidated},
+	{doc: ruleDocSpawnWarmWorker},
 	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
 	{doc: ruleDocCheckpointState, advisory: true},
@@ -831,6 +832,16 @@ var ruleDocSpawnUnvalidated = types.RuleDoc{
 		"A row with no stamp skipped that check, so its problems would surface in the worker, after the work began. " +
 		"A title naming no live row is spawn-unplaced's, not this rule's. " +
 		"It cannot tell a row an older magus wrote, before rows were stamped, from one a test or a catalog seeded straight into the store: both carry no stamp, and both are re-validated by applying the record again.",
+}
+
+var ruleDocSpawnWarmWorker = types.RuleDoc{
+	Name:    string(denyRuleSpawnWarmWorker),
+	Catches: "a fresh spawn for follow-up work while the worker that wrote the code is still warm",
+	Why: "Within the prompt-cache TTL a resumed worker re-reads its context at the cache-read price and has already paid its orientation, so it costs no more than a fresh agent, which pays the prefix and the orientation again. " +
+		"Context size is not cost: a large context read from cache is cheaper than a small one written fresh. " +
+		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
+		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record carries a `fresh_reason`. " +
+		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
 }
 
 var ruleDocReleaseRequested = types.RuleDoc{

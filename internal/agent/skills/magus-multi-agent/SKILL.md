@@ -354,8 +354,7 @@ an editor magus cannot attribute{{end}}.
 
    Before every fork, run `{{cmd "job fork"}} --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `{{cmd "job fork"}} --schema` prints every field and the newest `schema_version`.
-3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
-   first a parent id and a role joined by `/`, the second the job id.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).
    - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
@@ -363,6 +362,7 @@ an editor magus cannot attribute{{end}}.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
+   - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
 Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)

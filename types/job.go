@@ -747,6 +747,11 @@ type Job struct {
 	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
 	// agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
+	// Follows is the job this one continues: follow-up work on what that job's worker wrote.
+	// FreshReason says why that worker's context is wrong for this job, which lets a fresh
+	// spawn pass while that worker is still warm (see the guard's spawn-warm-worker).
+	Follows     string `json:"follows,omitempty"      yaml:"follows,omitempty"`
+	FreshReason string `json:"fresh_reason,omitempty" yaml:"fresh_reason,omitempty"`
 	// ReworkRounds counts the times the guard saw this row's holder sent more work after it
 	// handed back. Widenings counts the writes that added write paths after a holder took
 	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
@@ -1042,6 +1047,10 @@ type Declaration struct {
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
+	// Follows and FreshReason name the job this one continues and why its worker is not
+	// resumed for it. See [Job.Follows].
+	Follows     string `json:"follows,omitempty" schema:"leaseid"`
+	FreshReason string `json:"fresh_reason,omitempty"`
 	// Checkout is an absolute directory, outside the workspace, where the fork makes a new
 	// checkout of the repository for this job at its checkpoint, or at the forking
 	// checkout's revision when it names none.
@@ -1555,6 +1564,8 @@ func (r Declaration) Apply(u *Job) {
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
 	u.BriefFormat = r.BriefFormat
+	u.Follows = strings.TrimSpace(r.Follows)
+	u.FreshReason = strings.TrimSpace(r.FreshReason)
 	// Validate refused an unparsable check before the row reached a store, so the problems
 	// here cannot arise; the rendered line is written from the record so the two agree.
 	check, declared, _ := r.check()

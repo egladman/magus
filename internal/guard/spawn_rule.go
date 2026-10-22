@@ -231,8 +231,20 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
 		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
 	}
-	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok && row.Validated == 0 {
-		return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+		if row.Validated == 0 {
+			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+		}
+		if rows, err := leaseRows(ctx, at); err == nil {
+			var models []types.ModelPricing
+			if at.models != nil {
+				models = at.models()
+			}
+			ttl := resumeTTL()
+			if w, warm := findWarmWorker(facts, rows, row, models, ttl.ttl, time.Now()); warm {
+				return refused(denyRuleSpawnWarmWorker, denySpawnWarmWorker(row, w, ttl)), ""
+			}
+		}
 	}
 	if spawnWaitsFires(env.Spawn.Description, env.Value) {
 		return refused(denyRuleSpawnWaiter, denySpawnWaiter()), ""
@@ -370,6 +382,8 @@ func resolveAgentID(facts hint.Gate, addressed string) string {
 
 // spawnedAgent is what one subagent was spawned as, recorded under the id its host gave it.
 type spawnedAgent struct {
+	// ID is the id the host gave the agent; the marker's kind is a hash of it.
+	ID          string `json:"id,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name,omitempty"`
 	// Model is the model the spawn named, "" when it named none.
@@ -411,6 +425,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 	// its child stopped, so the child's usage can already be on file.
 	prev, _ := readSpawnedAgent(facts, env.SpawnedAgent)
 	rec := spawnedAgent{
+		ID:            env.SpawnedAgent,
 		Description:   env.Spawn.Description,
 		Name:          env.Spawn.Name,
 		Model:         env.DeclaredModel,
