@@ -562,6 +562,11 @@ func TestAnIntegratorIsJudgedWhereItsLineRuns(t *testing.T) {
 
 	assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, "cd "+held+" && ./magus run go-build ."), "the integrator's checkout, named on the line")
 	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run go-build .").refused(), "the same call from the envelope's checkout")
+
+	_, worker := workerRuns(ctx, deps, row.ID, "cd "+held+" && ./magus run go-test .")
+	assert.False(t, worker, "the integrator's background run, named on the line, is not a worker's")
+	_, worker = workerRuns(ctx, deps, row.ID, "./magus run go-test .")
+	assert.True(t, worker, "the same run from the envelope's checkout is a worker's")
 }
 
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for

@@ -38,7 +38,7 @@ started, which is what every rule did before.
 | `placeMagusCalls` places every magus call on a line (`internal/guard/lease.go`)                                       | done  |
 | `gatesInHeldCheckout` and the Buzz `gatesInHeldCheckout` judge a holder's gate where the call runs                    | done  |
 | `actingIntegratorFor` and `denyWorkerCheckOnly`'s row judge read the workspace the line runs in                       | done  |
-| `actingIntegrator` in `background.go` and `bootstrap.go`, and the brief judge, still read the envelope                | planned |
+| `background.go`, `bootstrap.go` and the brief judge read the workspace each line runs in                               | done |
 | `lease-checkout` denies a holder's magus call that resolves outside its row's `Worktree.Root`, default deny           | done  |
 | `magusCdTargets` (`shell.go`) stays: it resolves same-line variable assignments and serves `sibling-checkout`         | done  |
 
@@ -83,8 +83,6 @@ guard reads the line.
   page say so.
 - A `cd <checkout> && magus affected ci` passes for the holder from any directory, and a
   gate aimed at another checkout is refused.
-- `background.go` and `bootstrap.go` keep reading the envelope until their callers carry
-  the line.
 
 ## Open questions
 

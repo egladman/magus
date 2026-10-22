@@ -401,7 +401,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
 	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && (staleOwnBinary(root) || cannotLoad(ctx, deps, root))
 	lease := deps.lease
-	if me, ok := actingLiveLease(ctx, deps, lease); ok && actingIntegrator(ctx, deps, me) {
+	if me, ok := actingLiveLease(ctx, deps, lease); ok && integrates(me, spawnedAs(deps.facts, deps.caller.Agent), root) {
 		lease = ""
 	}
 	return &ownBuildOutcome{
@@ -458,7 +458,7 @@ func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string
 		return nil
 	}
 	if dir, ok := checkoutBootstrapDir(cmds, cwd); ok {
-		if refused := denyCheckoutBootstrap(ctx, deps, dir); refused.refused() {
+		if refused := denyCheckoutBootstrap(ctx, deps, command, dir); refused.refused() {
 			return &ownBuildOutcome{checkoutBuild: refused}
 		}
 		return nil
@@ -521,11 +521,11 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 // denyCheckoutBootstrap refuses a build of ./magus in dir under a lease that does not own
 // dir: the root, the integrator and the job holding that checkout may run it, since a
 // checkout forked at a commit no placed binary matches has no other way to get one.
-func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, dir string) denial {
+func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, dir string) denial {
 	if deps.lease == "" {
 		return denial{}
 	}
-	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegrator(ctx, deps, me) {
+	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegratorFor(ctx, deps, me, command) {
 		return denial{}
 	}
 	if ownsCheckout(ctx, deps, hookLocation(ctx, deps), dir) {

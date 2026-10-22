@@ -214,18 +214,35 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 		return v
 	}
 	var notes []string
-	// A worker starts at its checkout's root, wherever the spawn was made from.
+	// A worker starts at its checkout's root, wherever the spawn was made from, and each
+	// run is judged where its own line moves it.
 	at.dir = at.workspace
+	workerCtx := context.WithValue(ctx, locationKey{}, at)
+	workerDeps := deps
+	workerDeps.callDir = at.workspace
+	workspaces := map[string]func() (types.WorkspaceRepository, error){at.workspace: workspace}
 	for _, row := range graded {
-		judge := newRowJudge(ctx, deps, row, at, workspace)
-		if off, v, found := briefOffCheck(runs, judge); found {
-			return ShellVerdict{
-				Deny: briefOffCheckDeny(row, off, v),
-				Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
-				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+		judges := map[string]rowJudge{}
+		for _, r := range runs {
+			placed := placedLocation(workerCtx, workerDeps, r.line)
+			judge, ok := judges[placed.workspace]
+			if !ok {
+				if workspaces[placed.workspace] == nil {
+					workspaces[placed.workspace] = lazyWorkspace(ctx, deps, placed.workspace)
+				}
+				judge = newRowJudge(ctx, deps, row, placed, workspaces[placed.workspace])
+				judges[placed.workspace] = judge
 			}
+			one := []briefRun{r}
+			if off, v, found := briefOffCheck(one, judge); found {
+				return ShellVerdict{
+					Deny: briefOffCheckDeny(row, off, v),
+					Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
+					Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+				}
+			}
+			notes = append(notes, briefPassNotes(one, judge)...)
 		}
-		notes = append(notes, briefPassNotes(runs, judge)...)
 	}
 	return briefPassVerdict(notes)
 }

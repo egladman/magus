@@ -80,7 +80,7 @@ func workerRuns(ctx context.Context, deps Dependencies, actingLease, command str
 		return workerRun{}, false
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegratorFor(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
 		return workerRun{}, false
 	}
 	return workerRun{lease: me, runs: runs}, true
