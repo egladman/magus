@@ -106,6 +106,10 @@ type FuncType struct {
 	// argument slot a call leaves empty; like ParamNames it never affects
 	// assignability.
 	ParamDefaults []ast.Node
+	// TypeParams names the function's `::<T, U>` clause in declaration order, the
+	// keys of upstream's FunctionDef.generic_types. A call's explicit type arguments
+	// fill them positionally. Like ParamNames it never affects assignability.
+	TypeParams []string
 }
 
 func (f *FuncType) TypeName() string {

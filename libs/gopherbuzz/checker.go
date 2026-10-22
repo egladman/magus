@@ -757,7 +757,7 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	if fd.YieldAnnot != "" {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults, TypeParams: fd.TypeParams}
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -2158,6 +2158,23 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
 	// call's result type. gopherbuzz doesn't model generic signatures, so without
 	// this the result would be `any`; honoring the hint matches upstream Buzz.
+	if v.TypeArg != "" && ok && len(ft.TypeParams) > 0 && ft.Ret != nil {
+		// A declared generic function: its type arguments fill its own parameters in
+		// the declared return, so `mk::<int>(1)` declared `> R::<T>` is an R::<int>.
+		args := c.literalTypeArgs(v.TypeArg)
+		if len(args) == len(ft.TypeParams) {
+			subst := make(map[string]types.Type, len(args))
+			for i, name := range ft.TypeParams {
+				if _, erased := args[i].(*types.NamedType); erased || args[i] == types.Unknown {
+					return types.Unknown
+				}
+				subst[name] = args[i]
+			}
+			return types.Substitute(ft.Ret, subst)
+		}
+		c.errorfc(v.Pos, ArgumentError, "wrong type argument count: got %d, want %d", len(args), len(ft.TypeParams))
+		return types.Unknown
+	}
 	if v.TypeArg != "" {
 		// The hint only helps when it names a type this checker knows. A call inside a
 		// generic function passes its own type PARAMETERS through (`lambda::<A, B>()`),
@@ -2630,7 +2647,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.raiseDeclared = savedRaise
 	c.retOptional = savedRetOpt
 
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults, TypeParams: v.TypeParams}
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {

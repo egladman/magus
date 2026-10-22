@@ -1941,3 +1941,17 @@ func TestDiscardedValueStaysQuiet(t *testing.T) {
 		assert.Empty(t, typeWarnings(t, src), src)
 	}
 }
+
+func TestCheck_ExplicitTypeArgumentsFillTheDeclaredReturn(t *testing.T) {
+	const decls = `object R::<T> { v: T? = null, }
+fun mk::<T>(x: T) > R::<T> { return R::<T>{ v = x }; }
+fun id::<T>(x: T) > T { return x; }
+fun pair::<A, B>(a: A, b: B) > R::<B> { return R::<B>{ v = b }; }
+`
+	checkOK(t, decls+`fun f() > R::<int> { return mk::<int>(1); }`)
+	checkOK(t, decls+`final r: R::<int> = mk::<int>(1); final n: int = id::<int>(2);`)
+	checkOK(t, decls+`final r: R::<str> = pair::<int, str>(1, b: "b");`)
+	checkErr(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
+	checkErr(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
+}
+
