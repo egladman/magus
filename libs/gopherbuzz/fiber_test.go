@@ -285,3 +285,77 @@ fun body() > void *> str !> any { landed = host\wait(); }
 	require.Truef(t, landed.IsStr(), "resolve left a %s behind", landed.Kind())
 	assert.Equal(t, "resolved", landed.AsString())
 }
+
+// newWaitingSession parks body() at host\wait, the shape ctx.needs parks a target in.
+func newWaitingSession(t *testing.T, source string) (*Session, vm.Value) {
+	t.Helper()
+	s := NewSession(t.Context(), WithEmbedded())
+	mod := vm.NewMap()
+	mod.MapSet("wait", vm.DirectValue("host.wait", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.Null, vm.Suspend(vm.Null)
+	}))
+	s.SetNativeModule("host", mod)
+	require.NoError(t, s.Exec(t.Context(), source))
+	fiber, err := s.Eval(t.Context(), `return &body()`)
+	require.NoError(t, err)
+	_, err = s.ResumeFiber(t.Context(), fiber)
+	require.NoError(t, err, "the first resume parks at host\\wait")
+	return s, fiber
+}
+
+func TestThrowIntoFiberIsCaughtAtTheSuspendingCall(t *testing.T) {
+	s, fiber := newWaitingSession(t, `
+import "host";
+var caught = "none";
+var after = false;
+fun inner() > void !> any { host\wait(); }
+fun body() > void *> void !> any {
+    try {
+        inner();
+        after = true;
+    } catch (e: str) {
+        caught = e;
+    }
+}
+`)
+	_, err := s.ThrowIntoFiber(t.Context(), fiber, errors.New("dependency failed"))
+	require.NoError(t, err, "a try around the call catches the thrown error")
+
+	caught := s.Globals()["caught"]
+	require.True(t, caught.IsStr())
+	assert.Equal(t, "dependency failed", caught.AsString())
+	assert.False(t, s.Globals()["after"].AsBool(), "the throw must skip the rest of the try body")
+	f, _ := vm.AsFiber(fiber)
+	assert.Equal(t, vm.FiberDone, f.Status())
+}
+
+func TestThrowIntoFiberUncaughtEndsItWithTheSameError(t *testing.T) {
+	s, fiber := newWaitingSession(t, `
+import "host";
+var after = false;
+fun body() > void *> void !> any {
+    host\wait();
+    after = true;
+}
+`)
+	want := errors.New("dependency failed")
+	_, err := s.ThrowIntoFiber(t.Context(), fiber, want)
+	assert.Equal(t, want, err, "uncaught, the error comes back unwrapped")
+	assert.False(t, s.Globals()["after"].AsBool())
+
+	_, err = s.ResumeFiber(t.Context(), fiber)
+	assert.Equal(t, want, err, "the ended fiber re-surfaces the same error")
+}
+
+func TestThrowIntoFiberRefusesAFiberThatIsNotSuspended(t *testing.T) {
+	s, fiber := newWaitingSession(t, `
+import "host";
+fun body() > void *> void !> any { host\wait(); }
+`)
+	_, err := s.ResumeFiber(t.Context(), fiber)
+	require.NoError(t, err)
+
+	_, err = s.ThrowIntoFiber(t.Context(), fiber, errors.New("late"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires a suspended fiber")
+}
