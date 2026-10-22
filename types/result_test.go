@@ -1,8 +1,9 @@
 package types
 
 import (
-	"encoding/json"
 	"testing"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 func TestResultConstructors(t *testing.T) {
