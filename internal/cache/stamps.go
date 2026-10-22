@@ -73,8 +73,12 @@ func (c *Cache) movedOutputs(ctx context.Context, s *Step, m *Manifest) ([]strin
 	if err != nil {
 		return nil, err
 	}
+	owned, err := ownedOutputs(m, scope)
+	if err != nil {
+		return nil, err
+	}
 	recorded := map[string]OutputRecord{}
-	for _, rec := range ownedOutputs(m, scope).Outputs {
+	for _, rec := range owned.Outputs {
 		recorded[rec.Path] = rec
 	}
 	c.mtimes.load(ctx)

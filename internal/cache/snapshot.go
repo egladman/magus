@@ -232,34 +232,26 @@ func expandOutputGlobs(globs []types.Glob, root string, nested []string) ([]relA
 // not trusted to have been snapshotted under these rules (a remote tier, an older binary,
 // a declaration that gained an exclusion), so a hit enforces them again: replay must
 // never write over a file the declaration carves out. It returns m itself when nothing
-// drops. A record outside a nested project that no glob claims at all stays, flagged
-// unclaimedBlob, and replayFrom refuses it: a manifest can come from a remote tier or an
-// imported archive, and replay would otherwise write any workspace path it names. The
-// flag rides the record because this function's callers have no error to return.
-func ownedOutputs(m *Manifest, s Step) *Manifest {
+// drops. A record outside a nested project that no glob claims at all is an error: a
+// manifest can come from a remote tier or an imported archive, and replay would
+// otherwise write any workspace path it names.
+func ownedOutputs(m *Manifest, s Step) (*Manifest, error) {
 	kept := make([]OutputRecord, 0, len(m.Outputs))
-	changed := false
 	for _, rec := range m.Outputs {
 		switch ownership(s, rec.Path) {
 		case ownedRecord:
 			kept = append(kept, rec)
 		case unclaimedRecord:
-			changed = true
-			kept = append(kept, OutputRecord{Path: rec.Path, Blob: unclaimedBlob})
-		default:
-			changed = true
+			return nil, fmt.Errorf("manifest records %q, which no output glob of the step claims", rec.Path)
 		}
 	}
-	if !changed {
-		return m
+	if len(kept) == len(m.Outputs) {
+		return m, nil
 	}
 	narrowed := *m
 	narrowed.Outputs = kept
-	return &narrowed
+	return &narrowed, nil
 }
-
-// unclaimedBlob marks a record no output glob claims; no sha256 hex digest can equal it.
-const unclaimedBlob = "unclaimed"
 
 type recordOwnership int
 
@@ -296,11 +288,6 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 // replayFrom restores a manifest's outputs into root from the blobs under store (the
 // local store, or a remote hit's staging root): reflink, else byte copy.
 func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string) ([]string, error) {
-	for _, rec := range m.Outputs {
-		if rec.Blob == unclaimedBlob {
-			return nil, fmt.Errorf("manifest records %q, which no output glob of the step claims", rec.Path)
-		}
-	}
 	var paths []string
 	for _, rec := range m.Outputs {
 		if err := ctx.Err(); err != nil {

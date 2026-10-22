@@ -779,7 +779,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
 	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
-	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s.withoutForeignOutputs()), s.WorkspaceRoot, e.root)
+	var paths []string
+	owned, err := ownedOutputs(e.manifest, s.withoutForeignOutputs())
+	if err == nil {
+		paths, err = c.replayFrom(replayCtx, owned, s.WorkspaceRoot, e.root)
+	}
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
