@@ -3,7 +3,6 @@ package guard
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 )
 
@@ -151,25 +151,13 @@ func clientCall(input map[string]any, root string) string {
 }
 
 // readClientScript reads the script at path under root, false when it is not a regular file
-// inside root. A copy of readWorkspaceScript's resolution rather than a call: the guard
-// answers yes or no where the handler words a diagnostic, and imports no handler.
+// inside root.
 func readClientScript(root, path string) ([]byte, bool) {
 	if root == "" {
 		return nil, false
 	}
-	resolved, err := filepath.EvalSymlinks(root)
+	name, err := file.Within(root, path)
 	if err != nil {
-		return nil, false
-	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(resolved, path)
-	}
-	name, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return nil, false
-	}
-	rel, err := filepath.Rel(resolved, name)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, false
 	}
 	if info, err := os.Stat(name); err != nil || !info.Mode().IsRegular() {
