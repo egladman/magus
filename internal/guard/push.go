@@ -291,10 +291,10 @@ const movedPushReason = "this line pushes after a command that changes what is p
 // the line relocates the push somewhere this cannot name, so the push keeps its advisory:
 // refusing it would grade a tree nobody proved it publishes. moved reports a push whose
 // line moves the revision first (movedPushReason), and then commit is "".
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool) {
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool, replay sessions.GateRecord) {
 	push, located := locatePush(command, d, cwd)
 	if !located {
-		return gateUnknown, "", false
+		return gateUnknown, "", false, replay
 	}
 	at := hook
 	if push.relocated {
@@ -307,16 +307,16 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	}
 	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
 	if cover != gatePassed {
-		if _, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), commit); replayed {
-			cover = gatePassed
+		if rec, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), commit); replayed {
+			cover, replay = gatePassed, rec
 		}
 	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
 	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
-		return cover, "", true
+		return cover, "", true, replay
 	}
-	return cover, commit, false
+	return cover, commit, false, replay
 }
 
 // revisionMovesBeforePush reports a push on command that runs after a command that changes

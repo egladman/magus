@@ -257,6 +257,29 @@ func TestDenyRepeatGate(t *testing.T) {
 		ctx, _ := gateRepeatRepo(t, 1, sessions.OutcomePass)
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
 	})
+	t.Run("a gate placed in another checkout with its own changes", func(t *testing.T) {
+		ctx, landing := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		other := testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n", "magusfile.buzz": "\n"})
+		otherRuns := filepath.Join(other.Root(), ".magus", "runs")
+		require.NoError(t, os.MkdirAll(otherRuns, 0o755))
+		for i := range 2 {
+			writeRun(t, otherRuns, "other-"+strconv.Itoa(i), time.Now().Add(-time.Duration(30-i)*time.Minute), time.Minute, "affected", "ci")
+		}
+		otherDir, err := sessions.Dir(other.Root())
+		require.NoError(t, err)
+		require.NoError(t, sessions.RecordGate(otherDir, sessions.GateResult{
+			Target: types.TargetCI, Ref: "main", Commit: other.Head(), Outcome: sessions.OutcomePass, Inv: "inv-other",
+		}, sessions.InvocationStart{Workspace: other.Root()}))
+		other.Write("b.go", "package a\n")
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(other.Path("b.go"), after, after))
+
+		placed := other.Root() + "/magus -C " + other.Root() + " affected ci"
+		assert.NotEmpty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus -C "+landing.Root()+" affected ci"),
+			"the landing checkout's own unchanged green tree is still refused")
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", placed),
+			"the landing branch's verdict does not judge a gate that runs in another checkout")
+	})
 	t.Run("a command that is not the gate", func(t *testing.T) {
 		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomePass)
 		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus run test ."))

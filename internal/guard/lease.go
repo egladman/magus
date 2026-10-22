@@ -81,6 +81,10 @@ func adviseRepeatGate(runsDir string, now time.Time) (full advice, brief string)
 // again. A gate over a tree it already passed can only pass again, so the refusal costs the
 // caller nothing it needed.
 //
+// The verdict, the run log and the changed files all come from the workspace the gate
+// call runs in (placedLocation), not the hook's, so a worker gating its own checkout from
+// the landing cwd is judged on its tree.
+//
 // "Changed" is read off version control: every file that differs from the green gate's
 // commit, committed or not, compared by modification time against the verdict. A file
 // edited before the gate ran was in the tree it passed; one it cannot stat counts as a
@@ -89,7 +93,7 @@ func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) d
 	if !commandRunsGate(command) {
 		return denial{}
 	}
-	at := hookLocation(ctx, deps)
+	at := placedLocation(ctx, deps, command)
 	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
 	if runs < gateRepeatDenyRuns {
 		return denial{}

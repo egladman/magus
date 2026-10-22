@@ -616,7 +616,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 
 func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return commit[:12] }}
-	cover, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
+	cover, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
 	return cover
 }
 
@@ -631,6 +631,19 @@ func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
 	}, rec)
 
 	assert.Equal(t, gatePassed, coverageAtPush(ctx, repo, replayed))
+}
+
+func TestPushCoverageNamesTheReplayedRun(t *testing.T) {
+	ctx, repo, _, replayed := replayedBranch(t)
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return replayed[:12] }}
+	at := location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}
+
+	cover, _, _, replay := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
+	assert.Equal(t, gatePassed, cover)
+	assert.Equal(t, "inv-green", replay.Inv)
+
+	v := Judge(ctx, deps, Request{Input: "git push", RendersAsk: true})
+	assert.Contains(t, v.Context, "run inv-green")
 }
 
 func TestPushGateStillNeedsItsOwnGateForADifferentTree(t *testing.T) {
