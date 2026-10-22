@@ -161,6 +161,10 @@ type hookEntry struct {
 	} `json:"hooks"`
 }
 
+// checkoutMagusPrefix is how spells/harness/claude-code runs the checkout's own ./magus
+// when it is executable and PATH's magus otherwise.
+const checkoutMagusPrefix = `m="$CLAUDE_PROJECT_DIR"/magus; [ -x "$m" ] || m=magus; "$m" `
+
 // hookSettings is a host hook config keyed by event name.
 type hookSettings struct {
 	Hooks map[string][]hookEntry `json:"hooks"`
@@ -193,9 +197,14 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
 				// One magus command per hook: a shell around it is logic no template
-				// carries and no reader downloads.
+				// carries and no reader downloads. The claude-code spell's checkout-first
+				// prefix is the one exception, and only verbatim.
+				command := h.Command
+				if rest, ok := strings.CutPrefix(command, checkoutMagusPrefix); ok {
+					command = "magus " + rest
+				}
 				for _, control := range []string{";", "&&", "||", "|", ">", "$(", "#"} {
-					assert.NotContains(t, h.Command, control, "the %s %q hook must be one plain magus command", event, entry.Matcher)
+					assert.NotContains(t, command, control, "the %s %q hook must be one plain magus command", event, entry.Matcher)
 				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
