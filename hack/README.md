@@ -48,6 +48,8 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | see every worktree, its uncommitted files and unpushed commits | `hack/dev/ls-worktrees.buzz` |
 | see uncommitted files by owning project | `hack/dev/ls-uncommitted.buzz` |
 | merge job branches or a split stack | `hack/dev/merge-job-branches.buzz` |
+| open a pull request from commits, with CI's hygiene checks run first | `hack/dev/land-commits.buzz` |
+| bring a stack of branches up to date, in order | `hack/dev/update-stack.buzz` |
 | split the working change into stacked branches | `hack/dev/split-into-branches.buzz` |
 | settle a file's merge conflict hunks | `hack/dev/resolve-conflicts.buzz` |
 | build `./magus` in a checkout, or restart the daemon on it | `hack/dev/bootstrap-checkout.buzz` |
@@ -72,6 +74,8 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | `magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]` | plans which git worktrees and agent branches can go, largest first, with every reason a kept one stays; dry run by default | a git status and rev-list per worktree, one lsof, and a du per removable worktree |
 | `magus buzz hack/dev/prune-changelog-fragments.buzz -- [-o json] [--apply]` | plans which unreleased changelog fragments are superseded, obsolete or duplicate from the history of the lines their commits wrote; dry run by default | a git blame per changed path, then a nested magus diff of about 13s per duplicate candidate |
 | `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> [--take <n\|all>=ours\|theirs\|both\|base]... [--text <n>=<file>]... [--apply]` | lists a file's merge conflict hunks, or resolves the chosen ones and prints the diff; refuses an empty result or stray markers, writes through a same-directory rename, and only with `--apply` | none; reads and writes one file |
+| `magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <sha,...\|ref> --title <text> --body-file <file> [--dry-run]` | refuses a branch name taken locally or on origin, switches to it from a fresh origin/main, cherry-picks the commits, runs the pr-title, pr-description and pr-changelog targets, then pushes and runs `gh pr create`; stops at the first failed step, never enables auto-merge; `--dry-run` prints the steps | a fetch, three targets, a push |
+| `magus buzz hack/dev/update-stack.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]` | per branch in order: switches to it, runs `magus vcs resolve --against` the previous branch (the first, `--base`, default origin/main), commits the merge and pushes; stops at the first source conflict and lists the files; refuses a dirty tree | one merge, one regeneration and a push per branch |
 | `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: magus's results as typed Buzz values, where a shell pipes `-o json` into jq | needs the code index |
 | `magus buzz hack/dev/ls-uncommitted.buzz` | read-only: uncommitted files by owning project and declared role | grows with tree size |
 | `magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]` | read-only: every worktree with its uncommitted files, unpushed commits and job | grows with the number of worktrees |

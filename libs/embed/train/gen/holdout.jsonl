@@ -114,6 +114,7 @@
 {"group":"file:changes/unreleased/guard-session-copy-fixes.md","path":"changes/unreleased/guard-session-copy-fixes.md"}
 {"group":"file:changes/unreleased/guard-stale-binary-denies.md","path":"changes/unreleased/guard-stale-binary-denies.md"}
 {"group":"file:changes/unreleased/guard-stale-binary.md","path":"changes/unreleased/guard-stale-binary.md"}
+{"group":"file:changes/unreleased/guard-unread-command.md","path":"changes/unreleased/guard-unread-command.md"}
 {"group":"file:changes/unreleased/hack-script-names.md","path":"changes/unreleased/hack-script-names.md"}
 {"group":"file:changes/unreleased/harness-merge-command-reruns.md","path":"changes/unreleased/harness-merge-command-reruns.md"}
 {"group":"file:changes/unreleased/hook-glue-binary-from-event-cwd.md","path":"changes/unreleased/hook-glue-binary-from-event-cwd.md"}
@@ -772,6 +773,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/diff-dirs.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/example-typed-results.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/host-schemas.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/land-commits.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-test-failures.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-uncommitted.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-worktrees.buzz"}
@@ -782,6 +784,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/run-gate.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-feedback.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-interrupted-session.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-memory-kills.buzz"}
@@ -790,6 +793,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/split-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-root-cost.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-transcript.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/update-stack.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/banned-words.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-glue-is-wired-as-plain-argv.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-sources-pass-the-static-check.buzz"}
