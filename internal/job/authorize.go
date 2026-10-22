@@ -364,6 +364,8 @@ func changedFields(prev, next types.Job) []string {
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
 	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
 	add("model", prev.Model != next.Model)
+	add("follows", prev.Follows != next.Follows)
+	add("fresh_reason", prev.FreshReason != next.FreshReason)
 	add("brief_format", prev.BriefFormat != next.BriefFormat)
 	add("validation", prev.Validation != next.Validation)
 	add("goals", !goalsEqual(prev.Goals, next.Goals))
