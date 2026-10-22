@@ -849,7 +849,7 @@ func (c *checker) checkStmt(n ast.Node) {
 	case *ast.AssignStmt:
 		c.checkAssign(v)
 	case *ast.ExprStmt:
-		c.infer(v.Expr)
+		c.flagDiscardedValue(v, c.infer(v.Expr))
 	case *ast.ReturnStmt:
 		c.checkReturn(v)
 	case *ast.BlockStmt:
@@ -1195,6 +1195,19 @@ func (c *checker) flagRedundantUnwrap(v *ast.ForceExpr) {
 	if e, found := c.lookup(id.Name); found && e.nonOptional && !e.optional {
 		c.warnfc(v.Pos, RedundantUnwrap, "force-unwrap `!` on %q, which is not optional", id.Name)
 	}
+}
+
+// flagDiscardedValue warns on an expression statement whose value nothing uses,
+// as upstream's generateExpression does (Codegen.zig, Reporter.discarded_value).
+// Assignment is a statement here, not an expression, so upstream's exemption for
+// it needs no case. Null is exempt because upstream types it as void, and
+// Unknown because it is this checker's tracking failure, not a known type.
+func (c *checker) flagDiscardedValue(v *ast.ExprStmt, t types.Type) {
+	switch t {
+	case nil, types.Void, types.Null, types.Unknown:
+		return
+	}
+	c.warnfc(v.Pos, DiscardedValue, "discarded value of type `%s`", t.TypeName())
 }
 
 // concatSpineRefers reports whether n is a `+` chain carrying name as a direct operand.

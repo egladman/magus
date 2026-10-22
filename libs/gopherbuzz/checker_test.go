@@ -1915,3 +1915,29 @@ fun f() > Result::<int> { return Result{}; }
 final _raw: Result = Result::<str>{};
 `)
 }
+
+func TestDiscardedValueWarns(t *testing.T) {
+	for _, src := range []string{
+		`fun f() > int { return 1; } f();`,
+		`final x = 1; x + 1;`,
+		`"text";`,
+	} {
+		got := typeWarnings(t, src)
+		require.Len(t, got, 1, src)
+		assert.Equal(t, DiscardedValue, got[0].Code)
+		assert.Equal(t, SeverityWarning, got[0].Severity)
+		assert.Contains(t, got[0].Msg, "discarded value of type `")
+	}
+}
+
+func TestDiscardedValueStaysQuiet(t *testing.T) {
+	for _, src := range []string{
+		`fun f() > void {} f();`,
+		`fun g() {} g();`,
+		`var x = 1; x = 2;`,
+		`fun f() > int { return 1; } _ = f();`,
+		`null;`,
+	} {
+		assert.Empty(t, typeWarnings(t, src), src)
+	}
+}
