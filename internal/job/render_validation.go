@@ -12,7 +12,8 @@ import (
 )
 
 // RenderValidation writes v for a person: every problem numbered, each as
-// `[MGSxxxx] <field>: <message>` with its fix beneath, then the record as it would be
+// `[MGSxxxx] <field>: <message>` with its fix beneath and a count of those `--fix` would
+// apply, then the record as it would be
 // stored when dryRun is set, the waived problems with their reasons, and each check that
 // could not run. A validation with nothing to say writes nothing, except under dryRun,
 // which says the record is clean.
@@ -31,6 +32,9 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 			if p.Fix != "" {
 				fmt.Fprintf(w, "     fix: %s\n", p.Fix)
 			}
+		}
+		if n := v.Problems.Fixable(); n > 0 {
+			fmt.Fprintf(w, "--fix would apply %d of them\n", n)
 		}
 	case dryRun:
 		fmt.Fprintln(w, "no problems")
@@ -65,7 +69,7 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 // is.
 //
 // Apply joins its problems as errors, so a problem's fix rides inside its message here
-// rather than on a line of its own.
+// rather than on a line of its own; its Edit is kept.
 func ApplyValidations(err error, ids []string) ([]types.JobValidation, bool) {
 	var leaves []error
 	var walk func(error)
@@ -94,7 +98,11 @@ func ApplyValidations(err error, ids []string) ([]types.JobValidation, bool) {
 			v = &types.JobValidation{Job: types.Job{ID: ids[i]}}
 			byID[ids[i]] = v
 		}
-		v.Problems = append(v.Problems, types.JobProblem{Code: diag.Code, Message: strings.TrimPrefix(diag.Msg, ids[i]+": ")})
+		p := types.JobProblem{Code: diag.Code, Message: strings.TrimPrefix(diag.Msg, ids[i]+": ")}
+		if carried := (*types.JobProblemError)(nil); errors.As(leaf, &carried) {
+			p.Edit = carried.Problem.Edit
+		}
+		v.Problems = append(v.Problems, p)
 	}
 	var out []types.JobValidation
 	for _, id := range ids {

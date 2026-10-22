@@ -1086,15 +1086,16 @@ func (f forkFlags) declaredCheck() *types.LeaseCheck {
 // live job must not erase the rest.
 func jobFork(ctx context.Context, root string, args []string) error {
 	var (
-		row           types.Declaration
-		declared      forkFlags
-		schema, stdin bool
-		flags         *flag.FlagSet
+		row                types.Declaration
+		declared           forkFlags
+		schema, stdin, fix bool
+		flags              *flag.FlagSet
 	)
 	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
 		flags = fs
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
+		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's waiver), validating again until none is left, and list only the problems that remain")
 		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
 		fs.StringVar(&declared.timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
@@ -1133,6 +1134,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "the waived problems and the checks that could not run, and exits 1 while any")
 			fmt.Fprintln(os.Stderr, "problem remains. A waiver in the record keeps a broad write path, an output a")
 			fmt.Fprintln(os.Stderr, "target regenerates outside the write paths, or a ci target the job does not run.")
+			fmt.Fprintln(os.Stderr, "--fix makes the edits those problems name (the output added to the write paths,")
+			fmt.Fprintln(os.Stderr, "or waived for the integrator; the gate's goal added), validating again until no")
+			fmt.Fprintln(os.Stderr, "edit is left, says each one it made, and lists only the problems that need a")
+			fmt.Fprintln(os.Stderr, "person. With --checkout it also moves a checkpoint this checkout cannot place to")
+			fmt.Fprintln(os.Stderr, "its HEAD. Without it, the list says how many --fix would apply.")
 			fmt.Fprintln(os.Stderr, "A fork also notes a check whose last real run took longer than a wired agent host")
 			fmt.Fprintln(os.Stderr, "lets a foreground call wait, which its holder cannot wait on.")
 			fmt.Fprintln(os.Stderr, "When this machine's build budget is full it says how full and which run has held")
@@ -1189,8 +1195,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: --stdin takes the job from the record, so %s would be ignored: put it in the record (`%s` prints its fields)",
 				strings.Join(dropped, ", "), hint.JobFork.With("--schema"))
 		}
-		if row, err = job.DecodeDeclaration(os.Stdin); err != nil {
+		var defaulted bool
+		if row, defaulted, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
+		}
+		if defaulted {
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no schema_version, so it was read as version %d", types.JobSchemaVersion), attr.Notice("note"))
 		}
 		// --checkout says where the job runs, so it rides beside a record that names none.
 		switch {
@@ -1230,20 +1240,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	for _, n := range notes {
 		slog.InfoContext(ctx, n, attr.Notice("note"))
 	}
+	if fix {
+		if row, err = fixFork(ctx, store, row, reader); err != nil {
+			return err
+		}
+	}
 	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	// A job that works in its own checkout shares none, which the standing placeholder says.
 	// Validating before the worktree is made leaves nothing behind for a record with problems.
-	judged := merge
-	if row.Checkout != "" {
-		judged = func(u *types.Job) {
-			merge(u)
-			u.Worktree = &types.JobWorktree{Root: row.Checkout}
-		}
-	}
+	judged := judgedMerge(row)
 	if globalCfg.DryRun || row.Checkout != "" {
 		validation, err := job.ValidateFork(ctx, store, row.ID, judged, globalCfg.Jobs, reader)
 		if err != nil {
@@ -2363,9 +2371,13 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // each record is a job's whole spec, upserted in order, and nothing magus records about the
 // job (its state, holder, registration, results) moves. A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
-	var file string
+	var (
+		file string
+		fix  bool
+	)
 	pos, err := cmdParse("job apply", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&file, "f", "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
+		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job apply -f <file|->")
 			fmt.Fprintln(os.Stderr, "")
@@ -2378,6 +2390,8 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
 			fmt.Fprintln(os.Stderr, "adds, and every record's problems are listed at once with their codes. It prints")
 			fmt.Fprintln(os.Stderr, "what changed per job; the global --dry-run prints it and writes nothing.")
+			fmt.Fprintln(os.Stderr, "--fix makes the edits a problem names without judgment, as job fork --fix does,")
+			fmt.Fprintln(os.Stderr, "and says each one it made; the problems that need a person are still listed.")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobFork.With("--schema")+"` prints the record, waivers included.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Example:")
@@ -2434,6 +2448,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		for _, n := range notes {
 			slog.InfoContext(ctx, records[i].ID+": "+n, attr.Notice("note"))
 		}
+	}
+	if fix {
+		records = fixApply(ctx, store, records, graphSymbolReader(graph.load), checkpoint)
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)
 	if err != nil {

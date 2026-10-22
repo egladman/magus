@@ -428,3 +428,23 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	assert.ElementsMatch(t, append(jsonFields(types.JobPut{}), "validation"), mergeFields,
 		"a JobPut field is named by the key its map spells it with")
 }
+
+func TestDecodeStdinDeclarationTakesTheCurrentVersionWhenTheRecordNamesNone(t *testing.T) {
+	t.Parallel()
+
+	row, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
+	require.NoError(t, err)
+	assert.True(t, defaulted, "the caller says it defaulted")
+	assert.Equal(t, types.JobSchemaVersion, row.Version)
+	assert.Equal(t, "a", row.ID)
+
+	_, defaulted, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
+	require.NoError(t, err)
+	assert.False(t, defaulted, "a named version is read as named")
+
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"schema_version":0,"id":"a","read_only":true}`))
+	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version, and is refused as before")
+
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
+	require.Error(t, err, "a record that is not an object is refused, not defaulted")
+}

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
@@ -78,6 +80,28 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 		return types.Declaration{}, memberProblems(raw, err).Err()
 	}
 	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
+}
+
+// DecodeStdinDeclaration is [DecodeDeclaration] for the one record `magus job fork --stdin`
+// reads, where a JSON object naming no schema_version member takes this magus's version.
+// defaulted reports that it did, for the caller to say so. A schema_version the record
+// names, 0 included, is held to DecodeDeclaration's rules.
+func DecodeStdinDeclaration(r io.Reader) (row types.Declaration, defaulted bool, err error) {
+	raw, err := readInput(r, "job")
+	if err != nil {
+		return types.Declaration{}, false, asRecordInvalid(err)
+	}
+	if members, isObject := objectMembers(raw); isObject {
+		if _, named := members["schema_version"]; !named {
+			members["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
+			if raw, err = json.Marshal(members); err != nil {
+				return types.Declaration{}, false, err
+			}
+			defaulted = true
+		}
+	}
+	row, err = DecodeDeclaration(bytes.NewReader(raw))
+	return row, defaulted, err
 }
 
 // recordInvalid is err, the reason a record could not be read as a job, as its one problem.
