@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -283,6 +284,32 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	inferred, _ := groundworkFinding(advise, call("git diff", types.OrchestrationInferred))
 	search, _ := groundworkFinding(advise, call("rg x", types.OrchestrationInferred))
 	assert.NotEqual(t, inferred.key, search.key, "advised once per kind of work")
+}
+
+// TestGroundworkNamesTheMergeScript: a merge or cherry-pick of job branches names the merge
+// script in the finding's first line, only where the workspace carries it.
+func TestGroundworkNamesTheMergeScript(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack", "dev"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "dev", "merge-job-branches.buzz"), nil, 0o644))
+	deny := builtin.Setting{Decision: builtin.Deny}
+	call := func(line, workspace string) mainCall {
+		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: workspace}
+	}
+	named := "Merging job branches? `" + hint.Buzz.With("hack/dev/merge-job-branches.buzz") + "`"
+	for _, line := range []string{"git cherry-pick abc123", "git merge job-branch"} {
+		f, ok := groundworkFinding(deny, call(line, root))
+		require.True(t, ok)
+		assert.Equal(t, 1, strings.Count(f.say, named), line)
+		first, _, _ := strings.Cut(f.say, "\n")
+		assert.Contains(t, first, named, "advice keeps only the first line")
+
+		f, _ = groundworkFinding(deny, call(line, t.TempDir()))
+		assert.NotContains(t, f.say, "hack/", "%q in a workspace without the script", line)
+	}
+	f, _ := groundworkFinding(deny, call("git commit -m x", root))
+	assert.NotContains(t, f.say, "hack/", "a commit is not a branch merge")
 }
 
 // Proof is the session's from its first bound spawn: its groundwork is refused from the

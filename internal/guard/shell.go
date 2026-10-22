@@ -2543,12 +2543,22 @@ var (
 		lead: "Reading magus output in a script?",
 		argv: []string{"hack/dev/example-typed-results.buzz"},
 	}
+	pruneWorktreesScript = referenceScript{
+		lead: "Freeing disk or clearing finished worktrees?",
+		argv: []string{"hack/dev/prune-worktrees.buzz", "--", "--go-cache"},
+	}
+	resolveConflictsScript = referenceScript{
+		lead: "Settling a conflicted file?",
+		argv: []string{"hack/dev/resolve-conflicts.buzz"},
+	}
 	referenceScripts = map[denyRuleName]referenceScript{
 		denyRuleSedInPlace:         renameScript,
 		denyRuleScriptedRewrite:    renameScript,
 		denyRuleInterpreterRewrite: renameScript,
 		denyRuleOutputPipe:         typedResultScript,
 		denyRuleOutputRedirect:     typedResultScript,
+		denyRuleWorktreeRemove:     pruneWorktreesScript,
+		denyRuleMergeSideCheckout:  resolveConflictsScript,
 	}
 )
 
@@ -2557,7 +2567,14 @@ var (
 // there is advice nobody can take.
 func referenceScriptNote(root string, rule denyRuleName) string {
 	s, ok := referenceScripts[rule]
-	if !ok || root == "" {
+	if !ok {
+		return ""
+	}
+	return s.note(root)
+}
+
+func (s referenceScript) note(root string) string {
+	if root == "" {
 		return ""
 	}
 	if _, err := os.Stat(filepath.Join(root, s.argv[0])); err != nil {
