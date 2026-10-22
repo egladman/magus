@@ -761,6 +761,8 @@
 {"group":"dir:docs/tour","path":"docs/tour/26-advisory.buzz"}
 {"group":"dir:evals/buzz","path":"evals/buzz/grade.buzz"}
 {"group":"dir:hack/bench","path":"hack/bench/time-startup.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/bootstrap-checkout.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/bootstrap-harnesses.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/bootstrap-worktree.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/check-guard-blocks.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/count-feedback.buzz"}
@@ -967,6 +969,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/read_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/release_advice.go"}
 {"group":"dir:internal/guard","path":"internal/guard/release_advice_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/resume_warm.go"}
+{"group":"dir:internal/guard","path":"internal/guard/resume_warm_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rework.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rework_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rewrite.go"}
