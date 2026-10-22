@@ -470,3 +470,30 @@ func TestConfinedToGeneratedSection(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteManagedSectionRefusesAConfigSymlinkLeavingItsDirectory(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "sub"), 0o755))
+	outside := filepath.Join(t.TempDir(), "bashrc")
+	require.NoError(t, os.WriteFile(outside, []byte("export A=1\n"), 0o644))
+	link := filepath.Join(repo, ".gitattributes")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	changed, err := writeManagedSection(link, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), link)
+	assert.Contains(t, err.Error(), outside)
+	assert.False(t, changed)
+	assertFile(t, outside, "export A=1\n", 0o644)
+
+	inside := filepath.Join(repo, "sub", "attrs")
+	require.NoError(t, os.WriteFile(inside, []byte("*.png binary\n"), 0o644))
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink(inside, link))
+	changed, err = writeManagedSection(link, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
+	require.NoError(t, err)
+	assert.True(t, changed)
+	assertFile(t, inside, "*.png binary\n\n"+generatedMarkers.section("gen/** merge=magus\n"), 0o644)
+}

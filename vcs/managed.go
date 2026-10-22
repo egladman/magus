@@ -354,6 +354,11 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		target = resolved
 	}
+	if kind != hookFile && target != path {
+		if err := withinDir(filepath.Dir(path), path, target); err != nil {
+			return false, err
+		}
+	}
 
 	mode := fs.FileMode(0o644)
 	if kind == hookFile {
@@ -392,6 +397,20 @@ func writeManagedSection(path string, m managedMarkers, body string, kind manage
 		return false, fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return true, nil
+}
+
+// withinDir refuses a path whose symlink target lies outside dir: a committed link would
+// otherwise aim a managed write at any file the user owns.
+func withinDir(dir, path, target string) error {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("vcs: resolve %s: %w", dir, err)
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("vcs: refusing to write %s: it is a symlink to %s, outside %s", path, target, dir)
+	}
+	return nil
 }
 
 // renderManagedFile returns current with its m section set to body. path only names the
