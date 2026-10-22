@@ -94,7 +94,19 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	}
 	o.log = o.log.With(attr.Component("broker"))
 	exe, _ := os.Executable()
+	token, err := newToken()
+	if err != nil {
+		_ = ln.Close()
+		return err
+	}
+	sock := ln.Addr().String()
+	if err := writeToken(sock, token); err != nil {
+		_ = ln.Close()
+		return err
+	}
+	defer func() { _ = os.Remove(tokenPath(sock)) }()
 	s := &server{
+		token:      token,
 		opts:       o,
 		budget:     cache.NewMachineBudget(o.budgetMB, o.budgetSlots),
 		socket:     "unix://" + ln.Addr().String(),
@@ -127,7 +139,6 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 			graceTimer.Stop()
 		}
 	}()
-	var err error
 loop:
 	for {
 		select {
@@ -175,6 +186,7 @@ type server struct {
 	opts       serveOptions
 	budget     *cache.MachineBudget
 	socket     string
+	token      string
 	executable string
 	started    time.Time
 	ctx        context.Context
@@ -338,6 +350,12 @@ func (s *server) handle(conn net.Conn) {
 	if first.Type != typeHello || decodeBody(first, &h) != nil || h.Magic != helloMagic || h.Protocol != ProtocolVersion {
 		_ = w.write(typeError, first.ID, errorReply{Code: CodeProtocol,
 			Message: fmt.Sprintf("broker: expected a hello speaking protocol %d", ProtocolVersion)})
+		s.forget(conn, nil)
+		return
+	}
+	if !tokenMatches(s.token, h.Token) {
+		_ = w.write(typeError, first.ID, errorReply{Code: CodeAuth,
+			Message: "broker: the hello carried no valid token; the broker keeps it in " + tokenPath(strings.TrimPrefix(s.socket, "unix://")) + ", readable by its owner only"})
 		s.forget(conn, nil)
 		return
 	}

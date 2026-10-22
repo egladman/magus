@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -367,6 +368,41 @@ func (c *Client) open(ctx context.Context) (*conn, error) {
 	return c.connect(ctx)
 }
 
+// authAttempts bounds how often a hello refused for its token is sent again. A broker a
+// supervisor is still starting accepts the connection before it has written its token,
+// so the first hello can lose that race; the next one reads the file it has written.
+const (
+	authAttempts = 5
+	authRetryGap = 50 * time.Millisecond
+)
+
+func (c *Client) dialHello(ctx context.Context, ep endpoint.Endpoint) (net.Conn, *conn, error) {
+	for attempt := 1; ; attempt++ {
+		nc, err := ep.Dial(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
+		}
+		cn := newConn(nc, c.lost)
+		h := c.hello
+		h.Token = readToken(ep.Addr)
+		var hr helloReply
+		err = cn.roundTrip(ctx, c.next(), typeHello, h, typeHelloReply, &hr, nil)
+		if err == nil {
+			return nc, cn, nil
+		}
+		_ = nc.Close()
+		var refusal *Error
+		if errors.As(err, &refusal) && refusal.Code == CodeAuth && attempt < authAttempts {
+			select {
+			case <-time.After(authRetryGap):
+				continue
+			case <-ctx.Done():
+			}
+		}
+		return nil, nil, fmt.Errorf("%w: hello: %w", ErrUnavailable, err)
+	}
+}
+
 func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if cn := c.live(); cn != nil {
 		return cn, nil
@@ -392,16 +428,9 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	nc, err := ep.Dial(dctx)
+	nc, cn, err := c.dialHello(dctx, ep)
 	if err != nil {
-		return nil, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
-	}
-	cn := newConn(nc, c.lost)
-	var hr helloReply
-	if err := cn.roundTrip(dctx, c.next(), typeHello, c.hello, typeHelloReply, &hr, nil); err != nil {
-		_ = nc.Close()
-		// A broker speaking another protocol is no arbiter for this client either.
-		return nil, fmt.Errorf("%w: hello: %w", ErrUnavailable, err)
+		return nil, err
 	}
 
 	c.mu.Lock()

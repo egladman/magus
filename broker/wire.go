@@ -75,6 +75,8 @@ type hello struct {
 	// at once. Zero is no cap.
 	Tree           string `json:"tree,omitempty"`
 	MaxValidations int    `json:"max_validations,omitzero"`
+	// Token is the secret kept beside the broker socket; a hello without it gets CodeAuth.
+	Token string `json:"token,omitempty"`
 }
 
 // helloReply is the broker's own identity.
@@ -191,6 +193,8 @@ type ErrorCode string
 const (
 	// CodeProtocol is a hello with the wrong magic or protocol version.
 	CodeProtocol ErrorCode = "protocol"
+	// CodeAuth is a hello without the token the broker keeps beside its socket.
+	CodeAuth ErrorCode = "auth"
 	// CodeMalformed is a frame the broker could not decode.
 	CodeMalformed ErrorCode = "malformed"
 	// CodeUnknownType is a frame type the broker does not speak.

@@ -2,6 +2,9 @@ package broker
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -61,6 +64,51 @@ func Listen(ctx context.Context, addr string) (net.Listener, error) {
 // WSA error that syscall.EADDRINUSE does not match.
 func addrInUse(err error) bool {
 	return err != nil && (errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use"))
+}
+
+func tokenPath(sock string) string { return sock + ".token" }
+
+func newToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("broker: generate token: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// writeToken replaces any file a crashed broker left; O_EXCL after the remove refuses to
+// follow anything planted at the path in between. Serve calls it, not Listen, so a
+// socket a supervisor bound carries a token too.
+func writeToken(sock, token string) error {
+	path := tokenPath(sock)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("broker: replace token %s: %w", path, err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("broker: write token: %w", err)
+	}
+	_, werr := f.WriteString(token)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("broker: write token %s: %w", path, werr)
+	}
+	return nil
+}
+
+func readToken(sock string) string {
+	b, err := os.ReadFile(tokenPath(sock))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func tokenMatches(want, got string) bool {
+	return want != "" && subtle.ConstantTimeCompare([]byte(want), []byte(got)) == 1
 }
 
 // Live reports whether something accepts connections on addr, within 100ms.

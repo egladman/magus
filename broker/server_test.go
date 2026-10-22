@@ -676,6 +676,41 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	assert.Equal(t, CodeProtocol, er.Code)
 }
 
+func TestBrokerRefusesPeerWithoutToken(t *testing.T) {
+	addr := testAddr(t)
+	path := addr[len("unix://"):]
+	stop, _ := serve(t, addr)
+
+	require.Eventually(t, func() bool { return readToken(path) != "" }, 3*time.Second, 5*time.Millisecond)
+	info, err := os.Stat(tokenPath(path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	hello1 := func(token string) frame {
+		conn, err := endpoint.DialUnix(t.Context(), path)
+		require.NoError(t, err)
+		defer func() { _ = conn.Close() }()
+		require.NoError(t, (&frameWriter{w: conn}).write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion, Token: token}))
+		f, err := newFrameReader(conn).read()
+		require.NoError(t, err)
+		return f
+	}
+	for name, token := range map[string]string{"no token": "", "a wrong token": "not-the-token"} {
+		t.Run(name, func(t *testing.T) {
+			f := hello1(token)
+			require.Equal(t, typeError, f.Type)
+			var er errorReply
+			require.NoError(t, decodeBody(f, &er))
+			assert.Equal(t, CodeAuth, er.Code)
+			assert.Contains(t, er.Message, tokenPath(path), "the refusal says where the token is kept")
+		})
+	}
+	assert.Equal(t, typeHelloReply, hello1(readToken(path)).Type)
+
+	stop()
+	assert.NoFileExists(t, tokenPath(path))
+}
+
 func TestShutdownStopsTheBroker(t *testing.T) {
 	addr := testAddr(t)
 	_, done := serve(t, addr)
