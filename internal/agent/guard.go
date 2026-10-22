@@ -231,7 +231,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 31: native shell calls may carry cmd and workdir. The shared command glue selects
 // that directory's binary, and the hook names its starting directory for handoff.
 //
-// 32: the Claude Code hook command runs the checkout's own ./magus when it is executable
+// 32: a harness hook command runs the checkout's own ./magus when it is executable
 // and PATH's magus otherwise, so a stale binary on PATH no longer judges a newer tree.
 const GuardTemplateVersion = 32
 
