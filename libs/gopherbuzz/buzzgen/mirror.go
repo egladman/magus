@@ -73,14 +73,61 @@ func DefaultOptions() Options { return Options{TimeAsString: true} }
 // It emits the declaration alone, with no generated-file banner, so a caller bundling
 // many mirrors into one module source carries one header instead of repeating it per
 // type.
+//
+// A generic Go struct is mirrored through an instantiation at placeholder types such as
+// [T]: Result[T] renders as `export object Result::<T> { … }`, with a field of type T
+// declared `T?` because Buzz has no zero value to default a type parameter to.
 func ObjectDecl(name string, rt reflect.Type, opts Options) ([]byte, error) {
 	var b bytes.Buffer
+	if params := TypeParams(rt); len(params) > 0 {
+		name += "::<" + strings.Join(params, ", ") + ">"
+	}
 	fmt.Fprintf(&b, "export object %s {\n", name)
 	if err := renderFields(&b, rt, opts); err != nil {
 		return nil, err
 	}
 	fmt.Fprintln(&b, "}")
 	return b.Bytes(), nil
+}
+
+// T is a placeholder for a generic struct's type parameter. reflect has no type for an
+// uninstantiated generic, so a host registers the instantiation at T (Result[buzzgen.T])
+// and the mirror declares the parameter T in its place.
+type T struct{ typeParam }
+
+// typeParam marks a placeholder. Its method is unexported so only this package can
+// declare one.
+type typeParam struct{}
+
+func (typeParam) buzzTypeParam() {}
+
+var typeParamType = reflect.TypeFor[interface{ buzzTypeParam() }]()
+
+func isTypeParam(t reflect.Type) bool {
+	return t.Kind() == reflect.Struct && t.Implements(typeParamType)
+}
+
+// TypeParams returns the placeholder names rt's exported fields reference, directly or
+// as an element, in field order and deduplicated. Empty for a non-generic struct.
+func TypeParams(rt reflect.Type) []string {
+	var out []string
+	seen := map[string]bool{}
+	var walk func(reflect.Type)
+	walk = func(t reflect.Type) {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		if isTypeParam(t) && !seen[t.Name()] {
+			seen[t.Name()] = true
+			out = append(out, t.Name())
+		}
+	}
+	for i := 0; i < rt.NumField(); i++ {
+		if f := rt.Field(i); f.IsExported() && f.Tag.Get("buzz") != "-" {
+			walk(f.Type)
+		}
+	}
+	return out
 }
 
 // renderFields writes one Buzz field line per exported field of rt, INLINING the fields
@@ -119,6 +166,9 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 	if t == reflect.TypeOf(time.Duration(0)) {
 		return "str", `""`, nil
 	}
+	if isTypeParam(t) {
+		return t.Name() + "?", "null", nil
+	}
 	// Checked ahead of the Kind switch, which would see only String: a registered
 	// named-string type mirrors as its enum, so a magusfile writes
 	// VersionComponent.patch and a typo is a compile error rather than a value that
@@ -151,6 +201,9 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 		if eerr != nil {
 			return "", "", eerr
 		}
+		if strings.HasSuffix(elem, "?") {
+			return elem, "null", nil
+		}
 		return elem + "?", "null", nil
 	case reflect.Array, reflect.Slice:
 		// A fixed-size array carries no length information Buzz could enforce, so it
@@ -163,6 +216,11 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 	case reflect.Struct:
 		if opts.TimeAsString && t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil
+		}
+		// A field holding a generic instance would need `Result::<int>` spelled from
+		// the type arguments, which reflect does not expose by name.
+		if strings.Contains(t.Name(), "[") {
+			return "", "", fmt.Errorf("generic instance %s cannot be a field type", t)
 		}
 		// A struct field maps to the Buzz object the host declares for it, which is NOT
 		// always the Go type's own name. Resolving through the Namer is what keeps a
