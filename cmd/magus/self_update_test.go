@@ -29,6 +29,9 @@ import (
 	"github.com/egladman/magus/internal/selfupdate"
 )
 
+// testIndexExpiry is far enough out that no fixture index expires while a test runs.
+const testIndexExpiry = "2999-01-01T00:00:00Z"
+
 // testFixture holds everything needed to stand up a local index server and
 // artifact server for integration tests of selfUpdateCmd.
 type testFixture struct {
@@ -50,7 +53,7 @@ type testFixture struct {
 func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFixture {
 	t.Helper()
 	return newIndexFixture(t, tag, func(served selfupdate.IndexRelease) selfupdate.ReleaseIndex {
-		return selfupdate.ReleaseIndex{SchemaVersion: 1, Releases: []selfupdate.IndexRelease{served}}
+		return selfupdate.ReleaseIndex{SchemaVersion: 1, ExpiresAt: testIndexExpiry, Releases: []selfupdate.IndexRelease{served}}
 	}, manifestVersion...)
 }
 
@@ -291,10 +294,11 @@ func newCandidateFixture(t *testing.T, underReleases bool) *testFixture {
 	return newIndexFixture(t, "v0.5.0-rc.1", func(rc selfupdate.IndexRelease) selfupdate.ReleaseIndex {
 		stable := selfupdate.IndexRelease{Version: "v0.4.3"}
 		if underReleases {
-			return selfupdate.ReleaseIndex{SchemaVersion: 1, Releases: []selfupdate.IndexRelease{rc, stable}}
+			return selfupdate.ReleaseIndex{SchemaVersion: 1, ExpiresAt: testIndexExpiry, Releases: []selfupdate.IndexRelease{rc, stable}}
 		}
 		return selfupdate.ReleaseIndex{
 			SchemaVersion: 1,
+			ExpiresAt:     testIndexExpiry,
 			Releases:      []selfupdate.IndexRelease{stable},
 			Prereleases:   []selfupdate.IndexRelease{rc},
 		}
