@@ -1,0 +1,147 @@
+namespace harnesssync;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "merge";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/harness-sync.buzz -- [--id <harness>]";
+final HELP = "cost: a skill install and one plan read per harness\n{USAGE}\n\n"
+    + "Installs the skill trees of the wired harnesses, then merges each harness's host config the way\n"
+    + "`magus describe harness <id>` plans it: a file's content is written whole, a fragment is deep-merged into\n"
+    + "the file on disk, or written as a new file. Prints one line per file changed, or `no change`.\n"
+    + "Refuses, naming the files, while anything under the harness spells, the agent integration docs or the\n"
+    + "guard policy differs from HEAD: only committed, reviewed wiring is installed. Writes host config.";
+final GUARDED = ["spells/harness", "docs/guides/integrations/agents", "hack/policy"];
+
+export fun refuseDirty(dirty: [str]) > void !> any {
+    if (dirty.len() > 0) {
+        throw "harness-sync: REFUSED; {dirty.join(", ")} differ from HEAD, and only committed wiring is installed; commit or revert them, then rerun";
+    }
+}
+
+fun dirtyGuarded() > [str] !> any {
+    final paths = mut [<str>];
+    foreach (file in vcs\status(GUARDED).files) {
+        paths.append(file.value);
+    }
+    return paths;
+}
+
+fun harnessIds(id: str?) > [str] !> any {
+    if (id != null) {
+        return [id!];
+    }
+    final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim();
+    return if (names == "") [<str>] else names.split("\n");
+}
+
+// applyPlan writes what plan says each file lacks under root and returns one line per file it changed.
+// A merge that reproduces the file on disk writes nothing, so a rerun reports no change.
+export fun applyPlan(plan: magus\HarnessPlan, root: str) > [str] !> any {
+    final lines = mut [<str>];
+    final names = plan.files.keys().cloneMutable();
+    names.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (name in names) {
+        final file = plan.files[name]!;
+        final target = fs\join(root, name: name);
+        final present = fs\exists(target);
+        var text = file.content;
+        if (text == "") {
+            final base = if (present) fs\readFile(target) else "\{}";
+            text = merge\json(base, overlay: json\stringify(file.fragment));
+        }
+        if (present and fs\readFile(target) == text) {
+            continue;
+        }
+        fs\mkdirAll(fs\dirname(target));
+        fs\writeFileAtomic(target, content: text);
+        final verb = if (present) "merged" else "created";
+        lines.append("{verb} {name} ({plan.id})");
+    }
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--id"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "harness-sync: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    refuseDirty(dirtyGuarded());
+    final install = mut ["harness", "install"];
+    final id = parsed.values["--id"];
+    if (id != null) {
+        install.append("--id");
+        install.append(id!);
+    }
+    magus\cmd("agent", args: install, opts: {"quiet": true});
+    final lines = mut [<str>];
+    foreach (each in harnessIds(id)) {
+        foreach (line in applyPlan(magus\describe.harness(each), root: ".")) {
+            lines.append(line);
+        }
+    }
+    std\print(if (lines.len() == 0) "no change" else lines.join("\n"));
+}
+
+fun plan(files: {str: magus\HarnessFile}) > magus\HarnessPlan {
+    return magus\HarnessPlan{ id = "claude-code", files = files };
+}
+
+test "a dirty spell path is refused, naming the files" {
+    var said = "";
+    try {
+        refuseDirty(["spells/harness/codex/spell.buzz", "hack/policy/guard.buzz"]);
+    } catch (e: str) {
+        said = e;
+    }
+    assert\isTrue(said.indexOf("spells/harness/codex/spell.buzz, hack/policy/guard.buzz differ from HEAD") != null, message: said);
+    refuseDirty([<str>]);
+}
+
+test "a fragment is merged into an existing file and a content file is written whole" {
+    final root = fs\tempDir("harness-sync");
+    fs\mkdirAll(fs\join(root, name: ".claude"));
+    fs\writeFile(fs\join(root, name: ".claude/settings.json"), content: "\{\"keep\": 1, \"hooks\": \{\"a\": [1]\}\}");
+    final fragment: {str: any} = json\parse("\{\"hooks\": \{\"a\": [2]\}, \"new\": true\}");
+    final lines = applyPlan(plan({
+        ".claude/settings.json": magus\HarnessFile{ exists = true, fragment = fragment },
+        "AGENTS.md": magus\HarnessFile{ exists = false, content = "rules\n" },
+    }), root: root);
+    assert\equal(lines, want: ["merged .claude/settings.json (claude-code)", "created AGENTS.md (claude-code)"], message: "lines");
+    final merged: {str: any} = json\parse(fs\readFile(fs\join(root, name: ".claude/settings.json")));
+    assert\equal(std\toInt(merged["keep"]), want: 1, message: "kept");
+    assert\equal(json\stringify(merged["hooks"]), want: "\{\"a\":[2]\}", message: "managed array replaced");
+    assert\equal(fs\readFile(fs\join(root, name: "AGENTS.md")), want: "rules\n", message: "content");
+    fs\removeAll(root);
+}
+
+test "a fragment for a new file creates it and its directory" {
+    final root = fs\tempDir("harness-sync");
+    final fragment: {str: any} = json\parse("\{\"a\": 1\}");
+    final lines = applyPlan(plan({".cursor/hooks.json": magus\HarnessFile{ exists = false, fragment = fragment }}), root: root);
+    assert\equal(lines, want: ["created .cursor/hooks.json (claude-code)"], message: "created");
+    assert\equal(fs\readFile(fs\join(root, name: ".cursor/hooks.json")), want: "\{\n  \"a\": 1\n}\n", message: "indented");
+    fs\removeAll(root);
+}
+
+test "a second run changes nothing" {
+    final root = fs\tempDir("harness-sync");
+    final fragment: {str: any} = json\parse("\{\"a\": 1\}");
+    final files = {
+        "x.json": magus\HarnessFile{ exists = false, fragment = fragment },
+        "y.md": magus\HarnessFile{ exists = false, content = "y\n" },
+    };
+    assert\equal(applyPlan(plan(files), root: root).len(), want: 2, message: "first run");
+    assert\equal(applyPlan(plan(files), root: root), want: [<str>], message: "second run");
+    fs\removeAll(root);
+}
