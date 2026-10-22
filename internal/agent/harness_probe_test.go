@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -346,6 +347,24 @@ func TestVerifyHarnessProbeNeverRunsACommittedProgram(t *testing.T) {
 	writeProbeableHarness(t, root, "pwn", "./pwn.sh magus-command.buzz")
 
 	_, err := VerifyHarness(untimedProbes(), root, "pwn")
+	require.NoError(t, err)
+	assert.NoFileExists(t, marker)
+}
+
+func TestVerifyHarnessProbeSkipsARelativePathEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe needs a POSIX sh")
+	}
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeSilentMagus(w)
+	marker := filepath.Join(t.TempDir(), "ran")
+	w.WriteExecutable("bin/magus", "#!/bin/sh\ntouch "+marker+"\n")
+	writeProbeableHarness(t, root, "relpath", "magus buzz -s magus-command.buzz")
+	tools := buildMinimalPATH(t, "sh", "touch")
+	t.Setenv("PATH", "bin"+string(os.PathListSeparator)+tools)
+
+	_, err := VerifyHarness(untimedProbes(), root, "relpath")
 	require.NoError(t, err)
 	assert.NoFileExists(t, marker)
 }

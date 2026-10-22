@@ -157,6 +157,20 @@ func isMagusProgram(root, word string) bool {
 	})
 }
 
+// absolutePATH keeps path's absolute entries. sh resolves a bare program against a
+// relative entry from the probe's directory, the workspace root, so a relative entry
+// would let a committed file answer for `magus`; spawn.lookPath skips them for the
+// same reason.
+func absolutePATH(path string) string {
+	var kept []string
+	for _, dir := range filepath.SplitList(path) {
+		if filepath.IsAbs(dir) {
+			kept = append(kept, dir)
+		}
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
+}
+
 // isEnvName reports whether s is shaped like an environment variable name.
 func isEnvName(s string) bool {
 	if s == "" {
@@ -315,6 +329,7 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
 		"TMPDIR="+scratch,
+		"PATH="+absolutePATH(os.Getenv("PATH")),
 	)
 	if strings.Contains(command, "CLAUDE_PROJECT_DIR") {
 		env = append(env, "CLAUDE_PROJECT_DIR="+root)
