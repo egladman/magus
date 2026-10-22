@@ -141,7 +141,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return branchTopic(req.dir);
     };
     final texts = withHeredocs(programs, line: req.command);
-    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\holdsCheckout(req.lease, workspace: req.workspace) }, checkout: checkout,
+    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace) }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },

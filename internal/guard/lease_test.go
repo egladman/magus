@@ -441,6 +441,45 @@ func TestACheckoutHolderGatesInItsOwnCheckout(t *testing.T) {
 	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").refused(), "a row taken in another checkout")
 }
 
+func TestACheckoutHolderGatesWhereTheCallRuns(t *testing.T) {
+	workspaceDir := func() string {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+		return dir
+	}
+	held, other := workspaceDir(), workspaceDir()
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	row.CheckoutRoot = held
+	ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: held})
+	require.NoError(t, err)
+
+	for _, command := range []string{
+		"cd " + held + " && ./magus affected ci",
+		"./magus -C " + held + " affected ci",
+		"./magus --root " + held + " run ci .",
+		"cd " + other + " && ./magus -C " + held + " affected ci",
+		"cd " + held + " && ./magus affected ci && ./magus run ci .",
+	} {
+		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), command)
+	}
+	for _, command := range []string{
+		"./magus affected ci",
+		"cd " + other + " && ./magus affected ci",
+		"./magus -C " + other + " affected ci",
+		"cd " + held + " && ./magus -C " + other + " affected ci",
+		"cd " + held + " && ./magus affected ci && cd " + other + " && ./magus affected ci",
+		"cd " + held + " && ./magus -C $DIR affected ci",
+		"cd " + held + " || ./magus affected ci",
+	} {
+		assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+	}
+}
+
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
 // harnesses that opt in: each of these is a case where nothing declared the gate to be
 // out of scope, and a guard that cannot evaluate a rule must not block a tool call.

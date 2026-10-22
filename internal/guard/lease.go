@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -327,7 +328,7 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || holdsCheckout(me, hookLocation(ctx, deps).workspace) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegrator(ctx, deps, me) || gatesInHeldCheckout(ctx, deps, me, command) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
 	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands. The holder of a row forked with `job fork --checkout` gates in that checkout too."
@@ -396,7 +397,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || (commandRunsGate(command) && holdsCheckout(me, hookLocation(ctx, deps).workspace)) {
+	if !ok || actingIntegrator(ctx, deps, me) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -2003,6 +2004,72 @@ func integrates(row types.Job, spawned, workspace string) bool {
 // may not.
 func holdsCheckout(row types.Job, workspace string) bool {
 	return row.State.Live() && row.Worktree != nil && row.CheckoutRoot != "" && workspace != "" && samePath(row.CheckoutRoot, workspace)
+}
+
+// gatesInHeldCheckout reports whether every gate call on command runs in the checkout row
+// holds, judged where the call runs (a leading cd, then its -C or --root) rather than where
+// the envelope started. False when a call's directory cannot be read without running it.
+func gatesInHeldCheckout(ctx context.Context, deps Dependencies, row types.Job, command string) bool {
+	at := hookLocation(ctx, deps)
+	cwd := cmp.Or(deps.callDir, at.dir, at.workspace)
+	calls, ok := locateCalls(command, effectiveDialect(deps.ShellDialect), cwd, isGateInvocation, false)
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, c := range calls {
+		dir, ok := gateDir(c)
+		if !ok || !holdsCheckout(row, gateWorkspace(at, dir)) {
+			return false
+		}
+	}
+	return true
+}
+
+func isGateInvocation(c hint.Invocation) bool {
+	return c.Name == "magus" && isGateCommand(c.Args)
+}
+
+// gateWorkspace takes the hook's own workspace for a dir inside it, so a pinned location
+// needs no marker on disk, and the nearest root above dir otherwise.
+func gateWorkspace(at location, dir string) string {
+	if at.workspace != "" && (dir == at.workspace || strings.HasPrefix(dir, at.workspace+string(filepath.Separator))) {
+		return at.workspace
+	}
+	root, err := workspace.FindRoot(dir)
+	if err != nil {
+		return ""
+	}
+	return root
+}
+
+// gateDir is where a located gate call runs: the line's directory moved by the call's -C
+// and --root in order.
+func gateDir(c locatedCall) (string, bool) {
+	if c.unfollowed || !c.at.known || !filepath.IsAbs(c.at.dir) {
+		return "", false
+	}
+	dir := c.at.dir
+	args := c.inv.Args
+	for i := 0; i < len(args) && args[i] != "--"; i++ {
+		var to string
+		switch {
+		case (args[i] == "-C" || args[i] == "--root") && i+1 < len(args):
+			i++
+			to = args[i]
+		case strings.HasPrefix(args[i], "--root="):
+			to = strings.TrimPrefix(args[i], "--root=")
+		default:
+			continue
+		}
+		if to == "" || strings.HasPrefix(to, "~") || strings.ContainsAny(to, "$`*?[{") {
+			return "", false
+		}
+		if !filepath.IsAbs(to) {
+			to = filepath.Join(dir, to)
+		}
+		dir = filepath.Clean(to)
+	}
+	return dir, true
 }
 
 // actingIntegrator reports whether the caller of this judgment, acting under me, integrates
