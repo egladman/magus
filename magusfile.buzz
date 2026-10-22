@@ -64,8 +64,6 @@ import "project/libs/scipbuzz";
 import "project/libs/xdg";
 import "project/libs/cmdline";
 import "project/libs/textsearch";
-import "project/console";
-import "project/docs";
 
 // Declaring trusted keys is what enables the cache; the insecure arm ignores them all.
 // This reads raw env while the engine reads parsed config, so the two can disagree.
@@ -863,12 +861,10 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
 
 // Regenerates everything derived from the boundary registry: the runtime boundary list,
 // the Go-to-Buzz encoders, the Buzz-to-Go decoders, the provider ops, the spell
-// contract's signatures, the merge queue script's record mirrors and the TypeScript
-// types the console and docs share.
+// contract's signatures and the merge queue script's record mirrors. The TypeScript
+// forms are console's and docs' own types-generate.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["internal/interp/bindings/gen/boundary_list.go",
-        console\file("src/gen/magus/types.ts"),
-        docs\file("src/gen/magus/types.ts"),
         "internal/interp/bindings/gen/boundary_objects.go",
         "internal/interp/bindings/gen/boundary_ops.go",
         "internal/interp/bindings/gen/providerops/providerops.go",

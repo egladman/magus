@@ -45,9 +45,18 @@ magus\project({
 // install installs node_modules through the typescript spell's pnpm-install op.
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+// Regenerates MAGUS.md and the boundary types and fails on drift. Use the rw charm to keep
+// the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(index_generate);
+    ctx.needs(index_generate, types_generate);
+}
+
+// Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry
+// flags TS. It runs here because a root target writing into console is MGS3001.
+export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
+    ctx.writesFiles(["src/gen/magus/types.ts"]);
+    proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
 }
 
 // Renders MAGUS.md, this project's target catalog.

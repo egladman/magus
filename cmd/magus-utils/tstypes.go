@@ -1,7 +1,5 @@
 package main
 
-//go:generate go run . tstypes -out ../../console/src/gen/magus/types.ts -out ../../docs/src/gen/magus/types.ts
-
 import (
 	"bytes"
 	"flag"
@@ -12,8 +10,6 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
-
-func init() { scribes["tstypes"] = runTSTypes }
 
 // runTSTypes writes the TypeScript form of every boundary type flagged TS to each -out.
 // The console and docs bundle separately, so each gets its own copy.

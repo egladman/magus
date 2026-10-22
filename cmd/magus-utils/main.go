@@ -23,6 +23,7 @@ import (
 // and writes the derived artifact; see the per-subcommand file for the details.
 var scribes = map[string]func(args []string) error{
 	"types":           runTypes,
+	"tstypes":         runTSTypes,
 	"boundarylist":    runBoundaryList,
 	"boundaryobjects": runBoundaryObjects,
 	"boundarydecode":  runBoundaryDecode,

@@ -376,6 +376,14 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         ctx.hasCharm("rw"));
 }
 
+// Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry
+// flags TS. It runs here because a root target writing into docs is MGS3001.
+export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
+    ctx.writesFiles(["src/gen/magus/types.ts"]);
+    proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
+}
+
 // generate regenerates the committed derived files and fails on drift. The ignored gen/
 // tree belongs to build.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
@@ -387,14 +395,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "design.md"], editsExistingSource: true);
-    // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
-    // diagrams-generate, which needs a symbol index these shards never build.
-    final GENERATED = ["MAGUS.md", "glossary.md"] + CONTENT;
+    // Tracked paths only. src/gen is gated by proto:generate, all but the types.ts
+    // types_generate writes, and assets/gen by diagrams-generate, which needs a symbol
+    // index these shards never build.
+    final GENERATED = ["MAGUS.md", "glossary.md", "src/gen/magus/types.ts"] + CONTENT;
     // Hashed before and after: a dirty tree or a git worktree must not disarm the gate.
     final before = drift\hashes(GENERATED);
     // The indexes rewrite pages the content families read, so they finish first.
     ctx.needs(glossary_index_generate, design_index_generate);
-    ctx.needs(content_generate, index_generate);
+    ctx.needs(content_generate, index_generate, types_generate);
     if (ctx.hasCharm("rw")) { return; }
     final moved = drift\changedSince(before, GENERATED);
     if (moved.len() > 0) {

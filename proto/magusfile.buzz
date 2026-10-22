@@ -25,9 +25,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // ../go.mod would rerun on every dependency bump; this wants a per-target version probe.
     ctx.needs(index_generate);
     // The TS client trees are declared here, not by docs and console: only this target
-    // produces them, and two claims on one path is MGS4002. gen/** is restated because
-    // writesFiles replaces the spell baseline.
-    ctx.writesFiles(["gen/**", docs\file("src/gen/**"), console\file("src/gen/**")]);
+    // produces them, and two claims on one path is MGS4002. The exception is types.ts,
+    // which each project's types-generate writes. gen/** is restated because writesFiles
+    // replaces the spell baseline.
+    ctx.writesFiles(["gen/**", docs\file("src/gen/**"), console\file("src/gen/**"),
+        docs\file("!src/gen/magus/types.ts"), console\file("!src/gen/magus/types.ts")]);
     // The root generate gate never runs buf, so this gates all three trees itself.
     final GENERATED = ["gen", fs\join("..", "docs", "src", "gen"),
                        fs\join("..", "console", "src", "gen")];
