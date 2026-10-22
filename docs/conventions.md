@@ -438,22 +438,23 @@ same guard rule and the same decisions table.
 ### The shape of a description
 
 A change description is read by a reviewer now and by whoever follows the squash commit
-to it later, so it opens with what changed for a reader and keeps the rest in named
-sections.
+to it later, so it opens with what the change set out to do and why, then what was
+built, then where the work left the plan. It stays short and in the author's own words.
 
-| Part              | Required                                   | What it holds                                                                                                      |
-| ----------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Lead (no heading) | yes                                        | The outcome first: what a reader can now do or no longer has to do. Then how the work came up and why it mattered. |
-| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                                         |
-| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                                                   |
-| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                                             |
-| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                                                    |
-| Not verified      | when something was not tested              | What was not checked, and why.                                                                                     |
-| Reading guide     | optional                                   | Where to start reading.                                                                                            |
+| Part              | Required                                   | What it holds                                                                                |
+| ----------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Lead (no heading) | yes                                        | The intent: what the change set out to do and why, in one to three sentences.                |
+| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                   |
+| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                             |
+| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                       |
+| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                              |
+| Where it differs  | when the work left the plan                | A line or heading opening Cut, Changed from plan, Not done or Not verified, with the reason. |
+| Reading guide     | optional                                   | Where to start reading.                                                                      |
 
-The lead is at least 12 words and names a result, not the defect: the defect is the
-reason (`lead-context`). A change in a series names the destination and its own place in
-it. Headings after the lead are sentence case. The stock labels a reply generator emits
+The lead is at least 12 words and states the intent. A lead that opens on the defect
+names a purpose within two sentences (`lead-context`). A change in a series names the
+destination and its own place in it. Headings after the lead are sentence case. The
+stock labels a reply generator emits
 (`Summary`, `Test plan`, `Overview`), a bold label opening a bullet, an opener that
 answers a request (`This PR`, `Here's`, `I've`) and a reference to a conversation
 (`as discussed`) stay refused, because they answer a prompt the reader never saw

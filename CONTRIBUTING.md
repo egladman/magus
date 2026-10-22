@@ -621,11 +621,11 @@ push reports all three:
   bytes at most. `feat(git): install version-controlled buzz hooks` passes;
   `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
 - The title and description follow the proofread rules (`pr-description`). The description
-  opens with a paragraph saying what a reader can now do and how the work came up,
-  keeps its claims next to their evidence, and describes the situation rather than a
-  person or the earlier code. The guard's `pull-request-text` rule runs the same checks
-  when a description is posted. The shape, the claim and tone rules, and the
-  decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
+  opens with what the change set out to do and why, says where the work left the plan
+  (Cut, Changed from plan, Not done, Not verified), keeps its claims next to their
+  evidence, and describes the situation rather than a person or the earlier code.
+  The guard's `pull-request-text` rule runs the same checks when a description is posted.
+  The shape, the claim and tone rules, and the decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with
   `magus run pr-description . -- "--title=<title>" "--body=<body>"`.
 - A `feat`, `fix` or `perf` change to shipped code adds a changelog
