@@ -240,11 +240,14 @@ var hedging = regexp.MustCompile(`\b(?:(?:[Mm]ay|[Mm]ight|[Cc]ould) (?:help|impr
 	`(?:potentially|conceivably|theoretically)|[Pp]otentially possibly|[Cc]onceivably)\b`)
 
 var (
-	// limitHeading names a section that states what was not checked.
-	limitHeading = regexp.MustCompile(`(?i)\b(?:not (?:verified|measured|tested)|untested|limits)\b`)
+	// limitHeading names a section that states what was not checked or where the
+	// work departs from the plan.
+	limitHeading = regexp.MustCompile(`(?i)\b(?:not (?:verified|measured|tested)|untested|limits)\b|` +
+		`^(?:cut|changed from plan|not done)\b`)
 
-	// limitOpener opens a sentence that states what was not checked.
-	limitOpener = regexp.MustCompile(`(?i)^(?:not (?:measured|tested|verified)|untested)\b`)
+	// limitOpener opens a sentence or bullet that states a limit or a divergence.
+	limitOpener = regexp.MustCompile(`(?i)^(?:(?:not (?:measured|tested|verified)|untested)\b|` +
+		`(?:cut|changed from plan|not done|not verified):)`)
 )
 
 // limitSections returns, for each paragraph, whether it sits in a section
@@ -436,25 +439,22 @@ var (
 		`didn't|never|(?:was|were|is|are) missing|(?:stayed|went) stale|(?:is|was|were|are) red|died|dies|` +
 		`panicked|crashed)\b`)
 
-	// outcome names what a reader can do after the change.
-	outcome = regexp.MustCompile(`(?i)\b(?:now|no longer|lets?|allows?)\b|\bcan\s`)
+	// leadIntent marks the purpose of the change: what it sets out to do, or what
+	// a reader no longer has to.
+	leadIntent = regexp.MustCompile(`(?i)\b(?:so that|in order to|to|lets?|allows?|now|no longer|goal|meant to)\b|\bcan\s`)
 )
 
 // leadExample is a lead in the order lead-context asks for, from #570.
-const leadExample = "'The first query after an edit answers from a graph that is already current. " +
-	"Until now the graph rebuilt inline on that query.'"
+const leadExample = "'Make the first query after an edit answer from a graph that is already current. " +
+	"The warm caches lagged behind edits, so that query paid for the rebuild inline.'"
 
-// leadContext reports a pull request whose description does not open with a
-// paragraph that says what a reader can now do, then how the work came up and
-// why it mattered. A reviewer's first question is what the change is for; a
-// list, a heading or a reply opener in that place answers a different one.
-//
-// A lead whose first sentence states a defect and names no outcome is
-// reported to advise: the outcome may be phrased in words no list holds.
-// Measured over the 190 leads of the last 200 merged pull requests, 60 did.
+// leadContext reports a description whose lead does not state the intent: what
+// the change set out to do and why. A lead on a defect with no intent in its
+// first two sentences is advised only, since intent has words no list holds.
+// 60 of the last 200 merged pull requests' 190 leads opened on a defect.
 func leadContext(in input) []Finding {
-	const ask = "open the description with what a reader can now do or no longer has to do, then how the work " +
-		"came up and why it mattered, then the changes, as in " + leadExample
+	const ask = "open the description with what the change sets out to do and why, then what was built, then " +
+		"where it differs from the plan, as in " + leadExample
 
 	line := leadLine(in.lines)
 	if line == 0 {
@@ -496,17 +496,20 @@ func leadContext(in input) []Finding {
 			}}
 		}
 
-		first := para.text
+		first, near := para.text, para.text
 		if starts := sentenceStarts(first); len(starts) > 1 {
 			first = first[:starts[1]]
+			if len(starts) > 2 {
+				near = near[:starts[2]]
+			}
 		}
 
-		if at := defect.FindStringIndex(first); at != nil && !outcome.MatchString(first) {
+		if at := defect.FindStringIndex(first); at != nil && !leadIntent.MatchString(near) {
 			m := first[at[0]:at[1]]
 
 			return []Finding{{
-				Message: fmt.Sprintf("The lead opens on the defect '%s': open with what a reader can now do and "+
-					"give the defect as the reason, as in %s", m, leadExample),
+				Message: fmt.Sprintf("The lead opens on the defect '%s': open with what the change sets out to do "+
+					"and give the defect as the reason, as in %s", m, leadExample),
 				Match: m, Line: para.lineAt(at[0]), Decision: DecisionAdvise,
 			}}
 		}
