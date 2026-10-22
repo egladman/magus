@@ -16,7 +16,7 @@ window. One file carries all of it. Everything below was checked against OpenCod
 | what            | where                                                                                          |
 | --------------- | ---------------------------------------------------------------------------------------------- |
 | skills          | `.opencode/skills/` (it also reads `.claude/skills/`)                                          |
-| guard wiring    | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                          |
+| guard wiring    | `.opencode/plugins/`, per project; never `~/.config/opencode/plugins/`                          |
 | shell commands  | `bash`: deny and advise both reach the model                                                   |
 | file writes     | `edit`, `write` and `apply_patch`: deny and advise both reach the model                        |
 | MCP calls       | the magus server's tools, matched by the `<server>_<tool>` id: deny and advise reach the model |
@@ -98,8 +98,12 @@ MAGUS_LOG_SILENT=false opencode
 
 ## Guard hook
 
-Save the plugin below to `~/.config/opencode/plugins/` or `.opencode/plugins/`,
-then confirm OpenCode loaded it:
+Save the plugin below to `.opencode/plugins/` in the project. Do not put it in
+`~/.config/opencode/plugins/`: a user-level plugin runs magus in every folder OpenCode
+opens, including repositories you have not read, and opening a workspace evaluates its
+magusfile (see
+[Running magus runs the repository's code](../../../concepts/sandbox.md#running-magus-runs-the-repositorys-code)).
+Then confirm OpenCode loaded it:
 
 ```sh
 opencode debug config

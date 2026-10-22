@@ -944,9 +944,10 @@ type SessionAdapter struct {
 	Host string `json:"host" yaml:"host"` // the host whose transcripts this reads, for reporting
 	// Command is the program and its arguments, run from the workspace root. A LIST, not a
 	// command line: magus executes this directly, with no shell, so a declared adapter
-	// runs the one program it names. That is both how magus represents every command it
-	// runs (see job.CatalogEntry.Argv) and what keeps a committed config value from
-	// becoming a second command on a machine that merely pulled the branch.
+	// runs the one program it names. That is how magus represents every command it runs
+	// (see job.CatalogEntry.Argv). A committed value is still code that runs on the
+	// machine that pulled the branch: `magus graph build` runs it, and only an explicit
+	// verb does.
 	//
 	// Something needing a pipeline or a variable writes a script and names the script,
 	// which is what the adapters magus documents already are.
