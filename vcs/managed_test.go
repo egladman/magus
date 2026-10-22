@@ -207,7 +207,7 @@ func TestWriteManagedSectionHookEndsExecutable(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "post-commit")
 		require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho mine\n"), 0o644))
 
-		changed, err := writeManagedSection(filepath.Dir(path), path,driftMarkers, body, hookFile, stamp.Judge{})
+		changed, err := writeManagedSection(filepath.Dir(path), path, driftMarkers, body, hookFile, stamp.Judge{})
 		require.NoError(t, err)
 		assert.True(t, changed)
 		assertFile(t, path, "#!/bin/sh\necho mine\n\n"+driftMarkers.section(body), 0o755)
@@ -218,7 +218,7 @@ func TestWriteManagedSectionHookEndsExecutable(t *testing.T) {
 		want := "#!/bin/sh\n\n" + driftMarkers.section(body)
 		require.NoError(t, os.WriteFile(path, []byte(want), 0o644))
 
-		changed, err := writeManagedSection(filepath.Dir(path), path,driftMarkers, body, hookFile, stamp.Judge{})
+		changed, err := writeManagedSection(filepath.Dir(path), path, driftMarkers, body, hookFile, stamp.Judge{})
 		require.NoError(t, err)
 		assert.True(t, changed, "a hook git would skip is not current")
 		assertFile(t, path, want, 0o755)
@@ -226,7 +226,7 @@ func TestWriteManagedSectionHookEndsExecutable(t *testing.T) {
 
 	t.Run("a new hook", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "post-commit")
-		changed, err := writeManagedSection(filepath.Dir(path), path,driftMarkers, body, hookFile, stamp.Judge{})
+		changed, err := writeManagedSection(filepath.Dir(path), path, driftMarkers, body, hookFile, stamp.Judge{})
 		require.NoError(t, err)
 		assert.True(t, changed)
 		assertFile(t, path, "#!/bin/sh\n\n"+driftMarkers.section(body), 0o755)
@@ -237,7 +237,7 @@ func TestWriteManagedSectionKeepsAnExistingMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hgrc")
 	require.NoError(t, os.WriteFile(path, []byte("[ui]\nusername = me\n"), 0o600))
 
-	changed, err := writeManagedSection(filepath.Dir(path), path,refreshMarkers, "[hooks]\n", configFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, refreshMarkers, "[hooks]\n", configFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.True(t, changed)
 	assertFile(t, path, "[ui]\nusername = me\n\n"+refreshMarkers.section("[hooks]\n"), 0o600)
@@ -247,14 +247,14 @@ func TestWriteManagedSectionKeepsAnExistingMode(t *testing.T) {
 // same inode, same mtime.
 func TestWriteManagedSectionNoOpDoesNotRewrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitattributes")
-	_, err := writeManagedSection(filepath.Dir(path), path,generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
+	_, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
 	require.NoError(t, err)
 	past := time.Now().Add(-time.Hour).Truncate(time.Second)
 	require.NoError(t, os.Chtimes(path, past, past))
 	before, err := os.Stat(path)
 	require.NoError(t, err)
 
-	changed, err := writeManagedSection(filepath.Dir(path), path,generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
 	require.NoError(t, err)
 	assert.False(t, changed)
 
@@ -269,7 +269,7 @@ func TestWriteManagedSectionRefusesATornSection(t *testing.T) {
 	torn := "*.png binary\n" + tornBanner + "\ngen/** merge=magus\n"
 	require.NoError(t, os.WriteFile(path, []byte(torn), 0o644))
 
-	changed, err := writeManagedSection(filepath.Dir(path), path,generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
 	require.EqualError(t, err, path+`: line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
 	assert.False(t, changed)
 	assertFile(t, path, torn, 0o644)
@@ -280,7 +280,7 @@ func TestWriteManagedSectionRefusesANonShHook(t *testing.T) {
 	script := "#!/usr/bin/env python3\nprint('mine')\n"
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
 
-	changed, err := writeManagedSection(filepath.Dir(path), path,driftMarkers, "magus job run check-drift\n", hookFile, stamp.Judge{})
+	changed, err := writeManagedSection(filepath.Dir(path), path, driftMarkers, "magus job run check-drift\n", hookFile, stamp.Judge{})
 	require.EqualError(t, err, `vcs: hook `+path+` runs "#!/usr/bin/env python3", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`)
 	assert.False(t, changed)
 	assertFile(t, path, script, 0o755)
@@ -325,7 +325,7 @@ func TestWithRepoLockSerializesWriters(t *testing.T) {
 				}
 				defer inside.Add(-1)
 				time.Sleep(time.Millisecond)
-				return writeManagedSection(filepath.Dir(path), path,m, "[hooks]\n", configFile, stamp.Judge{})
+				return writeManagedSection(filepath.Dir(path), path, m, "[hooks]\n", configFile, stamp.Judge{})
 			})
 			assert.NoError(t, err)
 		})
@@ -369,12 +369,12 @@ func TestWriteManagedSectionRefusesADowngrade(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-commit")
 	newer := stamp.Judge{Self: newerMagus}
 	older := stamp.Judge{Self: olderMagus}
-	_, err := writeManagedSection(filepath.Dir(path), path,regenMarkers, "magus vcs resolve --hook post-commit\n", hookFile, newer)
+	_, err := writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve --hook post-commit\n", hookFile, newer)
 	require.NoError(t, err)
 	written := "#!/bin/sh\n\n" + regenMarkers.banner(newerMagus) + "magus vcs resolve --hook post-commit\n" + regenMarkers.end + "\n"
 	assertFile(t, path, written, 0o755)
 
-	_, err = writeManagedSection(filepath.Dir(path), path,regenMarkers, "magus vcs resolve post-commit\n", hookFile, older)
+	_, err = writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve post-commit\n", hookFile, older)
 	var down *stamp.DowngradeError
 	require.ErrorAs(t, err, &down)
 	assert.Equal(t, stamp.DowngradeError{File: path, Recorded: newerMagus, Writer: olderMagus}, *down)
@@ -387,11 +387,11 @@ func TestWriteManagedSectionRefusesADowngrade(t *testing.T) {
 	require.ErrorAs(t, err, &down)
 	assertFile(t, path, written, 0o755)
 
-	changed, err := writeManagedSection(filepath.Dir(path), path,regenMarkers, "magus vcs resolve --hook post-commit\n", hookFile, older)
+	changed, err := writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve --hook post-commit\n", hookFile, older)
 	require.NoError(t, err)
 	assert.False(t, changed, "the content an older writer wants is already there, so nothing is replaced")
 
-	changed, err = writeManagedSection(filepath.Dir(path), path,regenMarkers, "magus vcs resolve --hook=v2 post-commit\n", hookFile, newer)
+	changed, err = writeManagedSection(filepath.Dir(path), path, regenMarkers, "magus vcs resolve --hook=v2 post-commit\n", hookFile, newer)
 	require.NoError(t, err)
 	assert.True(t, changed, "an equal writer replaces")
 	assertFile(t, path, "#!/bin/sh\n\n"+regenMarkers.banner(newerMagus)+"magus vcs resolve --hook=v2 post-commit\n"+regenMarkers.end+"\n", 0o755)
@@ -407,7 +407,7 @@ func TestWriteManagedSectionStampsOlderAndLegacySections(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), ".gitattributes")
 			require.NoError(t, os.WriteFile(path, []byte("*.png binary\n\n"+prior), 0o644))
-			changed, err := writeManagedSection(filepath.Dir(path), path,generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
+			changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
 			require.NoError(t, err)
 			assert.True(t, changed)
 			assertFile(t, path, "*.png binary\n\n"+generatedMarkers.banner(newerMagus)+"gen/** merge=magus\n"+generatedMarkers.end+"\n", 0o644)
@@ -417,7 +417,7 @@ func TestWriteManagedSectionStampsOlderAndLegacySections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gitattributes")
 	current := generatedMarkers.banner(olderMagus) + "gen/** merge=magus\n" + generatedMarkers.end + "\n"
 	require.NoError(t, os.WriteFile(path, []byte(current), 0o644))
-	changed, err := writeManagedSection(filepath.Dir(path), path,generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
+	changed, err := writeManagedSection(filepath.Dir(path), path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{Self: newerMagus})
 	require.NoError(t, err)
 	assert.False(t, changed, "a stamp alone never rewrites a tracked file")
 	assertFile(t, path, current, 0o644)
