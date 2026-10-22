@@ -102,7 +102,7 @@ Save the plugin below to `.opencode/plugins/` in the project. Do not put it in
 `~/.config/opencode/plugins/`: a user-level plugin runs magus in every folder OpenCode
 opens, including repositories you have not read, and opening a workspace evaluates its
 magusfile (see
-[Running magus runs the repository's code](../../../concepts/sandbox.md#running-magus-runs-the-repositorys-code)).
+[Running magus runs the code in the repository](../../../concepts/sandbox.md#running-magus-runs-the-code-in-the-repository)).
 Then confirm OpenCode loaded it:
 
 ```sh

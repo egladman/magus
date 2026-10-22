@@ -35,7 +35,7 @@ Four design intents follow from that:
 
 What the sandbox does **not** claim to stop in its current form is spelled out under [What the sandbox does not confine](#what-the-sandbox-does-not-confine). Being precise about the gaps is part of the model.
 
-## Running magus runs the repository's code
+## Running magus runs the code in the repository
 
 A magusfile is a program. Opening a workspace evaluates its magusfiles and local spells with your authority, and `ls`, `query` and `doctor` open it the same way `run` does. The sandbox narrows what a target's processes touch. It does not make a hostile magusfile safe to evaluate. Read a repository you do not trust before you run magus in it.
 
