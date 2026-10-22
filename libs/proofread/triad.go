@@ -136,25 +136,9 @@ type triadHit struct {
 func triad(in input) []Finding {
 	paras := maskedParagraphs(in)
 
-	var (
-		hits    []triadHit
-		leadEnd = -1
-		leadAt  = -1
-	)
+	leadAt, leadEnd := triadLead(in, paras)
 
-	for i, p := range paras {
-		if p.head.heading || p.head.item || (titled(in.kind) && p.head.line == 1) {
-			continue
-		}
-
-		leadAt = i
-
-		if spans := sentenceBounds(p.masked); len(spans) > 0 {
-			leadEnd = spans[0][1]
-		}
-
-		break
-	}
+	var hits []triadHit
 
 	for i, p := range paras {
 		if p.head.heading || numberedInline.MatchString(p.masked) {
@@ -187,6 +171,25 @@ func triad(in input) []Finding {
 	}
 
 	return out
+}
+
+// triadLead returns the index of the lead among paras and the offset where its
+// first sentence ends, or -1 for each when the text has no lead.
+func triadLead(in input, paras []maskedParagraph) (at, end int) {
+	for i, p := range paras {
+		if p.head.heading || p.head.item || (titled(in.kind) && p.head.line == 1) {
+			continue
+		}
+
+		end = -1
+		if spans := sentenceBounds(p.masked); len(spans) > 0 {
+			end = spans[0][1]
+		}
+
+		return i, end
+	}
+
+	return -1, -1
 }
 
 type seriesHit struct {
