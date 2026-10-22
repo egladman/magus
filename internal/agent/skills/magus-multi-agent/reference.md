@@ -116,7 +116,8 @@ fresh agent pays the prefix and the orientation again.
   an ended job is linked without it.
 - The guard refuses a fresh spawn for a linked job while the ended job's worker is inside
   the prompt-cache TTL (`spawn-warm-worker`). The refusal names the agent to message and the
-  TTL left, and says where the TTL came from.
+  TTL left, and says where the TTL came from: the provider's 5-minute default, or
+  `agents.prompt_cache_ttl` in magus.yaml for a host on the one-hour cache.
 - A fresh spawn passes once the TTL has passed, or when the warm worker's context is within
   10% of its model's long-context price step.
 - When the old context is wrong for the job (it read code the job replaces, or it is

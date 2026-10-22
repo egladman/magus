@@ -1,6 +1,9 @@
 package guard
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -60,9 +63,19 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 			assert.Contains(t, v.Reason, "job regress-fix "+tc.link)
 			assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message (SendMessage)")
 			assert.Contains(t, v.Reason, "magus job apply -f <record>")
-			assert.Contains(t, v.Reason, "no harness model row carries a prompt-cache TTL", "the TTL's source is said")
+			assert.Contains(t, v.Reason, "TTL 5m0s: the provider default", "the TTL's source is said")
 		})
 	}
+}
+
+func TestSpawnWarmWorkerReadsTheWorkspaceTTL(t *testing.T) {
+	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	require.NoError(t, os.WriteFile(filepath.Join(f.at.workspace, "magus.yaml"), []byte("agents:\n  prompt_cache_ttl: 1h\n"), 0o644))
+
+	v := f.spawn(t)
+
+	require.Equal(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
+	assert.Contains(t, v.Reason, "TTL 1h0m0s: agents.prompt_cache_ttl in magus.yaml")
 }
 
 func TestSpawnWarmWorkerPassesAFreshReason(t *testing.T) {
@@ -130,8 +143,15 @@ func TestFindWarmWorker(t *testing.T) {
 }
 
 func TestResumeTTLNamesItsSource(t *testing.T) {
-	got := resumeTTL()
-
+	got := resumeTTL(account{})
 	assert.Equal(t, 5*time.Minute, got.ttl)
+	assert.Contains(t, got.source, "the provider default")
 	assert.Contains(t, got.source, "https://")
+
+	got = resumeTTL(account{cacheTTL: time.Hour})
+	assert.Equal(t, promptCacheTTL{ttl: time.Hour, source: "agents.prompt_cache_ttl in magus.yaml"}, got)
+
+	got = resumeTTL(account{loadErr: errors.New("agents.prompt_cache_ttl: bad duration")})
+	assert.Equal(t, 5*time.Minute, got.ttl)
+	assert.Contains(t, got.source, "magus.yaml did not load (agents.prompt_cache_ttl: bad duration), so the provider default")
 }

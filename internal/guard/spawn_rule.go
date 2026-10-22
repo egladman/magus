@@ -240,7 +240,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 			if at.models != nil {
 				models = at.models()
 			}
-			ttl := resumeTTL()
+			ttl := resumeTTL(accountAt(at.workspace))
 			if w, warm := findWarmWorker(facts, rows, row, models, ttl.ttl, time.Now()); warm {
 				return refused(denyRuleSpawnWarmWorker, denySpawnWarmWorker(row, w, ttl)), ""
 			}

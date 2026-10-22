@@ -112,6 +112,10 @@ type account struct {
 	// overrides are the rows agents.models declares. The harness rows are not kept here:
 	// they belong to the request judged, and location.modelTable layers these over them.
 	overrides []types.ModelPricing
+	// cacheTTL is agents.prompt_cache_ttl, zero when unset; loadErr is why magus.yaml did
+	// not load, which a reader of cacheTTL must say rather than read zero as unset.
+	cacheTTL  time.Duration
+	loadErr   error
 	read      time.Time
 }
 
@@ -134,8 +138,10 @@ func accountAt(root string) account {
 	if agents, err := config.LoadAgents(root); err == nil {
 		a.billing = agents.ResolveBilling(os.Getenv)
 		a.overrides = agents.ModelOverrides()
+		a.cacheTTL = agents.PromptCacheTTL
 	} else {
 		a.billing = config.DetectBilling(os.Getenv)
+		a.loadErr = err
 	}
 	accounts.Store(root, a)
 	return a

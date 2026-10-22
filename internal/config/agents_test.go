@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,4 +147,26 @@ func TestLoadAgentsLayersTiers(t *testing.T) {
 	writeYAML(t, root, "agents:\n  billing: oauth\n")
 	_, err = LoadAgents(root)
 	require.Error(t, err)
+}
+
+func TestLoadAgentsReadsPromptCacheTTL(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+
+	got, err := LoadAgents(root)
+	require.NoError(t, err)
+	assert.Zero(t, got.PromptCacheTTL, "unset leaves the provider default to the reader")
+
+	writeYAML(t, root, "agents:\n  prompt_cache_ttl: 1h\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, time.Hour, got.PromptCacheTTL)
+
+	writeYAML(t, root, "agents:\n  prompt_cache_ttl: an hour\n")
+	_, err = LoadAgents(root)
+	require.Error(t, err, "a bad duration is a config error")
+
+	writeYAML(t, root, "agents:\n  prompt_cache_ttl: -5m\n")
+	_, err = LoadAgents(root)
+	require.Error(t, err, "a negative duration is a config error")
 }

@@ -24,17 +24,24 @@ type promptCacheTTL struct {
 	source string
 }
 
-// resumeTTL is the shortest window the published prompt-cache table holds: no harness model
-// row carries a TTL, and the shortest window never calls a cold cache warm.
-func resumeTTL() promptCacheTTL {
+// resumeTTL is the account's agents.prompt_cache_ttl, else the shortest window the published
+// prompt-cache table holds: a host on the one-hour cache opts in, and the shortest window
+// never calls a cold cache warm.
+func resumeTTL(acct account) promptCacheTTL {
+	if acct.cacheTTL > 0 {
+		return promptCacheTTL{ttl: acct.cacheTTL, source: "agents.prompt_cache_ttl in magus.yaml"}
+	}
 	var best promptCacheTTL
 	for _, p := range sessions.PromptCacheProviders {
 		for _, w := range p.Windows {
 			if best.ttl == 0 || w.Min < best.ttl {
 				best = promptCacheTTL{ttl: w.Min, source: fmt.Sprintf(
-					"no harness model row carries a prompt-cache TTL, so this is the shortest published window, %s %s, from %s", p.Provider, w.Window, p.Source)}
+					"the provider default, the shortest published window (%s %s, %s); set agents.prompt_cache_ttl for the one-hour cache", p.Provider, w.Window, p.Source)}
 			}
 		}
+	}
+	if acct.loadErr != nil {
+		best.source = "magus.yaml did not load (" + acct.loadErr.Error() + "), so " + best.source
 	}
 	return best
 }
