@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Widyasari et al. (arXiv 2311.09020) labeled 793 Gerrit review comments and found 42% gave a suggestion with no explanation; Ebert et al. (SANER 2019) found missing rationale the most frequent reason for confusion in code review, which delays the merge. Only a comment of one sentence is judged, one opening with a command or holding should, must or needs to: a second sentence is read as the reason, and so is a reason marker (because, since, so, otherwise, which, a purpose such as "to avoid"). A question, and a comment labeled nit, typo or optional, is left alone. No firing has been labeled, so it advises.
+Widyasari et al. (arXiv 2311.09020) labeled 793 Gerrit review comments and found 42% gave a suggestion with no explanation; Ebert et al. (SANER 2019) found missing rationale the most frequent reason for confusion in code review, which delays the merge. Only a comment of one sentence is judged, one opening with a command or holding should, must or needs to: a second sentence is read as the reason, and so is a reason marker (because, since, so, otherwise, which, a purpose such as "to avoid"), and so is what was intended set beside what the code does ("the doc says it returns an error, but this returns nil"). A question, and a comment labeled nit, typo or optional, is left alone. No firing has been labeled, so it advises.
 
 ## Default decision
 

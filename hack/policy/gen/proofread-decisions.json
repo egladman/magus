@@ -51,14 +51,18 @@
     "no-reason": "advise",
     "reply-voice": "deny",
     "restates": "deny",
+    "restates-diff": "advise",
+    "review-length": "advise",
     "signpost": "deny",
     "skill-description-budget": "advise",
     "skill-set-description-budget": "advise",
+    "stacked-colon": "advise",
     "template": "deny",
     "tense": "deny",
     "terms": "deny",
     "terse-paragraph": "deny",
     "terse-sentence": "deny",
+    "triad": "advise",
     "wordy": "deny"
   }
 }

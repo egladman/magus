@@ -285,7 +285,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
-	compactChecks, skillChecks, []check{templateCheck, gradeCheck})
+	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks)
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: diagnostic, judge: messageLength},

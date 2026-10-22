@@ -1,0 +1,6 @@
+Cases written with the rule (2026-10-22), not drawn from a labeling round.
+A series of exactly three twice in a text, or once in the lead's first sentence.
+-- hit/review-summary --
+Reviewers can now see the cache, the graph, and the log in one view. The old panel hid all of it.
+-- pass/review-summary --
+The loader now retries the fetch. It reads the cache, the graph, the log, and the index, then stops.

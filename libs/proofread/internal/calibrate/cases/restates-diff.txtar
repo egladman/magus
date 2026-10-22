@@ -1,0 +1,6 @@
+Cases written with the rule (2026-10-22), not drawn from a labeling round.
+A sentence that is a verb and the things touched, with no reason.
+-- hit/review-reply --
+Updates `foo.go`.
+-- pass/review-reply --
+Updates `foo.go` so the cache key includes the path.

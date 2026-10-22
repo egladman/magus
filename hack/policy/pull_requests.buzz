@@ -73,29 +73,31 @@ final inlineField = "comments[][body]";
 
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
-    + "    Warm builds hit the cache again. A failing CI run showed the key hashing its inputs\n"
-    + "    in map order, so two runs of one tree missed each other's entries.\n"
+    + "    Make warm builds hit the cache again. A CI run showed the key hashing its inputs in\n"
+    + "    map order, so two runs of one tree missed each other's entries.\n"
     + "\n"
     + "    - The key sorts its inputs before hashing them.\n"
-    + "    - `TestKeyStable` pins one key across 50 runs.";
-final fixLine = "Rewrite it in this shape: a conventional title, then a lead paragraph whose first "
-    + "sentence says what a reader can now do or no longer has to do, followed by how the work "
-    + "came up and why it mattered; then one present-tense bullet per change, with the code as "
-    + "the subject; headed sections (Why this approach, Evidence, Not verified) only when they "
-    + "carry something. Keep it within the budget the change earns, in plain ASCII, with no "
-    + "credit to a tool or an agent. For example:\n" + example;
-final shapeLine = "The shape: a lead paragraph with the outcome and how the work came up, one bullet "
-    + "per change, then headed sections only where they carry something. This is said once per "
-    + "pull request. For example:\n" + example;
-final replyLine = "Rewrite the reply: acknowledge the point it answers, state what you know with its "
-    + "evidence, label a judgment call and give its reason, and ask where you do not know. For "
-    + "example: \"I'd move the retry into the client: the upstream drops about 1% of calls. "
-    + "Open to keeping it here if you see a cleaner seam.\"";
-final summaryLine = "Rewrite the review's body: the verdict and what blocks it, pointing at the inline "
-    + "comments that do, with what is left marked optional. For example: \"Requesting changes: "
+    + "    - `TestKeyStable` pins one key across 50 runs.\n"
+    + "\n"
+    + "    Not verified: a cold cache on Windows.";
+final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
+    + "what you set out to do and why; one present-tense bullet per change; then where the work "
+    + "differs from the plan, on a line that opens Cut:, Changed from plan:, Not done: or Not "
+    + "verified:. Keep it short and in your own words, within the budget the change earns, in plain "
+    + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
+    + example;
+final shapeLine = "The shape: what you set out to do and why in one to three sentences, one bullet per "
+    + "change, then where it differs from the plan (Cut:, Changed from plan:, Not done:, Not "
+    + "verified:). Short, in your own words. This is said once per pull request. For example:\n" + example;
+final replyLine = "Rewrite the reply: say whether you made the change, and if not, why, in a sentence or "
+    + "two. For example: \"Done, the retry is in the client now.\" or \"Kept it here, since the client "
+    + "never sees the backoff state. Happy to move it if you see a cleaner seam.\"";
+final summaryLine = "Rewrite the review's body short: the verdict and what blocks it, pointing at the "
+    + "inline comments that do; mark the rest optional. For example: \"Requesting changes: "
     + "`Cache.put` races with `Cache.get` (see the comment on cache.go). The naming notes are optional.\"";
-final inlineLine = "Rewrite the comment: one point about this line, with its reason and, where you can, "
-    + "the change. For example: \"Use a sync.Map here: two workers write this map at once.\"";
+final inlineLine = "Rewrite the comment: one point about this line, as what was expected against what it "
+    + "does, then the change. For example: \"The doc says `Get` returns nil on a miss; this returns an "
+    + "empty Entry. Return nil here.\"";
 final commitLine = "Rewrite the subject as one line in the imperative ('add', not 'added'), at most 100 "
     + "bytes, with no trailing period, no selling word and no credit to a tool; detail belongs in the "
     + "pull request description. For example: sort the key's inputs before hashing";
@@ -1157,7 +1159,7 @@ export fun judgeShape(body: str) > Findings {
     if (blocks[0].kind == "paragraph") {
         final lead = wordsIn(blocks[0].lines.join(" "));
         if (lead > blockWords) {
-            advice.append("a lead of {lead} words, past {blockWords}: keep the outcome and how the work came up, and move the rest into bullets");
+            advice.append("a lead of {lead} words, past {blockWords}: keep what the change sets out to do and why, and move the rest into bullets");
         }
     }
     var headed = blocks.len();
@@ -1880,7 +1882,7 @@ test "a conventional title and a plain description pass" {
 test "a spaced hyphen is denied with the shape and its example" {
     final reason = judgedReason(goodTitle, body: "Pins the key - for good.");
     std\assert(reason.indexOf("spaced hyphen") != null, message: reason);
-    std\assert(reason.indexOf("first sentence says what a reader can now do") != null, message: "teaches the lead: {reason}");
+    std\assert(reason.indexOf("a lead of one to three sentences saying what you set out to do and why") != null, message: "teaches the lead: {reason}");
     std\assert(reason.indexOf(example) != null, message: "carries the example: {reason}");
 }
 
@@ -2043,7 +2045,7 @@ test "a reply denial teaches a reply, not a description" {
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
-    std\assert(v.reason.indexOf("acknowledge the point it answers") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
+    std\assert(v.reason.indexOf("say whether you made the change") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
 }
 
 test "a summary denial teaches a review's body" {
@@ -2051,7 +2053,7 @@ test "a summary denial teaches a review's body" {
     final v = decidePullRequest(helpers\request([["gh", "pr", "review", "412", "-r", "-b", "You broke it."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: reporting(f), once: helpers\counter());
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
-    std\assert(v.reason.indexOf("the verdict and what blocks it") != null and v.reason.indexOf("acknowledge the point") == null,
+    std\assert(v.reason.indexOf("the verdict and what blocks it") != null and v.reason.indexOf("say whether you made the change") == null,
         message: v.reason);
 }
 

@@ -76,4 +76,5 @@ var unmeasured = map[Rule]bool{
 	RuleTriad:                     true, // no labeled firing yet
 	RuleStackedColon:              true, // no labeled firing yet
 	RuleRestatesDiff:              true, // no labeled firing yet
+	RuleReviewLength:              true, // no labeled firing yet
 }

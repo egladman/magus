@@ -1,18 +1,9 @@
 package proofread
 
 import (
-	"maps"
 	"strings"
 	"testing"
 )
-
-// The package does not list triadChecks and triadTexts yet, so the tests list
-// them here. Wiring them into checks and ruleTexts removes this init.
-func init() {
-	checks = append(checks, triadChecks...)
-
-	maps.Copy(ruleTexts, triadTexts)
-}
 
 func triadMatches(found []Finding) []string {
 	var out []string

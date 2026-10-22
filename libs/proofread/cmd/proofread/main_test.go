@@ -210,10 +210,10 @@ func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 
 func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 	want := rows(t, row("change-description", "change-description:2", "change-description", proofread.RuleLeadContext,
-		proofread.DecisionDeny, "It opens with a heading: open the description with what a reader can now do "+
-			"or no longer has to do, then how the work came up and why it mattered, then the changes, as in 'The first "+
-			"query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that "+
-			"query.'", "## Summary").at(2, 1, 11))
+		proofread.DecisionDeny, "It opens with a heading: open the description with what the change sets out to do "+
+			"and why, then what was built, then where it differs from the plan, as in 'Make the first query after an "+
+			"edit answer from a graph that is already current. The warm caches lagged behind edits, so that query paid "+
+			"for the rebuild inline.'", "## Summary").at(2, 1, 11))
 
 	assertArgs(t, []string{"change-description", "--stdin"}, "fix: pin the key\n## Summary\n", want)
 }
