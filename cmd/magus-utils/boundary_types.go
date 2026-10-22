@@ -10,6 +10,7 @@ import (
 
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -240,7 +241,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
-	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true},
+	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true, TS: true},
+	// Must follow Diagnostic: Result.err is one. Not a RuntimeObject: the encoder is
+	// generated per concrete Go type, and the placeholder T is none; a host method
+	// returning Result[X] is what brings that instance's encoder.
+	{Name: "Result", Type: reflect.TypeFor[types.Result[buzzgen.T]](), TS: true},
 	{Name: "DiffUncovered", Type: reflect.TypeFor[types.DiffUncovered](), RuntimeObject: true},
 	{Name: "DiffUnread", Type: reflect.TypeFor[types.DiffUnread](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
@@ -1125,6 +1130,8 @@ type boundaryType struct {
 	// with methods is encoded as an instance of the session's object, never a map: a map
 	// has no methods to dispatch.
 	Methods string
+	// TS marks a type tstypes also writes as TypeScript for the console and docs.
+	TS bool
 }
 
 // key is the registry's name for the entry: Name, qualified as module\Name when Module

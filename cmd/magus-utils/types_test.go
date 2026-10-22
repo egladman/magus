@@ -43,6 +43,16 @@ func TestRenderBuzzMirrorRenamesThroughTheRegistry(t *testing.T) {
 	assert.Contains(t, string(out), "export object HttpResponse {")
 }
 
+func TestRenderBuzzMirrorDeclaresResultGeneric(t *testing.T) {
+	entry, ok := boundaryTypeNamed("Result")
+	require.True(t, ok)
+	out, err := renderBuzzMirror("Result", entry.Type)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(out), "// Buzz mirror of github.com/egladman/magus/types.Result,")
+	assert.Contains(t, string(out), "export object Result::<T> {\n    value: T? = null,\n    error: Diagnostic? = null,\n}\n")
+}
+
 func TestRunTypes(t *testing.T) {
 	t.Run("writes the mirror", func(t *testing.T) {
 		got := readGenerated(t, runTypes, func(out string) []string {
