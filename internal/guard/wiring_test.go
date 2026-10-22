@@ -24,8 +24,11 @@ func TestHookWiringSubjectNamesEveryDocumentedHost(t *testing.T) {
 		"/Users/dev/.codex/hooks.json",
 		".opencode/plugins/magus-guard.ts",
 		"/Users/dev/.config/opencode/plugins/magus-guard.ts",
+		"magus",
+		"./magus",
+		"/repo/magus",
 	} {
-		assert.NotEmpty(t, hookWiringSubject(path), "%q is host guard wiring", path)
+		assert.NotEmpty(t, hookWiringSubject("/repo", path), "%q is host guard wiring", path)
 	}
 }
 
@@ -42,15 +45,18 @@ func TestHookWiringSubjectIsSilentEverywhereElse(t *testing.T) {
 		"settings.json",
 		"internal/hooks.json",
 		"console/src/hooks/useThing.ts",
+		"cmd/magus",
+		"/repo/sub/magus",
+		"/Users/dev/bin/magus",
 	} {
-		assert.Empty(t, hookWiringSubject(path), "%q is not host guard wiring", path)
+		assert.Empty(t, hookWiringSubject("/repo", path), "%q is not host guard wiring", path)
 	}
 }
 
 // TestGradeHookWiringWriteDeniesUnderALease is D4: the write a declared boundary cannot
 // make legitimate, because what it edits is whether the boundary is checked at all.
 func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
-	g := gradeHookWiringWrite("harness/wiring", false, ".claude/settings.json")
+	g := gradeHookWiringWrite("/repo", "harness/wiring", false, ".claude/settings.json")
 
 	require.Equal(t, "deny", g.Decision)
 	assert.Contains(t, g.Reason, "harness/wiring", "the denial must name the lease it refused")
@@ -65,7 +71,7 @@ func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
 // call to an agent is what disarms every rule from the next session on, whether or not
 // that agent ever took a lease. "Nobody told me not to" is not a scope.
 func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
-	g := gradeHookWiringWrite("", true, ".claude/settings.json")
+	g := gradeHookWiringWrite("/repo", "", true, ".claude/settings.json")
 
 	require.Equal(t, "deny", g.Decision, "an agent-attributed session with no lease must still be denied")
 	assert.Contains(t, g.Reason, ".claude/settings.json", "the denial must name the file")
@@ -81,15 +87,20 @@ func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
 // attributed to any agent, and both legitimately rewire a host. What they are owed is the
 // sentence naming the file, not a refusal.
 func TestGradeHookWiringWriteAdvisesAPersonsOwnSession(t *testing.T) {
-	g := gradeHookWiringWrite("", false, ".cursor/hooks.json")
+	g := gradeHookWiringWrite("/repo", "", false, ".cursor/hooks.json")
 
 	require.Equal(t, writeGrade{Decision: "advise", Context: g.Context, Why: g.Why, Kind: advisoryHookWiring}, g,
 		"a standing fact is said once per session")
 	assert.Contains(t, g.Context, ".cursor/hooks.json")
 	assert.Contains(t, g.Why, "next session start", "the advisory must say when the edit takes effect")
 
-	assert.Empty(t, gradeHookWiringWrite("harness/wiring", false, "cmd/magus/guard.go").Decision,
+	assert.Empty(t, gradeHookWiringWrite("/repo", "harness/wiring", false, "cmd/magus/guard.go").Decision,
 		"every other path is somebody else's rule")
-	assert.Empty(t, gradeHookWiringWrite("", true, "cmd/magus/guard.go").Decision,
+	assert.Empty(t, gradeHookWiringWrite("/repo", "", true, "cmd/magus/guard.go").Decision,
 		"every other path is somebody else's rule, agent-attributed or not")
+}
+
+func TestHookWiringSubjectReadsTheBinaryOnlyAtTheRoot(t *testing.T) {
+	assert.Equal(t, "the guard binary every hook runs", hookWiringSubject("/repo", "/repo/magus"))
+	assert.Empty(t, hookWiringSubject("", "magus"), "with no workspace there is no root to read it against")
 }

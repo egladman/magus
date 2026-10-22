@@ -3,6 +3,7 @@ package guard
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,13 +48,15 @@ func TestApplyPatchWritePaths(t *testing.T) {
 			{"command": "echo '*** Begin Patch'"},
 			{"patchText": "no marker"},
 		} {
-			files, ok := envelopePatch(input)
+			files, ok := envelopePatch(input, true)
 			assert.False(t, ok, input)
 			assert.Nil(t, files, input)
 		}
-		files, ok := envelopePatch(map[string]any{"patchText": "*** Begin Patch\n*** End Patch\n"})
+		files, ok := envelopePatch(map[string]any{"patchText": "*** Begin Patch\n*** End Patch\n"}, false)
 		assert.True(t, ok, "a patch that names no file is still a patch")
 		assert.Empty(t, files)
+		_, ok = envelopePatch(map[string]any{"command": "*** Begin Patch\n*** End Patch\n"}, false)
+		assert.False(t, ok, "`command` is a shell line unless the row names the tool a writer")
 	})
 	t.Run("content is read only from a patch that creates one file", func(t *testing.T) {
 		assert.Equal(t, "package guard\n\nconst x = 1\n", patchContent(parsePatch(
@@ -125,4 +128,8 @@ func TestPatchMarkerInBashIsShell(t *testing.T) {
 		Who:   hookAttribution{Session: "s", Event: "PreToolUse"},
 		Value: line,
 	}, req, "only a tool whose row says it writes carries a patch")
+
+	unrowed, ok := decodeHookEnvelope(string(body), agent.ToolRows{})
+	require.True(t, ok)
+	assert.Equal(t, req, unrowed, "with no rows, `command` is still a shell line")
 }

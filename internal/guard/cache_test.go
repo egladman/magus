@@ -243,10 +243,10 @@ func TestShellWriteToHookWiringDenied(t *testing.T) {
 		"rm -f " + filepath.Join(root, "magus"),
 		"echo x > magus",
 	} {
-		reason := denyGuardInstallCommand(at, root, "", true, line, DialectBash)
+		reason := denyHookWiringCommand(at, root, "", true, line, DialectBash)
 		assert.Contains(t, reason, "the guard's own installation", "a subagent: %s", line)
-		assert.Contains(t, denyGuardInstallCommand(at, root, "job-a", false, line, DialectBash), "the guard's own installation", "a leased worker: %s", line)
-		assert.Empty(t, denyGuardInstallCommand(at, root, "", false, line, DialectBash), "a person's own session: %s", line)
+		assert.Contains(t, denyHookWiringCommand(at, root, "job-a", false, line, DialectBash), "the guard's own installation", "a leased worker: %s", line)
+		assert.Empty(t, denyHookWiringCommand(at, root, "", false, line, DialectBash), "a person's own session: %s", line)
 	}
 	for _, line := range []string{
 		"cat .claude/settings.json",
@@ -255,6 +255,6 @@ func TestShellWriteToHookWiringDenied(t *testing.T) {
 		"mv sub/magus sub/magus.bak",
 		"go build -o magus ./cmd/magus",
 	} {
-		assert.Empty(t, denyGuardInstallCommand(at, root, "", true, line, DialectBash), line)
+		assert.Empty(t, denyHookWiringCommand(at, root, "", true, line, DialectBash), line)
 	}
 }

@@ -95,6 +95,128 @@ func literalWord(parts []syntax.WordPart) string {
 	return b.String()
 }
 
+// readsAsWritten reports a word the shell passes as written once quotes are removed. A
+// backslash escape, `$'...'` with an escape, a brace or glob pattern, a parameter, a
+// substitution or arithmetic makes the shell compute the word, which literalWord does not.
+func readsAsWritten(parts []syntax.WordPart) bool {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			if strings.Contains(p.Value, `\`) || expandsUnquoted(p.Value) {
+				return false
+			}
+		case *syntax.SglQuoted:
+			if p.Dollar && strings.Contains(p.Value, `\`) {
+				return false
+			}
+		case *syntax.DblQuoted:
+			if p.Dollar {
+				return false
+			}
+			for _, inner := range p.Parts {
+				if lit, ok := inner.(*syntax.Lit); !ok || strings.Contains(lit.Value, `\`) {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// expandsUnquoted reports unquoted text the shell rewrites: a glob (`*`, `?`, a `[...]`
+// class) or a brace expansion (`{a,b}`, `{1..3}`). A `[` with no `]` after it is the
+// test command, and `{}` is find's placeholder.
+func expandsUnquoted(text string) bool {
+	if strings.ContainsAny(text, "*?") {
+		return true
+	}
+	if i := strings.Index(text, "["); i >= 0 && strings.Contains(text[i:], "]") {
+		return true
+	}
+	open := strings.Index(text, "{")
+	if open < 0 {
+		return false
+	}
+	body, _, closed := strings.Cut(text[open+1:], "}")
+	return closed && (strings.Contains(body, ",") || strings.Contains(body, ".."))
+}
+
+// unreadMark tags a word readsAsWritten rejects, with its index in the call, so the word
+// peelWrappers leaves in command position traces back to its source. It is plain text so
+// that a `sh -c` script made of such a word carries it into the nested parse.
+const unreadMark = "%unread%"
+
+// unreadCommandWord returns, as written, the first word the shell would compute and then
+// run as a command: a program name, or a VCS subcommand, whose value no rule can read.
+// False when every such word is plain. An argument that is not one is no business of this
+// check: `git commit -m "$msg"` names its command plainly.
+func unreadCommandWord(command string, d Dialect) (string, bool) {
+	return unreadCommandWordAt(command, 0, d)
+}
+
+func unreadCommandWordAt(command string, depth int, d Dialect) (string, bool) {
+	if depth > writeScanDepth {
+		return "", false
+	}
+	f, err := parseFile(command, d)
+	if err != nil {
+		return "", false
+	}
+	found := ""
+	syntax.Walk(f, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if found != "" || !ok {
+			return found == ""
+		}
+		words := make([]string, len(call.Args))
+		for i, w := range call.Args {
+			words[i] = literalWord(w.Parts)
+			if !readsAsWritten(w.Parts) {
+				words[i] += unreadMark + strconv.Itoa(i) + unreadMark
+			}
+		}
+		for _, inv := range peelWrappers(words, d) {
+			if i, ok := markedWord(commandWords(inv)...); ok && i < len(call.Args) {
+				found = command[call.Args[i].Pos().Offset():call.Args[i].End().Offset()]
+				return false
+			}
+		}
+		if script, ok := shellPayload(literalWords(call.Args)); ok {
+			found, _ = unreadCommandWordAt(script, depth+1, d)
+		}
+		return found == ""
+	})
+	return found, found != ""
+}
+
+// commandWords are the words of inv that pick what runs: the program, and for a VCS the
+// subcommand.
+func commandWords(inv hint.Invocation) []string {
+	switch inv.Name {
+	case "git", "hg", "sl", "jj":
+		sub, _ := vcsSubcommand(inv)
+		return []string{inv.Name, sub}
+	}
+	return []string{inv.Name}
+}
+
+// markedWord is the call index unreadMark tags in the first of words carrying one.
+func markedWord(words ...string) (int, bool) {
+	for _, w := range words {
+		_, rest, ok := strings.Cut(w, unreadMark)
+		if !ok {
+			continue
+		}
+		index, _, _ := strings.Cut(rest, unreadMark)
+		if i, err := strconv.Atoi(index); err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // peelWrappers reduces a wrapper invocation to the command it wraps, repeatedly,
 // so a stack of them reduces to the program that will actually run. A -c payload
 // is parsed as its own script, so it contributes the commands it contains rather

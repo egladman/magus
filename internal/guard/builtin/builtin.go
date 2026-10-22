@@ -206,6 +206,7 @@ var defaults = map[string]Decision{
 	"throwaway-copy":         Deny,
 	"unjudged-tool":          Deny,
 	"unknown-env":            Deny,
+	"unread-command":         Deny,
 
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,

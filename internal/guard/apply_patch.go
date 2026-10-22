@@ -42,18 +42,22 @@ var patchSections = []struct {
 }
 
 // patchTexts are the tool_input fields a host puts a patch in: one host sends it as
-// `command`, another as `patchText`.
+// `command`, another as `patchText`. `command` is a shell tool's field too, so it is read
+// only for a tool its row names a writer.
 var patchTexts = []string{"patchText", "command"}
 
 // envelopePatch reads the files a patch tool_input names. ok reports that tool_input holds
 // a patch at all, which may name no file. A field is a patch only when it opens with the
-// patch marker, and a tool its row names as anything but a writer carries none:
-// decodeHookEnvelope asks the row, since a shell line in `command` can open with the marker.
+// patch marker, and `command` only when writer says the tool's row names it a writer: a
+// shell line can open with the marker too, and bash runs the lines after it.
 //
 // A section that moves a file yields two entries, the source and the destination, since
 // both are written.
-func envelopePatch(input map[string]any) (files []patchFile, ok bool) {
+func envelopePatch(input map[string]any, writer bool) (files []patchFile, ok bool) {
 	for _, key := range patchTexts {
+		if key == "command" && !writer {
+			continue
+		}
 		if text := envelopeString(input, key); isPatchText(text) {
 			return parsePatch(text), true
 		}
