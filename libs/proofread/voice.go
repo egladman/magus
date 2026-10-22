@@ -163,12 +163,11 @@ var (
 // change. Prose describes the code after the change in the present tense, and
 // names the code as the actor.
 //
-// First person is judged per kind of text. A pull request describes the change, so
-// its author has no place in it: every first-person singular is reported, and
-// "we" or "our" as the actor of a change. A Markdown page may speak as the
+// Only "we", "I" or "our" as the actor of a change is reported, in every kind of
+// text. A first-person statement of intent is the author's to make, so a pull
+// request is not held to a stricter rule. A Markdown page may speak as the
 // project ("we believe", "our users"), the voice docs/doctrine.md and the
-// decision records argue in, so only "we" or "I" as the actor of a change is
-// reported there.
+// decision records argue in.
 func tense(in input) []Finding {
 	var out []Finding
 
@@ -190,23 +189,6 @@ func tense(in input) []Finding {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Name the code, not the author, in '%s': say what the change does.", m),
-				Match:   m, Line: para.lineAt(at[0]),
-			})
-		}
-
-		if in.kind != KindChangeDescription {
-			continue
-		}
-
-		for _, at := range firstPerson.FindAllStringIndex(para.text, -1) {
-			if within(at[0], actors) || (at[1] < len(para.text) && para.text[at[1]] == '/') {
-				// An actor is already reported; I/O is no pronoun.
-				continue
-			}
-
-			m := para.text[at[0]:at[1]]
-			out = append(out, Finding{
-				Message: fmt.Sprintf("Drop '%s': a description names the code, not its author.", m),
 				Match:   m, Line: para.lineAt(at[0]),
 			})
 		}

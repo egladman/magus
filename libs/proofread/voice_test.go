@@ -89,7 +89,8 @@ func TestTenseReportsTheFutureAndTheAuthor(t *testing.T) {
 		// docs/doctrine.md speaks as the project.
 		{"the project's voice on a page", KindReference, "We believe a warning is a bug. Our users run it in CI.", nil},
 		{"the project's voice in a pull request", KindChangeDescription, pr("- We believe the cap holds."), nil},
-		{"the author in a pull request", KindChangeDescription, pr("- I think my cap holds."), []string{"4:I", "4:my"}},
+		{"an opinion in a pull request", KindChangeDescription, pr("- I think my cap holds."), nil},
+		{"first-person intent in a pull request", KindChangeDescription, pr("- I wanted the cache to survive a restart."), nil},
 		{"our change", KindChangeDescription, pr("- Our fix pins the key."), []string{"4:Our fix"}},
 		{"I/O is no pronoun", KindChangeDescription, pr("- Moves the I/O off the loop."), nil},
 	})
