@@ -1,5 +1,6 @@
 ### Changed
 
-- **`show-failures` reads a failed plain CI job's log.** When a run has no `magus-logs-`
-  artifact but a job failed (`magus doctor`, for one), it prints the tail of each failed
-  job's `gh run view --job <id> --log-failed` and says on stderr that it fell back.
+- **`show-failures` reads a failed plain CI job's log.** A failed job that no `magus-logs-`
+  artifact accounts for (`magus doctor`, for one, even beside shards that uploaded theirs)
+  gets the tail of its `gh run view --job <id> --log-failed` printed, and a line on stderr
+  says it fell back.
