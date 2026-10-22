@@ -8,7 +8,7 @@ import (
 )
 
 // ErrOutsideRoot is Within's refusal of a path that resolves outside its root.
-var ErrOutsideRoot = errors.New("outside")
+var ErrOutsideRoot = errors.New("resolves outside the root")
 
 // Within resolves path through every symlink, a relative path against root, and returns
 // it when it lies inside root, itself resolved. A path that does not exist is an error,
@@ -28,7 +28,7 @@ func Within(root, path string) (string, error) {
 	}
 	rel, err := filepath.Rel(resolved, name)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s resolves to %s, %w %s", path, name, ErrOutsideRoot, resolved)
+		return "", fmt.Errorf("%s (%s) under %s: %w", path, name, resolved, ErrOutsideRoot)
 	}
 	return name, nil
 }
