@@ -1186,6 +1186,8 @@ export object Job {
     model: str = "",
     modelTier: JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
+    follows: str = "",
+    freshReason: str = "",
     reworkRounds: int = 0,
     widenings: int = 0,
     generation: int = 0,

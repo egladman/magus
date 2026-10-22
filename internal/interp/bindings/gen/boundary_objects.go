@@ -3875,6 +3875,8 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("modelTier", optModelTier)
 	out.MapSet("briefFormat", enums.Case("BriefFormat", string(v.BriefFormat)))
+	out.MapSet("follows", vm.StrValue(v.Follows))
+	out.MapSet("freshReason", vm.StrValue(v.FreshReason))
 	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
 	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
