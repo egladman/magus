@@ -124,6 +124,7 @@
 {"group":"file:changes/unreleased/job-exit-narrows-to-changes.md","path":"changes/unreleased/job-exit-narrows-to-changes.md"}
 {"group":"file:changes/unreleased/job-footprint-cache.md","path":"changes/unreleased/job-footprint-cache.md"}
 {"group":"file:changes/unreleased/job-fork-checkout-removal.md","path":"changes/unreleased/job-fork-checkout-removal.md"}
+{"group":"file:changes/unreleased/job-fork-fix.md","path":"changes/unreleased/job-fork-fix.md"}
 {"group":"file:changes/unreleased/job-fork-notes-foreground-limit.md","path":"changes/unreleased/job-fork-notes-foreground-limit.md"}
 {"group":"file:changes/unreleased/job-proof-counts-declared.md","path":"changes/unreleased/job-proof-counts-declared.md"}
 {"group":"file:changes/unreleased/job-prune.md","path":"changes/unreleased/job-prune.md"}

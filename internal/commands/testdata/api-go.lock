@@ -2569,6 +2569,13 @@ github.com/egladman/magus/types.JobDenial.Rule field string "json:\"rule\"      
 github.com/egladman/magus/types.JobDenial.Ts field int64 "json:\"ts\"                    yaml:\"ts\""
 github.com/egladman/magus/types.JobDenial.VerdictRef field string "json:\"verdict_ref,omitempty\" yaml:\"verdict_ref,omitempty\""
 github.com/egladman/magus/types.JobDescendants func(rows []Job, id string) []Job
+github.com/egladman/magus/types.JobEdit type struct
+github.com/egladman/magus/types.JobEdit.AddGoal field *Goal "json:\"add_goal,omitempty\""
+github.com/egladman/magus/types.JobEdit.AddWaiver field *JobWaiver "json:\"add_waiver,omitempty\""
+github.com/egladman/magus/types.JobEdit.AddWritePath field string "json:\"add_write_path,omitempty\""
+github.com/egladman/magus/types.JobEdit.Apply method func(d *Declaration) bool
+github.com/egladman/magus/types.JobEdit.RefreshCheckpoint field string "json:\"refresh_checkpoint,omitempty\""
+github.com/egladman/magus/types.JobEdit.String method func() string
 github.com/egladman/magus/types.JobEntry type struct
 github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
@@ -2657,13 +2664,19 @@ github.com/egladman/magus/types.JobOverlapFootprint.Shared field []string "json:
 github.com/egladman/magus/types.JobOverlapFootprint.Verdict field string "json:\"verdict\" yaml:\"verdict\""
 github.com/egladman/magus/types.JobProblem type struct
 github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"code\""
+github.com/egladman/magus/types.JobProblem.Edit field *JobEdit "json:\"edit,omitempty\""
 github.com/egladman/magus/types.JobProblem.Err method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
+github.com/egladman/magus/types.JobProblemError type struct
+github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string
+github.com/egladman/magus/types.JobProblemError.Problem field JobProblem
+github.com/egladman/magus/types.JobProblemError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.JobProblems type []JobProblem
 github.com/egladman/magus/types.JobProblems.Err method func() error
+github.com/egladman/magus/types.JobProblems.Fixable method func() int
 github.com/egladman/magus/types.JobProblems.Waive method func(ws []JobWaiver) (kept JobProblems, waived JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Breaks field *[]string "json:\"breaks,omitempty\""

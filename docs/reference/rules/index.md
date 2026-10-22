@@ -48,7 +48,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [graph-pipe](graph-pipe.md)                           | a read-only graph verb piped into a text filter, when magus projects the record itself               |
 | [grep-reader](grep-reader.md)                         | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body     |
 | [heredoc-write](heredoc-write.md)                     | a here-document written to a file, judged as the file write it is                                    |
-| [hook-wiring-write](hook-wiring-write.md)             | a leased or agent-attributed write to the hook wiring the guard is installed by                      |
+| [hook-wiring-write](hook-wiring-write.md)             | a leased or agent-attributed write to the host hook wiring or the workspace's ./magus                |
 | [hooks-off](hooks-off.md)                             | a git call with the repository's hooks switched off                                                  |
 | [human-only](human-only.md)                           | a magus run reaching a human_only target: the person is asked, a leased worker refused               |
 | [inline-alias](inline-alias.md)                       | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                   |
@@ -96,6 +96,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [token-state](token-state.md)                         | an agent reading or writing the token secrets: the operator token file or the token store            |
 | [unjudged-tool](unjudged-tool.md)                     | a tool call whose input carries nothing any rule reads, from a tool the guard does not know          |
 | [unknown-env](unknown-env.md)                         | a retired or misspelled MAGUS_* variable handed to a command                                         |
+| [unread-command](unread-command.md)                   | a program or VCS subcommand the shell computes before it runs, which no rule can read                |
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
 | [whole-tree](whole-tree.md)                           | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
 | [worker-background-run](worker-background-run.md)     | a bound worker running a magus target in the background                                              |
