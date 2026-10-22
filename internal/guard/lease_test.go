@@ -400,6 +400,32 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 		assert.Equal(t, types.AgentRoleWorker, role, name)
 	}
 
+	t.Run("a --checkout holder gates in its own checkout under any title and builds nothing else", func(t *testing.T) {
+		ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
+		recordCheckout := func(ctx context.Context) {
+			at, ok := ctx.Value(locationKey{}).(location)
+			require.True(t, ok)
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
+			_, err := store.RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: at.workspace})
+			require.NoError(t, err)
+		}
+		recordCheckout(ctx)
+		for _, command := range []string{"./magus affected ci", "magus run ci .", "./magus -C . affected ci"} {
+			assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), command)
+		}
+		for _, command := range []string{"./magus run go-build .", "./magus run lint ."} {
+			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+		}
+		role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, "root/feat "+row.ID)
+		assert.Equal(t, types.AgentRoleWorker, role, "holding the checkout is not integrating it")
+
+		elsewhere := row
+		elsewhere.CheckoutRoot = t.TempDir()
+		ctx, deps = integratorFixture(t, elsewhere, "root/feat "+row.ID)
+		recordCheckout(ctx)
+		assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").refused(), "a row taken in another checkout")
+	})
+
 	t.Run("an integrate title in a checkout the row was not taken in", func(t *testing.T) {
 		isolated := row
 		isolated.CheckoutRoot = t.TempDir()

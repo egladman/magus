@@ -16,7 +16,7 @@ import (
 const (
 	warmAgent      = "a1b2c3"
 	warmEndedTitle = "orchestrator/feat gate-fits"
-	warmSpawnTitle = "orchestrator/fix regress-fix"
+	warmSpawnTitle = "orchestrator/feat regress-fix"
 )
 
 func (f reworkFixture) putRow(t *testing.T, row types.Job) {
@@ -132,7 +132,7 @@ func TestFindWarmWorker(t *testing.T) {
 			f := newReworkFixture(t)
 			writeSpawnedAgent(f.facts, warmAgent, tc.rec)
 
-			w, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, tc.models, ttl, tc.now)
+			w, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, warmSpawnTitle, tc.models, ttl, tc.now)
 
 			require.Equal(t, tc.want, warm)
 			if warm {
@@ -140,6 +140,20 @@ func TestFindWarmWorker(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	ended := types.Job{ID: "gate-fits", State: types.StatePass, WritePaths: []string{"a.go"}, Updated: now.Add(-time.Minute).Unix()}
+	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
+	f := newReworkFixture(t)
+	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
+
+	_, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, "orchestrator/review regress-fix", nil, 5*time.Minute, now)
+	assert.False(t, warm, "a reviewer is not the writer's continuation")
+
+	_, warm = findWarmWorker(f.facts, []types.Job{ended, next}, next, "other/feat regress-fix", nil, 5*time.Minute, now)
+	assert.True(t, warm, "the same role under another parent still continues")
 }
 
 func TestResumeTTLNamesItsSource(t *testing.T) {

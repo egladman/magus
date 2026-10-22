@@ -327,10 +327,10 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) || workerRole(me, deps.caller) == "" {
+	if !ok || actingIntegrator(ctx, deps, me) || holdsCheckout(me, hookLocation(ctx, deps).workspace) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
-	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands."
+	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands. The holder of a row forked with `job fork --checkout` gates in that checkout too."
 	if source, names := LeaseGateSource(me); names {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s names it as its check; a job's check is never the gate.",
@@ -374,7 +374,8 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
-// integrator, which builds, regenerates and gates there, or a row declaring no check at
+// integrator, which builds, regenerates and gates there, the gate itself for the holder of a
+// `job fork --checkout` row in its own checkout, or a row declaring no check at
 // all, which denyLeaseGate already answers for the gate. Every other verb, and a run that only reports (--plan,
 // --dry-run, --graph, --help), passes.
 func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) denial {
@@ -395,7 +396,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) {
+	if !ok || actingIntegrator(ctx, deps, me) || (commandRunsGate(command) && holdsCheckout(me, hookLocation(ctx, deps).workspace)) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -1994,6 +1995,14 @@ func integrates(row types.Job, spawned, workspace string) bool {
 		return false
 	}
 	return samePath(row.CheckoutRoot, workspace)
+}
+
+// holdsCheckout reports whether row is a live row taken with `magus job fork --checkout` in
+// the checkout at workspace. Its holder gates there under any title. It is not integrates:
+// that role also lets the integrator build and bootstrap, which a holder of a change role
+// may not.
+func holdsCheckout(row types.Job, workspace string) bool {
+	return row.State.Live() && row.Worktree != nil && row.CheckoutRoot != "" && workspace != "" && samePath(row.CheckoutRoot, workspace)
 }
 
 // actingIntegrator reports whether the caller of this judgment, acting under me, integrates

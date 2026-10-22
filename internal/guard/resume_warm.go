@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
@@ -59,7 +61,7 @@ type warmWorker struct {
 
 // denyWarmSpawn refuses row's fresh spawn while a worker that wrote its code is warm.
 // False when the lease rows cannot be read or no such worker is warm.
-func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.Job) (denial, bool) {
+func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.Job, title string) (denial, bool) {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return denial{}, false
@@ -69,7 +71,7 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 		models = at.models()
 	}
 	ttl := resumeTTL(accountAt(at.workspace))
-	w, warm := findWarmWorker(facts, rows, row, models, ttl.ttl, time.Now())
+	w, warm := findWarmWorker(facts, rows, row, title, models, ttl.ttl, time.Now())
 	if !warm {
 		return denial{}, false
 	}
@@ -78,8 +80,10 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 
 // findWarmWorker is the warm worker row continues: a spawn record of facts whose job ended
 // within ttl of now and that row names in Follows or shares a write path with. False when
-// row carries a FreshReason, or when every such worker is near its model's price step.
-func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
+// row carries a FreshReason, when the worker's spawn title has another role than title (a
+// reviewer is not the writer's continuation), or when every such worker is near its model's
+// price step.
+func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title string, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
 	if row.FreshReason != "" || ttl <= 0 {
 		return warmWorker{}, false
 	}
@@ -87,6 +91,9 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, models []t
 	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
 		rec, ok := readMarker[spawnedAgent](facts, kind)
 		if !ok || rec.UntrustedJob != "" {
+			continue
+		}
+		if spawnTitleRole(rec.Description) != spawnTitleRole(title) {
 			continue
 		}
 		agent := cmp.Or(rec.ID, rec.Name)
@@ -109,6 +116,15 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, models []t
 		return warmWorker{agent: agent, job: ended.ID, link: link, idle: idle, left: ttl - idle}, true
 	}
 	return warmWorker{}, false
+}
+
+// spawnTitleRole is the role of a `<parent>/<role> <job>` spawn title, "" for any other shape.
+func spawnTitleRole(title string) string {
+	head, _, ok := strings.Cut(title, " ")
+	if !ok {
+		return ""
+	}
+	return path.Base(head)
 }
 
 // continuationLink says how row continues ended, "" when it does not.

@@ -1772,7 +1772,8 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		req.Spawn = spawnFields{
 			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
-			Description: envelopeString(env.ToolInput, "description"),
+			// The desktop start_session tool calls the spawn description `title`.
+			Description: cmp.Or(envelopeString(env.ToolInput, "description"), envelopeString(env.ToolInput, "title")),
 			Name:        cmp.Or(envelopeString(env.ToolInput, "name"), envelopeString(env.ToolInput, "task_name")),
 			// Only an explicit true: a host whose default is to background agents still
 			// reports false here, because a default is not something the caller asked for.
@@ -1792,7 +1793,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			envelopeString(env.ToolInput, "subagent_type"),
 			env.SubagentType,
 			envelopeString(env.ToolInput, "agent_type"),
-			envelopeString(env.ToolInput, "description"),
+			cmp.Or(envelopeString(env.ToolInput, "description"), envelopeString(env.ToolInput, "title")),
 			envelopeString(env.ToolInput, "task_name"),
 			env.ToolName,
 		} {

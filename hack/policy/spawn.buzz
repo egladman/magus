@@ -122,7 +122,8 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
         return magus\guard.deny("the row `{found!.id}` is bound to another checkout; spawn its integrator from there\n"
             + "The integrator shares the spawning checkout, `{spawn.checkout}`, but the row is bound to "
             + "`{found!.checkoutRoot}`, where the guard takes its lease and the child would find no lease to hold. "
-            + "Spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
+            + "The holder of a `--checkout` row runs the gate in that checkout itself, so it needs no integrator from here. "
+            + "Otherwise spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
             + "`magus job fork {found!.id}-here --write-paths <paths> --criteria \"<what done means>\"` (no --checkout), "
             + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }

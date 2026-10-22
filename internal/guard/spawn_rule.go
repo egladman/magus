@@ -235,7 +235,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		if row.Validated == 0 {
 			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
 		}
-		if d, warm := denyWarmSpawn(ctx, at, facts, row); warm {
+		if d, warm := denyWarmSpawn(ctx, at, facts, row, env.Spawn.Description); warm {
 			return refused(denyRuleSpawnWarmWorker, d), ""
 		}
 	}

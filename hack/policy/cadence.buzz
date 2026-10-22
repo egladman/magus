@@ -12,13 +12,16 @@ final gateDenial = "a worker mid-change does not run the gate; finish with the n
     + "`magus affected ci --plan` stays open to you: it runs nothing. "
     + "Report with `magus job exit <job> --stdin`; the orchestrator runs the gate. "
     + "If you were spawned as the integrator and are refused, `magus describe job <job>` names the checkout "
-    + "your row was taken in; the gate runs only from there.";
+    + "your row was taken in; the gate runs only from there. "
+    + "A worker whose row was taken with `job fork --checkout` gates in that checkout, whatever its title.";
 
 // Caller is who runs a command: role is root, worker (a lease binds it) or integrator, and title is
-// the description it was itself spawned with, empty for a person or the orchestrator.
+// the description it was itself spawned with, empty for a person or the orchestrator. holdsCheckout
+// is true for the holder of a live `job fork --checkout` row run from that row's own checkout.
 export object Caller {
     role: str,
     title: str,
+    holdsCheckout: bool = false,
 }
 
 // Checkout is the git state a push leaves from, handed over only for a line that pushes.
@@ -44,12 +47,23 @@ export fun decideCadence(programs: [helpers\Program], caller: Caller, checkout: 
 
 // mayGate: a person or the orchestrator (no lease, no spawn title), or the checkout's
 // integrator, which the guard computes from the spawn title, the lease and the checkout its
-// row was taken in.
+// row was taken in, or the holder of a `job fork --checkout` row in that checkout. The holder
+// is a separate predicate: the integrator role also lets a caller build and bootstrap.
 fun mayGate(caller: Caller) > bool {
     if (caller.role != "worker" and caller.title == "") {
         return true;
     }
-    return caller.role == "integrator";
+    return caller.role == "integrator" or caller.holdsCheckout;
+}
+
+// holdsCheckout: a live row (declared, running or exited) taken with `job fork --checkout`
+// in the workspace the line runs in.
+export fun holdsCheckout(lease: magus\Job?, workspace: str) > bool {
+    if (lease == null or lease!.worktree == null) {
+        return false;
+    }
+    final live = lease!.state == "declared" or lease!.state == "running" or lease!.state == "exited";
+    return live and workspace != "" and lease!.checkoutRoot == workspace;
 }
 
 // runsGate: `magus affected ci` or `magus run ci`, with or without a charm, and not the
@@ -148,6 +162,22 @@ test "the orchestrator, a person, an integrate worker and the plan form may gate
     std\assert(judged(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");
     final narrow = helpers\request([["magus", "run", "go::go-test", ".", "--", "-run", "Guard"]]);
     std\assert(judged(narrow, caller: worker, checkout: null).decision == "allow", message: "narrow validation");
+}
+
+test "the holder of a checkout row may gate whatever its title" {
+    final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
+    final holder = Caller{ role = "worker", title = "orchestrator/feat guard-command", holdsCheckout = true };
+    std\assert(judged(gate, caller: holder, checkout: null).decision == "allow", message: "a --checkout holder");
+}
+
+test "a row is held in its checkout only when live, with a worktree, and run from its root" {
+    final worktree = magus\JobWorktree{ root = "/w/a" };
+    final row = magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a", worktree = worktree };
+    std\assert(holdsCheckout(row, workspace: "/w/a"), message: "the holder's own checkout");
+    std\assert(!holdsCheckout(row, workspace: "/w/b"), message: "another checkout");
+    std\assert(!holdsCheckout(magus\Job{ id = "a", state = "running", checkoutRoot = "/w/a" }, workspace: "/w/a"), message: "no worktree");
+    std\assert(!holdsCheckout(magus\Job{ id = "a", state = "failed", checkoutRoot = "/w/a", worktree = worktree }, workspace: "/w/a"), message: "not live");
+    std\assert(!holdsCheckout(null, workspace: "/w/a"), message: "no lease");
 }
 
 test "a detached push to a branch the remote lacks is denied, naming the full ref" {
