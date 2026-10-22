@@ -2,14 +2,17 @@ package main
 
 import (
 	"go/ast"
+	"go/build"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +33,25 @@ func (s sourcePackages) Import(path string) (*types.Package, error) {
 	return s.std.Import(path)
 }
 
-func newSourcePackages() sourcePackages {
+var goRootOnce sync.Once
+
+// ensureGoRoot gives the source importer a GOROOT when a -trimpath build left
+// runtime.GOROOT empty and the environment sets none.
+func ensureGoRoot(t *testing.T) {
+	t.Helper()
+	goRootOnce.Do(func() {
+		if build.Default.GOROOT != "" {
+			return
+		}
+		out, err := exec.Command("go", "env", "GOROOT").Output()
+		require.NoError(t, err)
+		build.Default.GOROOT = strings.TrimSpace(string(out))
+	})
+}
+
+func newSourcePackages(t *testing.T) sourcePackages {
+	t.Helper()
+	ensureGoRoot(t)
 	return sourcePackages{
 		built: map[string]*types.Package{},
 		std:   importer.ForCompiler(token.NewFileSet(), "source", nil),
@@ -50,7 +71,7 @@ func (s sourcePackages) check(t *testing.T, path, src string) *types.Package {
 
 func renderSource(t *testing.T, src string) []string {
 	t.Helper()
-	return renderGoAPI([]*types.Package{newSourcePackages().check(t, "example.com/m", src)})
+	return renderGoAPI([]*types.Package{newSourcePackages(t).check(t, "example.com/m", src)})
 }
 
 func TestRenderGoAPIOrdersSymbolsByNameAndMembersUnderTheirType(t *testing.T) {
@@ -97,7 +118,7 @@ type Store interface{ Get() }
 }
 
 func TestRenderGoAPIOrdersPackagesByImportPath(t *testing.T) {
-	std := newSourcePackages()
+	std := newSourcePackages(t)
 	b := std.check(t, "example.com/m/sub", "package sub\nfunc B() {}\n")
 	a := std.check(t, "example.com/m", "package m\nfunc A() {}\n")
 
@@ -248,7 +269,7 @@ var Err error
 }
 
 func TestRenderGoAPIExpandsAnAliasOfATypeOutsideThePublicSet(t *testing.T) {
-	pk := newSourcePackages()
+	pk := newSourcePackages(t)
 	pk.check(t, "example.com/m/internal/inner", `package inner
 
 type Engine struct{ Name string }
@@ -272,7 +293,7 @@ type Engine = inner.Engine
 }
 
 func TestRenderGoAPIDoesNotExpandAnAliasOfAPublicType(t *testing.T) {
-	pk := newSourcePackages()
+	pk := newSourcePackages(t)
 	base := pk.check(t, "example.com/m/base", "package base\ntype T struct{ X int }\n")
 	root := pk.check(t, "example.com/m", "package m\nimport \"example.com/m/base\"\ntype T = base.T\n")
 
@@ -286,7 +307,7 @@ func TestRenderGoAPIDoesNotExpandAnAliasOfAPublicType(t *testing.T) {
 }
 
 func TestRenderGoAPIQualifiesForeignTypesWithTheirFullPath(t *testing.T) {
-	pk := newSourcePackages()
+	pk := newSourcePackages(t)
 	pk.check(t, "example.com/m/other", "package other\ntype Kind int\n")
 	got := renderGoAPI([]*types.Package{pk.check(t, "example.com/m", `package m
 
@@ -316,7 +337,7 @@ func F() {}
 // T, R (whose method takes a T) and Option, and returns the leaks internalLeaks finds.
 func leakSource(t *testing.T, src string) []string {
 	t.Helper()
-	pk := newSourcePackages()
+	pk := newSourcePackages(t)
 	pk.check(t, "example.com/m/internal/x", `package x
 
 type T struct{}
