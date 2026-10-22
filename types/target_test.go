@@ -422,6 +422,10 @@ func TestSizedChainMemoryLeavesOutMembersThatClaimTheirOwn(t *testing.T) {
 	assert.Equal(t, ChainMemory{MB: 500, DeclaredBy: "format"}, SizedChainMemory(p, "ci", lookup, nil, skipCache),
 		"each same-project member claims for itself; the inline cross-project one stays")
 	assert.Equal(t, 10240, SizedChainMemory(p, "test", lookup, nil, skipCache).MB, "a member's own figure is unchanged")
+
+	p.TargetChains["release"] = Needs("ci")
+	assert.Equal(t, 19355, SizedChainMemory(p, "release", lookup, nil, skipCache).MB,
+		"beneath release's claim ci rides it, and so do ci's members")
 }
 
 func TestMemorySizingString(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -116,56 +115,98 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	return release, err
 }
 
-// composersKey carries the steps whose ctx.needs calls dispatched the work under ctx as
-// steps of their own, outermost first.
-type composersKey struct{}
+// machineHold is the machine claim one step took, kept so the step can hand it back
+// while it waits on members that claim their own and take it again after.
+type machineHold struct {
+	gate  *machineGate
+	claim types.MachineClaim
 
-// ChildrenClaimTheirOwn returns ctx for the members composer's ctx.needs call dispatches
-// as cache steps of their own: each takes its own machine claim instead of riding
-// composer's, whose figure leaves them out (types.SizedChainMemory's ownClaims). It is
-// ctx unchanged when composer holds no claim.
-//
-// composer keeps its claim while it waits, so a member that could never be seated
-// beside it would wait forever; the gate refuses that member instead (beyondComposers).
-func ChildrenClaimTheirOwn(ctx context.Context, composer types.TargetRef) context.Context {
-	held := admissionFrom(ctx)
-	if !held.machineClaim {
-		return ctx
-	}
-	held.machineClaim = false
-	composers, _ := ctx.Value(composersKey{}).([]types.TargetRef)
-	ctx = context.WithValue(ctx, composersKey{}, append(slices.Clip(composers), composer))
-	return held.on(ctx)
+	mu      sync.Mutex
+	id      string
+	release func()
+	// lent counts the dispatches waiting with the claim handed back. A count, not a flag:
+	// the first hands it back and the last takes it again.
+	lent int
 }
 
-// beyondComposers refuses c, kept out by its own run, when the composers it was
-// dispatched under hold so much that c could not be seated even once every other
-// claim was released. They are blocked waiting for c, so nothing else frees it.
-func beyondComposers(ctx context.Context, c types.MachineClaim, v types.MachineVerdict) error {
-	composers, _ := ctx.Value(composersKey{}).([]types.TargetRef)
-	if len(composers) == 0 {
+type machineHoldKey struct{}
+
+// withMachineHold marks ctx as running under the claim h, the step's own; nil marks a
+// step riding an ancestor's claim, which it cannot hand back.
+func withMachineHold(ctx context.Context, h *machineHold) context.Context {
+	return context.WithValue(ctx, machineHoldKey{}, h)
+}
+
+// current is the id of the claim the step holds now, "" while it is handed back.
+func (h *machineHold) current() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.id
+}
+
+// close hands the claim back for good, when the step ends.
+func (h *machineHold) close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.release != nil {
+		h.release()
+	}
+	h.id, h.release = "", nil
+}
+
+func (h *machineHold) lend() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.lent++
+	if h.lent == 1 && h.release != nil {
+		h.release()
+		h.id, h.release = "", nil
+	}
+}
+
+// reclaim takes the claim again once the last lent dispatch returns. It waits on this
+// run's claims and is refused by any other invocation's, so a composer can fail here
+// after its members ran.
+func (h *machineHold) reclaim(ctx context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.lent--
+	if h.lent > 0 || h.release != nil {
 		return nil
 	}
-	pid := os.Getpid()
-	var heldMB, heldSlots int
-	var names []string
-	for _, h := range v.Holders {
-		if h.PID != pid || !slices.Contains(composers, types.TargetRef{Project: h.Project, Target: h.Target}) {
-			continue
-		}
-		heldMB += h.MemoryMB
-		heldSlots += max(h.Slots, 1)
-		names = append(names, displayProject(h.Project)+" "+h.Target)
+	id, release, err := h.gate.claim(ctx, h.claim)
+	if err != nil {
+		return err
 	}
-	memory := v.BudgetMB > 0 && c.MemoryMB+heldMB > v.BudgetMB
-	slots := v.BudgetSlots > 0 && max(c.Slots, 1)+heldSlots > v.BudgetSlots
-	if !memory && !slots {
-		return nil
+	h.id, h.release = id, release
+	return nil
+}
+
+// ChildrenClaimTheirOwn runs fn, which awaits members composer dispatched as steps that
+// claim the machine for themselves, with composer's claim and limiter slots handed back,
+// then takes the claim again; a refused retake is joined to fn's error. A claim held
+// across that wait is a seat no member can get, at any depth (see [Cache.claimMachine]).
+//
+// fn runs on ctx unchanged when composer does not own the claim ctx holds: a composer
+// riding an ancestor's claim keeps its members riding it, since that ancestor waits on
+// them all and its figure folds them.
+func ChildrenClaimTheirOwn(ctx context.Context, composer types.TargetRef, fn func(context.Context) error) error {
+	h, _ := ctx.Value(machineHoldKey{}).(*machineHold)
+	if h == nil || (types.TargetRef{Project: h.claim.Project, Target: h.claim.Target}) != composer || h.current() == "" {
+		return fn(ctx)
 	}
-	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"refusing to start %s %s: %s, and %s, which composed it and waits for it, holds %s and %d slot(s) of this machine's build budget of %s across %d slots, so it could never be seated. Waiting would not help. Run `magus doctor` and read the gate-fits check, then lower the composer's own claim or run %s on its own.",
-		displayProject(c.Project), c.Target, describeMachineDeclaration(c), strings.Join(names, ", "),
-		FormatMB(heldMB), heldSlots, FormatMB(v.BudgetMB), v.BudgetSlots, c.Target)}
+	lent := func(ctx context.Context) error {
+		h.lend()
+		held := admissionFrom(ctx)
+		held.machineClaim = false
+		err := fn(withMachineHold(held.on(ctx), nil))
+		return errors.Join(err, h.reclaim(ctx))
+	}
+	lim := LimiterFromContext(ctx)
+	if lim == nil || !SlotHeld(ctx) {
+		return lent(ctx)
+	}
+	return lim.Yield(ctx, func() error { return lent(WithoutSlotHeld(ctx)) })
 }
 
 // claim is acquire, also returning the id of the claim granted: "" when nothing
@@ -193,9 +234,6 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 		case !v.Fits:
 			return "", nil, machineDoesNotFitError(c, v)
 		case v.OwnRun:
-			if err := beyondComposers(ctx, c, v); err != nil {
-				return "", nil, err
-			}
 		case blindToOwnAncestry(ctx):
 			// A nested magus that cannot name its ancestors cannot be excused from its own
 			// parent's claim, so the refusal names the fix rather than the holders.
@@ -246,14 +284,14 @@ type overrunWatchKey struct{}
 // overrunWatch is the granted claim a step's samples are judged against.
 type overrunWatch struct {
 	admit   MachineAdmitter
-	id      string
+	id      func() string
 	profile types.MemoryProfile
 }
 
-// withOverrunWatch marks ctx as holding claim id, granted with profile. A claim with no
-// profile is charged its peak already, so there is nothing to watch.
-func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id string, profile types.MemoryProfile) context.Context {
-	if id == "" || profile.Runs == 0 {
+// withOverrunWatch marks ctx as holding the claim id names, granted with profile. A claim
+// with no profile is charged its peak already, so there is nothing to watch.
+func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id func() string, profile types.MemoryProfile) context.Context {
+	if id() == "" || profile.Runs == 0 {
 		return ctx
 	}
 	return context.WithValue(ctx, overrunWatchKey{}, overrunWatch{admit: admit, id: id, profile: profile})
@@ -273,11 +311,15 @@ func watchOverrun(ctx context.Context) {
 		if bytes <= int64(w.profile.HeldMB(at))<<20 {
 			return
 		}
+		id := w.id()
+		if id == "" {
+			return
+		}
 		once.Do(func() {
 			go func() {
 				octx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 				defer cancel()
-				w.admit.Overrun(octx, w.id)
+				w.admit.Overrun(octx, id)
 			}()
 		})
 	})
@@ -294,14 +336,14 @@ type GroupHolder interface {
 }
 
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
-// claim, when admit can hold groups.
-func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) context.Context {
+// the claim claim names when the group starts, when admit can hold groups.
+func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() string) context.Context {
 	holder, ok := admit.(GroupHolder)
-	if !ok || claim == "" {
+	if !ok || claim() == "" {
 		return ctx
 	}
 	return spawn.WithGroupWatch(ctx, func(pgid int, command string) func() {
-		return holdStepGroup(ctx, holder, claim, pgid, command)
+		return holdStepGroup(ctx, holder, claim(), pgid, command)
 	})
 }
 

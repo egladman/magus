@@ -499,9 +499,10 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 }
 
 // MembersClaimTheirOwn reports whether target's same-project ctx.needs members each take
-// their own machine claim: the run admits a skip_cache composer's members as cache steps
-// of their own, and the dispatch clears the composer's claim from their context. Admission
-// and dispatch both read it, so a member is never counted twice nor left uncovered.
+// their own machine claim when target holds its own: the run admits a skip_cache
+// composer's members as cache steps of their own, and the composer hands its claim back
+// while it waits on them. Admission and dispatch both read it, so a member is never
+// counted twice nor left uncovered.
 func MembersClaimTheirOwn(p *Project, target string) bool {
 	return p.TargetPolicies[target].SkipCache
 }
@@ -611,9 +612,10 @@ type ChainMemory struct {
 // Sizing names the largest single contributor's provenance, as DeclaredBy names it.
 //
 // ownClaims reports a composer whose same-project members are admitted as steps of
-// their own (MembersClaimTheirOwn); those members are left out of its fold rather than
-// counted twice. Cross-project members run inline under the composer's claim and still
-// fold. A nil ownClaims folds every member.
+// their own (MembersClaimTheirOwn); when target is one, those members are left out of
+// its fold rather than counted twice. Only target's own: a composer deeper in the chain
+// rides target's claim with its members, so they fold. Cross-project members run inline
+// and fold. A nil ownClaims folds every member.
 func SizedChainMemory(p *Project, target string, lookup func(path string) *Project, size MemorySizer, ownClaims func(p *Project, target string) bool) ChainMemory {
 	seen := map[string]bool{}
 
@@ -628,7 +630,7 @@ func SizedChainMemory(p *Project, target string, lookup func(path string) *Proje
 		}
 		seen[key] = true
 
-		separate := ownClaims != nil && ownClaims(proj, name)
+		separate := proj == p && name == target && ownClaims != nil && ownClaims(proj, name)
 		declared := proj.TargetPolicies[name].MemoryMB
 		peak := ChainMemory{MB: declared, DeclaredBy: name}
 		if size != nil {

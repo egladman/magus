@@ -1224,28 +1224,34 @@ func stepSlots(s Step, lim *Limiter) int {
 // claims first and can run to completion. The claim goes back LAST, after the slot and
 // the lease.
 //
-// A step dispatched beneath a claim holder rides that claim, which its folded figure
-// covers; a skip_cache composer's members claim their own ([ChildrenClaimTheirOwn]).
+// A step beneath a claim holder rides it, covered by its folded figure: the holder waits
+// on the step, so a second claim queued behind it never seats (2026-09-08: `magus
+// affected ci` sat 27 minutes at 13s of CPU). Only a skip_cache composer's members claim
+// their own, and it yields its claim while it waits ([ChildrenClaimTheirOwn]). Others
+// cover instead, since the retake is fallible: a stranger can refuse it after they ran.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
 	held := admissionFrom(ctx)
 	if held.machineClaim {
-		return ctx, func() {}, nil
+		return withMachineHold(ctx, nil), func() {}, nil
 	}
-	id, release, err := c.machine.claim(ctx, types.MachineClaim{
+	h := &machineHold{gate: c.machine, claim: types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
-	})
+	}}
+	id, release, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
 		return ctx, nil, err
 	}
+	h.id, h.release = id, release
 	held.machineClaim = true
+	ctx = withMachineHold(ctx, h)
 	if id != "" {
-		ctx = withStepGroups(ctx, c.machine.admit, id)
-		ctx = withOverrunWatch(ctx, c.machine.admit, id, s.MemoryProfile)
+		ctx = withStepGroups(ctx, c.machine.admit, h.current)
+		ctx = withOverrunWatch(ctx, c.machine.admit, h.current, s.MemoryProfile)
 	}
-	return held.on(ctx), release, nil
+	return held.on(ctx), h.close, nil
 }
 
 // reportRefusal puts a step that was refused before it started on the record a failed

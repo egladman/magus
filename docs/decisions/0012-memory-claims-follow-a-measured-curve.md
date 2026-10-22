@@ -287,10 +287,18 @@ steps from claiming.
   Cross-project members still run inline and still fold. ci now claims
   its own inline work only, not a floor of its largest member. A floor would hold memory
   no process uses while the member it copies holds its own.
-- The composer keeps its claim while it waits, since giving it back and taking it again can
-  be refused after the children ran. A member that cannot be seated beside its waiting
-  composers, on memory or slots, is refused by name (`beyondComposers`) and does not wait.
-  A member larger than the whole budget is refused by name, as before.
+- The composer hands its claim and its limiter slots back while it waits on those
+  members, and takes the claim again after (`cache.ChildrenClaimTheirOwn`). No claim is
+  held while it waits on another, at any depth. Keeping it hung `magus affected
+  generate:rw` the same day: root generate's members each composed generators of their
+  own, held all 10 slots, and waited on leaves that could never be seated. Refusing a
+  member that could not fit beside its waiting composers caught only the composers above
+  it, not siblings or deeper levels. The cost is the retake: another invocation can
+  refuse it after the members ran, a loud MGS3009 where the alternative was a hang.
+- A composer riding an ancestor's claim keeps its members riding too, as every
+  non-skip_cache composer does, and the ancestor's figure folds them: `ownClaims` drops
+  members from the fold only for the step being sized.
+- A member larger than the whole budget is refused by name, as before.
 - `magus doctor`'s gate-fits check sizes ci and every same-project step it reaches with
   the admission sizer and fails on any step larger than the whole budget.
 

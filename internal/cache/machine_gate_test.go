@@ -195,7 +195,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 		profile.Curve[i] = 100
 	}
 	ctx := types.WithExecCost(t.Context())
-	ctx = withOverrunWatch(ctx, admit, "claim-1", profile)
+	ctx = withOverrunWatch(ctx, admit, func() string { return "claim-1" }, profile)
 	watchOverrun(ctx)
 
 	record, end := types.RecordCurve(ctx, time.Now())
@@ -221,7 +221,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, "claim-2", types.MemoryProfile{})
+	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, func() string { return "claim-2" }, types.MemoryProfile{})
 	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
 }
 
@@ -434,10 +434,26 @@ func TestMachineDeclarationNamesHowSlotsWereSized(t *testing.T) {
 			Sizing: types.MemorySizing{Samples: 5, Slots: types.SlotSizing{Source: types.SlotsForMemory}}}))
 }
 
-// composedRun runs composer under a cache admitted by b, and inside it each member as a
-// step of its own, all at once, as one ctx.needs call's members are dispatched. It
-// returns the most that ran at once and the members' joined errors.
-func composedRun(t *testing.T, b *MachineBudget, composer Step, members []Step) (int, error) {
+// composed is a skip_cache composer and the members its one ctx.needs call dispatches; a
+// node with no members is a leaf.
+type composed struct {
+	step    Step
+	members []composed
+}
+
+// leaves is n's members as leaves.
+func leaves(composer Step, members ...Step) composed {
+	n := composed{step: composer}
+	for _, m := range members {
+		n.members = append(n.members, composed{step: m})
+	}
+	return n
+}
+
+// composedRun runs root under a cache admitted by b, and inside each composer its members
+// as steps of their own, all at once, as one ctx.needs call's members are dispatched. It
+// returns the most leaves that ran at once and the members' joined errors.
+func composedRun(t *testing.T, b *MachineBudget, root composed) (int, error) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
@@ -448,7 +464,7 @@ func composedRun(t *testing.T, b *MachineBudget, composer Step, members []Step) 
 
 	var mu sync.Mutex
 	running, widest := 0, 0
-	body := func(context.Context) error {
+	leaf := func(context.Context) error {
 		mu.Lock()
 		running++
 		widest = max(widest, running)
@@ -460,22 +476,30 @@ func composedRun(t *testing.T, b *MachineBudget, composer Step, members []Step) 
 		return nil
 	}
 	var membersErr error
-	_, err = c.RunAside(ctx, composer, func(ctx context.Context) error {
-		ctx = ChildrenClaimTheirOwn(ctx, types.TargetRef{Project: composer.ProjectPath, Target: composer.Target})
-		errs := make([]error, len(members))
-		var wg sync.WaitGroup
-		for i, m := range members {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, errs[i] = c.RunAside(ctx, m, body, lim)
-			}()
+	var body func(n composed) func(context.Context) error
+	body = func(n composed) func(context.Context) error {
+		if len(n.members) == 0 {
+			return leaf
 		}
-		wg.Wait()
-		membersErr = errors.Join(errs...)
-		return nil
-	}, lim)
+		return func(ctx context.Context) error {
+			ref := types.TargetRef{Project: n.step.ProjectPath, Target: n.step.Target}
+			return ChildrenClaimTheirOwn(ctx, ref, func(ctx context.Context) error {
+				errs := make([]error, len(n.members))
+				var wg sync.WaitGroup
+				for i, m := range n.members {
+					wg.Go(func() { _, errs[i] = c.RunAside(ctx, m.step, body(m), lim) })
+				}
+				wg.Wait()
+				mu.Lock()
+				membersErr = errors.Join(membersErr, errors.Join(errs...))
+				mu.Unlock()
+				return nil
+			})
+		}
+	}
+	_, err = c.RunAside(ctx, root.step, body(root), lim)
 	require.NoError(t, err, "the composer itself fits")
+	assert.Equal(t, 0, b.Snapshot().HeldMB, "every claim went back")
 	return widest, membersErr
 }
 
@@ -489,34 +513,50 @@ func TestChildrenClaimTheirOwnQueueBesideTheirComposer(t *testing.T) {
 		members = append(members, Step{ProjectPath: ".", Target: name, MemoryMB: 4000, NoCache: true})
 	}
 
-	widest, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, members)
+	widest, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, members...))
 	require.NoError(t, err, "16000 summed is over the 10000 budget, but each member waits its turn")
-	assert.LessOrEqual(t, widest, 2, "1000 + 2 x 4000 fits; a third member would not")
-	assert.Equal(t, 0, b.Snapshot().HeldMB, "every claim went back")
+	assert.LessOrEqual(t, widest, 2, "2 x 4000 fits; a third member would not")
 }
 
 // TestChildClaimLargerThanTheMachineNamesItself: a member over the whole budget is
 // refused at once, by its own name, while its siblings run.
 func TestChildClaimLargerThanTheMachineNamesItself(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	_, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, []Step{
-		{ProjectPath: ".", Target: "lint", MemoryMB: 2000, NoCache: true},
-		{ProjectPath: ".", Target: "test", MemoryMB: 12_000, NoCache: true},
-	})
+	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true},
+		Step{ProjectPath: ".", Target: "lint", MemoryMB: 2000, NoCache: true},
+		Step{ProjectPath: ".", Target: "test", MemoryMB: 12_000, NoCache: true},
+	))
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	assert.Contains(t, err.Error(), "refusing to start (root) test: it claims 11.7 GiB")
 	assert.Contains(t, err.Error(), "does not fit in this machine's whole build budget")
 	assert.NotContains(t, err.Error(), "lint", "lint fit and ran")
 }
 
-// TestChildClaimBeyondItsComposerIsRefused: a member that fits the budget alone but not
-// beside the composer waiting on it would wait forever, so it is refused by name.
-func TestChildClaimBeyondItsComposerIsRefused(t *testing.T) {
+// TestChildClaimRunsInItsWaitingComposersSeat: a member that fits the budget alone but
+// not beside its composer runs, because the composer holds nothing while it waits.
+func TestChildClaimRunsInItsWaitingComposersSeat(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	_, err := composedRun(t, b, Step{ProjectPath: ".", Target: "ci", MemoryMB: 3000, NoCache: true}, []Step{
-		{ProjectPath: ".", Target: "test", MemoryMB: 8000, NoCache: true},
-	})
-	require.ErrorIs(t, err, types.MachineBudgetExhausted)
-	assert.Contains(t, err.Error(), "refusing to start (root) test")
-	assert.Contains(t, err.Error(), "(root) ci, which composed it and waits for it, holds 2.9 GiB")
+	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 3000, NoCache: true},
+		Step{ProjectPath: ".", Target: "test", MemoryMB: 8000, NoCache: true},
+	))
+	require.NoError(t, err)
+}
+
+// TestNestedComposersNeverHoldTheSeatsTheirMembersNeed is root generate's shape: every
+// member composes generators of its own, and the members alone fill every slot. Each
+// composer holds nothing while it waits, so every generator runs.
+func TestNestedComposersNeverHoldTheSeatsTheirMembersNeed(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 4)
+	root := composed{step: Step{ProjectPath: ".", Target: "generate", NoCache: true}}
+	for _, name := range []string{"index-generate", "graph-generate", "docs-generate", "job-generate"} {
+		root.members = append(root.members, leaves(Step{ProjectPath: ".", Target: name, NoCache: true},
+			Step{ProjectPath: ".", Target: name + "-types", NoCache: true},
+			Step{ProjectPath: ".", Target: name + "-config", NoCache: true},
+		))
+	}
+
+	widest, err := composedRun(t, b, root)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, widest, 4, "the leaves still queue for the 4 slots")
+	assert.Equal(t, 0, b.Snapshot().HeldSlots, "every slot went back")
 }

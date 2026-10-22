@@ -793,7 +793,9 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
 			key := src.Dir + "\x00buzz"
 			p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
-			return buzzDispatchViaPool(childClaims(callCtx), p, names)
+			return childClaims(callCtx, func(ctx context.Context) error {
+				return buzzDispatchViaPool(ctx, p, names)
+			})
 		}
 	}
 	for _, name := range names {
@@ -811,23 +813,24 @@ func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable
 	return nil
 }
 
-// childClaims is ctx for the members of one ctx.needs call. A skip_cache composer's
-// members run as cache steps of their own under the run's interceptor, so each takes its
-// own machine claim (types.MembersClaimTheirOwn); any other composer's claim covers them.
-func childClaims(ctx context.Context) context.Context {
+// childClaims runs dispatch, which awaits the members of one ctx.needs call. A skip_cache
+// composer's members run as cache steps of their own under the run's interceptor, so each
+// takes its own machine claim (types.MembersClaimTheirOwn) while the composer's is handed
+// back; any other composer's claim covers them.
+func childClaims(ctx context.Context, dispatch func(context.Context) error) error {
 	if !buzz.HasTargetInterceptor(ctx) {
-		return ctx
+		return dispatch(ctx)
 	}
 	p := callerProject(ctx)
 	ancestors := buzz.AncestorsFromContext(ctx)
 	if p == nil || len(ancestors) == 0 {
-		return ctx
+		return dispatch(ctx)
 	}
 	composer := types.Normalize(ancestors[len(ancestors)-1])
 	if !types.MembersClaimTheirOwn(p, composer) {
-		return ctx
+		return dispatch(ctx)
 	}
-	return cache.ChildrenClaimTheirOwn(ctx, types.TargetRef{Project: p.Path, Target: composer})
+	return cache.ChildrenClaimTheirOwn(ctx, types.TargetRef{Project: p.Path, Target: composer}, dispatch)
 }
 
 // buzzDispatchViaPool fans names out via the Buzz pool, which yields the caller's
