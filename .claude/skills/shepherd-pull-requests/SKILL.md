@@ -55,8 +55,16 @@ fix the pure function that produced it and its test, then run it again.
    - It never acts on `red-inherited`. Nothing in the change is broken, and the
      queue would refuse it for main's failures.
 
-3. For every record whose `model` is `sonnet` or `opus`, spawn one agent of that
-   model:
+3. A record whose action is `rebase-branches-onto-base` still carries the commits
+   of a pull request that squash-merged below it (`evidence.squashed_base`).
+   - Run its `evidence.rebase` line yourself, without asking the person. It rebases
+     the branch's own commits onto the base in a fresh checkout job, gates, and
+     force-pushes with a lease.
+   - When it stops at a source conflict, it names the files and the checkout; hand
+     those to an agent of the record's model as below.
+
+   For every other record whose `model` is `sonnet` or `opus`, spawn one agent of
+   that model:
    - in its own worktree cut from the pull request's branch (`head`), never in
      your checkout;
    - with the record's `action`, `reason` and `evidence` as its brief;
@@ -90,7 +98,9 @@ proof; a green check or the queue's comment is not.
   mutation through `gh api`). A person enables it; the repo's guard denies it. Tell the
   person the command. `--disable-auto` and reading `autoMergeRequest` are yours.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
-  commits, and a rewrite orphans both.
+  commits, and a rewrite orphans both. The one rewrite is
+  `rebase-branches-onto-base.buzz` on a `rebase-branches-onto-base` record: the
+  squash already orphaned the commits it drops.
 - Never run two agents on one pull request branch at a time. One branch has one
   agent until you have pushed its result.
 - Never rerun a red by hand after `apply` declined to. It reruns a head once; red

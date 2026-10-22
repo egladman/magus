@@ -47,6 +47,7 @@ import "std";
 import "time";
 import "vcs";
 import "hack/magusfile/commits" as commits;
+import "hack/dev/rebase-branches-onto-base" as rebaseonto;
 import "../../.github/actions/advice/figure-link" as figurelink;
 
 import "assert";
@@ -177,6 +178,8 @@ object Facts {
     baseline: Baseline? = null,
     // The Go tests the head's failing jobs report failing.
     failingTests: [str] = [<str>],
+    // The squash-merged pull request whose head a conflicting one still carries.
+    squashed: rebaseonto\Squashed? = null,
 }
 
 object Evidence {
@@ -191,6 +194,9 @@ object Evidence {
     rerun: [str] = [<str>],
     sensitive: [str] = [<str>],
     drifted: [str] = [<str>],
+    squashed: int? = null,
+    // The rebase-branches-onto-base line that takes the squashed commits off.
+    rebase: str = "",
 }
 
 object Record {
@@ -439,6 +445,21 @@ export fun stackTops(p: Pull, open: [Pull], depth: int) > [int] {
         }
     }
     return tops;
+}
+
+// branchesFrom is p's branch and every branch stacked on it while the stack does not fork.
+export fun branchesFrom(p: Pull, open: [Pull]) > [str] {
+    final acc = mut [p.head];
+    var at = p;
+    while (acc.len() < 32) {
+        final above = open.filter(fun (index: int, o: Pull) > bool => o.number != at.number and o.state == "OPEN" and o.base == at.head);
+        if (above.len() != 1 or acc.indexOf(above[0].head) != null) {
+            break;
+        }
+        at = above[0];
+        acc.append(at.head);
+    }
+    return acc;
 }
 
 export fun hasQueueLabel(labels: [str]) > bool {
@@ -1096,6 +1117,14 @@ fun decideAction(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdi
         foreach (c in facts.conflicts) {
             paths.append(c.path);
         }
+        if (facts.squashed -> squashed) {
+            final e = newEvidence(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
+            final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches {branchesFrom(p, open: open).join(",")} --base origin/{p.base}";
+            return newRecord(p, action: "rebase-branches-onto-base", model: "sonnet",
+                reason: "carries #{squashed.pr}, which squash-merged into {p.base}; rebase its own commits onto {p.base}",
+                evidence: Evidence{ failing = e.failing, pending = e.pending, conflicts = paths, sensitive = sensitive,
+                    squashed = squashed.pr, rebase = line });
+        }
         final model = conflictModel(facts.conflicts, sensitive: sensitive);
         var reason = "conflicts with {p.base} in source";
         if (paths.len() == 0) {
@@ -1176,6 +1205,8 @@ export fun render(r: Record) > str {
     if (r.evidence.top != null) { e["stack_top"] = r.evidence.top!; }
     if (r.evidence.rerun.len() > 0) { e["rerun_runs"] = r.evidence.rerun; }
     if (r.evidence.drifted.len() > 0) { e["drifted_paths"] = r.evidence.drifted; }
+    if (r.evidence.squashed != null) { e["squashed_base"] = r.evidence.squashed!; }
+    if (r.evidence.rebase != "") { e["rebase"] = r.evidence.rebase; }
     // Sensitive paths explain a model, so a record with none leaves them out; a few name
     // the reason, and the agent reads the full diff anyway.
     if (r.model != "none" and r.evidence.sensitive.len() > 0) {
@@ -1366,18 +1397,18 @@ fun openPulls() > [Pull] !> any {
     return open;
 }
 
-// findGenerated asks this checkout's workspace which paths are declared outputs or
-// maintained by magus: main's declarations, the ones the queue reads.
-fun findGenerated(paths: [str]) > [str] !> any {
-    final acc = mut[<str>];
-    if (paths.len() == 0) {
+// findSquashed names, per conflicting pull request, the squash-merged pull request whose head
+// it still carries past its base. findConflicts fetched both already.
+fun findSquashed(pulls: [Pull]) > {int: rebaseonto\Squashed} !> any {
+    final acc = mut {<int: rebaseonto\Squashed>};
+    if (pulls.len() == 0) {
         return acc;
     }
-    final report = serialize\Boxed.init(magus\describe.file(paths));
-    foreach (f in report.q("files").listValue()) {
-        final role = f.q("role").stringValue();
-        if (role == "output" or role == "maintained") {
-            acc.append(f.q("path").stringValue());
+    final merged = rebaseonto\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefOid"]));
+    foreach (p in pulls) {
+        final listed = vcs\cmd(["rev-list", "origin/{p.base}..{p.oid}"], opts: {"quiet": true});
+        if (rebaseonto\squashedBase(listed.stdout.split("\n"), merged: merged) -> s) {
+            acc[p.number] = s;
         }
     }
     return acc;
@@ -1428,7 +1459,7 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
             contents["{p.number}:{path}"] = blob.stdout;
         }
     }
-    final generated = findGenerated(all);
+    final generated = rebaseonto\findGenerated(all);
     foreach (number, paths in found) {
         final conflicts = mut [<Conflict>];
         foreach (path in paths) {
@@ -1514,6 +1545,7 @@ fun records(sel: Selector) > [Record] !> any {
         }
     }
     final conflicts = findConflicts(conflicting);
+    final squashed = findSquashed(conflicting);
     // main's run is read once, and only when a finished red needs comparing with it.
     var baseline: Baseline? = null;
     final acc = mut[<Record>];
@@ -1528,12 +1560,13 @@ fun records(sel: Selector) > [Record] !> any {
                 tests = fetchFailingTests(p);
             }
         }
-        var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests };
+        var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests,
+            squashed = squashed[p.number] };
         final verdict = judge(p, facts: facts);
         if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
             facts = Facts{ annotations = fetchAnnotations(p), failedSteps = fetchFailedSteps(p), baseline = baseline, failingTests = tests };
         } else if (stage == "kicked-back" and p.kick != null) {
-            facts = Facts{ generated = findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests };
+            facts = Facts{ generated = rebaseonto\findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
@@ -2997,6 +3030,19 @@ test "a conflicting record carries its paths and model" {
     final r = classify(p, open: [p], facts: Facts{ conflicts = [Conflict{ path = "MAGUS.md", generated = true }] });
     assert\equal([r.stage, r.action, r.model], want: ["conflicting", "merge-base", "sonnet"], message: "generated only");
     assert\equal(r.evidence.conflicts, want: ["MAGUS.md"], message: "paths");
+}
+
+test "a pull request still carrying a squash-merged base is rebased onto it, with the branches stacked on it" {
+    final p = Pull{ number = 609, head = "guard-gaps", mergeable = "CONFLICTING" };
+    final above = Pull{ number = 610, head = "guard-more", base = "guard-gaps" };
+    final facts = Facts{ conflicts = [Conflict{ path = "internal/x.go" }], squashed = rebaseonto\Squashed{ pr = 606, head = "4a9ab82cf" } };
+    final r = classify(p, open: [p, above], facts: facts);
+    assert\equal([r.stage, r.action, r.model], want: ["conflicting", "rebase-branches-onto-base", "sonnet"], message: "routed");
+    assert\equal(r.reason, want: "carries #606, which squash-merged into main; rebase its own commits onto main", message: "reason");
+    final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches guard-gaps,guard-more --base origin/main";
+    assert\equal([r.evidence.squashed ?? 0, r.evidence.rebase], want: [606, line], message: "evidence");
+    final rendered = render(r);
+    assert\equal(rendered.indexOf("\"evidence\":\{\"conflicts\":[\"internal/x.go\"],\"squashed_base\":606,\"rebase\":\"{line}\"}") != null, want: true, message: rendered);
 }
 
 test "annotations keep failures that name a file" {
