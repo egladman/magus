@@ -1,0 +1,14 @@
+Cases written with the rule (2026-10-22), not drawn from a labeling round.
+A review comment over its kind's word cap.
+-- hit/review-inline --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word here.
+-- hit/review-summary --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word here.
+-- hit/review-reply --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word here.
+-- pass/review-inline --
+The doc says this returns an error, but it returns nil on a miss.
+-- pass/review-summary --
+Requesting changes: `Cache.put` races with `Cache.get`.
+-- pass/review-reply --
+Fixed in the next push.

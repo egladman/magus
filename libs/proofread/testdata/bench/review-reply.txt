@@ -1,1 +1,7 @@
 Every change here merged through egladman/magus#567's squash: the docs conventions lint skipping ignored pages, the testkit go env telemetry fix, the diff demo regeneration, and the import ceiling, which #567 then returned to 71. Nothing is left to merge.
+
+The doc says this returns an error, but it returns nil on a miss. Return the error.
+
+Expected a copy, but this shares the slice with the caller; copy it before sorting.
+
+Short reply: the caller already sorts, so the copy was redundant and I removed it.

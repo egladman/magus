@@ -32,6 +32,9 @@ const (
 	// RuleImpatience reports a review reply that reads as impatient: "as I
 	// said", "for the last time", "obviously".
 	RuleImpatience Rule = "impatience"
+	// RuleReviewLength reports a review text longer than its kind's word cap:
+	// an inline comment over 60 words, a summary over 100, a reply over 80.
+	RuleReviewLength Rule = "review-length"
 )
 
 var (
@@ -52,6 +55,7 @@ var reviewKindChecks = []check{
 	{rule: RuleDeferralNoLink, on: replyOnly, graded: true, judge: ownWords(deferralNoLink)},
 	{rule: RuleDeclineNoReason, on: replyOnly, graded: true, judge: ownWords(declineNoReason)},
 	{rule: RuleImpatience, on: replyOnly, graded: true, judge: ownWords(impatience)},
+	{rule: RuleReviewLength, on: reviewText, graded: true, judge: reviewLength},
 }
 
 var reviewKindTexts = map[Rule]ruleText{
@@ -64,8 +68,10 @@ var reviewKindTexts = map[Rule]ruleText{
 			"frequent reason for confusion in code review, which delays the merge. Only a comment of one " +
 			"sentence is judged, one opening with a command or holding should, must or needs to: a second " +
 			"sentence is read as the reason, and so is a reason marker (because, since, so, otherwise, " +
-			"which, a purpose such as \"to avoid\"). A question, and a comment labeled nit, typo or " +
-			"optional, is left alone. No firing has been labeled, so it advises.",
+			"which, a purpose such as \"to avoid\"), and so is what was intended set beside what the " +
+			"code does (\"the doc says it returns an error, but this returns nil\"). A question, and a " +
+			"comment labeled nit, typo or optional, is left alone. No firing has been labeled, so it " +
+			"advises.",
 	},
 	RuleNitLabel: {
 		code:      "PRF8031",
@@ -137,6 +143,15 @@ var reviewKindTexts = map[Rule]ruleText{
 			"points back at what the writer already said tells the reader they failed to listen. Legitimate " +
 			"urgency reads alike, so it advises.",
 	},
+	RuleReviewLength: {
+		code:      "PRF8038",
+		dimension: DimensionEconomy,
+		catches: "a review text over its word cap: an inline comment over 60 words, a summary over 100, " +
+			"a reply over 80",
+		why: "A convention, not yet measured: the caps are the author's own sense of a comment a reader " +
+			"takes in at a glance, and no labeled round has checked them against comments that were " +
+			"acted on. A long comment can be right, so it advises, and ships off until a round weighs it.",
+	},
 }
 
 var (
@@ -151,9 +166,34 @@ var (
 		`note)\b`)
 )
 
+var (
+	// expectedMarker says what the code was meant to do.
+	expectedMarker = regexp.MustCompile(`(?i)\b(?:expect(?:s|ed|ing)?|supposed to|meant to|should|intended|` +
+		`intends? to|the (?:docs?|PR|comment|description) says)\b`)
+	// behaviorMarker says what the code does instead.
+	behaviorMarker = regexp.MustCompile(`(?i)\b(?:but|actually|instead|does|returns|currently)\b`)
+)
+
+// statesIntentAgainstBehavior reports whether text sets what was intended
+// beside what the code does, in two different words.
+func statesIntentAgainstBehavior(text string) bool {
+	want := expectedMarker.FindStringIndex(text)
+	if want == nil {
+		return false
+	}
+
+	for _, at := range behaviorMarker.FindAllStringIndex(text, -1) {
+		if at[0] >= want[1] || at[1] <= want[0] {
+			return true
+		}
+	}
+
+	return false
+}
+
 // unexplainedRequest reports an inline comment of one sentence that asks for a
 // change and gives no reason. A second sentence, before or after the request,
-// is read as its reason.
+// is read as its reason, and so is the intent set against the behavior.
 func unexplainedRequest(in input) []Finding {
 	paras := paragraphs(in.prose, mentionsMasked)
 	if len(paras) != 1 || optionalLabel.MatchString(paras[0].text) {
@@ -161,7 +201,8 @@ func unexplainedRequest(in input) []Finding {
 	}
 
 	para := paras[0]
-	if reasonGiven.MatchString(para.text) || purpose.MatchString(para.text) || groundGiven.MatchString(para.text) {
+	if reasonGiven.MatchString(para.text) || purpose.MatchString(para.text) || groundGiven.MatchString(para.text) ||
+		statesIntentAgainstBehavior(para.text) {
 		return nil
 	}
 
@@ -466,4 +507,29 @@ func impatience(in input) []Finding {
 	}
 
 	return out
+}
+
+var reviewWordCaps = map[Kind]int{KindReviewInline: 60, KindReviewSummary: 100, KindReviewReply: 80}
+
+func reviewLength(in input) []Finding {
+	limit, ok := reviewWordCaps[in.kind]
+	if !ok {
+		return nil
+	}
+
+	words := 0
+
+	for _, ln := range in.prose {
+		words += len(strings.Fields(ln.text))
+	}
+
+	if words <= limit {
+		return nil
+	}
+
+	return []Finding{{
+		Message: fmt.Sprintf("Cut this to %d words or fewer (it runs %d): say what you expected, what the "+
+			"code does, and the change, and drop the rest.", limit, words),
+		Line: 1,
+	}}
 }

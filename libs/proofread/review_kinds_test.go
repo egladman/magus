@@ -2,6 +2,7 @@ package proofread
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -18,7 +19,7 @@ func ruleCheck(rule Rule) (check, bool) {
 func TestReviewKindChecksRunInThisOrder(t *testing.T) {
 	want := []Rule{
 		RuleNoReason, RuleNitLabel, RuleEmptyRequestChanges, RuleApproveBlocker, RuleBareLGTM, RuleDeferralNoLink,
-		RuleDeclineNoReason, RuleImpatience,
+		RuleDeclineNoReason, RuleImpatience, RuleReviewLength,
 	}
 
 	if got := ruleNames(reviewKindChecks); !reflect.DeepEqual(got, want) {
@@ -107,5 +108,29 @@ func TestDeferralNoLinkReadsAStandardsNameAsNoTrackerKey(t *testing.T) {
 		{"a hash", KindReviewReply, "We can move to SHA-256 later.", []string{"1:can move to SHA-256 later"}},
 		{"a date standard", KindReviewReply, "I'll parse ISO-8601 later.", []string{"1:'ll parse ISO-8601 later"}},
 		{"a standard beside a key", KindReviewReply, "I'll switch to SHA-256 later, tracked in MAG-9.", nil},
+	})
+}
+
+func TestNoReasonReadsIntentAgainstBehaviorAsTheReason(t *testing.T) {
+	runTextCases(t, RuleNoReason, []textCase{
+		{"doc against behavior", KindReviewInline, "The doc says it returns an error but this returns nil, return the error.", nil},
+		{"expected against actual", KindReviewInline, "Expected a copy, but this shares the slice, so copy it", nil},
+		{"two sentences", KindReviewInline, "This returns nil on miss; the doc says it returns an error. Return the error.", nil},
+		{"the request alone", KindReviewInline, "Return the error here.", []string{"1:Return"}},
+		{"an expectation with no behavior", KindReviewInline, "You should return the error here.", []string{"1:should"}},
+	})
+}
+
+func TestReviewLengthCapsEachKind(t *testing.T) {
+	words := func(n int) string { return strings.TrimSpace(strings.Repeat("word ", n)) + "." }
+
+	runTextCases(t, RuleReviewLength, []textCase{
+		{"inline at the cap", KindReviewInline, words(60), nil},
+		{"inline over", KindReviewInline, words(61), []string{"1:"}},
+		{"summary at the cap", KindReviewSummary, words(100), nil},
+		{"summary over", KindReviewSummary, words(101), []string{"1:"}},
+		{"reply at the cap", KindReviewReply, words(80), nil},
+		{"reply over", KindReviewReply, words(81), []string{"1:"}},
+		{"a description is not capped", KindChangeDescription, words(300), nil},
 	})
 }
