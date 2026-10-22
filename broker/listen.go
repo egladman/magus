@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/sockdir"
 )
@@ -82,23 +83,12 @@ func newHandshake() (string, error) {
 // writeHandshake publishes handshake for the socket at sock, readable by this user
 // alone. Serve calls it, not Listen, so a socket a supervisor bound carries one too. The
 // rename replaces whatever sits at the path, a planted link included, and a client never
-// reads a partial value.
+// reads a partial value. It skips the fsync: a crash loses only a value the next broker
+// replaces.
 func writeHandshake(sock, handshake string) error {
 	path := handshakePath(sock)
-	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
-	if err != nil {
-		return fmt.Errorf("broker: write handshake: %w", err)
-	}
-	_, werr := f.WriteString(handshake)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr == nil {
-		werr = os.Rename(f.Name(), path)
-	}
-	if werr != nil {
-		_ = os.Remove(f.Name())
-		return fmt.Errorf("broker: write handshake %s: %w", path, werr)
+	if err := file.ReplaceFile(path, []byte(handshake), 0o600); err != nil {
+		return fmt.Errorf("broker: write handshake %s: %w", path, err)
 	}
 	return nil
 }
