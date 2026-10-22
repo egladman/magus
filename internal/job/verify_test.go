@@ -504,14 +504,14 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	assert.True(t, strings.HasSuffix(gateCommand(plain), " run generate ."), gateCommand(plain))
 }
 
-// The opt-out is a field on the check record and has one spelling: a check line carrying
-// the flag is refused with the field named, and a declared record keeps it.
+// The opt-out is a field on the check record: a check line carrying the flag sets it, and
+// a declared record keeps it.
 func TestCheckOptOutIsARecordField(t *testing.T) {
 	t.Parallel()
 
-	_, err := types.ParseLeaseCheck("generate . --no-default-charms")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no_default_charms: true")
+	parsed, err := types.ParseLeaseCheck("generate . --no-default-charms")
+	require.NoError(t, err)
+	assert.True(t, parsed.NoDefaultCharms)
 
 	decl, err := decodeDeclaration(declaration(`"id":"adj/drift"`,
 		`"check":{"target":"generate","project":".","no_default_charms":true}`))
