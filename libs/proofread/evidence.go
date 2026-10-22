@@ -73,4 +73,7 @@ var unmeasured = map[Rule]bool{
 	RuleSkillDescriptionBudget:    true, // no labeled firing yet
 	RuleSkillSetDescriptionBudget: true, // no labeled firing yet
 	RuleInstructionPosition:       true, // no labeled firing yet
+	RuleTriad:                     true, // no labeled firing yet
+	RuleStackedColon:              true, // no labeled firing yet
+	RuleRestatesDiff:              true, // no labeled firing yet
 }
