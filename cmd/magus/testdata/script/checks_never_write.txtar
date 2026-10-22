@@ -35,6 +35,8 @@ cp broken-magusfile.buzz magusfile.buzz
 cmp gen.txt gen-committed.txt
 ! exists fresh.txt
 
+-- .gitignore --
+.magus/
 -- magus.yaml --
 concurrency: 1
 -- gen.txt --
