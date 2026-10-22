@@ -103,10 +103,36 @@ var params = map[string][]string{
 	stall:             {"calls"},
 }
 
-// neverDeny names the rules that only ever explain, so a deny declared for one is a
-// misdeclaration rather than a refusal nobody would see.
-var neverDeny = map[string]string{
+// notices names the rules that only ever state a fact, so a deny declared for one is a
+// misdeclaration rather than a refusal nobody would see. The cost rules are here too:
+// ADR 0009 sizes their advice by level, and orchestrator-groundwork does their refusing.
+var notices = map[string]string{
 	compatMarker:        "whether code stays for an old caller is the root's call, and refusing the write would not ask it",
+	"echo-on-success":   "the command it rides on already ran, and the echo changes nothing",
+	"focus":             "focus-read and lease-write refuse what crosses the boundary; this states where the boundary is",
+	"graph-stale":       "it says why a graph-backed deny stood down; refusing the search instead would leave nothing to run",
+	"hook-wiring":       "it speaks only to a person's own session, and the check it names runs after the edit",
+	"instruction-write": "only the author can tell whether a sentence restates a rule the tool already enforces",
+	"lease-state":       "a diverged base or re-entered path is the row's state, which the write does not change",
+	"lease-terminal":    "only the orchestrator reopens a finished row, so refusing its holder's calls would leave it no call to make",
+	"leased-path":       "magus cannot tell the lease's own unnamed writer from a stranger, and lease-write refuses the stranger who names a lease",
+	"new-file":          "a name that breaks a settled pattern may be the new pattern",
+	"new-source-dir":    "a new directory is a boundary only its author can draw",
+	"precedent-search":  "it fires with no symbol index too, where the refs it names answers nothing",
+	"push-gate":         "it fires on a gated push too; push-ungated refuses the push no green gate covers",
+	"read-symbol":       "the bounded read is the fallback read-navigation and read-paging name when the index is stale",
+	"regen-source":      "the generate run it names comes after the edit it fires on",
+	"release-requested": "it tells a holder about another fork's request, which the holder's own call does not answer",
+	"revert-classify":   "classifying first changes nothing it reads, so a refusal would refuse every revert",
+	"scope-drift":       "a missing dependency edge may be the edge this change adds",
+	"shared-checkout":   "it reads neither the new worker's isolation nor a disjointness proof, so a refusal would outlast its remedy",
+	"skill-source":      "it does not read whether the skill it names was loaded, so a refusal would outlast its remedy",
+	"source-read":       "read-navigation refuses a whole read past its line limit; below it a whole read is the cheap answer",
+	"spawn-unplaced":    "the caller may be no worker at all, and a spawn waits for its child up to two minutes",
+	"split-run":         "both runs already ran by the time the second is judged",
+	"stage-classify":    "stage-all refuses the unclassified stage; this states which files are generated",
+	"timed-magus":       "the timed run is the same run, and its durations are already in the log",
+	"unleased-write":    "magus cannot attribute the write, so there is nobody to name a remedy to",
 	rootContextBudget:   "size only tunes advice; refusing a session's groundwork is orchestrator-groundwork's, by its role",
 	rootHeavyCommand:    "it nudges a session that has handed out no work; refusing an orchestrator's groundwork is orchestrator-groundwork's",
 	rootRepeat:          "a repeat is advice to a session that has handed out no work; an orchestrator's repeat is groundwork, which orchestrator-groundwork refuses",
@@ -146,43 +172,40 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 	},
 }
 
-// defaults must name exactly the rules internal/guard catalogs. A rule that refuses
-// something the caller can recover from by running a different command advises, so
-// a workspace that wants it refused says so; a rule guarding something no later
-// command undoes, or a boundary a lease or person drew, denies. The timer rules
-// (busy-wait, process-poll, sleep-poll) deny too: a background task notifies on exit, so
-// no wait is needed, and an advising default would let timers through whenever the
-// workspace policy fails to load.
+// defaults must name exactly the rules internal/guard catalogs. Every rule that names a
+// remedy the caller can take now denies, recoverable or not (ADR 0013): an agent routes
+// around advice that only prints. A notice states a fact with no remedy and never
+// refuses. A workspace that wants a rule softer sets it to advise or off by name.
 var defaults = map[string]Decision{
 	// Recoverable: the served command answers what the refused one asked.
-	"architecture-unbriefed": Advise,
-	"brief-command":          Advise,
-	"brief-plain-commands":   Advise,
-	"buzz-unbriefed":         Advise,
-	"chained-run":            Advise,
-	"exit-status-echo":       Advise,
-	"filter-without-input":   Advise,
-	"grep-reader":            Advise,
-	"interpreter-rewrite":    Advise,
-	"magus-timeout":          Advise,
-	"monitor-duplicate":      Advise,
-	"monitor-pile":           Advise,
-	"output-pipe":            Advise,
-	"output-redirect":        Advise,
-	"raw-tool":               Advise,
-	readNavigation:           Advise,
-	"read-paging":            Advise,
-	"scripted-rewrite":       Advise,
-	"search-translation":     Advise,
-	"sed-in-place":           Advise,
-	"sibling-checkout":       Advise,
-	"spawn-unbriefed":        Advise,
-	"spawn-waiter":           Advise,
-	"stage-all":              Advise,
-	"symbol-search":          Advise,
-	"throwaway-copy":         Advise,
-	"unjudged-tool":          Advise,
-	"unknown-env":            Advise,
+	"architecture-unbriefed": Deny,
+	"brief-command":          Deny,
+	"brief-plain-commands":   Deny,
+	"buzz-unbriefed":         Deny,
+	"chained-run":            Deny,
+	"exit-status-echo":       Deny,
+	"filter-without-input":   Deny,
+	"grep-reader":            Deny,
+	"interpreter-rewrite":    Deny,
+	"magus-timeout":          Deny,
+	"monitor-duplicate":      Deny,
+	"monitor-pile":           Deny,
+	"output-pipe":            Deny,
+	"output-redirect":        Deny,
+	"raw-tool":               Deny,
+	readNavigation:           Deny,
+	"read-paging":            Deny,
+	"scripted-rewrite":       Deny,
+	"search-translation":     Deny,
+	"sed-in-place":           Deny,
+	"sibling-checkout":       Deny,
+	"spawn-unbriefed":        Deny,
+	"spawn-waiter":           Deny,
+	"stage-all":              Deny,
+	"symbol-search":          Deny,
+	"throwaway-copy":         Deny,
+	"unjudged-tool":          Deny,
+	"unknown-env":            Deny,
 
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,
@@ -215,6 +238,7 @@ var defaults = map[string]Decision{
 	"sleep-poll":            Deny,
 	"spawn-duplicate":       Deny,
 	"spawn-unvalidated":     Deny,
+	"spawn-warm-worker":     Deny,
 	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
@@ -224,47 +248,48 @@ var defaults = map[string]Decision{
 	"worker-check-only":     Deny,
 	"worktree-remove":       Deny,
 
-	// Advisories never refused anything, so they keep advising; a workspace may still
-	// raise one to deny or turn it off. lease-state, lease-invalid and lease-terminal are
-	// advisories, not the lease-* denies above.
-	"capture-filter":      Advise,
-	"check-timeout":       Advise,
-	compatMarker:          Advise,
-	"checkpoint-state":    Advise,
-	"dependency-install":  Advise,
-	"dependency-update":   Advise,
-	"echo-on-success":     Advise,
-	"focus":               Advise,
-	"gate-repeat":         Advise,
-	"generated-write":     Advise,
-	"graph-pipe":          Advise,
-	"graph-stale":         Advise,
-	"hook-wiring":         Advise,
-	"installed-skill":     Advise,
-	"instruction-write":   Advise,
-	"lease-invalid":       Advise,
-	"lease-state":         Advise,
-	"lease-terminal":      Advise,
-	"leased-path":         Advise,
-	modelTierContextCap:   Advise,
-	"new-file":            Advise,
-	"new-source-dir":      Advise,
-	"precedent-search":    Advise,
-	"push-gate":           Advise,
-	"read-symbol":         Advise,
-	"regen-source":        Advise,
-	"release-requested":   Advise,
-	"revert-classify":     Advise,
-	"scope-drift":         Advise,
-	"shared-checkout":     Advise,
-	"skill-source":        Advise,
-	"source-read":         Advise,
-	"spawn-unplaced":      Advise,
-	"spawn-nested-waiter": Advise,
-	"split-run":           Advise,
-	"stage-classify":      Advise,
-	"timed-magus":         Advise,
-	"unleased-write":      Advise,
+	// Advisories whose text names a command: raised to deny, each refuses with that text.
+	// lease-invalid and lease-terminal are these, not the lease-* denies above.
+	"capture-filter":      Deny,
+	"check-timeout":       Deny,
+	"checkpoint-state":    Deny,
+	"dependency-install":  Deny,
+	"dependency-update":   Deny,
+	"gate-repeat":         Deny,
+	"generated-write":     Deny,
+	"graph-pipe":          Deny,
+	"installed-skill":     Deny,
+	"lease-invalid":       Deny,
+	modelTierContextCap:   Deny,
+	"spawn-nested-waiter": Deny,
+
+	// Notices: a fact with no remedy, said and never refused; see notices.
+	compatMarker:        Advise,
+	"echo-on-success":   Advise,
+	"focus":             Advise,
+	"graph-stale":       Advise,
+	"hook-wiring":       Advise,
+	"instruction-write": Advise,
+	"lease-state":       Advise,
+	"lease-terminal":    Advise,
+	"leased-path":       Advise,
+	"new-file":          Advise,
+	"new-source-dir":    Advise,
+	"precedent-search":  Advise,
+	"push-gate":         Advise,
+	"read-symbol":       Advise,
+	"regen-source":      Advise,
+	"release-requested": Advise,
+	"revert-classify":   Advise,
+	"scope-drift":       Advise,
+	"shared-checkout":   Advise,
+	"skill-source":      Advise,
+	"source-read":       Advise,
+	"spawn-unplaced":    Advise,
+	"split-run":         Advise,
+	"stage-classify":    Advise,
+	"timed-magus":       Advise,
+	"unleased-write":    Advise,
 
 	// A session's role, not its size or level, decides whether its groundwork is refused,
 	// so no level names this rule and the off level leaves it on. It judges only a session
@@ -333,10 +358,10 @@ func Fixed(name string) bool {
 }
 
 // Verdicts returns the verdicts rule name can give under any setting a workspace may
-// declare, least refusing first: advise alone for a rule that never refuses or that a
-// workspace may not set, advise and deny for any other.
+// declare, least refusing first: advise alone for a notice or a rule a workspace may not
+// set, advise and deny for any other.
 func Verdicts(name string) []types.GuardDecision {
-	if _, never := neverDeny[name]; never || Fixed(name) {
+	if _, notice := notices[name]; notice || Fixed(name) {
 		return []types.GuardDecision{types.GuardAdvise}
 	}
 	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
@@ -403,9 +428,9 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
 	}
-	if why, ok := neverDeny[name]; ok && s.Decision == Deny {
+	if why, ok := notices[name]; ok && s.Decision == Deny {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q never refuses; give off or advise", name).WithWhy(why)
+			"built-in rule %q is a notice and never refuses; give off or advise", name).WithWhy(why)
 	}
 	for _, p := range paramSpecs {
 		value := *p.field(&s)

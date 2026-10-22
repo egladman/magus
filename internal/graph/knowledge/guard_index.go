@@ -44,7 +44,7 @@ const GuardSymbol = "symbol"
 // guardIndexKinds are the node kinds the index lists by id.
 var guardIndexKinds = []string{types.KindDiagnostic, types.KindDocSection, types.KindTarget, types.KindFile}
 
-const guardIndexHeader = "magus-guard-index 1"
+const guardIndexHeader = "magus-guard-index 2"
 
 // GuardIndexPath is the index file under a workspace cache dir.
 func GuardIndexPath(cacheDir string) string { return filepath.Join(StoreDir(cacheDir), "guard.idx") }
@@ -114,6 +114,7 @@ type GuardIndex struct {
 	symbolsFresh bool
 	built        GuardCheckout
 	ids          map[string][]string // sorted
+	symbolIDs    map[string][]string // symbol name to the ids that carry it
 	files        []guardFileStamp
 	dirs         []guardDirStamp
 
@@ -210,12 +211,14 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool, at Guar
 	}
 	ids := map[string][]string{}
 	symbols := map[string]types.KnowledgeNode{}
+	symbolIDs := map[string][]string{}
 	for _, n := range g.Nodes() {
 		switch {
 		case n.Kind == types.KindSymbol:
 			if n.Label != "" && !strings.ContainsAny(n.Label, " \n\t") {
 				ids[GuardSymbol] = append(ids[GuardSymbol], n.Label)
 				symbols[n.ID] = n
+				symbolIDs[n.Label] = append(symbolIDs[n.Label], n.ID)
 			}
 		case slices.Contains(guardIndexKinds, n.Kind):
 			ids[n.Kind] = append(ids[n.Kind], n.ID)
@@ -258,6 +261,11 @@ func WriteGuardIndex(cacheDir, root string, g *Graph, symbolsFresh bool, at Guar
 		list := slices.Compact(slices.Sorted(slices.Values(ids[kind])))
 		for _, id := range list {
 			fmt.Fprintf(&b, "i %s %s\n", kind, id)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(symbolIDs)) {
+		for _, id := range slices.Compact(slices.Sorted(slices.Values(symbolIDs[name]))) {
+			fmt.Fprintf(&b, "y %s %s\n", name, id)
 		}
 	}
 	return file.ReplaceFile(GuardIndexPath(cacheDir), []byte(b.String()), 0o600)
@@ -393,7 +401,7 @@ func readGuardIndex(cacheDir, root string, headerOnly bool) (*GuardIndex, error)
 		return nil, err
 	}
 	defer f.Close()
-	x := &GuardIndex{refsPath: guardRefsPath(cacheDir), ids: map[string][]string{}, fresh: map[string]bool{}}
+	x := &GuardIndex{refsPath: guardRefsPath(cacheDir), ids: map[string][]string{}, symbolIDs: map[string][]string{}, fresh: map[string]bool{}}
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	if !s.Scan() || s.Text() != guardIndexHeader {
@@ -432,6 +440,11 @@ func readGuardIndex(cacheDir, root string, headerOnly bool) (*GuardIndex, error)
 				continue
 			}
 			x.dirs = append(x.dirs, guardDirStamp{rel: rel, digest: v})
+		case "y":
+			name, id, ok := strings.Cut(rest, " ")
+			if ok {
+				x.symbolIDs[name] = append(x.symbolIDs[name], id)
+			}
 		case "i":
 			kind, id, ok := strings.Cut(rest, " ")
 			if ok {
@@ -460,6 +473,10 @@ func sameDir(a, b string) bool {
 
 // IDs are the ids of kind, sorted; for GuardSymbol, the symbol names.
 func (x *GuardIndex) IDs(kind string) []string { return x.ids[kind] }
+
+// SymbolIDs lists the ids of every symbol labelled name, sorted. More than one means the
+// name is ambiguous and `magus refs` needs an id to pick a definition.
+func (x *GuardIndex) SymbolIDs(name string) []string { return x.symbolIDs[name] }
 
 // Has reports whether id is listed under kind.
 func (x *GuardIndex) Has(kind, id string) bool {

@@ -1,12 +1,12 @@
 ---
 title: "output-pipe: magus output piped into a filter, when magus projects the record itself"
-description: "An advisory by default: it explains, and blocks nothing, on magus output piped into a filter, when magus projects the record itself."
-tags: [guard, rules, output-pipe, advise]
+description: "A deny rule by default: it refuses magus output piped into a filter, when magus projects the record itself, and names what to run instead."
+tags: [guard, rules, output-pipe, deny]
 ---
 
 # output-pipe
 
-An advisory by default: it explains, and blocks nothing, on magus output piped into a filter, when magus projects the record itself.
+A deny rule by default: it refuses magus output piped into a filter, when magus projects the record itself, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ magus projects its own record, so the filter is answering a question the command
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"output-pipe": "deny"})
+magus\guard.builtins({"output-pipe": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [output-pipe]: ...
+deny [output-pipe]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [output-pipe]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [output-pipe]: ...` instead.
 
 `magus describe rule output-pipe` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

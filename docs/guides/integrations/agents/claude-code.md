@@ -379,7 +379,7 @@ the background and wakes the agent on each line it prints, so the command is jud
 as the shell line it is (busy-wait and process-poll apply), and the waiter rules
 count the watchers each agent holds: a second live one on the same subject, or one
 on work the agent backgrounded itself, is a duplicate, and five live at once are a
-pile (see [the guard](guard.md#what-magus-advises-by-default)). `ScheduleWakeup`
+pile (see [the guard](guard.md#what-magus-denies-with-a-served-command)). `ScheduleWakeup`
 and `CronCreate` carry a `prompt` beside a delay or a cron expression, which magus
 reads as a prompt queued for the same session rather than a spawn.
 

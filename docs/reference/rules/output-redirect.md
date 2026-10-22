@@ -1,12 +1,12 @@
 ---
 title: "output-redirect: magus output sent to a file or discarded, which the run log already holds"
-description: "An advisory by default: it explains, and blocks nothing, on magus output sent to a file or discarded, which the run log already holds."
-tags: [guard, rules, output-redirect, advise]
+description: "A deny rule by default: it refuses magus output sent to a file or discarded, which the run log already holds, and names what to run instead."
+tags: [guard, rules, output-redirect, deny]
 ---
 
 # output-redirect
 
-An advisory by default: it explains, and blocks nothing, on magus output sent to a file or discarded, which the run log already holds.
+A deny rule by default: it refuses magus output sent to a file or discarded, which the run log already holds, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ Silencing and keeping are the only two intents and magus has a lever for each: `
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"output-redirect": "deny"})
+magus\guard.builtins({"output-redirect": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [output-redirect]: ...
+deny [output-redirect]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [output-redirect]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [output-redirect]: ...` instead.
 
 `magus describe rule output-redirect` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

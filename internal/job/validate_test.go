@@ -1,6 +1,10 @@
 package job
 
 import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -197,4 +201,197 @@ func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 	rows, lerr := s.List()
 	require.NoError(t, lerr)
 	assert.Empty(t, rows, "nothing is written while any record has a problem")
+}
+
+func TestValidateMergeWaivesEveryRegeneratedOutputByGlob(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+		return func(u *types.Job) {
+			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+		}
+	}
+	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
+	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unwaived")
+
+	outputs := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob waives its own code alone")
+
+	both := validateMerge(t.Context(), s, nil, "w", declare(
+		types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
+		types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
+	), config.Jobs{}, nil)
+	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot waive")
+	assert.Len(t, both.Waived, len(bare.Problems)-1)
+
+	narrow := validateMerge(t.Context(), s, nil, "w", declare(types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob waives only the subjects it matches")
+	assert.Less(t, len(narrow.Problems), len(bare.Problems))
+}
+
+func TestIntegratorWaiversAcceptEveryOutputButADeniedOne(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+
+	got := IntegratorWaivers(root, row, projects, ignoresCoverage)
+
+	subjects := make([]string, len(got))
+	for i, w := range got {
+		assert.Equal(t, types.OutputOutsideWritePaths, w.Code)
+		assert.Equal(t, integratorRegenerates, w.Reason)
+		subjects[i] = w.Subject
+	}
+	assert.Contains(t, subjects, "docs/manpage/*.md")
+	assert.Contains(t, subjects, "cmd/gen/*.go")
+	assert.NotContains(t, subjects, "cli/testdata/api.lock", "a denied output stays refused")
+
+	row.Waivers = got
+	assert.Empty(t, IntegratorWaivers(root, row, projects, ignoresCoverage), "an output already waived needs no second waiver")
+}
+
+func TestExtendFootprintAddsSiblingTests(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+	referrers := func(file, _ string) map[string]int {
+		if file != "cli/registry.go" {
+			return nil
+		}
+		return map[string]int{"cli/registry_test.go": 3, "cmd/main_test.go": 1, "cmd/main.go": 2}
+	}
+
+	paths, notes := ExtendFootprint(root, row, projects, referrers)
+
+	assert.Equal(t, []string{"cli/registry_test.go"}, paths, "a test beside a written file is reached; outputs and other directories are not")
+	assert.Len(t, notes, len(paths), "each added path says why")
+
+	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers)
+	assert.Empty(t, none)
+}
+
+func TestValidateMergeWaivesLintOnlyByItsExactSubject(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(waivers ...types.JobWaiver) func(*types.Job) {
+		return func(u *types.Job) {
+			u.WritePaths, u.Check, u.Waivers = []string{"cli/registry.go"}, forkCheck(), waivers
+		}
+	}
+	glob := types.JobWaiver{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
+	got := validateMerge(t.Context(), s, nil, "w", declare(glob), config.Jobs{}, nil)
+	lint := problemAt(t, got.Problems, types.GateNotRun)
+	assert.Equal(t, "lint .", lint.Subject, "a glob leaves the lint gate standing")
+
+	exact := types.JobWaiver{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
+	got = validateMerge(t.Context(), s, nil, "w", declare(glob, exact), config.Jobs{}, nil)
+	assert.NotContains(t, codes(got.Problems), types.GateNotRun)
+	assert.Contains(t, codes(got.Waived), types.GateNotRun)
+}
+
+func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	declare := func(paths ...string) func(*types.Job) {
+		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+	}
+	resolve := func(merge func(*types.Job)) (types.Job, string) {
+		var notes bytes.Buffer
+		s.notices = &notes
+		merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
+		require.NoError(t, err)
+		var row types.Job
+		merged(&row)
+		return row, notes.String()
+	}
+
+	row, note := resolve(declare("cli/registry.go"))
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true}, row.Goals[i].Check)
+	assert.Contains(t, note, `added the goal "lint"`)
+
+	row, note = resolve(func(u *types.Job) {
+		declare("cli/registry.go")(u)
+		u.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	})
+	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
+	assert.Empty(t, note)
+
+	row, note = resolve(declare("docs/notes.md"))
+	assert.Empty(t, row.Goals, "no Go source, no lint goal")
+	assert.Empty(t, note)
+}
+
+func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *testing.T) {
+	t.Parallel()
+
+	read := func(_ context.Context, name, _ string) (SymbolFact, bool) {
+		if name == "job.Declare" {
+			return SymbolFact{DefinedIn: []string{"internal/job/plan.go"}}, true
+		}
+		return SymbolFact{}, true
+	}
+	goals := []types.Goal{
+		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"job.Declare", "job.Typo"}},
+		{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"job.Typo"}},
+		{ID: "bare", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Typo"}},
+	}
+
+	ps := ambiguousSymbolProblems(t.Context(), goals, read)
+
+	require.Len(t, ps, 1, "a present goal names what the job will write, and a bare name may be a graph without an index")
+	assert.Equal(t, "goals[0].symbols[1]", ps[0].Field)
+	assert.Contains(t, ps[0].Message, `"job.Typo"`)
+}
+
+func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, rel := range []string{
+		"docs/gen/a.md", "docs/gen/sub/b.md",
+		"docs/mixed/c.md", "docs/mixed/hand.txt",
+		"docs/src/page.buzz",
+	} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(rel), 0o644))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs", "empty"), 0o755))
+	projects := []*types.Project{{
+		Path: "docs",
+		TargetOutputs: map[string][]types.OutputRef{
+			"site-generate": {{Glob: "gen/**"}, {Glob: "mixed/*.md"}, {Glob: "empty/*.md"}},
+		},
+	}}
+	store := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
+	problems := func(paths ...string) types.JobProblems {
+		return directoryWritePathProblems(store, types.Job{WritePaths: paths})
+	}
+
+	assert.Empty(t, problems("docs/gen"), "every file under it is a declared output")
+	assert.Empty(t, problems("docs/gen/**"), "a wildcard subtree reads as the directory")
+
+	ps := problems("docs/mixed")
+	require.Len(t, ps, 1)
+	assert.Equal(t, types.WritePathIsDirectory, ps[0].Code)
+	assert.Contains(t, ps[0].Message, "docs/mixed/hand.txt is not a declared output", "the message names the file that keeps the refusal")
+
+	assert.Len(t, problems("docs/src"), 1, "a source file keeps the refusal")
+	assert.Len(t, problems("docs/empty"), 1, "a directory with no file shows nothing generated")
+	assert.Len(t, problems("**"), 1, "a bare ** stays refused")
+	assert.Len(t, problems("."), 1)
+
+	bare := NewStore(tempLocation(t, root))
+	assert.Len(t, directoryWritePathProblems(bare, types.Job{WritePaths: []string{"docs/gen"}}), 1, "with no workspace nothing is known to be generated")
+
+	row := types.Job{WritePaths: []string{"docs/gen"}}
+	assert.True(t, outputInside(row, types.Glob{Pattern: "docs/gen/*.md"}), "the directory claim holds an output glob under it (MGS3044)")
+	assert.False(t, outputInside(row, types.Glob{Pattern: "docs/mixed/*.md"}))
 }

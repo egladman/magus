@@ -3,6 +3,8 @@ package types
 import (
 	"errors"
 	"slices"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // JobProblem is one thing wrong with a job record, found before anything is stored or
@@ -51,9 +53,7 @@ func (ps JobProblems) Err() error {
 // [Declaration.Problems] reports it as JobRecordInvalid.
 func (ps JobProblems) Waive(ws []JobWaiver) (kept, waived JobProblems) {
 	for _, p := range ps {
-		if Waivable(p.Code) && slices.ContainsFunc(ws, func(w JobWaiver) bool {
-			return w.Code == p.Code && w.Subject == p.Subject
-		}) {
+		if Waivable(p.Code) && slices.ContainsFunc(ws, func(w JobWaiver) bool { return w.Waives(p) }) {
 			waived = append(waived, p)
 			continue
 		}
@@ -68,6 +68,23 @@ type JobWaiver struct {
 	Code    DiagnosticCode `json:"code"`
 	Subject string         `json:"subject"`
 	Reason  string         `json:"reason" schema:"nonblank"`
+}
+
+// Waives reports whether w accepts p: the same code, and a subject equal to p's or, for an
+// output outside the write paths or an unrun gate, a glob matching it, so `**` accepts
+// every regenerated output the integrator owns in one waiver.
+func (w JobWaiver) Waives(p JobProblem) bool {
+	if w.Code != p.Code {
+		return false
+	}
+	if w.Subject == p.Subject {
+		return true
+	}
+	if p.Code != OutputOutsideWritePaths && p.Code != GateNotRun {
+		return false
+	}
+	matched, _ := doublestar.Match(w.Subject, p.Subject)
+	return matched
 }
 
 // Waivable reports whether a problem of code c may be waived: only a judgment about how

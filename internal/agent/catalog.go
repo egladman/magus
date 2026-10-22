@@ -436,7 +436,13 @@ import (
 //
 // 144: magus-multi-agent says what a spawn brief leaves out; magus-change-summary teaches
 // `magus diff --rev` and `--patch -` instead of the bare `-`.
-const SkillVersion = 144
+//
+// 145: magus-multi-agent says the root's role is the live lease: it may take one row with
+// `magus job exec` and returns to orchestrating on `magus job exit`.
+//
+// 146: magus-multi-agent teaches resume-first: follow-up work goes to the warm worker that
+// wrote the code, and `follows` and `fresh_reason` on a job record.
+const SkillVersion = 146
 
 const skillLicense = "GPL-3.0-or-later"
 

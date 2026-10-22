@@ -115,7 +115,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 }
 
 // gatedVerb names, in backticks, the first call on the line that must wait while no side
-// of the policy loads: a push, a pull request merge, or a magus verb writing state other
+// of the policy loads: a push, opening or merging a pull request, or a magus verb writing state other
 // checkouts or magus versions read. "" for anything else, the rebuild included, and for a
 // line that does not parse, which the built-ins already judge.
 func gatedVerb(command string, d Dialect) string {
@@ -125,6 +125,8 @@ func gatedVerb(command string, d Dialect) string {
 	}
 	for _, c := range cmds {
 		switch {
+		case isPRCreate(c):
+			return "`gh pr create`"
 		case isPush(c):
 			return "`" + vcsMutation(c) + "`"
 		case filepath.Base(c.Name) == "gh" && len(c.Args) > 1 && c.Args[0] == "pr" && c.Args[1] == "merge":

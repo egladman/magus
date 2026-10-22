@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -421,6 +422,19 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 	}
 	goals := resolved.Goals
 	paths := append(slices.Clone(probe.WritePaths), placed...)
+	if ws, why := store.loadedWorkspace(); why == "" {
+		probe.Goals, probe.WritePaths = goals, paths
+		if added := lintGoals(store.root, probe, ws); len(added) > 0 {
+			goals = append(slices.Clone(goals), added...)
+			out := store.notices
+			if out == nil {
+				out = os.Stderr
+			}
+			for _, g := range added {
+				fmt.Fprintf(out, "job: %s: added the goal %q (%s): the write paths include Go source and no check or goal runs lint\n", id, g.ID, g.Check)
+			}
+		}
+	}
 	return func(u *types.Job) {
 		merge(u)
 		u.Goals, u.WritePaths = goals, paths

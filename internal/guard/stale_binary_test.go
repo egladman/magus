@@ -208,13 +208,15 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 
 	for i, line := range []string{
 		"./magus run go-build .",
-		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		"go build -o magus ./cmd/magus",
 	} {
 		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "w" + strconv.Itoa(i), Lease: "lease-a"})
 		assert.Equal(t, decisionDeny, v.Decision, line)
 		assert.NotContains(t, v.Reason, "rebuild ./magus", line)
 	}
+
+	bootstrap := Judge(ctx, deps, Request{Input: ward.BootstrapCommand, Host: "claude-code", Session: "wb", Lease: "lease-a"})
+	assert.NotContains(t, bootstrap.Reason, denyRuleStaleBinary, "the stale-binary rule lets the bootstrap through")
 }
 
 // A worker whose placed ./magus was built ahead of its checkout fast-forwards its own branch
@@ -673,13 +675,37 @@ func TestRecoveryLine(t *testing.T) {
 		{"go test ./...", "", false},
 		{"./magus run go-build .", "lease-a", false},
 		{"mv magus magus.old", "lease-a", false},
-		{"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .", "lease-a", false},
+		{"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .", "lease-a", true},
+		{"GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus", "lease-a", false},
 		{workerPlacementRun, "lease-a", true},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo", "lease-a", true},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo && go build ./cmd/magus", "lease-a", false},
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
-		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", false},
+		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
 		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == ""), "%s (lease %q)", tc.line, tc.lease)
+	}
+}
+
+// A stale-binary deny never names a command the same rule would deny.
+func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
+	for _, tc := range []struct {
+		name, lease string
+		builds      bool
+	}{{"root", "", true}, {"integrator", "lease-a", true}, {"worker", "lease-a", false}} {
+		for _, hasBinary := range []bool{true, false} {
+			fix := binaryRemedy(true, hasBinary, tc.lease, tc.builds)
+			named := []string{ward.BootstrapCommand}
+			if tc.builds && hasBinary {
+				named = append(named, strings.Trim(ownRebuild, "`"))
+			}
+			if !tc.builds {
+				named = []string{strings.Join(placementArgv(tc.lease), " ")}
+				named[0] = strings.ReplaceAll(named[0], "<main checkout>", "/repo")
+			}
+			for _, line := range named {
+				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)
+			}
+		}
 	}
 }

@@ -1,12 +1,12 @@
 ---
 title: "check-timeout: a bound worker's magus run whose timeout is shorter than the target's last real run allows for"
-description: "An advisory by default: it explains, and blocks nothing, on a bound worker's magus run whose timeout is shorter than the target's last real run allows for."
-tags: [guard, rules, check-timeout, advise]
+description: "A deny rule by default: it refuses a bound worker's magus run whose timeout is shorter than the target's last real run allows for, and names what to run instead."
+tags: [guard, rules, check-timeout, deny]
 ---
 
 # check-timeout
 
-An advisory by default: it explains, and blocks nothing, on a bound worker's magus run whose timeout is shorter than the target's last real run allows for.
+A deny rule by default: it refuses a bound worker's magus run whose timeout is shorter than the target's last real run allows for, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A call the host times out moves to the background, and a worker that then ends i
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"check-timeout": "deny"})
+magus\guard.builtins({"check-timeout": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [check-timeout]: ...
+deny [check-timeout]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [check-timeout]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [check-timeout]: ...` instead.
 
 `magus describe rule check-timeout` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

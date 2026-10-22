@@ -2,7 +2,10 @@ package magus
 
 import (
 	"context"
+	"sync"
 
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,4 +25,16 @@ func (m *Magus) ModelTierMatrix() types.ModelTierMatrix {
 		return nil
 	}
 	return m.wsReg.ModelTierMatrix()
+}
+
+// ModelRows is the lazy reader of the model rows this workspace's wired harnesses
+// publish. The first call loads each harness spell.
+func (m *Magus) ModelRows(ctx context.Context) func() []types.ModelPricing {
+	return sync.OnceValue(func() []types.ModelPricing {
+		wired, err := workspace.WiredHarnesses(m)
+		if err != nil {
+			return nil
+		}
+		return agent.HarnessModelRows(types.WithWorkspace(ctx, m), m.Root(), wired)
+	})
 }

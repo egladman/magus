@@ -215,6 +215,10 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 			floor, why := table().PriceContext(calls)
 			return floor.Tokens, floor.USD, why == ""
 		}
+		// Lazy: the harness spells load only when a row names a model.
+		loc.ModelRows = harnessModelRows(ctx, root, func(ctx context.Context) (types.WorkspaceRepository, error) {
+			return inspectWorkspace(ctx, root)
+		})
 	}
 	if o.ModelTiers && root != "" {
 		m, err := loadMagus(ctx, root)
@@ -892,7 +896,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
-	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graph))
+	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graphsByTree(root, graph, false)))
 	if err != nil {
 		return exit.Usagef("magus describe job: %s", err)
 	}
@@ -909,7 +913,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
-		printJobWorktree(os.Stdout, row)
+		printJobWorktree(os.Stdout, row, "")
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -1222,6 +1226,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	// candidates ask for it, and the two share one load.
 	graph := newJobGraph(root, true)
 	reader := graphSymbolReader(graph.load)
+	row, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
+	for _, n := range notes {
+		slog.InfoContext(ctx, n, attr.Notice("note"))
+	}
 	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1250,10 +1258,17 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	var worktree types.JobWorktree
 	made := false
+	// bootstrap is the build the job's checkout needs when the forker's ./magus was built at
+	// another commit and so was not placed there.
+	bootstrap := ""
 	if row.Checkout != "" {
 		exe, _ := os.Executable()
-		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, job.MirroredBinary(exe, root)); err != nil {
+		mirrored := job.MirroredBinary(exe, root)
+		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
+		}
+		if mirrored != "" && worktree.Binary == "" {
+			bootstrap = job.CheckoutBootstrap(worktree.Root)
 		}
 		declare := merge
 		merge = func(u *types.Job) {
@@ -1316,7 +1331,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
-		printJobWorktree(os.Stdout, stored)
+		printJobWorktree(os.Stdout, stored, bootstrap)
 		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
@@ -1743,6 +1758,9 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 		endedIDs[i] = stored.ID
 		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
+	if len(ended) > 0 {
+		fmt.Println("no result was filed; file one with `magus job exit <id> --stdin < result.json` (`magus job exit --schema` prints its format)")
+	}
 	removed := endWorktrees(ctx, os.Stdout, store, endedIDs...)
 	if len(refused) > 0 {
 		reasons := make([]string, len(refused))
@@ -1797,7 +1815,7 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 	}
 	changed, err := store.EndCheckouts(ctx, written, ended...)
 	for _, row := range changed {
-		printJobWorktree(out, row)
+		printJobWorktree(out, row, "")
 	}
 	if err != nil {
 		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
@@ -1806,8 +1824,8 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 }
 
 // printJobWorktree says where the checkout a job owns stands: made for it, removed, or kept
-// and why.
-func printJobWorktree(out io.Writer, row types.Job) {
+// and why. bootstrap, when not "", is the build a checkout made with no binary needs next.
+func printJobWorktree(out io.Writer, row types.Job, bootstrap string) {
 	wt := row.Worktree
 	switch {
 	case wt == nil:
@@ -1818,9 +1836,12 @@ func printJobWorktree(out io.Writer, row types.Job) {
 	default:
 		fmt.Fprintf(out, "checkout %s: made for job %s at %.12s; its holder takes it there with `%s`, and magus removes it once the job ends unless it holds work\n",
 			wt.Root, row.ID, wt.Base, hint.JobExec.With(row.ID))
-		if wt.Binary != "" {
+		switch {
+		case wt.Binary != "":
 			fmt.Fprintf(out, "  placed %s, the magus the forking checkout runs\n", wt.Binary)
-		} else {
+		case bootstrap != "":
+			fmt.Fprintf(out, "  placed no magus: the forking checkout's was built at another commit, so its guard could not load this one\n  next: `%s` builds one at %.12s\n", bootstrap, wt.Base)
+		default:
 			fmt.Fprintln(out, "  placed no magus: the forking checkout runs magus from PATH, and so does the job")
 		}
 	}
@@ -1939,7 +1960,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if len(evidence) > 0 && (stdin || integration) {
 		return exit.Usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
 	}
-	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, newJobGraph(root, true)), evidence)
+	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root, graphsByTree(root, newJobGraph(root, true), true)), evidence)
 	if err != nil {
 		// An ended job that filed nothing still owns its checkout, and its waiter is the one
 		// caller left to remove it.
@@ -2406,7 +2427,15 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token
 	}
-	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, jobSymbolReader(root, true), checkpoint, globalCfg.DryRun)
+	graph := newJobGraph(root, true)
+	for i := range records {
+		var notes []string
+		records[i], notes = extendedFootprint(ctx, store, graph, root, records[i], jobWS)
+		for _, n := range notes {
+			slog.InfoContext(ctx, records[i].ID+": "+n, attr.Notice("note"))
+		}
+	}
+	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)
 	if err != nil {
 		ids := make([]string, len(records))
 		for i, rec := range records {

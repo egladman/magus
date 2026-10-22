@@ -57,6 +57,14 @@ stdout '(unchanged|updated) wave/a'
 ! exec magus job apply -f $WORK/typo.json
 stderr 'write_pathz'
 
+# A record changing only fresh_reason (or follows) is an update, not "unchanged": the guard
+# reads both, so the apply must say it moved them.
+exec magus job apply -f $WORK/fresh.json
+stdout '^updated wave/a, still declared:$'
+stdout '^  fresh_reason '
+exec magus job apply -f $WORK/fresh.json
+stdout '^unchanged wave/a'
+
 -- code.go --
 package pkg
 -- widen.jsonl --
@@ -64,6 +72,8 @@ package pkg
 {"schema_version":11,"id":"wave/b","write_paths":["src/fresh"],"goals":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
 -- narrow.json --
 {"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+-- fresh.json --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go"],"fresh_reason":"wave/b read the old limiter","check":{"target":"test","project":"."}}
 -- typo.json --
 {"schema_version":11,"id":"wave/a","write_pathz":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
 -- two.jsonl --

@@ -225,6 +225,49 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	})
 }
 
+// A soft path is a write path that collides with nothing until its holder writes it: two
+// rows extending the same test file both fork, and the first write hardens the holder's
+// claim, after which a second hard writer is refused (MGS3032) as for any other path.
+func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{".gitattributes": "*.go diff=golang\n", "run_test.go": claimGo}
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRev := aRepo.Head()
+
+	s := NewStore(tempLocation(t, bRoot))
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run_test.go"}, SoftPaths: []string{"run_test.go"},
+		Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
+	fork := func(soft []string) types.JobValidation {
+		rows, err := s.List()
+		require.NoError(t, err)
+		return validateMerge(t.Context(), s, rows, "B", func(u *types.Job) {
+			u.WritePaths, u.SoftPaths, u.Check = []string{"run_test.go"}, soft, forkCheck()
+		}, config.Jobs{}, nil)
+	}
+
+	for _, soft := range [][]string{{"run_test.go"}, nil} {
+		v := fork(soft)
+		assert.NotContains(t, codes(v.Problems), types.WritePathFileShared, "soft on the holder's side: soft %v", soft)
+		assert.Equal(t, types.WriteProofAlone, v.WriteProof, "the holder's soft claim is no overlap: soft %v", soft)
+	}
+
+	aRepo.WriteTree(map[string]string{"run_test.go": strings.Replace(claimGo, "a()", "a2()", 1)})
+	assert.NotContains(t, codes(fork([]string{"run_test.go"}).Problems), types.WritePathFileShared, "a soft claimant is still no collision")
+	v := fork(nil)
+	assert.Contains(t, codes(v.Problems), types.WritePathFileShared, "the write hardened A's claim")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows[0].SoftPaths, "the hardening is recorded on the row")
+	assert.Equal(t, []string{"run_test.go"}, rows[0].WritePaths)
+
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run_test.go"}, SoftPaths: []string{"run_test.go"},
+		Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
+	assert.Contains(t, codes(fork(nil).Problems), types.WritePathFileShared, "re-declaring the row does not soften what it wrote")
+}
+
 // A re-fork that replaces a declared row is judged by the depends_on it declares, not by
 // the stored row it replaces: adding the dependency the refusal asked for is the fix.
 func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {

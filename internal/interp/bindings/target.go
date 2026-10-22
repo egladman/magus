@@ -428,8 +428,10 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	// would get goBuild -> gobuild here and dispatch a target that does not exist.
 	target := types.Normalize(ref.Target)
 	lim := cache.LimiterFromContext(ctx)
-	return proc.RunChildSync(ctx, lim, func() error {
-		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep, target)
+	return cache.LendMachineClaim(ctx, func(ctx context.Context) error {
+		return proc.RunChildSync(ctx, lim, func() error {
+			return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep, target)
+		})
 	})
 }
 
@@ -500,8 +502,8 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 			// pointing one way, and DependencyWait.Do times it without this site having
 			// to remember to.
 			//
-			// The marker matches the inline branch below. The driver returns this error
-			// as the body's, and the reporter reads the marker to tell a dependent
+			// The marker matches the inline branch below. The driver throws this error
+			// at this call; uncaught, it is the body's, and the reporter reads the marker to tell a dependent
 			// restating its dependency's failure from a target failing on its own.
 			w.Request(func(runCtx context.Context) error {
 				if err := runBuzzDependencies(runCtx, targets, names); err != nil {
@@ -750,16 +752,7 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 // reason it gave. Nil when the caller's project cannot be resolved, which is the bare
 // `magus buzz` script case: no magusfile, no policy, every member gates.
 func advisoryMembers(ctx context.Context, names []string) map[string]string {
-	ws := types.WorkspaceFromContext(ctx)
-	src := interp.SourceFromContext(ctx)
-	if ws == nil || src == nil {
-		return nil
-	}
-	rel, err := filepath.Rel(ws.Root(), src.Dir)
-	if err != nil {
-		return nil
-	}
-	p := ws.Get(filepath.ToSlash(rel))
+	p := callerProject(ctx)
 	if p == nil {
 		return nil
 	}
@@ -777,12 +770,34 @@ func advisoryMembers(ctx context.Context, names []string) map[string]string {
 	return out
 }
 
+// callerProject is the project whose magusfile is running, or nil outside a workspace:
+// a bare `magus buzz` script has no magusfile and no policy.
+func callerProject(ctx context.Context) *types.Project {
+	ws := types.WorkspaceFromContext(ctx)
+	src := interp.SourceFromContext(ctx)
+	if ws == nil || src == nil {
+		return nil
+	}
+	rel, err := filepath.Rel(ws.Root(), src.Dir)
+	if err != nil {
+		return nil
+	}
+	return ws.Get(filepath.ToSlash(rel))
+}
+
 // dispatchBuzzTargets awaits names: via the Buzz VM pool when one is in ctx (parallel,
-// TargetRuns-deduped), else inline sequential.
+// TargetRuns-deduped), else inline sequential. The caller's machine claim is lent for the
+// wait (cache.LendMachineClaim).
 func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
+	return cache.LendMachineClaim(callCtx, func(callCtx context.Context) error {
+		return awaitBuzzTargets(callCtx, targets, names)
+	})
+}
+
+func awaitBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
 	if src := interp.SourceFromContext(callCtx); src != nil {
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
 			key := src.Dir + "\x00buzz"

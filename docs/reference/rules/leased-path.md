@@ -19,10 +19,10 @@ The writer is either that lease, not saying so, or someone about to collide with
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"leased-path": "deny"})
+magus\guard.builtins({"leased-path": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -34,8 +34,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [leased-path]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [leased-path]: ...` instead.
 
 `magus describe rule leased-path` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

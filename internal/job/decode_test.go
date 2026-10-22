@@ -378,9 +378,9 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
 	// The envelope and the key, which a put names outside its map, decode.go's own legacy
-	// compat, and checkout, which only a fork makes.
+	// compat, and checkout and soft_paths, which only a fork makes.
 	skipped := func(field string) bool {
-		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || legacy[field]
+		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
 	require.ErrorContains(t, err, "which only a fork makes")

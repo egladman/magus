@@ -222,6 +222,20 @@ func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
 	})
 }
 
+// The desktop start_session tool carries the spawn description as `title`.
+func TestDecodeHookEnvelopeSpawnTitle(t *testing.T) {
+	t.Parallel()
+
+	req, ok := decodeTestEnvelope(t, `{"session_id":"s1","cwd":"/repo","hook_event_name":"PreToolUse","tool_name":"mcp__ccd_session__start_session",`+
+		`"tool_input":{"title":"orchestrator/feat gate-fits","name":"gate-fits","prompt":"Do the job."}}`)
+	require.True(t, ok)
+	assert.Equal(t, hookRequest{
+		Value: "Do the job.", IsSpawn: true, Tool: "mcp__ccd_session__start_session", Cwd: "/repo",
+		Child: "orchestrator/feat gate-fits", Spawn: spawnFields{Description: "orchestrator/feat gate-fits", Name: "gate-fits"},
+		Who: hookAttribution{Session: "s1", Event: "PreToolUse"},
+	}, req)
+}
+
 // send_input, send_message and followup_task name their addressee `target`.
 func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
 	t.Parallel()

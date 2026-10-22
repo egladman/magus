@@ -97,6 +97,30 @@ func TestTokenStateListingPasses(t *testing.T) {
 	}
 }
 
+// The state dir holds more than the secrets, so a file beside them is readable and a command
+// that walks the dir, or a glob that would match a secret, is not.
+func TestTokenStateSiblingsPassAndWalksAreDenied(t *testing.T) {
+	state, at := tokenStateFixture(t)
+	for _, cmd := range []string{
+		"cat " + filepath.Join(state, "server.log"),
+		"tail -n 20 " + filepath.Join(state, "daemon.pid"),
+		"cat " + state + "/*.log",
+		"ls " + state,
+	} {
+		assert.Empty(t, denyTokenStateCommand(at, cmd, DialectBash), "a sibling of the secrets is not one: %s", cmd)
+	}
+	for _, cmd := range []string{
+		"grep -r token " + state,
+		"rg token " + state,
+		"find " + state + " -type f",
+		"tar cf /tmp/x.tar " + state,
+		"cat " + state + "/*",
+		"for f in " + state + "; do cat $f; done",
+	} {
+		assert.NotEmpty(t, denyTokenStateCommand(at, cmd, DialectBash), "should be denied: %s", cmd)
+	}
+}
+
 // The editor write: a write aimed at the token state is refused, by name or by resolving it.
 func TestTokenStatePathsAreDenied(t *testing.T) {
 	state, at := tokenStateFixture(t)

@@ -1,12 +1,12 @@
 ---
 title: "filter-without-input: a filter with no file, pipe or redirect, which reads a stdin nothing feeds"
-description: "An advisory by default: it explains, and blocks nothing, on a filter with no file, pipe or redirect, which reads a stdin nothing feeds."
-tags: [guard, rules, filter-without-input, advise]
+description: "A deny rule by default: it refuses a filter with no file, pipe or redirect, which reads a stdin nothing feeds, and names what to run instead."
+tags: [guard, rules, filter-without-input, deny]
 ---
 
 # filter-without-input
 
-An advisory by default: it explains, and blocks nothing, on a filter with no file, pipe or redirect, which reads a stdin nothing feeds.
+A deny rule by default: it refuses a filter with no file, pipe or redirect, which reads a stdin nothing feeds, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A filter given no input reads stdin, and under an agent harness stdin is the har
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"filter-without-input": "deny"})
+magus\guard.builtins({"filter-without-input": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [filter-without-input]: ...
+deny [filter-without-input]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [filter-without-input]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [filter-without-input]: ...` instead.
 
 `magus describe rule filter-without-input` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

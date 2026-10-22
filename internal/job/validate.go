@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,6 +48,7 @@ import (
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
 func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
+	rows = hardenWritten(ctx, store, rows)
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	prev, updates := mergeBase(rows, id, merge)
 	merged := prev.Clone()
@@ -69,11 +71,11 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool {
 			return slices.ContainsFunc(prev.WritePaths, func(held string) bool { return types.PathWithin(p, held) })
 		})
-		addedRow := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		addedRow := types.Job{ID: id, WritePaths: added, SoftPaths: merged.SoftPaths, Parent: merged.Parent, DependsOn: merged.DependsOn}
 		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow), addedRow, merged)...)
 		addedDenies := types.Job{ID: id, DenyPaths: slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
-		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, rows, addedRow), addedRow, merged)...)
+		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
 		// Judged on what the update changes, so a check the row already held never blocks an
 		// unrelated update: a new check or goal is graded against every write path, an old
 		// one only against the paths this update adds.
@@ -103,7 +105,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
-		ps = append(ps, unorderedFileShareProblems(ctx, store, rows, merged)...)
+		ps = append(ps, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
 		ps = append(ps, narrowedTestProblems(store, merged)...)
 		ps = append(ps, deniedCheckProblems(graded, store, merged)...)
 		v.WriteProof = store.WriteProof(rows, merged)
@@ -111,8 +113,108 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
-	v.Problems, v.Waived = ps.Waive(merged.Waivers)
+	v.Problems, v.Waived = waiveBut(ps, merged.Waivers)
 	return v
+}
+
+// lintTarget is the ci target whose findings a worker must meet itself: the root meets them
+// otherwise, one integration late.
+const lintTarget = "lint"
+
+// waiveBut is ps.Waive with lint exempted from globs: a gate on lint is waived only by a
+// waiver naming its exact subject, so `**` cannot hide the findings a go-test check never
+// shows.
+func waiveBut(ps types.JobProblems, waivers []types.JobWaiver) (kept, waived types.JobProblems) {
+	isLint := func(p types.JobProblem) bool {
+		return p.Code == types.GateNotRun && strings.HasPrefix(p.Subject, lintTarget+" ")
+	}
+	var lint, rest types.JobProblems
+	for _, p := range ps {
+		if isLint(p) {
+			lint = append(lint, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	exact := slices.DeleteFunc(slices.Clone(waivers), func(w types.JobWaiver) bool { return types.IsGlobMeta(w.Subject) })
+	kept, waived = rest.Waive(waivers)
+	lintKept, lintWaived := lint.Waive(exact)
+	return append(kept, lintKept...), append(waived, lintWaived...)
+}
+
+// lintGoals is a lint goal per project whose lint reads Go source the row writes and which
+// nothing runs: a worker checking only go-test leaves lint findings for the integrator.
+// The goal skips default charms so lint reports instead of rewriting the worker's tree.
+func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
+	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
+		return nil
+	}
+	if !slices.ContainsFunc(writtenFiles(root, row), func(f string) bool { return path.Ext(f) == ".go" }) {
+		return nil
+	}
+	var goals []types.Goal
+	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
+		if g.Target == lintTarget {
+			goal := g.Goal
+			goal.Check.NoDefaultCharms = true
+			goals = append(goals, goal)
+		}
+	}
+	return goals
+}
+
+// ExtendFootprint is the write paths row's change reaches that it did not declare, and a
+// note saying why for each: the test files beside a written file that reference what the
+// write paths define ([ReferencedOutside]). Only a non-test write path extends: a written
+// test file would pull in every test that merely shares its helpers. A read-only row reaches
+// none.
+//
+// The caller skips it for a holder, whose own fork may not widen its boundary, and records
+// the paths it returns as the row's SoftPaths: they overlap nothing until the holder writes.
+func ExtendFootprint(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) (paths, notes []string) {
+	if row.ReadOnly || len(row.WritePaths) == 0 {
+		return nil, nil
+	}
+	beside := map[string]bool{}
+	for _, f := range writtenFiles(root, row) {
+		beside[path.Dir(f)] = true
+	}
+	var fromSource func(file, declaration string) map[string]int
+	if referrers != nil {
+		fromSource = func(file, declaration string) map[string]int {
+			if types.IsTestPath(file) {
+				return nil
+			}
+			return referrers(file, declaration)
+		}
+	}
+	for _, f := range ReferencedOutside(root, row, projects, fromSource) {
+		if types.IsTestPath(f.File) && beside[path.Dir(f.File)] {
+			paths = append(paths, f.File)
+			notes = append(notes, fmt.Sprintf("%s added to the write paths: it tests what %s defines", f.File, strings.Join(f.Uses, ", ")))
+		}
+	}
+	return paths, notes
+}
+
+// integratorRegenerates is the reason a record gives for an output the integrator owns.
+const integratorRegenerates = "the integrator regenerates it"
+
+// IntegratorWaivers is one waiver per output a target regenerates from row's write paths
+// that sits outside them: the integrator regenerates it after the job. An output a deny
+// path touches stays its owner's, and one a waiver of row accepts already needs no new one.
+func IntegratorWaivers(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.JobWaiver {
+	var waivers []types.JobWaiver
+	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
+		glob, _, _ := strings.Cut(o.Output, " !")
+		problem := types.JobProblem{Code: types.OutputOutsideWritePaths, Subject: o.Output}
+		accepted := slices.ContainsFunc(row.Waivers, func(w types.JobWaiver) bool { return w.Waives(problem) })
+		if accepted || slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+			continue
+		}
+		waivers = append(waivers, types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
+	}
+	return waivers
 }
 
 // ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
@@ -152,7 +254,7 @@ func (s *Store) InWorkspace(ws Workspace) *Store {
 		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
 		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
 		trailBase: s.trailBase, landed: s.landed, grader: s.grader, dryRun: s.dryRun, build: s.build,
-		modelTiers: s.modelTiers, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
+		modelTiers: s.modelTiers, modelRows: s.modelRows, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
 		workspace: &ws,
 	}
 }
@@ -515,10 +617,17 @@ func forkLimitProblems(rows []types.Job, id, parent string, limits config.Jobs) 
 	return ps
 }
 
+// namesExistingSymbol reports whether a symbol goal of expect grades a symbol that exists
+// when the job is declared: one a job is to create (present) is the exception, and a name
+// that resolves to nothing under any other expectation is a typo that grades vacuously.
+func namesExistingSymbol(expect types.GoalExpect) bool {
+	return slices.Contains([]types.GoalExpect{types.ExpectChanged, types.ExpectAbsent, types.ExpectUnreferenced}, expect)
+}
+
 // ambiguousSymbolProblems finds each symbol a goal names whose bare name resolves to more
-// than one definition, as JobGoalInvalid, naming each. A name the reader cannot answer for
-// is no problem: a cold graph must not block a declaration, and the goal itself still
-// refuses to certify later.
+// than one definition, or a `<package>.<Name>` that resolves to none when the goal grades an
+// existing symbol, as JobGoalInvalid, naming each. A name the reader cannot answer for is no
+// problem: a cold graph must not block a declaration, and the goal refuses to certify later.
 func ambiguousSymbolProblems(ctx context.Context, goals []types.Goal, read SymbolReader) types.JobProblems {
 	if read == nil {
 		return nil
@@ -533,6 +642,15 @@ func ambiguousSymbolProblems(ctx context.Context, goals []types.Goal, read Symbo
 				continue
 			}
 			fact, ok := read(ctx, name, "")
+			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && namesExistingSymbol(goal.Resolve().Expect) {
+				ps = append(ps, types.JobProblem{
+					Code: types.JobGoalInvalid, Field: fmt.Sprintf("goals[%d].symbols[%d]", i, j),
+					Message: fmt.Sprintf("goal %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",
+						goal.ID, name, goal.Resolve().Expect),
+					Fix: fmt.Sprintf("name a definition `%s` finds, as `<package>.<Name>` or a symbol id; with no symbol index built, `%s` builds one", hint.Refs.With(name), hint.GraphBuild),
+				})
+				continue
+			}
 			if !ok || len(fact.SameNameDefinitions) < 2 {
 				continue
 			}

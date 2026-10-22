@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -532,16 +533,98 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 	})
 }
 
+// extendedFootprint is rec with the tests beside what it writes added to its write paths and
+// the outputs regenerated from them waived as the integrator's, with a note for each and a
+// count line. A bound caller, whose fork may not widen its boundary, and a workspace that
+// did not load are skipped.
+func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
+	if store.Actor().Bound() || ws.Unavailable != "" {
+		return rec, nil
+	}
+	var declared types.Job
+	rec.Apply(&declared)
+	var referrers func(file, declaration string) map[string]int
+	if g := graph.load(ctx); g != nil && g.HasSymbols() {
+		referrers = g.Referrers
+	}
+	paths, notes := job.ExtendFootprint(root, declared, ws.Projects, referrers)
+	rec.WritePaths = append(rec.WritePaths, paths...)
+	rec.SoftPaths = append(rec.SoftPaths, paths...)
+	declared.WritePaths = append(declared.WritePaths, paths...)
+	waivers := job.IntegratorWaivers(root, declared, ws.Projects, ws.Ignored)
+	rec.Waivers = append(rec.Waivers, waivers...)
+	if len(waivers) > 0 {
+		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are waived: the integrator owns them", len(waivers)))
+	}
+	return rec, notes
+}
+
+// graphsByTree answers a graph per checkout, root's being rootGraph and any other built on
+// first ask under the same rebuild rule.
+func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree string) *jobGraph {
+	var (
+		mu     sync.Mutex
+		others = map[string]*jobGraph{}
+	)
+	return func(tree string) *jobGraph {
+		tree = filepath.Clean(tree)
+		if tree == filepath.Clean(root) {
+			return rootGraph
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if _, ok := others[tree]; !ok {
+			others[tree] = newJobGraph(tree, rebuild)
+		}
+		return others[tree]
+	}
+}
+
+// runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
+// check would mint there now is the key the run was stored under. Any lookup that fails
+// answers no, so the clock judges the run as it would without this.
+func runsAtCurrentKey() job.CurrentRun {
+	return func(ctx context.Context, tree string, run types.JobAttempt) bool {
+		if run.Ref == "" || run.Failed {
+			return false
+		}
+		dir, err := magus.ResolveCacheDir(tree, workspace.WithLoadedConfig(globalCfg))
+		if err != nil {
+			return false
+		}
+		desc, err := cache.NewOutputStore(dir).DescriptorByRef(run.Ref)
+		if err != nil || desc.Key == "" {
+			return false
+		}
+		m, err := loadMagus(ctx, tree)
+		if err != nil {
+			return false
+		}
+		target, charms, _ := strings.Cut(desc.Target, ":")
+		var names []string
+		if charms != "" {
+			names = strings.Split(charms, ",")
+		}
+		key, _, err := m.ComputeTargetKey(ctx, desc.Project, target, names)
+		return err == nil && key == desc.Key
+	}
+}
+
 // jobObserver is the checkpoint observer plus the symbol delta of the job's diff and, for a
 // job with a check gate on ci, the newest green ci gate on this checkout's branch and the
-// tier of the change since it. One graph load serves the symbol goals and the delta.
-func jobObserver(root string, graph *jobGraph) job.Observer {
+// tier of the change since it. One graph load serves the symbol goals and the delta, and it
+// is the graph of the checkout the job's work lives in: a worker's unintegrated branch is
+// invisible to the waiter's.
+func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer {
 	return func(ctx context.Context, row types.Job) (job.Observed, error) {
+		tree := job.WorkTree(root, row)
+		graph := graphIn(tree)
 		seen, err := job.CheckpointObserver(root, graphSymbolReader(graph.loadScoped(row.WritePaths)))(ctx, row)
 		if err != nil {
 			return seen, err
 		}
-		if delta, ok := observeSymbolDelta(ctx, root, row, seen, graph); ok {
+		seen.CurrentRun = runsAtCurrentKey()
+		if delta, ok := observeSymbolDelta(ctx, tree, row, seen, graph); ok {
 			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
 		}
 		if root == "" || !gatesOnCI(row) {
@@ -552,28 +635,17 @@ func jobObserver(root string, graph *jobGraph) job.Observer {
 	}
 }
 
-// observeSymbolDelta reads the delta of the diff seen was graded on, in the checkout that
-// diff was read in. A holder's other checkout gets its own graph, since lines of its files
-// placed against this one's would name the wrong symbols; one that will not load leaves
-// the delta unknown, as does a stale index there when graph must not build.
-func observeSymbolDelta(ctx context.Context, root string, row types.Job, seen job.Observed, graph *jobGraph) (symbolDelta, bool) {
-	if row.ReadOnly || root == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
+// observeSymbolDelta reads the delta of the diff seen was graded on, in tree, the checkout
+// that diff was read in, against graph, which is that tree's. A graph that will not load
+// leaves the delta unknown, as does a stale index when graph must not build.
+func observeSymbolDelta(ctx context.Context, tree string, row types.Job, seen job.Observed, graph *jobGraph) (symbolDelta, bool) {
+	if row.ReadOnly || tree == "" || !seen.ChangedKnown || seen.ChangedRevision == "" {
 		return symbolDelta{}, false
 	}
 	if len(seen.Changed) == 0 {
 		return symbolDelta{}, true
 	}
-	tree := root
-	if info, err := os.Stat(row.CheckoutRoot); row.CheckoutRoot != "" && err == nil && info.IsDir() {
-		tree = row.CheckoutRoot
-	}
-	var g *knowledge.Graph
-	if filepath.Clean(tree) == filepath.Clean(root) {
-		g = graph.loadScoped(row.WritePaths)(ctx)
-	} else if ws, err := magus.Inspect(ctx, tree, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...); err == nil &&
-		(graph.rebuild || len(findStaleIndexes(ctx, ws)) == 0) {
-		g, _ = loadRefsGraph(ctx, ws, globalCfg, false, "")
-	}
+	g := graph.loadScoped(row.WritePaths)(ctx)
 	res, err := vcs.Resolve(ctx, tree, "", types.VCSOptions{})
 	if err != nil || res.Source == types.VCSSourceDisabled {
 		return symbolDelta{}, false

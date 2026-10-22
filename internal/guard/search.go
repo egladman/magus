@@ -1234,6 +1234,11 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 			r.run = hint.Refs.With(a.ident, "--definition", "--source")
 		}
 		defined, definitive := deps.symbolDefined(a.ident)
+		ids := deps.symbolIDs(a.ident)
+		if len(ids) > 1 {
+			// refs on a name that several symbols carry lists them and stops.
+			r.run = strings.Replace(r.run, " "+a.ident, " '"+ids[0]+"'", 1)
+		}
 		switch {
 		case definitive && defined:
 			route(a, r, a.how+", defined in the index")
@@ -1332,8 +1337,22 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep)
 func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
 	build := hint.GraphBuild.With("--silent")
 	textNote, textNext := textRemedy(c, js)
+	wait := hint.Status.With("--wait")
+	rebuild, leadRebuild := "rebuild it: `"+build+"`", "rebuild it, then ask the graph. "
+	full := budgetFullText()
+	// A worker never waits for a seat outside the call that spends it, so its remedy is the
+	// report its check would make.
+	worker := full != "" && deps.lease != ""
+	switch {
+	case worker:
+		rebuild = "the rebuild has no seat (" + full + "); report that and stop, as a worker's check does"
+		leadRebuild = "the rebuild has no seat; report that and stop. "
+	case full != "":
+		rebuild = "the rebuild has no seat (" + full + "); wait for one: `" + wait + "`, then rebuild it: `" + build + "`"
+		leadRebuild = "wait for a seat, then rebuild it and ask the graph. "
+	}
 	v := ShellVerdict{
-		Deny: denySymbolSearchLead + ", and the symbol index " + symbolIndexCause(moved) + "; rebuild it: `" + build + "`.",
+		Deny: denySymbolSearchLead + ", and the symbol index " + symbolIndexCause(moved) + "; " + rebuild + ".",
 		Why: "Then " + routeClause(js.routes) + " this exactly.\n" +
 			classifiedLine(js) + "\n" +
 			"refs checks every site against the tree, the generated and cross-language ones a pattern misses included." +
@@ -1341,10 +1360,14 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
 	}
 	argv := servedArgv(build)
-	if len(argv) == 0 {
+	if len(argv) == 0 || worker {
 		return v
 	}
-	next := []types.NextStep{hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly.")}
+	var next []types.NextStep
+	if full != "" {
+		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), servedArgv(wait), "waits for a seat in the build budget; the rebuild after it then has one."))
+	}
+	next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly."))
 	routes := routeNexts(js.routes)
 	if len(routes) == 0 {
 		return v
@@ -1352,7 +1375,17 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	next = append(append(next, routes...), textNext...)
 	// The lead replaces the deny when the remedy is served, so it carries the classification:
 	// it is what makes a false positive disputable.
-	return v.withRemedy(denySymbolSearchLead+", and the symbol index "+symbolIndexCause(moved)+"; rebuild it, then ask the graph. "+classifiedLine(js)+textNote, next...)
+	return v.withRemedy(denySymbolSearchLead+", and the symbol index "+symbolIndexCause(moved)+"; "+leadRebuild+classifiedLine(js)+textNote, next...)
+}
+
+// budgetFullText words the machine build budget when it has no seat for a rebuild, "" when
+// it has one or no broker answers.
+func budgetFullText() string {
+	s, err := budgetSnapshot(context.Background())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.SplitN(BudgetFull(s, time.Now()), ". ", 2)[0], ".")
 }
 
 // noGraphVerdict advises a search for a name in a workspace with no symbol index to route

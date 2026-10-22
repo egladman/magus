@@ -3848,6 +3848,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 		itemsDenyPaths[indexDenyPaths] = vm.StrValue(v.DenyPaths[indexDenyPaths])
 	}
 	out.MapSet("denyPaths", vm.ListValue(itemsDenyPaths))
+	itemsSoftPaths := make([]vm.Value, len(v.SoftPaths))
+	for indexSoftPaths := range v.SoftPaths {
+		itemsSoftPaths[indexSoftPaths] = vm.StrValue(v.SoftPaths[indexSoftPaths])
+	}
+	out.MapSet("softPaths", vm.ListValue(itemsSoftPaths))
 	itemsReadPaths := make([]vm.Value, len(v.ReadPaths))
 	for indexReadPaths := range v.ReadPaths {
 		itemsReadPaths[indexReadPaths] = vm.StrValue(v.ReadPaths[indexReadPaths])
@@ -3870,6 +3875,8 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("modelTier", optModelTier)
 	out.MapSet("briefFormat", enums.Case("BriefFormat", string(v.BriefFormat)))
+	out.MapSet("follows", vm.StrValue(v.Follows))
+	out.MapSet("freshReason", vm.StrValue(v.FreshReason))
 	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
 	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
@@ -4252,6 +4259,7 @@ func ObjectSpawnRequest(v types.SpawnRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("prompt", vm.StrValue(v.Prompt))
 	out.MapSet("background", vm.BoolValue(v.Background))
 	out.MapSet("isolated", vm.BoolValue(v.Isolated))
+	out.MapSet("checkout", vm.StrValue(v.Checkout))
 	out.MapSet("agent", vm.StrValue(v.Agent))
 	out.MapSet("parent", vm.StrValue(v.Parent))
 	out.MapSet("role", vm.StrValue(string(v.Role)))

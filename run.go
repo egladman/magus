@@ -2653,9 +2653,11 @@ func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, erro
 	return sync.OnceValues(func() (*forecast.History, error) {
 		<-done
 		if err != nil {
-			slog.With(attr.Component("magus")).ErrorContext(ctx,
-				"run history is unreadable, so this run sizes claims from declarations and records no history",
-				attr.Error(err))
+			m.historySaid.Do(func() {
+				slog.With(attr.Component("magus")).ErrorContext(ctx,
+					"run history is unreadable, so this run sizes claims from declarations and records no history",
+					attr.Error(err))
+			})
 		}
 		return &h, err
 	})

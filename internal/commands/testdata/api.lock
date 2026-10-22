@@ -1,6 +1,7 @@
 config agents.billing
 config agents.brief_format
 config agents.profile
+config agents.prompt_cache_ttl
 config broker
 config cache.dir
 config cache.include.arch.enabled

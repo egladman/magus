@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -283,6 +284,9 @@ type ownBuildOutcome struct {
 	// checkout's integrator. A worker never builds the binary: there is one per base, the
 	// integrator builds it and the main session places it.
 	lease string
+	// checkoutBuild refuses job.CheckoutBootstrapScript to a lease that does not own the
+	// checkout it names; it is the whole outcome for that line.
+	checkoutBuild denial
 }
 
 // apply layers this outcome onto v, the raw-tool deny it refines.
@@ -395,7 +399,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
-	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && cannotLoad(ctx, deps, root)
+	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && (staleOwnBinary(root) || cannotLoad(ctx, deps, root))
 	lease := deps.lease
 	if me, ok := actingLiveLease(ctx, deps, lease); ok && actingIntegrator(ctx, deps, me) {
 		lease = ""
@@ -423,8 +427,8 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		}, workspaceShell),
 		staleBootstrap: staleBootstrap,
 		staleBootstrapAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than the tree and cannot load it (MGS1021): the bootstrap replaces it.",
-			Why:     "A binary that cannot load the tree cannot rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
+			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than its sources or cannot load it: the bootstrap replaces it.",
+			Why:     "A binary older than its sources may not load the tree or rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 	}
@@ -453,6 +457,12 @@ func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string
 	if !parsed {
 		return nil
 	}
+	if dir, ok := checkoutBootstrapDir(cmds, cwd); ok {
+		if refused := denyCheckoutBootstrap(ctx, deps, dir); refused.refused() {
+			return &ownBuildOutcome{checkoutBuild: refused}
+		}
+		return nil
+	}
 	i := slices.IndexFunc(cmds, func(c hint.Invocation) bool { return rawToolDenied(deps, c) })
 	if i < 0 {
 		return nil
@@ -470,8 +480,59 @@ func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string
 // rankOwnBuild refines a raw-tool deny with the bootstrap correction; every other verdict
 // passes through untouched.
 func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
-	if oc == nil || v.Rule.Name != denyRuleRawTool || v.Deny == "" {
+	switch {
+	case oc == nil:
+		return v
+	case oc.checkoutBuild.refused():
+		return stronger(v, ShellVerdict{Deny: oc.checkoutBuild.Say, Why: oc.checkoutBuild.Why, Rule: denyRule{Name: denyRuleRawTool}})
+	case v.Rule.Name != denyRuleRawTool || v.Deny == "":
 		return v
 	}
 	return oc.apply(v)
+}
+
+// checkoutBootstrapDir is the checkout a line's magus call hands job.CheckoutBootstrapScript
+// with --checkout, resolved against cwd; ok is false for a line running no such call.
+func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
+	for _, c := range cmds {
+		words := magusSubcommandWords(c.Args)
+		if c.Name != "magus" || len(words) < 2 || words[0] != "buzz" || !strings.HasSuffix(path.Clean("/"+words[1]), "/"+job.CheckoutBootstrapScript) {
+			continue
+		}
+		rest := c.Args[slices.Index(c.Args, "--")+1:]
+		for i, a := range rest {
+			dir, joined := strings.CutPrefix(a, "--checkout=")
+			if !joined {
+				if a != "--checkout" || i+1 >= len(rest) {
+					continue
+				}
+				dir = rest[i+1]
+			}
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(cwd, dir)
+			}
+			return filepath.Clean(dir), true
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// denyCheckoutBootstrap refuses a build of ./magus in dir under a lease that does not own
+// dir: the root, the integrator and the job holding that checkout may run it, since a
+// checkout forked at a commit no placed binary matches has no other way to get one.
+func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, dir string) denial {
+	if deps.lease == "" {
+		return denial{}
+	}
+	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegrator(ctx, deps, me) {
+		return denial{}
+	}
+	if ownsCheckout(ctx, deps, hookLocation(ctx, deps), dir) {
+		return denial{}
+	}
+	return denial{
+		Say: "magus workspace: `magus buzz " + job.CheckoutBootstrapScript + " -- --checkout " + dir + "` builds ./magus in a checkout lease " + deps.lease + " does not own; the root places it.",
+		Why: workerBuildVerdict + ". Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
+	}
 }

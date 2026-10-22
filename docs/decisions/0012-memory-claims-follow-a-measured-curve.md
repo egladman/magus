@@ -261,3 +261,47 @@ field is added: the profile learns retrospectively, the same way the peak claim 
   the curve lands, before admission changes.
 - Should a refusal across invocations say when the claim would fit? magus never waits on
   another invocation, so the hint must not read as a queue.
+
+## Amendments
+
+### 2026-10-21: a call's members claim their own
+
+The curve did not reach ci. `SizedChainMemory` holds a composed target's peak flat, so
+lint and test carried no curve, and the call summed their peaks. On an 18.0 GiB budget
+across 10 slots, `magus affected ci` was refused every time: ci claimed 18.9 GiB, measured
+over 8 runs, with "lint: no memory curve; summed the peaks of its ctx.needs call".
+
+The members do run at once. `dispatchBuzzTargets` sends one call to `Pool.Dispatch`,
+which submits every member before it waits on any. The sum was honest about that
+concurrency. What it got wrong was the unit: under a skip_cache composer such as ci, the
+run's interceptor already makes each same-project member a cache step of its own
+(`RunAside`), and only `claimMachine`'s "a step beneath a claim takes none" rule kept those
+steps from claiming.
+
+- Each member that `dispatchBuzzTargets` hands to the interceptor takes its own machine
+  claim (`cache.ChildrenClaimTheirOwn`). A member that fits waits for a seat beside its
+  siblings, so four members that each fit and together do not all run, in turn.
+- The composer's claim leaves those members out (`SizedChainMemory`'s `ownClaims`). One
+  predicate, `types.MembersClaimTheirOwn` (the composer's skip_cache), decides both the
+  fold and the dispatch, so a member is never counted twice or left uncovered.
+  Cross-project members still run inline and still fold. ci now claims
+  its own inline work only, not a floor of its largest member. A floor would hold memory
+  no process uses while the member it copies holds its own.
+- Any step holding its own claim lends it, with its limiter slots, for every ctx.needs
+  wait, same-project or cross-project, and takes the claim again after
+  (`cache.LendMachineClaim`). No claim is held while it waits on another. Keeping it
+  hung twice the same day. First, `magus affected generate:rw`: root generate's members
+  each composed generators of their own, held all 10 slots, and waited on leaves that
+  could never be seated. Then, with only skip_cache composers lending, a `vcs resolve`:
+  ten generators held every slot, each waiting on types-generate, which generate had
+  also dispatched and which needed a seat of its own. Refusing a member that could not
+  fit beside its waiting composers caught only the composers above it, not siblings or
+  shared needs.
+- The cost is twofold. The retake can be refused by another invocation after the
+  members ran, a loud MGS3009 where the alternative was a hang. And members that run
+  inline rather than as steps run on no claim while it is lent; the claim's figure still
+  folds them.
+- `ownClaims` drops members from the fold only for the step being sized.
+- A member larger than the whole budget is refused by name, as before.
+- `magus doctor`'s gate-fits check sizes ci and every same-project step it reaches with
+  the admission sizer and fails on any step larger than the whole budget.

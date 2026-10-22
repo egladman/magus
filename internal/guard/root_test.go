@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -305,15 +307,19 @@ func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {
 
 // A proven orchestrator's write inside a checkout is refused, but advised while the
 // checkout is midway through a cherry-pick; notes, a leased caller and a session with no
-// record are never judged.
+// record are never judged. Proof is a live row the session handed out, on a thread its
+// host reported; on one it did not, the same row is inferred.
 func TestGradeMainWrite(t *testing.T) {
-	t.Parallel()
 	deps := strictDeps(t)
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	grade := func(orchestrates types.Orchestration, path, lease string, prepare func(at location)) types.GuardJudgment {
-		at, _ := orchestratorFixture(t)
-		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
-		writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Orchestrates: orchestrates})
+		at := handedOutFixture(t, types.Job{ID: "a1", State: types.StateRunning})
+		if orchestrates == types.OrchestrationProven {
+			hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
+		}
+		if orchestrates != "" {
+			writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Forked: []string{"a1"}})
+		}
 		if prepare != nil {
 			prepare(at)
 		}
@@ -336,6 +342,88 @@ func TestGradeMainWrite(t *testing.T) {
 	assert.Equal(t, decisionPass, grade(types.OrchestrationProven, filepath.Join(t.TempDir(), "plan.md"), "", nil).Decision)
 	assert.Equal(t, decisionPass, grade(types.OrchestrationProven, "internal/a.go", "job-a", nil).Decision)
 	assert.Equal(t, decisionPass, grade("", "internal/a.go", "", nil).Decision)
+}
+
+// handedOutFixture is orchestratorFixture over a job store holding rows.
+func handedOutFixture(t *testing.T, rows ...types.Job) location {
+	t.Helper()
+	root, cacheDir := fixture.SeedLeases(t, rows...)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
+	return location{cacheDir: cacheDir, workspace: root, dir: root}
+}
+
+// The role is the live lease: a session orchestrates while a row it handed out is
+// declared, running or exited, and not once every one has passed, failed or been taken
+// back by its own `job exec`.
+func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
+	who := hookAttribution{Host: "claude-code", Session: "s"}
+	role := func(at location) types.Orchestration {
+		return orchestration(sessionCostState(at, who, liveRowLookup(t.Context(), at), time.Now()), types.ThreadReported)
+	}
+	for _, tc := range []struct {
+		name  string
+		state types.JobState
+		want  types.Orchestration
+	}{
+		{"a fork still declared", types.StateDeclared, types.OrchestrationProven},
+		{"a worker running", types.StateRunning, types.OrchestrationProven},
+		{"a worker that exited, awaiting its wait", types.StateExited, types.OrchestrationProven},
+		{"every row passed", types.StatePass, ""},
+		{"every row failed", types.StateFail, ""},
+	} {
+		at := handedOutFixture(t, types.Job{ID: "a1", State: tc.state}, types.Job{ID: "a2", State: types.StatePass})
+		writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Forked: []string{"a1", "a2"}})
+		assert.Equal(t, tc.want, role(at), tc.name)
+	}
+
+	at := handedOutFixture(t, types.Job{ID: "own", State: types.StateRunning})
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
+	writeCostState(facts, costState{Forked: []string{"own"}, Forks: map[string]int64{"own": 1}})
+	require.Equal(t, types.OrchestrationProven, role(at))
+	bindOnExec(t.Context(), at, who, "./magus job exec own")
+	assert.Empty(t, readCostState(facts).Forked, "a row the session takes itself is no longer handed out")
+	assert.Empty(t, readCostState(facts).Forks)
+	releaseOnEnd(at, who, "./magus job exit own --stdin")
+	_, err := job.NewStore(at.jobs()).Update(t.Context(), "own", func(cur *types.Job) { cur.State = types.StateExited })
+	require.NoError(t, err)
+	assert.Empty(t, role(at), "its own row exec'd then exited leaves the session orchestrating nothing")
+}
+
+// Where no spawn would pass, groundwork names the row to hold rather than the spawn it
+// cannot make.
+func TestGroundworkNamesJobExecWhenSpawningIsBroken(t *testing.T) {
+	t.Parallel()
+	call := mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: types.DelegableRead}
+	f, ok := groundworkFinding(builtin.Setting{Decision: builtin.Deny}, call)
+	require.True(t, ok)
+	assert.Contains(t, f.say, "spawn a worker")
+
+	call.spawnBroken = "harness claude-code maps no model"
+	f, ok = groundworkFinding(builtin.Setting{Decision: builtin.Deny}, call)
+	require.True(t, ok)
+	assert.True(t, f.deny)
+	assert.Contains(t, f.say, "spawning is broken: harness claude-code maps no model; take a row with `./magus job exec <row>`")
+}
+
+// While ./magus is older than its sources or absent, rebuilding it is the root's own work;
+// once it is current, the build is integration again.
+func TestRootRebuildsAStaleBinary(t *testing.T) {
+	t.Parallel()
+	at, _ := orchestratorFixture(t)
+	require.NoError(t, os.Remove(filepath.Join(at.workspace, "magus")))
+	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "no binary yet")
+	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at), "no binary yet")
+
+	require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "magus"), []byte("binary"), 0o755))
+	ageBinary(t, at.workspace)
+	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a current binary")
+
+	writeSource(t, at.workspace, "internal/guard/x.go")
+	assert.True(t, staleOwnBinary(at.workspace))
+	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a stale binary that still loads")
+	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at))
+	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build . && git add -A", at), "only alone on its line")
+	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run generate .", at), "only the build")
 }
 
 // strictDeps is a workspace at the strict level with nothing else declared.

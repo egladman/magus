@@ -1,7 +1,13 @@
 package guard
 
 import (
+	"path"
+	"path/filepath"
 	"regexp"
+	"strings"
+	"sync"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -85,6 +91,92 @@ func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bo
 	}
 	return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
 		"acting on an architecture question", carries)
+}
+
+// noSkillAgents are the subagent types magus ships that have no Skill tool: a read-only
+// agent cannot load a skill, so a deny that asks for one has no remedy it can take.
+var noSkillAgents = sync.OnceValue(func() map[string]bool {
+	shipped, err := agent.ShippedAgents()
+	if err != nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, a := range shipped {
+		out[a.Name] = a.ReadOnly
+	}
+	return out
+})
+
+// loadsSkills reports whether the calling agent can load a skill. A root session and an
+// agent of a type magus does not know can; an agent spawned as a shipped read-only type
+// cannot.
+func (d Dependencies) loadsSkills() bool {
+	return !noSkillAgents()[spawnedAgentType(d.facts, d.caller.Agent)]
+}
+
+// structureProbe reports whether a shell line searches, reads or lists the workspace's own
+// source, the one thing a structure question changes the answer to. A line that counts or
+// reads files outside the workspace (a memory file, a log) probes no structure, and neither
+// does one that runs a command. Relative paths resolve against workspace.
+func structureProbe(line, workspace string) bool {
+	f, err := parseFile(line, DialectBash)
+	if err != nil || workspace == "" {
+		return false
+	}
+	probes := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok || probes {
+			return !probes
+		}
+		for _, c := range peelWrappers(literalWords(call.Args), DialectBash) {
+			probes = probes || probesSource(c, workspace)
+		}
+		return !probes
+	})
+	return probes
+}
+
+// listingTools print a directory's contents.
+var listingTools = map[string]bool{"ls": true, "find": true, "tree": true, "fd": true}
+
+// probesSource reports one command that searches, reads or lists inside workspace.
+func probesSource(c hint.Invocation, workspace string) bool {
+	name := path.Base(c.Name)
+	_, search := parseSearchCall(c)
+	if !search && !hint.IsSearchTool(name) && !listingTools[name] && len(parseReadCalls(c)) == 0 {
+		return false
+	}
+	paths := invocationPaths(c)
+	if len(paths) == 0 {
+		// A recursive search or a listing with no operand reads the working directory.
+		return name == "rg" || name == "ls" || name == "find" || name == "tree" || hasFlag(c.Args, 'r', "recursive") || hasFlag(c.Args, 'R', "")
+	}
+	for _, p := range paths {
+		if inSource(workspace, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// inSource reports a path inside workspace that is not tooling state.
+func inSource(workspace, p string) bool {
+	if p == "" || strings.HasPrefix(p, "~") {
+		return false
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(workspace, p)
+	}
+	rel, err := filepath.Rel(workspace, filepath.Clean(p))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	switch strings.SplitN(filepath.ToSlash(rel), "/", 2)[0] {
+	case ".git", ".magus", ".claude":
+		return false
+	}
+	return true
 }
 
 // rankArchitectureUnbriefed ranks the reason under every other deny on the line, as

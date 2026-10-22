@@ -836,8 +836,9 @@ a third longer to do it.[^sankaranarayanan-2026]
 
 The mechanisms are already on this page. Notes are human-authored by
 construction. `--ack` refuses without a terminal, agent hosts are denied it
-outright, and the count is shown to nobody but the reader. The guard advises
-where advice suffices and denies only what cannot be undone. magus never calls a
+outright, and the count is shown to nobody but the reader. The guard denies
+with a remedy the caller can run, since advice that only prints is routed
+around ([ADR 0013](decisions/0013-the-guard-denies.md)). magus never calls a
 model, which is what makes the Friday above an option rather than a slogan.
 
 This repository is built with agents at scale: 113,430 agent-run shell commands

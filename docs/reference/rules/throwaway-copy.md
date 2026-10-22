@@ -1,12 +1,12 @@
 ---
 title: "throwaway-copy: a run inside a temp or scratchpad copy, which leaves the real tree unverified"
-description: "An advisory by default: it explains, and blocks nothing, on a run inside a temp or scratchpad copy, which leaves the real tree unverified."
-tags: [guard, rules, throwaway-copy, advise]
+description: "A deny rule by default: it refuses a run inside a temp or scratchpad copy, which leaves the real tree unverified, and names what to run instead."
+tags: [guard, rules, throwaway-copy, deny]
 ---
 
 # throwaway-copy
 
-An advisory by default: it explains, and blocks nothing, on a run inside a temp or scratchpad copy, which leaves the real tree unverified.
+A deny rule by default: it refuses a run inside a temp or scratchpad copy, which leaves the real tree unverified, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate 
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"throwaway-copy": "deny"})
+magus\guard.builtins({"throwaway-copy": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [throwaway-copy]: ...
+deny [throwaway-copy]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [throwaway-copy]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [throwaway-copy]: ...` instead.
 
 `magus describe rule throwaway-copy` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

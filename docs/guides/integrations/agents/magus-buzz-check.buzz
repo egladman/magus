@@ -19,7 +19,7 @@
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 import "io";
 import "flags";

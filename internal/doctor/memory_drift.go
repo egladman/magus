@@ -1,13 +1,34 @@
 package doctor
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
+
+// historyUnreadableCheck is the advice a history-backed check gives when it could not
+// read the run history. Only a history a newer magus wrote names a fix; any other
+// failure has none to name.
+func historyUnreadableCheck(name string, err error) types.Check {
+	c := types.Check{
+		Name:    name,
+		Status:  types.CheckAdvice,
+		Message: "run history is unreadable, so declarations could not be checked against what magus measured",
+		Details: []string{err.Error()},
+	}
+	var skew *forecast.UnsupportedVersionError
+	if errors.As(err, &skew) {
+		c.Message = fmt.Sprintf("run history is version %d, written by a newer magus than this build (reads up to %d), so declarations could not be checked", skew.Have, skew.Max)
+		c.Details = append(c.Details, "the file is left alone; rebuild this magus to read it")
+		c.Fix = hint.Run.Argv("go-build", ".")
+	}
+	return c
+}
 
 const (
 	// underDeclaredRatio and materialGapMB decide when a disagreement is worth
@@ -41,13 +62,7 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check 
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
-		// Advice, not OK: the check could not RUN, which is a different answer from
-		// "everything agrees" and the reader needs to know which one they got.
-		return types.Check{
-			Name: name, Status: types.CheckAdvice,
-			Message: "run history is unreadable, so declarations could not be checked against what magus measured",
-			Details: []string{err.Error()},
-		}
+		return historyUnreadableCheck(name, err)
 	}
 	// A missing history file loads as an empty one, so this is the ordinary state of a
 	// fresh clone rather than an error. Saying so beats "everything agrees", which

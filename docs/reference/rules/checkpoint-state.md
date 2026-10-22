@@ -1,12 +1,12 @@
 ---
 title: "checkpoint-state: a command reaching for a tree's identity, which a revision alone cannot give"
-description: "An advisory by default: it explains, and blocks nothing, on a command reaching for a tree's identity, which a revision alone cannot give."
-tags: [guard, rules, checkpoint-state, advise]
+description: "A deny rule by default: it refuses a command reaching for a tree's identity, which a revision alone cannot give, and names what to run instead."
+tags: [guard, rules, checkpoint-state, deny]
 ---
 
 # checkpoint-state
 
-An advisory by default: it explains, and blocks nothing, on a command reaching for a tree's identity, which a revision alone cannot give.
+A deny rule by default: it refuses a command reaching for a tree's identity, which a revision alone cannot give, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A command reaching for a tree's identity, which a revision alone cannot give.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"checkpoint-state": "deny"})
+magus\guard.builtins({"checkpoint-state": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [checkpoint-state]: ...
+deny [checkpoint-state]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [checkpoint-state]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [checkpoint-state]: ...` instead.
 
 `magus describe rule checkpoint-state` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -104,8 +104,8 @@ func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
 }
 
 // A worker whose ./magus was built at another commit than its checkout cannot load the tree,
-// so its guard denies every change it makes: the fork refuses to make that worker, before any
-// checkout exists, and places the binary at the commit it was built at.
+// so the fork makes the checkout at any checkpoint and places the binary only at the commit
+// it was built at; elsewhere CheckoutBootstrap builds one.
 func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
@@ -115,20 +115,28 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	for name, tc := range map[string]struct {
 		build      types.MagusBuild
 		checkpoint string
+		base       string
+	}{
+		"the forker's revision is past the build": {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
+		"a checkpoint past the build":             {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
+		"a checkpoint before the build":           {build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bin, ctx := forkersBinary(t, tc.build)
+			wt, made, err := s.ForkWorktree(ctx, name, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
+			require.NoError(t, err)
+			require.True(t, made)
+			assert.Equal(t, tc.base, wt.Base)
+			assert.Empty(t, wt.Binary, "a binary built elsewhere is not placed")
+			assert.NoFileExists(t, filepath.Join(wt.Root, "magus"))
+		})
+	}
+
+	for name, tc := range map[string]struct {
+		build      types.MagusBuild
+		checkpoint string
 		want       string
 	}{
-		"the forker's revision is past the build": {
-			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built},
-			want:  "would start at " + later + ", and ",
-		},
-		"a checkpoint past the build": {
-			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later,
-			want: "was built at " + built + ", so the job could change nothing there until a binary built at " + later + " is placed: fork at `--checkpoint " + built + "`",
-		},
-		"a checkpoint before the build": {
-			build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built,
-			want: "was built at " + later,
-		},
 		"an unstamped build": {
 			build: types.MagusBuild{Version: "unknown", Commit: "unknown"}, checkpoint: built,
 			want: "records no commit it was built from",
@@ -147,7 +155,7 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "w1")
 			_, _, err := s.ForkWorktree(ctx, "w1", dir, tc.checkpoint, bin)
 			require.ErrorContains(t, err, tc.want)
-			assert.NoDirExists(t, dir, "nothing is made for a worker that could change nothing")
+			assert.NoDirExists(t, dir, "nothing is made for a binary whose build cannot be compared")
 		})
 	}
 

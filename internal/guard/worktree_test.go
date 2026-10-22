@@ -134,6 +134,26 @@ func TestWorktreeRemovePassesWhenNothingCanBeLost(t *testing.T) {
 }
 
 // Each failing condition refuses with its own reason and the command that inspects it.
+// An exited row that filed no result has no grade to wait for, so a clean landed tree
+// passes; a dirty or unlanded one still denies, pointing at job exit.
+func TestWorktreeRemovePassesAnUngradedRowOnlyWhenNothingCanBeLost(t *testing.T) {
+	r := newWorktreeRepo(t)
+	clean := r.add("clean")
+	row := func(wt string) types.Job { return types.Job{ID: "u", State: types.StateExited, CheckoutRoot: wt} }
+	assert.Equal(t, ShellVerdict{}, r.judge("git worktree remove "+clean, row(clean)))
+
+	unlanded := r.add("unlanded")
+	r.commit(unlanded)
+	dirty := r.add("dirty")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty, "scratch.txt"), []byte("x\n"), 0o644))
+	for _, wt := range []string{unlanded, dirty} {
+		v := r.judge("git worktree remove "+wt, row(wt))
+		assertRemovalDenied(t, v)
+		require.Len(t, v.Next, 1)
+		assert.Equal(t, hint.JobExit.Argv("u"), v.Next[0].Argv)
+	}
+}
+
 func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 	r := newWorktreeRepo(t)
 
@@ -187,9 +207,15 @@ func TestWorktreeRemoveRequiresLandedCommitsWhateverTheJobState(t *testing.T) {
 	}
 
 	v := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt})
-	assertRemovalDenied(t, v, "job w (exited)")
+	assertRemovalDenied(t, v, "1 commit(s) on it")
+	assert.Contains(t, v.Lead, "job w exited without filing a result")
 	require.Len(t, v.Next, 1)
-	assert.Equal(t, hint.JobWait.Argv("w"), v.Next[0].Argv, "an exited job's denial waits for its grade")
+	assert.Equal(t, hint.JobExit.Argv("w"), v.Next[0].Argv, "an exited job with no result is told to file one")
+
+	filed := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt, Result: &types.JobResult{}})
+	assertRemovalDenied(t, filed, "job w (exited)")
+	require.Len(t, filed.Next, 1)
+	assert.Equal(t, hint.JobWait.Argv("w"), filed.Next[0].Argv, "an exited job with a filed result waits for its grade")
 }
 
 // Your session's finished worker's worktree is locked by its host for as long as the host
@@ -272,6 +298,16 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 	t.Run("an exited job", func(t *testing.T) {
 		r := newWorktreeRepo(t)
 		wt, row := r.workerWorktree(types.StateExited)
+		v := r.judgeWith(rootSession(t, spawnedW1), r.main, removeFF(wt), row)
+		assertRemovalDenied(t, v, "it is locked (claude agent")
+		assert.Contains(t, v.Lead, "job w1 exited without filing a result")
+		require.Len(t, v.Next, 1)
+		assert.Equal(t, hint.JobExit.Argv("w1"), v.Next[0].Argv)
+	})
+	t.Run("an exited job with a filed result", func(t *testing.T) {
+		r := newWorktreeRepo(t)
+		wt, row := r.workerWorktree(types.StateExited)
+		row.Result = &types.JobResult{}
 		v := r.judgeWith(rootSession(t, spawnedW1), r.main, removeFF(wt), row)
 		assertRemovalDenied(t, v, "job w1 (exited) was taken in it", "it is locked (claude agent")
 		require.Len(t, v.Next, 1)

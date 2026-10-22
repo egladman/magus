@@ -178,7 +178,7 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git --no-pager describe":                     advisoryCheckpointState,
 		"git -C . rev-parse HEAD":                     advisoryCheckpointState,
 	} {
-		v := Evaluate(strict(testDependencies()), command)
+		v := Evaluate(advising(testDependencies(), string(advisoryCheckpointState)), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Equal(t, string(rule), v.advisoryName(), "%q", command)
 	}

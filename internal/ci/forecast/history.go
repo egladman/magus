@@ -956,6 +956,18 @@ func historyLog(path string) file.JSONL[historyLine] {
 	}
 }
 
+// UnsupportedVersionError is a history file a newer magus wrote. Load leaves the file
+// alone: rewriting it would drop the fields this build cannot decode.
+type UnsupportedVersionError struct {
+	Have, Max int
+	Path      string
+}
+
+func (e *UnsupportedVersionError) Error() string {
+	return fmt.Sprintf("forecast: history version %d in %q was written by a newer magus (this build reads up to %d) and is left alone",
+		e.Have, e.Path, e.Max)
+}
+
 // Load reads the history store at path; a missing file is not an error (returns a zero
 // History). A last line no writer finished is an append in flight and is left unread.
 func (h *History) Load(ctx context.Context, path string) error {
@@ -996,8 +1008,7 @@ func (h *History) fold(path string, lines []historyLine) error {
 		}
 	}
 	if h.Version > HistoryVersion {
-		return fmt.Errorf("forecast: unsupported history version %d in %q (max %d)",
-			h.Version, path, HistoryVersion)
+		return &UnsupportedVersionError{Have: h.Version, Max: HistoryVersion, Path: path}
 	}
 	slices.SortStableFunc(h.Runs, func(a, b Run) int { return a.At.Compare(b.At) })
 	slices.SortStableFunc(h.Jobs, func(a, b types.JobOutcome) int { return cmp.Compare(a.Ended, b.Ended) })

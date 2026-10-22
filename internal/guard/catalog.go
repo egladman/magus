@@ -33,7 +33,7 @@ import (
 // decision a row shows is builtin.Defaults', never a literal kept here.
 type ruleDocEntry struct {
 	doc types.RuleDoc
-	// advisory rows only ever EXPLAIN, and are the names a workspace can raise to deny.
+	// advisory rows EXPLAIN unless set to deny, which a notice never is.
 	// Several are agent-shaped by construction (a lease, a focus boundary, host wiring):
 	// they are catalogued anyway, because a reader asking what this workspace enforces is
 	// owed the whole set rather than the half that happens to apply to them today.
@@ -109,6 +109,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSpawnWaiter},
 	{doc: ruleDocSpawnDuplicate},
 	{doc: ruleDocSpawnUnvalidated},
+	{doc: ruleDocSpawnWarmWorker},
 	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
 	{doc: ruleDocCheckpointState, advisory: true},
@@ -296,17 +297,18 @@ var ruleDocArchitectureUnbriefed = types.RuleDoc{
 	Why: "A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. " +
 		"Two acts arm it. A message the person submits with structure vocabulary (architecture, boundaries, layering, coupling, imports, a new package, where something belongs, blast radius) marks the session, and the agent's next graded call (a shell line, a read, a search, an edit, a magus tool call) waits on the load. A write that creates a new directory waits on it too, since that write draws a boundary whatever was asked. " +
 		"A load counts for the agent that made it: a subagent in that session loads the skill itself, and a parent's load does not brief its child. Load Skill(magus-architecture-review), or its -full twin, once and the agent's later calls pass. " +
-		"It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there.",
+		"It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there. " +
+		"It also stands down for an agent spawned as a shipped read-only type (magus-scout), which has no Skill tool: a deny it cannot clear is a trap, and such an agent changes nothing.",
 }
 
 var ruleDocPushUngated = types.RuleDoc{
 	Name:    string(denyRulePushUngated),
-	Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
+	Catches: "a push or `gh pr create` at a commit with no green gate; refused for every session",
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
-		"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, the human in the loop for publishing, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
-		"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked. " +
+		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
+		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD.",
 }
 
@@ -373,6 +375,7 @@ var ruleDocTokenState = types.RuleDoc{
 	Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
 		"Refused for file writes and shell commands alike: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
 		"A bare listing passes (`ls`, `du`, `stat`, `test` of the state dir or a token file), alone or piped into a text filter such as `head` or `grep`: it shows file names, and none is a secret, since the operator file is always `mcp_token` and a store entry is `<token name>.json`, the name `magus config mcp connector ls` already prints. A listing inside a substitution, or piped into anything else (`| xargs cat`), is refused like any mention. " +
+		"The state dir itself is refused only under a command that walks it (`find`, `rg`, `grep -r`, `ls -R`, `cp -r`, an archiver) and for a glob that would match a token file (`magus/*`); a direct path to another file there, such as the forecast history beside the store, passes. " +
 		"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user.",
 }
 
@@ -495,7 +498,7 @@ var ruleDocSymbolSearch = types.RuleDoc{
 		"A name is a declaration lookup (`func X`, `type X`, `class X`, `function X`, `const X`), a CamelCase identifier, or a short name the syntax marks as one: a word search (`\\bX\\b`, -w), a qualified member (`pkg.X`, `\\.X`) or an assignment, when it is capitalized. " +
 		"Text is everything else: a plain word, which is as likely prose; snake_case, which in this tree is a config key, a JSON tag or a Buzz function; a lowercase call or member (`Mkdir(` is os.Mkdir as often as a local function); a standard-library member (`os.Rename`); a declaration of a lowercase word many share (`func main`); a string literal, a path, a hyphenated word or a regular expression. With -i a plain or marked short name widens to text, and a CamelCase one stays a name. " +
 		"The deny fires when ANY alternative is a name the index defines, serving `magus refs X --occurrences` per name (`--definition --source` for a declaration lookup, which prints the body in place of the grep-then-sed pair) and `magus refs --text <literal> <paths>` for each literal text alternative, and `magus explain diagnostic:<code>` for a code the graph holds a node for. " +
-		"A stale index still answers, serving `magus graph build --silent` first: it still knows the names it held, and it vouches for a declaration lookup or a CamelCase call it has not indexed yet, since that is the name a branch is adding; a bare word it does not hold stays text. An index goes stale on the first edit, so a rule that stood down for a stale one would let every symbol search through. Only a workspace with no symbol index at all is advised instead, since a deny there routes nowhere. " +
+		"A stale index still answers, serving `magus graph build --silent` first: it still knows the names it held, and it vouches for a declaration lookup or a CamelCase call it has not indexed yet, since that is the name a branch is adding; a bare word it does not hold stays text. When the build budget has no seat for that rebuild the deny says so: it names `magus status --wait` and then the rebuild for a caller that may wait, and tells a worker to report that its rebuild found no seat and stop. An index goes stale on the first edit, so a rule that stood down for a stale one would let every symbol search through. Only a workspace with no symbol index at all is advised instead, since a deny there routes nowhere. " +
 		"An index built at another revision is stale on the same terms; a rebase still underway turns the deny into graph-stale's advice, since a rebuild then would describe a tree about to move. " +
 		"The search must reach the tree: a directory, a glob, or several files. One named file is a read and runs, with refs advised when the index vouches for the name; a definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
 		"The files refs answers for are the languages a spell declares a symbol indexer for (here Go and TypeScript), read from the spell catalog. A search of stdin, Markdown, a log, Buzz (source no indexer reads, so a Buzz `fun` or `object` lookup is text too), a directory holding none of those languages (a skills tree, fixtures), a dot-directory (.github, .git), node_modules, a revision, or a tree outside the workspace runs. " +
@@ -686,6 +689,7 @@ var ruleDocReadPaging = types.RuleDoc{
 	Why: "read-navigation refuses a whole read and serves the file's map; paging through the file instead spends the same lines over several calls. " +
 		"Each caller's windows of each Go, Buzz or Markdown file are counted, and the third distinct one is refused with the map. " +
 		"A window inside one declaration or heading is a targeted read and never counts, nor does a repeat of a window already read, a whole read, or a file short enough for read-navigation to pass whole. " +
+		"The refusal names one concrete declaration or heading to read, the one holding the refused window's first line or the next one down, as the `sed -n` span or the `refs` command that prints it. Reading that span is a declaration read, so the suggested window never counts as a page; a window one line either side of a declaration (the Read tool's offset and limit land one off) counts as inside it. " +
 		"It cannot tell a walk through the file from reads of three spans that each cross a declaration's edge.",
 }
 
@@ -720,7 +724,7 @@ var ruleDocUnjudgedTool = types.RuleDoc{
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
 		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
-		"It advises by default, since the guard cannot know such a tool is harmful; a workspace that wants every call judged sets it to deny. A finished call is never named.",
+		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.",
 }
 
 var ruleDocMonitorDuplicate = types.RuleDoc{
@@ -765,7 +769,7 @@ var ruleDocCaptureFilter = types.RuleDoc{
 		"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
 		"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
-		"It ADVISES rather than refuses: most such filters are a search the reader needs, and a refused reader then reads the whole file into context. " +
+		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting. A workspace whose readers need such searches sets it to advise. " +
 		"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture.",
 }
 
@@ -830,6 +834,16 @@ var ruleDocSpawnUnvalidated = types.RuleDoc{
 		"It cannot tell a row an older magus wrote, before rows were stamped, from one a test or a catalog seeded straight into the store: both carry no stamp, and both are re-validated by applying the record again.",
 }
 
+var ruleDocSpawnWarmWorker = types.RuleDoc{
+	Name:    string(denyRuleSpawnWarmWorker),
+	Catches: "a fresh spawn for follow-up work while the worker that wrote the code is still warm",
+	Why: "Within the prompt-cache TTL a resumed worker re-reads its context at the cache-read price and has already paid its orientation, so it costs no more than a fresh agent, which pays the prefix and the orientation again. " +
+		"Context size is not cost: a large context read from cache is cheaper than a small one written fresh. " +
+		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
+		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record carries a `fresh_reason`. " +
+		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
+}
+
 var ruleDocReleaseRequested = types.RuleDoc{
 	Name:    string(advisoryReleaseRequested),
 	Catches: "a job holding write paths another fork was refused for, with a release request open",
@@ -859,8 +873,8 @@ var ruleDocGeneratedWrite = types.RuleDoc{
 var ruleDocGraphPipe = types.RuleDoc{
 	Name:    string(advisoryGraphPipe),
 	Catches: "a read-only graph verb piped into a text filter, when magus projects the record itself",
-	Why: "The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
-		"It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. A reader refused on these verbs tends to go back to `grep -rn`, which answers with less than the graph read it was denied.",
+	Why: "The same answer output-pipe gives: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. " +
+		"It is its own rule on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure, so a workspace whose readers go back to `grep -rn` when refused can set this one to advise and keep output-pipe denying.",
 }
 
 var ruleDocGraphStale = types.RuleDoc{
@@ -926,12 +940,12 @@ var ruleDocSpawnNestedWaiter = types.RuleDoc{
 	Name:    string(advisorySpawnNestedWaiter),
 	Catches: "a subagent spawning a helper whose title or brief opening speaks of waiting or watching",
 	Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends. A worker handing that to a helper of its own stacks a third context on a notice two already get. " +
-		"It advises, once a session, because a worker may also spawn a child to build a watch feature, which the words alone cannot tell apart.",
+		"A worker spawning a child to build a watch feature reads the same and rewords its title; a workspace where that is common sets the rule to advise, which says it once a session.",
 }
 
 var ruleDocPushGate = types.RuleDoc{
 	Name:    string(advisoryPushGate),
-	Catches: "a push the run log does not prove ungated, which names the gate and lets it through",
+	Catches: "a push or `gh pr create` the run log cannot prove ungated; names the gate",
 }
 
 var ruleDocRegenSource = types.RuleDoc{
@@ -1032,10 +1046,10 @@ var ruleDocOrchestratorGroundwork = types.RuleDoc{
 	Name:    string(denyRuleOrchestratorGroundwork),
 	Catches: "a session that hands out work doing its own groundwork: reads, searches, edits, runs",
 	Why: "A session that hands out work keeps to planning and coordinating. Reading and searching source, editing it and running checks belong to the workers it spawns, at any context size: a worker starts small and returns its findings, while every result the orchestrator reads itself stays in the context each later call re-sends. " +
-		"magus judges the role from what it recorded, never from the context's size or the guard level. A session is proven to orchestrate once its host reported its main thread and it spawned a worker whose title names a live job row, or ran `magus job fork` (or magus\\job.put) for a row the job store then showed live; it is inferred from a spawn bound to no row, a loaded magus-multi-agent skill, or proof on a thread its host did not report. Proof lasts the session. " +
-		"Proven, its groundwork is refused; inferred, it is advised once per kind of work. A session with no record, a leased worker, a subagent and a person are never judged, and the off level leaves the rule on. " +
-		"Groundwork is a recursive search, a read of a file inside a checkout of the repository (Markdown included, except AGENTS.md, MAGUS.md, SKILL.md and a host's own instruction file such as ./CLAUDE.md), a full diff, a target run with or without `-s`, a `magus buzz` script that reaches beyond magus\\job, a fetch, a write inside a checkout, and integration: a cherry-pick, `git add` or `magus vcs add`, a commit, the build of ./magus and the generate targets, which belong to the checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout. " +
-		"Orchestration work passes: the job verbs, graph reads (`magus query`, `explain`, `refs`, `path`, `describe`, `affected --plan`), branch work (`git switch`, `branch` and `worktree`), the final gate, the check of a live row the session forked, `git push`, `gh pr`, `magus query output` of a guard verdict or of a row's recorded check output, short status, and reads, searches and writes of paths outside every checkout, such as a plan or a memory, with a `~/` path placed under the home directory. " +
+		"magus judges the role from the live lease, never from the session's history, the context's size or the guard level. A session orchestrates while a row it handed out is declared, running or exited: a row a spawn's title bound, or one `magus job fork` (or magus\\job.put) wrote and the job store then showed live. A row the session takes itself with `magus job exec` is no longer handed out, so its `magus job exit` returns the session to orchestrating only what others hold, and once every row has passed or failed the session is judged as any other. That is proven on a main thread its host reported, and inferred on one it did not. " +
+		"Proven, its groundwork is refused; inferred, it is advised once per kind of work. A session with no live row, a leased worker, a subagent and a person are never judged, and the off level leaves the rule on. When no spawn could pass (spawn-names-model at deny, and a harness the model-tier declaration maps no model for), the refusal names `magus job exec <row>` instead of a spawn. " +
+		"Groundwork is a recursive search, a read of a file inside a checkout of the repository (Markdown included, except AGENTS.md, MAGUS.md, SKILL.md and a host's own instruction file such as ./CLAUDE.md), a full diff, a target run with or without `-s`, a `magus buzz` script that reaches beyond magus\\job, a fetch, a write inside a checkout, and integration, one class: merge, rebase, pull, am, reset, stash, restore, checkout, `switch -c`, cherry-pick, `git add` or `magus vcs add`, a commit, the build of ./magus and the generate targets. Integration belongs to the checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout; the one exception is `./magus run go-build .` or the bootstrap alone on its line while ./magus is older than its sources or absent, which the root runs itself. " +
+		"Orchestration work passes: the job verbs, graph reads (`magus query`, `explain`, `refs`, `path`, `describe`, `affected --plan`), branch work (a plain `git switch`, `branch` and `worktree`), the final gate, the check of a live row the session forked, `git push`, `gh pr`, `magus query output` of a guard verdict or of a row's recorded check output, short status, and reads, searches and writes of paths outside every checkout, such as a plan or a memory, with a `~/` path placed under the home directory. " +
 		"A write while its checkout is midway through a merge or a cherry-pick is advised and never refused, since resolving a conflict is integration. Set to advise, proof is advised too.",
 }
 
@@ -1101,8 +1115,8 @@ var ruleDocModelTierContextCap = types.RuleDoc{
 	Name:    string(advisoryModelTierContextCap),
 	Catches: "a leased worker writing past the context its job's model tier caps",
 	Why: "A model tier's bounds in the workspace's declaration can cap the context a worker at that tier reaches (maxContext), because a smaller model past a large context does worse work and resends all of it every turn. " +
-		"When a leased worker's context, as its host last reported it, passes the cap of the tier its row was forked at, its next write is advised to report what it has and stop. " +
-		"Set to deny, every write under the lease is refused, as a lease past its deadline is. A tier with no cap, a row with no tier, or a host that reports no context is never judged.",
+		"When a leased worker's context, as its host last reported it, passes the cap of the tier its row was forked at, every write under the lease is refused, as a lease past its deadline is, and the refusal says to report what it has and stop. " +
+		"Set to advise, the next write is told so once. A tier with no cap, a row with no tier, or a host that reports no context is never judged.",
 }
 
 var ruleDocCompatMarker = types.RuleDoc{

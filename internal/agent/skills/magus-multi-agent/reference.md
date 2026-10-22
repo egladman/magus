@@ -85,6 +85,46 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
+## The root's role
+
+The guard judges the root by the live lease, never by the session's history. The root
+orchestrates while a row it handed out (a fork the job store showed, or a row a titled
+spawn bound) is declared, running or exited; once every one has passed or failed, it is
+judged as any session is.
+
+- Integration is one class: merge, rebase, pull, am, reset, stash, restore, checkout,
+  `switch -c`, cherry-pick, add and commit. A plain switch, a branch, `worktree add`,
+  a push and the job verbs are orchestration.
+- The root may take ONE row: `{{cmd "job exec"}} <row>` makes it that row's holder,
+  under the row's write paths and check. It spawns nothing while it holds the row, and
+  `{{cmd "job exit"}} <row>` returns it to orchestrating whatever other rows still hold.
+- A root holding a parentless row may still run the gate.
+- When no spawn can pass, such as a harness the model-tier declaration maps no model
+  for, the groundwork refusal names `{{cmd "job exec"}} <row>` instead of a spawn.
+- While ./magus is older than its sources or absent, the root rebuilds it itself:
+  `./magus run go-build .` or the bootstrap, alone on its line.
+- A refusal repeated after a role change or a rebuild prints its new remedy in full.
+
+## Resume the warm worker
+
+Follow-up work on code a worker just wrote, a regression fix or a review round, goes back
+to that worker as a message while its prompt cache is warm. Context size is not cost: a
+resumed worker reads its context at the cache-read price and has already oriented, while a
+fresh agent pays the prefix and the orientation again.
+
+- Name the link: `follows: <job>` in the new job's record. A job sharing a write path with
+  an ended job is linked without it.
+- The guard refuses a fresh spawn for a linked job while the ended job's worker is inside
+  the prompt-cache TTL (`spawn-warm-worker`). The refusal names the agent to message and the
+  TTL left, and says where the TTL came from: the provider's 5-minute default, or
+  `agents.prompt_cache_ttl` in magus.yaml for a host on the one-hour cache.
+- A fresh spawn passes once the TTL has passed, or when the warm worker's context is within
+  10% of its model's long-context price step.
+- When the old context is wrong for the job (it read code the job replaces, or it is
+  stuck), put the reason in `fresh_reason` on the record. A context that is only large is
+  not a reason{{if .Full}}: at 300k tokens read from cache a resumed worker still costs less
+  than a fresh one at 70k written{{end}}.
+
 ## After the spawn
 
 The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a

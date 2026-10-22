@@ -105,6 +105,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkMemoryDeclarations,
 	},
 	{
+		Name:           gateFitsCheck,
+		Doc:            "each step of the ci gate claims no more than this machine's whole build budget",
+		Code:           types.MachineBudgetExhausted,
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            (*runner).checkGateFits,
+	},
+	{
 		Name:           "timeout-declarations",
 		Doc:            "a target's declared timeout against the durations magus has recorded for it",
 		Code:           types.TimeoutDeclarationDrift,

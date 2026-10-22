@@ -1,12 +1,12 @@
 ---
 title: "graph-pipe: a read-only graph verb piped into a text filter, when magus projects the record itself"
-description: "An advisory by default: it explains, and blocks nothing, on a read-only graph verb piped into a text filter, when magus projects the record itself."
-tags: [guard, rules, graph-pipe, advise]
+description: "A deny rule by default: it refuses a read-only graph verb piped into a text filter, when magus projects the record itself, and names what to run instead."
+tags: [guard, rules, graph-pipe, deny]
 ---
 
 # graph-pipe
 
-An advisory by default: it explains, and blocks nothing, on a read-only graph verb piped into a text filter, when magus projects the record itself.
+A deny rule by default: it refuses a read-only graph verb piped into a text filter, when magus projects the record itself, and names what to run instead.
 
 ## What it catches
 
@@ -14,15 +14,15 @@ A read-only graph verb piped into a text filter, when magus projects the record 
 
 ## Why
 
-The same answer output-pipe gives, offered rather than imposed: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. It advises on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure. A reader refused on these verbs tends to go back to `grep -rn`, which answers with less than the graph read it was denied.
+The same answer output-pipe gives: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field. It is its own rule on `refs`, `query`, `explain` and `describe` because they change nothing and their pipe loses no failure, so a workspace whose readers go back to `grep -rn` when refused can set this one to advise and keep output-pipe denying.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"graph-pipe": "deny"})
+magus\guard.builtins({"graph-pipe": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [graph-pipe]: ...
+deny [graph-pipe]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [graph-pipe]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [graph-pipe]: ...` instead.
 
 `magus describe rule graph-pipe` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -1,12 +1,12 @@
 ---
 title: "dependency-update: a raw dependency update outside a target's update charm"
-description: "An advisory by default: it explains, and blocks nothing, on a raw dependency update outside a target's update charm."
-tags: [guard, rules, dependency-update, advise]
+description: "A deny rule by default: it refuses a raw dependency update outside a target's update charm, and names what to run instead."
+tags: [guard, rules, dependency-update, deny]
 ---
 
 # dependency-update
 
-An advisory by default: it explains, and blocks nothing, on a raw dependency update outside a target's update charm.
+A deny rule by default: it refuses a raw dependency update outside a target's update charm, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A raw dependency update outside a target's update charm.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"dependency-update": "deny"})
+magus\guard.builtins({"dependency-update": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [dependency-update]: ...
+deny [dependency-update]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [dependency-update]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [dependency-update]: ...` instead.
 
 `magus describe rule dependency-update` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

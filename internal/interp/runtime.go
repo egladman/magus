@@ -1531,7 +1531,7 @@ func within(root, p string) bool {
 // instead of the queue behind it.
 //
 // The loop is the whole mechanism: resume, and if the body parked with a dependency
-// request, run it and resume again. A body that never calls ctx.needs runs to
+// request, run it and resume again, with its failure thrown at the parked call. A body that never calls ctx.needs runs to
 // completion on the first resume and costs one extra fiber allocation.
 //
 // Dependencies are themselves target bodies reached through targets, so each one gets
@@ -1556,13 +1556,22 @@ func runTargetBody(
 	// remaining is the body's UNSPENT ceiling. Each resume spends only the time the body
 	// itself runs, so parking to wait on dependencies costs it nothing.
 	remaining := ceiling
+	// needsErr is a failed dependency request, thrown at the parked ctx.needs on the
+	// next resume so a catch around it runs; uncaught, it ends the body unchanged.
+	var needsErr error
 	for {
 		runCtx, cancel := base, context.CancelFunc(func() {})
 		if ceiling > 0 {
 			runCtx, cancel = context.WithTimeout(base, remaining)
 		}
 		startedOwn := time.Now()
-		_, err := sess.ResumeFiber(runCtx, fiber)
+		var err error
+		if needsErr != nil {
+			_, err = sess.ThrowIntoFiber(runCtx, fiber, needsErr)
+			needsErr = nil
+		} else {
+			_, err = sess.ResumeFiber(runCtx, fiber)
+		}
 		ownElapsed := time.Since(startedOwn)
 		cancel()
 		if err != nil {
@@ -1585,7 +1594,8 @@ func runTargetBody(
 		// against this body, so the split logCeiling reports needs no separate call.
 		did, err := waiting.Do(base)
 		if err != nil {
-			return vm.Null, err
+			needsErr = err
+			continue
 		}
 		if !did {
 			return vm.Null, fmt.Errorf(

@@ -35,13 +35,7 @@ func (r *runner) checkRetryDeclarations(projects []*types.Project) types.Check {
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
-		// Advice rather than OK: the check could not RUN, which is a different answer
-		// from "every declaration still holds".
-		return types.Check{
-			Name: name, Status: types.CheckAdvice,
-			Message: "run history is unreadable, so retry_on_volatile declarations could not be checked against what magus recorded",
-			Details: []string{err.Error()},
-		}
+		return historyUnreadableCheck(name, err)
 	}
 
 	var declared int

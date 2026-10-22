@@ -11,6 +11,7 @@ namespace drift;
 
 import "fs";
 import "crypto";
+import "vcs";
 import "assert";
 
 // expand flattens a mixed list of file and directory paths into the files under them, so
@@ -65,6 +66,32 @@ export fun vcsChangedSince(before: {str: str}, paths: [str]) > [str] !> any {
         if (now[p] == null) { moved.append(p); }
     }
     return moved;
+}
+
+// saveFiles copies each regular file in paths into a fresh temp directory and returns it,
+// so restore can put uncommitted work back after a generator has written over it.
+export fun saveFiles(paths: [str]) > str !> any {
+    final saved = fs\tempDir("drift-saved-");
+    foreach (p in paths) {
+        if (!fs\isFile(p)) { continue; }
+        fs\mkdirAll(fs\join(saved, name: fs\dirname(p)));
+        fs\copyFile(p, dst: fs\join(saved, name: p));
+    }
+    return saved;
+}
+
+// restore undoes what a check's generators wrote to moved: a saved file returns to its
+// saved bytes, a path that was clean returns to HEAD, and a new untracked file is removed.
+export fun restore(moved: [str], saved: str, dirtyBefore: [str]) > void !> any {
+    foreach (p in moved) {
+        final kept = fs\join(saved, name: p);
+        if (fs\isFile(kept)) {
+            fs\copyFile(kept, dst: p);
+        } else if (dirtyBefore.indexOf(p) == null) {
+            final head = vcs\cmd(["checkout", "HEAD", "--", p], opts: {"quiet": true, "allow_failure": true});
+            if (!head.ok and fs\isFile(p)) { fs\remove(p); }
+        }
+    }
 }
 
 // changedSince returns the files whose bytes moved since `before` was taken: created,

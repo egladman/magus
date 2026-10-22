@@ -319,15 +319,18 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 // an empty field is an undeclared boundary, but a bound worker is a worker either way and
 // the gate is still the orchestrator's; the empty field says nobody wrote down what this
 // unit should run, which is a reason to ask rather than a licence to run everything.
+//
+// A root session holding a parentless row is still the root, whose gate it is, as
+// lease-vcs and the push gate read it (workerRole).
 func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" || !commandRunsGate(command) {
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) {
+	if !ok || actingIntegrator(ctx, deps, me) || holdsCheckout(me, hookLocation(ctx, deps).workspace) || workerRole(me, deps.caller) == "" {
 		return denial{}
 	}
-	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands."
+	const gated = "The checkout's integrator, " + integratorIs + ", gates once, in its own tree, after every unit lands. The holder of a row forked with `job fork --checkout` gates in that checkout too."
 	if source, names := LeaseGateSource(me); names {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is the integrator's gate, and lease %s names it as its check; a job's check is never the gate.",
@@ -371,7 +374,8 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
-// integrator, which builds, regenerates and gates there, or a row declaring no check at
+// integrator, which builds, regenerates and gates there, the gate itself for the holder of a
+// `job fork --checkout` row in its own checkout, or a row declaring no check at
 // all, which denyLeaseGate already answers for the gate. Every other verb, and a run that only reports (--plan,
 // --dry-run, --graph, --help), passes.
 func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) denial {
@@ -392,7 +396,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me) {
+	if !ok || actingIntegrator(ctx, deps, me) || (commandRunsGate(command) && holdsCheckout(me, hookLocation(ctx, deps).workspace)) {
 		return denial{}
 	}
 	checks := rowChecks(me)
@@ -410,7 +414,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
 			return rewriteDenial(v, me, deps.DefaultCharms)
-		case v.permitted:
+		case v.permitted, vetsWritePaths(v.run, me.WritePaths, deps):
 			continue
 		}
 		r = v.run
@@ -434,6 +438,23 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		}
 	}
 	return denial{}
+}
+
+// vetsWritePaths reports a `magus run go::go-vet` over projects holding the write paths,
+// with no rw charm the op honors. Vetting compiles and writes nothing, so a worker whose
+// check the machine cannot fit still has a way to know its code builds.
+func vetsWritePaths(r targetRun, writePaths []string, deps Dependencies) bool {
+	if r.verb != "run" || !sameTarget("go::go-vet", r.target) {
+		return false
+	}
+	if r.rewrites(deps.DefaultCharms) && opHonorsRewrite(deps.spells(), r.target) {
+		return false
+	}
+	// "/" is every project, most of which hold none of the write paths.
+	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+		p = path.Clean(p)
+		return p != "." && !slices.ContainsFunc(writePaths, func(w string) bool { return strings.HasPrefix(w, p+"/") })
+	})
 }
 
 // lazyWorkspace opens the workspace at root on its first call and keeps it, or the error
@@ -1630,8 +1651,13 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 	// held job is in flight: once it has exited or ended, or names no row at all, the next
 	// exec is how the caller moves on (see bindOnExec).
 	case hint.JobExec.MatchedBy(words) && len(words) > 2:
-		if held := h.standing(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
+		held := h.standing()
+		operand := execOperand(c.Args)
+		if !held.inFlight() || operand == held.row.ID {
 			return rebind{}
+		}
+		if operand == "" {
+			return boundedExecRebind(h)
 		}
 		return rebind{problem: "would take the lease on another job while lease " + h.id + " is in flight", ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
@@ -1643,6 +1669,20 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job", "fork it")
 	}
 	return rebind{}
+}
+
+// boundedExecRebind judges `job exec --timeout <d> -- <cmd>`, which takes no job: the
+// command runs owned by the lease the store writes as. Under the holder's own lease it is
+// the bounded run other rules send a holder to, so only another lease's is refused.
+func boundedExecRebind(h holder) rebind {
+	owner := h.storeLease()
+	if owner == "" || owner == h.id {
+		return rebind{}
+	}
+	return rebind{
+		problem: "would run a command owned by lease " + owner + " while lease " + h.id + " is in flight",
+		fix:     "set BAGGAGE=" + trail.BaggageLease + "=" + h.id + " on the line so it runs under your own lease",
+	}
 }
 
 // descendsFrom reports whether id sits below the held row in the parent chain.
@@ -1955,6 +1995,14 @@ func integrates(row types.Job, spawned, workspace string) bool {
 		return false
 	}
 	return samePath(row.CheckoutRoot, workspace)
+}
+
+// holdsCheckout reports whether row is a live row taken with `magus job fork --checkout` in
+// the checkout at workspace. Its holder gates there under any title. It is not integrates:
+// that role also lets the integrator build and bootstrap, which a holder of a change role
+// may not.
+func holdsCheckout(row types.Job, workspace string) bool {
+	return row.State.Live() && row.Worktree != nil && row.CheckoutRoot != "" && workspace != "" && samePath(row.CheckoutRoot, workspace)
 }
 
 // actingIntegrator reports whether the caller of this judgment, acting under me, integrates
@@ -2838,9 +2886,25 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 }
 
 // isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
-// without --to) or jj git push, relocated or not.
+// without --to) or jj git push, relocated or not. `gh pr create` counts: it pushes nothing
+// itself but opens review on the pushed head, so the push gate grades it at the same commit.
 func isPush(c hint.Invocation) bool {
-	return strings.HasSuffix(vcsMutation(c), " push")
+	return strings.HasSuffix(vcsMutation(c), " push") || isPRCreate(c)
+}
+
+// isPRCreate reports whether c is `gh pr create`, past gh's own flags.
+func isPRCreate(c hint.Invocation) bool {
+	if filepath.Base(c.Name) != "gh" {
+		return false
+	}
+	var words []string
+	for _, a := range c.Args {
+		if !strings.HasPrefix(a, "-") {
+			words = append(words, a)
+		}
+	}
+	i := slices.Index(words, "pr")
+	return i >= 0 && i+1 < len(words) && words[i+1] == "create"
 }
 
 // vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.

@@ -19,10 +19,10 @@ A fork refused for a file a live job holds (MGS3032, MGS3036, MGS3046) files an 
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"release-requested": "deny"})
+magus\guard.builtins({"release-requested": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -34,8 +34,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [release-requested]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [release-requested]: ...` instead.
 
 `magus describe rule release-requested` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -1,12 +1,12 @@
 ---
 title: "installed-skill: a write to an installed skill copy, which re-installing discards"
-description: "An advisory by default: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards."
-tags: [guard, rules, installed-skill, advise]
+description: "A deny rule by default: it refuses a write to an installed skill copy, which re-installing discards, and names what to run instead."
+tags: [guard, rules, installed-skill, deny]
 ---
 
 # installed-skill
 
-An advisory by default: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards.
+A deny rule by default: it refuses a write to an installed skill copy, which re-installing discards, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A write to an installed skill copy, which re-installing discards.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"installed-skill": "deny"})
+magus\guard.builtins({"installed-skill": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [installed-skill]: ...
+deny [installed-skill]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [installed-skill]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [installed-skill]: ...` instead.
 
 `magus describe rule installed-skill` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

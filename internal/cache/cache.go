@@ -1224,38 +1224,34 @@ func stepSlots(s Step, lim *Limiter) int {
 // claims first and can run to completion. The claim goes back LAST, after the slot and
 // the lease.
 //
-// A step admitted BENEATH one that already holds a claim takes none, because the ancestor
-// is the one thing that cannot release: it is blocked in dispatch waiting for this step,
-// so a second claim queued behind it would wait forever. Measured 2026-09-08: `magus
-// affected ci` sat 27 minutes at 13s of CPU with no child process running.
-//
-// The cover is a floor: Step.MemoryMB folds a chain to the largest sum over one
-// ctx.needs call (types.ChainMemoryMB), and a member's own transitive fan-out inside
-// that call adds under the member's figure rather than beside it. Covering rather than
-// yielding, because a machine claim's re-acquire
-// is FALLIBLE: it re-queues behind strangers and can be refused, so a parent that
-// released and retook could fail after its children had already run. The limiter still
-// bounds how many run at once inside this process; the machine budget does not see them.
+// A step beneath a claim holder rides it: the holder waits on the step, so a second claim
+// queued behind it never seats (2026-09-08: `magus affected ci` sat 27 minutes at 13s of
+// CPU). A holder waiting on ctx.needs lends its claim instead ([LendMachineClaim]), and
+// its members claim their own. The retake is fallible, since a stranger can refuse it
+// after they ran, but a held wait hung on a need shared by siblings filling every slot.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
 	held := admissionFrom(ctx)
 	if held.machineClaim {
-		return ctx, func() {}, nil
+		return withMachineHold(ctx, nil), func() {}, nil
 	}
-	id, release, err := c.machine.claim(ctx, types.MachineClaim{
+	h := &machineHold{gate: c.machine, claim: types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
-	})
+	}}
+	id, release, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
 		return ctx, nil, err
 	}
+	h.id, h.release = id, release
 	held.machineClaim = true
+	ctx = withMachineHold(ctx, h)
 	if id != "" {
-		ctx = withStepGroups(ctx, c.machine.admit, id)
-		ctx = withOverrunWatch(ctx, c.machine.admit, id, s.MemoryProfile)
+		ctx = withStepGroups(ctx, c.machine.admit, h.current)
+		ctx = withOverrunWatch(ctx, c.machine.admit, h.current, s.MemoryProfile)
 	}
-	return held.on(ctx), release, nil
+	return held.on(ctx), h.close, nil
 }
 
 // reportRefusal puts a step that was refused before it started on the record a failed

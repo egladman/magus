@@ -1,0 +1,239 @@
+{"name":"Advisory","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"AssessOptions","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"BaseLastPassed","reason":"constant a caller compares against or pins"}
+{"name":"BindingOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"CacheKeyVersion","reason":"constant a caller compares against or pins"}
+{"name":"CacheStats","reason":"value type a Run or query result returns to the caller"}
+{"name":"CatalogFingerprint","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"CharmsForCI","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"CleanedOutputs","reason":"value type a Run or query result returns to the caller"}
+{"name":"Command","reason":"value type a Run or query result returns to the caller"}
+{"name":"ComposeGraph","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"ComposeOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"Drift","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"DurationPredictor","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"DurationPredictor.PredictDuration","reason":"duration prediction contract the planner calls"}
+{"name":"Event","reason":"value type a Run or query result returns to the caller"}
+{"name":"Event.MarshalJSON","reason":"JSON encoding of the event log line"}
+{"name":"Event.UnmarshalJSON","reason":"JSON encoding of the event log line"}
+{"name":"FindRoot","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"HumanOnly","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"IgnoreGlob","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"IgnoreLiteral","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"IgnoreRegex","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"IncludeArch","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"IncludeOS","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"Inspect","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"Invocation","reason":"value type a Run or query result returns to the caller"}
+{"name":"LazyWorkspace","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"LazyWorkspace.ClassifyFiles","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.EvaluateProjects","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.EvaluateTarget","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.ListCharms","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.ListProjects","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.ListTargets","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.Magus","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.Opened","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.Root","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.TargetGraph","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"LazyWorkspace.Workspace","reason":"deferred workspace accessor the daemon and CLI call before the first load"}
+{"name":"ListSpells","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"Magus","reason":"the loaded workspace handle every SDK call hangs off"}
+{"name":"Magus.Affected","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.AffectedFromPaths","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.Affinity","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.All","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ApplySandbox","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.AssessChange","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.AutoResolvable","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.AutoResolve","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.AutoResolveGlobs","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.BeginInvocation","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.BranchChanges","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.CacheDescription","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.CacheDir","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.CacheDiskBytes","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.CacheStats","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.CarvedOutputs","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.ClassifyEdit","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.ClassifyFiles","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.CleanCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.CleanOutputs","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.Close","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ComputeTargetKey","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.ConcurrencyNudge","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.Conformance","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ConformanceOptions","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ContextWithSecrets","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.CurrentRevision","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.Diff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.DiffAgainst","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.DiffTUIEnabled","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.DiffWith","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.Duplication","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.EvaluateProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.EvaluateTarget","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ExpandAffected","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ExpandAffectedSet","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ExpandPath","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ExportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.FileAt","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.FindOutputProducer","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.FreshenSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.Get","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.Graph","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.GroupingLens","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.HeldLocks","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.Hotspots","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.IdentifyRef","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.ImportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.InvocationByID","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.InvocationEventsByID","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.JudgeCommand","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.JudgeWrite","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"Magus.KnowledgeGraphHealthy","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.LifecycleProvider","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.Lifecycles","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.ListCharms","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ListProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ListTargets","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.MachineClaims","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.MetricsCollector","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.MetricsSnapshot","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.ModelRows","reason":"std's job store resolves harness model aliases through it"}
+{"name":"Magus.ModelTierLens","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.ModelTierMatrix","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.ModelTiers","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.OutputAttempts","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.OutputByRef","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.OutputByRefRemote","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.OutputDescriptorByRef","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.OutputKeyInputs","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.OutputRecordByRef","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.Ownership","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.PayloadByRef","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.PipeWaits","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.Plan","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ProjectTargets","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.PruneCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.PruneRemoteCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.PublishOutput","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.RangeDiff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.RefMatchCommand","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.Regions","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ReindexSymbols","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.ResolveProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.ResolveTargetOutputs","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.RestoreSpellCaches","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.ReviewOrigin","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.RevisionCheckpoint","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.Root","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.Run","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.RunAffected","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.RunCI","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.RunGate","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.SandboxMode","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.SaveSpellCaches","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.SecretProvider","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.SymbolFreshnessEnv","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.SymbolGaps","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.SymbolIndexStatus","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.SymbolIndexStatusByStamp","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.SymbolOccurrences","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.SymbolsOccurrences","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.TailLog","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.TargetGraph","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.Tools","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.Trend","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.Unreferenced","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.VCSOptions","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.Volatility","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.WatchKnowledgeGraph","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.WatchSymbolIndexing","reason":"symbol index query or refresh for refs and the conformance lens"}
+{"name":"Magus.Where","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.WorkingDiff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.Workspace","reason":"workspace accessor the CLI or std calls on the loaded handle"}
+{"name":"Magus.WriteGuardIndex","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
+{"name":"MaybeLaunchSandbox","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"MergeMarkers","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"MetricsCollector","reason":"value type a Run or query result returns to the caller"}
+{"name":"MetricsCollector.Collect","reason":"metrics sampling hook"}
+{"name":"NewLazyWorkspace","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"NewSink","reason":"value type a Run or query result returns to the caller"}
+{"name":"NewWorkspaceRegistry","reason":"multi-workspace registry that lets one process serve several roots"}
+{"name":"Open","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"Option","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"OutputDescriptor","reason":"value type a Run or query result returns to the caller"}
+{"name":"PlanOptions","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"ProjectOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"ResolveCacheDir","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
+{"name":"RetryOnVolatile","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"RunOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"ShortRevision","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"Sink","reason":"value type a Run or query result returns to the caller"}
+{"name":"Sink.Close","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitBase","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitCache","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitCharms","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitDetach","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitDiagnostic","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitNotice","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitScope","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.EmitShardTotal","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.GraphObserver","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"Sink.RecordValues","reason":"console and structured emit call made by the CLI during a run"}
+{"name":"SinkOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"SpawnRule","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"SpellCache","reason":"value type a Run or query result returns to the caller"}
+{"name":"SymbolOccurrenceRead","reason":"value type a Run or query result returns to the caller"}
+{"name":"TargetHandler","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"TargetLabel","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"TargetOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"TierCeiling","reason":"helper or hook the CLI, std or a test double needs from the root package"}
+{"name":"WithBaseRef","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithBroker","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithBrokerPolicy","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithCacheBackend","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithCharms","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithCommandLine","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithComposeRoots","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithComposeSpell","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithConfigFile","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithDependsOn","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithDryRun","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithEnv","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithExtraArgs","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithGate","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithGraphHistory","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithGraphInput","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithMetricsCollection","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithNoCache","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithNoVolatilityRetry","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithObserver","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithOutputs","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithRace","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithRaceReplay","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSession","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSink","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSinkFilter","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSinkLevel","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSinkRecords","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSpawnRule","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSpell","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithSpellFilter","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithStderr","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithStep","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithTarget","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithVCSDriver","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithVersion","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithWatchIgnore","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithWorkspaceRegistry","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithWorkspaceRegistryContext","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithWrite","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithoutWorkspaceProviders","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WorkspaceLoadFailure","reason":"multi-workspace registry that lets one process serve several roots"}
+{"name":"WorkspaceRegistry","reason":"multi-workspace registry that lets one process serve several roots"}
+{"name":"WorkspaceRegistry.AddProvider","reason":"registration hook for providers and projects of a registry"}
+{"name":"WorkspaceRegistry.RegisterProject","reason":"registration hook for providers and projects of a registry"}
+{"name":"WorkspaceRegistryFromContext","reason":"multi-workspace registry that lets one process serve several roots"}

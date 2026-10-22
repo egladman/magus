@@ -116,6 +116,33 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.Equal(t, types.StatePass, rows[0].State)
 }
 
+func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
+	t.Parallel()
+
+	row := coveredRow()
+	row.WritePaths = append(row.WritePaths, "docs/unwritten_test.go")
+	row.SoftPaths = []string{"docs/unwritten_test.go"}
+	loc := declared(t, row)
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref = result.Validation.OutputRef
+	attempt.TimestampMs = 9_999_999_999_999
+	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+
+	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
+	require.NoError(t, err)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
+	require.NoError(t, err)
+	assert.True(t, status.Verified)
+	assert.Empty(t, status.Violations, "an unwritten soft path is no violation")
+
+	rows, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
+	assert.Empty(t, rows[0].SoftPaths)
+}
+
 func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
@@ -1553,6 +1580,34 @@ func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
 	assert.Contains(t, status.Gates[0].Violations[0], "predates the job's last write")
 	assert.Contains(t, status.Gates[0].Violations[0], changed)
 	j.requireUnmoved(t)
+}
+
+func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
+	t.Parallel()
+
+	run := passedHere
+	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	later := time.UnixMilli(run.TimestampMs).Add(time.Hour)
+	changed := j.result.ChangedPaths[0]
+	require.NoError(t, os.Chtimes(filepath.Join(j.holder, filepath.FromSlash(changed)), later, later))
+
+	var asked []string
+	current := func(_ context.Context, tree string, run types.JobAttempt) bool {
+		asked = append(asked, tree+" "+run.Ref)
+		return true
+	}
+	claimed := observeClaim(j.result)
+	observe := func(ctx context.Context, row types.Job) (Observed, error) {
+		seen, err := claimed(ctx, row)
+		seen.CurrentRun = current
+		return seen, err
+	}
+	status, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, nil, observe, nil)
+
+	require.NoError(t, err)
+	assert.True(t, status.Verified, "a run whose key is the one its check mints now read the files as they stand: %v", status.Gates)
+	assert.NotEmpty(t, asked)
 }
 
 func TestSameContentComparesLinksWithoutFollowingThem(t *testing.T) {

@@ -106,19 +106,39 @@ func magusArgv(c hint.Invocation) ([]string, bool) {
 // a parameter renders with the expansion dropped.
 var tokenStateSegmentRe = regexp.MustCompile(`(?:^|[^A-Za-z0-9_.-])magus/(?:mcp_token|tokens\.d)(?:$|[^A-Za-z0-9_.-])`)
 
-// namesTokenState reports whether a word points at the operator token file, the token store,
-// or the state dir holding both, by name or by resolving it against where the call runs.
-func namesTokenState(location location, candidate string) bool {
+// tokenReach is how far a word reaches into the token state.
+type tokenReach int
+
+const (
+	tokenNone tokenReach = iota
+	// tokenDir is the state dir itself. It holds the secrets and the other state beside
+	// them, so naming it reads the secrets only when the command walks it.
+	tokenDir
+	// tokenSecret is the operator file, the store or anything under it, or a glob that
+	// matches one of them.
+	tokenSecret
+)
+
+// tokenStateReaches resolves a word against the token state, by name or against where the
+// call runs. A file beside the secrets in the state dir reaches nothing.
+func tokenStateReaches(location location, candidate string) tokenReach {
 	p := strings.TrimSpace(candidate)
 	if p == "" {
-		return false
+		return tokenNone
 	}
 	if tokenStateSegmentRe.MatchString(filepath.ToSlash(p)) {
-		return true
+		return tokenSecret
 	}
 	if p = expandHome(p, userHome()); strings.HasPrefix(p, "~") {
-		return false
+		return tokenNone
 	}
+	state, err := auth.StateDir()
+	if err != nil {
+		return tokenNone
+	}
+	operator, _ := auth.OperatorPath()
+	store, _ := auth.StoreDir()
+	p, pattern := splitGlob(p)
 	abs := filepath.Clean(filepath.FromSlash(p))
 	if !filepath.IsAbs(abs) {
 		dir := location.dir
@@ -126,22 +146,77 @@ func namesTokenState(location location, candidate string) bool {
 			dir = location.workspace
 		}
 		if dir == "" {
-			return false
+			return tokenNone
 		}
 		abs = filepath.Join(dir, abs)
 	}
 	abs = realPath(abs)
-	state, err := auth.StateDir()
-	if err != nil {
-		return false
+	if pattern != "" {
+		return globReach(abs, pattern, realPath(state), realPath(store))
 	}
-	operator, _ := auth.OperatorPath()
-	store, _ := auth.StoreDir()
-	if abs == realPath(state) || abs == realPath(operator) {
+	if abs == realPath(operator) || under(realPath(store), abs) {
+		return tokenSecret
+	}
+	if abs == realPath(state) {
+		return tokenDir
+	}
+	return tokenNone
+}
+
+// under reports whether abs is dir or inside it.
+func under(dir, abs string) bool {
+	rel, err := filepath.Rel(dir, abs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// globReach judges a pattern by the directory it lists and its first glob segment: inside the
+// store it reaches a secret whatever it matches, and in the state dir it does when it would
+// match the operator file or the store's own name.
+func globReach(dir, pattern, state, store string) tokenReach {
+	if under(store, dir) {
+		return tokenSecret
+	}
+	if dir != state {
+		return tokenNone
+	}
+	for _, name := range []string{"mcp_token", filepath.Base(store)} {
+		if ok, _ := filepath.Match(pattern, name); ok {
+			return tokenSecret
+		}
+	}
+	return tokenNone
+}
+
+// splitGlob cuts a path at its first glob segment: the directory before it and that segment,
+// or the path and "" when it has none.
+func splitGlob(p string) (dir, pattern string) {
+	i := strings.IndexAny(p, "*?[")
+	if i < 0 {
+		return p, ""
+	}
+	cut := strings.LastIndexByte(p[:i], '/') + 1
+	end := strings.IndexByte(p[i:], '/')
+	if end < 0 {
+		end = len(p) - i
+	}
+	return p[:cut], p[cut : i+end]
+}
+
+// namesTokenState reports whether a word points at the operator token file, the token store,
+// or the state dir holding both, by name or by resolving it against where the call runs.
+func namesTokenState(location location, candidate string) bool {
+	return tokenStateReaches(location, candidate) != tokenNone
+}
+
+// walksDirectories reports a command that reads every file under a directory it is given:
+// a search that descends by default, a flag that asks for it, or an archiver.
+func walksDirectories(c hint.Invocation) bool {
+	switch path.Base(c.Name) {
+	case "find", "rg", "ag", "ack", "fd", "tree", "tar", "zip", "rsync", "ditto", "cpio":
 		return true
 	}
-	rel, err := filepath.Rel(realPath(store), abs)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return hasFlag(c.Args, 'r', "recursive") || hasFlag(c.Args, 'R', "") ||
+		path.Base(c.Name) == "cp" && hasFlag(c.Args, 'a', "archive")
 }
 
 // tokenStateDenial is the one text a file write and a shell line both refuse with.
@@ -176,7 +251,7 @@ func denyTokenStatePath(location location, filePath string) string {
 func denyTokenStateCommand(location location, command string, d Dialect) string {
 	f, err := parseFile(command, d)
 	if err != nil {
-		if namesTokenState(location, command) {
+		if tokenStateReaches(location, command) == tokenSecret {
 			return tokenStateDenial(command)
 		}
 		return ""
@@ -194,19 +269,47 @@ func denyTokenStateCommand(location location, command string, d Dialect) string 
 			return true
 		}
 		if call, ok := n.(*syntax.CallExpr); ok && len(call.Args) > 1 &&
-			tokenStateListers[filepath.Base(literalWord(call.Args[0].Parts))] && namesStayNames(stack, d) {
+			tokenStateListers[filepath.Base(literalWord(call.Args[0].Parts))] && !callWalks(call, d) && namesStayNames(stack, d) {
 			for _, arg := range call.Args[1:] {
 				listed[arg] = true
 			}
 		}
 		if w, ok := n.(*syntax.Word); ok && !listed[w] {
-			if text := literalWord(w.Parts); namesTokenState(location, text) {
+			text := literalWord(w.Parts)
+			switch tokenStateReaches(location, text) {
+			case tokenSecret:
 				reason = tokenStateDenial(text)
+			case tokenDir:
+				// The state dir holds more than the secrets: a command that opens one
+				// file in it or lists it reads none of them, and a loop or a redirect
+				// names it with no command to vouch for.
+				if call := enclosingCall(stack); call == nil || callWalks(call, d) {
+					reason = tokenStateDenial(text)
+				}
 			}
 		}
 		return true
 	})
 	return reason
+}
+
+// enclosingCall is the command whose arguments hold the node on top of stack, nil when the
+// node is in a redirect, a loop's word list or anywhere else no command owns.
+func enclosingCall(stack []syntax.Node) *syntax.CallExpr {
+	for i := len(stack) - 2; i >= 0; i-- {
+		switch n := stack[i].(type) {
+		case *syntax.CallExpr:
+			return n
+		case *syntax.Stmt, *syntax.ForClause, *syntax.BinaryCmd:
+			return nil
+		}
+	}
+	return nil
+}
+
+// callWalks reports whether any command the call runs, wrappers peeled, walks directories.
+func callWalks(call *syntax.CallExpr, d Dialect) bool {
+	return slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), walksDirectories)
 }
 
 // tokenStateListers print a file's name and metadata and never its content.

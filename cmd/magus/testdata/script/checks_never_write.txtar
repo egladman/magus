@@ -1,0 +1,117 @@
+# A check that finds stale generated files reports them and leaves the tracked tree as it
+# found it. The fixture's generate gate is the root one: it runs its generators, compares
+# the tree against the snapshot it took first, and puts every path back before it throws.
+# drift.buzz is the real file, copied from the repository through the templates path.
+
+cp $__MAGUS_TEMPLATES/../../../../hack/magusfile/drift.buzz drift.buzz
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .
+exec git commit -m initial
+exec magus ls
+exec git add -A
+exec git commit --allow-empty -m settled
+
+# Uncommitted work in a file the generators also write must survive the check.
+cp notes-edited.txt notes.txt
+
+! exec magus run generate .
+stderr 'MGS4006: generate: regeneration changed generated files'
+stderr 'gen.txt'
+
+# Stale file back at HEAD, new file gone, uncommitted edit intact.
+cmp gen.txt gen-committed.txt
+! exists fresh.txt
+cmp notes.txt notes-edited.txt
+exec git status --porcelain --untracked-files=no
+cmp stdout want-status.txt
+
+# A generator that fails leaves nothing behind either, and its own error is reported.
+cp gen-committed.txt gen.txt
+cp broken-magusfile.buzz magusfile.buzz
+! exec magus run generate .
+stderr 'generator failed'
+cmp gen.txt gen-committed.txt
+! exists fresh.txt
+
+-- .gitignore --
+.magus/
+-- magus.yaml --
+concurrency: 1
+-- gen.txt --
+stale
+-- gen-committed.txt --
+stale
+-- notes.txt --
+original
+-- notes-edited.txt --
+original
+edited
+-- want-status.txt --
+ M notes.txt
+-- magusfile.buzz --
+import "magus";
+import "./drift" as drift;
+import "fs";
+import "vcs";
+magus\project({
+    "sources": ["*.txt"],
+    "targets": {"generate": {"skip_cache": "is the drift gate itself"}},
+});
+export fun gen_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen.txt", "fresh.txt", "notes.txt");
+    fs\writeFile("gen.txt", content: "fresh\n");
+    fs\writeFile("fresh.txt", content: "new\n");
+    fs\writeFile("notes.txt", content: "regenerated\n");
+}
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    var dirtyBefore: mut [str] = mut [<str>];
+    foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
+    final before = drift\vcsHashes(dirtyBefore);
+    final saved = drift\saveFiles(dirtyBefore);
+    var dirtyNow: mut [str] = mut [<str>];
+    try {
+        ctx.needs(ctx.glob("*-generate"));
+    } catch (err: any) {
+        foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
+        drift\restore(drift\vcsChangedSince(before, dirtyNow), saved: saved, dirtyBefore: dirtyBefore);
+        throw err;
+    }
+    foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
+    final changed = drift\vcsChangedSince(before, dirtyNow);
+    if (changed.len() > 0) {
+        drift\restore(changed, saved: saved, dirtyBefore: dirtyBefore);
+        throw "MGS4006: generate: regeneration changed generated files: " + changed.join(", ");
+    }
+}
+-- broken-magusfile.buzz --
+import "magus";
+import "./drift" as drift;
+import "fs";
+import "vcs";
+magus\project({
+    "sources": ["*.txt"],
+    "targets": {"generate": {"skip_cache": "is the drift gate itself"}},
+});
+export fun gen_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen.txt", "fresh.txt");
+    fs\writeFile("gen.txt", content: "fresh\n");
+    fs\writeFile("fresh.txt", content: "new\n");
+    throw "generator failed";
+}
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    var dirtyBefore: mut [str] = mut [<str>];
+    foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
+    final before = drift\vcsHashes(dirtyBefore);
+    final saved = drift\saveFiles(dirtyBefore);
+    var dirtyNow: mut [str] = mut [<str>];
+    try {
+        ctx.needs(ctx.glob("*-generate"));
+    } catch (err: any) {
+        foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
+        drift\restore(drift\vcsChangedSince(before, dirtyNow), saved: saved, dirtyBefore: dirtyBefore);
+        throw err;
+    }
+}

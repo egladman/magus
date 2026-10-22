@@ -76,7 +76,9 @@ export fun workerPlacement(built: str, lease: str) > str {
         + cause + "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, "
         + "and {placementScript} copies it into a worker checkout whenever no Go build input differs. "
         + "A build per worker is two Go compiles each, and a fan-out runs a dozen at once. Use the ./magus "
-        + "placed in this checkout; if it cannot load this tree, ask the main session to place a newer one.";
+        + "placed in this checkout; if it cannot load this tree, ask the main session to place a newer one, "
+        + "which it builds and places in one step with "
+        + "`<main checkout>/magus buzz {placementScript} -- --job <id> --build-from <main checkout>`.";
 }
 
 // workerBuildDenial is worker-builds-magus: the denial for a program that compiles magus run
@@ -216,6 +218,7 @@ test "a worker lease denies a build of magus, naming the script and the one bina
         std\assert(denial.split("\n")[1] == "once placed, run `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`.",
             message: "the second line carries the placement command: " + argv.join(" "));
         std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it");
+        std\assert(denial.indexOf("--build-from <main checkout>`") != null, message: "names the build the main session runs");
         std\assert(denial.indexOf("`ui-logs`") != null, message: "names the lease");
     }
 }

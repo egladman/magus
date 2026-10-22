@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,19 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
+
+func TestMachineRefusalNamesTheOversizedClaimAndTheWaitForm(t *testing.T) {
+	b, _ := testBudget(t, 4000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "`magus status --wait` cannot seat it either")
+	assert.Contains(t, err.Error(), "25.4 GiB against a budget of 3.9 GiB", "which claim, against which budget")
+	assert.Contains(t, err.Error(), "Narrow the run")
+}
 
 func snapshotReader(b *MachineBudget) func(context.Context) (types.MachineSnapshot, error) {
 	return func(context.Context) (types.MachineSnapshot, error) { return b.Snapshot(), nil }
@@ -181,7 +195,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 		profile.Curve[i] = 100
 	}
 	ctx := types.WithExecCost(t.Context())
-	ctx = withOverrunWatch(ctx, admit, "claim-1", profile)
+	ctx = withOverrunWatch(ctx, admit, func() string { return "claim-1" }, profile)
 	watchOverrun(ctx)
 
 	record, end := types.RecordCurve(ctx, time.Now())
@@ -207,7 +221,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, "claim-2", types.MemoryProfile{})
+	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, func() string { return "claim-2" }, types.MemoryProfile{})
 	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
 }
 
@@ -418,4 +432,181 @@ func TestMachineDeclarationNamesHowSlotsWereSized(t *testing.T) {
 	assert.Equal(t, "it runs test, which claims 6.0 GiB (measured over 5 runs), and takes 6 slots (for its memory)",
 		describeMachineDeclaration(types.MachineClaim{Target: "ci", DeclaredBy: "test", MemoryMB: 6144, Slots: 6,
 			Sizing: types.MemorySizing{Samples: 5, Slots: types.SlotSizing{Source: types.SlotsForMemory}}}))
+}
+
+// composed is a skip_cache composer and the members its one ctx.needs call dispatches; a
+// node with no members is a leaf.
+type composed struct {
+	step    Step
+	members []composed
+}
+
+// leaves is n's members as leaves.
+func leaves(composer Step, members ...Step) composed {
+	n := composed{step: composer}
+	for _, m := range members {
+		n.members = append(n.members, composed{step: m})
+	}
+	return n
+}
+
+// composedRun runs root under a cache admitted by b, and inside each composer its members
+// as steps of their own, all at once, as one ctx.needs call's members are dispatched. It
+// returns the most leaves that ran at once and the members' joined errors.
+func composedRun(t *testing.T, b *MachineBudget, root composed) (int, error) {
+	t.Helper()
+	t.Setenv("MAGUS_LEVEL", "")
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+	lim := WithLimiter(NewLimiter(8))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	var mu sync.Mutex
+	running, widest := 0, 0
+	leaf := func(context.Context) error {
+		mu.Lock()
+		running++
+		widest = max(widest, running)
+		mu.Unlock()
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+		return nil
+	}
+	var membersErr error
+	var body func(n composed) func(context.Context) error
+	body = func(n composed) func(context.Context) error {
+		if len(n.members) == 0 {
+			return leaf
+		}
+		return func(ctx context.Context) error {
+			return LendMachineClaim(ctx, func(ctx context.Context) error {
+				errs := make([]error, len(n.members))
+				var wg sync.WaitGroup
+				for i, m := range n.members {
+					wg.Go(func() { _, errs[i] = c.RunAside(ctx, m.step, body(m), lim) })
+				}
+				wg.Wait()
+				mu.Lock()
+				membersErr = errors.Join(membersErr, errors.Join(errs...))
+				mu.Unlock()
+				return nil
+			})
+		}
+	}
+	_, err = c.RunAside(ctx, root.step, body(root), lim)
+	require.NoError(t, err, "the composer itself fits")
+	assert.Equal(t, 0, b.Snapshot().HeldMB, "every claim went back")
+	return widest, membersErr
+}
+
+// TestChildrenClaimTheirOwnQueueBesideTheirComposer is entry 94's shape: four members of
+// one call each fit beside their composer, and together they do not. Each claims for
+// itself, so all four run, two at a time.
+func TestChildrenClaimTheirOwnQueueBesideTheirComposer(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	var members []Step
+	for _, name := range []string{"lint", "build", "test", "security"} {
+		members = append(members, Step{ProjectPath: ".", Target: name, MemoryMB: 4000, NoCache: true})
+	}
+
+	widest, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true}, members...))
+	require.NoError(t, err, "16000 summed is over the 10000 budget, but each member waits its turn")
+	assert.LessOrEqual(t, widest, 2, "2 x 4000 fits; a third member would not")
+}
+
+// TestChildClaimLargerThanTheMachineNamesItself: a member over the whole budget is
+// refused at once, by its own name, while its siblings run.
+func TestChildClaimLargerThanTheMachineNamesItself(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true},
+		Step{ProjectPath: ".", Target: "lint", MemoryMB: 2000, NoCache: true},
+		Step{ProjectPath: ".", Target: "test", MemoryMB: 12_000, NoCache: true},
+	))
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Contains(t, err.Error(), "refusing to start (root) test: it claims 11.7 GiB")
+	assert.Contains(t, err.Error(), "does not fit in this machine's whole build budget")
+	assert.NotContains(t, err.Error(), "lint", "lint fit and ran")
+}
+
+// TestChildClaimRunsInItsWaitingComposersSeat: a member that fits the budget alone but
+// not beside its composer runs, because the composer holds nothing while it waits.
+func TestChildClaimRunsInItsWaitingComposersSeat(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 3000, NoCache: true},
+		Step{ProjectPath: ".", Target: "test", MemoryMB: 8000, NoCache: true},
+	))
+	require.NoError(t, err)
+}
+
+// TestNestedComposersNeverHoldTheSeatsTheirMembersNeed is root generate's shape: every
+// member composes generators of its own, and the members alone fill every slot. Each
+// composer holds nothing while it waits, so every generator runs.
+func TestNestedComposersNeverHoldTheSeatsTheirMembersNeed(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 4)
+	root := composed{step: Step{ProjectPath: ".", Target: "generate", NoCache: true}}
+	for _, name := range []string{"index-generate", "graph-generate", "docs-generate", "job-generate"} {
+		root.members = append(root.members, leaves(Step{ProjectPath: ".", Target: name, NoCache: true},
+			Step{ProjectPath: ".", Target: name + "-types", NoCache: true},
+			Step{ProjectPath: ".", Target: name + "-config", NoCache: true},
+		))
+	}
+
+	widest, err := composedRun(t, b, root)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, widest, 4, "the leaves still queue for the 4 slots")
+	assert.Equal(t, 0, b.Snapshot().HeldSlots, "every slot went back")
+}
+
+// TestMembersWaitingOnASharedNeedLendTheirSeats is the 2026-10-21 `vcs resolve` hang:
+// generate's members alone fill every slot, and each needs types-generate, which
+// generate dispatched too and which needs a seat of its own. Each member lends its claim
+// while it waits, so the shared need runs and every member completes.
+func TestMembersWaitingOnASharedNeedLendTheirSeats(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	const members = 4
+	b, _ := testBudget(t, 10_000, members)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+	lim := WithLimiter(NewLimiter(8))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	waiting := make(chan struct{}, members)
+	sharedDone := make(chan struct{})
+	member := func(ctx context.Context) error {
+		waiting <- struct{}{}
+		return LendMachineClaim(ctx, func(ctx context.Context) error {
+			select {
+			case <-sharedDone:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}
+	shared := Step{ProjectPath: ".", Target: "types-generate", NoCache: true}
+	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "generate", NoCache: true}, func(ctx context.Context) error {
+		return LendMachineClaim(ctx, func(ctx context.Context) error {
+			errs := make([]error, members+1)
+			var wg sync.WaitGroup
+			for i := range members {
+				m := Step{ProjectPath: ".", Target: fmt.Sprintf("gen-%d", i), NoCache: true}
+				wg.Go(func() { _, errs[i] = c.RunAside(ctx, m, member, lim) })
+			}
+			for range members {
+				<-waiting
+			}
+			wg.Go(func() {
+				defer close(sharedDone)
+				_, errs[members] = c.RunAside(ctx, shared, func(context.Context) error { return nil }, lim)
+			})
+			wg.Wait()
+			return errors.Join(errs...)
+		})
+	}, lim)
+	require.NoError(t, err, "every member held a seat while the need they share queued for one")
+	assert.Equal(t, 0, b.Snapshot().HeldSlots, "every slot went back")
 }

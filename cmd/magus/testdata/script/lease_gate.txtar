@@ -3,8 +3,8 @@
 # The worker's check is `test .`, which needs format and runs go's go-test op. A narrower
 # run of anything the check composes passes, and so does the install every fresh checkout
 # needs; a target the check does not compose is refused naming the check. A raw tool a
-# spell op covers is refused too, naming the same check: before, the refusal of a target
-# sent workers to the raw tool, which only advised.
+# spell op covers is refused too, naming the same check, ahead of raw-tool's generic
+# refusal.
 
 [!exec:git] skip 'the workspace is a git checkout'
 env HOME=$WORK/home
@@ -42,12 +42,13 @@ stdin raw.txt
 ! exec magus shell
 stdout 'deny \[worker-check-only\]: magus workspace: `go test ./src/pkg` runs go::go-test outside magus; run lease wave/guard''s check: `magus run test \.`\.'
 
-# --- the same raw tool with no lease only advises --------------------------------------
+# --- the same raw tool with no lease is raw-tool's, which names no check ---------------
 
 env BAGGAGE=
 stdin raw.txt
-exec magus shell
-! stdout '^deny'
+! exec magus shell
+stdout '^deny \[raw-tool\]'
+! stdout 'worker-check-only'
 
 -- magusfile.buzz --
 import "magus";

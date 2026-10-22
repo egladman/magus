@@ -340,6 +340,29 @@ func (m fileMap) covering(first, last int) (mapEntry, bool) {
 	return mapEntry{}, false
 }
 
+// coveringNear is covering with a line of slack at each end. The Read tool maps its offset
+// and limit onto a range one off the span a sed prints, and a reader who took the suggested
+// span through it is not paging.
+func (m fileMap) coveringNear(first, last int) (mapEntry, bool) {
+	for _, e := range m.entries {
+		if e.first-1 <= first && last <= e.last+1 {
+			return e, true
+		}
+	}
+	return mapEntry{}, false
+}
+
+// suggest is the entry a reader paging from line first should read instead: the one
+// holding that line, else the next one down, else the last. A fileMap is never empty.
+func (m fileMap) suggest(first int) mapEntry {
+	for _, e := range m.entries {
+		if first <= e.last {
+			return e
+		}
+	}
+	return m.entries[len(m.entries)-1]
+}
+
 // closeSpans ends each entry where the next begins.
 func closeSpans(entries []mapEntry, lines int) []mapEntry {
 	for i := range entries {

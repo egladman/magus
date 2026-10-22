@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -268,7 +269,7 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepo(t)
 			wt, row := r.workerWorktree(types.StateExited)
-			row.ID = "remedy-wait"
+			row.ID, row.Result = "remedy-wait", &types.JobResult{}
 			seedRemedyJob(t, at, row)
 			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
 		}},
@@ -381,6 +382,9 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				command := call.Input
 				deps := strict(testDependencies())
 				deps.GraphIDs = diagnosticGraph
+				// A bound worker's raw tool is worker-check-only's by default; lowered, the
+				// raw-tool remedy is what this role is served.
+				deps.Builtins[string(denyRuleWorkerCheckOnly)] = builtin.Setting{Decision: builtin.Advise}
 				v := Judge(ctx, deps, call)
 				shape := verdictWithRule("deny", string(f.rule))
 				shape.Next = v.Next // graded one by one below, as this role is served them

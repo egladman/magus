@@ -1,12 +1,12 @@
 ---
 title: "generated-write: a hand edit to a declared output, which the next run overwrites"
-description: "An advisory by default: it explains, and blocks nothing, on a hand edit to a declared output, which the next run overwrites."
-tags: [guard, rules, generated-write, advise]
+description: "A deny rule by default: it refuses a hand edit to a declared output, which the next run overwrites, and names what to run instead."
+tags: [guard, rules, generated-write, deny]
 ---
 
 # generated-write
 
-An advisory by default: it explains, and blocks nothing, on a hand edit to a declared output, which the next run overwrites.
+A deny rule by default: it refuses a hand edit to a declared output, which the next run overwrites, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A hand edit to a declared output, which the next run overwrites.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"generated-write": "deny"})
+magus\guard.builtins({"generated-write": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [generated-write]: ...
+deny [generated-write]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [generated-write]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [generated-write]: ...` instead.
 
 `magus describe rule generated-write` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

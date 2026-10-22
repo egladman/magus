@@ -1,12 +1,12 @@
 ---
 title: "buzz-unbriefed: the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill"
-description: "An advisory by default: it explains, and blocks nothing, on the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill."
-tags: [guard, rules, buzz-unbriefed, advise]
+description: "A deny rule by default: it refuses the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill, and names what to run instead."
+tags: [guard, rules, buzz-unbriefed, deny]
 ---
 
 # buzz-unbriefed
 
-An advisory by default: it explains, and blocks nothing, on the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill.
+A deny rule by default: it refuses the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ Buzz is in no model's training data, so what gets written is Go or TypeScript wi
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"buzz-unbriefed": "deny"})
+magus\guard.builtins({"buzz-unbriefed": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [buzz-unbriefed]: ...
+deny [buzz-unbriefed]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [buzz-unbriefed]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [buzz-unbriefed]: ...` instead.
 
 `magus describe rule buzz-unbriefed` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

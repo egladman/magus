@@ -190,6 +190,6 @@ func TestStdinReaderFlagsAreUnambiguous(t *testing.T) {
 	}
 }
 
-func TestFilterWithoutInputAdvisesByDefault(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(testDependencies(), "wc -l"), denyRuleFilterWithoutInput)
+func TestFilterWithoutInputAdvisesWhenSetToAdvise(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "wc -l"), denyRuleFilterWithoutInput)
 }

@@ -167,7 +167,7 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 		return r
 	}
 	var finished []types.Job
-	exited := ""
+	exited, unfiled := "", ""
 	for _, row := range rows {
 		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
 			r.failed = append(r.failed, fmt.Sprintf("job %s's fork made it, and only that job's holder or the session that forked it removes it (`%s`)",
@@ -177,6 +177,9 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 			continue
 		}
 		switch {
+		case row.State == types.StateExited && row.Result == nil:
+			// No result was filed, so there is nothing to wait for; only the tree can lose work.
+			unfiled = row.ID
 		case row.State.Live():
 			r.failed = append(r.failed, fmt.Sprintf("job %s (%s) was taken in it (`%s`)", row.ID, row.State, hint.DescribeJob.With(row.ID)))
 			if row.State == types.StateExited {
@@ -216,6 +219,10 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	}
 
 	switch {
+	case unfiled != "" && len(r.failed) > 0:
+		r.lead = "job " + unfiled + " exited without filing a result, and " + r.target + " still holds work."
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(unfiled),
+			"exit files the result the job never filed")
 	case exited != "":
 		r.lead = "job " + exited + " exited and is not graded yet; wait for its grade before " + r.verb + " " + r.target + "."
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(exited),

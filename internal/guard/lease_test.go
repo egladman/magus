@@ -386,6 +386,7 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 	for _, command := range refused {
 		assert.True(t, denyLeaseScopedGate(ctx, root, row.ID, command).refused(), "the root holding the integrator's lease never builds: %s", command)
 	}
+	assert.Empty(t, denyLeaseGate(ctx, root, row.ID, "./magus affected ci"), "the gate is still the root's while it holds a parentless row")
 
 	for name, title := range map[string]string{
 		"a change-role worker":                  "root/feat " + row.ID,
@@ -407,6 +408,37 @@ func TestTheCheckoutsIntegratorBuildsAndRegenerates(t *testing.T) {
 			assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
 		}
 	})
+}
+
+// TestACheckoutHolderGatesInItsOwnCheckout pins that a --checkout holder runs the gate in
+// the checkout it holds under any title, builds nothing else, and is still a worker.
+func TestACheckoutHolderGatesInItsOwnCheckout(t *testing.T) {
+	row := narrowLease()
+	row.Validation = ""
+	row.Check = &types.LeaseCheck{Target: "go-test", Project: "."}
+	ctx, deps := integratorFixture(t, row, "root/feat "+row.ID)
+	recordCheckout := func(ctx context.Context) {
+		at, ok := ctx.Value(locationKey{}).(location)
+		require.True(t, ok)
+		store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
+		_, err := store.RecordWorktree(t.Context(), row.ID, types.JobWorktree{Root: at.workspace})
+		require.NoError(t, err)
+	}
+	recordCheckout(ctx)
+	for _, command := range []string{"./magus affected ci", "magus run ci .", "./magus -C . affected ci"} {
+		assert.Empty(t, denyLeaseScopedGate(ctx, deps, row.ID, command), command)
+	}
+	for _, command := range []string{"./magus run go-build .", "./magus run lint ."} {
+		assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, command).refused(), command)
+	}
+	role, _ := actingRole(ctx, hookLocation(ctx, deps), row.ID, "root/feat "+row.ID)
+	assert.Equal(t, types.AgentRoleWorker, role, "holding the checkout is not integrating it")
+
+	elsewhere := row
+	elsewhere.CheckoutRoot = t.TempDir()
+	ctx, deps = integratorFixture(t, elsewhere, "root/feat "+row.ID)
+	recordCheckout(ctx)
+	assert.True(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").refused(), "a row taken in another checkout")
 }
 
 // TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
@@ -582,6 +614,26 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 	assert.True(t, denyWorkerCheckOnly(ctx, rw, row.ID, "./magus run go-fmt .").refused(), "go-fmt honors rw, so default rw rewrites through it")
 }
 
+// A worker may always vet the projects holding its write paths, beside a check that composes
+// no vet there: vetting compiles and writes nothing, so a worker whose check the machine
+// cannot fit still learns whether its code builds.
+func TestWorkerCheckOnlyLetsAWorkerVetItsOwnPaths(t *testing.T) {
+	row := testCheckLease()
+	row.Check = &types.LeaseCheck{Target: "test", Project: "libs/conventions"}
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+	rw := deps
+	rw.DefaultCharms = []string{"rw"}
+
+	for _, command := range []string{"./magus run go::go-vet .", "./magus run go-vet .", "./magus run go::go-vet . -- ./internal/guard/..."} {
+		assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, command), "%q", command)
+		assert.Empty(t, denyWorkerCheckOnly(ctx, rw, row.ID, command), "%q under default rw", command)
+	}
+	for _, command := range []string{"./magus run go::go-vet docs", "./magus run go::go-vet", "./magus run go::go-test .", "./magus affected go::go-vet"} {
+		assert.True(t, denyWorkerCheckOnly(ctx, deps, row.ID, command).refused(), "%q", command)
+	}
+}
+
 // A worker never builds ./magus: the orchestrator builds one per base and places it. The
 // refusal says so and names the placement, rather than a check the build has nothing to do
 // with, so an integrating worker whose own changes reach the binary knows who builds it.
@@ -609,9 +661,17 @@ func TestWorkerRawTool(t *testing.T) {
 	ctx, _ := fleetFixture(t, row)
 	deps := composingWorkspace(t)
 
-	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
-		"Judge reaches the rule: %s", v.Reason)
+	// raw-tool denies the same line by default; the check is the remedy a bound worker can
+	// run, so worker-check-only answers first, whatever raw-tool is set to.
+	for _, deps := range []Dependencies{{Spells: spellCatalog}, advising(Dependencies{Spells: spellCatalog}, string(denyRuleRawTool))} {
+		v := Judge(ctx, deps, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
+			"Judge names the check: %s", v.Reason)
+	}
+	lowered := withSetting(string(denyRuleWorkerCheckOnly), builtin.Advise)
+	lowered.Spells = spellCatalog
+	v := Judge(ctx, lowered, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+	assert.Equal(t, string(denyRuleRawTool), judgedAs(v).Rule, "with worker-check-only lowered, raw-tool still refuses")
 
 	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
 	require.NotEmpty(t, reason)
@@ -1897,8 +1957,9 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 
 	b := boundJob(who, at)
 	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+	// sed-in-place lowered, so the line reaches the binding's own refusal.
 	judge := func(command string) types.GuardJudgment {
-		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
+		return Judge(ctx, advising(Dependencies{}, string(denyRuleSedInPlace)), Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
 	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")
 	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("sed -i s/a/b/ x").Rule, "sed in place is work")
@@ -2191,6 +2252,31 @@ func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+me.ID)
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
+}
+
+// `job exec --timeout <d> -- <cmd>` takes no job: it is the bounded run other rules send a
+// holder to, so it passes under the holder's own lease and is refused only when the line's
+// BAGGAGE would hand the command to another one.
+func TestDenyLeaseScopedRebindLetsAHolderBoundItsOwnRun(t *testing.T) {
+	me := narrowLease()
+	ctx, _ := fleetFixture(t, me)
+	t.Setenv(trail.EnvBaggage, "")
+	const bounded = "magus job exec --timeout 1m -- true"
+
+	for _, line := range []string{
+		bounded,
+		"./magus job exec --timeout 20m -- ./magus run go-test . -- -run TestX",
+		"BAGGAGE=" + trail.BaggageLease + "=" + me.ID + " " + bounded,
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
+	}
+
+	other := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "export BAGGAGE="+trail.BaggageLease+"=elsewhere; "+bounded)
+	require.True(t, other.refused())
+	assert.Contains(t, other.Say, "owned by lease elsewhere")
+	assert.Contains(t, other.Say, "BAGGAGE="+trail.BaggageLease+"="+me.ID, "the remedy is the holder's own")
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "magus job exec --timeout 1m harness/other").Say,
+		"take the lease on another job", "a job operand is still a take")
 }
 
 // TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal

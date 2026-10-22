@@ -1,12 +1,12 @@
 ---
 title: "exit-status-echo: a line ending by printing an exit status, which the harness already reports"
-description: "An advisory by default: it explains, and blocks nothing, on a line ending by printing an exit status, which the harness already reports."
-tags: [guard, rules, exit-status-echo, advise]
+description: "A deny rule by default: it refuses a line ending by printing an exit status, which the harness already reports, and names what to run instead."
+tags: [guard, rules, exit-status-echo, deny]
 ---
 
 # exit-status-echo
 
-An advisory by default: it explains, and blocks nothing, on a line ending by printing an exit status, which the harness already reports.
+A deny rule by default: it refuses a line ending by printing an exit status, which the harness already reports, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ The harness reports a nonzero exit on its own and success needs no confirmation,
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"exit-status-echo": "deny"})
+magus\guard.builtins({"exit-status-echo": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [exit-status-echo]: ...
+deny [exit-status-echo]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [exit-status-echo]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [exit-status-echo]: ...` instead.
 
 `magus describe rule exit-status-echo` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

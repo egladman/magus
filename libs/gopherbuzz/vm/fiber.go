@@ -48,6 +48,13 @@ func (vm *VM) NewFiber(fn Value, args []Value) (Value, error) {
 // native written this way stays correct when the host chooses not to drive it.
 func Suspend(v Value) error { return &yieldSignal{value: v} }
 
+// RaiseAtSuspension throws err in a suspended fiber VM at the call it suspended in, as
+// though the native had returned err instead of Suspend. It reports true when a try in
+// the fiber caught it: the VM now sits at that handler and the next Exec runs the catch
+// body. On false nothing changed and the error is uncaught; the caller owns ending the
+// fiber with it, unchanged. Context cancellation is never caught, as with any native.
+func (vm *VM) RaiseAtSuspension(err error) bool { return vm.raiseHostError(err) }
+
 // suspendedAtCall reports that err is a native's suspend signal and, if so, COMPLETES
 // the interrupted call before the suspend propagates: the call evaluates to the
 // suspended value, exactly as OpYield makes `yield v` evaluate to v.

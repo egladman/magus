@@ -93,6 +93,7 @@
 {"group":"file:changes/unreleased/flags-repeated-and-command.md","path":"changes/unreleased/flags-repeated-and-command.md"}
 {"group":"file:changes/unreleased/fork-claim-notes.md","path":"changes/unreleased/fork-claim-notes.md"}
 {"group":"file:changes/unreleased/fork-rules-at-every-door.md","path":"changes/unreleased/fork-rules-at-every-door.md"}
+{"group":"file:changes/unreleased/gate-fits-machine.md","path":"changes/unreleased/gate-fits-machine.md"}
 {"group":"file:changes/unreleased/gitattributes-carve-outs.md","path":"changes/unreleased/gitattributes-carve-outs.md"}
 {"group":"file:changes/unreleased/go-source-conventions-become-linters.md","path":"changes/unreleased/go-source-conventions-become-linters.md"}
 {"group":"file:changes/unreleased/graph-links-target-workspace-spell-imported.md","path":"changes/unreleased/graph-links-target-workspace-spell-imported.md"}
@@ -160,6 +161,7 @@
 {"group":"file:changes/unreleased/model-tier-rework-widening.md","path":"changes/unreleased/model-tier-rework-widening.md"}
 {"group":"file:changes/unreleased/more-libs-never-compose-format.md","path":"changes/unreleased/more-libs-never-compose-format.md"}
 {"group":"file:changes/unreleased/needs-at-width-one.md","path":"changes/unreleased/needs-at-width-one.md"}
+{"group":"file:changes/unreleased/needs-failure-is-catchable.md","path":"changes/unreleased/needs-failure-is-catchable.md"}
 {"group":"file:changes/unreleased/on-linux.md","path":"changes/unreleased/on-linux.md"}
 {"group":"file:changes/unreleased/output-lookups-take-a-context.md","path":"changes/unreleased/output-lookups-take-a-context.md"}
 {"group":"file:changes/unreleased/parity-guard-claude-code-mod-install.md","path":"changes/unreleased/parity-guard-claude-code-mod-install.md"}
@@ -208,6 +210,7 @@
 {"group":"file:changes/unreleased/sec-cache-hardening.md","path":"changes/unreleased/sec-cache-hardening.md"}
 {"group":"file:changes/unreleased/self-invalidating-key-mgs4010.md","path":"changes/unreleased/self-invalidating-key-mgs4010.md"}
 {"group":"file:changes/unreleased/self-update-remedies.md","path":"changes/unreleased/self-update-remedies.md"}
+{"group":"file:changes/unreleased/soft-test-claims.md","path":"changes/unreleased/soft-test-claims.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier-default.md","path":"changes/unreleased/spawn-above-parent-tier-default.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier.md","path":"changes/unreleased/spawn-above-parent-tier.md"}
 {"group":"file:changes/unreleased/spawn-refuses-unvalidated-row.md","path":"changes/unreleased/spawn-refuses-unvalidated-row.md"}
@@ -759,6 +762,8 @@
 {"group":"dir:docs/tour","path":"docs/tour/26-advisory.buzz"}
 {"group":"dir:evals/buzz","path":"evals/buzz/grade.buzz"}
 {"group":"dir:hack/bench","path":"hack/bench/time-startup.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/bootstrap-checkout.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/bootstrap-harnesses.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/bootstrap-worktree.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/check-guard-blocks.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/count-feedback.buzz"}
@@ -813,6 +818,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/root-project-declares-the-configs-its-tools-read.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/rules-name-their-tier.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/run.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/sdk-exports.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/skill-renders-follow-markdown-and-description-budgets.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/skills-generate-declares-every-shipped-skill.buzz"}
@@ -964,6 +970,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/read_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/release_advice.go"}
 {"group":"dir:internal/guard","path":"internal/guard/release_advice_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/resume_warm.go"}
+{"group":"dir:internal/guard","path":"internal/guard/resume_warm_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rework.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rework_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/rewrite.go"}

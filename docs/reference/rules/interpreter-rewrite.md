@@ -1,12 +1,12 @@
 ---
 title: "interpreter-rewrite: an inline interpreter rewriting a file this tree already carries"
-description: "An advisory by default: it explains, and blocks nothing, on an inline interpreter rewriting a file this tree already carries."
-tags: [guard, rules, interpreter-rewrite, advise]
+description: "A deny rule by default: it refuses an inline interpreter rewriting a file this tree already carries, and names what to run instead."
+tags: [guard, rules, interpreter-rewrite, deny]
 ---
 
 # interpreter-rewrite
 
-An advisory by default: it explains, and blocks nothing, on an inline interpreter rewriting a file this tree already carries.
+A deny rule by default: it refuses an inline interpreter rewriting a file this tree already carries, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"interpreter-rewrite": "deny"})
+magus\guard.builtins({"interpreter-rewrite": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [interpreter-rewrite]: ...
+deny [interpreter-rewrite]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [interpreter-rewrite]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [interpreter-rewrite]: ...` instead.
 
 `magus describe rule interpreter-rewrite` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

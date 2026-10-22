@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -26,6 +27,10 @@ type Agents struct {
 	// or buzz, which the guard type-checks as one `magus\Brief{...}` literal. Only the
 	// workspace's magus.yaml sets it, so two people in one repository get the same verdict.
 	BriefFormat types.BriefFormat `json:"brief_format" yaml:"brief_format" validate:"omitempty,oneof=markdown buzz"`
+	// PromptCacheTTL is how long the account's prompt cache keeps a prefix, as a Go duration:
+	// "1h" for a host on the one-hour cache. Zero leaves the provider's shortest published
+	// window, 5m. The guard's spawn-warm-worker measures a finished worker's warmth by it.
+	PromptCacheTTL time.Duration `json:"prompt_cache_ttl" yaml:"prompt_cache_ttl" validate:"gte=0"`
 	// Models adds or overrides rows of the model table the workspace's harnesses publish,
 	// keyed by model id, for a model released after the harness spell or a price that
 	// changed.

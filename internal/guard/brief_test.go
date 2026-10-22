@@ -179,12 +179,16 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	ctx, _ = spawnFixture(t)
 	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
 	taught := envelope("Agent", "prompt", "Clean up first with `git stash`.")
-	first := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})),
+		"by default the brief is refused")
+
+	lowered := advising(Dependencies{}, string(denyRuleBriefCommand))
+	first := Judge(ctx, lowered, Request{Input: taught, Host: "claude-code"})
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(first),
-		"by default the brief is advised, not refused")
+		"set to advise, the brief is advised, not refused")
 	assert.Contains(t, first.Context, "git stash")
 
-	again := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	again := Judge(ctx, lowered, Request{Input: taught, Host: "claude-code"})
 	assert.NotEqual(t, string(denyRuleBriefCommand), again.Rule, "once per session")
 }
 

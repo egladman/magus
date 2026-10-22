@@ -257,12 +257,12 @@ func TestCdAheadOfMagusPassesWithoutTheSiblingRule(t *testing.T) {
 		Evaluate(strict(testDependencies()), "cd /tmp/copy && magus run lint .").Rule.Name)
 }
 
-func TestCheckoutRulesAdviseByDefault(t *testing.T) {
-	requireAdvisedOnce(t, Evaluate(testDependencies(), "cd /tmp/copy && magus run lint ."), denyRuleThrowawayCopy)
+func TestCheckoutRulesAdviseWhenSetToAdvise(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(advising(testDependencies()), "cd /tmp/copy && magus run lint ."), denyRuleThrowawayCopy)
 
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 	command := "cd " + wt + " && ./magus affected ci --no-default-charms -s"
-	sibling := Dependencies{}.rankGraded(ShellVerdict{}, denyRuleSiblingCheckout, testSiblingCheckoutDeny(command), rankSiblingCheckout)
+	sibling := advising(Dependencies{}).rankGraded(ShellVerdict{}, denyRuleSiblingCheckout, testSiblingCheckoutDeny(command), rankSiblingCheckout)
 	requireAdvisedOnce(t, sibling, denyRuleSiblingCheckout)
 }

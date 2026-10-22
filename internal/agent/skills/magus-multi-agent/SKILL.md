@@ -39,10 +39,10 @@ verification, and never hands those out. Above the root is the human in the loop
 lands, what is published and what a round may spend are the person's calls: the root
 reports to them and does not decide them.
 
-From its first call the root does no groundwork: no reading, searching or editing of
-source, no test or lint runs of its own. It plans from the graph and moves jobs.
-Groundwork it needs, a read-only scout included, is a job, and so is integration.
-The guard enforces this by role.
+While a row it handed out is live, the root does no groundwork: no reading, searching or editing
+of source, no runs of its own. It plans from the graph and moves jobs; a scout and integration are jobs.
+The guard enforces this by role, and the role is the live lease: the root may take ONE row with
+`{{cmd "job exec"}} <row>` until `{{cmd "job exit"}} <row>` ([the root's role](reference.md#the-roots-role)).
 
 ## Coalesce what the write sets allow
 
@@ -354,8 +354,7 @@ an editor magus cannot attribute{{end}}.
 
    Before every fork, run `{{cmd "job fork"}} --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `{{cmd "job fork"}} --schema` prints every field and the newest `schema_version`.
-3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
-   first a parent id and a role joined by `/`, the second the job id.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).
    - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
@@ -363,6 +362,7 @@ an editor magus cannot attribute{{end}}.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
+   - Resume first: follow-up on code a worker just wrote goes back to that worker as a message while its prompt cache is warm, at any context size; a fresh spawn is refused (`spawn-warm-worker`), and [reference.md](reference.md#resume-the-warm-worker) says when fresh is right.
 
 Write paths name exact FILES; a glob too broad is refused as MGS3043 unless waived. The
 check is `<target> <project> [-- args]`, never the gate. [reference.md](reference.md)

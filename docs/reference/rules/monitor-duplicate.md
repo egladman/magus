@@ -1,12 +1,12 @@
 ---
 title: "monitor-duplicate: a second live watcher on one subject, or one on work the agent backgrounded itself"
-description: "An advisory by default: it explains, and blocks nothing, on a second live watcher on one subject, or one on work the agent backgrounded itself."
-tags: [guard, rules, monitor-duplicate, advise]
+description: "A deny rule by default: it refuses a second live watcher on one subject, or one on work the agent backgrounded itself, and names what to run instead."
+tags: [guard, rules, monitor-duplicate, deny]
 ---
 
 # monitor-duplicate
 
-An advisory by default: it explains, and blocks nothing, on a second live watcher on one subject, or one on work the agent backgrounded itself.
+A deny rule by default: it refuses a second live watcher on one subject, or one on work the agent backgrounded itself, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A watcher is a host tool that runs a command in the background and wakes the age
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"monitor-duplicate": "deny"})
+magus\guard.builtins({"monitor-duplicate": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [monitor-duplicate]: ...
+deny [monitor-duplicate]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [monitor-duplicate]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [monitor-duplicate]: ...` instead.
 
 `magus describe rule monitor-duplicate` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -3,6 +3,7 @@ package guard
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,6 +48,44 @@ func TestReadPagingRefusesTheThirdWindow(t *testing.T) {
 	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "paged.go")
 	assert.NotEqual(t, "deny", read("a2", "sed -n 81,121p paged.go").Decision, "each caller's windows are its own")
+}
+
+func TestReadPagingSuggestedSpanIsNotAWindow(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	pagedFile(t, root)
+	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
+	read := func(line string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Input: line, Session: "suggested", Agent: "a1", Host: "claude-code", Dir: root})
+	}
+	read("sed -n 1,40p paged.go")
+	read("sed -n 41,80p paged.go")
+	v := read("sed -n 81,121p paged.go")
+	require.Equal(t, "deny", v.Decision)
+
+	span := regexp.MustCompile(`sed -n (\d+),(\d+)p paged\.go`).FindStringSubmatch(v.Reason)
+	require.NotNil(t, span, "the refusal names a span to read: %s", v.Reason)
+	first, _ := strconv.Atoi(span[1])
+	last, _ := strconv.Atoi(span[2])
+
+	assert.NotEqual(t, "deny", read("sed -n "+span[1]+","+span[2]+"p paged.go").Decision, "the span it names reads")
+	assert.NotEqual(t, "deny", read("sed -n "+strconv.Itoa(first-1)+","+strconv.Itoa(last+1)+"p paged.go").Decision,
+		"so does the span the Read tool maps it onto, one line wider at each end")
+}
+
+func TestFileMapCoveringNearAllowsOneLineOfSlack(t *testing.T) {
+	m := fileMap{entries: []mapEntry{{name: "A", first: 10, last: 20}, {name: "B", first: 21, last: 40}}}
+
+	_, exact := m.covering(9, 21)
+	assert.False(t, exact, "the strict test refuses a span one line past the entry")
+	e, near := m.coveringNear(9, 21)
+	assert.True(t, near)
+	assert.Equal(t, "A", e.name)
+	_, wide := m.coveringNear(8, 20)
+	assert.False(t, wide, "two lines past is paging")
+
+	assert.Equal(t, "A", m.suggest(15).name, "the entry holding the line")
+	assert.Equal(t, "B", m.suggest(100).name, "past the end, the last entry")
 }
 
 func TestReadNavigationRefusesACallerOncePerFile(t *testing.T) {

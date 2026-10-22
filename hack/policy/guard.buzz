@@ -141,7 +141,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return branchTopic(req.dir);
     };
     final texts = withHeredocs(programs, line: req.command);
-    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
+    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\holdsCheckout(req.lease, workspace: req.workspace) }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
@@ -256,23 +256,45 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
 // judgeSpawn is the spawn rule the root magusfile registers. magus\job.list answers from the
 // rows the guard pinned for this hook call, and throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
-    var lease = "";
-    if (req.lease != null) {
-        lease = req.lease!.id;
-    }
-    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt };
+    final facts = spawnFacts(req);
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {
-        final read = mut [<helpers\JobRow>];
-        foreach (row in magus\job.list().jobs) {
-            read.append(helpers\JobRow{ id = row.id, parent = row.parent, state = row.state });
-        }
-        rows = read;
+        rows = jobRows(magus\job.list().jobs);
     } catch (e) {
         unreadable = errorText(e);
     }
     return spawn\decideSpawn(facts, rows: rows, unreadable: unreadable);
+}
+
+fun spawnFacts(req: SpawnRequest) > spawn\Spawn {
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout };
+}
+
+fun jobRows(jobs: [Job]) > [helpers\JobRow] {
+    final read = mut [<helpers\JobRow>];
+    foreach (row in jobs) {
+        read.append(helpers\JobRow{ id = row.id, parent = row.parent, state = row.state, checkoutRoot = row.checkoutRoot });
+    }
+    return read;
+}
+
+test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
+    final rows = jobRows([
+        Job{ id = "land", state = "declared", checkoutRoot = "/w/other" },
+        Job{ id = "here", state = "declared", checkoutRoot = "/w/main" },
+    ]);
+    final facts = fun (title: str) > spawn\Spawn {
+        return spawnFacts(SpawnRequest{ kind = "spawn", description = title, checkout = "/w/main" });
+    };
+    final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "");
+    std\assert(denied.decision == "deny" and denied.reason.indexOf("`/w/other`") != null, message: denied.decision + " " + denied.reason);
+    final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "");
+    std\assert(allowed.decision == "allow", message: allowed.reason);
 }
 
 // errorText is a caught host error's message: a magus\* call throws a map, not a str.

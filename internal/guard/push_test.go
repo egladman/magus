@@ -69,7 +69,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gdeadbee", "pass", "affected", "ci")
 		assert.Equal(t, gateAbsent, gateCoverageAt(dir, "abc1234"))
 		decision, _ := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
-		assert.Equal(t, decisionAsk, decision)
+		assert.Equal(t, decisionDeny, decision)
 	})
 
 	t.Run("a green NON-gate run is not coverage", func(t *testing.T) {
@@ -229,40 +229,59 @@ func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...
 	return Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease, RendersAsk: rendersAsk})
 }
 
-// TestAskReachesOnlyACallerThatRendersIt pins the fail-open this closes: a hook installed
-// before the decision existed renders an ask as nothing, and every host reads nothing as
-// allow. A caller that does not declare it renders ask gets a deny that says why.
-func TestAskReachesOnlyACallerThatRendersIt(t *testing.T) {
-	v := judgePushFrom(t, false, "", "")
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
-	assert.Contains(t, v.Reason, "predates approval prompts")
-	assert.Contains(t, v.Reason, "magus describe harness")
-	assert.Contains(t, v.Reason, "abc1234", "the refusal still names what it refused")
+// TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk pins that no push is ever asked
+// about: a caller that renders ask and one that does not get the same deny.
+func TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk(t *testing.T) {
+	for _, renders := range []bool{true, false} {
+		v := judgePushFrom(t, renders, "", "")
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+		assert.Contains(t, v.Reason, "abc1234", "the refusal names what it refused")
+		assert.NotContains(t, v.Reason, "predates approval prompts")
+	}
 
 	gated := judgePushFrom(t, false, "pass", "")
-	assert.Contains(t, []string{decisionPass, decisionAdvise}, gated.Decision, "a covered push needs no prompt, so an old hook passes it")
+	assert.Contains(t, []string{decisionPass, decisionAdvise}, gated.Decision, "a covered push passes")
 }
 
-// TestUngatedPushAsksTheOrchestrator pins that consent to publish comes from the person,
-// through the host's own prompt. A marker the agent types is not consent, and the deny this
-// replaced promised exactly that escape without implementing it.
-func TestUngatedPushAsksTheOrchestrator(t *testing.T) {
+// TestUngatedPushDeniesTheOrchestrator pins that the root is refused with the gate named:
+// pull requests went out with no local gate when the root was only asked.
+func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	v := judgePush(t, "", "")
-	assert.Equal(t, verdictWithRule(decisionAsk, string(denyRulePushUngated)), unworded(v))
-	assert.Contains(t, v.Reason, "abc1234", "the prompt names the commit it publishes")
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+	assert.Contains(t, v.Reason, "abc1234", "the refusal names the commit it publishes")
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
-	assert.Contains(t, v.Reason, "Approving publishes")
-	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+	assert.NotContains(t, v.Reason, "Approving")
+
+	_, full := gradePushWithoutGate(gateAbsent, "abc1234", "")
+	assert.Contains(t, full, "status --wait")
+	assert.Contains(t, full, "affected ci")
 
 	failed := judgePush(t, "fail", "")
-	assert.Equal(t, decisionAsk, failed.Decision)
+	assert.Equal(t, decisionDeny, failed.Decision)
 	assert.Contains(t, failed.Reason, "failed")
 }
 
-// TestUngatedPushAskStillAsksTheCommandRule pins the line that merged a pull request past
-// the queue: the person was asked about the push, and their approval carried a
-// `gh pr merge --admin` the workspace rule denies but was never asked about.
-func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
+// TestGhPrCreateMeetsThePushGate pins that opening a pull request is graded at the head
+// commit like a push, and that the other gh verbs are not.
+func TestGhPrCreateMeetsThePushGate(t *testing.T) {
+	for _, line := range []string{"gh pr create --fill", "gh --repo x/y pr create -t t -b b"} {
+		ctx, _ := fleetFixture(t)
+		require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
+		deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v), line)
+		assert.Contains(t, v.Reason, "abc1234", line)
+	}
+	for _, line := range []string{"gh pr view 12", "gh pr list"} {
+		ctx, _ := fleetFixture(t)
+		v := Judge(ctx, Dependencies{}, Request{Input: line, RendersAsk: true})
+		assert.NotEqual(t, string(denyRulePushUngated), v.Rule, line)
+	}
+}
+
+// TestUngatedPushDenyStillAsksTheCommandRule pins the line that merged a pull request past
+// the queue: the push verdict must not hide a `gh pr merge --admin` the workspace rule denies.
+func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
 	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "queue it"}}
@@ -273,13 +292,11 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
 
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: "queue it", Rule: workspaceCommandRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
-	require.Len(t, probe.asked, 1)
-	assert.Equal(t, []string{"git", "gh"}, []string{probe.asked[0].Commands[0].Program, probe.asked[0].Commands[1].Program})
+	assert.Equal(t, decisionDeny, v.Decision, "the line is refused whichever rule speaks")
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionAsk, Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the ask as it stood")
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the push deny as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 
@@ -307,8 +324,8 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 }
 
 // A root session holding a parentless row is the root under lease-vcs, so the push gate
-// asks it as it asks a person; only a worker is refused outright.
-func TestUngatedPushAsksARootSessionHoldingItsOwnLease(t *testing.T) {
+// names the gate and not the orchestrator.
+func TestUngatedPushDeniesARootSessionHoldingItsOwnLease(t *testing.T) {
 	lease := narrowLease()
 	lease.Parent = ""
 	ctx, _ := fleetFixture(t, lease)
@@ -316,12 +333,12 @@ func TestUngatedPushAsksARootSessionHoldingItsOwnLease(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
-	assert.Equal(t, verdictWithRule(decisionAsk, string(denyRulePushUngated)), unworded(v))
-	assert.Contains(t, v.Reason, "Approving publishes")
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+	assert.NotContains(t, v.Reason, "workers do not publish")
 }
 
-// TestGatedPushIsNeverAsked pins that the prompt appears only when consent is needed.
-func TestGatedPushIsNeverAsked(t *testing.T) {
+// TestGatedPushIsNeverRefused pins that a covered push passes.
+func TestGatedPushIsNeverRefused(t *testing.T) {
 	v := judgePush(t, "pass", "")
 	assert.Contains(t, []string{decisionPass, decisionAdvise}, v.Decision)
 }
@@ -474,9 +491,9 @@ func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string
 func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 	dashC := func(b string) string { return "git -C " + b + " push origin HEAD:refs/heads/x" }
 
-	t.Run("an ungated checkout is asked about, though the hook's own is gated", func(t *testing.T) {
+	t.Run("an ungated checkout is refused, though the hook's own is gated", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, dashC)
-		assert.Equal(t, verdictWithRule(decisionAsk, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 		assert.NotContains(t, v.Reason, "abc1234")
 	})
@@ -488,13 +505,13 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 
 	t.Run("a leading cd relocates it the same way", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string { return "cd " + b + " && git push" })
-		assert.Equal(t, decisionAsk, v.Decision)
+		assert.Equal(t, decisionDeny, v.Decision)
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a plain push still grades the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git push" })
-		assert.Equal(t, decisionAsk, v.Decision)
+		assert.Equal(t, decisionDeny, v.Decision)
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 
@@ -502,13 +519,13 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string {
 			return "git --no-pager -c color.ui=never -C " + b + " -P push origin HEAD:refs/heads/x"
 		})
-		assert.Equal(t, verdictWithRule(decisionAsk, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a pager option does not hide a push from the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git -P push" })
-		assert.Equal(t, verdictWithRule(decisionAsk, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 

@@ -111,6 +111,7 @@ type Store struct {
 	build string
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *types.ModelTierSet
+	modelRows       func() []types.ModelPricing
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
@@ -174,6 +175,10 @@ type Location struct {
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
 	ModelTiers *types.ModelTierSet
+	// ModelRows is the harness model rows (mgs_listModels), which name a model by id or
+	// alias for a tier the declaration's hosts do not map. Nil leaves only the hosts to
+	// resolve a model.
+	ModelRows func() []types.ModelPricing
 	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
@@ -201,7 +206,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
@@ -655,6 +660,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if i < 0 {
 			row.Entries = nil
 		}
+		// Hardening is one-way: a re-declaration cannot soften a path the holder already
+		// wrote, and a soft path that is no write path claims nothing.
+		row.SoftPaths = slices.DeleteFunc(row.SoftPaths, func(p string) bool {
+			return !slices.Contains(row.WritePaths, p) ||
+				i >= 0 && slices.Contains(prev.WritePaths, p) && !slices.Contains(prev.SoftPaths, p)
+		})
 		// The store writes every reason: the sweep's, and the one a write ending a live row
 		// as no_return gets from what the row had become. A row brought back to life has none.
 		row.EndReason = prev.EndReason
@@ -891,7 +902,7 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 		return slices.Contains(next.WritePaths, r.Path)
 	})
 	for _, p := range prev.WritePaths {
-		if slices.Contains(next.WritePaths, p) {
+		if slices.Contains(next.WritePaths, p) || slices.Contains(prev.SoftPaths, p) {
 			continue
 		}
 		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}

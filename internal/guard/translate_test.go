@@ -87,7 +87,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 // rule still denies wins, and with none the first demoted one answers.
 func TestTranslateWalksPastADemotedTranslation(t *testing.T) {
 	root := repoOperandTree(t)
-	deps := Dependencies{GraphIDs: diagnosticGraph}
+	deps := advising(Dependencies{GraphIDs: diagnosticGraph})
 	const listing, literal = `grep -o 'MGS[0-9]' docs/reference/codes/README.md`, `grep -n MGS1046 types/diagnostic.go`
 	line := parseForTest(t, listing+" && "+literal)
 	code, _ := translateSearches(deps, root, parseForTest(t, literal))
@@ -96,7 +96,7 @@ func TestTranslateWalksPastADemotedTranslation(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=diagnostic 'id=~^diagnostic:MGS[0-9]\d{3}$' -o name`}, v.Rule, "both demoted, the first answers")
 
-	deps.Builtins = map[string]builtin.Setting{string(denyRuleSymbolSearch): {Decision: builtin.Deny}}
+	deps.Builtins[string(denyRuleSymbolSearch)] = builtin.Setting{Decision: builtin.Deny}
 	v, ok = translateSearches(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, code, v)
@@ -116,7 +116,7 @@ func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3022\n")
 	assert.NotContains(t, v.Why, "Its answer", "the answer is what the search was for, so it is shown, never stored behind the ref")
 
-	advised := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
+	advised := Evaluate(advising(Dependencies{GraphIDs: diagnosticGraph}), `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	requireAdvisedOnce(t, advised, denyRuleSearchTranslation)
 }
 

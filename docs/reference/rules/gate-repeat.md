@@ -1,12 +1,12 @@
 ---
 title: "gate-repeat: the gate run a third time over a tree its last green verdict already covers"
-description: "An advisory by default: it explains, and blocks nothing, on the gate run a third time over a tree its last green verdict already covers."
-tags: [guard, rules, gate-repeat, advise]
+description: "A deny rule by default: it refuses the gate run a third time over a tree its last green verdict already covers, and names what to run instead."
+tags: [guard, rules, gate-repeat, deny]
 ---
 
 # gate-repeat
 
-An advisory by default: it explains, and blocks nothing, on the gate run a third time over a tree its last green verdict already covers.
+A deny rule by default: it refuses the gate run a third time over a tree its last green verdict already covers, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ From the third gate run inside two hours, the run is refused when the newest ver
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"gate-repeat": "deny"})
+magus\guard.builtins({"gate-repeat": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [gate-repeat]: ...
+deny [gate-repeat]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [gate-repeat]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [gate-repeat]: ...` instead.
 
 `magus describe rule gate-repeat` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
@@ -105,9 +108,6 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 		d.Say = strings.TrimSpace(strings.Replace(d.Say, line, "", 1))
 		d.Why = strings.TrimSpace(strings.Replace(d.Why, line, "", 1))
 	}
-	// Only the same verdict, note aside, is a repeat: a rule that refuses for a second
-	// reason would have its Catches line misname it.
-	marker := denyMarker(rule + "-" + reasonDigest(d.Say))
 	stored := d.Say + note
 	if d.Why != "" {
 		stored += "\n" + d.Why
@@ -117,6 +117,10 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	if len(remedy) > 0 {
 		command = strings.TrimSuffix(hint.Render(remedy[:1], func(types.NextStep) string { return "" }), "\n")
 	}
+	// Only the same verdict and remedy from the same binary, note aside, is a repeat: a
+	// rule refusing for a second reason would have its Catches line misname it, and after
+	// a role change or a rebuild the new remedy is what the reader needs to see.
+	marker := denyMarker(rule + "-" + reasonDigest(d.Say+"\n"+command+"\n"+binaryStamp()))
 	if preview {
 		return d.Say + note + command, "", remedy
 	}
@@ -148,6 +152,20 @@ func reasonDigest(reason string) string {
 	sum := sha256.Sum256([]byte(reason))
 	return hex.EncodeToString(sum[:6])
 }
+
+// binaryStamp names the binary judging this call by its path and modification time, so a
+// rebuild in place names a new one. "" when the executable cannot be read.
+var binaryStamp = sync.OnceValue(func() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(exe)
+	if err != nil {
+		return ""
+	}
+	return exe + "@" + strconv.FormatInt(info.ModTime().UnixNano(), 10)
+})
 
 // firstLine is s up to its first newline, trimmed.
 func firstLine(s string) string {

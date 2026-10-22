@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
@@ -786,4 +787,55 @@ export fun plain(ctx: magus\Context, args: [str]) > void { lib\plain(); magus\lo
 	assert.Equal(t, map[string]bool{
 		"direct": true, "via-helper": true, "via-import": true, "via-namespace": true, "after-cycle": true,
 	}, got)
+}
+
+// runParkedBody drives body() through runTargetBody with host\needs parked on a
+// dependency request that fails with depErr, as ctx.needs parks on a failing member.
+func runParkedBody(t *testing.T, source string, depErr error) (*buzz.Session, error) {
+	t.Helper()
+	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	mod := vm.NewMap()
+	mod.MapSet("needs", vm.DirectValue("host.needs", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		types.DependencyWaitFromContext(ctx).Request(func(context.Context) error { return depErr })
+		return vm.Null, vm.Suspend(vm.Null)
+	}))
+	sess.SetNativeModule("host", mod)
+	require.NoError(t, sess.Exec(t.Context(), source))
+	body, err := sess.Eval(t.Context(), `return body`)
+	require.NoError(t, err)
+	_, err = runTargetBody(types.WithDependencyWait(t.Context()), sess, body, nil, 0)
+	return sess, err
+}
+
+func TestTargetBodyCatchesAFailingNeed(t *testing.T) {
+	sess, err := runParkedBody(t, `
+import "host";
+var caught = "none";
+fun body() > void !> any {
+    try {
+        host\needs();
+    } catch (e: str) {
+        caught = e;
+    }
+}
+`, errors.New("ctx.needs: gen-generate: generator failed"))
+	require.NoError(t, err, "the body caught the failure, so it succeeds")
+	caught := sess.Globals()["caught"]
+	require.True(t, caught.IsStr())
+	assert.Equal(t, "ctx.needs: gen-generate: generator failed", caught.AsString())
+}
+
+func TestTargetBodyFailsWithAnUncaughtNeedsError(t *testing.T) {
+	want := errors.New("ctx.needs: generator failed")
+	sess, err := runParkedBody(t, `
+import "host";
+var after = false;
+fun body() > void !> any {
+    host\needs();
+    after = true;
+}
+`, want)
+	assert.Same(t, want, err, "uncaught, the target fails with the dependency's own error")
+	assert.False(t, sess.Globals()["after"].AsBool(), "the body must not run past the failed need")
 }

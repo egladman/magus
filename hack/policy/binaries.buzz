@@ -137,7 +137,10 @@ final placementScript = builds\placementScript;
 // through; a worker has no other way to get one.
 fun places(args: [str], built: str, dir: str) > bool {
     if (args.len() < 2 or args[0] != "buzz" or path\clean(args[1]) != placementScript) { return false; }
-    final source = helpers\flagValue(args, long: "--from", short: "");
+    var source = helpers\flagValue(args, long: "--from", short: "");
+    if (source == null) {
+        source = helpers\flagValue(args, long: "--build-from", short: "");
+    }
     return source != null and absolute(source!, dir: dir) == built;
 }
 
@@ -147,8 +150,8 @@ fun ownBinaryHint(root: str, disk: Disk, lease: str) > str {
     final hasBinary = disk.hasBinary;
     if (hasBinary(root)) { return ""; }
     if (lease != "") {
-        return "It has none yet: ask the main session to place one with {placementScript}. "
-            + "A worker never builds magus.";
+        return "It has none yet: ask the main session to place one with {placementScript}, which builds it first "
+            + "when none is built, with `--build-from <main checkout>`. A worker never builds magus.";
     }
     return "It has none yet: `{bootstrapIn(root)}` builds one with the real go-build target, "
         + "past a magus cache that cannot key it, while Go's build cache stays on.";
@@ -340,6 +343,10 @@ test "a worker places another checkout's binary through the bootstrap script onl
     final elsewhere = ["/w/a/magus", "buzz", "hack/dev/bootstrap-worktree.buzz", "--", "--job", "j", "--from", "/w/c"];
     std\assert(binaryDenial([elsewhere], where: inB, disk: fresh) != "", message: "--from names the binary's checkout");
     std\assert(binaryDenial([["/w/a/magus", "buzz", "other.buzz", "--from", "/w/a"]], where: inB, disk: fresh) != "", message: "only the placement script");
+    final build = ["/w/a/magus", "buzz", "hack/dev/bootstrap-worktree.buzz", "--", "--job", "j", "--build-from", "/w/a"];
+    std\assert(binaryDenial([build], where: inB, disk: fresh) == "", message: "--build-from names the binary's checkout too");
+    final noneBuilt = decideBinaries(helpers\request([["/w/a/magus", "ls"]]), where: Where{ dir = "/w/b", workspace = "/w/b", lease = "j" }, disk: fresh, worker: true);
+    std\assert(noneBuilt.indexOf("--build-from <main checkout>") != null, message: "a worker with no binary is told the reachable build: " + noneBuilt);
 }
 
 test "only the main session bootstraps" {

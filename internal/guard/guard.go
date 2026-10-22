@@ -129,6 +129,9 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// SymbolIDs lists the ids of the indexed symbols named ident. More than one makes the
+	// name ambiguous: refs wants an id to pick a definition. Nil leaves every name unambiguous.
+	SymbolIDs func(ident string) []string
 	// IndexCause names the observed reason the symbol index is missing or behind (no
 	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
 	// sync running now) and the command that clears it, as advisory sentences. "" when it
@@ -295,6 +298,14 @@ func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
 	return d.SymbolDefined(ident)
 }
 
+// symbolIDs lists the ids of every symbol named ident, none for an unset resolver.
+func (d Dependencies) symbolIDs(ident string) []string {
+	if d.SymbolIDs == nil {
+		return nil
+	}
+	return d.SymbolIDs(ident)
+}
+
 // symbolSites answers not-definitive for an unset resolver, like symbolDefined.
 func (d Dependencies) symbolSites(ident string) ([]types.KnowledgeRefSite, bool) {
 	if d.SymbolSites == nil {
@@ -423,6 +434,10 @@ func stronger(a, b ShellVerdict) ShellVerdict {
 // rank orders it among the line's other denies; demoted, it outranks only advisories.
 func (d Dependencies) rankGraded(v ShellVerdict, rule denyRuleName, reason string, rank func(ShellVerdict, string) ShellVerdict) ShellVerdict {
 	if reason == "" {
+		return v
+	}
+	// A skill the caller cannot load is a remedy it cannot take.
+	if (rule == denyArchitectureUnbriefed || rule == denyBuzzUnbriefed) && !d.loadsSkills() {
 		return v
 	}
 	if g := d.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); g.Deny == "" {
@@ -1083,8 +1098,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
 		}
-		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, ""), rankArchitectureUnbriefed); {
+		var unbriefed string
+		if structureProbe(input, location.workspace) {
+			unbriefed = denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, "")
+		}
+		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, unbriefed, rankArchitectureUnbriefed); {
 		case v.Deny != "":
+			// A bound worker's raw tool is refused naming its check, the remedy it can run,
+			// rather than raw-tool's generic target.
+			if v.Rule.Name == denyRuleRawTool && preauth == "" {
+				if d := denyWorkerRawTool(ctx, deps, actingLease, input); d.refused() {
+					if refuseWith(denyRuleWorkerCheckOnly, d); verdict.Decision == decisionDeny {
+						break
+					}
+				}
+			}
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
 			// language tool, a relocated checkout. A next magus served would not carry one
@@ -1191,8 +1219,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		// The push gate, upgraded from the advisory gitGuard returned when the run log proves
-		// no green gate covers this commit: the person is asked through the host's prompt,
-		// or a leased worker is refused outright (see gradePushWithoutGate).
+		// no green gate covers this commit: every session is refused, and a leased worker's
+		// reason sends the commit to its orchestrator (see gradePushWithoutGate).
 		//
 		// Here rather than in gitGuard because that function is pure over the parsed
 		// command and this reads the run log and the revision. The rule is split the same
@@ -1201,13 +1229,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
 			cover, commit, moved := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
-			// publishes, so it is asked like a person rather than refused like a worker. A
-			// row that cannot be read stays a worker.
+			// publishes, so its refusal names no orchestrator. A row that cannot be read
+			// stays a worker.
 			worker := actingLease
 			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
 				worker = ""
 			}
-			// An ask is graded as the deny it stands in for: demoted, nobody is asked.
 			decision, reason := gradePushWithoutGate(cover, commit, worker)
 			if moved {
 				decision, reason = decisionDeny, movedPushReason
@@ -1217,15 +1244,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 					decision = ""
 				}
 			}
-			switch decision {
-			case decisionAsk:
-				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
-				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny("pushing "+commit+" ungated")
-					whys[verdict.Reason] = reason + "\n" + askUnrendered
-				}
-				verdict.Rule = string(denyRulePushUngated)
-			case decisionDeny:
+			if decision == decisionDeny {
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRulePushUngated)
 			}
@@ -1752,8 +1771,9 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// all, not so an answer can be graded.
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		req.Spawn = spawnFields{
-			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
-			Description: envelopeString(env.ToolInput, "description"),
+			AgentType: cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
+			// The desktop start_session tool calls the spawn description `title`.
+			Description: cmp.Or(envelopeString(env.ToolInput, "description"), envelopeString(env.ToolInput, "title")),
 			Name:        cmp.Or(envelopeString(env.ToolInput, "name"), envelopeString(env.ToolInput, "task_name")),
 			// Only an explicit true: a host whose default is to background agents still
 			// reports false here, because a default is not something the caller asked for.
@@ -1773,7 +1793,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			envelopeString(env.ToolInput, "subagent_type"),
 			env.SubagentType,
 			envelopeString(env.ToolInput, "agent_type"),
-			envelopeString(env.ToolInput, "description"),
+			cmp.Or(envelopeString(env.ToolInput, "description"), envelopeString(env.ToolInput, "title")),
 			envelopeString(env.ToolInput, "task_name"),
 			env.ToolName,
 		} {

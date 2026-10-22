@@ -202,11 +202,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordRework(ctx, at, facts, env.Target)
 		}
 		markAgentSeen(facts, env)
-		bound := false
+		handed := ""
 		if env.IsSpawn {
-			_, bound = titled()
+			if row, bound := titled(); bound {
+				handed = row.ID
+			}
 		}
-		noteMainSpawn(at, who, actingLease, bound)
+		noteMainSpawn(at, who, actingLease, handed)
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
@@ -229,8 +231,13 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
 		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
 	}
-	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok && row.Validated == 0 {
-		return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+		if row.Validated == 0 {
+			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
+		}
+		if d, warm := denyWarmSpawn(ctx, at, facts, row, env.Spawn.Description); warm {
+			return refused(denyRuleSpawnWarmWorker, d), ""
+		}
 	}
 	if spawnWaitsFires(env.Spawn.Description, env.Value) {
 		return refused(denyRuleSpawnWaiter, denySpawnWaiter()), ""
@@ -285,6 +292,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		Prompt:      env.Value,
 		Background:  env.Spawn.Background,
 		Isolated:    spawnIsolated(env, titled),
+		Checkout:    at.workspace,
 		Agent:       who.Agent,
 		Parent:      spawnedAs(facts, who.Agent),
 	}
@@ -367,6 +375,8 @@ func resolveAgentID(facts hint.Gate, addressed string) string {
 
 // spawnedAgent is what one subagent was spawned as, recorded under the id its host gave it.
 type spawnedAgent struct {
+	// ID is the id the host gave the agent; the marker's kind is a hash of it.
+	ID          string `json:"id,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name,omitempty"`
 	// Model is the model the spawn named, "" when it named none.
@@ -408,6 +418,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 	// its child stopped, so the child's usage can already be on file.
 	prev, _ := readSpawnedAgent(facts, env.SpawnedAgent)
 	rec := spawnedAgent{
+		ID:            env.SpawnedAgent,
 		Description:   env.Spawn.Description,
 		Name:          env.Spawn.Name,
 		Model:         env.DeclaredModel,
@@ -650,6 +661,14 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	store := job.NewStore(at.jobs())
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
+	}
+	// A row the caller takes itself is no longer one it handed out, so its `job exit`
+	// leaves the caller orchestrating only what others still hold.
+	if at.cacheDir != "" {
+		facts := hint.NewGate(at.cacheDir, who.factsKey())
+		if st := readCostState(facts); st.forget(id) {
+			writeCostState(facts, st)
+		}
 	}
 }
 

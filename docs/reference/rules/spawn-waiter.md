@@ -1,12 +1,12 @@
 ---
 title: "spawn-waiter: a spawn whose child exists to wait on, poll or watch other work"
-description: "An advisory by default: it explains, and blocks nothing, on a spawn whose child exists to wait on, poll or watch other work."
-tags: [guard, rules, spawn-waiter, advise]
+description: "A deny rule by default: it refuses a spawn whose child exists to wait on, poll or watch other work, and names what to run instead."
+tags: [guard, rules, spawn-waiter, deny]
 ---
 
 # spawn-waiter
 
-An advisory by default: it explains, and blocks nothing, on a spawn whose child exists to wait on, poll or watch other work.
+A deny rule by default: it refuses a spawn whose child exists to wait on, poll or watch other work, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A host tells a parent when each child ends, and a root waits on a job with `magu
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"spawn-waiter": "deny"})
+magus\guard.builtins({"spawn-waiter": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [spawn-waiter]: ...
+deny [spawn-waiter]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [spawn-waiter]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [spawn-waiter]: ...` instead.
 
 `magus describe rule spawn-waiter` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

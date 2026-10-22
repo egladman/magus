@@ -115,6 +115,107 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	return release, err
 }
 
+// machineHold is the machine claim one step took, kept so the step can hand it back
+// while it waits on members that claim their own and take it again after.
+type machineHold struct {
+	gate  *machineGate
+	claim types.MachineClaim
+
+	mu      sync.Mutex
+	id      string
+	release func()
+	// lent counts the dispatches waiting with the claim handed back. A count, not a flag:
+	// the first hands it back and the last takes it again.
+	lent int
+}
+
+type machineHoldKey struct{}
+
+// withMachineHold marks ctx as running under the claim h, the step's own; nil marks a
+// step riding an ancestor's claim, which it cannot hand back.
+func withMachineHold(ctx context.Context, h *machineHold) context.Context {
+	return context.WithValue(ctx, machineHoldKey{}, h)
+}
+
+// current is the id of the claim the step holds now, "" while it is handed back.
+func (h *machineHold) current() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.id
+}
+
+// close hands the claim back for good, when the step ends.
+func (h *machineHold) close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.release != nil {
+		h.release()
+	}
+	h.id, h.release = "", nil
+}
+
+func (h *machineHold) lend() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.lent++
+	if h.lent == 1 && h.release != nil {
+		h.release()
+		h.id, h.release = "", nil
+	}
+}
+
+// reclaim takes the claim again once the last lent dispatch returns. It waits on this
+// run's claims and is refused by any other invocation's, so a composer can fail here
+// after its members ran.
+func (h *machineHold) reclaim(ctx context.Context) error {
+	h.mu.Lock()
+	h.lent--
+	last := h.lent == 0 && h.release == nil
+	h.mu.Unlock()
+	if !last {
+		return nil
+	}
+	// Claimed unlocked, so a wait starting meanwhile never blocks behind it; such a wait
+	// gets the claim handed straight back.
+	id, release, err := h.gate.claim(ctx, h.claim)
+	if err != nil {
+		return err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.lent > 0 || h.release != nil {
+		release()
+		return nil
+	}
+	h.id, h.release = id, release
+	return nil
+}
+
+// LendMachineClaim runs fn, a wait on ctx.needs members, with the step's machine claim
+// and limiter slots handed back, then takes the claim again; a refused retake is joined
+// to fn's error. Members that are steps claim for themselves while it is lent. A claim
+// held across the wait is a seat a member, or a need shared with a sibling, may never
+// get (see [Cache.claimMachine]). fn runs on ctx unchanged when ctx holds no claim of
+// its own step's.
+func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error {
+	h, _ := ctx.Value(machineHoldKey{}).(*machineHold)
+	if h == nil || h.current() == "" {
+		return fn(ctx)
+	}
+	lent := func(ctx context.Context) error {
+		h.lend()
+		held := admissionFrom(ctx)
+		held.machineClaim = false
+		err := fn(withMachineHold(held.on(ctx), nil))
+		return errors.Join(err, h.reclaim(ctx))
+	}
+	lim := LimiterFromContext(ctx)
+	if lim == nil || !SlotHeld(ctx) {
+		return lent(ctx)
+	}
+	return lim.Yield(ctx, func() error { return lent(WithoutSlotHeld(ctx)) })
+}
+
 // claim is acquire, also returning the id of the claim granted: "" when nothing
 // arbitrates the step.
 func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
@@ -140,7 +241,6 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 		case !v.Fits:
 			return "", nil, machineDoesNotFitError(c, v)
 		case v.OwnRun:
-			// Falls out of the switch to the wait below.
 		case blindToOwnAncestry(ctx):
 			// A nested magus that cannot name its ancestors cannot be excused from its own
 			// parent's claim, so the refusal names the fix rather than the holders.
@@ -191,14 +291,14 @@ type overrunWatchKey struct{}
 // overrunWatch is the granted claim a step's samples are judged against.
 type overrunWatch struct {
 	admit   MachineAdmitter
-	id      string
+	id      func() string
 	profile types.MemoryProfile
 }
 
-// withOverrunWatch marks ctx as holding claim id, granted with profile. A claim with no
-// profile is charged its peak already, so there is nothing to watch.
-func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id string, profile types.MemoryProfile) context.Context {
-	if id == "" || profile.Runs == 0 {
+// withOverrunWatch marks ctx as holding the claim id names, granted with profile. A claim
+// with no profile is charged its peak already, so there is nothing to watch.
+func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id func() string, profile types.MemoryProfile) context.Context {
+	if id() == "" || profile.Runs == 0 {
 		return ctx
 	}
 	return context.WithValue(ctx, overrunWatchKey{}, overrunWatch{admit: admit, id: id, profile: profile})
@@ -218,11 +318,15 @@ func watchOverrun(ctx context.Context) {
 		if bytes <= int64(w.profile.HeldMB(at))<<20 {
 			return
 		}
+		id := w.id()
+		if id == "" {
+			return
+		}
 		once.Do(func() {
 			go func() {
 				octx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 				defer cancel()
-				w.admit.Overrun(octx, w.id)
+				w.admit.Overrun(octx, id)
 			}()
 		})
 	})
@@ -239,14 +343,14 @@ type GroupHolder interface {
 }
 
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
-// claim, when admit can hold groups.
-func withStepGroups(ctx context.Context, admit MachineAdmitter, claim string) context.Context {
+// the claim claim names when the group starts, when admit can hold groups.
+func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() string) context.Context {
 	holder, ok := admit.(GroupHolder)
-	if !ok || claim == "" {
+	if !ok || claim() == "" {
 		return ctx
 	}
 	return spawn.WithGroupWatch(ctx, func(pgid int, command string) func() {
-		return holdStepGroup(ctx, holder, claim, pgid, command)
+		return holdStepGroup(ctx, holder, claim(), pgid, command)
 	})
 }
 
@@ -551,7 +655,8 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // lie for the other.
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
-		return "that budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine."
+		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and `magus status --wait` cannot seat it either. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
+			displayProject(c.Project), c.Target, FormatMB(c.MemoryMB), FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -466,6 +467,11 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 // under its directory, so it is judged as that directory, each match when the directory
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
+// A directory whose every file the workspace declares an output (the role `magus describe
+// file` reports) passes too: nobody edits a generated tree by hand, so claiming it overlaps
+// no one. One other file keeps the refusal and the message names it. The workspace root
+// never passes.
+//
 // A nil store, or one with no workspace root, has no tree to read and finds nothing.
 func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" {
@@ -474,9 +480,17 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 	var ps types.JobProblems
 	for i, decl := range row.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
+			stray, generated := nonOutputFile(store, dir)
+			if generated {
+				continue
+			}
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
 				named = fmt.Sprintf("%q (matching the directory %q)", decl, dir)
+			}
+			why := ""
+			if stray != "" {
+				why = fmt.Sprintf("; %s is not a declared output", stray)
 			}
 			switch {
 			case dir == ".":
@@ -490,12 +504,48 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 				Code:  types.WritePathIsDirectory,
 				Field: fmt.Sprintf("write_paths[%d]", i),
 				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
-					" so the job would overlap every job editing anything there",
+					" so the job would overlap every job editing anything there" + why,
 				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}
 	return ps
+}
+
+// nonOutputFile reports whether every file under dir is a declared output. When it is not,
+// stray is the first file that is not, empty for a directory with no file at all, which
+// shows nothing generated. The workspace root is never generated.
+func nonOutputFile(store *Store, dir string) (stray string, generated bool) {
+	if dir == "." || store.workspace == nil {
+		return "", false
+	}
+	var outputs []types.Glob
+	for _, p := range store.workspace.Projects {
+		for _, g := range p.AllOutputs() {
+			outputs = append(outputs, g.Root(p.Path))
+		}
+	}
+	var (
+		found bool
+		files int
+	)
+	tree := os.DirFS(store.root)
+	_ = fs.WalkDir(tree, dir, func(rel string, d fs.DirEntry, err error) error {
+		// An unreadable entry cannot be shown generated, so it counts as the stray.
+		if err == nil && d.IsDir() {
+			return nil
+		}
+		files++
+		if err != nil || !types.MatchGlobs(outputs, rel) {
+			stray, found = rel, true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if found {
+		return stray, false
+	}
+	return "", files > 0
 }
 
 // claimedDirs returns the existing directories, workspace-relative, that the write path
@@ -578,15 +628,15 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	}
 	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
 		there := workingCheckout(peer.CheckoutRoot, peer)
-		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
+		return peer.ID == row.ID || !Editing(peer) || len(peer.HardPaths()) == 0 ||
 			there != "" && !samePath(there, here)
 	})
 	if len(peers) == 0 {
 		return types.WriteProofAlone
 	}
 	for _, peer := range peers {
-		for _, mine := range row.WritePaths {
-			for _, theirs := range peer.WritePaths {
+		for _, mine := range row.HardPaths() {
+			for _, theirs := range peer.HardPaths() {
 				if types.PathsIntersect(mine, theirs) && !releasedReach(peer, theirs, mine) && !releasedReach(row, mine, theirs) {
 					return types.WriteProofOverlapping
 				}
@@ -594,4 +644,62 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 		}
 	}
 	return types.WriteProofDisjoint
+}
+
+// hardenWritten is rows with each live holder's soft paths its diff has touched made hard,
+// and the change recorded on the row. A footprint that cannot be read hardens nothing; a
+// record that fails leaves the row soft in the store for the next check to record again.
+func hardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.Job {
+	if store == nil || store.root == "" {
+		return rows
+	}
+	ctx = withFootprintCache(ctx, store.footprintCache())
+	var driver types.VCSDriver
+	out := slices.Clone(rows)
+	for i, row := range rows {
+		if len(row.SoftPaths) == 0 || !Editing(row) || row.CheckoutRoot == "" {
+			continue
+		}
+		if driver == nil {
+			driver, _ = resolveDriver(ctx, store.root)
+		}
+		fp := readFootprint(ctx, driver, rows, row.ID)
+		if !fp.known {
+			continue
+		}
+		written := slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+			return !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(entry, r.Location()) })
+		})
+		if len(written) == 0 {
+			continue
+		}
+		harden := func(soft []string) []string {
+			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return slices.Contains(written, p) })
+		}
+		out[i].SoftPaths = harden(row.SoftPaths)
+		if store.dryRun {
+			continue
+		}
+		_, _ = store.mutate(ctx, row.ID, asObservation, func(cur *types.Job, exists bool, _ int64) error {
+			if exists {
+				cur.SoftPaths = harden(cur.SoftPaths)
+			}
+			return nil
+		})
+	}
+	return out
+}
+
+// claiming is row as the checks that read WritePaths for a collision see it: soft paths out.
+func claiming(row types.Job) types.Job {
+	row.WritePaths = row.HardPaths()
+	return row
+}
+
+func claimingRows(rows []types.Job) []types.Job {
+	out := make([]types.Job, len(rows))
+	for i, r := range rows {
+		out[i] = claiming(r)
+	}
+	return out
 }

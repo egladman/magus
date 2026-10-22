@@ -1,12 +1,12 @@
 ---
 title: "brief-command: a spawn or continuation brief that teaches a command the guard denies"
-description: "An advisory by default: it explains, and blocks nothing, on a spawn or continuation brief that teaches a command the guard denies."
-tags: [guard, rules, brief-command, advise]
+description: "A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, and names what to run instead."
+tags: [guard, rules, brief-command, deny]
 ---
 
 # brief-command
 
-An advisory by default: it explains, and blocks nothing, on a spawn or continuation brief that teaches a command the guard denies.
+A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A worker runs the commands in its brief as written, so a denied one is refused i
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"brief-command": "deny"})
+magus\guard.builtins({"brief-command": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [brief-command]: ...
+deny [brief-command]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [brief-command]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [brief-command]: ...` instead.
 
 `magus describe rule brief-command` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

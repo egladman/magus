@@ -1,12 +1,12 @@
 ---
 title: "scripted-rewrite: a scripted substitute-and-write, which cannot tell your symbol from a dependency's"
-description: "An advisory by default: it explains, and blocks nothing, on a scripted substitute-and-write, which cannot tell your symbol from a dependency's."
-tags: [guard, rules, scripted-rewrite, advise]
+description: "A deny rule by default: it refuses a scripted substitute-and-write, which cannot tell your symbol from a dependency's, and names what to run instead."
+tags: [guard, rules, scripted-rewrite, deny]
 ---
 
 # scripted-rewrite
 
-An advisory by default: it explains, and blocks nothing, on a scripted substitute-and-write, which cannot tell your symbol from a dependency's.
+A deny rule by default: it refuses a scripted substitute-and-write, which cannot tell your symbol from a dependency's, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A regex cannot tell YOUR symbol from a dependency's symbol of the same name. A `
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"scripted-rewrite": "deny"})
+magus\guard.builtins({"scripted-rewrite": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [scripted-rewrite]: ...
+deny [scripted-rewrite]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [scripted-rewrite]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [scripted-rewrite]: ...` instead.
 
 `magus describe rule scripted-rewrite` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

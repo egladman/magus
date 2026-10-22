@@ -325,6 +325,24 @@ func TestSizeClaimFoldsSizedFigures(t *testing.T) {
 	assert.Nil(t, newClaimSizer(nil, shape, m.chainReadsCharm), "no history, no sizer: declarations fold as written")
 }
 
+// A skip_cache composer's same-project members run as cache steps of their own, each
+// taking its own machine claim, so the composer's step claims none of their memory.
+func TestSizeClaimLeavesOutMembersThatClaimTheirOwn(t *testing.T) {
+	p := chainProject(".",
+		map[string]types.Target{"ci": {SkipCache: true}, "test": {MemoryMB: 10240}, "lint": {MemoryMB: 1024}},
+		map[string][]types.ChainStep{"ci": types.Needs("lint", "test")})
+	m := &Magus{}
+	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
+	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
+
+	var step cache.Step
+	m.sizeClaim(&step, p, "ci", nil)
+	assert.Zero(t, step.MemoryMB, "lint and test claim for themselves")
+
+	m.sizeClaim(&step, p, "test", nil)
+	assert.Equal(t, 10240, step.MemoryMB)
+}
+
 // A target that declares neither memory nor slots claims what its runs measured once it
 // has minMeasuredRuns of them, and nothing before; a declaration on either axis wins
 // over the measurement on that axis.

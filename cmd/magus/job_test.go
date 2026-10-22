@@ -712,6 +712,31 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	}
 }
 
+// A fork naming a model takes the tier of the harness row that names it: the row is what
+// the wired harness publishes, and the host's own mapping of opus would give principal.
+func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
+		Config:        types.HarnessConfig{Path: "hooks.json"},
+		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
+	})
+	resetWorkspaceMemo(t)
+	root, _ := execFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
+	writeStdin(t, `{"schema_version": 12, "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
+		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin"}))
+	})
+	assert.Contains(t, out, "model tier: economy (rank 0)")
+}
+
 // The tool rows a wired harness installs in a checkout are magus's, so ending its job
 // removes the checkout; a harness that fails to load keeps it and names the failure,
 // since its rows would otherwise read as work.
@@ -925,7 +950,7 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 		}
 	}
 	grade := func(graph *jobGraph) types.JobStatus {
-		seen, err := jobObserver("", graph)(t.Context(), row)
+		seen, err := jobObserver("", func(string) *jobGraph { return graph })(t.Context(), row)
 		require.NoError(t, err)
 		return job.VerifyGates(row, types.JobResult{Job: row.ID}, types.JobAttempt{}, nil, []types.Job{row}, seen)
 	}
@@ -945,6 +970,32 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 		assert.Contains(t, strings.Join(gate.Violations, " "), hint.GraphBuild.String(), gate.ID)
 	}
 	assert.Equal(t, waited, grade(read(true, stale)), "wait builds whatever the index says")
+}
+
+func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
+	t.Parallel()
+
+	root, checkout := t.TempDir(), t.TempDir()
+	row := types.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []types.Goal{
+		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
+	}}
+	var trees []string
+	graphIn := func(tree string) *jobGraph {
+		trees = append(trees, tree)
+		return &jobGraph{
+			rebuild: true,
+			stale:   func(context.Context) []types.KnowledgeStaleIndex { return nil },
+			build: func(context.Context) (*knowledge.Graph, error) {
+				return deltaGraph(map[string]string{"Present": "code.go:3"}), nil
+			},
+		}
+	}
+
+	seen, err := jobObserver(root, graphIn)(t.Context(), row)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{checkout}, trees, "the worker's checkout holds the symbols its branch defines, not the waiter's")
+	assert.True(t, seen.SymbolsKnown)
 }
 
 // describe reads the graph evidence as it reads the symbol goals: from the graph as built,
@@ -1768,4 +1819,18 @@ func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
 	assert.Equal(t, "w", v.Job.ID)
 	require.Len(t, v.Problems, 1)
 	assert.Equal(t, types.JobCheckUnrunnable, v.Problems[0].Code)
+}
+
+// A fork made at a commit the forker's ./magus was not built at places no binary and names
+// the one build its checkout needs.
+func TestPrintJobWorktreeNamesTheCheckoutBootstrap(t *testing.T) {
+	row := types.Job{ID: "w", Worktree: &types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}}
+	var out bytes.Buffer
+	printJobWorktree(&out, row, job.CheckoutBootstrap("/w/c"))
+	assert.Contains(t, out.String(), "placed no magus: the forking checkout's was built at another commit")
+	assert.Contains(t, out.String(), "next: `./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/c` builds one at 0123456789ab")
+
+	out.Reset()
+	printJobWorktree(&out, row, "")
+	assert.Contains(t, out.String(), "runs magus from PATH", "a forker on PATH needs no build")
 }

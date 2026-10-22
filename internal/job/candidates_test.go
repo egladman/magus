@@ -117,6 +117,22 @@ func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
 	assert.Contains(t, got, "add each one the change touches to the write paths")
 }
 
+func TestExtendFootprintExtendsNothingFromATestFile(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	referrers := func(string, string) map[string]int {
+		return map[string]int{"cli/other_test.go": 2}
+	}
+
+	paths, notes := ExtendFootprint(root, types.Job{WritePaths: []string{"cli/registry_test.go"}}, projects, referrers)
+	assert.Empty(t, paths)
+	assert.Empty(t, notes)
+
+	paths, _ = ExtendFootprint(root, types.Job{WritePaths: []string{"cli/registry.go", "cli/registry_test.go"}}, projects, referrers)
+	assert.Equal(t, []string{"cli/other_test.go"}, paths, "the non-test path still extends")
+}
+
 func TestRenderDeletionCandidatesCapsAndCarriesTheCaveat(t *testing.T) {
 	t.Parallel()
 

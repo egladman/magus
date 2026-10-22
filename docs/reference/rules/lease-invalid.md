@@ -1,12 +1,12 @@
 ---
 title: "lease-invalid: a call naming a lease this workspace's job store does not declare"
-description: "An advisory by default: it explains, and blocks nothing, on a call naming a lease this workspace's job store does not declare."
-tags: [guard, rules, lease-invalid, advise]
+description: "A deny rule by default: it refuses a call naming a lease this workspace's job store does not declare, and names what to run instead."
+tags: [guard, rules, lease-invalid, deny]
 ---
 
 # lease-invalid
 
-An advisory by default: it explains, and blocks nothing, on a call naming a lease this workspace's job store does not declare.
+A deny rule by default: it refuses a call naming a lease this workspace's job store does not declare, and names what to run instead.
 
 ## What it catches
 
@@ -14,11 +14,11 @@ A call naming a lease this workspace's job store does not declare.
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"lease-invalid": "deny"})
+magus\guard.builtins({"lease-invalid": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -28,10 +28,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [lease-invalid]: ...
+deny [lease-invalid]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [lease-invalid]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [lease-invalid]: ...` instead.
 
 `magus describe rule lease-invalid` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

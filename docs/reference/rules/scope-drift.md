@@ -15,10 +15,10 @@ A write into a project this session has no dependency edge to.
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"scope-drift": "deny"})
+magus\guard.builtins({"scope-drift": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -30,8 +30,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [scope-drift]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [scope-drift]: ...` instead.
 
 `magus describe rule scope-drift` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

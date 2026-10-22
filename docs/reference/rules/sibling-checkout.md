@@ -1,12 +1,12 @@
 ---
 title: "sibling-checkout: a magus command relocated into another checkout, judging a tree nobody ships"
-description: "An advisory by default: it explains, and blocks nothing, on a magus command relocated into another checkout, judging a tree nobody ships."
-tags: [guard, rules, sibling-checkout, advise]
+description: "A deny rule by default: it refuses a magus command relocated into another checkout, judging a tree nobody ships, and names what to run instead."
+tags: [guard, rules, sibling-checkout, deny]
 ---
 
 # sibling-checkout
 
-An advisory by default: it explains, and blocks nothing, on a magus command relocated into another checkout, judging a tree nobody ships.
+A deny rule by default: it refuses a magus command relocated into another checkout, judging a tree nobody ships, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ A binary links the spell sources of the tree it was built from, so a verdict it 
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"sibling-checkout": "deny"})
+magus\guard.builtins({"sibling-checkout": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [sibling-checkout]: ...
+deny [sibling-checkout]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [sibling-checkout]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [sibling-checkout]: ...` instead.
 
 `magus describe rule sibling-checkout` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

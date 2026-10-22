@@ -196,6 +196,39 @@ func TestGraphSymbolsListsEveryDefinitionOfABareName(t *testing.T) {
 	assert.Empty(t, exact.SameNameDefinitions, "a full symbol id names one definition")
 }
 
+func TestGraphSymbolsResolvesAPackageQualifiedName(t *testing.T) {
+	t.Parallel()
+
+	g := cannedSymbolGraph{
+		nodes: []types.KnowledgeMatch{
+			{ID: "symbol:internal/job Declare().", Kind: types.KindSymbol, Label: "Declare"},
+			{ID: "symbol:types/Declare().", Kind: types.KindSymbol, Label: "Declare"},
+			{ID: "symbol:types/Declaration#Validate().", Kind: types.KindSymbol, Label: "Validate"},
+		},
+		defs: map[string]string{
+			"symbol:internal/job Declare().":       "internal/job/plan.go",
+			"symbol:types/Declare().":              "types/declare.go",
+			"symbol:types/Declaration#Validate().": "types/job.go",
+		},
+	}
+	read := GraphSymbols(g)
+	for name, want := range map[string][]string{
+		"job.Declare":                {"internal/job/plan.go"},
+		"types.Declare":              {"types/declare.go"},
+		"types.Declaration#Validate": {"types/job.go"},
+		"job.Missing":                nil,
+		"types.Validate":             nil,
+	} {
+		fact, ok := read(t.Context(), name, "")
+		require.True(t, ok, name)
+		assert.Equal(t, want, fact.DefinedIn, name)
+	}
+
+	bare, ok := read(t.Context(), "Declare", "")
+	require.True(t, ok)
+	assert.Equal(t, []string{"internal/job/plan.go", "types/declare.go"}, bare.SameNameDefinitions, "a bare name is still ambiguous")
+}
+
 func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	t.Parallel()
 
@@ -742,7 +775,7 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	want.Updated = got[0].Next.Updated
 	want.Widenings = 1
 	want.WriteProof = types.WriteProofAlone // moved paths are proved again
-	want.Generation = before[0].Generation + 1
+	want.Generation = before[0].Generation
 	assert.NotZero(t, got[0].Next.Validated, "a written record is stamped validated")
 	want.Validated = got[0].Next.Validated
 	assert.Equal(t, want, got[0].Next)

@@ -1,12 +1,12 @@
 ---
 title: "sed-in-place: `sed -i`, whose two spellings destroy each other's work across platforms"
-description: "An advisory by default: it explains, and blocks nothing, on `sed -i`, whose two spellings destroy each other's work across platforms."
-tags: [guard, rules, sed-in-place, advise]
+description: "A deny rule by default: it refuses `sed -i`, whose two spellings destroy each other's work across platforms, and names what to run instead."
+tags: [guard, rules, sed-in-place, deny]
 ---
 
 # sed-in-place
 
-An advisory by default: it explains, and blocks nothing, on `sed -i`, whose two spellings destroy each other's work across platforms.
+A deny rule by default: it refuses `sed -i`, whose two spellings destroy each other's work across platforms, and names what to run instead.
 
 ## What it catches
 
@@ -18,11 +18,11 @@ An advisory by default: it explains, and blocks nothing, on `sed -i`, whose two 
 
 ## Default and override
 
-By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"sed-in-place": "deny"})
+magus\guard.builtins({"sed-in-place": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,10 +32,10 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-advise [sed-in-place]: ...
+deny [sed-in-place]: ...
 ```
 
-A workspace that sets this rule to `deny` sees `deny [sed-in-place]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [sed-in-place]: ...` instead.
 
 `magus describe rule sed-in-place` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.

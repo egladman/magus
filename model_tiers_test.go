@@ -7,9 +7,50 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
+
+const opusHostSpell = `import "magus/spell";
+
+export fun mgs_getName() > str { return "opus-host"; }
+
+export fun mgs_getHarnessConfig() > HarnessConfig {
+    return HarnessConfig{path = "hooks.json"};
+}
+
+export fun mgs_getSkills() > HarnessSkills {
+    return HarnessSkills{form = SkillForm.short};
+}
+`
+
+func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
+	testkit.Isolate(t)
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "opus-host",
+		Display:       agent.HarnessDisplay{Name: "Opus host"},
+		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
+		Config:        types.HarnessConfig{Path: "hooks.json"},
+		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
+	})
+	root := writeWorkspace(t, map[string]string{
+		"magus.yaml":                  "",
+		"magusfile.buzz":              "import \"magus\";\nimport \"spells/opus-host\" as host;\nmagus\\harness.provider(host);\n",
+		"spells/opus-host/spell.buzz": opusHostSpell,
+	})
+	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+
+	got, err := std.MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
+	require.NoError(t, err)
+	require.NotNil(t, got.ModelTier)
+	assert.Equal(t, "principal", got.ModelTier.Name)
+}
 
 func TestModelTiersWithoutARegistry(t *testing.T) {
 	m := &Magus{}

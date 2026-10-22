@@ -17,8 +17,8 @@ import (
 // generator close() with a different mechanism: close() throws GeneratorExit at the
 // suspension point, while ResolveFiber keeps running the fiber's own code to completion.
 //
-// These export the SAME drivers the `resume` and `resolve` keywords already bind to
-// and add no behavior. Buzz semantics are untouched and no Buzz program can observe
+// These export the SAME drivers the `resume` and `resolve` keywords already bind to;
+// ThrowIntoFiber alone adds a host-only path. Buzz semantics are untouched and no Buzz program can observe
 // that they exist, so upstream parity is unaffected: this is embedding API,
 // the axis on which a Go implementation is expected to differ from a Zig one with a
 // C API.
@@ -51,6 +51,28 @@ func (s *Session) ResumeFiber(ctx context.Context, fiber vmpackage.Value) (vmpac
 // so finalizing one that already finished costs nothing and reports no error.
 func (s *Session) ResolveFiber(ctx context.Context, fiber vmpackage.Value) (vmpackage.Value, error) {
 	return s.builtinResolve(ctx, []vmpackage.Value{fiber})
+}
+
+// ThrowIntoFiber resumes a suspended fiber by throwing err where it suspended, rather
+// than letting the suspending call return. A try around that call catches err and the
+// fiber runs on, reported as ResumeFiber reports it. Uncaught, the fiber ends and err
+// comes back unchanged. It matches upstream Buzz, which rethrows a fiber's error at
+// the `resume` or `resolve` that awaited it: the awaited work's error lands at the
+// call that waited, as one ordinary throw.
+func (s *Session) ThrowIntoFiber(ctx context.Context, fiber vmpackage.Value, err error) (vmpackage.Value, error) {
+	fib, ok := vmpackage.AsFiber(fiber)
+	if !ok {
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: throw into fiber requires a fiber, got %s", fiber.Kind())
+	}
+	if fib.Status() != vmpackage.FiberSuspended {
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: throw into fiber requires a suspended fiber")
+	}
+	if !fib.VM().RaiseAtSuspension(err) {
+		fib.SetStatus(vmpackage.FiberDone)
+		fib.SetErr(err)
+		return vmpackage.Null, err
+	}
+	return s.builtinResume(ctx, []vmpackage.Value{fiber})
 }
 
 // NewFiber builds a suspended fiber over fn, ready for ResumeFiber. It is CallValue's

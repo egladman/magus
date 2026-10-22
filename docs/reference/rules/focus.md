@@ -15,10 +15,10 @@ A read or write outside the paths the running job declared.
 ## Default and override
 
 By default this rule takes the decision `advise`. A workspace sets it by name, in its root
-magusfile, to `deny`, `advise` or `off`:
+magusfile, to `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"focus": "deny"})
+magus\guard.builtins({"focus": "off"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -30,8 +30,6 @@ A verdict names its rule in brackets, which is how you got here:
 ```text
 advise [focus]: ...
 ```
-
-A workspace that sets this rule to `deny` sees `deny [focus]: ...` instead.
 
 `magus describe rule focus` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
