@@ -42,6 +42,27 @@ func TestNewChecksSkipDirs(t *testing.T) {
 	}
 }
 
+// golangci-lint keys a package's cached findings on the analyzer name alone, so
+// the name must change with the vocabulary or a rename elsewhere leaves a stale
+// finding.
+func TestAnalyzerNameFollowsVocabulary(t *testing.T) {
+	name := func(files ...string) string {
+		sourcetest.Module(t, "example.com/m", files...)
+		analyzer, err := New(Options{Module: "example.com/m"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return analyzer.Name
+	}
+	both := name("push/push.go", "gate/gate.go", "app/pushgate.go")
+	if again := name("push/push.go", "gate/gate.go", "app/pushgate.go"); again != both {
+		t.Errorf("same vocabulary, different names: %q and %q", both, again)
+	}
+	if without := name("push/push.go", "app/pushgate.go"); without == both {
+		t.Errorf("removing gate.go left the analyzer name %q", both)
+	}
+}
+
 func TestNewRequiresModule(t *testing.T) {
 	if _, err := New(Options{}); err == nil {
 		t.Fatal("expected an empty module to fail at construction")

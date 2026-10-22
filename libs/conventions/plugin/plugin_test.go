@@ -59,7 +59,7 @@ func TestPluginsRegister(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(analyzers) != 1 || analyzers[0].Name != name {
+			if len(analyzers) != 1 || !strings.HasPrefix(analyzers[0].Name, name) {
 				t.Fatalf("plugin %q built %v", name, analyzers)
 			}
 			// Syntax loading leaves pass.Pkg nil, which every analyzer reads.

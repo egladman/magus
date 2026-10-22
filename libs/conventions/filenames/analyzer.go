@@ -14,8 +14,11 @@
 package filenames
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -88,10 +91,21 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		return nil, fmt.Errorf("filenames: no Go files under %s, so the rule would report nothing", root)
 	}
 	return &analysis.Analyzer{
-		Name: "filenames",
+		Name: "filenames_" + c.vocabularyDigest(),
 		Doc:  "report Go file names that mash two words together",
 		Run:  func(pass *analysis.Pass) (any, error) { return nil, c.run(pass) },
 	}, nil
+}
+
+// vocabularyDigest names the vocabulary in the analyzer's name. golangci-lint
+// caches a package's findings under the analyzer name alone, so a finding in one
+// package would outlive a rename in another unless the name changes with it.
+func (c *checker) vocabularyDigest() string {
+	sum := sha256.New()
+	for _, seg := range slices.Sorted(maps.Keys(c.vocabulary)) {
+		sum.Write([]byte(seg + "\n"))
+	}
+	return hex.EncodeToString(sum.Sum(nil))[:12]
 }
 
 type checker struct {
