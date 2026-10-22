@@ -103,6 +103,9 @@ func (r *runner) installRemedy() string {
 	if err != nil {
 		return "no VCS resolved for this workspace, so there is no backend to install them for: " + err.Error()
 	}
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
+		return "no VCS resolved for this workspace (nothing claims it and none is named), so there is no backend to install them for"
+	}
 	return "install them with `" + hint.Init.With("--vcs", res.Name) + "`"
 }
 
