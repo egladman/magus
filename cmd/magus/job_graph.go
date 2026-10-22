@@ -425,8 +425,10 @@ func graphSymbolReader(load func(context.Context) *knowledge.Graph) job.SymbolRe
 // One jobGraph serves one row: the first read that names write paths scopes every later one.
 type jobGraph struct {
 	rebuild bool
-	stale   func(context.Context) []types.KnowledgeStaleIndex
-	build   func(context.Context) (*knowledge.Graph, error)
+	// workspace opens the workspace this graph reads.
+	workspace func(context.Context) (*magus.Magus, error)
+	stale     func(context.Context) []types.KnowledgeStaleIndex
+	build     func(context.Context) (*knowledge.Graph, error)
 	// domain loads the graph without its symbol shards, the graph whose blast radius
 	// `magus explain` prints.
 	domain func(context.Context) (*knowledge.Graph, error)
@@ -461,6 +463,9 @@ func (l *lazyGraph) get(ctx context.Context, skip func(context.Context) bool, bu
 func newJobGraph(root string, rebuild bool) *jobGraph {
 	return &jobGraph{
 		rebuild: rebuild,
+		workspace: func(ctx context.Context) (*magus.Magus, error) {
+			return loadMagus(ctx, root)
+		},
 		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
 			// The opened workspace judges afresh and names the changed files, which a
 			// verdict the store recorded does not carry. Describe opens it for the
@@ -476,6 +481,54 @@ func newJobGraph(root string, rebuild bool) *jobGraph {
 		},
 		domain: func(ctx context.Context) (*knowledge.Graph, error) {
 			return loadKnowledgeGraph(ctx, root, false, false, false)
+		},
+	}
+}
+
+// newTreeJobGraph is newJobGraph for a checkout the process did not open at startup. It
+// opens tree's own workspace, once, beside the process-wide singleton rather than through
+// it, which names a single workspace and panics on a second. The settings are the process's:
+// a checkout reads the config the invoking tree loaded.
+func newTreeJobGraph(tree string, rebuild bool) *jobGraph {
+	var (
+		once sync.Once
+		m    *magus.Magus
+		err  error
+	)
+	open := func(ctx context.Context) (*magus.Magus, error) {
+		once.Do(func() {
+			var root string
+			if root, err = workspace.FindRoot(tree); err != nil {
+				return
+			}
+			opts := append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+			m, err = magus.Open(ctx, root, opts...)
+		})
+		return m, err
+	}
+	return &jobGraph{
+		rebuild:   rebuild,
+		workspace: open,
+		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
+			m, err := open(ctx)
+			if err != nil {
+				return nil
+			}
+			return findStaleIndexes(ctx, m)
+		},
+		build: func(ctx context.Context) (*knowledge.Graph, error) {
+			m, err := open(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return loadRefsGraph(ctx, m, globalCfg, false, "")
+		},
+		domain: func(ctx context.Context) (*knowledge.Graph, error) {
+			m, err := open(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return loadWorkspaceGraph(ctx, m, globalCfg, false, false, false)
 		},
 	}
 }
@@ -574,7 +627,7 @@ func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree stri
 		mu.Lock()
 		defer mu.Unlock()
 		if _, ok := others[tree]; !ok {
-			others[tree] = newJobGraph(tree, rebuild)
+			others[tree] = newTreeJobGraph(tree, rebuild)
 		}
 		return others[tree]
 	}
@@ -583,7 +636,7 @@ func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree stri
 // runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
 // check would mint there now is the key the run was stored under. Any lookup that fails
 // answers no, so the clock judges the run as it would without this.
-func runsAtCurrentKey() job.CurrentRun {
+func runsAtCurrentKey(graphIn func(tree string) *jobGraph) job.CurrentRun {
 	return func(ctx context.Context, tree string, run types.JobAttempt) bool {
 		if run.Ref == "" || run.Failed {
 			return false
@@ -596,7 +649,11 @@ func runsAtCurrentKey() job.CurrentRun {
 		if err != nil || desc.Key == "" {
 			return false
 		}
-		m, err := loadMagus(ctx, tree)
+		graph := graphIn(tree)
+		if graph == nil || graph.workspace == nil {
+			return false
+		}
+		m, err := graph.workspace(ctx)
 		if err != nil {
 			return false
 		}
@@ -623,7 +680,7 @@ func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer 
 		if err != nil {
 			return seen, err
 		}
-		seen.CurrentRun = runsAtCurrentKey()
+		seen.CurrentRun = runsAtCurrentKey(graphIn)
 		if delta, ok := observeSymbolDelta(ctx, tree, row, seen, graph); ok {
 			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
 		}
