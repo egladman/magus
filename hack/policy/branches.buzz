@@ -587,29 +587,44 @@ fun serve(kept: [str], topic: Topic) > str {
     return fitted.join("-");
 }
 
+// shellPlain matches a word the shell reads as itself, which the advice prints bare.
+final shellPlain = $"^[A-Za-z0-9._/@:+=-]+$";
+
+// shellWord is s as one shell word: bare when the shell reads it as itself, single-quoted
+// otherwise. A checked-out branch can be named `x;rm -rf .`, and the advice gets pasted.
+fun shellWord(s: str) > str {
+    if (shellPlain.match(s) != null) {
+        return s;
+    }
+    return "'" + s.replace("'", with: "'\\''") + "'";
+}
+
 // rename is how to publish p under name instead, in p's own tool.
 fun rename(p: Push, name: str, current: str) > str {
+    final served = shellWord(name);
+    final pushed = shellWord(p.name);
+    final remote = shellWord(p.remote);
     var local = "";
     if (p.tool == "git" or p.tool == "gh") {
         if (current != "" and current != name) {
-            local = "\n  git branch -m {current} {name}";
+            local = "\n  git branch -m {shellWord(current)} {served}";
         }
         var then = "";
         if (p.tool == "gh") {
-            then = "\n  then open the pull request with --head {name}";
+            then = "\n  then open the pull request with --head {served}";
         }
-        return "  git push -u {p.remote} HEAD:{name}{local}{then}";
+        return "  git push -u {remote} {shellWord("HEAD:" + name)}{local}{then}";
     }
     if (p.tool == "jj") {
         if (p.generated) {
-            return "  jj bookmark create {name} -r @-\n  jj git push --remote {p.remote} -b {name}";
+            return "  jj bookmark create {served} -r @-\n  jj git push --remote {remote} -b {served}";
         }
-        return "  jj bookmark rename {p.name} {name}\n  jj git push --remote {p.remote} -b {name}";
+        return "  jj bookmark rename {pushed} {served}\n  jj git push --remote {remote} -b {served}";
     }
     if (p.tool == "sl") {
-        return "  sl bookmark -m {p.name} {name}\n  sl push --to {name}";
+        return "  sl bookmark -m {pushed} {served}\n  sl push --to {served}";
     }
-    return "  hg bookmark -m {p.name} {name}\n  hg push -B {name}";
+    return "  hg bookmark -m {pushed} {served}\n  hg push -B {served}";
 }
 
 // Remote is what the checkout knows of where a push lands: its base (`origin/main`) and the
@@ -868,6 +883,15 @@ test "a bad name is denied with every rule, the served name and the commands to 
     std\assert(overlong.decision == "deny", message: "a name past the verdict line");
     verdict\assertVerdict(overlong.reason, label: "a name past the verdict line");
     std\assert(overlong.reason.indexOf(long) != null, message: "the name is still quoted");
+}
+
+test "the commands to use a served name quote what the shell would expand" {
+    final current = "feat/x;touch pwned";
+    final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:feat/practical-gates-e9x4tl"]]);
+    final v = decideNames(push, current: current, remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(v.reason.indexOf("git branch -m 'feat/x;touch pwned' comparison-practical-gates") != null, message: "the branch is one quoted word: {v.reason}");
+    std\assert(shellWord("it's") == "'it'\\''s'", message: "a quote inside a quoted word");
+    std\assert(shellWord("HEAD:feat/x") == "HEAD:feat/x", message: "a plain word stays bare");
 }
 
 test "a good name, the base branch and a version pass" {
