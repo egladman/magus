@@ -482,8 +482,7 @@ func composedRun(t *testing.T, b *MachineBudget, root composed) (int, error) {
 			return leaf
 		}
 		return func(ctx context.Context) error {
-			ref := types.TargetRef{Project: n.step.ProjectPath, Target: n.step.Target}
-			return ChildrenClaimTheirOwn(ctx, ref, func(ctx context.Context) error {
+			return LendMachineClaim(ctx, func(ctx context.Context) error {
 				errs := make([]error, len(n.members))
 				var wg sync.WaitGroup
 				for i, m := range n.members {
@@ -558,5 +557,56 @@ func TestNestedComposersNeverHoldTheSeatsTheirMembersNeed(t *testing.T) {
 	widest, err := composedRun(t, b, root)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, widest, 4, "the leaves still queue for the 4 slots")
+	assert.Equal(t, 0, b.Snapshot().HeldSlots, "every slot went back")
+}
+
+// TestMembersWaitingOnASharedNeedLendTheirSeats is the 2026-10-21 `vcs resolve` hang:
+// generate's members alone fill every slot, and each needs types-generate, which
+// generate dispatched too and which needs a seat of its own. Each member lends its claim
+// while it waits, so the shared need runs and every member completes.
+func TestMembersWaitingOnASharedNeedLendTheirSeats(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	const members = 4
+	b, _ := testBudget(t, 10_000, members)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+	lim := WithLimiter(NewLimiter(8))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	waiting := make(chan struct{}, members)
+	sharedDone := make(chan struct{})
+	member := func(ctx context.Context) error {
+		waiting <- struct{}{}
+		return LendMachineClaim(ctx, func(ctx context.Context) error {
+			select {
+			case <-sharedDone:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}
+	shared := Step{ProjectPath: ".", Target: "types-generate", NoCache: true}
+	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "generate", NoCache: true}, func(ctx context.Context) error {
+		return LendMachineClaim(ctx, func(ctx context.Context) error {
+			errs := make([]error, members+1)
+			var wg sync.WaitGroup
+			for i := range members {
+				m := Step{ProjectPath: ".", Target: fmt.Sprintf("gen-%d", i), NoCache: true}
+				wg.Go(func() { _, errs[i] = c.RunAside(ctx, m, member, lim) })
+			}
+			for range members {
+				<-waiting
+			}
+			wg.Go(func() {
+				defer close(sharedDone)
+				_, errs[members] = c.RunAside(ctx, shared, func(context.Context) error { return nil }, lim)
+			})
+			wg.Wait()
+			return errors.Join(errs...)
+		})
+	}, lim)
+	require.NoError(t, err, "every member held a seat while the need they share queued for one")
 	assert.Equal(t, 0, b.Snapshot().HeldSlots, "every slot went back")
 }

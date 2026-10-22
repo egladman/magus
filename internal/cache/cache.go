@@ -1224,11 +1224,11 @@ func stepSlots(s Step, lim *Limiter) int {
 // claims first and can run to completion. The claim goes back LAST, after the slot and
 // the lease.
 //
-// A step beneath a claim holder rides it, covered by its folded figure: the holder waits
-// on the step, so a second claim queued behind it never seats (2026-09-08: `magus
-// affected ci` sat 27 minutes at 13s of CPU). Only a skip_cache composer's members claim
-// their own, and it yields its claim while it waits ([ChildrenClaimTheirOwn]). Others
-// cover instead, since the retake is fallible: a stranger can refuse it after they ran.
+// A step beneath a claim holder rides it: the holder waits on the step, so a second claim
+// queued behind it never seats (2026-09-08: `magus affected ci` sat 27 minutes at 13s of
+// CPU). A holder waiting on ctx.needs lends its claim instead ([LendMachineClaim]), and
+// its members claim their own. The retake is fallible, since a stranger can refuse it
+// after they ran, but a held wait hung on a need shared by siblings filling every slot.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
 	held := admissionFrom(ctx)
 	if held.machineClaim {

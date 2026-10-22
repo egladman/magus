@@ -169,30 +169,37 @@ func (h *machineHold) lend() {
 // after its members ran.
 func (h *machineHold) reclaim(ctx context.Context) error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.lent--
-	if h.lent > 0 || h.release != nil {
+	last := h.lent == 0 && h.release == nil
+	h.mu.Unlock()
+	if !last {
 		return nil
 	}
+	// Claimed unlocked, so a wait starting meanwhile never blocks behind it; such a wait
+	// gets the claim handed straight back.
 	id, release, err := h.gate.claim(ctx, h.claim)
 	if err != nil {
 		return err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.lent > 0 || h.release != nil {
+		release()
+		return nil
 	}
 	h.id, h.release = id, release
 	return nil
 }
 
-// ChildrenClaimTheirOwn runs fn, which awaits members composer dispatched as steps that
-// claim the machine for themselves, with composer's claim and limiter slots handed back,
-// then takes the claim again; a refused retake is joined to fn's error. A claim held
-// across that wait is a seat no member can get, at any depth (see [Cache.claimMachine]).
-//
-// fn runs on ctx unchanged when composer does not own the claim ctx holds: a composer
-// riding an ancestor's claim keeps its members riding it, since that ancestor waits on
-// them all and its figure folds them.
-func ChildrenClaimTheirOwn(ctx context.Context, composer types.TargetRef, fn func(context.Context) error) error {
+// LendMachineClaim runs fn, a wait on ctx.needs members, with the step's machine claim
+// and limiter slots handed back, then takes the claim again; a refused retake is joined
+// to fn's error. Members that are steps claim for themselves while it is lent. A claim
+// held across the wait is a seat a member, or a need shared with a sibling, may never
+// get (see [Cache.claimMachine]). fn runs on ctx unchanged when ctx holds no claim of
+// its own step's.
+func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error {
 	h, _ := ctx.Value(machineHoldKey{}).(*machineHold)
-	if h == nil || (types.TargetRef{Project: h.claim.Project, Target: h.claim.Target}) != composer || h.current() == "" {
+	if h == nil || h.current() == "" {
 		return fn(ctx)
 	}
 	lent := func(ctx context.Context) error {
