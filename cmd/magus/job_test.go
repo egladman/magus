@@ -1631,6 +1631,44 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 	assert.Contains(t, verdict.NotGraded, "magusfile.buzz:3: expected ';'")
 }
 
+// One judge: the check a fork grades is the check `describe job` briefs and the guard lets
+// the holder run. A row forked with --checkout gates in that checkout, so its `ci` check is
+// accepted by all three; the same row with no checkout of its own is refused by all three.
+func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "", "go.mod": goModule, "run.go": "package run\n"})
+	root := repo.Root()
+	own := filepath.Join(t.TempDir(), "own")
+	repo.Git("worktree", "add", "-q", "--detach", own)
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	ci := &types.LeaseCheck{Target: types.TargetCI, Project: "."}
+	held := types.Job{ID: "w", State: types.StateDeclared, WritePaths: []string{"run.go"}, Check: ci, Worktree: &types.JobWorktree{Root: own}}
+	shared := held
+	shared.Worktree = nil
+	deps := guardDependencies(t.Context(), root)
+
+	t.Run("its own checkout", func(t *testing.T) {
+		verdict := gradeCheck(t.Context(), deps, root, held)
+		assert.Empty(t, verdict.NotGraded)
+		assert.False(t, verdict.Denied, "the holder gates in the checkout it holds: %s", verdict.Reason)
+		require.NoError(t, jobRefusesTheGate(t.Context(), root, held), "describe briefs what the fork accepted")
+
+		taken := held
+		taken.State, taken.CheckoutRoot = types.StateRunning, own
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + ci.String(), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
+	})
+
+	t.Run("the forker's checkout", func(t *testing.T) {
+		verdict := gradeCheck(t.Context(), deps, root, shared)
+		assert.True(t, verdict.Denied, "a job's check is never the gate in a shared checkout")
+		require.Error(t, jobRefusesTheGate(t.Context(), root, shared))
+	})
+}
+
 // denyEveryWorkerRule is a magusfile whose command rule denies a worker every command, the
 // way the stale-binary rule does: it describes the binary, not the check.
 const denyEveryWorkerRule = `import "magus";
@@ -1647,8 +1685,9 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 `
 
 // A deny that holds for the compiling check too is about the binary or the workspace, so
-// the fork is not refused over it and says the check was not graded.
-func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
+// it is no verdict on the check: the fork is refused as ungraded, never as a denied check,
+// and never accepted.
+func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
@@ -1665,12 +1704,15 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
 	installCheckGrader(t, newCheckGrader())
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
+	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
+	require.ErrorIs(t, err, types.JobUngraded)
+	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
+	assert.Equal(t, 1, strings.Count(err.Error(), string(types.JobUngraded)), "reported once: %s", err)
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "the fork went through")
+	assert.Empty(t, rows, "a fork nobody graded writes nothing")
 }
 
 // installCheckGrader installs g as runCLI installs newCheckGrader, and puts back what was

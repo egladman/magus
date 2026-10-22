@@ -260,6 +260,10 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []job.Te
 // same seven concurrent runs, and it is the likelier mistake once this refuses the obvious
 // spelling.
 func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
+	// The holder of a row forked with --checkout gates in that checkout, as the guard lets it.
+	if row.State.Live() && row.Worktree.Standing() {
+		return nil
+	}
 	fix := fmt.Sprintf(" The gate runs ONCE, in the forking session's tree, after every job lands."+
 		" Give this job the narrowest target covering its paths (`%s` decomposes what the gate chains) with `%s`, then ask for the terms again.",
 		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.JobFork)

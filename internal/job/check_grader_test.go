@@ -92,6 +92,31 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	assert.Len(t, rec.graded, 2, "a job with no check has nothing to grade")
 }
 
+// A grader that reached no verdict is not an accept: the fork is refused with one
+// JobUngraded problem, however many checks the row declares, since the reason is the
+// workspace's and not any one check's.
+func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
+	t.Parallel()
+
+	s, rec := graderStore(t, CheckVerdict{NotGraded: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"})
+	row := types.Job{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: forkCheck(), Goals: []types.Goal{
+		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+	}}
+
+	ps := deniedCheckProblems(t.Context(), s, row)
+
+	require.Len(t, ps, 1)
+	assert.Equal(t, types.JobUngraded, ps[0].Code)
+	assert.Equal(t, "check", ps[0].Field)
+	assert.Contains(t, ps[0].Message, "w's check `magus run")
+	assert.Contains(t, ps[0].Message, "magusfile.buzz:3: expected ';'", "the reason no verdict was reached is quoted")
+	assert.NotEmpty(t, ps[0].Fix)
+	assert.Len(t, rec.graded, 1, "grading stops at the first check nobody could grade")
+
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
+	require.ErrorIs(t, err, types.JobUngraded)
+}
+
 // humanOnlyGrader denies the target bench as the guard's human-only rule does, and lets
 // every other check through.
 func humanOnlyGrader(t *testing.T) (*Store, *gradeRecorder) {
