@@ -374,6 +374,11 @@ func newReplyGate(t *testing.T, upstream string) *replyGate {
 	t.Cleanup(func() { _ = ln.Close() })
 	up, err := endpoint.Parse(upstream)
 	require.NoError(t, err)
+	gate, err := endpoint.Parse(g.addr)
+	require.NoError(t, err)
+	// A client reads the token beside the socket it dials, so the gate's points at the
+	// token of whichever broker serves upstream.
+	require.NoError(t, os.Symlink(tokenPath(up.Addr), tokenPath(gate.Addr)))
 	var once sync.Once
 	go func() {
 		for n := 0; ; n++ {
