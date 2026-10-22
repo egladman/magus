@@ -442,7 +442,9 @@ import (
 //
 // 146: magus-multi-agent teaches resume-first: follow-up work goes to the warm worker that
 // wrote the code, and `follows` and `fresh_reason` on a job record.
-const SkillVersion = 146
+//
+// 147: magus-multi-agent says a prose scout that files a result passes, ending "returned".
+const SkillVersion = 147
 
 const skillLicense = "GPL-3.0-or-later"
 
