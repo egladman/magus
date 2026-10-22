@@ -41,18 +41,18 @@ consent `make`, `gradle tasks`, `./gradlew`, cargo's `build.rs` and npm scripts 
 No store, subcommand or setting records it. magus instead never runs the repository's
 code passively: only a command you typed, or a tool call that names the workspace, does.
 
-| Item                                                                                                                              | State   |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `loadMagus` no longer refreshes the merge driver (P1)                                                                             | planned |
-| `EnsureDriver` never first-installs a registration; only `magus init --vcs <name>` does                                           | planned |
-| `magus doctor` names a stale registration and the `init` command that repairs it                                                  | planned |
-| A tracked `<root>/magus` is never probed as the driver binary and never registered (P2)                                           | planned |
-| A hook spelled `./magus` runs only a build the repository does not track (P3)                                                     | planned |
-| magus refuses to install hooks into a `core.hooksPath` that other repositories share (P4)                                         | planned |
-| The hook refresh and drift check move from server start to `magus init`                                                           | proposed |
-| OpenCode wiring is per project (`.opencode/plugins/`), never a user-level plugin                                                  | planned |
-| `cmd/magus/testdata/script/read_verbs_write_no_vcs_metadata.txtar` pins that read verbs write no `.gitattributes` or `.git/config` | planned |
-| The sandbox page states the model: [Running magus runs the repository's code](../concepts/sandbox.md#running-magus-runs-the-repositorys-code) | done    |
+| Item                                                                                                                                          | State    |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `loadMagus` no longer refreshes the merge driver (P1)                                                                                         | planned  |
+| `EnsureDriver` never first-installs a registration; only `magus init --vcs <name>` does                                                       | planned  |
+| `magus doctor` names a stale registration and the `init` command that repairs it                                                              | planned  |
+| A tracked `<root>/magus` is never probed as the driver binary and never registered (P2)                                                       | planned  |
+| A hook spelled `./magus` runs only a build the repository does not track (P3)                                                                 | planned  |
+| magus refuses to install hooks into a `core.hooksPath` that other repositories share (P4)                                                     | planned  |
+| The hook refresh and drift check move from server start to `magus init`                                                                       | proposed |
+| OpenCode wiring is per project (`.opencode/plugins/`), never a user-level plugin                                                              | planned  |
+| `cmd/magus/testdata/script/read_verbs_write_no_vcs_metadata.txtar` pins that read verbs write no `.gitattributes` or `.git/config`            | planned  |
+| The sandbox page states the model: [Running magus runs the repository's code](../concepts/sandbox.md#running-magus-runs-the-repositorys-code) | done     |
 
 The agent host gates folder open: Claude Code, Codex and Cursor each decide whether a
 project's hooks run, and magus does not second-guess them. The sandbox page lists what
