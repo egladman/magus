@@ -77,6 +77,7 @@
 {"group":"file:changes/unreleased/declared-timeout-bounds-target-own-time.md","path":"changes/unreleased/declared-timeout-bounds-target-own-time.md"}
 {"group":"file:changes/unreleased/delete-ci-shard-max-shards-advice.md","path":"changes/unreleased/delete-ci-shard-max-shards-advice.md"}
 {"group":"file:changes/unreleased/descendant-write-race.md","path":"changes/unreleased/descendant-write-race.md"}
+{"group":"file:changes/unreleased/describe-job-cross-checkout.md","path":"changes/unreleased/describe-job-cross-checkout.md"}
 {"group":"file:changes/unreleased/diff-judges-conformance-thresholds.md","path":"changes/unreleased/diff-judges-conformance-thresholds.md"}
 {"group":"file:changes/unreleased/diff-reading-order.md","path":"changes/unreleased/diff-reading-order.md"}
 {"group":"file:changes/unreleased/doctor-advises-memory-mb-for-unstable-targets.md","path":"changes/unreleased/doctor-advises-memory-mb-for-unstable-targets.md"}
@@ -134,6 +135,7 @@
 {"group":"file:changes/unreleased/job-wait-accepts-a-same-second-run.md","path":"changes/unreleased/job-wait-accepts-a-same-second-run.md"}
 {"group":"file:changes/unreleased/jobs-retain.md","path":"changes/unreleased/jobs-retain.md"}
 {"group":"file:changes/unreleased/lease-commits-in-another-repo.md","path":"changes/unreleased/lease-commits-in-another-repo.md"}
+{"group":"file:changes/unreleased/lease-row-one-resolver.md","path":"changes/unreleased/lease-row-one-resolver.md"}
 {"group":"file:changes/unreleased/libs-xdg.md","path":"changes/unreleased/libs-xdg.md"}
 {"group":"file:changes/unreleased/lifecycle-provider-console.md","path":"changes/unreleased/lifecycle-provider-console.md"}
 {"group":"file:changes/unreleased/log-format-jsonl-refused.md","path":"changes/unreleased/log-format-jsonl-refused.md"}
