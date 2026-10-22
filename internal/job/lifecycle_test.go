@@ -78,8 +78,7 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
 	require.NoError(t, err)
-	assert.Equal(t, types.StatePass, notes.State)
-	assert.Equal(t, returnedReason, notes.EndReason)
+	assert.Equal(t, types.Job{ID: "notes", ReadOnly: true, State: types.StatePass, Registered: 1, EndReason: returnedReason}, notes)
 
 	probe, err := Exit(t.Context(), s, "probe", &types.JobResult{}, none)
 	require.NoError(t, err)

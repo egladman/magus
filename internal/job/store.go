@@ -252,7 +252,7 @@ const (
 func (s *Store) refuseDocument() error {
 	old := filepath.Join(filepath.Dir(s.path), documentFileName)
 	if err := file.RefuseOld(old); err != nil {
-		return fmt.Errorf("cannot open job plan %s: %w; once no older magus writes it, set it aside with `mv %s %s.old`",
+		return fmt.Errorf("cannot open job plan %s: %w: once no older magus writes it, set it aside with `mv %s %s.old`",
 			s.path, err, shellQuote(old), shellQuote(old))
 	}
 	return nil
