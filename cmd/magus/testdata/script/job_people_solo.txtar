@@ -145,6 +145,7 @@ left defined with no use: none
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
 -- abandon.out --
 ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
+no result was filed; file one with `magus job exit <id> --stdin < result.json` (`magus job exit --schema` prints its format)
 -- wait.out --
 verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .

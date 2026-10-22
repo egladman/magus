@@ -1758,6 +1758,9 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 		endedIDs[i] = stored.ID
 		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
+	if len(ended) > 0 {
+		fmt.Println("no result was filed; file one with `magus job exit <id> --stdin < result.json` (`magus job exit --schema` prints its format)")
+	}
 	removed := endWorktrees(ctx, os.Stdout, store, endedIDs...)
 	if len(refused) > 0 {
 		reasons := make([]string, len(refused))
