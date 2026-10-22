@@ -532,7 +532,7 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, dir string) d
 		return denial{}
 	}
 	return denial{
-		Say: "magus workspace: `magus buzz " + job.CheckoutBootstrapScript + " -- --checkout " + dir + "` builds ./magus in a checkout lease " + deps.lease + " does not own; " + workerBuildVerdict + ".",
-		Why: "Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
+		Say: "magus workspace: `magus buzz " + job.CheckoutBootstrapScript + " -- --checkout " + dir + "` builds ./magus in a checkout lease " + deps.lease + " does not own; the root places it.",
+		Why: workerBuildVerdict + ". Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
 	}
 }

@@ -141,9 +141,10 @@ func nearPriceStep(rec spawnedAgent, model string, models []types.ModelPricing) 
 
 func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial {
 	return denial{
-		Say: fmt.Sprintf("job %s %s, whose worker %s ended %s ago and stays warm for about %s more: continue agent %s with a message (SendMessage) instead of spawning, or set `fresh_reason` in %s's record and `%s` (TTL %s: %s).",
-			row.ID, w.link, w.agent, w.idle.Round(time.Second), w.left.Round(time.Second), w.agent, row.ID, hint.JobApply.With("-f", "<record>"), ttl.ttl, ttl.source),
-		Why: "A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. " +
+		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s with a message (SendMessage), or set `fresh_reason` and run `%s`.",
+			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, hint.JobApply.With("-f", "<record>")),
+		Why: fmt.Sprintf("Worker %s ended %s ago. ", w.agent, w.idle.Round(time.Second)) +
+			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. " +
 			"`fresh_reason` is for a context that is wrong for the job, never for one that is merely large.",
 	}
 }
