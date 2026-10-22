@@ -1,0 +1,6 @@
+Cases written with the rule (2026-10-22), not drawn from a labeling round.
+Two or more clause-introducing colons in one paragraph.
+-- hit/review-inline --
+The old loop retried forever: it hid the failure, and the reason is simple: nobody capped it.
+-- pass/review-inline --
+Not done: the retry cap, because it needs a config key.

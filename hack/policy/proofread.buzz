@@ -60,6 +60,12 @@ final RULES: {str: str} = {
     "deferral-no-link": "advise",
     "decline-no-reason": "advise",
     "impatience": "advise",
+    "review-length": "advise",
+    // Generated-writing tells in descriptions, commits and review text, which ship off until
+    // a labeling round measures them.
+    "triad": "advise",
+    "stacked-colon": "advise",
+    "restates-diff": "advise",
     // The list and date rules ship off until a labeling round measures them; here they run
     // graded, at weight 0 until one does, backed by the Google and Microsoft list guidance and the date mix in decision record 0001.
     "list-marks": "advise",

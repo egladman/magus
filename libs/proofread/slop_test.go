@@ -58,7 +58,7 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 		{"a contrast is graded wherever it is judged", RuleContrast,
 			"It is not just a cache; it is the ledger.", nil, map[Kind]Decision{
 				KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
-				KindAgentBrief: DecisionAdvise,
+				KindAgentBrief: DecisionAdvise, KindReviewReply: DecisionAdvise,
 			}},
 		{"staccato leaves a guide and agent instructions their short imperatives", RuleStaccato,
 			"fix: pin the key\n\nIt is fast. It is small. It is stable.", nil,

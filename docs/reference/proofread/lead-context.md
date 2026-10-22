@@ -1,17 +1,17 @@
 ---
 title: "lead-context"
-description: "A deny rule by default: it refuses a change description that does not open with a paragraph naming what a reader can now do."
+description: "A deny rule by default: it refuses a change description whose first paragraph does not state the intent: what it set out to do and why."
 tags: [proofread, rules, lead-context, deny]
 aliases: [reference/prose/lead-context]
 ---
 
 # lead-context
 
-A deny rule by default: it refuses a change description that does not open with a paragraph naming what a reader can now do.
+A deny rule by default: it refuses a change description whose first paragraph does not state the intent: what it set out to do and why.
 
 ## What it catches
 
-A change description that does not open with a paragraph naming what a reader can now do.
+A change description whose first paragraph does not state the intent: what it set out to do and why.
 
 ## Dimension
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A reviewer's first question is what the change is for; a list, a heading or a reply opener in that place answers a different one. A lead under 12 words carries no reason. A lead whose first sentence states a defect and names no outcome only advises: over the 190 leads of the last 200 merged pull requests, 60 opened on the defect, and the outcome may be phrased in words no list holds.
+A reviewer reads the intent first, then what was built, then where the work left the plan (a Cut, Changed from plan, Not done or Not verified bullet or heading). A code block, heading, list, reply opener or a lead under 12 words is denied. A lead that opens on a defect passes when a purpose follows within two sentences: 60 of the 190 leads of the last 200 merged pull requests opened on one.
 
 ## Default decision
 

@@ -116,6 +116,14 @@ func TestHedgeReportsASoftenerAndLeavesPermissionAlone(t *testing.T) {
 		{"a limit section", KindChangeDescription, pr("## Not verified\n\n- It might help a slow runner.\n\n## Evidence\n\n- It might help."),
 			[]string{"10:might help"}},
 		{"a limits heading", KindReference, "## Known limits\n\nIt probably holds.", nil},
+		{"a cut bullet", KindChangeDescription, pr("- Cut: the retry, which might help."), nil},
+		{"a changed-from-plan bullet", KindChangeDescription, pr("- Changed from plan: it might help."), nil},
+		{"a not-done bullet", KindChangeDescription, pr("- Not done: the cache, which might help."), nil},
+		{"a not-verified bullet", KindChangeDescription, pr("- Not verified: it might help."), nil},
+		{"a cut heading", KindChangeDescription, pr("## Cut\n\n- It might help."), nil},
+		{"a changed-from-plan heading", KindChangeDescription, pr("## Changed from plan\n\n- It might help."), nil},
+		{"a heading that only starts with cut", KindChangeDescription, pr("## Cutover\n\n- It might help."),
+			[]string{"6:might help"}},
 		{"a limit opener only exempts its sentence", KindReference, "Not tested on Linux. It probably holds.", []string{"1:probably"}},
 	})
 }
@@ -191,12 +199,32 @@ func TestLeadContextAdvisesALeadThatOpensOnADefect(t *testing.T) {
 		// #570 before and after its rewrite.
 		{"a defect", "perf: x\nThe server's warm caches lagged behind edits, so the first query rebuilt the graph inline.", []Finding{{
 			Rule: RuleLeadContext, Decision: DecisionAdvise, Match: "lagged", Line: 2,
-			Message: "The lead opens on the defect 'lagged': open with what a reader can now do and give the defect " +
-				"as the reason, as in " + leadExample,
+			Message: "The lead opens on the defect 'lagged': open with what the change sets out to do and give the " +
+				"defect as the reason, as in " + leadExample,
 		}}},
 		{"an outcome", "perf: x\nThe first query after an edit now answers from a graph that is already current.", nil},
 		{"a defect named as the reason", "perf: x\nThe first query answers from a current graph, which no longer " +
 			"rebuilds inline. Until now it failed under load.", nil},
+		{"intent first", "perf: x\nMake the first query after an edit answer from a current graph. The warm " +
+			"caches lagged behind edits, so that query paid for the rebuild inline.", nil},
+		{"a defect with the intent in the next sentence", "perf: x\nThe warm caches lagged behind edits. " +
+			"Goal: answer the first query from a graph that is already current.", nil},
+		{"a defect with the intent in the same sentence", "perf: x\nThe warm caches lagged behind edits, so that " +
+			"the first query rebuilt the graph inline every time.", nil},
+		{"a defect with the intent two sentences on", "perf: x\nThe warm caches lagged behind edits. The first " +
+			"query rebuilt the graph inline. It is meant to answer from a current graph.", []Finding{{
+			Rule: RuleLeadContext, Decision: DecisionAdvise, Match: "lagged", Line: 2,
+			Message: "The lead opens on the defect 'lagged': open with what the change sets out to do and give the " +
+				"defect as the reason, as in " + leadExample,
+		}}},
+		{"an outcome-only lead", "perf: x\nThe first query after an edit answers from a graph that is already current.", nil},
+		// The lead restates the title and names no intent.
+		{"a lead restating the title", "perf: rebuild the graph on edit\nThe graph never rebuilt on edit and failed " +
+			"under load for every user.", []Finding{{
+			Rule: RuleLeadContext, Decision: DecisionAdvise, Match: "never", Line: 2,
+			Message: "The lead opens on the defect 'never': open with what the change sets out to do and give the " +
+				"defect as the reason, as in " + leadExample,
+		}}},
 	}
 
 	for _, tc := range cases {

@@ -83,7 +83,7 @@ var slopChecks = []check{
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: slices.Concat(proseKinds, compact, agentReply), graded: true,
+		rule: RuleContrast, on: slices.Concat(withReply, compact, agentReply), graded: true,
 		judge: ownWords(tellJudgeExcept("State the positive claim directly: drop the negation in '%s'.",
 			contrastExempt, contrasts...)),
 	},

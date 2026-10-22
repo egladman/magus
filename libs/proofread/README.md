@@ -226,7 +226,7 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 | `comment-budget`     | PRF6008 | stylesheet                       | off (house)                          | a comment over the lines its place earns                                         |
 | `block-budget`       | PRF6009 | stylesheet                       | off (house)                          | a rule block whose comments, summed, outrun its size                             |
 | `banned-word`        | PRF5006 | stylesheet                       | off (house)                          | a word this repository bans                                                      |
-| `lead-context`       | PRF1001 | change description               | deny; advise for a defect            | a lead that is not a paragraph saying what a reader can now do                   |
+| `lead-context`       | PRF1001 | change description               | deny; advise for a defect            | a lead that is not a paragraph stating what the change set out to do and why     |
 | `reply-voice`        | PRF1002 | pages, change description, reply | deny                                 | a reply opener, a conversation, a bold-label item, a stock label or heading      |
 | `tense`              | PRF5004 | pages, change description        | off (house)                          | the future tense, and the author as the actor of a change                        |
 | `hedge`              | PRF3002 | pages, change description        | deny                                 | a softener on a claim ("might fix", "could potentially")                         |

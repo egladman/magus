@@ -129,7 +129,7 @@ can tighten the policy that grades it and cannot loosen it.
 `deny` and `advise` take an optional `{rule: str}` record naming the rule that answered:
 
 ```buzz
-return magus\guard.deny("Lead the description with the outcome.", {"rule": "pull-request-text"});
+return magus\guard.deny("Lead the description with its intent.", {"rule": "pull-request-text"});
 ```
 
 A named verdict reports as `workspace:pull-request-text`, the id a

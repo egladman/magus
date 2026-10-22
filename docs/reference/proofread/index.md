@@ -29,7 +29,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 | Rule                                        | Code    | Dimension   | Default | Catches                                                                                                                                                   |
 | ------------------------------------------- | ------- | ----------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [lead-context](lead-context.md)             | PRF1001 | structure   | deny    | a change description that does not open with a paragraph naming what a reader can now do                                                                  |
+| [lead-context](lead-context.md)             | PRF1001 | structure   | deny    | a change description whose first paragraph does not state the intent: what it set out to do and why                                                       |
 | [reply-voice](reply-voice.md)               | PRF1002 | structure   | advise  | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label                                                         |
 | [second-person](second-person.md)           | PRF1003 | conventions | off     | we, us, our or ours in a guide, which speaks to the reader as you                                                                                         |
 | [step-verb](step-verb.md)                   | PRF1004 | structure   | deny    | a numbered step of a guide that does not open with its imperative verb                                                                                    |
@@ -67,23 +67,26 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Generated-writing tells
 
-| Rule                                  | Code    | Dimension | Default | Catches                                                                                                 |
-| ------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| [filler](filler.md)                   | PRF4001 | economy   | advise  | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                                |
-| [wordy](wordy.md)                     | PRF4002 | economy   | advise  | a phrase with a shorter equivalent ("in order to")                                                      |
-| [signpost](signpost.md)               | PRF4003 | structure | advise  | an announcement standing where the point should be ("Here's the thing", "Let's dive in")                |
-| [chatbot](chatbot.md)                 | PRF4004 | stance    | off     | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer                 |
-| [leak](leak.md)                       | PRF4005 | evidence  | advise  | residue of a tool or a template: a citation marker or an unfilled placeholder                           |
-| [buzzword](buzzword.md)               | PRF4006 | economy   | deny    | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")                  |
-| [buzzword-weak](buzzword-weak.md)     | PRF4007 | economy   | advise  | a buzzword that also has an ordinary sense ("crucial", "landscape")                                     |
-| [vague](vague.md)                     | PRF4008 | evidence  | deny    | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")                |
-| [closer](closer.md)                   | PRF4009 | structure | deny    | a sentence that opens by announcing it restates the text above ("In conclusion,")                       |
-| [contrast](contrast.md)               | PRF4010 | economy   | off     | a claim made by denying its opposite first ("not just X, it is Y")                                      |
-| [ing-tail](ing-tail.md)               | PRF4011 | economy   | off     | a participle clause added to claim significance (", highlighting the importance of")                    |
-| [staccato](staccato.md)               | PRF4012 | structure | off     | three or more consecutive sentences of six words or fewer in one paragraph                              |
-| [heading-case](heading-case.md)       | PRF4013 | structure | advise  | a heading whose every word after the first is capitalized                                               |
-| [participles](participles.md)         | PRF4020 | economy   | advise  | a text that hangs present participial clauses on its sentences at a generated-writing rate              |
-| [nominalizations](nominalizations.md) | PRF4021 | economy   | advise  | a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate |
+| Rule                                  | Code    | Dimension | Default | Catches                                                                                                                                                 |
+| ------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [filler](filler.md)                   | PRF4001 | economy   | advise  | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                                                                                |
+| [wordy](wordy.md)                     | PRF4002 | economy   | advise  | a phrase with a shorter equivalent ("in order to")                                                                                                      |
+| [signpost](signpost.md)               | PRF4003 | structure | advise  | an announcement standing where the point should be ("Here's the thing", "Let's dive in")                                                                |
+| [chatbot](chatbot.md)                 | PRF4004 | stance    | off     | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer                                                                 |
+| [leak](leak.md)                       | PRF4005 | evidence  | advise  | residue of a tool or a template: a citation marker or an unfilled placeholder                                                                           |
+| [buzzword](buzzword.md)               | PRF4006 | economy   | deny    | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")                                                                  |
+| [buzzword-weak](buzzword-weak.md)     | PRF4007 | economy   | advise  | a buzzword that also has an ordinary sense ("crucial", "landscape")                                                                                     |
+| [vague](vague.md)                     | PRF4008 | evidence  | deny    | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")                                                                |
+| [closer](closer.md)                   | PRF4009 | structure | deny    | a sentence that opens by announcing it restates the text above ("In conclusion,")                                                                       |
+| [contrast](contrast.md)               | PRF4010 | economy   | off     | a claim made by denying its opposite first ("not just X, it is Y")                                                                                      |
+| [ing-tail](ing-tail.md)               | PRF4011 | economy   | off     | a participle clause added to claim significance (", highlighting the importance of")                                                                    |
+| [staccato](staccato.md)               | PRF4012 | structure | off     | three or more consecutive sentences of six words or fewer in one paragraph                                                                              |
+| [heading-case](heading-case.md)       | PRF4013 | structure | advise  | a heading whose every word after the first is capitalized                                                                                               |
+| [participles](participles.md)         | PRF4020 | economy   | advise  | a text that hangs present participial clauses on its sentences at a generated-writing rate                                                              |
+| [nominalizations](nominalizations.md) | PRF4021 | economy   | advise  | a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate                                                 |
+| [triad](triad.md)                     | PRF4030 | economy   | off     | a series of exactly three ("X, Y, and Z", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence |
+| [stacked-colon](stacked-colon.md)     | PRF4031 | economy   | off     | two or more clause-introducing colons in one paragraph                                                                                                  |
+| [restates-diff](restates-diff.md)     | PRF4032 | evidence  | off     | a bullet or paragraph that is a verb and the things touched, with no reason: "Updates foo.go"                                                           |
 
 ## House style
 
@@ -156,6 +159,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [deferral-no-link](deferral-no-link.md)           | PRF8035 | evidence  | off     | a review reply deferring to later, a follow-up or a TODO, with no issue link or number                       |
 | [decline-no-reason](decline-no-reason.md)         | PRF8036 | stance    | off     | a short review reply declining the change ("won't fix", "No, ...") with no reason                            |
 | [impatience](impatience.md)                       | PRF8037 | stance    | off     | a review reply that reads as impatient: "as I said", "for the last time", "obviously"                        |
+| [review-length](review-length.md)                 | PRF8038 | economy   | off     | a review text over its word cap: an inline comment over 60 words, a summary over 100, a reply over 80        |
 
 ## Messages a program prints
 

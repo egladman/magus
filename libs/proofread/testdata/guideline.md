@@ -455,6 +455,22 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 - CORRECT example: "You asked whether the spool is per user. It is."
 - WRONG example: "You need one flag for this: pass `--no-spool`."
 
+### restates-diff (PRF4032)
+
+- Catches: a bullet or paragraph that is a verb and the things touched, with no reason: "Updates foo.go"
+- CORRECT: the sentence is a verb such as updates, adds or removes and nothing else but code spans, paths and identifiers.
+- WRONG: the sentence gives a reason or purpose ("so", "because", "to avoid"), or carries any other content word; or it sits in a generated file list or boilerplate.
+- CORRECT example: "Updates `cache.go` and `cache_test.go`."
+- WRONG example: "Adds `--json` so scripts can read the result."
+
+### review-length (PRF8038)
+
+- Catches: a review text over its word cap: an inline comment over 60 words, a summary over 100, a reply over 80
+- CORRECT: the writer's own words, outside quotes, code and boilerplate, exceed the cap for the text's kind.
+- WRONG: the count only passes the cap with a quoted comment, a code block, a pasted log or a bot footer in it.
+- CORRECT example: an inline comment of 90 words that restates the hunk before it names the problem.
+- WRONG example: a 40-word reply followed by a 50-line pasted test log.
+
 ### second-person (PRF1003)
 
 - Catches: we, us, our or ours in a guide, which speaks to the reader as you
@@ -491,6 +507,14 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 - Known false-positive shapes: generated reference pages with one-line statements; log output; a split at an abbreviation such as "e.g.".
 - CORRECT example: "The spool filled. Writes stalled. We checked. The lock leaked."
 - WRONG example: a block of file-header lines such as "Package spool. Defined in writer.go. Generated."
+
+### stacked-colon (PRF4031)
+
+- Catches: two or more clause-introducing colons in one paragraph
+- CORRECT: one paragraph of the writer's prose holds two or more colons that each introduce a clause.
+- WRONG: a colon is a leading label of three words or fewer ("Not done:"), or sits in a code span, a quote, a URL or a time; or the colons fall in separate paragraphs or list items.
+- CORRECT example: "The cache was stale: it skipped the rebuild. The fix is simple: rebuild first."
+- WRONG example: "Not done: the Windows path. Not verified: the release step."
 
 ### stacked-hedge (PRF8003)
 
@@ -567,6 +591,14 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 - Known false-positive shapes: a description joined with its parameter descriptions.
 - CORRECT example: a 1200-rune description.
 - WRONG example: a 600-rune description measured with its parameter list.
+
+### triad (PRF4030)
+
+- Catches: a series of exactly three ("X, Y, and Z", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence
+- CORRECT: the writer's own prose holds two series of exactly three, or the lead's first sentence holds one.
+- WRONG: a series is of code spans, paths, flags, ALL_CAPS names or numbers, or a list the author numbered; or the "series" came from a parse of a single compound phrase.
+- CORRECT example: a lead "Reviewers get a faster, simpler, and safer view." with a later "It reads the cache, the graph and the log."
+- WRONG example: "Run `build`, `test` and `lint`." as the only series in the text.
 
 ### unbacked-done (PRF8024)
 

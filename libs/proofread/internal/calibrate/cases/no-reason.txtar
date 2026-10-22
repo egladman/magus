@@ -7,6 +7,7 @@ Please remove the debug print.
 The timeout needs to be configurable.
 Don't log the token.
 -- pass/review-inline --
+The doc says this returns an error but it returns nil on a miss, return the error.
 Use a sync.Map here: two workers write this map at once.
 Remove the debug print because it leaks the token.
 Should this be a constant?
