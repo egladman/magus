@@ -250,7 +250,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // passes, leaves an ask to the person, and denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 31
+// magus-guard-template: 32
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -916,7 +916,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 31
+// magus-guard-template: 32
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -1177,7 +1177,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1379,7 +1379,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1531,7 +1531,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1676,7 +1676,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -1929,7 +1929,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 import "io";
 import "fs";
@@ -2336,7 +2336,7 @@ not a call.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 31
+// magus-guard-template: 32
 
 import "io";
 import "flags";
