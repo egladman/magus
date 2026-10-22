@@ -230,8 +230,7 @@ func TestDecodeHookEnvelopeSpawnTitle(t *testing.T) {
 		`"tool_input":{"title":"orchestrator/feat gate-fits","name":"gate-fits","prompt":"Do the job."}}`)
 	require.True(t, ok)
 	assert.True(t, req.IsSpawn)
-	assert.Equal(t, "orchestrator/feat gate-fits", req.Spawn.Description)
-	assert.Equal(t, "gate-fits", req.Spawn.Name)
+	assert.Equal(t, spawnFields{Description: "orchestrator/feat gate-fits", Name: "gate-fits"}, req.Spawn)
 	assert.Equal(t, "orchestrator/feat gate-fits", req.Child)
 }
 
