@@ -293,13 +293,13 @@ export fun placed(bin: str, commit: str, rootRev: str, scopes: int) > str {
     return "{bin} was built {where}; no Go build input under {scopes} package scopes differs";
 }
 
-// syncHarnesses merges the wired harnesses' host config through hack/dev/harness-sync.buzz and
+// syncHarnesses merges the wired harnesses' host config through hack/dev/sync-harnesses.buzz and
 // returns what it printed. A leased session skips it, as it does the skill install.
 export fun syncHarnesses(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
     if (lease != "") {
         return "skipped the harness config sync; this session holds the lease `{lease}`";
     }
-    return run(["buzz", "hack/dev/harness-sync.buzz"]).trim();
+    return run(["buzz", "hack/dev/sync-harnesses.buzz"]).trim();
 }
 
 // refusal is the error for a source with no placeable binary: what the orchestrator builds, once, in the root.
@@ -575,7 +575,7 @@ test "the harness config sync is skipped under a lease and run without one" {
     assert\equal(syncHarnesses(run, lease: "policy-bootstrap").startsWith("skipped"), want: true, message: "line under a lease");
     assert\equal(ran.len(), want: 0, message: "no sync under a lease");
     assert\equal(syncHarnesses(run, lease: ""), want: "no change", message: "sync output");
-    assert\equal(ran.join("|"), want: "buzz hack/dev/harness-sync.buzz", message: "sync without a lease");
+    assert\equal(ran.join("|"), want: "buzz hack/dev/sync-harnesses.buzz", message: "sync without a lease");
 }
 
 test "the lease is taken before the graph is built" {

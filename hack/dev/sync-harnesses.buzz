@@ -1,4 +1,4 @@
-namespace harnesssync;
+namespace syncharnesses;
 
 import "encoding/json";
 import "flags";
@@ -10,7 +10,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/harness-sync.buzz -- [--id <harness>]";
+final USAGE = "usage: magus buzz hack/dev/sync-harnesses.buzz -- [--id <harness>]";
 final HELP = "cost: a skill install and one plan read per harness\n{USAGE}\n\n"
     + "Installs the skill trees of the wired harnesses, then merges each harness's host config the way\n"
     + "`magus describe harness <id>` plans it: a file's content is written whole, a fragment is deep-merged into\n"
