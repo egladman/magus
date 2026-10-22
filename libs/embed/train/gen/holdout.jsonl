@@ -176,6 +176,7 @@
 {"group":"file:changes/unreleased/proofread-fix6-round5.md","path":"changes/unreleased/proofread-fix6-round5.md"}
 {"group":"file:changes/unreleased/proofread-fix8-adjectives.md","path":"changes/unreleased/proofread-fix8-adjectives.md"}
 {"group":"file:changes/unreleased/proofread-round-gates.md","path":"changes/unreleased/proofread-round-gates.md"}
+{"group":"file:changes/unreleased/proofread-tells.md","path":"changes/unreleased/proofread-tells.md"}
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
 {"group":"file:changes/unreleased/prune-worktrees.md","path":"changes/unreleased/prune-worktrees.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
@@ -216,6 +217,7 @@
 {"group":"file:changes/unreleased/security-model-docs.md","path":"changes/unreleased/security-model-docs.md"}
 {"group":"file:changes/unreleased/self-invalidating-key-mgs4010.md","path":"changes/unreleased/self-invalidating-key-mgs4010.md"}
 {"group":"file:changes/unreleased/self-update-remedies.md","path":"changes/unreleased/self-update-remedies.md"}
+{"group":"file:changes/unreleased/served-next-through-judge.md","path":"changes/unreleased/served-next-through-judge.md"}
 {"group":"file:changes/unreleased/soft-test-claims.md","path":"changes/unreleased/soft-test-claims.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier-default.md","path":"changes/unreleased/spawn-above-parent-tier-default.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier.md","path":"changes/unreleased/spawn-above-parent-tier.md"}
