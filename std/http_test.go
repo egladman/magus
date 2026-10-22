@@ -645,3 +645,56 @@ func TestParseHTTPRetryReadsMilliseconds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, httpRetry{delay: 250 * time.Millisecond, maxDelay: 2 * time.Second, maxElapsed: 10 * time.Second}, r)
 }
+
+func TestHTTPRedirectAcrossHostsDropsCredentialHeaders(t *testing.T) {
+	t.Parallel()
+	var seen http.Header
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Clone()
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer target.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer origin.Close()
+
+	res, err := HTTPGet(context.Background(), origin.URL, map[string]string{
+		"Authorization": "Bearer s", "Cookie": "a=b", "X-Api-Key": "k", "Private-Token": "t", "X-Trace": "keep",
+	}, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", res.Body)
+	for _, name := range []string{"Authorization", "Cookie", "X-Api-Key", "Private-Token"} {
+		assert.Empty(t, seen.Get(name), name)
+	}
+	assert.Equal(t, "keep", seen.Get("X-Trace"))
+}
+
+func TestHTTPRedirectKeepsHeadersOnTheSameHost(t *testing.T) {
+	t.Parallel()
+	var seen http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/end", http.StatusFound)
+			return
+		}
+		seen = r.Header.Clone()
+	}))
+	defer srv.Close()
+
+	_, err := HTTPGet(context.Background(), srv.URL+"/start", map[string]string{"X-Api-Key": "k"}, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "k", seen.Get("X-Api-Key"))
+}
+
+func TestGuardRedirectRefusesHTTPSToHTTP(t *testing.T) {
+	t.Parallel()
+	secure, err := http.NewRequest(http.MethodGet, "https://a.example/x", nil)
+	require.NoError(t, err)
+	plain, err := http.NewRequest(http.MethodGet, "http://a.example/x", nil)
+	require.NoError(t, err)
+
+	require.Error(t, guardRedirect(plain, []*http.Request{secure}))
+	require.NoError(t, guardRedirect(secure, []*http.Request{plain}))
+	require.NoError(t, guardRedirect(plain, []*http.Request{plain}))
+}

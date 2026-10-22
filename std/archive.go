@@ -1215,6 +1215,20 @@ func archiveSafePath(dest, name string) (string, error) {
 	if !strings.HasPrefix(abs+string(os.PathSeparator), destReal+string(os.PathSeparator)) {
 		return "", fmt.Errorf("archive contains path that escapes destination: %q", name)
 	}
+	walked := dest
+	for part := range strings.SplitSeq(cleaned, "/") {
+		walked = filepath.Join(walked, part)
+		fi, err := os.Lstat(walked)
+		if errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if fi.Mode()&fs.ModeSymlink != 0 {
+			return "", fmt.Errorf("archive entry %q would be written through the symlink at %q", name, walked)
+		}
+	}
 	return abs, nil
 }
 

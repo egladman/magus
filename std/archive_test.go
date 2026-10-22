@@ -674,3 +674,33 @@ func TestArchiveListRespectsSandboxRead(t *testing.T) {
 	_, err := ArchiveList(ctx, src, nil)
 	require.Error(t, err, "a denied read must not be listable")
 }
+
+func TestArchiveUncompressDoesNotFollowASymlinkAtTheDestination(t *testing.T) {
+	archives := map[string]func(*testing.T, map[string]string) string{
+		"tar.gz": makeTarGz,
+		"zip":    makeZip,
+	}
+	for name, build := range archives {
+		t.Run(name, func(t *testing.T) {
+			outside := t.TempDir()
+			victim := filepath.Join(outside, "victim.txt")
+			require.NoError(t, os.WriteFile(victim, []byte("kept"), 0o600))
+			dest := t.TempDir()
+			if err := os.Symlink(victim, filepath.Join(dest, "a.txt")); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			require.NoError(t, os.Symlink(outside, filepath.Join(dest, "sub")))
+
+			for _, entry := range []string{"a.txt", "sub/new.txt"} {
+				src := build(t, map[string]string{entry: "pwned"})
+				_, err := ArchiveUncompress(context.Background(), src, dest, nil)
+				assert.Error(t, err, entry)
+			}
+
+			got, err := os.ReadFile(victim)
+			require.NoError(t, err)
+			assert.Equal(t, "kept", string(got))
+			assert.NoFileExists(t, filepath.Join(outside, "new.txt"))
+		})
+	}
+}

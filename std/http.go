@@ -158,7 +158,7 @@ var HTTP = Module{
 // real outage reads as a slow build rather than a broken one. Retrying is now
 // something a caller states with an HttpRetry policy.
 var defaultHTTPClient = retry.NewHTTPClient(
-	nil,
+	redirectGuardClient,
 	retry.WithAttempts(1),
 	retry.WithTimeout(defaultHTTPTimeout),
 )
@@ -663,7 +663,40 @@ func (o httpOpts) client(r httpRetry) *http.Client {
 	ropts = append(ropts, retry.WithRetryDecider(func(resp *http.Response, err error) bool {
 		return o.shouldRetry(r, resp, err)
 	}))
-	return retry.NewHTTPClient(nil, ropts...)
+	return retry.NewHTTPClient(redirectGuardClient, ropts...)
+}
+
+const maxHTTPRedirects = 10
+
+var redirectGuardClient = &http.Client{CheckRedirect: guardRedirect}
+
+// guardRedirect covers what Go leaves: it strips only Authorization and Cookie, and a
+// caller may carry its credential in any header.
+func guardRedirect(next *http.Request, via []*http.Request) error {
+	if len(via) >= maxHTTPRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxHTTPRedirects)
+	}
+	if via[len(via)-1].URL.Scheme == "https" && next.URL.Scheme != "https" {
+		return fmt.Errorf("refused a redirect from https to %s", next.URL.Redacted())
+	}
+	if next.URL.Host != via[0].URL.Host {
+		for name := range next.Header {
+			if isCredentialHeader(name) {
+				next.Header.Del(name)
+			}
+		}
+	}
+	return nil
+}
+
+func isCredentialHeader(name string) bool {
+	lower := strings.ToLower(name)
+	for _, word := range []string{"authorization", "cookie", "token", "secret", "key", "auth", "password", "credential"} {
+		if strings.Contains(lower, word) {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldRetry is the retry policy derived from the curl-style options. Exactly
