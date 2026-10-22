@@ -700,7 +700,7 @@ func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, globs ty
 // section in .sl/config is an error.
 func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgRefreshSection(root, slConfigPath(root), command, WriteJudge(ctx, root))
+		return writeHgRefreshSection(root, slConfigPath(root), "sl", command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -711,6 +711,25 @@ func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string
 	return []string{"update"}, nil
 }
 
+// ReadSaplingRefreshHook returns the command InstallRefreshHook gave the refresh hook of
+// the Sapling repository at root, read from .sl/config. ok is false when none is installed.
+// A root with no .sl directory is [types.ErrVCSUnsupported].
+func ReadSaplingRefreshHook(root string) (command string, ok bool, err error) {
+	if err := requireDir(slMetaDir(root)); err != nil {
+		return "", false, err
+	}
+	return readHgRefreshHook(slConfigPath(root))
+}
+
+// ReadSaplingDriftHook is ReadSaplingRefreshHook for the drift hooks InstallDriftHook
+// writes.
+func ReadSaplingDriftHook(root string) (command string, ok bool, err error) {
+	if err := requireDir(slMetaDir(root)); err != nil {
+		return "", false, err
+	}
+	return readHgDriftHook(slConfigPath(root))
+}
+
 // InstallDriftHook implements types.DriftHookInstaller with Sapling's `commit` and
 // `outgoing` hooks (see hgDriftHooks). Neither hook can fail the sl command. It
 // returns their labels when it changed .sl/config and nil when they were already current.
@@ -718,7 +737,7 @@ func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string
 // error.
 func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
-		return writeHgDriftSection(root, slConfigPath(root), command, WriteJudge(ctx, root))
+		return writeHgDriftSection(root, slConfigPath(root), "sl", command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err

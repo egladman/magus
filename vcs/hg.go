@@ -532,7 +532,7 @@ func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.M
 // section in .hg/hgrc is an error.
 func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgRefreshSection(root, hgrcPath(root), command, WriteJudge(ctx, root))
+		return writeHgRefreshSection(root, hgrcPath(root), "hg", command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err
@@ -543,13 +543,31 @@ func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]
 	return []string{"update"}, nil
 }
 
+// ReadHgRefreshHook returns the command InstallRefreshHook gave the refresh hook of the hg
+// repository at root, read from .hg/hgrc. ok is false when none is installed. A root with
+// no .hg directory is [types.ErrVCSUnsupported].
+func ReadHgRefreshHook(root string) (command string, ok bool, err error) {
+	if err := requireDir(hgMetaDir(root)); err != nil {
+		return "", false, err
+	}
+	return readHgRefreshHook(hgrcPath(root))
+}
+
+// ReadHgDriftHook is ReadHgRefreshHook for the drift hooks InstallDriftHook writes.
+func ReadHgDriftHook(root string) (command string, ok bool, err error) {
+	if err := requireDir(hgMetaDir(root)); err != nil {
+		return "", false, err
+	}
+	return readHgDriftHook(hgrcPath(root))
+}
+
 // InstallDriftHook implements types.DriftHookInstaller with hg's `commit` and `outgoing`
 // hooks (see hgDriftHooks). Neither hook can fail the hg command. It returns their
 // labels when it changed .hg/hgrc and nil when they were already current. Installs are
 // serialized per repository, and a torn managed section in .hg/hgrc is an error.
 func (v hgVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
-		return writeHgDriftSection(root, hgrcPath(root), command, WriteJudge(ctx, root))
+		return writeHgDriftSection(root, hgrcPath(root), "hg", command, WriteJudge(ctx, root))
 	})
 	if err != nil {
 		return nil, err

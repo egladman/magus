@@ -1485,7 +1485,7 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, globs types.
 	haveDriver := registered != ""
 	if attrsCurrent == attrsWanted && haveDriver && len(staleFuncnames(cfg)) == 0 &&
 		driverExeExists(registered) && driverIsReachableHere(ctx, root, registered) &&
-		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
+		driverIsPreferredHere(ctx, root, registered, gitTracks) && driverUsable(ctx, registered) {
 		return false, nil
 	}
 	return true, v.InstallMergeDriver(ctx, root, globs)
@@ -1870,15 +1870,27 @@ func staleFuncnames(cfg map[string]string) []gitFuncname {
 //
 // It reaches only a workspace that builds an executable named `magus` at its root, which in
 // practice is magus's own. Everyone else keeps the PATH registration and its
-// upgrade-in-place behavior.
+// upgrade-in-place behavior. A `magus` the repository commits is never that build: running
+// it would run the branch's code because a merge happened (ADR 0014).
 func gitMergeDriverCommand(ctx context.Context, root string) string {
-	return quoteDriverExe(driverExe(ctx, root)) + gitDriverArgs
+	return quoteDriverExe(driverExe(ctx, root, gitTracks)) + gitDriverArgs
+}
+
+// tracksFunc reports whether the VCS at root tracks the file at rel, a slash-separated path
+// relative to root. A check that cannot answer reports true, so nothing committed runs.
+type tracksFunc func(ctx context.Context, root, rel string) bool
+
+// gitTracks is git's tracksFunc: `ls-files --error-unmatch` exits 1 for a path the index
+// does not hold.
+func gitTracks(ctx context.Context, root, rel string) bool {
+	err := gitExec(ctx, root, gitOpts{Literal: true}, "ls-files", "--error-unmatch", "--", rel).Run()
+	return exitCode(err) != 1
 }
 
 // driverExe is the magus a merge driver registration or run names: the workspace's own
 // build, then PATH's, each only if it dispatches the driver, then this process.
-func driverExe(ctx context.Context, root string) string {
-	if exe := localDriverExe(root); exe != "" && driverExeAnswers(ctx, exe) {
+func driverExe(ctx context.Context, root string, tracks tracksFunc) string {
+	if exe := localDriverExe(ctx, root, tracks); exe != "" && driverExeAnswers(ctx, exe) {
 		return exe
 	}
 	if exe, err := exec.LookPath("magus"); err == nil && driverExeAnswers(ctx, exe) {
@@ -1890,11 +1902,15 @@ func driverExe(ctx context.Context, root string) string {
 	return "magus"
 }
 
-// localDriverExe is the workspace's own magus binary, or "" when it has none built.
-func localDriverExe(root string) string {
+// localDriverExe is the workspace's own magus binary, or "" when it has none built or the
+// VCS tracks the one at the root. It checks tracking before anything executes the file.
+func localDriverExe(ctx context.Context, root string, tracks tracksFunc) string {
 	exe := filepath.Join(root, "magus")
 	info, err := os.Stat(exe)
 	if err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		return ""
+	}
+	if tracks(ctx, root, "magus") {
 		return ""
 	}
 	return exe
@@ -2047,8 +2063,8 @@ func driverIsReachableHere(ctx context.Context, root, registered string) bool {
 //
 // A workspace with no magus of its own has nothing better to offer, so whatever is
 // registered stands and PATH keeps its upgrade-in-place behavior.
-func driverIsPreferredHere(root, registered string) bool {
-	if localDriverExe(root) == "" {
+func driverIsPreferredHere(ctx context.Context, root, registered string, tracks tracksFunc) bool {
+	if localDriverExe(ctx, root, tracks) == "" {
 		return true
 	}
 	exe, _ := splitDriver(registered)
@@ -2128,6 +2144,14 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 	if !ok {
 		return []string{}, nil
 	}
+	top, err := gitVCS{}.Root(ctx, root)
+	if err != nil {
+		return nil, fmt.Errorf("top level of %s: %w", root, err)
+	}
+	hooks := realPath(paths.hooksDir)
+	if !pathUnder(realPath(paths.commonDir), hooks) && !pathUnder(realPath(top), hooks) {
+		return nil, fmt.Errorf("vcs: core.hooksPath is %s, which other repositories share, so magus will not install a hook that runs in every repository: point core.hooksPath inside this repository or unset it, then rerun magus init --vcs git", paths.hooksDir)
+	}
 	if err := os.MkdirAll(paths.hooksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("vcs: mkdir %s: %w", paths.hooksDir, err)
 	}
@@ -2163,11 +2187,50 @@ func gitHookBody(name, command string) string {
 	if name == "post-checkout" {
 		guard = "[ \"$3\" = \"1\" ] || exit 0\n"
 	}
-	return guard + command + gitHookSuffix + "\n"
+	return guard + skipTrackedBinary(gitLsFiles, command, "magus"+commandArgs(command), command+gitHookSuffix) + "\n"
 }
 
 // gitHookSuffix is what gitHookBody appends to the command, so a reader can take it off.
 const gitHookSuffix = " >/dev/null 2>&1 || true"
+
+// gitLsFiles is the shell test that git tracks the path following it.
+const gitLsFiles = "git ls-files --error-unmatch"
+
+// skipTrackedBinary guards run so a relative binary the repository commits never runs: a
+// checkout must not run the branch's code (ADR 0014). An absolute or bare binary is the
+// user's own. tracked exits 0 for a tracked path; own is what the notice says to run.
+func skipTrackedBinary(tracked, command, own, run string) string {
+	bin := commandBinary(command)
+	if filepath.IsAbs(bin) || !strings.ContainsAny(bin, "/"+string(filepath.Separator)) {
+		return run
+	}
+	notice := "magus: this branch commits " + bin + ", so the hook will not run it; run '" + own + "' with your own build"
+	return "if " + tracked + " -- " + bin + " >/dev/null 2>&1; then echo \"" + notice + "\" >&2; else " + run + "; fi"
+}
+
+// unwrapTrackedBinary returns the run line inside skipTrackedBinary's guard, or line itself
+// when it carries none.
+func unwrapTrackedBinary(line string) string {
+	inner, ok := strings.CutSuffix(line, "; fi")
+	if !ok {
+		return line
+	}
+	if _, run, ok := strings.Cut(inner, "; else "); ok {
+		return run
+	}
+	return line
+}
+
+// commandBinary is command's first word, the program a hook runs.
+func commandBinary(command string) string {
+	bin, _, _ := strings.Cut(command, " ")
+	return bin
+}
+
+// commandArgs is command after its first word, with its leading space.
+func commandArgs(command string) string {
+	return strings.TrimPrefix(command, commandBinary(command))
+}
 
 // GitRefreshHook is the refresh hook installed in a git repository, as one of its
 // checkouts sees it.
@@ -2199,26 +2262,17 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 	if err != nil {
 		return GitRefreshHook{}, false, fmt.Errorf("vcs: read %s: %w", path, err)
 	}
-	text := string(data)
-	spans, err := managedSpans(text, refreshMarkers)
+	cmd, found, err := readSectionCommand(path, string(data), refreshMarkers, func(line string) (string, bool) {
+		return strings.CutSuffix(unwrapTrackedBinary(line), gitHookSuffix)
+	})
+	if err != nil || !found {
+		return GitRefreshHook{}, false, err
+	}
+	top, err := gitVCS{}.Root(ctx, root)
 	if err != nil {
-		return GitRefreshHook{}, false, fmt.Errorf("%s: %w", path, err)
+		return GitRefreshHook{}, false, fmt.Errorf("top level of %s: %w", root, err)
 	}
-	for _, s := range spans {
-		for line := range strings.Lines(text[s.start:s.end]) {
-			line = strings.TrimSpace(line)
-			cmd, found := strings.CutSuffix(line, gitHookSuffix)
-			if !found {
-				continue
-			}
-			top, err := gitVCS{}.Root(ctx, root)
-			if err != nil {
-				return GitRefreshHook{}, false, fmt.Errorf("top level of %s: %w", root, err)
-			}
-			return GitRefreshHook{Command: cmd, Top: top}, true, nil
-		}
-	}
-	return GitRefreshHook{}, false, nil
+	return GitRefreshHook{Command: cmd, Top: top}, true, nil
 }
 
 // InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
@@ -2245,7 +2299,54 @@ func gitDriftHookBody(name, command string) string {
 	if name == "pre-push" {
 		run += ` "$@"`
 	}
-	return run + gitHookSuffix + "\n"
+	return skipTrackedBinary(gitLsFiles, command, "magus"+commandArgs(command)+" "+name, run+gitHookSuffix) + "\n"
+}
+
+// ReadGitDriftHook returns the command of the drift hook installed for root's git
+// repository, as InstallDriftHook was given it, read from post-commit. ok is false when no
+// drift section is installed. A root outside any git repository is
+// [types.ErrVCSUnsupported].
+func ReadGitDriftHook(ctx context.Context, root string) (command string, ok bool, err error) {
+	const hook = "post-commit"
+	paths, inRepo, err := resolveGitRepoPaths(ctx, root)
+	if err != nil {
+		return "", false, err
+	}
+	if !inRepo {
+		return "", false, types.ErrVCSUnsupported
+	}
+	path := filepath.Join(paths.hooksDir, hook)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	return readSectionCommand(path, string(data), driftMarkers, func(line string) (string, bool) {
+		run, ok := strings.CutSuffix(unwrapTrackedBinary(line), gitHookSuffix)
+		if !ok {
+			return "", false
+		}
+		return strings.CutSuffix(run, " "+hook)
+	})
+}
+
+// readSectionCommand returns the first command parse finds on a trimmed line of text's m
+// sections. path names the file in an error.
+func readSectionCommand(path, text string, m managedMarkers, parse func(line string) (string, bool)) (string, bool, error) {
+	spans, err := managedSpans(text, m)
+	if err != nil {
+		return "", false, fmt.Errorf("%s: %w", path, err)
+	}
+	for _, s := range spans {
+		for line := range strings.Lines(text[s.start:s.end]) {
+			if cmd, ok := parse(strings.TrimSpace(line)); ok {
+				return cmd, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 // InstallRegenHook implements types.RegenHookInstaller: after it returns, each of
@@ -2280,12 +2381,12 @@ func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]s
 // DeferredSettle) and starts nothing either. The guard is an `if` block rather than an
 // early exit so a section below this one still runs.
 func gitSettleHookBody(name, command string) string {
-	bin, _, _ := strings.Cut(command, " ")
+	bin := commandBinary(command)
 	run := command + " " + name
 	if name == HookPostRewrite {
 		run += ` "$@"`
 	}
-	settle := run + "\n" +
+	settle := skipTrackedBinary(gitLsFiles, command, "magus vcs resolve", run) + "\n" +
 		"magus_rc=$?\n" +
 		"if [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" +
 		"  echo \"magus: the settle hook did not run: " + bin + " is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run '" + bin + " vcs resolve' once it is\" >&2\n"

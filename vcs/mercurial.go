@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -99,22 +100,74 @@ func hgMergeDriverCommand(ctx context.Context, prog, root string) (string, error
 	return strings.TrimSpace(exe + " " + args), nil
 }
 
-// writeHgRefreshSection registers an `update` hook running command in the
-// hg-family config at path, of the repository at root. The caller holds withRepoLock.
-func writeHgRefreshSection(root, path, command string, j stamp.Judge) (bool, error) {
-	body := fmt.Sprintf("[hooks]\nupdate.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
+// writeHgRefreshSection registers an `update` hook running command in the hg-family config
+// at path, of the repository at root; prog is hg or sl. The caller holds withRepoLock.
+func writeHgRefreshSection(root, path, prog, command string, j stamp.Judge) (bool, error) {
+	body := "[hooks]\n" + hgRefreshKey + " = " + hgHookValue(prog, command) + "\n"
 	return writeManagedSection(root, path, refreshMarkers, body, configFile, j)
 }
 
-// writeHgDriftSection registers each of hgDriftHooks to run command in the
-// hg-family config at path, of the repository at root. The caller holds withRepoLock.
-func writeHgDriftSection(root, path, command string, j stamp.Judge) (bool, error) {
+// writeHgDriftSection registers each of hgDriftHooks to run command in the hg-family config
+// at path, of the repository at root; prog is hg or sl. The caller holds withRepoLock.
+func writeHgDriftSection(root, path, prog, command string, j stamp.Judge) (bool, error) {
 	var body strings.Builder
 	body.WriteString("[hooks]\n")
 	for _, name := range hgDriftHooks {
-		fmt.Fprintf(&body, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+		fmt.Fprintf(&body, "%s%s = %s\n", name, hgDriftKeySuffix, hgHookValue(prog, command))
 	}
 	return writeManagedSection(root, path, driftMarkers, body.String(), configFile, j)
+}
+
+const (
+	hgRefreshKey     = "update.magus-refresh"
+	hgDriftKeySuffix = ".magus-drift-notice"
+)
+
+// hgHookValue is the fail-open shell line a hook key holds. hg runs a hook at the
+// repository root, which a relative binary resolves against.
+func hgHookValue(prog, command string) string {
+	return skipTrackedBinary(prog+" files", command, "magus"+commandArgs(command), command+gitHookSuffix)
+}
+
+// readHgHook returns the command the hook key named by key holds in the m section of the
+// hg-family config at path. ok is false when the file or the section is absent.
+func readHgHook(path string, m managedMarkers, key func(string) bool) (command string, ok bool, err error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	return readSectionCommand(path, string(data), m, func(line string) (string, bool) {
+		k, value, found := strings.Cut(line, " = ")
+		if !found || !key(k) {
+			return "", false
+		}
+		return strings.CutSuffix(unwrapTrackedBinary(value), gitHookSuffix)
+	})
+}
+
+// requireDir is nil when dir is a directory and [types.ErrVCSUnsupported] when it is absent.
+func requireDir(dir string) error {
+	info, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && !info.IsDir()) {
+		return types.ErrVCSUnsupported
+	}
+	if err != nil {
+		return fmt.Errorf("vcs: stat %s: %w", dir, err)
+	}
+	return nil
+}
+
+// readHgRefreshHook is readHgHook for the refresh section.
+func readHgRefreshHook(path string) (string, bool, error) {
+	return readHgHook(path, refreshMarkers, func(k string) bool { return k == hgRefreshKey })
+}
+
+// readHgDriftHook is readHgHook for the drift section.
+func readHgDriftHook(path string) (string, bool, error) {
+	return readHgHook(path, driftMarkers, func(k string) bool { return strings.HasSuffix(k, hgDriftKeySuffix) })
 }
 
 // hgGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two
