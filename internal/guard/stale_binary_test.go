@@ -701,7 +701,7 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 			}
 			if !tc.builds {
 				named = []string{strings.Join(placementArgv(tc.lease), " ")}
-				named[0] = strings.Replace(named[0], "<main checkout>", "/repo", -1)
+				named[0] = strings.ReplaceAll(named[0], "<main checkout>", "/repo")
 			}
 			for _, line := range named {
 				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)

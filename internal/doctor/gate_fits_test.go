@@ -84,6 +84,8 @@ func TestGateFitsSizesCiAndItsSameProjectSteps(t *testing.T) {
 	}, asked, "cross-project members are inside ci's claim; libs/x composes no ci")
 
 	skipped := (&runner{}).checkGateFits([]*types.Project{p})
-	assert.Equal(t, types.CheckOK, skipped.Status)
-	assert.Equal(t, types.EvidenceUnknown, skipped.Evidence, "no sizer is not a pass")
+	assert.Equal(t, types.Check{
+		Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		Message: "no admission sizer supplied; skipped",
+	}, skipped, "no sizer is not a pass")
 }

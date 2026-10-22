@@ -114,9 +114,9 @@ type account struct {
 	overrides []types.ModelPricing
 	// cacheTTL is agents.prompt_cache_ttl, zero when unset; loadErr is why magus.yaml did
 	// not load, which a reader of cacheTTL must say rather than read zero as unset.
-	cacheTTL  time.Duration
-	loadErr   error
-	read      time.Time
+	cacheTTL time.Duration
+	loadErr  error
+	read     time.Time
 }
 
 // accountTTL bounds how long a process trusts a read of magus.yaml; a daemon judging for
