@@ -186,6 +186,7 @@
 {"group":"file:changes/unreleased/queue-reviews-dismiss.md","path":"changes/unreleased/queue-reviews-dismiss.md"}
 {"group":"file:changes/unreleased/queue-settles-drift-label.md","path":"changes/unreleased/queue-settles-drift-label.md"}
 {"group":"file:changes/unreleased/raw-package-manager-installs-advised-not.md","path":"changes/unreleased/raw-package-manager-installs-advised-not.md"}
+{"group":"file:changes/unreleased/read-verbs-write-no-vcs-metadata.md","path":"changes/unreleased/read-verbs-write-no-vcs-metadata.md"}
 {"group":"file:changes/unreleased/refactor-remove-preflight.md","path":"changes/unreleased/refactor-remove-preflight.md"}
 {"group":"file:changes/unreleased/release-rc-images-use-tagged.md","path":"changes/unreleased/release-rc-images-use-tagged.md"}
 {"group":"file:changes/unreleased/remove-deprecated-workspace-ref-aliases.md","path":"changes/unreleased/remove-deprecated-workspace-ref-aliases.md"}
@@ -210,6 +211,7 @@
 {"group":"file:changes/unreleased/sdk-seams-spawn-rule-required.md","path":"changes/unreleased/sdk-seams-spawn-rule-required.md"}
 {"group":"file:changes/unreleased/sdk-seams-vcs-driver.md","path":"changes/unreleased/sdk-seams-vcs-driver.md"}
 {"group":"file:changes/unreleased/sec-cache-hardening.md","path":"changes/unreleased/sec-cache-hardening.md"}
+{"group":"file:changes/unreleased/security-model-docs.md","path":"changes/unreleased/security-model-docs.md"}
 {"group":"file:changes/unreleased/self-invalidating-key-mgs4010.md","path":"changes/unreleased/self-invalidating-key-mgs4010.md"}
 {"group":"file:changes/unreleased/self-update-remedies.md","path":"changes/unreleased/self-update-remedies.md"}
 {"group":"file:changes/unreleased/soft-test-claims.md","path":"changes/unreleased/soft-test-claims.md"}
