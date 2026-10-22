@@ -35,6 +35,7 @@ import {
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
+import { timer, type Timer } from "d3-timer";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
@@ -80,12 +81,17 @@ import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
-  setFlowEdges,
-  setPulses,
+  FLOW_DASH_PX,
+  FLOW_GAP_PX,
+  dashOffset,
+  flowOrigin,
+  flowSpeed,
+  flows,
+  pulseProgress,
   resetMotion,
-  tick as particlesTick,
-  type FlowEdge,
-} from "./particles.js";
+  setFlowLinks,
+  setPulses,
+} from "./flow.js";
 import {
   type Insets,
   NO_INSETS,
@@ -399,49 +405,53 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 // The OS preference, or the console's own Motion setting. One predicate rather than the media query
 // tested in five places, which is how a new switch reaches four of them and misses the fifth. The
-// console's CSS kill cannot reach the opening burst, the particles or the camera glides - they are JS.
+// console's CSS kill cannot reach the opening burst, the edge flow or the camera glides - they are JS.
 function motionSuppressed(): boolean {
   return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
 }
 
-// ---- motion layer (flow particles + live recency pulses) ------------------
-// Motion is OFF outside two states: an active path/subset view (blast, trace,
-// critical) with flow particles running along its edges, or a live refresh
-// that just pulsed some nodes. flowOn mirrors whether particles.ts currently
-// holds a non-null flow-edge list (set by buildFlowEdges, cleared at every
-// view-exit site). pulsesPending is set true whenever liveApplyGraphUpdate
-// calls setPulses, and cleared by draw() once tick() reports nothing left to
-// paint (see the draw() motion block) - that self-clearing, plus
-// motionEligible's reducedMotion/document.hidden checks, is what makes
-// motionLoop below stop itself within a frame of there being nothing to show.
+// ---- motion layer (edge flow + live recency pulses) ------------------------
+// Motion runs in three states: a path/subset view (blast, trace, critical) whose edges flow, a
+// hovered or selected node whose incident edges flow, or a live refresh that just pulsed some
+// nodes. flowOn mirrors flow.ts holding the view's flow set; flowDrawn says the last draw() stroked
+// a flowing edge; pulsesPending clears once pulseProgress() reports none left. The timer re-checks
+// motionEligible() every frame and stops itself, so with the layout settled and nothing flowing the
+// CPU drops to zero.
 let flowOn = false;
+let flowDrawn = false;
 let pulsesPending = false;
-let motionRaf = 0;
+let dragging = false;
+// One shared d3-timer for all of it. It only redraws: the force simulation keeps its own timer and
+// alpha, and this one never touches either.
+let motionTimer: Timer | null = null;
+// Advances only while the timer runs, so a pause (drag, hidden tab, reduced motion) freezes the
+// dashes where they stand instead of jumping on resume.
+let flowPhaseMs = 0;
 
 const flowActive = () =>
   (activeView === "trace" || activeView === "critical" || activeView === "blast") && !!matchSet;
 
-const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn || pulsesPending);
+const motionEligible = () =>
+  !motionSuppressed() && !document.hidden && !dragging && (flowOn || flowDrawn || pulsesPending);
 
-// motionLoop keeps draw() repainting once per frame while motionEligible();
-// the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
-// pulses expired), it zeroes motionRaf and stops re-arming itself - and with the layout settled
-// there is no other repaint loop, so CPU drops to zero.
-function motionLoop() {
-  if (!motionEligible()) {
-    motionRaf = 0;
-    return;
-  }
-  draw();
-  motionRaf = requestAnimationFrame(motionLoop);
+// startMotion arms the timer when there is something eligible to animate. Safe to call from any
+// site that turns flow or pulses on, and from draw() itself: a running timer makes it a no-op.
+function startMotion() {
+  if (motionTimer || !motionEligible()) return;
+  const from = flowPhaseMs;
+  motionTimer = timer((elapsed) => {
+    if (!motionEligible()) {
+      stopMotion();
+      return;
+    }
+    flowPhaseMs = from + elapsed;
+    draw();
+  });
 }
 
-// startMotion arms the loop if it isn't already running and there is
-// something eligible to animate; call it from every site that turns flow or
-// pulses on. Guarded by motionRaf so a second call while the loop is already
-// running is a no-op.
-function startMotion() {
-  if (!motionRaf && motionEligible()) motionRaf = requestAnimationFrame(motionLoop);
+function stopMotion() {
+  motionTimer?.stop();
+  motionTimer = null;
 }
 
 // ---- theme / palette -------------------------------------------------------
@@ -1421,6 +1431,8 @@ function draw() {
   // The projection is its own visibility rule (nodes outside it are absent, not dim), so it
   // stands in for the scope while it is active.
   const scope = matchSet && !projectionActive ? matchSet : null;
+  const highlightDegree = near?.size ?? 0;
+  let flowDrawnNow = false;
   // Painted in the label pass, so node marks never cover them.
   const transportLabels: { x: number; y: number; text: string; incident: boolean }[] = [];
   for (const e of graph.links) {
@@ -1479,9 +1491,10 @@ function draw() {
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
     // in layered mode) also render dashed, as does a call only a marker claims.
+    // Those dashes carry meaning, so they stay still; only a solid edge flows.
     const call = declaredCall(e);
     const dashed = e.cycle || e.layoutReversed || !!call;
-    if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    const flowing = !dashed && active && flows(e, highlight || null, highlightDegree);
     // Routed edges (multi-layer spans in a DAG mode) carry world-space bend
     // points ordered ascending-x (dependency end -> dependent end, see
     // types.ts). Assemble the full polyline (both endpoints + bend points)
@@ -1491,6 +1504,23 @@ function draw() {
       isDagMode() && e.points && e.points.length
         ? [{ x: sx, y: sy }, { x: tx, y: ty }, ...e.points].sort((a, b) => a.x - b.x)
         : null;
+    if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    else if (flowing) {
+      flowDrawnNow = true;
+      // The stroke starts at s, unless the x-sorted route put t first. Reading the start off the
+      // drawn geometry keeps a layoutReversed edge flowing dependency to dependent.
+      const startsAt = routePts && tx < sx ? t.id : s.id;
+      ctx.setLineDash([FLOW_DASH_PX / transform.k, FLOW_GAP_PX / transform.k]);
+      ctx.lineDashOffset = dashOffset(
+        flowPhaseMs,
+        flowSpeed(e.relation),
+        startsAt === flowOrigin(e),
+        transform.k,
+      );
+      ctx.strokeStyle = th.accent;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = Math.max(ctx.lineWidth, 1.4 / transform.k);
+    }
     ctx.beginPath();
     if (routePts) {
       // Smooth curve through the bend points via quadratic segments to their
@@ -1515,7 +1545,10 @@ function draw() {
       ctx.lineTo(t.x, t.y);
     }
     ctx.stroke();
-    if (dashed) ctx.setLineDash([]);
+    if (dashed || flowing) {
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
     if (call?.transport && active) {
       const mid = routePts
         ? routePts[routePts.length >> 1]
@@ -1647,46 +1680,29 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Motion layer: flow particles along the active view's edges, and
-  // recency-pulse rings from a live refresh. Gated on prefers-reduced-motion
-  // and tab visibility here too (not just in motionEligible/motionLoop) so
-  // nothing paints even when draw() is triggered by something other than the
-  // motion loop (a click, a drag, a theme toggle) while motion should stay
-  // suppressed. Painted after nodes/cards, before labels, so a pulse ring
-  // doesn't clip label text. tick() returning null (no flow, no unexpired
-  // pulses) is what lets pulsesPending self-clear, which is in turn what lets
-  // motionLoop stop re-arming itself once nothing is left to animate.
+  // Recency-pulse rings from a live refresh, after nodes and before labels so a ring never clips
+  // label text. Gated here as well as in motionEligible, since draw() also runs from clicks, drags
+  // and theme toggles. pulseProgress() returning null is what clears pulsesPending.
+  flowDrawn = flowDrawnNow;
   if (!motionSuppressed() && !document.hidden) {
-    const motion = particlesTick(performance.now());
-    if (!motion) {
+    const pulses = pulseProgress(performance.now());
+    if (!pulses) {
       pulsesPending = false;
     } else {
-      if (motion.flowPoints.length) {
-        ctx.fillStyle = th.accent;
-        const flowR = 2.2 / transform.k;
-        for (const p of motion.flowPoints) {
-          ctx.globalAlpha = p.alpha;
+      ctx.strokeStyle = th.accent;
+      ctx.lineWidth = 1.5 / transform.k;
+      for (const [id, progress] of pulses) {
+        const n = graph.byId.get(id);
+        if (!n || n.x == null) continue;
+        ctx.globalAlpha = 0.5 * (1 - progress);
+        if (cardsActive() && n.w) {
+          const grow = (progress * 26) / transform.k;
+          const h = n.h ?? 0;
+          ctx.strokeRect(n.x - n.w / 2 - grow, n.y - h / 2 - grow, n.w + grow * 2, h + grow * 2);
+        } else {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, flowR, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-      }
-      if (motion.pulses.size) {
-        ctx.strokeStyle = th.accent;
-        ctx.lineWidth = 1.5 / transform.k;
-        for (const [id, progress] of motion.pulses) {
-          const n = graph.byId.get(id);
-          if (!n || n.x == null) continue;
-          ctx.globalAlpha = 0.5 * (1 - progress);
-          if (cardsActive() && n.w) {
-            const grow = (progress * 26) / transform.k;
-            const h = n.h ?? 0;
-            ctx.strokeRect(n.x - n.w / 2 - grow, n.y - h / 2 - grow, n.w + grow * 2, h + grow * 2);
-          } else {
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, n.r + (progress * 26) / transform.k, 0, 2 * Math.PI);
-            ctx.stroke();
-          }
+          ctx.arc(n.x, n.y, n.r + (progress * 26) / transform.k, 0, 2 * Math.PI);
+          ctx.stroke();
         }
       }
       ctx.globalAlpha = 1;
@@ -1805,6 +1821,8 @@ function draw() {
     ctx.fillText(l.text, l.x, l.y);
   }
   ctx.restore();
+  // A hover or selection that lit flowing edges arms the timer here; otherwise this is a no-op.
+  startMotion();
 }
 
 // ---- interaction -----------------------------------------------------------
@@ -1887,6 +1905,9 @@ function setupZoomDrag() {
     .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
+      // The flow holds still under the pointer; the sim's own ticks keep the drag drawn.
+      dragging = true;
+      stopMotion();
       if (!isDagMode() && !event.active) sim?.alphaTarget(0.2).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
@@ -1904,6 +1925,8 @@ function setupZoomDrag() {
     })
     .on("end", (event) => {
       if (!event.subject) return;
+      dragging = false;
+      startMotion();
       if (isDagMode()) {
         // Keep the manually dragged position (fx/fy stay set); just redraw.
         draw();
@@ -2698,7 +2721,7 @@ function clearFocusOrQuery() {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
   }
   renderList();
@@ -3176,7 +3199,7 @@ function applyQuery(q: string) {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
   }
   query = q.trim();
@@ -3784,6 +3807,8 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   resetMotion(); // clears flow edges AND any recency pulse mid-flight from the graph being replaced
   flowOn = false;
   pulsesPending = false;
+  flowDrawn = false;
+  dragging = false;
   if (searchEl) searchEl.value = "";
   // Reset view/projection state.
   activeView = null;
@@ -4258,7 +4283,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   projectionUnfolded = true; // a view always shows the full graph context
   projectionSet = null;
   matchSet = null;
-  setFlowEdges(null); // cleared up front; the tail below rebuilds it once matchSet is final
+  setFlowLinks(null); // cleared up front; the tail below rebuilds it once matchSet is final
   flowOn = false;
   if (searchEl) {
     searchEl.value = "";
@@ -4451,7 +4476,7 @@ function clearView() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  setFlowEdges(null);
+  setFlowLinks(null);
   flowOn = false;
   renderList();
   // Only the canvas line used to be cleared here, so the status line kept describing a view that
@@ -4521,13 +4546,13 @@ function askQuestion(view: string) {
   if (view === "blast" || view === "trace") {
     // Enter picking mode: status tells user to click a node. Bypasses
     // activateView (no node picked yet), so clear any flow left over from
-    // whatever view was active before this click - otherwise particles from
+    // whatever view was active before this click - otherwise edges from
     // the OLD view's matchSet would keep animating through the picking-mode gap.
     activeView = view;
     viewNode = null;
     viewNodeTo = null;
     pendingRadialPick = false;
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
     document
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
@@ -4562,39 +4587,18 @@ function askQuestion(view: string) {
   }
 }
 
-// buildFlowEdges (re)builds particles.ts's flow-edge list from the CURRENT
-// activeView/matchSet/graph positions: trace/critical flow along the path
-// (consecutive path nodes joined by their depends_on link, in either stored
-// orientation), blast flows along every depends_on link with both endpoints
-// in matchSet. Each polyline runs dependency -> dependent (e.target is the
-// dependency, e.source the dependent - see the edge-direction convention
-// note in draw()'s edge pass), reusing the same routed bend points (e.points)
-// the DAG layouts computed, so particles follow the curve on screen instead
-// of cutting a chord through it. Call after matchSet is final for the view;
-// it no-ops (and clears any prior flow) when the view isn't a flow view, so
-// it's safe to call unconditionally at a view's settle point.
+// buildFlowEdges (re)builds flow.ts's flow set from the CURRENT activeView/matchSet: trace and
+// critical flow along the path (consecutive path nodes joined by their depends_on link, in either
+// stored orientation), blast along every depends_on link with both ends in matchSet. draw() strokes
+// those links with moving dashes. Call after matchSet is final for the view; it clears any prior
+// flow when the view is not a flow view, so it is safe to call at a view's settle point.
 function buildFlowEdges() {
   if (!flowActive()) {
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
     return;
   }
-  const edges: FlowEdge[] = [];
-  const pushLinkPolyline = (link: GLink) => {
-    // s = dependent (e.source), t = dependency (e.target); flow travels t -> s.
-    const s = graph.byId.get(endpointId(link.source));
-    const t = graph.byId.get(endpointId(link.target));
-    if (!s || !t || s.x == null || t.x == null) return;
-    // Match draw()'s routePts assembly: collect both endpoints plus any routed
-    // bend points and sort the whole polyline ascending by x. link.points runs
-    // dependency -> dependent for a normal edge, but a layoutReversed cycle
-    // back-edge stores it descending, which would zigzag the particle path if
-    // just concatenated in source/target order.
-    const pts = [{ x: t.x, y: t.y }, { x: s.x, y: s.y }, ...(link.points ?? [])].sort(
-      (a, b) => a.x - b.x,
-    );
-    edges.push({ pts });
-  };
+  const links: GLink[] = [];
   if (activeView === "trace" || activeView === "critical") {
     const path =
       activeView === "trace"
@@ -4612,17 +4616,16 @@ function buildFlowEdges() {
             ((endpointId(l.source) === a && endpointId(l.target) === b) ||
               (endpointId(l.source) === b && endpointId(l.target) === a)),
         );
-        if (link) pushLinkPolyline(link);
+        if (link) links.push(link);
       }
     }
   } else if (activeView === "blast" && matchSet) {
     for (const l of graph.links) {
       if (l.relation !== "depends_on") continue;
-      if (matchSet.has(endpointId(l.source)) && matchSet.has(endpointId(l.target)))
-        pushLinkPolyline(l);
+      if (matchSet.has(endpointId(l.source)) && matchSet.has(endpointId(l.target))) links.push(l);
     }
   }
-  flowOn = setFlowEdges(edges.length ? edges : null);
+  flowOn = setFlowLinks(links);
   if (flowOn) startMotion();
 }
 
@@ -6037,9 +6040,8 @@ function bootWireEvents() {
 
   // Keep an unfinished settle from ticking against a canvas nobody can see: stop the sim while
   // the tab is hidden, resume it when the tab returns. In a dag mode the sim is stopped already.
-  // startMotion() re-arms the motion loop on the same two triggers -
-  // it self-checks motionEligible(), so it's a no-op when there's nothing to
-  // animate or the tab/preference still says not to.
+  // The motion timer stops and re-arms on the same two triggers; startMotion() self-checks
+  // motionEligible(), so it is a no-op when there is nothing to animate.
   document.addEventListener(
     "visibilitychange",
     () => {
@@ -6049,15 +6051,17 @@ function bootWireEvents() {
         // mid-burst finishes it and one hidden after it settled ticks once and stops again.
         else if (!isDagMode()) sim.restart();
       }
-      if (!document.hidden) startMotion();
+      if (document.hidden) stopMotion();
+      else startMotion();
     },
     { signal: lifecycleSignal },
   );
   reducedMotion.addEventListener(
     "change",
     () => {
-      // The layout itself is unaffected either way now - only the particle/pulse layer is.
-      startMotion();
+      // Only the flow and pulse layer answers; the layout is unaffected either way.
+      if (motionSuppressed()) stopMotion();
+      else startMotion();
     },
     { signal: lifecycleSignal },
   );
@@ -6285,7 +6289,7 @@ async function bootLive() {
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
 // stops the force simulation, cancels the
-// motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
+// motion timer and clears its state, aborts a live SSE stream and cancels its reconnect timer,
 // disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
@@ -6405,10 +6409,7 @@ export function deactivate(): void {
   haloFocus = null;
   haloKeep = new Set();
   if (sim) sim?.stop();
-  if (motionRaf) {
-    cancelAnimationFrame(motionRaf);
-    motionRaf = 0;
-  }
+  stopMotion();
   // The camera's own two kinds of pending work, neither of which this used to stop: the glide is a
   // self-perpetuating rAF chain that would keep calling applyTransform -> draw() on a hidden
   // canvas, and the beats are timeouts queued to fit an app the console has torn down.
@@ -6420,6 +6421,8 @@ export function deactivate(): void {
   resetMotion();
   flowOn = false;
   pulsesPending = false;
+  flowDrawn = false;
+  dragging = false;
   if (liveSseAbort) {
     liveSseAbort.abort();
     liveSseAbort = null;
