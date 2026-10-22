@@ -93,6 +93,7 @@
 {"group":"file:changes/unreleased/flags-repeated-and-command.md","path":"changes/unreleased/flags-repeated-and-command.md"}
 {"group":"file:changes/unreleased/fork-claim-notes.md","path":"changes/unreleased/fork-claim-notes.md"}
 {"group":"file:changes/unreleased/fork-rules-at-every-door.md","path":"changes/unreleased/fork-rules-at-every-door.md"}
+{"group":"file:changes/unreleased/gate-fits-machine.md","path":"changes/unreleased/gate-fits-machine.md"}
 {"group":"file:changes/unreleased/gitattributes-carve-outs.md","path":"changes/unreleased/gitattributes-carve-outs.md"}
 {"group":"file:changes/unreleased/go-source-conventions-become-linters.md","path":"changes/unreleased/go-source-conventions-become-linters.md"}
 {"group":"file:changes/unreleased/graph-links-target-workspace-spell-imported.md","path":"changes/unreleased/graph-links-target-workspace-spell-imported.md"}
@@ -208,6 +209,7 @@
 {"group":"file:changes/unreleased/sec-cache-hardening.md","path":"changes/unreleased/sec-cache-hardening.md"}
 {"group":"file:changes/unreleased/self-invalidating-key-mgs4010.md","path":"changes/unreleased/self-invalidating-key-mgs4010.md"}
 {"group":"file:changes/unreleased/self-update-remedies.md","path":"changes/unreleased/self-update-remedies.md"}
+{"group":"file:changes/unreleased/soft-test-claims.md","path":"changes/unreleased/soft-test-claims.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier-default.md","path":"changes/unreleased/spawn-above-parent-tier-default.md"}
 {"group":"file:changes/unreleased/spawn-above-parent-tier.md","path":"changes/unreleased/spawn-above-parent-tier.md"}
 {"group":"file:changes/unreleased/spawn-refuses-unvalidated-row.md","path":"changes/unreleased/spawn-refuses-unvalidated-row.md"}
@@ -813,6 +815,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/root-project-declares-the-configs-its-tools-read.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/rules-name-their-tier.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/run.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/sdk-exports.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/skill-renders-follow-markdown-and-description-budgets.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/skills-generate-declares-every-shipped-skill.buzz"}
