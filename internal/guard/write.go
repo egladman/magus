@@ -283,19 +283,21 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the job store could not be read (%v); re-declare the plan with magus\\job if leased work is running.", err),
 			Why:     "The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff."}
 	}
-	live := liveLeases(leases)
-	if len(live) == 0 {
-		return adviseUnleasedWorker(actingLease)
-	}
-
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
 	// The notice that says so is adviseInvalidLease, fired from Judge so both kinds of call
 	// get it.
-	if !types.ValidJobID(actingLease) {
-		actingLease = ""
+	graded := actingLease
+	if !types.ValidJobID(graded) {
+		graded = ""
+	}
+	me, enrolled := leaseRow(ctx, location, graded)
+	enrolled = enrolled && me.State.Live()
+	live := editingLeases(leases)
+	if len(live) == 0 && !enrolled {
+		return adviseUnleasedWorker(actingLease)
 	}
 
-	if me, enrolled := liveLease(live, actingLease); enrolled {
+	if enrolled {
 		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
 			return writeGrade{Decision: decisionDeny, Reason: reason}
 		}
@@ -700,18 +702,11 @@ func enteredPathKey(lease string, e types.JobEntry) hint.MarkerKind {
 	return hint.MarkerKind("entered-path-" + hex.EncodeToString(sum[:6]))
 }
 
-// liveLeases are the rows a write can still collide with: declared and running.
-// A terminal row has stopped competing for its paths, which is the same rule
-// types.leaseOverlaps applies when it decides which pairs to report. A row with no
-// state at all is not live either: it has not said it is.
-func liveLeases(leases []types.Job) []types.Job {
-	live := make([]types.Job, 0, len(leases))
-	for _, u := range leases {
-		if u.State == types.StateDeclared || u.State == types.StateRunning {
-			live = append(live, u)
-		}
-	}
-	return live
+// editingLeases are the rows a write can still collide with, the ones whose holder may be
+// writing their paths (see types.JobState.Editing). An exited row is live for its own
+// holder, see leaseRow, and claims nothing against anyone else.
+func editingLeases(leases []types.Job) []types.Job {
+	return slices.DeleteFunc(slices.Clone(leases), func(u types.Job) bool { return !u.State.Editing() })
 }
 
 // owningLeases narrows live to the rows that claim their write paths against other
@@ -723,19 +718,6 @@ func owningLeases(rows, live []types.Job) []types.Job {
 		_, blocked := types.JobBlockedOn(rows, u)
 		return blocked
 	})
-}
-
-// liveLease finds the acting lease's own row. An empty id matches nothing, so an
-// un-enrolled caller cannot collide with a row whose id was never written.
-func liveLease(live []types.Job, id string) (types.Job, bool) {
-	if id == "" {
-		return types.Job{}, false
-	}
-	i := slices.IndexFunc(live, func(u types.Job) bool { return u.ID == id })
-	if i < 0 {
-		return types.Job{}, false
-	}
-	return live[i], true
 }
 
 // findOwner finds the live lease whose write paths cover rel, skipping the id in exclude.

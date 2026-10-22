@@ -977,6 +977,31 @@ func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 	}
 }
 
+// A holder that filed its result and was sent back still holds its boundary: exited is
+// live, so its write outside its paths is denied whether or not another job is editing.
+func TestGradeLeasedWriteHoldsAnExitedHolderToItsPaths(t *testing.T) {
+	registered := func(j types.Job) types.Job {
+		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
+		return j
+	}
+	holder := registered(types.Job{ID: "holder", Criteria: "land the store", WritePaths: []string{"internal/job/**"}, State: types.StateExited})
+	sibling := registered(types.Job{ID: "sibling", Criteria: "unrelated", WritePaths: []string{"docs/**"}, State: types.StateRunning})
+	for name, rows := range map[string][]types.Job{
+		"alone":            {holder},
+		"beside a sibling": {holder, sibling},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, root := fleetFixture(t, rows...)
+			got := gradeLeasedWrite(ctx, Dependencies{}, "holder", filepath.Join(root, "cmd/magus/main.go"))
+			require.Equal(t, "deny", got.Decision, got.Reason)
+			assert.Contains(t, got.Reason, "holder")
+
+			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "holder", filepath.Join(root, "internal/job/store.go")).Decision,
+				"its own paths stay its to write")
+		})
+	}
+}
+
 // A taken lease past its deadline is ended by the read that grades its write, which then
 // has no boundary left to deny on; one nobody took stays live, and its writes are denied.
 func TestGradeLeasedWriteUnderAnOverdueLease(t *testing.T) {

@@ -165,6 +165,28 @@ func TestExecReadsTheBaseFromTheCheckout(t *testing.T) {
 	assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict, "the clean checkpoint and the dirty tree share only the revision")
 }
 
+// A holder sent back after `job exit` takes the job again where it was taken, and the row
+// runs: an exited row claims none of its paths against another job, so leaving it exited
+// would let a sibling fork over the paths it is editing.
+func TestStoreExecReopensAnExitedRowInItsOwnCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	repo := execRepo(t)
+	s := tempStore(t, repo.Root())
+	seed(t, s, types.Job{ID: "u1", Checkpoint: repo.Head(), State: types.StateDeclared})
+	taken, err := s.Exec(ctx, "u1")
+	require.NoError(t, err)
+	_, err = s.Update(ctx, "u1", func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+
+	got, err := s.Exec(ctx, "u1")
+	require.NoError(t, err)
+	want := stamped(taken, got)
+	want.Registered = got.Registered
+	assert.Equal(t, want, got, "the row runs again in the checkout it was taken in")
+}
+
 // A worker registering an id nobody declared has been handed the wrong id. Every other
 // write here creates the row it names, so the message has to say where the real ids are.
 func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
