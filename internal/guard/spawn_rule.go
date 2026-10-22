@@ -235,15 +235,8 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		if row.Validated == 0 {
 			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
 		}
-		if rows, err := leaseRows(ctx, at); err == nil {
-			var models []types.ModelPricing
-			if at.models != nil {
-				models = at.models()
-			}
-			ttl := resumeTTL(accountAt(at.workspace))
-			if w, warm := findWarmWorker(facts, rows, row, models, ttl.ttl, time.Now()); warm {
-				return refused(denyRuleSpawnWarmWorker, denySpawnWarmWorker(row, w, ttl)), ""
-			}
+		if d, warm := denyWarmSpawn(ctx, at, facts, row); warm {
+			return refused(denyRuleSpawnWarmWorker, d), ""
 		}
 	}
 	if spawnWaitsFires(env.Spawn.Description, env.Value) {

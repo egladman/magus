@@ -2,6 +2,7 @@ package guard
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -54,6 +55,25 @@ type warmWorker struct {
 	link  string
 	idle  time.Duration
 	left  time.Duration
+}
+
+// denyWarmSpawn refuses row's fresh spawn while a worker that wrote its code is warm.
+// False when the lease rows cannot be read or no such worker is warm.
+func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.Job) (denial, bool) {
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return denial{}, false
+	}
+	var models []types.ModelPricing
+	if at.models != nil {
+		models = at.models()
+	}
+	ttl := resumeTTL(accountAt(at.workspace))
+	w, warm := findWarmWorker(facts, rows, row, models, ttl.ttl, time.Now())
+	if !warm {
+		return denial{}, false
+	}
+	return denySpawnWarmWorker(row, w, ttl), true
 }
 
 // findWarmWorker is the warm worker row continues: a spawn record of facts whose job ended
