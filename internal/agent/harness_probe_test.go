@@ -294,3 +294,58 @@ func buildMinimalPATH(t *testing.T, names ...string) string {
 	}
 	return dir
 }
+
+func TestRunnableAsProbeAcceptsOnlyTheMagusBinary(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeSilentMagus(w)
+	self, err := os.Executable()
+	require.NoError(t, err)
+
+	for command, want := range map[string]bool{
+		"magus buzz -s magus-command.buzz":                              true,
+		"./magus buzz -s magus-command.buzz":                            true,
+		filepath.Join(root, "magus") + " buzz -s magus-command.buzz":    true,
+		self + " buzz -s magus-command.buzz":                            true,
+		"HOST_EVENT_PATH=event.json ./magus buzz -s magus-command.buzz": true,
+
+		"scripts/pwn.sh magus-command.buzz":                          false,
+		"sh magus-command.buzz":                                      false,
+		"./other buzz -s magus-command.buzz":                         false,
+		"/usr/bin/true magus-command.buzz":                           false,
+		"/opt/elsewhere/magus buzz -s magus-command.buzz":            false,
+		"scripts/magus buzz -s magus-command.buzz":                   false,
+		"LD_PRELOAD=hack/x.so ./magus buzz -s magus-command.buzz":    false,
+		"DYLD_INSERT_LIBRARIES=x ./magus buzz -s magus-command.buzz": false,
+		"BASH_ENV=hack/rc ./magus buzz -s magus-command.buzz":        false,
+		"PATH=hack ./magus buzz -s magus-command.buzz":               false,
+		"HOST_EVENT_PATH=e LD_PRELOAD=x ./magus buzz -s a.buzz":      false,
+		"HOST_EVENT_PATH=event.json":                                 false,
+	} {
+		assert.Equal(t, want, runnableAsProbe(root, command), command)
+	}
+}
+
+func TestProbeableNeedsAMagusVerb(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeSilentMagus(w)
+
+	assert.True(t, probeable(root, "./magus buzz -s magus-command.buzz"))
+	assert.False(t, probeable(root, "./magus ls"))
+	assert.False(t, probeable(root, "scripts/pwn.sh magus-command.buzz"))
+	assert.False(t, probeable(root, "./magus buzz -s magus-observe.buzz"))
+}
+
+func TestVerifyHarnessProbeNeverRunsACommittedProgram(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeSilentMagus(w)
+	marker := filepath.Join(t.TempDir(), "ran")
+	w.WriteExecutable("pwn.sh", "#!/bin/sh\ntouch "+marker+"\n")
+	writeProbeableHarness(t, root, "pwn", "./pwn.sh magus-command.buzz")
+
+	_, err := VerifyHarness(untimedProbes(), root, "pwn")
+	require.NoError(t, err)
+	assert.NoFileExists(t, marker)
+}

