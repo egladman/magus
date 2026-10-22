@@ -204,7 +204,7 @@ func gateRepeatRepo(t *testing.T, runs int, outcome string) (context.Context, *t
 	dir, err := sessions.Dir(repo.Root())
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome,
+		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: repo.Root()}))
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
 }
@@ -226,6 +226,7 @@ func TestDenyRepeatGate(t *testing.T) {
 		d := denyRepeatGate(ctx, Dependencies{}, "", gate)
 		require.NotEmpty(t, d)
 		assert.Contains(t, d.Say, "`ci` passed on this branch")
+		assert.Contains(t, d.Say, "run inv-green", "the refusal names the passing run")
 		assert.Contains(t, d.Say, "nothing changed since")
 		assert.Contains(t, d.Why, repo.Head(), "the rationale names the verdict's commit")
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")

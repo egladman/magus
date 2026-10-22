@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"os"
 	"path"
@@ -303,6 +304,12 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	cover = gateVerdictAt(at.workspace, commit)
 	if cover == gateUnknown {
 		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
+	}
+	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
+	if cover != gatePassed {
+		if _, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), commit); replayed {
+			cover = gatePassed
+		}
 	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -98,12 +99,21 @@ func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) d
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago and nothing changed since: gate after your next change.",
-			types.TargetCI, time.Since(green.At).Round(time.Second)),
-		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s, covers the tree as it stands: no file that differs from that commit was written after it. "+
+		Say: fmt.Sprintf("magus workspace: `%s` passed on this branch %s ago (%s) and nothing changed since: gate after your next change.",
+			types.TargetCI, time.Since(green.At).Round(time.Second), gateRunRef(green)),
+		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s (%s), covers the tree as it stands: no file that differs from that commit was written after it. "+
 			"A gate over a tree it already passed only repeats the pass. %s.",
-			runs, gateRepeatWindow, green.Commit, gateCadence),
+			runs, gateRepeatWindow, green.Commit, gateRunRef(green), gateCadence),
 	}
+}
+
+// gateRunRef names the run behind a gate verdict, the ref `magus query output` reads. A
+// verdict recorded without one says so rather than naming nothing.
+func gateRunRef(rec sessions.GateRecord) string {
+	if rec.Inv == "" {
+		return "run ref unrecorded"
+	}
+	return "run " + rec.Inv
 }
 
 // gateRepeatDenyRuns is how many gate runs inside the window refuse the next over an
@@ -147,6 +157,52 @@ func greenGateUnchanged(ctx context.Context, deps Dependencies, workspace string
 		}
 	}
 	return green, true
+}
+
+// gateReplayScanLimit bounds how many distinct commits with a passing gate are asked for
+// their tree, newest first: one VCS read each, on a push the gate has not covered by commit.
+const gateReplayScanLimit = 64
+
+// gateReplayAt is the newest passing gate recorded at another commit whose tree equals
+// commit's, in the checkout dir. A replayed branch holds the files a gate already passed
+// under new commit ids, so the gate covers it. False when either tree cannot be read:
+// the push then stays graded by commit alone.
+func gateReplayAt(ctx context.Context, workspace, dir, commit string) (sessions.GateRecord, bool) {
+	if workspace == "" || dir == "" || !matchableRevision(commit) {
+		return sessions.GateRecord{}, false
+	}
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return sessions.GateRecord{}, false
+	}
+	tree, err := res.VCS.TreeID(ctx, dir, commit)
+	if err != nil || tree == "" {
+		return sessions.GateRecord{}, false
+	}
+	store, err := sessions.Dir(workspace)
+	if err != nil {
+		return sessions.GateRecord{}, false
+	}
+	fold, err := sessions.ReadGateResults(store)
+	if err != nil {
+		return sessions.GateRecord{}, false
+	}
+	seen := map[string]bool{}
+	for i := len(fold.Records) - 1; i >= 0 && len(seen) < gateReplayScanLimit; i-- {
+		rec := fold.Records[i]
+		var g sessions.GateResult
+		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+			continue
+		}
+		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || g.Commit == "" || seen[g.Commit] {
+			continue
+		}
+		seen[g.Commit] = true
+		if id, err := res.VCS.TreeID(ctx, dir, g.Commit); err == nil && id == tree {
+			return sessions.GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
+		}
+	}
+	return sessions.GateRecord{}, false
 }
 
 // workspaceRunsDir is where this workspace logs its invocations, or "" when there is none
