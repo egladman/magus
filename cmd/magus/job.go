@@ -913,7 +913,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
-		printJobWorktree(os.Stdout, row)
+		printJobWorktree(os.Stdout, row, "")
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -1258,10 +1258,17 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	var worktree types.JobWorktree
 	made := false
+	// bootstrap is the build the job's checkout needs when the forker's ./magus was built at
+	// another commit and so was not placed there.
+	bootstrap := ""
 	if row.Checkout != "" {
 		exe, _ := os.Executable()
-		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, job.MirroredBinary(exe, root)); err != nil {
+		mirrored := job.MirroredBinary(exe, root)
+		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
+		}
+		if mirrored != "" && worktree.Binary == "" {
+			bootstrap = job.CheckoutBootstrap(worktree.Root)
 		}
 		declare := merge
 		merge = func(u *types.Job) {
@@ -1324,7 +1331,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
 		}
-		printJobWorktree(os.Stdout, stored)
+		printJobWorktree(os.Stdout, stored, bootstrap)
 		printClaimNotes(os.Stdout, job.ForkNotes(ctx, store, plan, stored))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
@@ -1805,7 +1812,7 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 	}
 	changed, err := store.EndCheckouts(ctx, written, ended...)
 	for _, row := range changed {
-		printJobWorktree(out, row)
+		printJobWorktree(out, row, "")
 	}
 	if err != nil {
 		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
@@ -1814,8 +1821,8 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 }
 
 // printJobWorktree says where the checkout a job owns stands: made for it, removed, or kept
-// and why.
-func printJobWorktree(out io.Writer, row types.Job) {
+// and why. bootstrap, when not "", is the build a checkout made with no binary needs next.
+func printJobWorktree(out io.Writer, row types.Job, bootstrap string) {
 	wt := row.Worktree
 	switch {
 	case wt == nil:
@@ -1826,9 +1833,12 @@ func printJobWorktree(out io.Writer, row types.Job) {
 	default:
 		fmt.Fprintf(out, "checkout %s: made for job %s at %.12s; its holder takes it there with `%s`, and magus removes it once the job ends unless it holds work\n",
 			wt.Root, row.ID, wt.Base, hint.JobExec.With(row.ID))
-		if wt.Binary != "" {
+		switch {
+		case wt.Binary != "":
 			fmt.Fprintf(out, "  placed %s, the magus the forking checkout runs\n", wt.Binary)
-		} else {
+		case bootstrap != "":
+			fmt.Fprintf(out, "  placed no magus: the forking checkout's was built at another commit, so its guard could not load this one\n  next: `%s` builds one at %.12s\n", bootstrap, wt.Base)
+		default:
 			fmt.Fprintln(out, "  placed no magus: the forking checkout runs magus from PATH, and so does the job")
 		}
 	}

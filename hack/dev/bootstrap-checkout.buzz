@@ -1,0 +1,115 @@
+// Cost: two Go compiles of magus in the checkout, a minute or more on a cold build cache.
+//
+// Builds ./magus in a job's checkout at the checkout's own revision, for a fork made at a
+// checkpoint no built binary matches. It runs the go-run bootstrap inside the checkout, so
+// the binary carries the guard rules and spells of that revision, then checks that
+// `./magus version` names the checkout's HEAD.
+//
+//	magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout <dir>
+namespace bootstrapcheckout;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "proc";
+import "std";
+import "vcs";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout <dir>";
+final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}";
+
+// bootstrapArgv is ward.BootstrapCommand as argv for env, which sets the experiment
+// internal/json needs without a shell.
+export fun bootstrapArgv() > [str] {
+    return ["GOEXPERIMENT=jsonv2", "go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."];
+}
+
+// dirtyRefusal is why a checkout holding uncommitted changes gets no binary, "" when it
+// holds none: the binary would carry changes its HEAD does not.
+export fun dirtyRefusal(dir: str, porcelain: str) > str {
+    final changed = mut [<str>];
+    foreach (line in porcelain.split("\n")) {
+        if (line.trim() != "") {
+            changed.append(line.trim());
+        }
+    }
+    if (changed.len() == 0) {
+        return "";
+    }
+    return "bootstrap-checkout: {dir} holds {changed.len()} uncommitted change(s) ({changed.join(", ")}), which a binary stamped with its HEAD would carry unrecorded: commit or drop them first";
+}
+
+// versionMismatch is why the built binary is not the checkout's, "" when its commit is head
+// and nothing uncommitted went into it.
+export fun versionMismatch(versionJSON: str, head: str) > str !> any {
+    final j = json\parse(versionJSON);
+    final commit: str = j["commit"] ?? "";
+    final version: str = j["version"] ?? "";
+    if (commit == "" or !(commit.startsWith(head) or head.startsWith(commit))) {
+        return "bootstrap-checkout: the built ./magus names commit {commit}, not the checkout's HEAD {head}";
+    }
+    if (version.endsWith("-dirty")) {
+        return "bootstrap-checkout: the built ./magus is {version}, built from uncommitted changes";
+    }
+    return "";
+}
+
+fun build(dir: str) > str !> any {
+    if (!fs\isDir(dir)) {
+        throw "bootstrap-checkout: {dir} is not a directory\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "bootstrap-checkout: builds in git checkouts, and this one is {vcs\name()}";
+    }
+    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: {"dir": dir, "quiet": true}).stdout);
+    if (refused != "") {
+        throw refused;
+    }
+    final head = vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+    proc\exec("env", args: bootstrapArgv(), dir: dir);
+    final bin = fs\join(dir, name: "magus");
+    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: {"quiet": true}).stdout, head: head);
+    if (mismatch != "") {
+        throw mismatch;
+    }
+    return "placed {bin}, built at {head}";
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--checkout"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "bootstrap-checkout: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final dir = parsed.values["--checkout"] ?? "";
+    if (dir == "") {
+        throw "bootstrap-checkout: --checkout is required\n{USAGE}";
+    }
+    std\print(build(dir));
+}
+
+test "the build is the go-run bootstrap, run through env rather than a shell" {
+    assert\equal(bootstrapArgv().join(" "), want: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .", message: "argv");
+}
+
+test "a clean checkout is not refused" {
+    assert\equal(dirtyRefusal("/w/c", porcelain: "\n"), want: "", message: "clean");
+}
+
+test "a dirty checkout is refused, naming each change" {
+    final why = dirtyRefusal("/w/c", porcelain: " M a.go\n?? b.go\n");
+    assert\equal(why.indexOf("/w/c holds 2 uncommitted change(s) (M a.go, ?? b.go)") != null, want: true, message: why);
+}
+
+test "the built binary must name the checkout's HEAD" {
+    assert\equal(versionMismatch(`{"commit": "abc123", "version": "v0.5.0-1-gabc123"}`, head: "abc123") catch "x", want: "", message: "match");
+    final other = versionMismatch(`{"commit": "def456", "version": "v0.5.0"}`, head: "abc123") catch "x";
+    assert\equal(other.indexOf("names commit def456") != null, want: true, message: other);
+    final dirty = versionMismatch(`{"commit": "abc123", "version": "v0.5.0-dirty"}`, head: "abc123") catch "x";
+    assert\equal(dirty.indexOf("uncommitted") != null, want: true, message: dirty);
+}

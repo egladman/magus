@@ -41,11 +41,12 @@ func MirroredBinary(exe, root string) string {
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
 // is placed only in a checkout at the commit it was built at: anywhere else its guard cannot
-// load the tree and the job could change nothing. made is false when the job already owns
-// the checkout at dir, which is returned as it stands. A job owning another standing
-// checkout, a checkpoint carrying uncommitted changes the new checkout would not hold, a
-// binary built elsewhere or from uncommitted changes, and a version control that cannot make
-// one are refused.
+// load the tree, so the checkout is made with no binary and wt.Binary stays "" for
+// [CheckoutBootstrap] to fill. made is false when the job already owns the checkout at dir,
+// which is returned as it stands. A job owning another standing checkout, a checkpoint
+// carrying uncommitted changes the new checkout would not hold, a binary whose commit is
+// unrecorded, unknown to the repository or carries uncommitted changes, and a version
+// control that cannot make one are refused.
 //
 // Nothing is written to the store: the caller records the result once the fork lands, and
 // discards it with [Store.DiscardWorktree] when the fork is refused.
@@ -104,9 +105,10 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		if err != nil {
 			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built at %s, which %s cannot find: %w", id, binary, build.Commit, drv.Name(), err)
 		}
+		// Built elsewhere, its guard could not load the checkout; CheckoutBootstrap builds
+		// one there instead.
 		if built.ID != base.ID {
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would start at %s, and %s, which it places there, was built at %s, so the job could change nothing there until a binary built at %s is placed: fork at `--checkpoint %s`, or rebuild ./magus at %s first",
-				id, base.ID, binary, built.ID, base.ID, built.ID, base.ID)
+			binary = ""
 		}
 	}
 	if err := drv.CreateCheckout(ctx, source, dir, base.ID); err != nil {
@@ -121,6 +123,15 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		wt.Binary = placed
 	}
 	return wt, true, nil
+}
+
+// CheckoutBootstrapScript builds ./magus in a checkout at the checkout's own revision.
+const CheckoutBootstrapScript = "hack/dev/bootstrap-checkout.buzz"
+
+// CheckoutBootstrap is the command that builds ./magus in dir, a checkout ForkWorktree made
+// at a commit no placed binary was built at.
+func CheckoutBootstrap(dir string) string {
+	return "./magus buzz " + CheckoutBootstrapScript + " -- --checkout " + dir
 }
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then
