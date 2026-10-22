@@ -46,6 +46,44 @@ export fun logArtifacts(listing: str) > [str] !> any {
     return names;
 }
 
+export final TAIL_LINES = 80;
+
+export object FailedJob {
+    id: int,
+    name: str,
+}
+
+// failedJobs lists the run's jobs that concluded in failure, as `gh run view --json jobs` prints them.
+export fun failedJobs(listing: str) > [FailedJob] !> any {
+    final jobs = mut [<FailedJob>];
+    foreach (j in serialize\jsonDecode(listing).q("jobs").listValue()) {
+        if (j.q("conclusion").stringValue() == "failure") {
+            jobs.append(FailedJob{ id = j.q("databaseId").integerValue(), name = j.q("name").stringValue() });
+        }
+    }
+    return jobs;
+}
+
+// tail keeps the last count lines of text.
+export fun tail(text: str, count: int) > str {
+    final lines = text.trim().split("\n");
+    if (lines.len() <= count) {
+        return lines.join("\n");
+    }
+    return lines.sub(lines.len() - count, len: count).join("\n");
+}
+
+// fallbackLogs reads each failed job's `gh run view --log-failed` tail, for a run whose
+// failed jobs wrote no magus-logs artifact; gh is the call to the gh CLI.
+export fun fallbackLogs(run: str, gh: fun (args: [str]) > str !> any) > str !> any {
+    final report = mut [<str>];
+    foreach (job in failedJobs(gh(["run", "view", run, "--json", "jobs"]))) {
+        final log = gh(["run", "view", "--job", "{job.id}", "--log-failed"]);
+        report.append("== {job.name} (job {job.id}): last {TAIL_LINES} lines of gh run view --job {job.id} --log-failed\n{tail(log, count: TAIL_LINES)}");
+    }
+    return report.join("\n");
+}
+
 fun note(line: str) > void {
     io\stderr.write(line + "\n") catch void;
 }
@@ -79,7 +117,13 @@ export fun main(args: [str]) > void !> any {
     }
     final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
     if (names.len() == 0) {
-        note("run {run} has no {ARTIFACT_PREFIX}* artifact: no shard failed, or it has not finished");
+        final fallback = fallbackLogs(run, gh: fun (ghArgs: [str]) > str !> any => capture("gh", args: ghArgs));
+        if (fallback == "") {
+            note("run {run} has no {ARTIFACT_PREFIX}* artifact and no failed job: nothing failed, or it has not finished");
+            return;
+        }
+        note("run {run} has no {ARTIFACT_PREFIX}* artifact: fell back to the failed jobs' gh logs");
+        io\stdout.write(fallback + "\n") catch void;
         return;
     }
     final dir = fs\tempDir("show-failures-");
@@ -99,6 +143,29 @@ final LISTING = "\{\"artifacts\": [\{\"name\": \"magus-logs-01\", \"expired\": f
 
 test "only unexpired magus-logs artifacts are downloaded" {
     assert\equal(logArtifacts(LISTING) catch [<str>], want: ["magus-logs-01"], message: "names");
+}
+
+final JOBS = "\{\"jobs\": [\{\"databaseId\": 11, \"name\": \"doctor\", \"conclusion\": \"failure\"}, \{\"databaseId\": 12, \"name\": \"lint\", \"conclusion\": \"success\"}]}";
+
+test "a failed plain job falls back to its gh log tail" {
+    final seen = mut [<str>];
+    final stub = fun (ghArgs: [str]) > str !> any {
+        seen.append(ghArgs.join(" "));
+        if (ghArgs.indexOf("--json") != null) {
+            return JOBS;
+        }
+        return "setup\nerror one\nerror two";
+    };
+    final report = fallbackLogs("99", gh: stub) catch "";
+    assert\equal(report.indexOf("doctor (job 11)") != null, want: true, message: "names the job");
+    assert\equal(report.indexOf("error two") != null, want: true, message: "carries the log");
+    assert\equal(report.indexOf("lint") == null, want: true, message: "passing job skipped");
+    assert\equal(seen[1], want: "run view --job 11 --log-failed", message: "log call");
+}
+
+test "tail keeps the last lines" {
+    assert\equal(tail("a\nb\nc\nd", count: 2), want: "c\nd", message: "last two");
+    assert\equal(tail("a\nb", count: 5), want: "a\nb", message: "short log whole");
 }
 
 test "the run id must be a number" {
