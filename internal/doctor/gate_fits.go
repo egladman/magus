@@ -10,23 +10,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// GateClaims sizes targets' machine claims the way admission does, from the measured
-// runs of a ci shape. The sizer lives with the run path, outside this package, so the
-// CLI hands it in (WithGateClaims).
-type GateClaims func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error)
-
 type gateClaimsKey struct{}
 
 type gateSizing struct {
-	claims      GateClaims
+	claims      func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error)
 	budgetMB    int
 	budgetSlots int
 }
 
 // WithGateClaims returns ctx carrying the admission sizer and this machine's whole
-// build budget for the gate-fits check. A Run whose ctx carries none reports that
-// check skipped.
-func WithGateClaims(ctx context.Context, claims GateClaims, budgetMB, budgetSlots int) context.Context {
+// build budget for the gate-fits check. claims sizes targets' machine claims the way
+// admission does, from the measured runs of a ci shape; it lives with the run path,
+// outside this package, so the CLI hands it in. A Run whose ctx carries none reports
+// that check skipped.
+func WithGateClaims(ctx context.Context, claims func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error), budgetMB, budgetSlots int) context.Context {
 	return context.WithValue(ctx, gateClaimsKey{}, gateSizing{claims: claims, budgetMB: budgetMB, budgetSlots: budgetSlots})
 }
 
