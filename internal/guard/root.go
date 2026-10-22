@@ -213,7 +213,7 @@ var mergeJobBranchesScript = referenceScript{
 // integrationScriptNote names the merge script after a merge or cherry-pick, in the
 // finding's first line so the once-per-session advice keeps it.
 func integrationScriptNote(c mainCall) string {
-	if c.work != delegableIntegrate || !(strings.Contains(c.line, "git merge") || strings.Contains(c.line, "git cherry-pick")) {
+	if c.work != delegableIntegrate || (!strings.Contains(c.line, "git merge") && !strings.Contains(c.line, "git cherry-pick")) {
 		return ""
 	}
 	note := mergeJobBranchesScript.note(c.root)
