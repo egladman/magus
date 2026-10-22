@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -190,3 +192,26 @@ func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
 // in-process test: initCmd reaches loadMagus, which memoizes its root for the life of
 // the process and panics when a later call names a different one, so the assertion
 // passes alone and panics in a full run. Each script case is its own subprocess.
+
+func TestInstallInitHooksWritesSettleRefreshAndDriftHooks(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
+	installer, ok := vcs.Installer("git")
+	require.True(t, ok)
+
+	require.NoError(t, installInitHooks(t.Context(), installer, "git", dir))
+
+	hooks := filepath.Join(dir, ".git", "hooks")
+	for file, sections := range map[string][]string{
+		"pre-merge-commit": {"# BEGIN magus-regenerate"},
+		"post-checkout":    {"# BEGIN magus-refresh"},
+		"post-commit":      {"# BEGIN magus-regenerate", "# BEGIN magus-drift-notice"},
+		"pre-push":         {"# BEGIN magus-drift-notice"},
+	} {
+		data, err := os.ReadFile(filepath.Join(hooks, file))
+		require.NoError(t, err, file)
+		for _, want := range sections {
+			assert.Contains(t, string(data), want, file)
+		}
+	}
+}

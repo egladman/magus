@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
@@ -350,16 +351,8 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
 		return fmt.Errorf("init: install %s merge driver: %w", name, err)
 	}
-	// The hooks are the driver's second half, and this is the one place that writes
-	// them (see settle.EnsureDriver for why a workspace load does not).
-	if hooks, ok := installer.(types.RegenHookInstaller); ok {
-		installed, err := hooks.InstallRegenHook(ctx, m.Root(), hint.VCSResolve.With("--hook"))
-		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
-			return fmt.Errorf("init: install %s settle hooks: %w", name, err)
-		}
-		if len(installed) > 0 {
-			slog.With(attr.Component("init")).InfoContext(ctx, "wrote the settle hooks; a merge now regenerates what it changed", slog.String("hooks", strings.Join(installed, ", ")))
-		}
+	if err := installInitHooks(ctx, installer, name, m.Root()); err != nil {
+		return err
 	}
 
 	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
@@ -370,6 +363,44 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 		slog.With(attr.Component("init")).InfoContext(ctx, "wired hg merge driver (.hg/hgrc)", n)
 	default:
 		slog.With(attr.Component("init")).InfoContext(ctx, "wired merge driver", slog.String("vcs", name), n)
+	}
+	return nil
+}
+
+// installInitHooks writes the git-style hooks `magus init` owns: the settle hooks, which are
+// the merge driver's second half (see settle.EnsureDriver for why a workspace load does not
+// write them), and the refresh and drift hooks. Server start only refreshes sections that
+// already exist, so this is where a repository first gets them.
+func installInitHooks(ctx context.Context, installer any, name, root string) error {
+	log := slog.With(attr.Component("init"))
+	type install struct {
+		kind, done string
+		run        func() ([]string, error)
+	}
+	var steps []install
+	if h, ok := installer.(types.RegenHookInstaller); ok {
+		steps = append(steps, install{"settle", "a merge now regenerates what it changed", func() ([]string, error) {
+			return h.InstallRegenHook(ctx, root, hint.VCSResolve.With("--hook"))
+		}})
+	}
+	if h, ok := installer.(types.RefreshHookInstaller); ok {
+		steps = append(steps, install{"refresh", "history changes now reconcile the graph", func() ([]string, error) {
+			return h.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+		}})
+	}
+	if h, ok := installer.(types.DriftHookInstaller); ok {
+		steps = append(steps, install{"drift", "a commit that leaves generated output stale is now noticed", func() ([]string, error) {
+			return h.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+		}})
+	}
+	for _, s := range steps {
+		installed, err := s.run()
+		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
+			return fmt.Errorf("init: install %s %s hooks: %w", name, s.kind, err)
+		}
+		if len(installed) > 0 {
+			log.InfoContext(ctx, "wrote the "+s.kind+" hooks; "+s.done, slog.String("hooks", strings.Join(installed, ", ")))
+		}
 	}
 	return nil
 }
