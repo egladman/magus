@@ -194,6 +194,9 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git -C . checkout main",
 		"git --help reset",
 		"git -C . clean -n",
+		// Paths magus listed are already classified.
+		"magus vcs ls-files -o name | git add --pathspec-from-file=-",
+		"./magus vcs ls-files --include-generated internal/guard -o name | git -C . add --pathspec-from-file=-",
 		// Prose naming an alias is not a git option.
 		"echo 'git -c alias.x=reset x'",
 	} {

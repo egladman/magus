@@ -235,6 +235,9 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 			return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 		case "add":
 			// The stage-everything forms already denied in the first pass.
+			if stagesListedPaths(c, cmds) {
+				continue
+			}
 			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 		case "commit":
 			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
@@ -655,6 +658,18 @@ func isWholeTreePathspec(args []string) bool {
 		args = args[i+1:]
 	}
 	return slices.Contains(args, ".")
+}
+
+// stagesListedPaths reports a `git add` reading its paths from a pathspec file on a line
+// where magus vcs ls-files runs: the list was already classified, so the stage advisory
+// has nothing left to say.
+func stagesListedPaths(add hint.Invocation, cmds []hint.Invocation) bool {
+	fromFile := slices.ContainsFunc(add.Args, func(a string) bool {
+		return a == "--pathspec-from-file" || strings.HasPrefix(a, "--pathspec-from-file=")
+	})
+	return fromFile && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		return isMagusInvocation(c) && hint.VCSLsFiles.MatchedBy(magusSubcommandWords(c.Args))
+	})
 }
 
 // isStageAllOperand reports the stage-everything spellings of `git add`.
