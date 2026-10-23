@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,7 +205,7 @@ func TestHolderWidensItsOwnJobWithAProof(t *testing.T) {
 		{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
 		{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
 	}
-	stored, err := boundStore(loc, row.ID).Widen(t.Context(), row.ID, reqs, facts, DefaultWideningLimit(), false)
+	stored, err := boundStore(loc, row.ID).Widen(t.Context(), row.ID, reqs, facts, config.Defaults().Jobs, false)
 	require.NoError(t, err)
 
 	want := row.Clone()
@@ -248,7 +249,7 @@ func TestHolderWidensAPathItsExitReleased(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	stored, err := held.Widen(t.Context(), row.ID, []types.JobWidenRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, DefaultWideningLimit(), false)
+	stored, err := held.Widen(t.Context(), row.ID, []types.JobWidenRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, config.Defaults().Jobs, false)
 	require.NoError(t, err)
 	assert.Contains(t, stored.WritePaths, "internal/commands/registry.go")
 	assert.Equal(t, types.StateExited, stored.State)
@@ -261,8 +262,8 @@ func TestWidenRefusals(t *testing.T) {
 	owner := types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"internal/guard/shell.go"}}
 	for name, tc := range map[string]struct {
 		actor   string
+		cap     int
 		reqs    []types.JobWidenRequest
-		limit   wideningLimit
 		refused string
 	}{
 		"a holder widens nothing but its own job": {
@@ -282,23 +283,29 @@ func TestWidenRefusals(t *testing.T) {
 			refused: "no package the job changed",
 		},
 		"past the cap": {
-			actor: "cli-ls-files", limit: wideningLimit{Max: 1, Source: "jobs.max_proved_widenings in magus.yaml"},
+			actor: "cli-ls-files", cap: 1,
 			reqs: []types.JobWidenRequest{
 				{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
 				{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
 			},
-			refused: "past jobs.max_proved_widenings, 1 (jobs.max_proved_widenings in magus.yaml)",
+			refused: "past max_widenings, 1 (max_widenings on job cli-ls-files)",
+		},
+		"a cap past the ceiling": {
+			actor: "cli-ls-files", cap: 11,
+			reqs:    []types.JobWidenRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
+			refused: "11 widenings (max_widenings on job cli-ls-files) is past the ceiling of 10 (jobs.max_widenings_ceiling in magus.yaml)",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			loc, row, facts := widenStore(t, owner)
-			limit := tc.limit
-			if limit.Max == 0 {
-				limit = DefaultWideningLimit()
+			if tc.cap > 0 {
+				_, err := NewStore(loc).Update(t.Context(), row.ID, func(u *types.Job) { u.MaxWidenings = tc.cap })
+				require.NoError(t, err)
+				row.MaxWidenings = tc.cap
 			}
-			_, err := boundStore(loc, tc.actor).Widen(t.Context(), row.ID, tc.reqs, facts, limit, false)
+			_, err := boundStore(loc, tc.actor).Widen(t.Context(), row.ID, tc.reqs, facts, config.Defaults().Jobs, false)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.refused)
 
@@ -310,12 +317,18 @@ func TestWidenRefusals(t *testing.T) {
 	}
 }
 
-func TestDefaultWideningLimitSaysWhereItCameFrom(t *testing.T) {
+func TestWideningLimitSaysWhereItCameFrom(t *testing.T) {
 	t.Parallel()
 
-	limit := DefaultWideningLimit()
-	assert.Equal(t, 5, limit.Max)
-	assert.Contains(t, limit.Source, "default")
+	jobs := config.Defaults().Jobs
+	defaulted, err := WideningLimit(types.Job{ID: "a"}, jobs)
+	require.NoError(t, err)
+	assert.Equal(t, 3, defaulted.Max)
+	assert.Contains(t, defaulted.Source, "default")
+
+	named, err := WideningLimit(types.Job{ID: "a", MaxWidenings: 7}, jobs)
+	require.NoError(t, err)
+	assert.Equal(t, wideningLimit{Max: 7, Source: "max_widenings on job a"}, named)
 }
 
 // The line the guard serves is the record apply decodes, bounded so a refusal never grows
@@ -342,4 +355,25 @@ func TestWideningCommandIsOneApplyLine(t *testing.T) {
 	long := []types.JobWidenRequest{{Path: strings.Repeat("a/", maxWideningCommand) + "x.go", Because: "released"}}
 	_, ok = WideningCommand("cli-ls-files", long)
 	assert.False(t, ok, "a line past the budget is not served")
+}
+
+func TestForkRefusesAWideningCapPastTheCeiling(t *testing.T) {
+	t.Parallel()
+
+	jobs := config.Defaults().Jobs
+	assert.Empty(t, wideningCeilingProblems(types.Job{ID: "a", MaxWidenings: 10}, jobs))
+	assert.Empty(t, wideningCeilingProblems(types.Job{ID: "a"}, jobs))
+
+	err := wideningCeilingProblems(types.Job{ID: "a", MaxWidenings: 11}, jobs).Err()
+	require.ErrorIs(t, err, types.JobForkLimitExceeded)
+	assert.Contains(t, err.Error(), "11 widenings (max_widenings on job a)")
+	assert.Contains(t, err.Error(), "ceiling of 10 (jobs.max_widenings_ceiling in magus.yaml)")
+}
+
+func TestForkAdvisesASmallWideningCap(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, wideningCapAdvice(types.Job{ID: "a", MaxWidenings: AdvisedMaxWidenings}))
+	assert.Empty(t, wideningCapAdvice(types.Job{ID: "a"}))
+	assert.Contains(t, wideningCapAdvice(types.Job{ID: "a", MaxWidenings: 8}), "a asks for 8 widenings")
 }

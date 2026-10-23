@@ -380,6 +380,7 @@ func changedFields(prev, next types.Job) []string {
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)
+	add("max_widenings", prev.MaxWidenings != next.MaxWidenings)
 	add("reported_base", prev.ReportedBase != next.ReportedBase)
 	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
 	// that extends its own bound has none.

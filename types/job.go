@@ -771,6 +771,9 @@ type Job struct {
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does; zero is no cap. It
 	// is checked only when the row is forked again: magus never retries a job on its own.
 	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// MaxWidenings caps how many proved widenings one attempt takes, chosen by whoever declares the
+	// job; zero takes the default. A fork raising it past jobs.max_widenings_ceiling is refused.
+	MaxWidenings int `json:"max_widenings,omitempty" yaml:"max_widenings,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -1100,6 +1103,9 @@ type Declaration struct {
 	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
 	// is no cap. See [Job.MaxAttempts].
 	MaxAttempts int `json:"max_attempts,omitempty"`
+	// MaxWidenings caps how many proved widenings one attempt takes; zero takes the default. See
+	// [Job.MaxWidenings].
+	MaxWidenings int `json:"max_widenings,omitempty"`
 	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
 	Waivers []JobWaiver `json:"waivers,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
@@ -1274,6 +1280,9 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
+	}
+	if r.MaxWidenings < 0 {
+		invalid("max_widenings", fmt.Sprintf("max_widenings is %d, and it is a count of widenings", r.MaxWidenings), "use a positive count, or 0 for the default")
 	}
 	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
 		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", r.Checkout),
@@ -1682,6 +1691,7 @@ func (r Declaration) Apply(u *Job) {
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
+	u.MaxWidenings = r.MaxWidenings
 	u.Waivers = slices.Clone(r.Waivers)
 }
 

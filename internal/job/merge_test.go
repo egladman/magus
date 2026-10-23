@@ -155,3 +155,16 @@ func TestPutSetsTheBriefFormat(t *testing.T) {
 	_, err := PutMerge(types.JobPut{BriefFormat: new(types.BriefFormat("json"))})
 	require.ErrorContains(t, err, `brief_format "json"`)
 }
+
+func TestMergeReadsMaxWideningsAsAWholeCount(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []any{4, int64(4), float64(4), " 4 "} {
+		assert.Equal(t, 4, applyMerge(t, map[string]any{"max_widenings": v}, types.Job{}).MaxWidenings, "%#v", v)
+	}
+	assert.Zero(t, applyMerge(t, map[string]any{"max_widenings": 0}, types.Job{MaxWidenings: 2}).MaxWidenings)
+	for _, v := range []any{2.5, -1, "three", true} {
+		_, err := DecodePut(map[string]any{"max_widenings": v})
+		require.ErrorContains(t, err, "max_widenings", "%#v", v)
+	}
+}

@@ -1086,3 +1086,16 @@ func TestAWideningRecordDeclaresNothingElse(t *testing.T) {
 	}
 	assert.Equal(t, []string{"widen", "widen[1].path", "widen[2].path", "widen[2].because"}, fields)
 }
+
+func TestDeclarationCarriesMaxWidenings(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", MaxWidenings: 4}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxWidenings: -1}.Validate(), "max_widenings is -1")
+
+	var row Job
+	Declaration{ID: "worker", MaxWidenings: 4}.Apply(&row)
+	assert.Equal(t, 4, row.MaxWidenings)
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.MaxWidenings)
+}

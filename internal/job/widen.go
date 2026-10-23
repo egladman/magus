@@ -19,14 +19,12 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
-
-// defaultMaxProvedWidenings is how many proved widenings one attempt takes.
-const defaultMaxProvedWidenings = 5
 
 // maxWideningCommand bounds the `job apply` line the guard serves, so a refusal carrying
 // it stays under a kilobyte.
@@ -35,15 +33,31 @@ const maxWideningCommand = 640
 // maxWideningSource is the largest file a proof reads; a larger one proves nothing.
 const maxWideningSource = 1 << 20
 
+// DefaultMaxWidenings is how many proved widenings one attempt takes when its job names no
+// max_widenings.
+const DefaultMaxWidenings = 3
+
+// AdvisedMaxWidenings is the most a fork asks for before it is told to keep the number small.
+const AdvisedMaxWidenings = 5
+
 // wideningLimit is the cap on an attempt's proved widenings and where it came from.
 type wideningLimit struct {
 	Max    int
 	Source string
 }
 
-// DefaultWideningLimit is the cap when the workspace names none.
-func DefaultWideningLimit() wideningLimit {
-	return wideningLimit{Max: defaultMaxProvedWidenings, Source: "magus's default; magus.yaml cannot set jobs.max_proved_widenings yet"}
+// WideningLimit is the cap row's attempt takes: its max_widenings, or the default when it
+// names none. A cap above jobs.max_widenings_ceiling is an error naming both values and
+// where each came from.
+func WideningLimit(row types.Job, limits config.Jobs) (wideningLimit, error) {
+	limit := wideningLimit{Max: DefaultMaxWidenings, Source: fmt.Sprintf("magus's default of %d, since %s sets no max_widenings", DefaultMaxWidenings, row.ID)}
+	if row.MaxWidenings > 0 {
+		limit = wideningLimit{Max: row.MaxWidenings, Source: "max_widenings on job " + row.ID}
+	}
+	if limit.Max > limits.MaxWideningsCeiling {
+		return limit, fmt.Errorf("%d widenings (%s) is past the ceiling of %d (jobs.max_widenings_ceiling in magus.yaml)", limit.Max, limit.Source, limits.MaxWideningsCeiling)
+	}
+	return limit, nil
 }
 
 // wideningFacts is what the tree says about one job's change, read before the store's lock
@@ -451,7 +465,7 @@ func WideningCommand(id string, reqs []types.JobWidenRequest) (string, bool) {
 // unless every path is proved: see [authorizeWidening] for who may widen and what no
 // proof adds.
 // dryRun proves and authorizes against the store as read, and writes nothing.
-func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenRequest, facts wideningFacts, limit wideningLimit, dryRun bool) (types.Job, error) {
+func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenRequest, facts wideningFacts, limits config.Jobs, dryRun bool) (types.Job, error) {
 	actor := s.Actor()
 	if err := holderWidens(actor, id); err != nil {
 		return types.Job{}, err
@@ -465,7 +479,7 @@ func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenReque
 			if !exists {
 				return widenRefusal(actor, id, "nothing declares that job")
 			}
-			return grantWidening(actor, cur, reqs, facts, limit, now, by)
+			return grantWidening(actor, cur, reqs, facts, limits, now, by)
 		})
 	}
 	rows, err := s.List()
@@ -477,18 +491,22 @@ func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenReque
 		return types.Job{}, widenRefusal(actor, id, "nothing declares that job")
 	}
 	next := rows[i].Clone()
-	if err := grantWidening(actor, &next, reqs, facts, limit, time.Now().Unix(), by); err != nil {
+	if err := grantWidening(actor, &next, reqs, facts, limits, time.Now().Unix(), by); err != nil {
 		return types.Job{}, err
 	}
 	return next, authorizeRow(actor, id, asWidening, rows[i], next, true, rows)
 }
 
 // grantWidening proves each of reqs against cur and appends the path and its proof, or
-// refuses the first that is past limit, outside the checkout, held or denied by cur, or
+// refuses the first that is past the cap WideningLimit gives, outside the checkout, held or denied by cur, or
 // unproved. Another job's hold is authorizeWidening's, which reads the rows.
-func grantWidening(actor Actor, cur *types.Job, reqs []types.JobWidenRequest, facts wideningFacts, limit wideningLimit, now int64, by types.Origin) error {
+func grantWidening(actor Actor, cur *types.Job, reqs []types.JobWidenRequest, facts wideningFacts, limits config.Jobs, now int64, by types.Origin) error {
+	limit, err := WideningLimit(*cur, limits)
+	if err != nil {
+		return widenRefusal(actor, cur.ID, err.Error())
+	}
 	if len(cur.Widened)+len(reqs) > limit.Max {
-		return widenRefusal(actor, cur.ID, fmt.Sprintf("%s holds %d proved widening(s) and this adds %d, past jobs.max_proved_widenings, %d (%s)",
+		return widenRefusal(actor, cur.ID, fmt.Sprintf("%s holds %d proved widening(s) and this adds %d, past max_widenings, %d (%s)",
 			cur.ID, len(cur.Widened), len(reqs), limit.Max, limit.Source))
 	}
 	for _, req := range reqs {
@@ -561,4 +579,22 @@ func widenRefusal(actor Actor, id, rule string) error {
 		return &RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: "ask whoever forked the job to widen it"}
 	}
 	return fmt.Errorf("job: %s: %s", id, rule)
+}
+
+func wideningCeilingProblems(row types.Job, limits config.Jobs) types.JobProblems {
+	if _, err := WideningLimit(row, limits); err != nil {
+		return types.JobProblems{{
+			Code: types.JobForkLimitExceeded, Field: "max_widenings", Message: err.Error(),
+			Fix: "name a smaller max_widenings, or raise jobs.max_widenings_ceiling in magus.yaml",
+		}}
+	}
+	return nil
+}
+
+// wideningCapAdvice advises and never refuses: a small cap keeps each widening a decision.
+func wideningCapAdvice(row types.Job) string {
+	if row.MaxWidenings <= AdvisedMaxWidenings {
+		return ""
+	}
+	return fmt.Sprintf("%s asks for %d widenings; %d or fewer keeps each one a decision the root can read", row.ID, row.MaxWidenings, AdvisedMaxWidenings)
 }

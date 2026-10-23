@@ -109,6 +109,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
 		// A holder that raised its own cap could fork itself past it.
 		"max_attempts": func(u *types.Job) { u.MaxAttempts = 9 },
+		"max_widenings": func(u *types.Job) { u.MaxWidenings = 9 },
 		"goals": func(u *types.Job) {
 			u.Goals = []types.Goal{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},
