@@ -40,6 +40,17 @@ const defaultMaxClaims = 3
 // advisedMaxClaims is the most a fork asks for before it is told to keep the number small.
 const advisedMaxClaims = 5
 
+// TODO: move these to types/job.go beside ClaimRefs and into claimKinds in types/enums.go.
+// Until then ClaimKind.Valid refuses them, so ProposeClaim skips them and the store
+// records neither.
+const (
+	// claimCalls is a direct caller of a function or method whose signature the job's diff
+	// changed.
+	claimCalls types.ClaimKind = "calls"
+	// claimDefines is the file declaring a name a Go file the job changed uses.
+	claimDefines types.ClaimKind = "defines"
+)
+
 // claimLimit is the cap on an attempt's proved claims and where it came from.
 type claimLimit struct {
 	Max    int
@@ -63,31 +74,39 @@ func claimCap(row types.Job, limits config.Jobs) (claimLimit, error) {
 // claimFacts is what the tree says about one job's change, read before the store's lock
 // so the proof under it reads nothing. Build it with [ObserveClaim].
 type claimFacts struct {
-	seen        Observed
-	files       map[string]sourceFacts
-	packages    map[string]goPackage
+	seen     Observed
+	files    map[string]sourceFacts
+	packages map[string]goPackage
+	// held is each file the job holds beside an asked test, which a test proof may name.
+	held        []string
 	regenerated []RegeneratedOutput
 	// outputsKnown says a workspace answered for the outputs: none read proves no output.
 	outputsKnown bool
 }
 
 // sourceFacts is one file as a proof reads it. pkg is empty for a file that is not Go,
-// which a proof then reads as text.
+// which a proof then reads as text. sigs holds each function's and method's signature
+// lines, several for a method name more than one type declares; calls holds every name
+// called, `Name(` or `x.Name(` alike, since a method's receiver type is unknown without
+// type checking.
 type sourceFacts struct {
 	read     bool
 	pkg      string
 	imports  []string
 	decls    map[string][2]int
+	sigs     map[string][][2]int
 	uses     map[string]bool
+	calls    map[string]bool
 	literals []string
 	text     string
 }
 
 // goPackage is a Go package the job changed inside its write paths: its name and each
-// top-level declaration's file and lines.
+// top-level declaration's and each signature's file and lines.
 type goPackage struct {
 	dir, name string
 	decls     map[string]declSite
+	sigs      map[string][]declSite
 }
 
 type declSite struct {
@@ -96,7 +115,8 @@ type declSite struct {
 }
 
 // ObserveClaim reads the facts a proof of asked needs: the job's diff since its
-// checkpoint, the asked files and every file the job changed inside its write paths, the Go
+// checkpoint, the asked files, every file the job changed inside its write paths and every
+// file it holds beside an asked test, the Go
 // packages those sit in, and the outputs projects regenerate from them. Nil projects leaves
 // every output proof unproved. A diff that cannot be read leaves the refs, test and output
 // proofs unproved too.
@@ -114,6 +134,12 @@ func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, p
 			facts.files[rel] = readSource(tree, rel)
 		}
 	}
+	for _, rel := range heldBeside(tree, row, asked) {
+		if _, ok := facts.files[rel]; !ok {
+			facts.files[rel] = readSource(tree, rel)
+		}
+		facts.held = append(facts.held, rel)
+	}
 	for _, rel := range changed {
 		if dir := path.Dir(rel); path.Ext(rel) == ".go" {
 			if _, ok := facts.packages[dir]; !ok {
@@ -126,6 +152,32 @@ func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, p
 		facts.regenerated = RegeneratedOutside(tree, types.Job{WritePaths: changed}, projects, nil)
 	}
 	return facts
+}
+
+// heldBeside is each file other than a test that row's write paths cover in the directory
+// an asked test sits beside: its own for a _test file, the one holding testdata for a
+// file under it. Sorted.
+func heldBeside(tree string, row types.Job, asked []string) []string {
+	var out []string
+	for _, rel := range asked {
+		rel = path.Clean(rel)
+		dir, _, under := strings.Cut(rel, "/testdata/")
+		if !under {
+			if !types.IsTestPath(rel) {
+				continue
+			}
+			dir = path.Dir(rel)
+		}
+		entries, _ := os.ReadDir(filepath.Join(tree, filepath.FromSlash(dir)))
+		for _, e := range entries {
+			f := path.Join(dir, e.Name())
+			if !e.IsDir() && !types.IsTestPath(f) && slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, f) }) {
+				out = append(out, f)
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // changedInside is what the job's diff changed inside its write paths, sorted.
@@ -155,16 +207,15 @@ func readSource(tree, rel string) sourceFacts {
 	return parseGo(rel, body)
 }
 
-// parseGo reads a Go file's package, imports, top-level declarations, the identifiers and
-// `x.Name` selectors it uses, and its string literals. A file that does not parse is read
-// as text.
+// parseGo reads a Go file's package, imports, top-level declarations and signatures, and
+// what [sourceFacts.readUses] records. A file that does not parse is read as text.
 func parseGo(rel string, body []byte) sourceFacts {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, rel, body, parser.SkipObjectResolution)
 	if err != nil || f == nil {
 		return sourceFacts{read: true, text: string(body)}
 	}
-	s := sourceFacts{read: true, pkg: f.Name.Name, decls: map[string][2]int{}, uses: map[string]bool{}}
+	s := sourceFacts{read: true, pkg: f.Name.Name, decls: map[string][2]int{}, sigs: map[string][][2]int{}, uses: map[string]bool{}, calls: map[string]bool{}}
 	lines := func(n ast.Node) [2]int { return [2]int{fset.Position(n.Pos()).Line, fset.Position(n.End()).Line} }
 	for _, imp := range f.Imports {
 		if p, err := strconv.Unquote(imp.Path.Value); err == nil {
@@ -175,6 +226,7 @@ func parseGo(rel string, body []byte) sourceFacts {
 		switch d := d.(type) {
 		case *ast.FuncDecl:
 			s.decls[d.Name.Name] = lines(d)
+			s.sigs[d.Name.Name] = append(s.sigs[d.Name.Name], [2]int{fset.Position(d.Pos()).Line, fset.Position(d.Type.End()).Line})
 		case *ast.GenDecl:
 			for _, spec := range d.Specs {
 				switch spec := spec.(type) {
@@ -188,8 +240,22 @@ func parseGo(rel string, body []byte) sourceFacts {
 			}
 		}
 	}
+	s.readUses(f)
+	return s
+}
+
+// readUses records what f calls, the identifiers and `x.Name` selectors it uses, and its
+// string literals.
+func (s *sourceFacts) readUses(f *ast.File) {
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch n := n.(type) {
+		case *ast.CallExpr:
+			switch fun := n.Fun.(type) {
+			case *ast.Ident:
+				s.calls[fun.Name] = true
+			case *ast.SelectorExpr:
+				s.calls[fun.Sel.Name] = true
+			}
 		case *ast.SelectorExpr:
 			if x, ok := n.X.(*ast.Ident); ok {
 				s.uses[x.Name+"."+n.Sel.Name] = true
@@ -203,13 +269,12 @@ func parseGo(rel string, body []byte) sourceFacts {
 		}
 		return true
 	})
-	return s
 }
 
 // readPackage is the Go package in dir as its non-test files declare it. A directory the
 // diff emptied keeps its base name, the name its callers import it by.
 func readPackage(tree, dir string) goPackage {
-	p := goPackage{dir: dir, name: path.Base(dir), decls: map[string]declSite{}}
+	p := goPackage{dir: dir, name: path.Base(dir), decls: map[string]declSite{}, sigs: map[string][]declSite{}}
 	entries, err := os.ReadDir(filepath.Join(tree, filepath.FromSlash(dir)))
 	if err != nil {
 		return p
@@ -230,6 +295,11 @@ func readPackage(tree, dir string) goPackage {
 		for name, at := range src.decls {
 			p.decls[name] = declSite{file: rel, lines: at}
 		}
+		for name, sigs := range src.sigs {
+			for _, at := range sigs {
+				p.sigs[name] = append(p.sigs[name], declSite{file: rel, lines: at})
+			}
+		}
 	}
 	return p
 }
@@ -247,6 +317,10 @@ func proveClaim(row types.Job, rel string, e types.ClaimEvidence, facts claimFac
 		return proveRefs(rel, e.Subject, facts)
 	case types.ClaimTest:
 		return proveTest(row, rel, path.Clean(e.Subject), facts)
+	case claimCalls:
+		return proveCalls(rel, e.Subject, facts)
+	case claimDefines:
+		return proveDefines(row, rel, e.Subject, facts)
 	case types.ClaimOutput:
 		return proveOutput(rel, e.Subject, facts)
 	case types.ClaimReleased:
@@ -270,7 +344,7 @@ func proveRefs(rel, subject string, facts claimFacts) (string, error) {
 	for _, dir := range slices.Sorted(maps.Keys(facts.packages)) {
 		p := facts.packages[dir]
 		if qualified {
-			if p.name != pkg || !asked.uses[subject] || !slices.ContainsFunc(asked.imports, func(i string) bool { return i == dir || strings.HasSuffix(i, "/"+dir) }) {
+			if p.name != pkg || !asked.uses[subject] || !importsDir(asked, dir) {
 				continue
 			}
 		} else if dir != path.Dir(rel) || !asked.uses[name] {
@@ -305,6 +379,83 @@ func (p goPackage) changed(name string, seen Observed) (string, bool) {
 	return "", false
 }
 
+// proveCalls proves rel a direct caller of name, a function or method whose signature the
+// job's diff changed in a package rel sits in or imports. A body-only change proves
+// nothing: a caller compiles against the signature alone.
+func proveCalls(rel, name string, facts claimFacts) (string, error) {
+	asked := facts.files[rel]
+	switch {
+	case !asked.read:
+		return "", fmt.Errorf("%s could not be read", rel)
+	case asked.pkg == "":
+		return "", fmt.Errorf("a calls proof reads Go source, and %s is not Go", rel)
+	case !asked.calls[name]:
+		return "", fmt.Errorf("%s calls nothing named %s", rel, name)
+	}
+	for _, dir := range slices.Sorted(maps.Keys(facts.packages)) {
+		if dir != path.Dir(rel) && !importsDir(asked, dir) {
+			continue
+		}
+		if file, ok := facts.packages[dir].signatureChanged(name, facts.seen); ok {
+			return fmt.Sprintf("%s calls %s, whose signature the job's diff changes in %s", rel, name, file), nil
+		}
+	}
+	return "", fmt.Errorf("the job's diff changes no signature of %s in a package %s sits in or imports", name, rel)
+}
+
+// signatureChanged is the file where the job's diff touches the signature lines of a
+// function or method p declares as name.
+func (p goPackage) signatureChanged(name string, seen Observed) (string, bool) {
+	if !seen.RegionsKnown {
+		return "", false
+	}
+	for _, site := range p.sigs[name] {
+		for _, r := range seen.Regions {
+			if r.Side == types.RegionNew && path.Clean(r.File.Path) == site.file && r.Lines[0] <= site.lines[1] && r.Lines[1] >= site.lines[0] {
+				return site.file, true
+			}
+		}
+	}
+	return "", false
+}
+
+// proveDefines proves rel the declaration of subject, a name a Go file the job changed
+// inside its write paths uses: `pkg.Name` from a file importing rel's package, or a bare
+// Name from a file in rel's package. A _test file's declarations prove only to a test.
+func proveDefines(row types.Job, rel, subject string, facts claimFacts) (string, error) {
+	asked := facts.files[rel]
+	switch {
+	case !asked.read:
+		return "", fmt.Errorf("%s could not be read", rel)
+	case asked.pkg == "":
+		return "", fmt.Errorf("a defines proof reads Go source, and %s is not Go", rel)
+	}
+	pkg, name, qualified := strings.Cut(subject, ".")
+	if !qualified {
+		pkg, name = asked.pkg, subject
+	}
+	if _, ok := asked.decls[name]; !ok || name == "_" || pkg != asked.pkg {
+		return "", fmt.Errorf("%s declares no %s", rel, subject)
+	}
+	dir := path.Dir(rel)
+	for _, f := range changedInside(row, facts.seen) {
+		user := facts.files[f]
+		if f == rel || !user.uses[subject] || types.IsTestPath(rel) && !types.IsTestPath(f) {
+			continue
+		}
+		if qualified && importsDir(user, dir) || !qualified && path.Dir(f) == dir && user.pkg == asked.pkg {
+			return fmt.Sprintf("%s declares %s, which %s, a file the job changed, uses", rel, name, f), nil
+		}
+	}
+	return "", fmt.Errorf("no Go file the job changed inside its write paths uses %s from %s", subject, rel)
+}
+
+// importsDir says src imports the package in dir, matched by import path suffix since the
+// module path is not read.
+func importsDir(src sourceFacts, dir string) bool {
+	return slices.ContainsFunc(src.imports, func(i string) bool { return i == dir || strings.HasSuffix(i, "/"+dir) })
+}
+
 var declaredNamePattern = regexp.MustCompile(`^(?:func\s*(?:\([^)]*\)\s*)?|type\s+|var\s+|const\s+)([A-Za-z_][A-Za-z0-9_]*)`)
 
 // declaredName is the name a diff driver's declaration line declares, "" for a block
@@ -318,8 +469,8 @@ func declaredName(decl string) string {
 }
 
 func proveTest(row types.Job, rel, subject string, facts claimFacts) (string, error) {
-	if types.IsTestPath(subject) || !slices.Contains(changedInside(row, facts.seen), subject) {
-		return "", fmt.Errorf("%s is not a file the job changed inside its write paths, other than a test", subject)
+	if types.IsTestPath(subject) || !slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, subject) }) {
+		return "", fmt.Errorf("%s is not a file the job holds or claimed, other than a test", subject)
 	}
 	dir := path.Dir(subject)
 	beside := types.IsTestPath(rel) && path.Dir(rel) == dir || strings.HasPrefix(rel, dir+"/testdata/")
@@ -419,8 +570,8 @@ func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
 	return nil
 }
 
-// ProposeClaim is the first proof of rel for row the facts hold, tried refs, test,
-// output, then released, each kind's subjects in sorted order, and false when rel is no
+// ProposeClaim is the first proof of rel for row the facts hold, tried refs, test, calls,
+// defines, output, then released, each kind's subjects in sorted order, and false when rel is no
 // path a proof may add or none proves it.
 func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job) (types.JobClaimRequest, string, bool) {
 	rel = path.Clean(rel)
@@ -434,14 +585,23 @@ func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job)
 			tries = append(tries, types.ClaimEvidence{Kind: types.ClaimRefs, Subject: use})
 		}
 	}
-	for _, f := range changedInside(row, facts.seen) {
+	for _, f := range slices.Compact(slices.Sorted(slices.Values(append(changedInside(row, facts.seen), facts.held...)))) {
 		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimTest, Subject: f})
+	}
+	for _, name := range slices.Sorted(maps.Keys(asked.calls)) {
+		tries = append(tries, types.ClaimEvidence{Kind: claimCalls, Subject: name})
+	}
+	for _, name := range slices.Sorted(maps.Keys(asked.decls)) {
+		tries = append(tries, types.ClaimEvidence{Kind: claimDefines, Subject: asked.pkg + "." + name}, types.ClaimEvidence{Kind: claimDefines, Subject: name})
 	}
 	for _, o := range facts.regenerated {
 		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimOutput, Subject: o.Target})
 	}
 	tries = append(tries, types.ClaimEvidence{Kind: types.ClaimReleased})
 	for _, e := range tries {
+		if !e.Kind.Valid() {
+			continue
+		}
 		if proof, err := proveClaim(row, rel, e, facts); err == nil {
 			return types.JobClaimRequest{Path: rel, Because: e.String()}, proof, true
 		}
