@@ -217,10 +217,14 @@ fun lines(text: str) > [str] {
     return acc;
 }
 
-fun requireBranch(root: str, branch: str) > void !> any {
-    if (!gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{branch}"])) {
-        throw "merge-job-branches: unknown branch {branch}";
+// requireBranch accepts any ref that resolves to a commit, a remote-tracking one included,
+// and returns the line naming what it resolved to.
+fun requireBranch(root: str, branch: str) > str !> any {
+    final found = vcs\cmd(["rev-parse", "--verify", "--quiet", "{branch}^\{commit\}"], opts: {"quiet": true, "dir": root, "allow_failure": true});
+    if (found.code != 0) {
+        throw "merge-job-branches: unknown branch {branch}: it resolves to no commit";
     }
+    return "{branch} resolves to {found.stdout.trim()}";
 }
 
 // containsMap is, for each branch, the others whose tip it contains and that are not
@@ -605,13 +609,14 @@ fun planned(root: str, values: {str: str}) > stack\BranchStack !> any {
     if (given.len() != 1) {
         throw "merge-job-branches: name the branches one way, with --jobs, --branches or --stack\n{USAGE}";
     }
+    final resolved = mut [<str>];
     if (values["--stack"] != null) {
         if (values["--base"] != null) { throw "merge-job-branches: a stack names its own base, so --base is not taken with --stack"; }
         final s = stack\orderLayers(stack\readStack(readSource(values["--stack"]!)));
         final rows = storeRows();
         final layers = mut [<stack\StackLayer>];
         foreach (l in s.layers) {
-            requireBranch(root, branch: l.branch);
+            resolved.append(requireBranch(root, branch: l.branch));
             var check = l.check;
             var goals = l.goals;
             if (l.job != "" and check == "" and goals.len() == 0) {
@@ -621,6 +626,7 @@ fun planned(root: str, values: {str: str}) > stack\BranchStack !> any {
             layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
                 declarations = l.declarations, check = check, goals = goals, status = "planned", reason = l.reason });
         }
+        nameResolved(resolved, values: values);
         return stack\BranchStack{ schema = s.schema, base = s.base, layers = layers };
     }
     final base = values["--base"] ?? vcs\base();
@@ -635,19 +641,55 @@ fun planned(root: str, values: {str: str}) > stack\BranchStack !> any {
     final names = mut [<str>];
     final withPaths = mut [<Candidate>];
     foreach (c in cands) {
-        requireBranch(root, branch: c.branch);
+        resolved.append(requireBranch(root, branch: c.branch));
         names.append(c.branch);
         withPaths.append(Candidate{ branch = c.branch, job = c.job, dependsOn = c.dependsOn, check = c.check,
             goals = c.goals, paths = changedPaths(root, branch: c.branch, base: base) });
     }
+    nameResolved(resolved, values: values);
     return order(withPaths, contains: containsMap(root, branches: names, base: base), base: base);
+}
+
+// nameResolved prints what each ref resolved to, except under -o json, whose output is the stack.
+fun nameResolved(resolved: [str], values: {str: str}) > void {
+    if ((values["-o"] ?? "text") == "json") { return; }
+    foreach (r in resolved) { std\print(r); }
 }
 
 fun requireNewBranch(root: str, into: str) > void !> any {
     git(root, args: ["check-ref-format", "--branch", into]);
     if (gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{into}"])) {
-        throw "merge-job-branches: branch {into} already exists; delete it or pass another --into";
+        throw "merge-job-branches: branch {into} already exists; to merge more branches into it run merge-base-into-branches.buzz --branches {into}";
     }
+}
+
+test "requireBranch resolves a remote-tracking ref and refuses a name that is no commit" {
+    final root = fs\tempDir("merge-job-branches-test-");
+    git(root, args: ["init", "-q", "-b", "main"]);
+    foreach (kv in [["user.email", "t@example.com"], ["user.name", "t"], ["commit.gpgsign", "false"], ["core.hooksPath", "/dev/null"]]) {
+        git(root, args: ["config", kv[0], kv[1]]);
+    }
+    put(root, path: "a.txt", content: "a\n");
+    commitAll(root, subject: "base");
+    final tip = git(root, args: ["rev-parse", "HEAD"]);
+    git(root, args: ["update-ref", "refs/remotes/origin/main", tip]);
+    assert\equal(requireBranch(root, branch: "origin/main"), want: "origin/main resolves to {tip}", message: "a remote-tracking ref resolves");
+    assert\equal(requireBranch(root, branch: "main"), want: "main resolves to {tip}", message: "a local branch still resolves");
+    var refused = "";
+    try {
+        requireBranch(root, branch: "nope");
+    } catch (err: str) {
+        refused = err;
+    }
+    assert\equal(refused.indexOf("unknown branch nope") != null, want: true, message: "a missing ref is refused: {refused}");
+    var existing = "";
+    try {
+        requireNewBranch(root, into: "main");
+    } catch (err: str) {
+        existing = err;
+    }
+    assert\equal(existing.indexOf("merge-base-into-branches.buzz --branches main") != null, want: true, message: "an existing --into names the updater: {existing}");
+    fs\removeAll(root);
 }
 
 fun printVerdicts(verdicts: [Verdict]) > bool {
