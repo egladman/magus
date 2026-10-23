@@ -313,29 +313,35 @@ func SameLeaseCheck(a, b *LeaseCheck) bool {
 // A flag anywhere is REFUSED rather than read as a word: a check is an identity the output
 // store can be asked about, and `-o json` in it either names a target nobody ran or
 // silently shifts the project.
+//
+// The one flag read is --no-default-charms, which the record carries as NoDefaultCharms.
 func ParseLeaseCheck(s string) (LeaseCheck, error) {
 	words := strings.Fields(s)
 	var args []string
 	if i := slices.Index(words, "--"); i >= 0 {
 		words, args = words[:i], words[i+1:]
 	}
+	var noDefaultCharms bool
+	positional := words[:0:0]
 	for _, w := range words {
 		if w == "--no-default-charms" {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s,"+
-				" declare the check as a record with `no_default_charms: true` instead", s, w)
+			noDefaultCharms = true
+			continue
 		}
+		positional = append(positional, w)
 		if strings.HasPrefix(w, "-") {
 			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s,"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
 		}
 	}
+	words = positional
 	switch {
 	case len(words) == 0:
 		return LeaseCheck{}, errors.New("a check is `<target> <project> [-- args]` and this one names no target")
 	case len(words) > 2:
 		return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %d words before any `--`", s, len(words))
 	}
-	c := LeaseCheck{Target: words[0], Project: ".", Args: args}
+	c := LeaseCheck{Target: words[0], Project: ".", Args: args, NoDefaultCharms: noDefaultCharms}
 	if len(words) == 2 {
 		c.Project = words[1]
 	}
