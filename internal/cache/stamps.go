@@ -42,12 +42,18 @@ func (c *Cache) stampDigests(ctx context.Context, root string, stamps []string) 
 }
 
 // treeMoved reports whether the tree no longer reads as m recorded it, through a
-// stamp or a verified output; either makes m unfit to replay, so its tier answers a miss.
-// What moved is logged as a cache.stamp debug record.
+// stamp or a verified output, or m records none of the outputs s declares; each makes m
+// unfit to replay, so its tier answers a miss. What moved is logged as a cache.stamp
+// debug record.
 func (c *Cache) treeMoved(ctx context.Context, s *Step, m *Manifest) bool {
 	moved := c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, m.Stamps)
 	outputs, err := c.movedOutputs(ctx, s, m)
 	moved = append(moved, outputs...)
+	// Snapshot refuses a declared step that produced nothing, so only an older declaration
+	// filed m, and replaying it would restore none of what s promises.
+	if s.OutputsDeclared && len(s.Outputs) > 0 && len(m.Outputs) == 0 {
+		moved = append(moved, "(no recorded outputs)")
+	}
 	if len(moved) == 0 && err == nil {
 		return false
 	}
