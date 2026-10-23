@@ -328,10 +328,11 @@ test("a child is placed to the right of its parent, and a dependent right of its
 // to leave room for it: two nodes that overlap would put one id's 12px text over another's.
 test("no two nodes overlap at the size they are drawn", () => {
   const at = [...layoutNodes(buildJobTree(TREE)).at.values()];
-  for (let i = 0; i < at.length; i++) {
-    for (let j = i + 1; j < at.length; j++) {
-      const dx = Math.abs(at[i].x - at[j].x);
-      const dy = Math.abs(at[i].y - at[j].y);
+  for (const [i, a] of at.entries()) {
+    for (const [j, b] of at.entries()) {
+      if (j <= i) continue;
+      const dx = Math.abs(a.x - b.x);
+      const dy = Math.abs(a.y - b.y);
       assert.ok(dx >= NODE_W || dy >= NODE_H, `nodes ${i} and ${j} overlap (${dx}, ${dy})`);
     }
   }

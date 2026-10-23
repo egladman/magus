@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { runInThisContext } from "node:vm";
-import { succeed } from "../result";
+import { succeed } from "../../../lib/result";
 import {
   buildFigure,
   figureForLink,

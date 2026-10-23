@@ -1,5 +1,6 @@
 import { errMessage, errName } from "./guards";
 import { reportFailure, type NotifyLink } from "./notifications";
+import { fail, succeed, type Result } from "./result";
 // server.ts - the ONE audited module for addressing and talking to a magus server.
 //
 // Every app (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -315,8 +316,6 @@ export function resolveServerHostOrRemembered(params: HashParams = parseHash()):
 
 // ---- reachability probe ----------------------------------------------------
 
-export type ProbeResult = { ok: true; url: string } | { ok: false; reason: string };
-
 // probeServer answers "is anything listening at this host:port?" for the Settings test-connection
 // control. /livez is the server's only tokenless route (health checks are mounted unguarded so a
 // kubelet can reach them). Current servers also wrap /livez and /readyz in the same CORSAllow
@@ -324,14 +323,12 @@ export type ProbeResult = { ok: true; url: string } | { ok: false; reason: strin
 // enough for "a server answered", and the body/status stay opaque by design. Success therefore
 // means "a server answered", NOT "magus is healthy". The browser also refuses to distinguish a
 // refused connection from a CORS/mixed-content block, so those collapse into one honest message.
-export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<ProbeResult> {
+export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<Result<string>> {
   const host = normalizeServerHost(hostPort);
   if (!host) {
-    return {
-      ok: false,
-      reason:
-        "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
-    };
+    return fail(
+      "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
+    );
   }
   const url = "http://" + host + "/livez";
   try {
@@ -340,27 +337,23 @@ export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<P
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return { ok: true, url };
+    return succeed(url);
   } catch (e) {
     if (errName(e) === "TimeoutError" || errName(e) === "AbortError") {
-      return {
-        ok: false,
-        reason:
-          "No response from " +
+      return fail(
+        "No response from " +
           url +
           " within " +
           Math.round(timeoutMs / 1000) +
           "s. Check the port, or something is dropping the connection.",
-      };
+      );
     }
     // Deliberately no status code or errno: an opaque request surfaces one bare TypeError for every
     // network-layer failure (refused, CORS-blocked, mixed content). The browser withholds the detail, so
     // naming a cause here would be a guess.
-    return {
-      ok: false,
-      reason:
-        "Could not reach " + url + ". Is the server running? Start it with: magus server start",
-    };
+    return fail(
+      "Could not reach " + url + ". Is the server running? Start it with: magus server start",
+    );
   }
 }
 

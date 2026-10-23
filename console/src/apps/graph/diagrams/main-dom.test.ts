@@ -345,17 +345,17 @@ describe("the Diagrams app", () => {
     await settle();
     assert.equal(rt.figures.length, 1);
     const f = rt.figures[0];
-    assert.equal(f.graphEdges, true);
-    assert.equal(f.unscopedWhy, "");
+    assert.equal(f?.graphEdges, true);
+    assert.equal(f?.unscopedWhy, "");
     assert.deepEqual(
-      f.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
+      f?.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
       [
         ["internal/a", "internal/a", ["internal/b"], true, null],
         ["internal/b", "internal/b", [], true, null],
       ],
       "the scope cut c before layout, and each box carries the imports the SVG drew",
     );
-    assert.deepEqual(f.flows, []);
+    assert.deepEqual(f?.flows, []);
     instance.deactivate();
   });
 
@@ -394,14 +394,14 @@ describe("the Diagrams app", () => {
       assert.deepEqual(requests, [], "a link needs no server");
       assert.equal(rt.figures.length, 1);
       assert.deepEqual(
-        rt.figures[0].boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
+        rt.figures[0]?.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
         [
           ["lib", "edited", "focal"],
           ["app", "", "plain"],
         ],
       );
       assert.deepEqual(
-        rt.figures[0].flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
+        rt.figures[0]?.flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
         [["lib", "app"]],
         "an edge runs dependency to dependent",
       );
@@ -657,8 +657,8 @@ test("the actor record carries every value as data, however it is spelled", () =
   const f = built.value;
   assert.equal(f.id, "targets-app");
   assert.equal(f.desc, "scope x");
-  assert.equal(f.boxes[0].actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
-  assert.equal(f.boxes[0].actor?.look, "plain");
+  assert.equal(f.boxes[0]?.actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
+  assert.equal(f.boxes[0]?.actor?.look, "plain");
   assert.deepEqual(
     f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
     [['say "{hi}"', "b"]],

@@ -578,11 +578,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       // and body are unreadable - this proves a server answered at that address, nothing more.
       if (res.ok) {
         hostTest.set(
-          "A server answered at " + res.url + ". Save & Apply to connect the console to it.",
+          "A server answered at " + res.value + ". Save & Apply to connect the console to it.",
           "success",
         );
       } else {
-        hostTest.set(res.reason, "error");
+        hostTest.set(res.error.message, "error");
       }
     });
   });

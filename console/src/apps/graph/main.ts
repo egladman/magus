@@ -1,5 +1,5 @@
 import { must, errMessage } from "../../lib/guards";
-import { fail, failFrom, succeed, type Result } from "./result";
+import { fail, failFrom, succeed, type Result } from "../../lib/result";
 import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import type { AppInstance } from "../../desktop/standalone";
 import { activate as activateFigures } from "./diagrams/main";

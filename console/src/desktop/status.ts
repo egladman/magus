@@ -41,7 +41,11 @@ export function publishStatus(contribution: StatusContribution): void {
       label: demoing ? "demo" : (contribution.label ?? ""),
       state: demoing ? "demo" : contribution.connection,
       health: contribution.health && !demoing ? contribution.health : null,
-      hint: demoing ? DEMO_CONNECTION_HINT : contribution.hint,
+      ...(demoing
+        ? { hint: DEMO_CONNECTION_HINT }
+        : contribution.hint
+          ? { hint: contribution.hint }
+          : {}),
     });
   }
   const count = document.getElementById("console-count");

@@ -4,7 +4,7 @@
 
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
-import { asError, type Result } from "./result";
+import { asError, type Result } from "../lib/result";
 
 const LABEL = ".console-render-btn__label, .pf-v6-c-menu__item-text";
 const FLASH_MS = 1500;

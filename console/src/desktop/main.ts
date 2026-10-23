@@ -821,7 +821,8 @@ export function startConsole(
     if (cur.tabs.length < 2) return;
     const i = cur.tabs.findIndex((t) => t.id === cur.activeId);
     if (i < 0) return;
-    activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
+    const next = cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length];
+    if (next) activateTab(next.id);
   }
 
   // moveAppToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag

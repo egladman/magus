@@ -240,11 +240,11 @@ describe("a prepared figure", () => {
       ["job", "store", "lone", "types"],
     );
     assert.equal(
-      rows[0].querySelector("a")?.getAttribute("href"),
+      rows[0]?.querySelector("a")?.getAttribute("href"),
       "https://github.com/acme/widgets/blob/abc/internal/job",
     );
-    assert.equal(rows[2].querySelector("a"), null);
-    rows[1].querySelector("button")?.click();
+    assert.equal(rows[2]?.querySelector("a"), null);
+    rows[1]?.querySelector("button")?.click();
     assert.deepEqual(focused, ["b"]);
     markListFocus(list, "a", new Set(["a", "b"]));
     assert.deepEqual(

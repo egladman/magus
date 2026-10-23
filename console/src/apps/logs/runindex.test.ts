@@ -102,19 +102,19 @@ test("runs mode nests invocation -> target and keeps the feed order", () => {
     tree.map((n) => n.id),
     ["inv:invA", "inv:invB"],
   );
-  assert.equal(tree[0].description, "magus affected ci");
-  assert.equal(tree[0].count, 2);
-  assert.equal(tree[0].status, "fail");
+  assert.equal(tree[0]?.description, "magus affected ci");
+  assert.equal(tree[0]?.count, 2);
+  assert.equal(tree[0]?.status, "fail");
   assert.deepEqual(
-    tree[0].children?.map((c) => c.id),
+    tree[0]?.children?.map((c) => c.id),
     ["ref:outA1", "ref:outA2"],
   );
-  assert.deepEqual(tree[0].select, {
+  assert.deepEqual(tree[0]?.select, {
     kind: "invocation",
     inv: "invA",
     label: "magus affected ci",
   });
-  assert.deepEqual(tree[0].children?.[1].select, {
+  assert.deepEqual(tree[0]?.children?.[1]?.select, {
     kind: "output",
     run: runs[1],
     focus: "test",
@@ -129,14 +129,14 @@ test("an invocation's own outcome beats its targets' fold", () => {
     filter: parseRunFilter(""),
     now: NOW,
   });
-  assert.equal(tree[0].status, "fail");
+  assert.equal(tree[0]?.status, "fail");
 });
 
 test("an unfiltered tree keeps a run that produced no retained output; a filter drops it", () => {
   const opts = { runs: [], logs: [log({ inv: "invA" })], mode: "runs" as const, now: NOW };
   const all = buildRunTree({ ...opts, filter: parseRunFilter("") });
   assert.equal(all.length, 1);
-  assert.equal(all[0].count, undefined);
+  assert.equal(all[0]?.count, undefined);
   assert.equal(buildRunTree({ ...opts, filter: parseRunFilter("build") }).length, 0);
 });
 
@@ -149,8 +149,8 @@ test("outputs whose invocation is not in the runs feed still list", () => {
     now: NOW,
   });
   assert.equal(tree.length, 1);
-  assert.equal(tree[0].description, "invGone");
-  assert.equal(tree[0].select, undefined);
+  assert.equal(tree[0]?.description, "invGone");
+  assert.equal(tree[0]?.select, undefined);
 });
 
 test("projects mode nests project -> target -> run and folds a mixed branch", () => {
@@ -172,11 +172,11 @@ test("projects mode nests project -> target -> run and folds a mixed branch", ()
   );
   // The charm suffix collapses, so both executions group under the declared target name.
   assert.deepEqual(
-    tree[0].children?.map((c) => c.label),
+    tree[0]?.children?.map((c) => c.label),
     ["build"],
   );
-  assert.equal(tree[0].children?.[0].count, 2);
-  assert.equal(tree[0].status, "mixed");
+  assert.equal(tree[0]?.children?.[0]?.count, 2);
+  assert.equal(tree[0]?.status, "mixed");
 });
 
 test("commandText reads as the command that was typed", () => {
@@ -233,11 +233,11 @@ test("buildRunRows joins outputs onto their invocation, newest first", () => {
     rows.map((r) => r.inv),
     ["invA", "invB"],
   );
-  assert.equal(rows[0].command, "magus affected ci");
-  assert.equal(rows[0].outputs.length, 2);
-  assert.equal(rows[0].durationMs, 5000);
-  assert.equal(rows[0].status, "pass", "the journal's own outcome wins over its targets");
-  assert.equal(rows[1].outputs.length, 1);
+  assert.equal(rows[0]?.command, "magus affected ci");
+  assert.equal(rows[0]?.outputs.length, 2);
+  assert.equal(rows[0]?.durationMs, 5000);
+  assert.equal(rows[0]?.status, "pass", "the journal's own outcome wins over its targets");
+  assert.equal(rows[1]?.outputs.length, 1);
 });
 
 test("buildRunRows keeps an output-less run only when unfiltered", () => {
@@ -248,9 +248,9 @@ test("buildRunRows keeps an output-less run only when unfiltered", () => {
 
 test("buildRunRows falls back to output timestamps when the journal is gone", () => {
   const rows = buildRunRows([run({ inv: "invGone", timestamp_ms: NOW - 1000 })], [], true);
-  assert.equal(rows[0].command, "invGone");
-  assert.equal(rows[0].log, undefined);
-  assert.equal(rows[0].startMs, NOW - 1000);
+  assert.equal(rows[0]?.command, "invGone");
+  assert.equal(rows[0]?.log, undefined);
+  assert.equal(rows[0]?.startMs, NOW - 1000);
 });
 
 test("buildFacets lists only values that occur, with counts", () => {
@@ -269,21 +269,21 @@ test("buildFacets lists only values that occur, with counts", () => {
   const facets = buildFacets(runs, logs, parseRunFilter(""));
   const byKey = Object.fromEntries(facets.map((f) => [f.key, f]));
   assert.deepEqual(
-    byKey.status.values.map((v) => [v.value, v.count]),
+    byKey.status?.values.map((v) => [v.value, v.count]),
     [
       ["pass", 2],
       ["fail", 1],
     ],
   );
   assert.deepEqual(
-    byKey.project.values.map((v) => [v.value, v.count]),
+    byKey.project?.values.map((v) => [v.value, v.count]),
     [
       ["console", 2],
       ["docs", 1],
     ],
   );
   assert.deepEqual(
-    byKey.trigger.values.map((v) => [v.value, v.count]),
+    byKey.trigger?.values.map((v) => [v.value, v.count]),
     [
       ["ci", 2],
       ["run", 1],
@@ -301,16 +301,16 @@ test("a facet counts runs, not the outputs inside them", () => {
   const facets = buildFacets(runs, [log({ inv: "invA" })], parseRunFilter(""));
   const byKey = Object.fromEntries(facets.map((f) => [f.key, f]));
   assert.deepEqual(
-    byKey.project.values.map((v) => [v.value, v.count]),
+    byKey.project?.values.map((v) => [v.value, v.count]),
     [["console", 1]],
   );
   assert.deepEqual(
-    byKey.status.values.map((v) => [v.value, v.count]),
+    byKey.status?.values.map((v) => [v.value, v.count]),
     [["pass", 1]],
   );
   // The targets themselves are still distinct values - it is the RUN that is counted once each.
   assert.deepEqual(
-    byKey.target.values.map((v) => [v.value, v.count]),
+    byKey.target?.values.map((v) => [v.value, v.count]),
     [
       ["build", 1],
       ["test", 1],
@@ -334,7 +334,7 @@ test("a facet's counts exclude its own selection", () => {
   const facets = buildFacets(runs, logs, parseRunFilter("status:fail"));
   const byKey = Object.fromEntries(facets.map((f) => [f.key, f]));
   assert.deepEqual(
-    byKey.status.values.map((v) => [v.value, v.count, v.active]),
+    byKey.status?.values.map((v) => [v.value, v.count, v.active]),
     [
       ["fail", 2, true],
       ["pass", 1, false],
@@ -342,7 +342,7 @@ test("a facet's counts exclude its own selection", () => {
     "status still counts against the unfiltered-by-status set",
   );
   assert.deepEqual(
-    byKey.project.values.map((v) => [v.value, v.count]),
+    byKey.project?.values.map((v) => [v.value, v.count]),
     [
       ["console", 1],
       ["docs", 1],

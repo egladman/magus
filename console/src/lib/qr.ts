@@ -13,18 +13,14 @@
 // without a DOM, plus encodeToCanvas for the caller. Nothing here touches the
 // network or any global except the <canvas> the caller hands in.
 //
-// Failures are values, never exceptions: both entry points return a QrResult.
+// Failures are values, never exceptions: both entry points return a Result.
 
-export type QrResult<T> = { ok: true; value: T } | { ok: false; error: string };
+import { fail, succeed, type Result } from "./result";
 
-const done: QrResult<void> = { ok: true, value: undefined };
-
-function fail(error: string): { ok: false; error: string } {
-  return { ok: false, error };
-}
+const done: Result<void> = succeed(undefined);
 
 // firstFailure returns the first failed step, or done when every step passed.
-function firstFailure(steps: QrResult<void>[]): QrResult<void> {
+function firstFailure(steps: Result<void>[]): Result<void> {
   for (const step of steps) if (!step.ok) return step;
   return done;
 }
@@ -165,7 +161,7 @@ interface ChosenVersion {
 // chooseVersion picks the smallest version 1-10 whose byte-mode data capacity
 // holds the payload plus its header. A payload too large for the supported range
 // is the one user-facing failure, so the error says how large the limit is.
-function chooseVersion(byteLen: number): QrResult<ChosenVersion> {
+function chooseVersion(byteLen: number): Result<ChosenVersion> {
   let largest = 0;
   for (const [i, spec] of SPECS.entries()) {
     const version = i + 1;
@@ -258,7 +254,7 @@ function newGrid(size: number): Grid {
   return g;
 }
 
-function readModule(grid: Grid, r: number, c: number): QrResult<number> {
+function readModule(grid: Grid, r: number, c: number): Result<number> {
   const value = grid[r]?.[c];
   if (value === undefined) {
     return fail(`QR module (${r}, ${c}) is outside the ${grid.length}x${grid.length} grid.`);
@@ -266,7 +262,7 @@ function readModule(grid: Grid, r: number, c: number): QrResult<number> {
   return { ok: true, value };
 }
 
-function writeModules(grid: Grid, cells: readonly ModuleWrite[]): QrResult<void> {
+function writeModules(grid: Grid, cells: readonly ModuleWrite[]): Result<void> {
   for (const [r, c, value] of cells) {
     const row = grid[r];
     if (row === undefined || c < 0 || c >= row.length) {
@@ -277,7 +273,7 @@ function writeModules(grid: Grid, cells: readonly ModuleWrite[]): QrResult<void>
   return done;
 }
 
-function placeFinder(grid: Grid, r0: number, c0: number): QrResult<void> {
+function placeFinder(grid: Grid, r0: number, c0: number): Result<void> {
   const cells: ModuleWrite[] = [];
   for (let r = -1; r <= 7; r++) {
     for (let c = -1; c <= 7; c++) {
@@ -295,7 +291,7 @@ function placeFinder(grid: Grid, r0: number, c0: number): QrResult<void> {
 }
 
 // touchesPattern reports whether the 5x5 square around (r, c) holds a claimed cell.
-function touchesPattern(grid: Grid, r: number, c: number): QrResult<boolean> {
+function touchesPattern(grid: Grid, r: number, c: number): Result<boolean> {
   for (let dr = -2; dr <= 2; dr++) {
     for (let dc = -2; dc <= 2; dc++) {
       const cell = readModule(grid, r + dr, c + dc);
@@ -306,7 +302,7 @@ function touchesPattern(grid: Grid, r: number, c: number): QrResult<boolean> {
   return { ok: true, value: false };
 }
 
-function placeAlignment(grid: Grid, centers: number[]): QrResult<void> {
+function placeAlignment(grid: Grid, centers: number[]): Result<void> {
   const cells: ModuleWrite[] = [];
   for (const r of centers) {
     for (const c of centers) {
@@ -326,7 +322,7 @@ function placeAlignment(grid: Grid, centers: number[]): QrResult<void> {
   return writeModules(grid, cells);
 }
 
-function placeTiming(grid: Grid): QrResult<void> {
+function placeTiming(grid: Grid): Result<void> {
   const cells: ModuleWrite[] = [];
   for (let i = 8; i < grid.length - 8; i++) {
     const v = i % 2 === 0 ? 1 : 0;
@@ -344,7 +340,7 @@ function placeTiming(grid: Grid): QrResult<void> {
 // cells and the dark module so data placement skips them. A cell a function
 // pattern already holds, such as the timing line crossing row and column 8, keeps
 // its value. placeFormat writes the claimed cells later.
-function reserveFormatAreas(grid: Grid): QrResult<void> {
+function reserveFormatAreas(grid: Grid): Result<void> {
   const size = grid.length;
   const positions: Array<readonly [number, number]> = [];
   for (let i = 0; i < 9; i++) {
@@ -369,7 +365,7 @@ function reserveFormatAreas(grid: Grid): QrResult<void> {
 // placeData lays the codeword bitstream in the standard upward/downward zigzag,
 // two columns at a time, skipping the vertical timing column and claimed cells,
 // and applies the data mask as each bit lands.
-function placeData(grid: Grid, codewords: number[], mask: number): QrResult<void> {
+function placeData(grid: Grid, codewords: number[], mask: number): Result<void> {
   const size = grid.length;
   const bits = codewords.flatMap((cw) => Array.from({ length: 8 }, (_, k) => (cw >>> (7 - k)) & 1));
   let bi = 0;
@@ -433,7 +429,7 @@ function bchFormat(mask: number): number {
   return bch ^ 0x5412;
 }
 
-function placeFormat(grid: Grid, mask: number): QrResult<void> {
+function placeFormat(grid: Grid, mask: number): Result<void> {
   const size = grid.length;
   const fmt = bchFormat(mask); // 15 bits, bit 14 is MSB
   const bit = (i: number): number => (fmt >>> i) & 1;
@@ -511,7 +507,7 @@ function penalty(grid: Grid): number {
 // the version, mask, and applying EC level M. No quiet zone is included; the
 // caller adds margin when rendering. The error is set when text is too long for
 // the largest supported version, and its message is fit to show a user.
-export function encodeMatrix(text: string): QrResult<number[][]> {
+export function encodeMatrix(text: string): Result<number[][]> {
   const bytes = Array.from(new TextEncoder().encode(text));
   const chosen = chooseVersion(bytes.length);
   if (!chosen.ok) return chosen;
@@ -558,7 +554,7 @@ export function encodeToCanvas(
   pixels = 240,
   fg = "#000000",
   bg = "#ffffff",
-): QrResult<number> {
+): Result<number> {
   const encoded = encodeMatrix(text);
   if (!encoded.ok) return encoded;
   const matrix = encoded.value;

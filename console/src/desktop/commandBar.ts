@@ -45,8 +45,8 @@ function fuzzyMatch(query: string, hay: string): { hits: number[]; score: number
   for (let i = 0; i < lower.length && qi < query.length; i++) {
     if (lower[i] !== query[qi]) continue;
     let bonus = 1;
-    const ch = hay[i];
-    const pc = i > 0 ? hay[i - 1] : "";
+    const ch = hay[i] ?? "";
+    const pc = hay[i - 1] ?? "";
     if (i === 0) bonus += 8;
     else if (pc === "." || pc === "-" || pc === "_" || pc === " ") bonus += 7;
     else if (ch >= "A" && ch <= "Z" && pc >= "a" && pc <= "z") bonus += 6;
@@ -372,7 +372,10 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
       if (stage) {
         const m = stage.matches[selected];
         if (m) run(m.target.value);
-      } else if (filtered[selected]) pick(filtered[selected].command);
+      } else {
+        const f = filtered[selected];
+        if (f) pick(f.command);
+      }
     } else if (ev.key === "Escape") {
       ev.preventDefault();
       // Escape backs OUT of a target list rather than dismissing outright: having answered "which

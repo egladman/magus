@@ -9,7 +9,7 @@ import {
   reportHttpStatus,
 } from "../../../lib/server";
 import { errMessage, errName } from "../../../lib/guards";
-import { fail, succeed, type Result } from "../result";
+import { fail, succeed, type Result } from "../../../lib/result";
 import { lensQuery, type Lens } from "./lens";
 
 export interface DiagramEntry {

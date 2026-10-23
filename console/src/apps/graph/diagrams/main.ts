@@ -28,7 +28,7 @@ import {
   type Declaration,
   type Lens,
 } from "./lens";
-import { succeed, type Result } from "../result";
+import { succeed, type Result } from "../../../lib/result";
 import { markListFocus, notice, prepareSvg, renderNodeList, type NoticeTone } from "./view";
 import {
   anchorTemplate,

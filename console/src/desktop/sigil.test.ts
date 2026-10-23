@@ -56,7 +56,7 @@ test("turning the figure by one fold lands it on itself", () => {
       // Allow a pixel of slack: the path is emitted at two decimals and rotation is not exact in
       // floating point.
       const near = [...have].some((k) => {
-        const [hx, hy] = k.split(",").map(Number);
+        const [hx = NaN, hy = NaN] = k.split(",").map(Number);
         return Math.hypot(hx - rx, hy - ry) <= 1.5;
       });
       assert.ok(near, "sym" + i + " is not " + spec.folds + "-fold symmetric");

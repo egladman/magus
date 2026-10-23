@@ -8,7 +8,7 @@
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
 import type { LinkedFigure } from "./figure-link";
-import { fail, failFrom, succeed, type Result } from "../result";
+import { fail, failFrom, succeed, type Result } from "../../../lib/result";
 
 export interface BuzzDiag {
   readonly msg: string;

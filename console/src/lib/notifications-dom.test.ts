@@ -54,16 +54,16 @@ describe("the notification drawer", () => {
     center.store.notify({ source: "Settings", message: "applied", kind: "ok" });
     center.open();
     const [ok, failed] = entries();
-    assert.ok(ok.classList.contains("pf-m-success"));
-    assert.ok(failed.classList.contains("pf-m-danger"));
-    assert.ok(failed.querySelector(".pf-v6-c-notification-drawer__list-item-header-icon svg"));
+    assert.ok(ok?.classList.contains("pf-m-success"));
+    assert.ok(failed?.classList.contains("pf-m-danger"));
+    assert.ok(failed?.querySelector(".pf-v6-c-notification-drawer__list-item-header-icon svg"));
     const title = must(
-      failed.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-header-title"),
+      failed?.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-header-title"),
     );
     assert.equal(title.tagName, "H3");
     assert.match(title.textContent ?? "", /Danger notification:\s+build failed/);
     const dismiss = must(
-      failed.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-action button"),
+      failed?.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-action button"),
     );
     assert.equal(dismiss.getAttribute("aria-label"), "Dismiss notification: build failed");
     dismiss.click();

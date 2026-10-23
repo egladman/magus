@@ -170,7 +170,7 @@ export function runningRows(st: Status | undefined, nowMs: number): ActivityRow[
       atMs,
       outcome: "",
       // The log viewer opens an invocation by id; a slot with none has nothing to link to.
-      href: t.invocation ? viewerHref("inv", t.invocation, false) : undefined,
+      ...(t.invocation ? { href: viewerHref("inv", t.invocation, false) } : {}),
     });
   }
   for (const l of st?.locks ?? []) {
@@ -204,7 +204,7 @@ export function recentRows(runs: RunDescriptor[], nowMs: number, demo = false): 
         atMs: r.timestamp_ms,
         // A descriptor exists only for a run that finished, so the outcome is always known here.
         outcome: r.failed ? "fail" : "pass",
-        href: r.ref ? viewerHref("ref", r.ref, demo) : undefined,
+        ...(r.ref ? { href: viewerHref("ref", r.ref, demo) } : {}),
       }),
     )
     .sort((a, b) => b.atMs - a.atMs)
@@ -248,7 +248,7 @@ function demoDescriptors(nowMs: number): RunDescriptor[] {
     target: r.target,
     inv: r.inv,
     failed: r.state === "failed",
-    error: r.error,
+    ...(r.error === undefined ? {} : { error: r.error }),
     timestamp_ms: r.endMs,
     duration_ms: r.durationMs,
   }));

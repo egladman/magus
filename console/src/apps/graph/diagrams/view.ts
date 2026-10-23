@@ -3,7 +3,7 @@
 
 import { h } from "../../../desktop/view";
 import { inlineAlert } from "../../../ui/alert";
-import { fail, succeed, type Result } from "../result";
+import { fail, succeed, type Result } from "../../../lib/result";
 import type { DiagramNode } from "./api";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

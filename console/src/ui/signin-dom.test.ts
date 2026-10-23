@@ -69,7 +69,7 @@ describe("the connect screen", () => {
     assert.ok(screen(), "the screen should be up");
     // The server-wide view is a row like any other, first, matching the title bar's own menu.
     assert.equal(choices().length, 3);
-    assert.equal(choices()[0].dataset.root, "");
+    assert.equal(choices()[0]?.dataset.root, "");
   });
 
   // A scope nobody picked is the failure this screen exists to prevent, so a first visit with nothing
@@ -91,7 +91,7 @@ describe("the connect screen", () => {
     rowFor(MAGUS).click();
     const checked = choices().filter((c) => c.getAttribute("aria-checked") === "true");
     assert.equal(checked.length, 1);
-    assert.equal(checked[0].dataset.root, MAGUS);
+    assert.equal(checked[0]?.dataset.root, MAGUS);
   });
 
   // The shortcut people reach for in any list-plus-confirm; refusing it makes the dialog feel stuck.
@@ -174,9 +174,9 @@ describe("the connect screen", () => {
     maybeAskWorkspace(BOTH);
     const marked = choices().filter((b) => b.dataset.suggested !== undefined);
     assert.equal(marked.length, 1);
-    assert.equal(marked[0].dataset.root, MAGUS);
+    assert.equal(marked[0]?.dataset.root, MAGUS);
     // Filled in as the answer AND ready to confirm - but still not applied until the click happens.
-    assert.equal(marked[0].getAttribute("aria-checked"), "true");
+    assert.equal(marked[0]?.getAttribute("aria-checked"), "true");
     assert.equal(confirmBtn().disabled, false);
     assert.equal(workspaceScope(), ALL_WORKSPACES, "preselecting must not decide");
   });
@@ -190,7 +190,7 @@ describe("the connect screen", () => {
     const stops = [...box.querySelectorAll<HTMLElement>("button")];
     assert.ok(stops.length >= 3);
 
-    stops[stops.length - 1].focus();
+    stops[stops.length - 1]?.focus();
     dismiss("Tab");
     assert.equal(document.activeElement, stops[0], "the last stop should wrap to the first");
   });

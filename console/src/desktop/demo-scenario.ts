@@ -377,7 +377,7 @@ export function scenarioInvocations(now: number): ScenarioInvocation[] {
     const ci = r.inv === INV_CI;
     const inv: ScenarioInvocation = {
       inv: r.inv,
-      arguments: ci ? ["affected", "ci"] : ["run", r.target.split(":")[0], r.project],
+      arguments: ci ? ["affected", "ci"] : ["run", r.target.split(":")[0] ?? r.target, r.project],
       trigger: ci ? "ci" : r.trigger === "mcp" ? "direct" : "run",
       startMs: r.startMs,
       endMs: r.endMs,

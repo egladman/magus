@@ -206,7 +206,8 @@ export function chordFromEvent(e: KeyChord, mac: boolean): Chord {
   // the pane-focus bindings (alt+hjkl) - bind reliably across platforms and layouts.
   if (e.altKey && e.code) {
     const m = /^Key([A-Z])$/.exec(e.code) ?? /^Digit([0-9])$/.exec(e.code);
-    if (m) key = m[1].toLowerCase();
+    const physical = m?.[1];
+    if (physical) key = physical.toLowerCase();
   }
   return [...MODIFIER_ORDER.filter((m) => mods.includes(m)), key].join("+");
 }

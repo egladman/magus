@@ -70,10 +70,10 @@ test("groups agent events by session, keeping page order and original indices", 
     ["s1", "s2"],
   );
   const s1 = roots[0];
-  assert.equal(s1.host, "claude");
-  assert.equal(s1.commands, 2, "the MCP event is not an agent command and is not counted");
+  assert.equal(s1?.host, "claude");
+  assert.equal(s1?.commands, 2, "the MCP event is not an agent command and is not counted");
   assert.deepEqual(
-    s1.events.map((e) => e.index),
+    s1?.events.map((e) => e.index),
     [0, 3],
     "only the agent events, at the positions they held in the page",
   );
@@ -88,8 +88,8 @@ test("denied counts the guard's deny preview, not every failure", () => {
   ];
 
   const [s1] = sessionLineage(events);
-  assert.equal(s1.commands, 4);
-  assert.equal(s1.denied, 2);
+  assert.equal(s1?.commands, 4);
+  assert.equal(s1?.denied, 2);
 });
 
 test("a spawn's lease adopts the session that ran commands under it", () => {
@@ -105,12 +105,12 @@ test("a spawn's lease adopts the session that ran commands under it", () => {
     ["parent"],
     "the child is nested, not listed beside its parent",
   );
-  assert.deepEqual(roots[0].spawns, [{ action: "Task", lease: "harness/child-work" }]);
+  assert.deepEqual(roots[0]?.spawns, [{ action: "Task", lease: "harness/child-work" }]);
   assert.deepEqual(
-    roots[0].children.map((n) => n.session),
+    roots[0]?.children.map((n) => n.session),
     ["child"],
   );
-  assert.deepEqual(roots[0].children[0].leases, ["harness/child-work"]);
+  assert.deepEqual(roots[0]?.children[0]?.leases, ["harness/child-work"]);
 });
 
 test("a spawn whose lease nobody acted under adopts nothing", () => {
@@ -121,8 +121,8 @@ test("a spawn whose lease nobody acted under adopts nothing", () => {
     roots.map((n) => n.session),
     ["parent"],
   );
-  assert.deepEqual(roots[0].children, [], "a declared lease is not by itself a child");
-  assert.deepEqual(roots[0].spawns, [{ action: "Task", lease: "harness/never-started" }]);
+  assert.deepEqual(roots[0]?.children, [], "a declared lease is not by itself a child");
+  assert.deepEqual(roots[0]?.spawns, [{ action: "Task", lease: "harness/never-started" }]);
 });
 
 // The trail lists a page newest-first, so the child's commands sit ABOVE the spawn that handed it
@@ -142,9 +142,9 @@ test("the join reads the same on a newest-first page", () => {
     ["later", "parent"],
     "roots keep page order",
   );
-  assert.deepEqual(roots[0].children, [], "the later spawn did not claim the child");
+  assert.deepEqual(roots[0]?.children, [], "the later spawn did not claim the child");
   assert.deepEqual(
-    roots[1].children.map((n) => n.session),
+    roots[1]?.children.map((n) => n.session),
     ["child"],
   );
 });
@@ -164,7 +164,7 @@ test("the spawner's own commands under its lease do not steal the join", () => {
     ["parent"],
   );
   assert.deepEqual(
-    roots[0].children.map((n) => n.session),
+    roots[0]?.children.map((n) => n.session),
     ["child"],
   );
 });
@@ -179,7 +179,7 @@ test("every session that acted under a spawned lease is a child", () => {
 
   const [parent] = sessionLineage(events);
   assert.deepEqual(
-    parent.children.map((n) => n.session),
+    parent?.children.map((n) => n.session),
     ["w1", "w2"],
   );
 });
@@ -207,7 +207,7 @@ test("events with no session are skipped, never pooled", () => {
     roots.map((n) => n.session),
     ["s1"],
   );
-  assert.equal(roots[0].commands, 1, "the unattributed commands did not land on the one session");
+  assert.equal(roots[0]?.commands, 1, "the unattributed commands did not land on the one session");
 });
 
 test("a session is both a child and a parent", () => {
@@ -223,10 +223,10 @@ test("a session is both a child and a parent", () => {
     roots.map((n) => n.session),
     ["top"],
   );
-  const mid = roots[0].children[0];
-  assert.equal(mid.session, "mid");
+  const mid = roots[0]?.children[0];
+  assert.equal(mid?.session, "mid");
   assert.deepEqual(
-    mid.children.map((n) => n.session),
+    mid?.children.map((n) => n.session),
     ["leaf"],
   );
 });
@@ -236,6 +236,7 @@ test("sessionLabel names the host, the counts and the leases", () => {
     cmd("s1", { unit: "harness/one", preview: "guard: deny" }),
     cmd("s1", { unit: "harness/one" }),
   ]);
+  assert.ok(s1);
   assert.equal(sessionLabel(s1), "claude, 2 commands, 1 denied, harness/one");
 
   // The source a command's lease came from rides beside it, so a claim reads apart from a record.
@@ -244,8 +245,10 @@ test("sessionLabel names the host, the counts and the leases", () => {
     cmd("s3", { unit: "harness/two", leaseFrom: "env" }),
     cmd("s3", { unit: "harness/one", leaseFrom: "marker" }),
   ]);
+  assert.ok(s3);
   assert.equal(sessionLabel(s3), "claude, 3 commands, harness/one (contested), harness/two (env)");
 
   const [s2] = sessionLineage([cmd("s2", { host: "" })]);
+  assert.ok(s2);
   assert.equal(sessionLabel(s2), "unknown host, 1 command");
 });

@@ -38,10 +38,10 @@ export interface PageController<S, Q> {
   setVisible(visible: boolean): void;
   // The document this app currently has open, for the console to title the tab after
   // (see TitleSource). An app with no document concept omits it and keeps its static title.
-  readonly docTitle?: TitleSource;
+  readonly docTitle?: TitleSource | undefined;
   // The app's current state, for the console to inspect. Typed per app via S; the
   // console treats it opaquely.
-  readonly state?: S;
+  readonly state?: S | undefined;
 }
 
 // TitleSource is how an app reports the document it currently has open, so the console can

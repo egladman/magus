@@ -145,7 +145,7 @@ async function remount(): Promise<HTMLElement> {
   return mount();
 }
 
-function text(el: Element | null): string {
+function text(el: Element | null | undefined): string {
   return (el?.textContent ?? "").trim();
 }
 
@@ -155,8 +155,8 @@ test("a run lists by the command that produced it, not by a ref", async () => {
 
   const rows = host.querySelectorAll(".console-runs__row");
   assert.equal(rows.length, 1);
-  assert.equal(text(rows[0].querySelector(".console-runs__row-cmd")), "magus run build console");
-  assert.match(text(rows[0].querySelector(".console-runs__row-meta")), /1 target/);
+  assert.equal(text(rows[0]?.querySelector(".console-runs__row-cmd")), "magus run build console");
+  assert.match(text(rows[0]?.querySelector(".console-runs__row-meta")), /1 target/);
   assert.equal(text(host.querySelector(".console-runs__count")), "1 run");
 });
 

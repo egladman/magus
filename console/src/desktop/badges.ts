@@ -8,7 +8,7 @@
 //
 // Same contract as pulse.ts, for the same reasons: best-effort, hidden rather than zeroed when there
 // is no answer, and latched off per host once the server says it does not serve the route.
-import { asError, fail, succeed, type Result } from "../lib/result";
+import { fail, failFrom, succeed, type Result } from "../lib/result";
 import { authHeaders, validateLoopbackHost } from "../lib/server";
 
 // Hosts whose server has no diff route. A plain fetch 404 is NOT a ConnectError, so server.ts's
@@ -78,11 +78,11 @@ async function getDiffCount(host: string): Promise<Result<number | null>> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (res.status === 404 || res.status === 501)
-      return fail(new RoutelessError(String(res.status)));
-    if (!res.ok) return fail(new Error(String(res.status)));
+      return failFrom(new RoutelessError(String(res.status)));
+    if (!res.ok) return fail(String(res.status));
     return succeed(diffFileCount(await res.json()));
   } catch (e) {
-    return fail(asError(e));
+    return failFrom(e);
   }
 }
 

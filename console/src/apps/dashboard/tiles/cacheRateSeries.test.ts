@@ -26,8 +26,8 @@ test("a rate is the hit share of the interval, not of the running total", () => 
     sample({ at: 2_000, cacheHits: 93, cacheMisses: 11 }),
   ]);
   assert.equal(pts.length, 1);
-  assert.equal(pts[0].atMs, 2_000, "a point is stamped at its LATER endpoint");
-  assert.equal(pts[0].rate, 75);
+  assert.equal(pts[0]?.atMs, 2_000, "a point is stamped at its LATER endpoint");
+  assert.equal(pts[0]?.rate, 75);
 });
 
 test("an interval where nothing happened has no rate to report", () => {
@@ -35,7 +35,7 @@ test("an interval where nothing happened has no rate to report", () => {
     sample({ at: 1_000, cacheHits: 5, cacheMisses: 5 }),
     sample({ at: 2_000, cacheHits: 5, cacheMisses: 5 }),
   ]);
-  assert.equal(pts[0].rate, null, "0% would claim every lookup missed");
+  assert.equal(pts[0]?.rate, null, "0% would claim every lookup missed");
 });
 
 // The bug this rule was added for. Before generation identity, a restart produced a
@@ -47,7 +47,7 @@ test("a server restart breaks the series instead of plotting a confident zero", 
     sample({ at: 1_000, cacheHits: 900, cacheMisses: 100, generation: 100 }),
     sample({ at: 2_000, cacheHits: 3, cacheMisses: 1, generation: 200 }),
   ]);
-  assert.equal(pts[0].rate, null, "counters restarted at zero; there is no rate across that");
+  assert.equal(pts[0]?.rate, null, "counters restarted at zero; there is no rate across that");
 });
 
 test("an unknown generation on either side is a boundary", () => {
@@ -61,7 +61,7 @@ test("the backfill-to-live crossover is a boundary even within one generation", 
     sample({ at: 1_000, cacheHits: 900, cacheMisses: 100, cacheSrc: "metrics" }),
     sample({ at: 2_000, cacheHits: 12, cacheMisses: 3, cacheSrc: "status" }),
   ]);
-  assert.equal(pts[0].rate, null, "the two feeds count different things");
+  assert.equal(pts[0]?.rate, null, "the two feeds count different things");
 });
 
 test("an unmeasured endpoint yields a gap, never an invented zero", () => {
@@ -69,7 +69,7 @@ test("an unmeasured endpoint yields a gap, never an invented zero", () => {
     sample({ at: 1_000, cacheHits: 10, cacheMisses: 1 }),
     sample({ at: 2_000, cacheHits: null, cacheMisses: null }),
   ]);
-  assert.equal(withNull[0].rate, null);
+  assert.equal(withNull[0]?.rate, null);
 });
 
 // A decrease with no crossover and no generation change is unexplained. Clamping it would
@@ -79,7 +79,7 @@ test("an unexplained decrease is unmeasurable rather than clamped", () => {
     sample({ at: 1_000, cacheHits: 50, cacheMisses: 5 }),
     sample({ at: 2_000, cacheHits: 40, cacheMisses: 5 }),
   ]);
-  assert.equal(pts[0].rate, null);
+  assert.equal(pts[0]?.rate, null);
 });
 
 test("a run of samples yields one point per interval", () => {

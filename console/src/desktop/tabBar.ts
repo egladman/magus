@@ -42,7 +42,7 @@ interface TitleParts {
 function splitTitle(title: string): TitleParts {
   const segs = title.split("/").filter((s) => s !== "");
   if (segs.length < 2) return { label: title, parents: [] };
-  return { label: segs[segs.length - 1], parents: segs.slice(0, -1) };
+  return { label: segs.at(-1) ?? title, parents: segs.slice(0, -1) };
 }
 
 // disambiguate is the editor behavior for same-named documents: two tabs both showing `main.ts`
@@ -60,17 +60,18 @@ function splitTitle(title: string): TitleParts {
 // further information to show, and inventing one would lie.
 function disambiguate(parts: TitleParts[]): (string | undefined)[] {
   const groups = new Map<string, number[]>();
-  for (let i = 0; i < parts.length; i++) {
-    const at = groups.get(parts[i].label);
+  for (const [i, part] of parts.entries()) {
+    const at = groups.get(part.label);
     if (at) at.push(i);
-    else groups.set(parts[i].label, [i]);
+    else groups.set(part.label, [i]);
   }
   const hints: (string | undefined)[] = parts.map(() => undefined);
   for (const idxs of groups.values()) {
     if (idxs.length < 2) continue;
-    const maxDepth = Math.max(...idxs.map((i) => parts[i].parents.length));
+    const parentsOf = (i: number): string[] => parts[i]?.parents ?? [];
+    const maxDepth = Math.max(...idxs.map((i) => parentsOf(i).length));
     for (let depth = 1; depth <= maxDepth; depth++) {
-      const suffixes = idxs.map((i) => parts[i].parents.slice(-depth).join("/"));
+      const suffixes = idxs.map((i) => parentsOf(i).slice(-depth).join("/"));
       const distinct = new Set(suffixes).size === suffixes.length;
       // Stop at the first depth that separates the group, or at the deepest available - past that
       // there is nothing left to add and every extra segment is noise.
@@ -89,12 +90,15 @@ function disambiguate(parts: TitleParts[]): (string | undefined)[] {
 export function tabViews(ws: Workspace): TabView[] {
   const parts = ws.tabs.map((t) => splitTitle(t.title));
   const hints = disambiguate(parts);
-  return ws.tabs.map((t, i) => ({
-    id: t.id,
-    title: parts[i].label,
-    hint: hints[i],
-    active: t.id === ws.activeId,
-  }));
+  return ws.tabs.map((t, i) => {
+    const hint = hints[i];
+    return {
+      id: t.id,
+      title: parts[i]?.label ?? t.title,
+      ...(hint === undefined ? {} : { hint }),
+      active: t.id === ws.activeId,
+    };
+  });
 }
 
 // Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), a

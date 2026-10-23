@@ -455,7 +455,7 @@ test("maxLineChars picks up a comment longer than every code line", () => {
     },
   ];
   const rows = buildRows(patchFixture(SHORT_LINES), "unified", byHunk(comments));
-  assert.equal(maxLineChars(rows), comments[0].body.length);
+  assert.equal(maxLineChars(rows), comments[0]?.body.length);
 });
 
 test("maxLineChars picks up a touch sentence longer than every code line", () => {

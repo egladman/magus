@@ -85,27 +85,27 @@ describe("the question builder", () => {
     const [filter, view] = [
       ...q<HTMLElement>('[role="tablist"]').querySelectorAll<HTMLElement>('[role="tab"]'),
     ];
-    assert.equal(filter.getAttribute("aria-selected"), "true");
-    assert.equal(filter.tabIndex, 0);
-    assert.equal(view.tabIndex, -1);
+    assert.equal(filter?.getAttribute("aria-selected"), "true");
+    assert.equal(filter?.tabIndex, 0);
+    assert.equal(view?.tabIndex, -1);
     assert.ok(
-      filter.closest("li")?.classList.contains("pf-m-current"),
+      filter?.closest("li")?.classList.contains("pf-m-current"),
       "PF marks the item current",
     );
 
     press(filter, "ArrowRight");
-    assert.equal(view.getAttribute("aria-selected"), "true");
-    assert.equal(view.tabIndex, 0);
-    assert.equal(filter.tabIndex, -1);
+    assert.equal(view?.getAttribute("aria-selected"), "true");
+    assert.equal(view?.tabIndex, 0);
+    assert.equal(filter?.tabIndex, -1);
     assert.equal(document.activeElement, view);
-    assert.equal(document.getElementById(view.getAttribute("aria-controls") ?? "")?.hidden, false);
+    assert.equal(document.getElementById(view?.getAttribute("aria-controls") ?? "")?.hidden, false);
 
     press(view, "ArrowRight");
-    assert.equal(filter.getAttribute("aria-selected"), "true", "wraps around");
+    assert.equal(filter?.getAttribute("aria-selected"), "true", "wraps around");
     press(filter, "End");
-    assert.equal(view.getAttribute("aria-selected"), "true");
+    assert.equal(view?.getAttribute("aria-selected"), "true");
     press(view, "Home");
-    assert.equal(filter.getAttribute("aria-selected"), "true");
+    assert.equal(filter?.getAttribute("aria-selected"), "true");
   });
 
   test("no control is a text character standing in for an icon", () => {
@@ -174,16 +174,16 @@ describe("the question builder", () => {
     try {
       const { qb } = mount();
       const copy = [...qb.el.querySelectorAll<HTMLElement>(".console-graph-qb__copyrow button")][0];
-      copy.click();
+      copy?.click();
       await new Promise((r) => setTimeout(r, 0));
       const alert = qb.el.querySelector<HTMLElement>(".console-graph-qb__notice [role='alert']");
       assert.ok(alert, "an inline alert in the panel");
       assert.match(alert.textContent ?? "", /Danger alert/);
       assert.match(alert.textContent ?? "", /denied/);
       assert.equal(heard.length, 1);
-      assert.equal(heard[0].kind, "error");
-      assert.equal(heard[0].toast, true);
-      assert.match(heard[0].message, /Could not copy/);
+      assert.equal(heard[0]?.kind, "error");
+      assert.equal(heard[0]?.toast, true);
+      assert.match(heard[0]?.message, /Could not copy/);
     } finally {
       document.removeEventListener(NOTIFY, listen);
     }

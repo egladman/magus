@@ -37,7 +37,7 @@ test("every app directory carries a manifest and an entry", () => {
 test("apps/index.ts imports exactly the app directories", () => {
   const imported = [
     ...readFileSync(join(APPS_DIR, "index.ts"), "utf8").matchAll(/from "\.\/([^/"]+)\/app"/g),
-  ].map((m) => m[1]);
+  ].map((m) => m[1] ?? "");
   assert.deepEqual(sorted(imported), dirs);
   // The bundle and stub paths are built from the id, so it has to be the directory's name.
   assert.deepEqual(sorted(APPS.map((app) => app.id)), dirs);
@@ -77,7 +77,7 @@ test("the server's link vocabulary names exactly the manifests' segments", () =>
     .split("\n")
     .find((l) => l.startsWith("var KnownApps = "));
   assert.ok(line, "no single-line KnownApps in url.go");
-  const known = [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const known = [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1] ?? "");
   assert.deepEqual(sorted(known), segments);
 });
 

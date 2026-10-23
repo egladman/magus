@@ -12,6 +12,7 @@
 
 import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "../../lib/server";
 import { reportFailure } from "../../lib/notifications";
+import { failFrom, succeed, type Result } from "../../lib/result";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -392,24 +393,17 @@ export interface DiffContext {
   readonly lines: readonly string[];
 }
 
-// Result is what a read or write here answers instead of throwing: the value, or the Error a
-// caller shows, skips or returns. A refused status is an HttpError, so callers can tell it apart.
-export type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
-
-function failed(e: unknown): { ok: false; error: Error } {
-  return { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
-}
-
 // getJSON is the one place the reads below meet fetch and res.json, which reject on a dropped
-// connection, an abort or a body that is not JSON.
+// connection, an abort or a body that is not JSON. A refused status fails as an HttpError, so
+// callers can tell it apart.
 async function getJSON<T>(url: string, signal: AbortSignal): Promise<Result<T>> {
   try {
     const res = await fetch(url, { headers: authHeaders(), signal });
-    if (!res.ok) return { ok: false, error: new HttpError(res.status) };
+    if (!res.ok) return failFrom(new HttpError(res.status));
     const value: T = await res.json();
-    return { ok: true, value };
+    return succeed(value);
   } catch (e) {
-    return failed(e);
+    return failFrom(e);
   }
 }
 
@@ -429,11 +423,11 @@ async function postSessionOp(
     });
     if (!res.ok) {
       const refusal = await readRefusal(res);
-      return failed(new Error(refusal?.message ?? `server answered ${res.status}`));
+      return failFrom(new Error(refusal?.message ?? `server answered ${res.status}`));
     }
-    return { ok: true, value: res };
+    return succeed(res);
   } catch (e) {
-    return failed(e);
+    return failFrom(e);
   }
 }
 
@@ -578,9 +572,9 @@ export async function publish(
   if (!posted.ok) return posted;
   try {
     const value: DiffReview = await posted.value.json();
-    return { ok: true, value };
+    return succeed(value);
   } catch (e) {
-    return failed(e);
+    return failFrom(e);
   }
 }
 
@@ -603,7 +597,7 @@ export async function reply(
   signal: AbortSignal,
 ): Promise<Result<null>> {
   const posted = await postSessionOp(host, { op: "reply", root, body }, signal);
-  return posted.ok ? { ok: true, value: null } : posted;
+  return posted.ok ? succeed(null) : posted;
 }
 
 // fetchThreadText reads one conversation as `magus diff --thread` prints it: the comments, the

@@ -367,7 +367,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     }).then((res) => {
       opening = false;
       if (res.ok) {
-        detached = res.handle;
+        detached = res.value;
         detachBtn.removeAttribute("data-detach-failed");
         detachBtn.title = "Put it back";
         clearNotice();
@@ -375,7 +375,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       }
       // A browser can refuse a second window. The reason is said where the reader is looking, in the
       // panel, and as a toast; a tooltip alone reaches nobody on touch and nobody who is not hovering.
-      const message = "Could not open the builder in its own window: " + res.reason;
+      const message = "Could not open the builder in its own window: " + res.error.message;
       detachBtn.title = message;
       detachBtn.setAttribute("data-detach-failed", "");
       showFailure(message, "graph:detach");

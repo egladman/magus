@@ -164,14 +164,14 @@ test("an event with a stored body offers to show it, sized", async () => {
 
   const btns = controls(host);
   assert.equal(btns.length, 1, "one control for the one ref the event carries");
-  assert.equal(btns[0].textContent, "Show response (2.0 KB)");
+  assert.equal(btns[0]?.textContent, "Show response (2.0 KB)");
 });
 
 test("clicking it resolves that ref and paints the full body", async () => {
   serve([mcpEvent()], { body: "line one\nline two\n" });
   const host = await mount();
 
-  controls(host)[0].click();
+  controls(host)[0]?.click();
   await settle();
 
   assert.deepEqual(asked, ["mcpbbbb"]);
@@ -193,7 +193,7 @@ test("a rotated-away payload says so instead of failing", async () => {
   });
   const host = await mount();
 
-  controls(host)[0].click();
+  controls(host)[0]?.click();
   await settle();
 
   assert.match(sectionText(host), /response mcpbbbb is no longer stored/);
@@ -206,13 +206,13 @@ test("a transient failure keeps the control and names the reason", async () => {
   serve([mcpEvent()], { status: 503, code: "unavailable", message: "server went away" });
   const host = await mount();
 
-  controls(host)[0].click();
+  controls(host)[0]?.click();
   await settle();
 
   const btns = controls(host);
   assert.equal(btns.length, 1);
-  assert.equal(btns[0].disabled, false, "still pressable");
-  assert.equal(btns[0].textContent, "Show response (2.0 KB)", "the label is restored");
+  assert.equal(btns[0]?.disabled, false, "still pressable");
+  assert.equal(btns[0]?.textContent, "Show response (2.0 KB)", "the label is restored");
   assert.match(sectionText(host), /Could not read the response: .*server went away/);
 });
 
@@ -280,7 +280,7 @@ test("a spawned session renders under the session that spawned it", async () => 
     ["parent"],
     "the child is nested, not a second root",
   );
-  const child = top[0].querySelector<HTMLElement>('[data-session="child"]');
+  const child = top[0]?.querySelector<HTMLElement>('[data-session="child"]');
   assert.ok(child, "the child session branch sits inside its parent");
   assert.equal(branchText(child), "claude, 1 command, 1 denied, harness/child-work");
 });
@@ -314,7 +314,7 @@ test("a branch carries its label as a title", async () => {
   assert.deepEqual(nodes, ["MCP tool calls", "Agent commands"]);
 
   modeButton(host, "session").click();
-  const session = roots(host)[0].querySelector<HTMLButtonElement>(
+  const session = roots(host)[0]?.querySelector<HTMLButtonElement>(
     ":scope > .pf-v6-c-tree-view__content button",
   );
   assert.equal(session?.title, "claude, 1 command  s1");
@@ -329,13 +329,13 @@ test("expansion and selection survive a repaint", async () => {
 
   const first = roots(host)[0];
   assert.equal(
-    first.classList.contains("pf-m-expanded"),
+    first?.classList.contains("pf-m-expanded"),
     true,
     "the first branch opens by default",
   );
-  first.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.click();
-  assert.equal(first.classList.contains("pf-m-expanded"), false);
-  const leaf = roots(host)[1].querySelector<HTMLButtonElement>("ul button");
+  first?.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.click();
+  assert.equal(first?.classList.contains("pf-m-expanded"), false);
+  const leaf = roots(host)[1]?.querySelector<HTMLButtonElement>("ul button");
   assert.ok(leaf);
   leaf.click();
   assert.equal(leaf.classList.contains("pf-m-current"), true);
@@ -345,12 +345,12 @@ test("expansion and selection survive a repaint", async () => {
 
   const again = roots(host);
   assert.equal(
-    again[0].classList.contains("pf-m-expanded"),
+    again[0]?.classList.contains("pf-m-expanded"),
     false,
     "the closed branch stays closed",
   );
   assert.equal(
-    again[1].querySelector("ul button")?.classList.contains("pf-m-current"),
+    again[1]?.querySelector("ul button")?.classList.contains("pf-m-current"),
     true,
     "the picked leaf stays current",
   );
@@ -377,7 +377,7 @@ test("the demo has an agent session to group by", async () => {
     top.map((el) => el.dataset.session),
     ["sess-orchestrator"],
   );
-  assert.ok(top[0].querySelector('[data-session="sess-worker"]'), "the worker nests under it");
+  assert.ok(top[0]?.querySelector('[data-session="sess-worker"]'), "the worker nests under it");
 });
 
 // The index is a tree a keyboard can use: it is named, one row is the tab stop, and the arrow keys
@@ -426,7 +426,7 @@ test("choosing an event in the index marks and focuses its section", async () =>
   leaf.click();
   const marked = host.querySelectorAll(".console-render-section__head[data-highlight]");
   assert.equal(marked.length, 1);
-  const toggle = must(marked[0].querySelector<HTMLElement>(".console-render-section__toggle"));
+  const toggle = must(marked[0]?.querySelector<HTMLElement>(".console-render-section__toggle"));
   assert.equal(document.activeElement, toggle);
 });
 

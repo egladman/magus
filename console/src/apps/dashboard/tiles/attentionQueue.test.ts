@@ -81,9 +81,9 @@ test("parseRequests is total over a body that is not the documented shape", () =
 // a queue - how long somebody has been waiting.
 test("parseRequests keeps opened_ms a number and never coerces one", () => {
   const [row] = parseRequests({ requests: [{ id: "att-a", opened_ms: "1755300000000" }] });
-  assert.equal(row.opened_ms, 0, "a string stamp is no stamp, not a stamp of zero characters");
+  assert.equal(row?.opened_ms, 0, "a string stamp is no stamp, not a stamp of zero characters");
   const [ok] = parseRequests({ requests: [{ id: "att-a", opened_ms: 5 }] });
-  assert.equal(ok.opened_ms, 5);
+  assert.equal(ok?.opened_ms, 5);
 });
 
 test("subjectLine joins the paths the event named", () => {

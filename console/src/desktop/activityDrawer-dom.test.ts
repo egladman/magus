@@ -163,7 +163,7 @@ test("in the demo it lists the demo's own runs and says they are demo data", () 
     ...panel().querySelectorAll<HTMLAnchorElement>("a.console-shell-activity__row-link"),
   ];
   assert.ok(links.length > 0, "the demo scenario has finished runs to list");
-  assert.match(links[0].getAttribute("href") ?? "", /^logs\/#demo&ref=/);
+  assert.match(links[0]?.getAttribute("href") ?? "", /^logs\/#demo&ref=/);
   assert.equal(panel().textContent?.includes("Not connected"), false);
   drawer.destroy();
   location.hash = "";

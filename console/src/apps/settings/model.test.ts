@@ -218,7 +218,7 @@ const diffCtx: DiffContext = {
   nodeShapesLabel: (on) => (on ? "On" : "Off"),
   commandLabel: (id) => (id === "console.tab.close" ? "Close pane or tab" : id),
   effectiveChord: (keymap, id) => {
-    const chord = Object.prototype.hasOwnProperty.call(keymap, id) ? keymap[id] : "mod+w"; // "mod+w" = the default
+    const chord = Object.hasOwn(keymap, id) ? (keymap[id] ?? "") : "mod+w"; // "mod+w" = the default
     return chord === "" ? "None" : chord;
   },
   commandIds: ["console.tab.close"],

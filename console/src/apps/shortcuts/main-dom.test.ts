@@ -45,7 +45,7 @@ describe("the Shortcuts app", () => {
   });
 
   test("Run is a real button named for the shortcut, and runs it", () => {
-    const run = rows()[0].querySelector<HTMLButtonElement>("button.pf-m-secondary");
+    const run = rows()[0]?.querySelector<HTMLButtonElement>("button.pf-m-secondary");
     assert.equal(run?.textContent, "Run");
     assert.equal(run?.getAttribute("aria-label"), "Run Next tab");
     run?.click();
@@ -53,23 +53,26 @@ describe("the Shortcuts app", () => {
   });
 
   test("the keys describe the Run button", () => {
-    const run = rows()[0].querySelector("button.pf-m-secondary");
+    const run = rows()[0]?.querySelector("button.pf-m-secondary");
     const keys = document.getElementById(run?.getAttribute("aria-describedby") ?? "");
     assert.ok(keys?.querySelector("kbd.console-shell-keycap"));
     assert.match(keys?.textContent ?? "", /Alt/);
     // A shortcut with no keys has nothing to describe it by.
-    const bare = rows()[1].querySelector("button.pf-m-secondary");
+    const bare = rows()[1]?.querySelector("button.pf-m-secondary");
     assert.equal(bare?.getAttribute("aria-describedby"), null);
   });
 
   test("edit is a sibling button, only on a rebindable shortcut", () => {
-    const edit = rows()[0].querySelector<HTMLButtonElement>('button[data-role="edit"]');
+    const edit = rows()[0]?.querySelector<HTMLButtonElement>('button[data-role="edit"]');
     assert.equal(edit?.getAttribute("aria-label"), "Edit shortcut for Next tab");
-    assert.equal(edit?.parentElement, rows()[0].querySelector(".console-shell-shortcuts__actions"));
+    assert.equal(
+      edit?.parentElement,
+      rows()[0]?.querySelector(".console-shell-shortcuts__actions"),
+    );
     edit?.click();
     assert.deepEqual(edited, ["console.tab.next"]);
     assert.deepEqual(ran, [], "editing does not run it");
-    assert.equal(rows()[1].querySelector('button[data-role="edit"]'), null);
+    assert.equal(rows()[1]?.querySelector('button[data-role="edit"]'), null);
   });
 
   test("groups are h2 headings that name their lists", () => {

@@ -5,7 +5,7 @@ import { encodeMatrix } from "./qr";
 // matrixOf encodes text and fails the test when the encoder returns an error.
 function matrixOf(text: string): number[][] {
   const result = encodeMatrix(text);
-  assert.ok(result.ok, result.ok ? "" : result.error);
+  assert.ok(result.ok, result.ok ? "" : result.error.message);
   return result.value;
 }
 
@@ -29,8 +29,11 @@ test("qr fills the largest version and rejects input past it", () => {
 
   const tooLong = encodeMatrix("a".repeat(214));
   assert.equal(tooLong.ok, false);
-  assert.ok(!tooLong.ok && tooLong.error.includes("214 bytes"), "error names the input size");
-  assert.ok(!tooLong.ok && tooLong.error.includes("213 bytes"), "error names the limit");
+  assert.ok(
+    !tooLong.ok && tooLong.error.message.includes("214 bytes"),
+    "error names the input size",
+  );
+  assert.ok(!tooLong.ok && tooLong.error.message.includes("213 bytes"), "error names the limit");
 });
 
 // Multi-byte characters count by their UTF-8 length, not by character.
@@ -44,17 +47,17 @@ test("qr counts bytes, not characters, against the limit", () => {
 test("qr places the three finder patterns", () => {
   const m = matrixOf("magus");
   const n = m.length;
-  const corners = [
+  const corners: [number, number][] = [
     [0, 0],
     [0, n - 7],
     [n - 7, 0],
   ];
   for (const [r0, c0] of corners) {
     // Outer ring dark, inner ring (offset 1) light, 3x3 core dark.
-    assert.equal(m[r0][c0], 1, "finder top-left corner dark");
-    assert.equal(m[r0 + 1][c0 + 1], 0, "finder inner ring light");
-    assert.equal(m[r0 + 3][c0 + 3], 1, "finder center dark");
-    assert.equal(m[r0 + 6][c0 + 6], 1, "finder bottom-right corner dark");
+    assert.equal(m[r0]?.[c0], 1, "finder top-left corner dark");
+    assert.equal(m[r0 + 1]?.[c0 + 1], 0, "finder inner ring light");
+    assert.equal(m[r0 + 3]?.[c0 + 3], 1, "finder center dark");
+    assert.equal(m[r0 + 6]?.[c0 + 6], 1, "finder bottom-right corner dark");
   }
 });
 
@@ -64,8 +67,8 @@ test("qr lays alternating timing patterns", () => {
   const n = m.length;
   for (let i = 8; i < n - 8; i++) {
     const want = i % 2 === 0 ? 1 : 0;
-    assert.equal(m[6][i], want, "row-6 timing at " + i);
-    assert.equal(m[i][6], want, "col-6 timing at " + i);
+    assert.equal(m[6]?.[i], want, "row-6 timing at " + i);
+    assert.equal(m[i]?.[6], want, "col-6 timing at " + i);
   }
 });
 
@@ -73,7 +76,7 @@ test("qr lays alternating timing patterns", () => {
 test("qr sets the mandatory dark module", () => {
   const m = matrixOf("magus");
   const n = m.length;
-  assert.equal(m[n - 8][8], 1, "dark module must be set");
+  assert.equal(m[n - 8]?.[8], 1, "dark module must be set");
 });
 
 // Every module is a bit: no cell is left unset (-1) after encoding.

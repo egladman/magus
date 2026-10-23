@@ -99,6 +99,7 @@ export function keepFocus(box: HTMLElement): FocusKeeper {
     }
     const first = stops[0];
     const last = stops[stops.length - 1];
+    if (!first || !last) return;
     const at = document.activeElement;
     if (ev.shiftKey && (at === first || at === box)) {
       ev.preventDefault();

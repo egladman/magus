@@ -167,7 +167,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
       qrFrame.dataset.failed = "";
       showToast(
         "Share",
-        `Could not draw the QR code. ${drawn.error} The link below still works.`,
+        `Could not draw the QR code. ${drawn.error.message} The link below still works.`,
         "warn",
       );
     }

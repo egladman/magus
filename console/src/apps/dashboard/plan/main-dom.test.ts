@@ -486,7 +486,7 @@ test("the stage is drawn at its own size rather than scaled to the pane", async 
   try {
     await settle();
     const svg = host.querySelector<SVGSVGElement>(".console-plan-stage__svg");
-    const [, , w, h] = (svg?.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const [, , w = NaN, h = NaN] = (svg?.getAttribute("viewBox") ?? "").split(" ").map(Number);
     assert.equal(svg?.style.width, `${Math.round(w)}px`);
     assert.equal(svg?.style.height, `${Math.round(h)}px`);
   } finally {

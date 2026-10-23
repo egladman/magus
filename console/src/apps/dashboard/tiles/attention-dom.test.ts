@@ -51,8 +51,8 @@ function statusWith(targets: { label: string; state: string; ref?: string }[]): 
         inv: "inv123",
         trigger: "ci",
         targets: targets.map((t) => ({
-          project: t.label.includes(":") ? t.label.split(":")[0] : "",
-          target: t.label.includes(":") ? t.label.split(":")[1] : t.label,
+          project: t.label.includes(":") ? (t.label.split(":")[0] ?? "") : "",
+          target: t.label.includes(":") ? (t.label.split(":")[1] ?? t.label) : t.label,
           label: t.label,
           state: t.state as never,
           terminal: t.state !== "running" && t.state !== "queued",
@@ -94,7 +94,7 @@ test("a target that failed without an output ref is still listed", () => {
   // Dropping it would make the count say two and the list show one, with nothing saying which was
   // withheld. Its run id is the fallback handle.
   const s = statusWith([{ label: "lib/core:test", state: "failed" }]);
-  assert.equal(failingTargets(s)[0].inv, "inv123");
+  assert.equal(failingTargets(s)[0]?.inv, "inv123");
 });
 
 test("reproduceCommand puts the target first and the project second", () => {

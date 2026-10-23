@@ -136,7 +136,7 @@ test("the real exchange asks for an expiring console=write grant", async () => {
         const now = Date.UTC(2026, 8, 22);
         const out = await exchangeOperatorToken("127.0.0.1:7391", now);
         assert.equal(out, "exchanged");
-        const body = JSON.parse(calls[0].body);
+        const body = JSON.parse(calls[0]?.body ?? "");
         assert.deepEqual(body.grant, { console: "LEVEL_WRITE" });
         assert.equal(body.scope, undefined, "the retired scope field is gone");
         assert.equal(Date.parse(String(body.expireTime)), now + CONSOLE_TOKEN_TTL_MS);
@@ -160,8 +160,8 @@ test("a link code is redeemed once, in the body, for the token it stands for", a
         const out = await redeemLinkCode("127.0.0.1:7391", "mgx_code");
         assert.equal(out, "exchanged");
         assert.equal(calls.length, 1);
-        assert.equal(calls[0].url, "http://127.0.0.1:7391/api/v1/token/exchange");
-        assert.deepEqual(JSON.parse(calls[0].body), { code: "mgx_code" });
+        assert.equal(calls[0]?.url, "http://127.0.0.1:7391/api/v1/token/exchange");
+        assert.deepEqual(JSON.parse(calls[0]?.body), { code: "mgx_code" });
         assert.equal(getLiveToken(), "mgs_console");
       },
     );

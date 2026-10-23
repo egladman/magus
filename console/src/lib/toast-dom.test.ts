@@ -50,21 +50,24 @@ describe("the toast group", () => {
     assert.equal(g.getAttribute("role"), "list");
     pushToast({ source: "Runs", message: "Done.", kind: "ok", ms: 0 });
     const [item] = items();
-    assert.equal(item.tagName, "LI");
-    assert.ok(item.parentElement === g);
+    assert.equal(item?.tagName, "LI");
+    assert.ok(item?.parentElement === g);
   });
 
   test("a toast is a PF alert: hidden icon, severity prefix, close button", () => {
     pushToast({ source: "Runs", message: "Could not load.", kind: "error", ms: 0 });
     const [item] = items();
-    const alert = item.querySelector(".pf-v6-c-alert");
+    const alert = item?.querySelector(".pf-v6-c-alert");
     assert.ok(alert?.classList.contains("pf-m-danger"));
     assert.equal(alert?.getAttribute("role"), "alert", "an error is announced assertively");
     const icon = alert?.querySelector(".pf-v6-c-alert__icon svg");
     assert.equal(icon?.getAttribute("aria-hidden"), "true");
-    assert.equal(item.querySelector(".pf-v6-c-alert__title")?.textContent, "Danger alert: Runs");
-    assert.equal(item.querySelector(".pf-v6-c-alert__description")?.textContent, "Could not load.");
-    const close = item.querySelector(".pf-v6-c-alert__action button");
+    assert.equal(item?.querySelector(".pf-v6-c-alert__title")?.textContent, "Danger alert: Runs");
+    assert.equal(
+      item?.querySelector(".pf-v6-c-alert__description")?.textContent,
+      "Could not load.",
+    );
+    const close = item?.querySelector(".pf-v6-c-alert__action button");
     assert.equal(close?.getAttribute("aria-label"), "Close danger alert: Runs");
   });
 
@@ -72,7 +75,7 @@ describe("the toast group", () => {
     const variant = (kind: "ok" | "warn" | "error" | "info"): [string, string | null] => {
       reset();
       pushToast({ source: "S", message: "m " + kind, kind, ms: 0 });
-      const alert = items()[0].querySelector(".pf-v6-c-alert");
+      const alert = items()[0]?.querySelector(".pf-v6-c-alert");
       const mod = [...(alert?.classList ?? [])].find((c) => c.startsWith("pf-m-")) ?? "";
       return [mod, alert?.getAttribute("role") ?? null];
     };
@@ -104,7 +107,7 @@ describe("the toast group", () => {
   test("the close button dismisses it and runs onDismiss", () => {
     let dismissed = 0;
     pushToast({ source: "A", message: "x", ms: 0, onDismiss: () => dismissed++ });
-    items()[0].querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
+    items()[0]?.querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
     assert.equal(items().length, 0, "it leaves the live stack at once");
     assert.equal(dismissed, 1);
   });
@@ -117,7 +120,7 @@ describe("the toast group", () => {
       ms: 0,
       actions: [{ label: "Retry", run: () => void ran++ }],
     });
-    const button = items()[0].querySelector<HTMLButtonElement>(ACTION);
+    const button = items()[0]?.querySelector<HTMLButtonElement>(ACTION);
     assert.equal(button?.textContent, "Retry");
     button?.click();
     assert.equal(ran, 1);
@@ -133,10 +136,10 @@ describe("the toast group", () => {
   test("waits while the pointer is on it and resumes when it leaves", async () => {
     pushToast({ source: "A", message: "read me", ms: 40 });
     const [item] = items();
-    item.dispatchEvent(new MouseEvent("mouseenter"));
+    item?.dispatchEvent(new MouseEvent("mouseenter"));
     await sleep(120);
     assert.equal(items().length, 1, "still up while hovered");
-    item.dispatchEvent(new MouseEvent("mouseleave"));
+    item?.dispatchEvent(new MouseEvent("mouseleave"));
     await sleep(1300);
     assert.equal(items().length, 0, "goes after leaving");
   });
@@ -144,10 +147,10 @@ describe("the toast group", () => {
   test("waits while focus is inside it", async () => {
     pushToast({ source: "A", message: "focus me", ms: 40 });
     const [item] = items();
-    item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    item?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await sleep(120);
     assert.equal(items().length, 1);
-    item.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    item?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await sleep(1300);
     assert.equal(items().length, 0);
   });
@@ -171,7 +174,7 @@ describe("the toast entry points", () => {
     const link = { label: "View", run: () => {} };
     renderTransientToast("Settings", "Dropped 2 keys.", "warn", link, 0);
     assert.equal(items().length, 2);
-    assert.equal(items()[0].querySelector(ACTION)?.textContent, "View");
+    assert.equal(items()[0]?.querySelector(ACTION)?.textContent, "View");
   });
 
   test("showToast raises a toast and records it in the history", () => {
@@ -190,11 +193,11 @@ describe("the toast entry points", () => {
     showRefreshToast("Dashboard", "A new version is available.");
     showRefreshToast("Dashboard", "Again.");
     assert.equal(items().length, 1);
-    const button = items()[0].querySelector(ACTION);
+    const button = items()[0]?.querySelector(ACTION);
     assert.equal(button?.textContent, "Refresh");
-    assert.ok(items()[0].querySelector(".pf-v6-c-alert__action button"), "has a close button");
-    assert.ok(items()[0].querySelector(".pf-v6-c-alert.pf-m-info"));
-    items()[0].querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
+    assert.ok(items()[0]?.querySelector(".pf-v6-c-alert__action button"), "has a close button");
+    assert.ok(items()[0]?.querySelector(".pf-v6-c-alert.pf-m-info"));
+    items()[0]?.querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
     assert.equal(items().length, 0);
   });
 
@@ -207,9 +210,9 @@ describe("the toast entry points", () => {
       () => elapsed++,
     );
     assert.equal(items().length, 1);
-    assert.equal(items()[0].querySelector(MESSAGE)?.textContent, "Reloading in 2s");
+    assert.equal(items()[0]?.querySelector(MESSAGE)?.textContent, "Reloading in 2s");
     await sleep(1100);
-    assert.equal(items()[0].querySelector(MESSAGE)?.textContent, "Reloading in 1s");
+    assert.equal(items()[0]?.querySelector(MESSAGE)?.textContent, "Reloading in 1s");
     assert.equal(items().length, 1, "one toast, rewritten");
     cancel();
     assert.equal(items().length, 0);
@@ -225,7 +228,7 @@ describe("the toast entry points", () => {
       1,
       () => elapsed++,
     );
-    items()[0].querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
+    items()[0]?.querySelector<HTMLButtonElement>(".pf-v6-c-alert__action button")?.click();
     await sleep(1200);
     assert.equal(elapsed, 0);
   });

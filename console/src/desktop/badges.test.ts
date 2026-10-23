@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test, beforeEach } from "node:test";
-import { fail, succeed, type Result } from "../lib/result";
+import { fail, failFrom, succeed, type Result } from "../lib/result";
 import {
   BADGE_MAX,
   badgeLabel,
@@ -39,7 +39,7 @@ test("a server with no diff route is not asked twice", async () => {
   let calls = 0;
   const routeless = async (): Promise<Result<number | null>> => {
     calls++;
-    return fail(new RoutelessError("404"));
+    return failFrom(new RoutelessError("404"));
   };
   assert.equal(await fetchDiffCount(HOST, routeless), null);
   assert.equal(await fetchDiffCount(HOST, routeless), null);
@@ -52,7 +52,7 @@ test("an outage keeps being retried, and recovers", async () => {
   let calls = 0;
   const down = async (): Promise<Result<number | null>> => {
     calls++;
-    return fail(new Error("500"));
+    return fail("500");
   };
   await fetchDiffCount(HOST, down);
   await fetchDiffCount(HOST, down);
@@ -61,7 +61,7 @@ test("an outage keeps being retried, and recovers", async () => {
 });
 
 test("the latch does not spread to another server", async () => {
-  await fetchDiffCount(HOST, async () => fail(new RoutelessError("404")));
+  await fetchDiffCount(HOST, async () => failFrom(new RoutelessError("404")));
   assert.equal(await fetchDiffCount("127.0.0.1:9999", async () => succeed(2)), 2);
 });
 

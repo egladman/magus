@@ -25,10 +25,11 @@ const NOW = 1_760_000_000_000; // a fixed anchor; every assertion is relative to
 test("runs are newest-first and span the last ~3 hours", () => {
   const runs = scenarioRuns(NOW);
   assert.ok(runs.length >= 8 && runs.length <= 12, "8-12 runs");
-  for (let i = 1; i < runs.length; i++) {
-    assert.ok(runs[i - 1].endMs >= runs[i].endMs, "endMs is descending (newest first)");
+  for (const [i, r] of runs.entries()) {
+    assert.ok((runs[i - 1]?.endMs ?? Infinity) >= r.endMs, "endMs is descending (newest first)");
   }
-  const oldest = runs[runs.length - 1];
+  const oldest = runs.at(-1);
+  assert.ok(oldest);
   const ageMin = (NOW - oldest.endMs) / 60_000;
   assert.ok(ageMin > 150 && ageMin < 200, "the CI sweep is ~3h back");
   // Every run's window is internally consistent.
@@ -62,8 +63,8 @@ test("the pruned ref is deliberately absent from the run list", () => {
 
 test("activity is newest-first, all in the scenario workspace", () => {
   const events = scenarioActivity(NOW);
-  for (let i = 1; i < events.length; i++) {
-    assert.ok(events[i - 1].timeMs >= events[i].timeMs, "timeMs is descending");
+  for (const [i, e] of events.entries()) {
+    assert.ok((events[i - 1]?.timeMs ?? Infinity) >= e.timeMs, "timeMs is descending");
   }
   for (const e of events) assert.equal(e.workspace, WORKSPACE);
 });

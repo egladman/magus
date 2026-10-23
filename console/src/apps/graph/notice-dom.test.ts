@@ -40,18 +40,18 @@ describe("showStatus", () => {
     assert.equal(alert.getAttribute("role"), "alert");
     assert.match(alert.textContent ?? "", /Danger alert/);
     assert.equal(heard.length, 1);
-    assert.equal(heard[0].kind, "error");
-    assert.equal(heard[0].toast, true);
-    assert.equal(heard[0].source, "Graph");
-    assert.match(heard[0].message, /bad token/);
+    assert.equal(heard[0]?.kind, "error");
+    assert.equal(heard[0]?.toast, true);
+    assert.equal(heard[0]?.source, "Graph");
+    assert.match(heard[0]?.message, /bad token/);
   });
 
   test("a refusal is a warning alert and a warning toast", () => {
     showStatus(host, "layered layout is capped at 500 nodes", "warning");
     assert.ok(host.querySelector(".pf-m-warning"));
     assert.equal(heard.length, 1);
-    assert.equal(heard[0].kind, "warn");
-    assert.equal(heard[0].toast, true);
+    assert.equal(heard[0]?.kind, "warn");
+    assert.equal(heard[0]?.toast, true);
   });
 
   test("a hint is read in place and interrupts nobody", () => {

@@ -13,7 +13,7 @@ import { must } from "../../lib/guards";
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { asError, type Result } from "../../render/result";
+import { asError, type Result } from "../../lib/result";
 import { JournalSchema } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {

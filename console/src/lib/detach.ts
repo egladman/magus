@@ -8,6 +8,8 @@
 // display, with no browser chrome. window.open elsewhere. Both are same-origin, so both can adopt the
 // node; only the chrome differs.
 
+import { fail, failFrom, succeed, type Result } from "./result";
+
 export interface DetachHandle {
   close(): void;
   isOpen(): boolean;
@@ -85,36 +87,42 @@ function mirrorRoot(target: Document): () => void {
 // requestWindow when there is. Falling back to window.open after requestWindow rejects cannot work -
 // the activation is already spent - which made the fallback fail on exactly the browsers it existed
 // for. openWindow is async, but its body runs synchronously up to whichever call it makes.
-async function openWindow(opts: DetachOptions): Promise<Window | { reason: string }> {
+async function openWindow(opts: DetachOptions): Promise<Result<Window>> {
   const w = opts.width ?? 420;
   const h = opts.height ?? 640;
-  const pip = (
-    window as { documentPictureInPicture?: { requestWindow(o: object): Promise<Window> } }
-  ).documentPictureInPicture;
+  const pip = window.documentPictureInPicture;
   if (!pip) {
     const popup = window.open("", "", `popup=yes,width=${w},height=${h}`);
-    return popup ?? { reason: "the popup was blocked" };
+    return popup ? succeed(popup) : fail("the popup was blocked");
   }
   try {
-    return await pip.requestWindow({ width: w, height: h });
+    return succeed(await pip.requestWindow({ width: w, height: h }));
   } catch (e) {
-    return { reason: e instanceof Error ? e.message : "the browser refused a second window" };
+    return e instanceof Error ? failFrom(e) : fail("the browser refused a second window");
   }
 }
 
-// A discriminated result rather than null: the caller has to tell the reader WHY nothing happened,
+// Document Picture-in-Picture is Chromium-only, and the DOM types do not declare it.
+declare global {
+  interface Window {
+    readonly documentPictureInPicture?: { requestWindow(o: object): Promise<Window> };
+  }
+}
+
+// A Result rather than null: the caller has to tell the reader WHY nothing happened,
 // and "the popup was blocked" and "Document PiP requires user activation" are different sentences.
 // With null the one call site had to invent a reason, which is how a correct refusal reads as a bug.
-export type DetachResult = { ok: true; handle: DetachHandle } | { ok: false; reason: string };
-
-export async function detachPanel(el: HTMLElement, opts: DetachOptions): Promise<DetachResult> {
+export async function detachPanel(
+  el: HTMLElement,
+  opts: DetachOptions,
+): Promise<Result<DetachHandle>> {
   // Nothing to put back into: a panel with no parent could be moved out but never returned.
   const parent = el.parentElement;
-  if (!parent) return { ok: false, reason: "the panel is not attached to anything" };
+  if (!parent) return fail("the panel is not attached to anything");
 
   const opened = await openWindow(opts);
-  if (!(opened instanceof Window)) return { ok: false, reason: opened.reason };
-  const win = opened;
+  if (!opened.ok) return opened;
+  const win = opened.value;
 
   // Marks the gap AND the way back: without it the host column silently collapses and the panel
   // looks closed rather than moved, and restore would have only an index to aim at - which the host
@@ -152,14 +160,11 @@ export async function detachPanel(el: HTMLElement, opts: DetachOptions): Promise
   // holding a closed Window.
   window.addEventListener("pagehide", closeWin);
 
-  return {
-    ok: true,
-    handle: {
-      close: () => {
-        win.close();
-        restore(); // close() does not always fire pagehide in time; restore is idempotent
-      },
-      isOpen: () => open,
+  return succeed({
+    close: () => {
+      win.close();
+      restore(); // close() does not always fire pagehide in time; restore is idempotent
     },
-  };
+    isOpen: () => open,
+  });
 }

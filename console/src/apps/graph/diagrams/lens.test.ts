@@ -62,7 +62,7 @@ test("the fragment carries the view and keeps every other key", () => {
       .slice(1)
       .split("&")
       .map((p) => {
-        const [k, v = ""] = p.split("=");
+        const [k = "", v = ""] = p.split("=");
         return [decodeURIComponent(k), decodeURIComponent(v)];
       }),
   );

@@ -105,8 +105,8 @@ test("a section head holds a toggle and its actions side by side, never one insi
     assert.equal(labels[0], "Copy", "sentence case, the same voice as the toolbar");
   }
 
-  const section = must(heads[0].parentElement);
-  const toggle = must(heads[0].querySelector<HTMLElement>(".console-render-section__toggle"));
+  const section = must(heads[0]?.parentElement);
+  const toggle = must(heads[0]?.querySelector<HTMLElement>(".console-render-section__toggle"));
   const was = toggle.getAttribute("aria-expanded");
   toggle.click();
   assert.notEqual(toggle.getAttribute("aria-expanded"), was);

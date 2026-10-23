@@ -31,10 +31,10 @@ test("records newest-first and defaults to ok kind (history tier)", () => {
   s.notify({ source: "Dashboard", message: "second", at: 2 });
   const list = s.list();
   assert.equal(list.length, 2);
-  assert.equal(list[0].message, "second"); // newest first
-  assert.equal(list[1].message, "first");
-  assert.equal(list[0].kind, "ok"); // default
-  assert.equal(list[0].source, "Dashboard");
+  assert.equal(list[0]?.message, "second"); // newest first
+  assert.equal(list[1]?.message, "first");
+  assert.equal(list[0]?.kind, "ok"); // default
+  assert.equal(list[0]?.source, "Dashboard");
 });
 
 test("only error-kind counts toward the unseen-dot; ok/warn record silently", () => {
@@ -257,7 +257,7 @@ test("subscribe fires on change and unsubscribe stops it", () => {
   });
   s.notify({ source: "Dashboard", message: "a" });
   assert.equal(hits, 1);
-  s.dismiss(s.list()[0].id);
+  s.dismiss(s.list()[0]?.id ?? "");
   assert.equal(hits, 2);
   off();
   s.notify({ source: "Dashboard", message: "b" });

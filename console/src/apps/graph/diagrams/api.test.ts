@@ -11,7 +11,7 @@ import {
   readFailure,
   renderDiagram,
 } from "./api";
-import { succeed } from "../result";
+import { succeed } from "../../../lib/result";
 
 const HOST = "127.0.0.1:7391";
 

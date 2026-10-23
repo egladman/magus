@@ -159,7 +159,7 @@ test("every toolchain row is a table row, with the wire mapped into its cells", 
       "Support",
     ],
   );
-  assert.deepEqual(table()[0].slice(0, 2), ["go", "."]);
+  assert.deepEqual(table()[0]?.slice(0, 2), ["go", "."]);
   const node = table().find((r) => r[0] === "node");
   assert.deepEqual(node?.slice(2, 7), [
     "v26.5.0",
@@ -189,8 +189,8 @@ test("the table shows the server's window text and violation flag, not its own r
     },
   ]);
   await mount();
-  assert.equal(table()[0][4], "whatever the server printed");
-  assert.equal(table()[0][6], "too old");
+  assert.equal(table()[0]?.[4], "whatever the server printed");
+  assert.equal(table()[0]?.[6], "too old");
   assert.equal(count(), "1 tool, 1 outside version window");
 });
 

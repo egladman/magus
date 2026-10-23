@@ -14,7 +14,7 @@ function mkNode(id: string, project?: string): GNode {
     id,
     kind: "target",
     label: id,
-    attrs: project === undefined ? undefined : { project },
+    ...(project === undefined ? {} : { attrs: { project } }),
     degree: 0,
     r: 6,
     x: 0,
@@ -48,12 +48,13 @@ test("layoutLayered: an edge spanning 3 layers gets 2 ascending-x bend points at
   for (const l of links.slice(0, 3)) assert.equal(l.points, undefined); // unit-span edges: no points
 
   const long = links[3]; // a -> d: layer(a)=3, layer(d)=0, span 3
-  assert.ok(long.points);
-  assert.equal(long.points.length, 2);
+  assert.ok(long?.points);
+  assert.equal(long?.points.length, 2);
   const [p0, p1] = long.points;
+  assert.ok(p0 && p1);
   assert.ok(p0.x < p1.x, "points must be ordered ascending x (dependency end -> dependent end)");
-  assert.equal(p0.x, 1 * LAYERED_COL_W + LAYERED_COL_W / 2); // intermediate layer 1 (c's column)
-  assert.equal(p1.x, 2 * LAYERED_COL_W + LAYERED_COL_W / 2); // intermediate layer 2 (b's column)
+  assert.equal(p0?.x, 1 * LAYERED_COL_W + LAYERED_COL_W / 2); // intermediate layer 1 (c's column)
+  assert.equal(p1?.x, 2 * LAYERED_COL_W + LAYERED_COL_W / 2); // intermediate layer 2 (b's column)
 });
 
 test("layoutLayered: repeated runs on fresh copies produce identical fx/fy and points", () => {

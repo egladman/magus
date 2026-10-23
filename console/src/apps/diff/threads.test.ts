@@ -109,8 +109,10 @@ test("commentThreadId is the comment's own root, or its id when it is a top-leve
 // is its own: the server finds no thread under the root the host named.
 test("an orphaned reply is addressed by its own id", () => {
   const [group] = groupThreads([{ ...thread("o1", "x.ts", 0), root: "gone" }]);
-  assert.equal(commentThreadId(group[0]), "o1");
-  assert.equal(group[0].root, "", "the stray root is cleared so it renders as a head");
+  const head = group?.[0];
+  assert.ok(head);
+  assert.equal(commentThreadId(head), "o1");
+  assert.equal(group?.[0]?.root, "", "the stray root is cleared so it renders as a head");
 });
 
 // A reply can carry a line the head no longer has while its top-level comment still has one.
