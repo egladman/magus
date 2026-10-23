@@ -76,7 +76,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
   const body = shell.body;
   document.body.append(shell.el);
 
-  let selectedSeconds = DURATIONS[0].seconds;
+  let selectedSeconds = HOUR; // the first entry of DURATIONS
 
   // Dismissed by Escape, the close button, or an outside click. Sharing is a task with a half-made
   // choice in it, so focus moves in on open and back to the share button on close. The picker is
@@ -88,7 +88,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
       renderPicker();
       return body.querySelector<HTMLElement>("button");
     },
-    onChange: options.onChange,
+    ...(options.onChange ? { onChange: options.onChange } : {}),
   });
 
   // renderPicker draws phase 1: the duration toggle-group + Generate + a disclosure.
@@ -161,14 +161,15 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
     const canvas = document.createElement("canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", "QR code for the share link");
-    try {
-      encodeToCanvas(canvas, url, 240);
-    } catch {
-      // reported: the QR frame shows its failed state, and the link below still works.
-      // A payload too large for the encoder should never happen for a LAN URL, but
-      // never let a QR failure hide the URL itself - the copy line below still works.
+    const drawn = encodeToCanvas(canvas, url, 240);
+    if (!drawn.ok) {
+      // A failed QR never hides the URL: the copy line below still works.
       qrFrame.dataset.failed = "";
-      showToast("Share", "Could not draw the QR code. The link below still works.", "warn");
+      showToast(
+        "Share",
+        `Could not draw the QR code. ${drawn.error} The link below still works.`,
+        "warn",
+      );
     }
     qrFrame.append(canvas);
     body.append(qrFrame);
