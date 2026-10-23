@@ -363,10 +363,10 @@ func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	drv, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, drv, why)
 
-	_, err := ChangedBuildInputs(t.Context(), drv, s.root, built, later)
+	_, err := changedBuildInputs(t.Context(), drv, s.root, built, later)
 	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
 
-	inputs, err := ChangedBuildInputs(t.Context(), drv, s.root, later, later)
+	inputs, err := changedBuildInputs(t.Context(), drv, s.root, later, later)
 	require.NoError(t, err, "equal commits list nothing")
 	assert.Empty(t, inputs)
 }
