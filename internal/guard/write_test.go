@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -976,6 +977,31 @@ func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 	}
 }
 
+// A holder that filed its result and was sent back still holds its boundary: exited is
+// live, so its write outside its paths is denied whether or not another job is editing.
+func TestGradeLeasedWriteHoldsAnExitedHolderToItsPaths(t *testing.T) {
+	registered := func(j types.Job) types.Job {
+		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
+		return j
+	}
+	holder := registered(types.Job{ID: "holder", Criteria: "land the store", WritePaths: []string{"internal/job/**"}, State: types.StateExited})
+	sibling := registered(types.Job{ID: "sibling", Criteria: "unrelated", WritePaths: []string{"docs/**"}, State: types.StateRunning})
+	for name, rows := range map[string][]types.Job{
+		"alone":            {holder},
+		"beside a sibling": {holder, sibling},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, root := fleetFixture(t, rows...)
+			got := gradeLeasedWrite(ctx, Dependencies{}, "holder", filepath.Join(root, "cmd/magus/main.go"))
+			require.Equal(t, "deny", got.Decision, got.Reason)
+			assert.Contains(t, got.Reason, "holder")
+
+			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "holder", filepath.Join(root, "internal/job/store.go")).Decision,
+				"its own paths stay its to write")
+		})
+	}
+}
+
 // A taken lease past its deadline is ended by the read that grades its write, which then
 // has no boundary left to deny on; one nobody took stays live, and its writes are denied.
 func TestGradeLeasedWriteUnderAnOverdueLease(t *testing.T) {
@@ -1313,6 +1339,44 @@ func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
 
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(scratch, "main.go")).Decision,
 		"a go.mod alone makes no magus checkout")
+}
+
+// A --checkout job widened by an apply run in the session's checkout keeps its lease where
+// its fork put it, whether its holder is still on it or has returned it and is continued:
+// the added path is written in the job's checkout like the declared ones, and a write in the
+// session's checkout is the one refused.
+func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) {
+	for _, state := range []types.JobState{types.StateRunning, types.StateExited} {
+		t.Run(string(state), func(t *testing.T) {
+			ctx, session := fleetFixture(t)
+			own := t.TempDir()
+			for _, dir := range []string{session, own} {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+			}
+			store := storeAt(ctx)
+			_, err := store.Update(ctx, "w", func(cur *types.Job) {
+				*cur = types.Job{ID: "w", Criteria: "widen me", WritePaths: []string{"std/*.go"}, State: state,
+					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: own}
+			})
+			require.NoError(t, err)
+			_, err = store.RecordWorktree(ctx, "w", types.JobWorktree{Root: own, Source: session})
+			require.NoError(t, err)
+
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "w", Criteria: "widen me",
+				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
+				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
+			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
+			require.NoError(t, err)
+
+			added := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "cmd", "main.go"))
+			assert.Empty(t, added.Decision, "%s", added.Reason)
+			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "std", "module.go")).Decision)
+			there := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(session, "cmd", "main.go"))
+			assert.Equal(t, "deny", there.Decision, "the session's checkout is not the one the lease was taken in")
+			assert.Contains(t, there.Reason, "write main.go in "+own)
+		})
+	}
 }
 
 // A worker its spawn bound is taken in the session's checkout while its fork made it one of

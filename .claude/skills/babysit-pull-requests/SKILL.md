@@ -1,11 +1,11 @@
 ---
-name: shepherd-pull-requests
-description: Shepherd open pull requests in THIS repository through the magus merge queue, spending agent work only where code must change. Use when asked to shepherd, merge or ship open pull requests, or to keep them moving until they reach main. hack/ci/pull-requests.buzz decides each one's state, action and model; this skill routes to it. Hand-authored here, never shipped.
+name: babysit-pull-requests
+description: Babysit open pull requests in THIS repository through the magus merge queue, spending agent work only where code must change. Use when asked to babysit, merge or ship open pull requests until they reach main. hack/ci/pull-requests.buzz decides each one's action; this skill chains the hack/dev scripts that act on it. Hand-authored, never shipped.
 metadata:
   source: workspace
 ---
 
-# Shepherding pull requests
+# Babysitting pull requests
 
 `hack/ci/pull-requests.buzz` decides; the orchestrator acts on what it prints. Never
 derive a state, an action or a model from `gh` yourself. When a record looks wrong,
@@ -55,8 +55,33 @@ fix the pure function that produced it and its test, then run it again.
    - It never acts on `red-inherited`. Nothing in the change is broken, and the
      queue would refuse it for main's failures.
 
-3. For every record whose `model` is `sonnet` or `opus`, spawn one agent of that
-   model:
+3. Run the script chain for a record yourself, without asking the person. Each
+   step is one script. Never stand in for one with raw `git`, `gh` or a hand-run
+   gate: each script already absorbs the failure that recurs there.
+
+   1. `hack/ci/pull-requests.buzz -- status` names the action.
+   2. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready` makes
+      the checkout gate-ready. It builds `./magus` at HEAD, stops pool parents of other
+      builds, removes untracked stamped skill installs, and builds the graph and symbol
+      digest. The scripts below run it themselves. An MGS7003 naming a binary
+      built at another commit means this step did not run.
+   3. Refresh the branches the action names:
+      - `rebase-branches-onto-base`: run the record's `evidence.rebase` line. The
+        branch still carries the commits of a pull request that squash-merged below
+        it (`evidence.squashed_base`). The script rebases its own commits onto the
+        base in a fresh checkout job, gates, and force-pushes with a lease.
+      - a branch behind its base with nothing squash-merged below it:
+        `./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c>`.
+      - When either stops at a source conflict, it names the files and the
+        checkout; hand those to an agent of the record's model as below.
+   4. `./magus buzz hack/dev/run-gate.buzz` gates the result once and prints each
+      failed member's ref and first failing lines; fix from those, never rerun.
+   5. `./magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <ref>
+      --title <text> --body-file <file>` opens a pull request for commits that have
+      none, after CI's hygiene checks pass locally.
+
+   For every record the chain cannot finish whose `model` is `sonnet` or `opus`, spawn one agent of
+   that model:
    - in its own worktree cut from the pull request's branch (`head`), never in
      your checkout;
    - with the record's `action`, `reason` and `evidence` as its brief;
@@ -90,7 +115,9 @@ proof; a green check or the queue's comment is not.
   mutation through `gh api`). A person enables it; the repo's guard denies it. Tell the
   person the command. `--disable-auto` and reading `autoMergeRequest` are yours.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
-  commits, and a rewrite orphans both.
+  commits, and a rewrite orphans both. The one rewrite is
+  `rebase-branches-onto-base.buzz` on a `rebase-branches-onto-base` record: the
+  squash already orphaned the commits it drops.
 - Never run two agents on one pull request branch at a time. One branch has one
   agent until you have pushed its result.
 - Never rerun a red by hand after `apply` declined to. It reruns a head once; red

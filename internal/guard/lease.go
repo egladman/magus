@@ -1312,12 +1312,8 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 	if err != nil {
 		return leaseStanding{}
 	}
-	for _, u := range leases {
-		if u.ID == actingLease {
-			return leaseStanding{readable: true, declared: true, state: u.State, row: u, rows: leases}
-		}
-	}
-	return leaseStanding{readable: true, rows: leases}
+	row, declared := leaseRow(ctx, location, actingLease)
+	return leaseStanding{readable: true, declared: declared, state: row.State, row: row, rows: leases}
 }
 
 // denyUndeclaredLease refuses to grade a call for an id this workspace's ledger does not
@@ -3222,9 +3218,9 @@ func vcsMutation(c hint.Invocation) string {
 // cannot drift about who owns a path or how the refusal reads, and the extraction that
 // finds the written words is the cache-dir rule's, shared for the same reason.
 //
-// Only a candidate some live lease DECLARED is graded. The extraction offers every word a
-// non-reader command was pointed at, which is the safe direction for a boundary as
-// specific as the cache dir but not for one as ordinary as a path: grading every word
+// Only a candidate the acting lease or an editing one DECLARED is graded. The extraction
+// offers every word a non-reader command was pointed at, which is the safe direction for a
+// boundary as specific as the cache dir but not for one as ordinary as a path: grading every word
 // would refuse `echo hi` for writing outside the boundary.
 func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
@@ -3238,8 +3234,13 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if err != nil {
 		return ""
 	}
-	live := liveLeases(rows)
-	if len(live) == 0 {
+	me, enrolled := leaseRow(ctx, location, actingLease)
+	enrolled = enrolled && me.State.Live()
+	declaring := editingLeases(rows)
+	if enrolled && !me.State.Editing() {
+		declaring = append(declaring, me)
+	}
+	if len(declaring) == 0 {
 		return ""
 	}
 	dialect := effectiveDialect(deps.ShellDialect)
@@ -3269,7 +3270,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}
 			continue
 		}
-		declared, byCatchAll := declaredPath(live, rel)
+		declared, byCatchAll := declaredPath(declaring, rel)
 		if !declared {
 			continue
 		}
@@ -3282,7 +3283,6 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			return g.Reason
 		}
 	}
-	me, enrolled := liveLease(live, actingLease)
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}

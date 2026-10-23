@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -8,14 +9,17 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -252,11 +256,18 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
-			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
 			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
 			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"},
-				filepath.Join(wt, "magus") + " --root " + wt + " describe job harness/worker"
+				filepath.Join(main, "magus") + " --root " + wt + " describe job harness/worker"
+		}},
+		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
+			main, wt := twoCheckouts(t)
+			require.NoError(t, os.WriteFile(filepath.Join(main, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			t.Chdir(main)
+			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus job exec harness/worker"},
+				filepath.Join(main, "magus") + " --root " + wt + " job exec harness/worker"
 		}},
 		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepo(t)
@@ -310,96 +321,260 @@ func TestEveryServedNextCoversEveryDenyRemedy(t *testing.T) {
 	require.NotZero(t, found, "remedyRe no longer matches how a rule builds its remedy")
 }
 
-// TestEveryServedNextPassesTheGuardForEveryRole is the structural half of the
-// pre-authorization bargain.
-func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
+// servedRole is a caller a next is served to, as Judge reads it: who calls and the lease it
+// acts under. The directory is the call's own, since a next runs where its call ran.
+type servedRole struct {
+	name string
+	call Request
+	// worker is whether the lease acts as a worker's, which the rules that word a remedy read.
+	worker bool
+}
+
+// servedRoles stands up, over one fleet, every caller a next is served to: a person, a root
+// holding a row it handed out, a worker and a reviewer in their own checkout, a holder
+// resumed on a row it exited, and a magus-scout, which has no Skill tool.
+func servedRoles(t *testing.T) (context.Context, []servedRole) {
+	t.Helper()
 	worker := narrowLease()
 	worker.ID, worker.Parent = "harness/worker", "harness/root"
-
+	exited := narrowLease()
+	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", types.StateExited
 	reviewer := types.Job{
 		ID: "harness/reviewer", Criteria: "read the guard",
 		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,
 	}
-	ctx, root := fleetFixture(t, worker, reviewer)
-	templates := servedNextTemplates(t)
-	readScript, writeScript := scriptNexts(t, root)
-	loaded := loadingWorkspace(t)
-
-	grade := func(t *testing.T, id, run, role, lease string) {
-		t.Helper()
-		if deny := Evaluate(strict(testDependencies()), run).Deny; deny != "" {
-			t.Errorf("the %q breadcrumb serves %q, which the guard denies for every role:\n%s", id, run, deny)
-		}
-		for _, rule := range []func(context.Context, Dependencies, string, string) denial{
-			denyLeaseScopedGate, oneString(denyLeaseScopedVCS), denyLeaseScopedRebind,
-			// Pre-authorization stands the focus rule down too, so a template
-			// whose operands leave a reviewer's focus would clear with nothing
-			// having graded it.
-			func(ctx context.Context, deps Dependencies, lease, command string) denial {
-				if grade := gradeFocusRead(ctx, deps, lease, command); grade.Decision == "deny" {
-					return denial{Say: grade.Reason}
-				}
-				return denial{}
-			},
-		} {
-			if reason := rule(ctx, loaded, lease, run).full(); reason != "" {
-				t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
-					"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
-					id, run, role, reason)
-			}
-		}
+	handed := types.Job{ID: "harness/handed", Criteria: "a row the root handed out", WritePaths: []string{"docs/**"}, State: types.StateDeclared}
+	ctx, _ := fleetFixture(t, worker, exited, reviewer, handed)
+	at := hookLocation(ctx, Dependencies{})
+	const host, session = "claude-code", "served"
+	hostGate(at.cacheDir, host).MarkFired(hostAgentsKind)
+	facts := hint.NewGate(at.cacheDir, FactsKey(host, session))
+	writeCostState(facts, costState{Forked: []string{handed.ID}})
+	writeAgentMarker(facts, agentTypeKind("a-scout"), []byte(`{"type":"magus-scout"}`))
+	tools := testTools(t)
+	as := func(agent, lease string) Request {
+		return Request{Host: host, Session: session, Agent: agent, Lease: lease, ObservesSkillLoads: true, Tools: tools}
 	}
+	groundwork := as("", "")
+	groundwork.Input, groundwork.DryRun = "git show HEAD", true
+	require.Equal(t, string(denyRuleOrchestratorGroundwork), Judge(ctx, strict(Dependencies{}), groundwork).Rule, "the root is proven to orchestrate")
+	require.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a-scout"}}.loadsSkills(), "the scout cannot load a skill")
+	return ctx, []servedRole{
+		{name: "person"},
+		{name: "root with a handed-out row", call: as("", "")},
+		{name: "worker in its own checkout", call: as("a-worker", worker.ID), worker: true},
+		{name: "exited holder resumed", call: as("a-exited", exited.ID), worker: true},
+		{name: "reviewer", call: as("a-reviewer", reviewer.ID), worker: true},
+		{name: "magus-scout", call: as("a-scout", "")},
+	}
+}
 
-	for _, role := range []struct {
-		name  string
-		lease string
-	}{
-		{"unbound", ""},
-		{"worker with narrow write paths", worker.ID},
-		{"reviewer", reviewer.ID},
-	} {
+// servedAs is call made by role: the call's own attribution wins where it set one.
+func servedAs(call Request, role servedRole) Request {
+	call.Host = cmp.Or(call.Host, role.call.Host)
+	call.Session = cmp.Or(call.Session, role.call.Session)
+	call.Agent = cmp.Or(call.Agent, role.call.Agent)
+	call.Lease = cmp.Or(call.Lease, role.call.Lease)
+	call.ObservesSkillLoads = call.ObservesSkillLoads || role.call.ObservesSkillLoads
+	call.Tools = role.call.Tools
+	return call
+}
+
+// gradeServed fails t when the guard refuses run to the caller call names, where call runs.
+// A dry run, so grading one next spends nothing a later one reads.
+func gradeServed(t *testing.T, ctx context.Context, deps Dependencies, call Request, role, id, run string) {
+	t.Helper()
+	call.Input, call.DryRun = run, true
+	if v := Judge(ctx, deps, call); v.Decision == decisionDeny {
+		t.Errorf("the %q next serves %q, which the guard refuses for a %s:\n%s", id, run, role, v.Reason)
+	}
+}
+
+// servedFixture is a next magus serves outside Judge's own remedies: setup returns the call
+// the caller made and the lines served for it. A role the call is refused to is never served
+// them, so they are graded only for the roles the call passes.
+type servedFixture struct {
+	name  string
+	setup func(t *testing.T, ctx context.Context, deps Dependencies, role servedRole) (call Request, next []string)
+}
+
+func servedFixtures() []servedFixture {
+	return []servedFixture{
+		{"MGS3009 waits in the call that spends the seat", func(*testing.T, context.Context, Dependencies, servedRole) (Request, []string) {
+			const run = "magus run go::go-test . -- ./internal/ledger/"
+			return Request{Input: run}, []string{hint.Status.With("--wait") + " | " + run}
+		}},
+		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
+			standBudget(t, types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1})
+			root := recordedSearchTree(t)
+			cacheDir := t.TempDir()
+			require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))
+			stale := strict(Dependencies{
+				SymbolDefined: func(name string) (bool, bool) { return name == "CheckStatus", false },
+				CacheDir:      func(string) (string, error) { return cacheDir, nil },
+				Spells:        spellCatalog,
+				scope:         workspaceScope{root: root},
+				callDir:       root,
+				lease:         role.call.Lease,
+				worker:        role.worker,
+			})
+			v := Evaluate(stale, "grep -rn CheckStatus internal")
+			require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "CheckStatus"}, v.Rule)
+			var next []string
+			for _, n := range v.Next {
+				next = append(next, n.Run)
+			}
+			if !role.worker {
+				require.NotEmpty(t, next, "a caller that may wait for a seat is served the wait")
+			}
+			return Request{}, next
+		}},
+		{"gh pr checks names a failure read the caller can run", func(t *testing.T, ctx context.Context, deps Dependencies, role servedRole) (Request, []string) {
+			deps.CommandRule = workspacePolicy(t).CommandRule()
+			call := servedAs(Request{Input: "gh pr checks 183"}, role)
+			call.DryRun = true
+			v := Judge(ctx, deps, call)
+			require.Equal(t, decisionDeny, v.Decision, "gh pr checks is refused to every role")
+			// The refusal names more than one read; the caller needs one it can run.
+			var runnable []string
+			for _, m := range backtickRe.FindAllStringSubmatch(v.Reason, -1) {
+				read := placeholderRe.ReplaceAllString(m[1], "0123abcd")
+				if !strings.Contains(read, "show-failures") && !strings.Contains(read, "--log-failed") {
+					continue
+				}
+				call.Input = read
+				if Judge(ctx, deps, call).Decision != decisionDeny {
+					runnable = append(runnable, read)
+				}
+			}
+			require.NotEmpty(t, runnable, "the refusal names a failure read a %s can run:\n%s", role.name, v.Reason)
+			return Request{}, nil
+		}},
+		{"a subagent's stop names the call that stops each task", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
+			if role.call.Agent == "" {
+				return Request{}, nil
+			}
+			started := bgTime(t, "2026-10-13T11:37:41.120Z")
+			v, ok := judgeStop(strict(Dependencies{}), hint.Gate{}, subagentStop(t, role.call.Agent, writeTranscript(t, bgSearchCall, bgSearchResult)), started.Add(time.Hour))
+			require.True(t, ok)
+			require.Equal(t, decisionDeny, v.Decision)
+			assert.NotContains(t, v.Reason, "completion notice", "a subagent refused its stop cannot wait for a notice that comes after it")
+			var next []string
+			for _, m := range taskStopRe.FindAllStringSubmatch(v.Reason, -1) {
+				next = append(next, hookJSON(t, map[string]any{
+					"session_id": role.call.Session, "agent_id": role.call.Agent, "hook_event_name": "PreToolUse",
+					"tool_name": "TaskStop", "tool_input": map[string]any{"task_id": m[1]},
+				}))
+			}
+			require.NotEmpty(t, next, "the refusal names a stop call per task:\n%s", v.Reason)
+			return Request{}, next
+		}},
+	}
+}
+
+var (
+	backtickRe    = regexp.MustCompile("`([^`]+)`")
+	placeholderRe = regexp.MustCompile(`<[a-z-]+>`)
+	taskStopRe    = regexp.MustCompile(`TaskStop \{"task_id": "([^"]+)"\}`)
+)
+
+// workspacePolicy is the command, spawn and write rules the root magusfile registers,
+// loaded once for the package's tests the way the hook loads them.
+var workspacePolicy = func() func(t *testing.T) *WorkspaceRules {
+	var (
+		once  sync.Once
+		rules *WorkspaceRules
+		err   error
+	)
+	return func(t *testing.T) *WorkspaceRules {
+		t.Helper()
+		once.Do(func() {
+			var root string
+			if root, err = workspace.FindRoot(""); err == nil {
+				rules, err = LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
+			}
+		})
+		require.NoError(t, err)
+		return rules
+	}
+}()
+
+// TestEveryServedNextPassesTheGuardForEveryRole is the structural half of the
+// pre-authorization bargain: every next magus serves is graded through the whole of Judge,
+// as the caller it is served to, where that caller runs.
+func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
+	ctx, roles := servedRoles(t)
+	templates := servedNextTemplates(t)
+	readScript, writeScript := scriptNexts(t, hookLocation(ctx, Dependencies{}).workspace)
+	deps := strict(loadingWorkspace(t))
+	deps.Spells = testDependencies().Spells
+	deps.GraphIDs = diagnosticGraph
+	// A bound worker's raw tool is worker-check-only's by default; lowered, the raw-tool
+	// remedy is what this role is served.
+	deps.Builtins[string(denyRuleWorkerCheckOnly)] = builtin.Setting{Decision: builtin.Advise}
+
+	for _, role := range roles {
 		for id, run := range templates {
-			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
+			t.Run(role.name+"/"+id, func(t *testing.T) { gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, id, run) })
 		}
-		kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
 		t.Run(role.name+"/scripts", func(t *testing.T) {
+			kind, writePaths := hint.LeaseRole(fixtureRows(t, ctx), role.call.Lease)
 			served := hint.FilterServable(kind, writePaths, []types.NextStep{readScript, writeScript})
 			require.Contains(t, served, readScript, "a read script is served to every role")
 			if kind == hint.RoleReviewer {
 				assert.NotContains(t, served, writeScript, "a write script is never served to a reviewer")
 			}
 			for _, n := range served {
-				grade(t, n.ID, n.Run, role.name, role.lease)
+				gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, n.ID, n.Run)
 			}
 		})
-		// A deny's remedy is graded as Judge serves it to this role: whatever it drops
-		// was never served, and whatever it keeps must pass.
+		// A deny's remedy is graded as Judge serves it to this role: whatever it drops was
+		// never served, and whatever it keeps must pass.
 		for _, f := range denyRemedyFixtures() {
 			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
 				call, want := f.setup(t, hookLocation(ctx, Dependencies{}))
-				call.Lease = role.lease
-				command := call.Input
-				deps := strict(testDependencies())
-				deps.GraphIDs = diagnosticGraph
-				// A bound worker's raw tool is worker-check-only's by default; lowered, the
-				// raw-tool remedy is what this role is served.
-				deps.Builtins[string(denyRuleWorkerCheckOnly)] = builtin.Setting{Decision: builtin.Advise}
+				call = servedAs(call, role)
+				call.DryRun = true
 				v := Judge(ctx, deps, call)
-				shape := verdictWithRule("deny", string(f.rule))
-				shape.Next = v.Next // graded one by one below, as this role is served them
-				require.Equal(t, shape, unworded(v), command)
-				if role.lease == "" {
-					require.Len(t, v.Next, 1, "unbound, %q serves its remedy", command)
+				if role.call.Host == "" {
+					shape := verdictWithRule("deny", string(f.rule))
+					shape.Next = v.Next
+					require.Equal(t, shape, unworded(v), call.Input)
+					require.Len(t, v.Next, 1, "unbound, %q serves its remedy", call.Input)
 					assert.Equal(t, want, v.Next[0].Run)
 				}
 				for _, n := range v.Next {
 					assert.Equal(t, "deny-"+string(f.rule), n.ID)
-					grade(t, n.ID, n.Run, role.name, role.lease)
+					gradeServed(t, ctx, deps, call, role.name, n.ID, n.Run)
+				}
+			})
+		}
+		for _, f := range servedFixtures() {
+			t.Run(role.name+"/"+f.name, func(t *testing.T) {
+				call, next := f.setup(t, ctx, deps, role)
+				call = servedAs(call, role)
+				if call.Input != "" {
+					probe := call
+					probe.DryRun = true
+					if Judge(ctx, deps, probe).Decision == decisionDeny {
+						return
+					}
+				}
+				for _, run := range next {
+					gradeServed(t, ctx, deps, call, role.name, f.name, run)
 				}
 			})
 		}
 	}
+}
+
+// fixtureRows reads the job store the fixture's context pins.
+func fixtureRows(t *testing.T, ctx context.Context) []types.Job {
+	t.Helper()
+	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
+	require.NoError(t, err)
+	return rows
 }
 
 // loadingWorkspace is a root whose generate target writes cmd/magus/gen, inside the

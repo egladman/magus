@@ -196,6 +196,9 @@ type Dependencies struct {
 	// Judge fills it once it has resolved the lease, so the rules that word a remedy can
 	// tell a worker, who never builds the binary, from the one who does.
 	lease string
+	// worker is whether lease acts as a worker's for the caller, which decides what a remedy
+	// may serve: a worker waits for a seat only in the call that spends it. Judge fills it.
+	worker bool
 	// revisions memoizes revision for one judgment; Judge fills it, nil reads every time.
 	revisions *revisionMemo
 }
@@ -827,6 +830,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if binding.Gone {
 		standing.endedBinding = binding.Job
 	}
+	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice
@@ -858,7 +862,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// once every rule has spoken.
 	var remedy ShellVerdict
 	preauth := ""
-	if hasInput && !req.Observe && !isPath {
+	if hasInput && !req.Observe && !isPath && !gradingRemedy(ctx) {
 		preauth = servedNextPreauthorizes(markers, input)
 	}
 	switch {
@@ -1398,13 +1402,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		why := whys[verdict.Reason]
 		switch {
 		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
-			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
 		case len(verdict.Next) > 0:
 			// The workspace seam's own deny, which words its reason without the command.
-			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, verdict.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
@@ -1554,36 +1558,43 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 	}
 }
 
-// servableRemedy keeps the remedies the acting lease may run. A served next is
-// pre-authorized and the role-scoped rules stand down for it, so one they would refuse
-// is dropped here: serving it would clear a command the role may not run.
-//
-// Graded by the rules the next call meets, rather than filtered by a list of its own,
-// so a rule added later grades remedies without anyone remembering to.
-//
-// A worker's placement of ./magus is kept whatever its write paths: it writes outside
-// every one by design, as the only way a worker gets its base's binary.
-func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
+// servableRemedy keeps the remedies a dry run of Judge passes for who, under the acting
+// lease, in callDir, judged as not yet served: a served next is pre-authorized, so one the
+// role may not run must never be served. A worker's placement of ./magus is kept whatever
+// its write paths, as the only way a worker gets its base's binary.
+func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
+	if gradingRemedy(ctx) {
+		return nil
+	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
-	d := effectiveDialect(deps.ShellDialect)
 	candidates := next
 	if len(next) != 1 || !placesBinary(next[0], actingLease) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
+	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})
+	call := Request{
+		DryRun: true, Lease: actingLease, PendingRow: req.PendingRow, Dir: callDir,
+		Host: who.Host, Form: who.Form, Session: who.Session, Agent: who.Agent, Window: who.Window,
+		ObservesSkillLoads: req.ObservesSkillLoads, Tools: req.Tools, RendersAsk: req.RendersAsk,
+	}
 	var kept []types.NextStep
 	for _, n := range candidates {
-		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run).refused() {
-			continue
+		call.Input = n.Run
+		if Judge(ctx, deps, call).Decision != decisionDeny {
+			kept = append(kept, n)
 		}
-		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule roleScopedRule) bool {
-			return rule.judge(ctx, deps, actingLease, n.Run).refused()
-		})
-		if refused || gradeFocusRead(ctx, deps, actingLease, n.Run).Decision == decisionDeny {
-			continue
-		}
-		kept = append(kept, n)
 	}
 	return kept
+}
+
+// gradingRemedyKey marks a context judging a remedy before it is served.
+type gradingRemedyKey struct{}
+
+// gradingRemedy reports a context judging a remedy before it is served: nothing about the
+// remedy is pre-authorized yet, and it serves none of its own.
+func gradingRemedy(ctx context.Context) bool {
+	graded, _ := ctx.Value(gradingRemedyKey{}).(bool)
+	return graded
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to

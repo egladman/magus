@@ -95,25 +95,23 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 	if err != nil {
 		return types.GuardJudgment{}, false
 	}
-	var listing string
-	if subagent {
-		listing = describeTasks(tasks, now)
-	} else {
+	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
 			return now.Sub(t.Started) < rootBackgroundAge || said.MarkFired(backgroundAdvisedKey(t))
 		})
-		listing = stoppableTasks(tasks, now)
 	}
 	if len(tasks) == 0 {
 		return types.GuardJudgment{}, false
 	}
+	listing := stoppableTasks(tasks, now)
+	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
 		return types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      decisionDeny,
 			Rule:          string(denyRuleBackgroundLeft),
-			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each by its id, or wait for its completion notice, before you finish:\n%s",
+			Reason: fmt.Sprintf("magus workspace: %s you ran in the background %s still running; stop each before you finish:\n%s",
 				plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
 		}, true
 	}
@@ -255,18 +253,19 @@ type transcriptBlock struct {
 	Input     map[string]any  `json:"input"`
 	ToolUseID string          `json:"tool_use_id"`
 	Content   json.RawMessage `json:"content"`
+	IsError   bool            `json:"is_error"`
 	Text      string          `json:"text"`
 }
 
 // liveBackgroundTasks reads a JSONL transcript for the shell commands its agent ran in the
 // background that are still running at now, in start order.
 //
-// A task starts with a call carrying a command and run_in_background, or with a call
-// carrying a command whose result names the background task it became: a foreground call
-// that timed out, or a watcher. It ends with a completion notice carrying a status, with a
-// call whose whole input names it by task_id or shell_id (the shape of a host's stop
-// tool; one that also waits or reads, with block or timeout, is not a stop), or at the
-// expiry a watcher declared.
+// A task starts with a call carrying a command whose result names the background task it
+// became: a run_in_background call, a foreground call that timed out, or a watcher. A
+// call with no such result, or an errored one, started nothing. It ends with a completion
+// notice carrying a status, with a call whose whole input names it by task_id or shell_id
+// (the shape of a host's stop tool; one that also waits or reads, with block or timeout,
+// is not a stop), or at the expiry a watcher declared.
 func liveBackgroundTasks(transcript string, now time.Time) ([]backgroundTask, error) {
 	if !filepath.IsAbs(transcript) {
 		return nil, errNotATranscript
@@ -359,9 +358,6 @@ func (r *taskReader) call(b transcriptBlock, at time.Time) {
 		task.Expires = at.Add(time.Duration(ms) * time.Millisecond)
 	}
 	r.commands[b.ID] = task
-	if b.Input["run_in_background"] == true {
-		r.start(b.ID, task)
-	}
 }
 
 // truthy reads a boolean a host may send as a JSON boolean or as a string.
@@ -392,7 +388,11 @@ func (r *taskReader) start(callID string, task backgroundTask) {
 }
 
 // callResult reads a call's result for the id the host gave its background task.
+// An errored result starts nothing, whatever id it quotes.
 func (r *taskReader) callResult(b transcriptBlock) {
+	if b.IsError {
+		return
+	}
 	m := backgroundIDPattern.FindStringSubmatch(blockText(b.Content))
 	if m == nil {
 		return

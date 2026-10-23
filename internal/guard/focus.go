@@ -191,12 +191,8 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
 		return project.Focus{}, types.Job{}, false
 	}
-	leases, err := leaseRows(ctx, location)
-	if err != nil {
-		return project.Focus{}, types.Job{}, false
-	}
-	me, enrolled := liveLease(liveLeases(leases), actingLease)
-	if !enrolled {
+	me, enrolled := leaseRow(ctx, location, actingLease)
+	if !enrolled || !me.State.Live() {
 		return project.Focus{}, types.Job{}, false
 	}
 	focus, ok := leaseFocus(ws, me)

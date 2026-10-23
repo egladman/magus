@@ -156,6 +156,25 @@ func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
 	assert.True(t, warm, "the same role under another parent still continues")
 }
 
+// A resumed worker stays bound to its own checkout, so it is served only for a job taken there.
+func TestFindWarmWorkerServesOnlyAWorkerInTheJobsCheckout(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	root := t.TempDir()
+	ended := types.Job{ID: "gate-fits", State: types.StatePass, WritePaths: []string{"a.go"}, CheckoutRoot: root, Updated: now.Add(-time.Minute).Unix()}
+	f := newReworkFixture(t)
+	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
+	warmFor := func(next types.Job) bool {
+		_, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, warmSpawnTitle, nil, 5*time.Minute, now)
+		return warm
+	}
+
+	here := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
+	assert.True(t, warmFor(here), "a job taken in the worker's checkout continues it")
+	elsewhere := here
+	elsewhere.Worktree = &types.JobWorktree{Root: filepath.Join(t.TempDir(), "gate2")}
+	assert.False(t, warmFor(elsewhere), "a job forked into another checkout does not")
+}
+
 func TestResumeTTLNamesItsSource(t *testing.T) {
 	got := resumeTTL(account{})
 	assert.Equal(t, 5*time.Minute, got.ttl)

@@ -977,7 +977,7 @@ func TestFreshenIndexesRebuildsOnlyTheStale(t *testing.T) {
 	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: true}
 
-	require.NoError(t, freshenIndexes(idxs, w.probe, w.build, true))
+	require.NoError(t, freshenIndexes(idxs, w.probe, w.build, true, noSkew))
 
 	assert.Equal(t, []string{".:scip"}, w.built)
 	assert.True(t, w.current[".:scip"], "the review then reads a current index")
@@ -987,7 +987,7 @@ func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
 	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{}, buildErr: errors.New(`exec: "scip-go": executable file not found`)}
 
-	err := freshenIndexes(idxs, w.probe, w.build, true)
+	err := freshenIndexes(idxs, w.probe, w.build, true, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "scip-go")
@@ -1001,7 +1001,7 @@ func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
 	unprobeable := types.DiagnosticErrorf(types.ToolUnprobeable, "go:go reports no version in /ws: exit status 1")
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, buildErr: unprobeable}
 
-	err := freshenIndexes(idxs, w.probe, w.build, true)
+	err := freshenIndexes(idxs, w.probe, w.build, true, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
@@ -1016,7 +1016,7 @@ func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
 	held := fmt.Errorf("run .:scip: %w", &lockContendedError{Project: ".", Owner: "pid 4242, `magus run test .`"})
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, buildErr: held}
 
-	err := freshenIndexes(idxs, w.probe, w.build, true)
+	err := freshenIndexes(idxs, w.probe, w.build, true, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "locked by another magus process")
@@ -1030,7 +1030,7 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
 
-	err := freshenIndexes(idxs, w.probe, w.build, false)
+	err := freshenIndexes(idxs, w.probe, w.build, false, noSkew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "cache writes are off")
@@ -1038,6 +1038,35 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 	assert.Contains(t, why, conformanceSkippedWhy)
 	assert.Contains(t, why, "publishes nothing without a signing key", "the reason enabling writes is safe rides as the why")
 	assert.NotContains(t, err.Error(), "signing key", "and stays out of the verdict")
+}
+
+func noSkew() string { return "" }
+
+// A ./magus built at another commit than the checkout writes an index the probe never reads
+// back: the error names the skew and the remedy that clears it, not another graph build alone.
+func TestFreshenIndexesNamesTheBinaryTreeSkew(t *testing.T) {
+	idxs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
+	skew := func() string { return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa") }
+
+	err := freshenIndexes(idxs, w.probe, w.build, true, skew)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "the cache recorded no run for the index it wrote: "+
+		"this magus was built at 6bd59e30c1a5 and the checkout is at 794bb6820376")
+	assert.Contains(t, err.Error(), "build ./magus at the checkout's HEAD, stop the pool parents of other builds "+
+		"with `magus server stop --pools`, then `magus graph build`")
+	assert.Contains(t, types.DiagnosticRationale(err), "built at another commit")
+}
+
+var ownGoMod = []byte("module " + ownModule + "\n")
+
+func TestBinaryTreeSkew(t *testing.T) {
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30c1a5", "6bd59e30c1a53eeb2cfb"), "an abbreviated match is no skew")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "unknown", "6bd59e30"), "an unstamped build says nothing")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30", ""), "no HEAD says nothing")
+	assert.Empty(t, binaryTreeSkew([]byte("module example.com/other\n"), "abc", "def"), "another workspace's HEAD is not a magus commit")
+	assert.Equal(t, "this magus was built at abc and the checkout is at def", binaryTreeSkew(ownGoMod, "abc", "def"))
 }
 
 // A missing scip-buzz must not cost the root project its review: while the Go index's

@@ -186,8 +186,9 @@ func (s *Store) writeWorktree(ctx context.Context, id string, fn func(*types.Job
 	return stored, err
 }
 
-// workingCheckout is where row's holder works: the checkout it owns, else root.
-func workingCheckout(root string, row types.Job) string {
+// WorkingCheckout is where row's holder works: the checkout it owns, else root. A row
+// forked with --checkout is taken there and nowhere else (see [WrongCheckout]).
+func WorkingCheckout(root string, row types.Job) string {
 	if row.Worktree.Standing() {
 		return row.Worktree.Root
 	}

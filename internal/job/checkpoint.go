@@ -30,6 +30,13 @@ const checkpointDigestLen = 32
 // back unchanged: a row may name none, and one it already holds was settled when it was
 // written. With a problem, the token comes back as it was given.
 func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, token string) (string, types.JobProblems) {
+	return s.declaredCheckpoint(ctx, rows, id, token, false)
+}
+
+// declaredCheckpoint is [Store.DeclaredCheckpoint]. With ownCheckout the row is forked into
+// a checkout made at its checkpoint, so any revision the repository holds is placeable: its
+// work starts there, not from this checkout's HEAD.
+func (s *Store) declaredCheckpoint(ctx context.Context, rows []types.Job, id, token string, ownCheckout bool) (string, types.JobProblems) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", nil
@@ -56,6 +63,9 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 		return unplaceable(realFix, "checkpoint %q cannot be placed against this checkout's HEAD (%v)", token, err)
 	}
 	if full != head.ID {
+		if ownCheckout {
+			return expandedCheckpoint(full, digest), nil
+		}
 		ancestor, err := driver.IsAncestor(ctx, s.root, full, head.ID)
 		switch {
 		case err != nil:
@@ -75,10 +85,14 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 				token, digest, live)
 		}
 	}
+	return expandedCheckpoint(full, digest), nil
+}
+
+func expandedCheckpoint(full, digest string) string {
 	if digest == "" {
-		return full, nil
+		return full
 	}
-	return full + "+" + digest, nil
+	return full + "+" + digest
 }
 
 // fullRevision is the version control answering at the store's root and the full revision
@@ -162,7 +176,7 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 			}
 		}, nil
 	}
-	full, ps := s.DeclaredCheckpoint(ctx, rows, id, written)
+	full, ps := s.declaredCheckpoint(ctx, rows, id, written, next.Worktree.Standing())
 	if len(ps) > 0 || full == written {
 		return merge, ps
 	}

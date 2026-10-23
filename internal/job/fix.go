@@ -16,9 +16,9 @@ const maxFixRounds = 5
 
 // FixFork makes every edit the problems of row's fork carry, validating again after each
 // round, until a round applies none or maxFixRounds have run. merge builds the fork's merge
-// from a record. With refresh, a checkpoint this checkout cannot place (JobCheckpointUnplaceable)
+// from a record. With refresh, a checkpoint naming a revision the repository does not hold
 // is replaced by this checkout's HEAD revision: only a fork into a checkout of its own may
-// start somewhere else than it was told. Nothing is written; the result is the record and the
+// start somewhere else than it was told, and one naming a real revision starts there. Nothing is written; the result is the record and the
 // edits that changed it, in order.
 func FixFork(ctx context.Context, store *Store, row types.Declaration, merge func(types.Declaration) func(*types.Job), limits config.Jobs, read SymbolReader, refresh bool) (types.Declaration, []types.JobEdit, error) {
 	quiet := quietDry(store)
@@ -30,7 +30,7 @@ func FixFork(ctx context.Context, store *Store, row types.Declaration, merge fun
 		}
 		v, _ := validateFork(ctx, quiet, rows, row.ID, merge(row), limits, read)
 		edits := problemEdits(v.Problems)
-		if refresh && slices.ContainsFunc(v.Problems, func(p types.JobProblem) bool { return p.Code == types.JobCheckpointUnplaceable }) {
+		if refresh && unheldCheckpoint(ctx, quiet, row.Checkpoint) && slices.ContainsFunc(v.Problems, func(p types.JobProblem) bool { return p.Code == types.JobCheckpointUnplaceable }) {
 			if token, err := quiet.CheckoutToken(ctx); err == nil {
 				rev, _ := types.ParseCheckpointToken(token)
 				edits = append(edits, types.JobEdit{RefreshCheckpoint: rev})
@@ -43,6 +43,13 @@ func FixFork(ctx context.Context, store *Store, row types.Declaration, merge fun
 		applied = append(applied, made...)
 	}
 	return row, applied, nil
+}
+
+// unheldCheckpoint reports whether token names a revision the repository does not hold.
+func unheldCheckpoint(ctx context.Context, store *Store, token string) bool {
+	rev, _ := types.ParseCheckpointToken(token)
+	_, _, err := store.fullRevision(ctx, rev)
+	return err != nil
 }
 
 // FixApply is [FixFork] for the records `magus job apply` takes, each validated by a dry

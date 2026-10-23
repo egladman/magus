@@ -106,6 +106,35 @@ func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
 	assert.Empty(t, rows)
 }
 
+// A job forked into a checkout of its own starts from its checkpoint there, so a sibling
+// branch the forker's HEAD does not descend from is placeable; only a revision the
+// repository does not hold is not (MGS3041).
+func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, loadableFiles)
+	repo.Git("switch", "-q", "-c", "elsewhere")
+	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
+	repo.Git("switch", "-q", "main")
+	s := NewStore(tempLocation(t, repo.Root()))
+	own := func(token string) func(*types.Job) {
+		return func(u *types.Job) {
+			checkpointMerge(token)(u)
+			u.Worktree = &types.JobWorktree{Root: filepath.Join(t.TempDir(), "own")}
+		}
+	}
+
+	v, err := ValidateFork(t.Context(), s, "sibling", own(elsewhere[:9]), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.NotContains(t, codes(v.Problems), types.JobCheckpointUnplaceable, "a sibling branch is where its own checkout starts: %v", v.Problems)
+	assert.Equal(t, elsewhere, v.Job.Checkpoint, "it is stored expanded")
+
+	v, err = ValidateFork(t.Context(), s, "made-up", own(madeUpRevision), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Contains(t, codes(v.Problems), types.JobCheckpointUnplaceable)
+	assert.ErrorContains(t, v.Problems.Err(), "names no revision this repository holds")
+}
+
 // At HEAD magus reproduces the digest, so a digest the tree does not hold is refused; the
 // clean tree's own revision, and the dirty tree's own token, are accepted.
 func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
