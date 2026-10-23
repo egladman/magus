@@ -177,10 +177,13 @@ var ruleDocBackgroundLeft = types.RuleDoc{
 
 var ruleDocBackgroundSilent = types.RuleDoc{
 	Name:    string(denyRuleBackgroundSilent),
-	Catches: "a background task of the session that has written nothing for half an hour or more",
+	Catches: "a background task of the session that has written nothing for advise_minutes (30 unset)",
 	Why: "A background task's output file and event notices are the only sign it is working, and one that writes nothing for half an hour is more likely waiting on a stdin nobody feeds, a lock or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat for eight hours that way. " +
 		"On each shell call of a root session magus reads the session's transcript for the background tasks still running, as background-left does, and measures each one's silence from the latest of its start, its output file's last write and its newest event notice. " +
-		"Past 30 minutes of silence the call is advised, once per task per session; past 60 minutes every shell call that is not a read is refused, naming each task's id, age, silence, command and the TaskStop call that ends it. " +
+		"It reads only the bytes written since its last call, resuming from a checkpoint in the workspace cache, so a transcript of hundreds of megabytes costs a hook call no more than a small one. " +
+		"Past 30 minutes of silence the call is advised, once per task per session; past 60 minutes every shell call that is not a read is refused, naming each task's id, age, silence, command, output file and the TaskStop call that ends it. " +
+		"magus never stops a task itself. The text says what a stop loses: only the process; the output file stays on disk, reads still pass, and a magus run keeps its output ref and history. It names how to pick the work back up, bounded at background-unbounded's ceiling. " +
+		"advise_minutes and deny_minutes set the two thresholds (30 and 60 unset); deny_minutes must be more than advise_minutes. " +
 		"A watcher with an expiry is not judged, since the host ends it. A subagent's tasks are background-left's at its stop. The host's hook input carries no list of background tasks, so the transcript is the record read.",
 }
 
@@ -189,7 +192,7 @@ var ruleDocBackgroundUnbounded = types.RuleDoc{
 	Catches: "a shell command run in the background with nothing to end it",
 	Why: "A backgrounded command outlives the agent that started it, and the host stops it only when asked. " +
 		"It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. " +
-		"The refusal names a default ceiling of 30 minutes (`timeout 30m`), the span after which background-silent starts speaking of a quiet task. " +
+		"The refusal names a ceiling, `timeout 30m` unless ceiling_minutes sets another, the span after which background-silent starts speaking of a quiet task. " +
 		"timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.",
 }
 

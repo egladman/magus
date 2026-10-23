@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -34,19 +36,20 @@ const denyRuleBackgroundLeft denyRuleName = "background-left"
 // denyRuleBackgroundUnbounded names the refusal of a backgrounded shell command nothing ends.
 const denyRuleBackgroundUnbounded denyRuleName = "background-unbounded"
 
-// backgroundCeiling is the bound an unbounded background command's refusal names. It
-// equals backgroundSilentAdvise, so a command run at the ceiling ends before the health
-// check would speak of it.
-const backgroundCeiling = 30 * time.Minute
+// backgroundLimits are the background rules' figures as the workspace set them in its
+// guard.builtins: the ceiling background-unbounded offers, and the silences past which
+// background-silent advises, then refuses.
+type backgroundLimits struct {
+	ceiling time.Duration
+	advise  time.Duration
+	deny    time.Duration
+}
 
-// backgroundSilentAdvise is how long a background task may go without new output before
-// each later call is advised of it: past half an hour, a quiet task is more likely stuck
-// than slow.
-const backgroundSilentAdvise = 30 * time.Minute
-
-// backgroundSilentDeny is how long it may go before each later call is refused until it
-// is stopped: twice the advisory, so the advice had a chance to be read and acted on.
-const backgroundSilentDeny = 60 * time.Minute
+func backgroundLimitsOf(deps Dependencies) backgroundLimits {
+	unbounded, _ := deps.setting(string(denyRuleBackgroundUnbounded))
+	silent, _ := deps.setting(string(denyRuleBackgroundSilent))
+	return backgroundLimits{ceiling: unbounded.Ceiling(), advise: silent.SilentAdvise(), deny: silent.SilentDeny()}
+}
 
 // denyRuleBackgroundSilent names the advice, then the refusal, a session gets while one
 // of its background tasks has gone silent.
@@ -109,7 +112,7 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 	if transcript == "" {
 		return types.GuardJudgment{}, false
 	}
-	tasks, err := liveBackgroundTasks(transcript, now)
+	tasks, err := liveBackgroundTasks(transcript, said.CacheDir(), now)
 	if err != nil {
 		return types.GuardJudgment{}, false
 	}
@@ -219,28 +222,29 @@ func backgroundTaskKey(kind hint.MarkerKind, t backgroundTask) hint.MarkerKind {
 }
 
 // judgeBackgroundSilent is a root session's per-call word on its background tasks that
-// have gone silent: a refusal naming each silent past backgroundSilentDeny, else advice
-// naming each silent past backgroundSilentAdvise, once per task on said. A watcher with an
-// expiry is left out, since the host ends it.
-func judgeBackgroundSilent(transcript string, said hint.Gate, now time.Time) (denial, advice) {
+// have gone silent: a refusal naming each silent past limits.deny, else advice naming each
+// silent past limits.advise, once per task on said. A watcher with an expiry is left out,
+// since the host ends it. It never stops a task: the stop it names is the agent's to make.
+func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint.Gate, now time.Time) (denial, advice) {
 	if transcript == "" {
 		return denial{}, advice{}
 	}
-	tasks, err := liveBackgroundTasks(transcript, now)
+	tasks, err := liveBackgroundTasks(transcript, said.CacheDir(), now)
 	if err != nil {
 		return denial{}, advice{}
 	}
 	silentFor := func(t backgroundTask) time.Duration { return now.Sub(lastHeard(t)) }
 	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
-		return !t.Expires.IsZero() || silentFor(t) < backgroundSilentAdvise
+		return !t.Expires.IsZero() || silentFor(t) < limits.advise
 	})
-	why := "A background task's output file and event notices are the only sign it is working. One that writes nothing for half an hour is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. " +
-		fmt.Sprintf("Past %s of silence each call is advised, once per task; past %s each call is refused until the task is stopped. ", backgroundSilentAdvise, backgroundSilentDeny) +
-		"Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it."
-	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < backgroundSilentDeny }); len(stuck) > 0 {
+	why := fmt.Sprintf("A background task's output file and event notices are the only sign it is working. One that writes nothing for %s is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. ", limits.advise) +
+		fmt.Sprintf("Past %s of silence each call is advised, once per task; past %s each call but a read is refused until the task is stopped. ", limits.advise, limits.deny) +
+		"Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it. " +
+		"magus never stops a task itself. The figures are background-silent's advise_minutes and deny_minutes in the workspace's magus\\guard.builtins."
+	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < limits.deny }); len(stuck) > 0 {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s",
-				plural(len(stuck), "a shell command", "shell commands"), plural(len(stuck), "has", "have"), backgroundSilentDeny, plural(len(stuck), "it", "each"), silentTasks(stuck, now)),
+			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s\n%s",
+				plural(len(stuck), "a shell command", "shell commands"), plural(len(stuck), "has", "have"), limits.deny, plural(len(stuck), "it", "each"), silentTasks(stuck, now), resumeAfterStop(limits.ceiling)),
 			Why: why,
 		}, advice{}
 	}
@@ -249,13 +253,23 @@ func judgeBackgroundSilent(transcript string, said hint.Gate, now time.Time) (de
 		return denial{}, advice{}
 	}
 	return denial{}, advice{
-		Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop any that is stuck:\n%s",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "has", "have"), backgroundSilentAdvise, silentTasks(tasks, now)),
+		Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop any that is stuck:\n%s\n%s",
+			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "has", "have"), limits.advise, silentTasks(tasks, now), resumeAfterStop(limits.ceiling)),
 		Why: why,
 	}
 }
 
-// silentTasks lists tasks as stoppableTasks does, each with how long it has been silent.
+// resumeAfterStop says what stopping a background task loses and how to pick its work
+// back up, so a stop is never a guess about lost output.
+func resumeAfterStop(ceiling time.Duration) string {
+	bound := fmt.Sprintf("%dm", int(ceiling.Minutes()))
+	return "Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. " +
+		"A magus run keeps its output ref and run history (`magus query output <ref>`). " +
+		fmt.Sprintf("To pick the work back up, rerun the command bounded: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", bound, bound)
+}
+
+// silentTasks lists tasks as stoppableTasks does, each with how long it has been silent
+// and the output file a stop leaves behind.
 func silentTasks(tasks []backgroundTask, now time.Time) string {
 	lines := make([]string, 0, len(tasks))
 	for _, t := range tasks {
@@ -264,6 +278,9 @@ func silentTasks(tasks []backgroundTask, now time.Time) string {
 		line = fmt.Sprintf("%s (silent %s)", head, now.Sub(lastHeard(t)).Round(time.Second))
 		if rest != "" {
 			line += "\n" + rest
+		}
+		if t.Output != "" {
+			line += "\n    output: " + t.Output
 		}
 		lines = append(lines, line)
 	}
@@ -289,15 +306,15 @@ func lastHeard(t backgroundTask) time.Time {
 // backgrounded call, or a watcher's command.
 type backgroundTask struct {
 	// ID is the host's task id, "" when the transcript never named one.
-	ID      string
-	Command string
-	Started time.Time
+	ID      string    `json:"id,omitzero"`
+	Command string    `json:"command"`
+	Started time.Time `json:"started"`
 	// Expires is when the host ends the task on its own, zero when it never does.
-	Expires time.Time
+	Expires time.Time `json:"expires,omitzero"`
 	// Output is the file the host writes the task's output to, "" when it named none.
-	Output string
+	Output string `json:"output,omitzero"`
 	// Heard is the newest event notice the task sent, zero for none.
-	Heard time.Time
+	Heard time.Time `json:"heard,omitzero"`
 }
 
 // The host's words for a shell command it runs in the background: asked for, timed out
@@ -358,7 +375,12 @@ type transcriptBlock struct {
 // notice carrying a status, with a call whose whole input names it by task_id or shell_id
 // (the shape of a host's stop tool; one that also waits or reads, with block or timeout,
 // is not a stop), or at the expiry a watcher declared.
-func liveBackgroundTasks(transcript string, now time.Time) ([]backgroundTask, error) {
+//
+// With a cacheDir, the fold of every complete line is saved there as a checkpoint, and the
+// next call reads only the bytes written since: a root transcript grows to hundreds of
+// megabytes, and a hook has 7 seconds. A checkpoint that cannot be saved costs the next
+// call a full read, never a wrong answer.
+func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgroundTask, error) {
 	if !filepath.IsAbs(transcript) {
 		return nil, errNotATranscript
 	}
@@ -367,26 +389,195 @@ func liveBackgroundTasks(transcript string, now time.Time) ([]backgroundTask, er
 		return nil, err
 	}
 	defer f.Close()
+	store := taskCheckpointPath(cacheDir, transcript)
+	r, start, saved := resumeTaskReader(store, transcript, f)
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return nil, err
+	}
+	reader := bufio.NewReaderSize(f, 1<<20)
+	offset := start
+	var tail []byte
+	for {
+		line, err := reader.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			// A line with no newline yet may be one the host is still writing, so it is
+			// judged now but left out of the checkpoint.
+			tail = line
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		offset += int64(len(line))
+		r.fold(line)
+	}
+	if store != "" && offset > start {
+		r.prune()
+		if head, err := transcriptHead(f, offset); err == nil {
+			r.save(store, saved, taskCheckpoint{Transcript: transcript, Offset: offset, Head: head})
+		}
+	}
+	r.fold(tail)
+	return r.result(now), nil
+}
+
+// pendingCallWindow is how long a shell call stays in a checkpoint waiting for a result
+// that moves it to the background. A host moves a foreground call there at its timeout,
+// at most 10 minutes in Claude Code, so twice that keeps every call that can still move
+// while a checkpoint of a long session stays small.
+const pendingCallWindow = 20 * time.Minute
+
+// headBytes is how much of a transcript's start a checkpoint fingerprints.
+const headBytes = 4096
+
+// taskCheckpoint is a transcript's fold up to Offset. Head fingerprints the transcript's
+// first bytes, so a file replaced or truncated under the same path is read from its start.
+type taskCheckpoint struct {
+	Transcript string                    `json:"transcript"`
+	Offset     int64                     `json:"offset"`
+	Head       string                    `json:"head"`
+	Pending    map[string]backgroundTask `json:"pending,omitzero"`
+	Live       []checkpointTask          `json:"live,omitzero"`
+	Heard      map[string]time.Time      `json:"heard,omitzero"`
+}
+
+// checkpointTask is one backgrounded call, keyed by the call id a notice may end it by.
+type checkpointTask struct {
+	CallID string         `json:"call_id"`
+	Task   backgroundTask `json:"task"`
+}
+
+// taskCheckpointPath is transcript's checkpoint store under cacheDir, "" with no cacheDir.
+// The path is hashed so the file name holds no part of the host's directory layout.
+func taskCheckpointPath(cacheDir, transcript string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(transcript))
+	return filepath.Join(cacheDir, "background-tasks", hex.EncodeToString(sum[:8])+".jsonl")
+}
+
+// transcriptHead fingerprints the first headBytes of f, or its first n when shorter.
+func transcriptHead(f *os.File, n int64) (string, error) {
+	buf := make([]byte, min(n, headBytes))
+	if _, err := f.ReadAt(buf, 0); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(buf)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// resumeTaskReader is a reader holding store's newest checkpoint of transcript and the
+// offset to read on from, or an empty reader and 0 when no checkpoint matches f. It also
+// returns the store's lines as read, which save needs to append or compact.
+func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64, file.Lines) {
 	r := &taskReader{
 		commands: map[string]backgroundTask{},
 		live:     map[string]*backgroundTask{},
 		endedIDs: map[string]bool{},
 		heard:    map[string]time.Time{},
 	}
-	reader := bufio.NewReaderSize(f, 1<<20)
-	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 && slices.ContainsFunc(backgroundMarkers, func(m []byte) bool { return bytes.Contains(line, m) }) {
-			r.read(line)
+	if store == "" {
+		return r, 0, file.Lines{}
+	}
+	saved, err := file.ReadLines(store)
+	if err != nil {
+		return r, 0, file.Lines{}
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return r, 0, saved
+	}
+	for _, line := range slices.Backward(saved.Lines) {
+		var cp taskCheckpoint
+		if json.Unmarshal(line.Text, &cp) != nil || cp.Transcript != transcript || cp.Offset > info.Size() {
+			continue
 		}
-		if errors.Is(err, io.EOF) {
-			break
+		if head, err := transcriptHead(f, cp.Offset); err != nil || head != cp.Head {
+			return r, 0, saved
 		}
-		if err != nil {
-			return nil, err
+		maps.Copy(r.commands, cp.Pending)
+		for _, t := range cp.Live {
+			r.start(t.CallID, t.Task)
+		}
+		maps.Copy(r.heard, cp.Heard)
+		return r, cp.Offset, saved
+	}
+	return r, 0, saved
+}
+
+// save appends r's fold, as of cp, to store, whose lines were saved, and rewrites store
+// to that one entry once it is due compaction. A failed write is dropped: the next call
+// reads the transcript from the last checkpoint that did land, which is slower, never
+// wrong.
+func (r *taskReader) save(store string, saved file.Lines, cp taskCheckpoint) {
+	cp.Pending = r.commands
+	cp.Heard = r.heard
+	for _, callID := range r.order {
+		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
+	}
+	line, err := json.Marshal(cp)
+	if err != nil {
+		return
+	}
+	if len(saved.Lines) == 0 && !saved.Partial {
+		sweepCheckpoints(filepath.Dir(store))
+	}
+	if saved.Partial || file.CompactDue(len(saved.Lines)+1, 1) {
+		_ = file.RewriteLines(store, [][]byte{line}, 0o644)
+		return
+	}
+	// One write per hook call: a sync would cost more than the checkpoint saves.
+	_ = file.AppendLines(store, [][]byte{line}, 0o644, file.WithoutSync())
+}
+
+// checkpointRetention is how long a session's checkpoint store outlives its last write,
+// as long as a resumed session's advice stays held (see hint's markerRetention).
+const checkpointRetention = 7 * 24 * time.Hour
+
+// sweepCheckpoints removes the stores in dir past checkpointRetention. It runs only when a
+// session writes its first checkpoint, so an ordinary call never lists the directory.
+func sweepCheckpoints(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-checkpointRetention)
+	for _, e := range entries {
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
 		}
 	}
-	return r.result(now), nil
+}
+
+// prune drops what no later line can change from r's fold: tasks a notice or a stop
+// ended, watchers past their expiry, and calls too old to still move to the background.
+// It measures age against the newest timestamp read, never the clock, so a transcript
+// read late keeps what was live when it was written.
+func (r *taskReader) prune() {
+	order := r.order[:0]
+	for _, callID := range r.order {
+		t, ok := r.live[callID]
+		ended := ok && ((t.ID != "" && r.endedIDs[t.ID]) || (!t.Expires.IsZero() && !r.latest.Before(t.Expires)))
+		if ended {
+			delete(r.live, callID)
+		}
+		if ok && !ended {
+			order = append(order, callID)
+		}
+	}
+	r.order = order
+	// A stop or notice follows the result that names its task, so an id ended here is
+	// never needed again.
+	clear(r.endedIDs)
+	ids := map[string]bool{}
+	for _, t := range r.live {
+		ids[t.ID] = true
+	}
+	maps.DeleteFunc(r.heard, func(id string, _ time.Time) bool { return !ids[id] })
+	if !r.latest.IsZero() {
+		maps.DeleteFunc(r.commands, func(_ string, t backgroundTask) bool { return r.latest.Sub(t.Started) > pendingCallWindow })
+	}
 }
 
 // taskReader folds transcript lines into the tasks still running.
@@ -400,6 +591,16 @@ type taskReader struct {
 	endedIDs map[string]bool
 	// heard is each task id's newest event notice.
 	heard map[string]time.Time
+	// latest is the newest timestamp read.
+	latest time.Time
+}
+
+// fold reads line when it holds one of backgroundMarkers; most lines hold none and are
+// never decoded.
+func (r *taskReader) fold(line []byte) {
+	if len(line) > 0 && slices.ContainsFunc(backgroundMarkers, func(m []byte) bool { return bytes.Contains(line, m) }) {
+		r.read(line)
+	}
 }
 
 func (r *taskReader) read(line []byte) {
@@ -408,6 +609,9 @@ func (r *taskReader) read(line []byte) {
 		return
 	}
 	at, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
+	if at.After(r.latest) {
+		r.latest = at
+	}
 	r.notices(rec.Attachment.Prompt, at)
 	if s, ok := rec.Content.(string); ok {
 		r.notices(s, at)
@@ -565,8 +769,8 @@ func (r *taskReader) result(now time.Time) []backgroundTask {
 // and the host stops it only when asked. `magus job exec --timeout D -- cmd` bounds it, and
 // so does a `timeout N` in front; a magus target run is bounded by its target's timeout. A
 // line that does not parse is left to the host, which will not run it. The refusal names
-// the bound; it never rewrites the command.
-func denyUnboundedBackground(command string, background bool, d Dialect) denial {
+// the bound, ceiling; it never rewrites the command.
+func denyUnboundedBackground(command string, background bool, d Dialect, ceiling time.Duration) denial {
 	if !background {
 		return denial{}
 	}
@@ -578,14 +782,15 @@ func denyUnboundedBackground(command string, background bool, d Dialect) denial 
 	if program == "" {
 		return denial{}
 	}
-	ceiling := fmt.Sprintf("%dm", int(backgroundCeiling.Minutes()))
+	bound := fmt.Sprintf("%dm", int(ceiling.Minutes()))
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the default ceiling: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", program, ceiling, ceiling),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the ceiling: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", program, bound, bound),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
 			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +
 			"timeout signals its own process group, so a child that starts its own session (setsid, a daemon) escapes it, and `--foreground` narrows it to the direct child; `--kill-after` sends KILL to a command that ignores TERM. " +
-			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output. Running the command in the foreground passes too, since the host times a foreground call out.",
+			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output. Running the command in the foreground passes too, since the host times a foreground call out. " +
+			"The ceiling is background-unbounded's ceiling_minutes in the workspace's magus\\guard.builtins.",
 	}
 }
 

@@ -1187,7 +1187,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// A backgrounded waiter is the waiter rules' to judge: they count it toward the pile
 		// and name what to wait on instead, which a bound would not.
 		if verdict.Decision != decisionDeny && !waits {
-			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD); d.refused() {
+			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD, backgroundLimitsOf(deps).ceiling); d.refused() {
 				refuseWith(denyRuleBackgroundUnbounded, d)
 			}
 		}
@@ -1321,7 +1321,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// The root's half of background-silent; a subagent's stop is background-left's. A read
 		// passes, so the task's output can still be inspected before it is stopped.
 		if setting, ok := deps.setting(string(denyRuleBackgroundSilent)); ok && setting.Decision != builtin.Off && who.Agent == "" && env.Read == "" && !req.DryRun && verdict.Decision != decisionDeny {
-			d, a := judgeBackgroundSilent(who.Transcript, deps.heldBy(markers, string(denyRuleBackgroundSilent)), time.Now())
+			d, a := judgeBackgroundSilent(who.Transcript, backgroundLimitsOf(deps), deps.heldBy(markers, string(denyRuleBackgroundSilent)), time.Now())
 			switch {
 			case d.refused():
 				refuseWith(denyRuleBackgroundSilent, d)

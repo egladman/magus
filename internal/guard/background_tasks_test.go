@@ -92,14 +92,103 @@ func TestLiveBackgroundTasks(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := liveBackgroundTasks(writeTranscript(t, tc.lines...), tc.now)
+			got, err := liveBackgroundTasks(writeTranscript(t, tc.lines...), "", tc.now)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
+		// Resumed from a checkpoint taken after any prefix, the answer is the full read's.
+		t.Run(tc.name+", resumed", func(t *testing.T) {
+			for split := range len(tc.lines) + 1 {
+				cacheDir := t.TempDir()
+				transcript := writeTranscript(t, tc.lines[:split]...)
+				_, err := liveBackgroundTasks(transcript, cacheDir, tc.now)
+				require.NoError(t, err)
+				appendTranscript(t, transcript, tc.lines[split:]...)
+				got, err := liveBackgroundTasks(transcript, cacheDir, tc.now)
+				require.NoError(t, err)
+				assert.Equal(t, tc.want, got, "checkpoint after %d line(s)", split)
+			}
+		})
 	}
 
-	_, err := liveBackgroundTasks("agent-a1b2c3.jsonl", time.Now())
+	_, err := liveBackgroundTasks("agent-a1b2c3.jsonl", "", time.Now())
 	assert.Error(t, err, "a relative path is never read")
+}
+
+func appendTranscript(t *testing.T, path string, lines ...string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	for _, line := range lines {
+		_, err = f.WriteString(line + "\n")
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.Close())
+}
+
+// A checkpoint is read on from only while the transcript under it is the one it folded:
+// one rewritten under the same path is read from its start, and so is one cut short.
+func TestLiveBackgroundTasksRereadsAReplacedTranscript(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	cacheDir := t.TempDir()
+	transcript := writeTranscript(t, bgSearchCall, bgSearchResult)
+	got, err := liveBackgroundTasks(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	replaced := writeTranscript(t, movedCall, movedResult, bgSearchCall, bgSearchResult, bgSearchDone)
+	require.NoError(t, os.Rename(replaced, transcript))
+	got, err = liveBackgroundTasks(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "bwu4rorj7", got[0].ID, "the new file's own task, not the old fold's")
+
+	require.NoError(t, os.WriteFile(transcript, []byte(bgSearchCall+"\n"), 0o644))
+	got, err = liveBackgroundTasks(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	assert.Empty(t, got, "a transcript cut short is read from its start")
+}
+
+// A session's first checkpoint sweeps the stores no session has written for a week.
+func TestLiveBackgroundTasksSweepsStaleCheckpoints(t *testing.T) {
+	cacheDir := t.TempDir()
+	dir := filepath.Join(cacheDir, "background-tasks")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	stale, fresh := filepath.Join(dir, "stale.jsonl"), filepath.Join(dir, "fresh.jsonl")
+	for _, p := range []string{stale, fresh} {
+		require.NoError(t, os.WriteFile(p, []byte("{}\n"), 0o644))
+	}
+	old := time.Now().Add(-checkpointRetention - time.Hour)
+	require.NoError(t, os.Chtimes(stale, old, old))
+
+	_, err := liveBackgroundTasks(writeTranscript(t, bgSearchCall, bgSearchResult), cacheDir, time.Now())
+	require.NoError(t, err)
+	assert.NoFileExists(t, stale)
+	assert.FileExists(t, fresh)
+}
+
+// A line the host is still writing is judged but never checkpointed, so the next call
+// reads it whole.
+func TestLiveBackgroundTasksLeavesAPartialLineOutOfTheCheckpoint(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	cacheDir := t.TempDir()
+	transcript := writeTranscript(t, bgSearchCall)
+	half := len(bgSearchResult) / 2
+	f, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString(bgSearchResult[:half])
+	require.NoError(t, err)
+	got, err := liveBackgroundTasks(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	_, err = f.WriteString(bgSearchResult[half:] + "\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	got, err = liveBackgroundTasks(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "bc0m5o2bg", got[0].ID)
 }
 
 // rootStop is Claude Code's Stop for the root session: no agent, and the session's own
@@ -222,7 +311,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.command, func(t *testing.T) {
-			d := denyUnboundedBackground(tc.command, true, DialectBash)
+			d := denyUnboundedBackground(tc.command, true, DialectBash, 30*time.Minute)
 			if tc.want == "" {
 				assert.False(t, d.refused(), d.Say)
 				return
@@ -233,7 +322,16 @@ func TestDenyUnboundedBackground(t *testing.T) {
 			assert.Contains(t, d.Why, "`timeout N` or `gtimeout N`", "the other remedy is behind the ref")
 		})
 	}
-	assert.False(t, denyUnboundedBackground(`grep -r x .`, false, DialectBash).refused(), "a foreground call is the host's to time out")
+	assert.False(t, denyUnboundedBackground(`grep -r x .`, false, DialectBash, 30*time.Minute).refused(), "a foreground call is the host's to time out")
+}
+
+// The ceiling the refusal offers is the workspace's ceiling_minutes.
+func TestJudgeOffersTheWorkspaceCeiling(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	deps := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleBackgroundUnbounded): {Decision: builtin.Deny, CeilingMinutes: 45}}}
+	v := Judge(ctx, deps, Request{Input: "rsync -a src/ dst/", Session: "bg", Host: "claude-code", CallBackground: true})
+	assert.Equal(t, string(denyRuleBackgroundUnbounded), v.Rule)
+	assert.Contains(t, v.Reason, "`timeout 45m <command>` or `magus job exec --timeout 45m -- <command>`")
 }
 
 func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
@@ -289,30 +387,50 @@ func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 func TestJudgeBackgroundSilent(t *testing.T) {
 	started := bgTime(t, "2026-10-13T11:37:41.120Z")
 	live := writeTranscript(t, bgSearchCall, bgSearchResult)
+	limits := backgroundLimitsOf(Dependencies{})
 
 	t.Run("a task silent past the advisory threshold is advised once", func(t *testing.T) {
 		said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
-		d, a := judgeBackgroundSilent(live, said, started.Add(31*time.Minute))
+		d, a := judgeBackgroundSilent(live, limits, said, started.Add(31*time.Minute))
 		assert.False(t, d.refused())
 		assert.Equal(t, "magus workspace: a shell command this session ran in the background has written nothing for over 30m0s; stop any that is stuck:\n"+
 			"  bc0m5o2bg  started 11:37:41Z, 31m0s ago: cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c (silent 31m0s)\n"+
-			`    stop it: TaskStop {"task_id": "bc0m5o2bg"}`, a.Say)
-		_, again := judgeBackgroundSilent(live, said, started.Add(32*time.Minute))
+			`    stop it: TaskStop {"task_id": "bc0m5o2bg"}`+"\n"+
+			"    output: /private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output\n"+
+			"Stopping ends only the process: its output file stays on disk, and reads still pass, so read it first if you need it. "+
+			"A magus run keeps its output ref and run history (`magus query output <ref>`). "+
+			"To pick the work back up, rerun the command bounded: `timeout 30m <command>` or `magus job exec --timeout 30m -- <command>`.", a.Say)
+		_, again := judgeBackgroundSilent(live, limits, said, started.Add(32*time.Minute))
 		assert.Empty(t, again.Say, "the same task is advised once per session")
 	})
 	t.Run("past the deny threshold every call is refused", func(t *testing.T) {
 		said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
 		for range 2 {
-			d, a := judgeBackgroundSilent(live, said, started.Add(61*time.Minute))
+			d, a := judgeBackgroundSilent(live, limits, said, started.Add(61*time.Minute))
 			require.True(t, d.refused())
 			assert.Empty(t, a.Say)
 			assert.Contains(t, d.Say, "has written nothing for over 1h0m0s; stop it before anything else")
 			assert.Contains(t, d.Say, "bc0m5o2bg  started 11:37:41Z, 1h1m0s ago")
 			assert.Contains(t, d.Say, `TaskStop {"task_id": "bc0m5o2bg"}`)
+			assert.Contains(t, d.Say, "output: /private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output")
+			assert.Contains(t, d.Say, "`magus job exec --timeout 30m -- <command>`")
 		}
 	})
+	t.Run("the workspace's minutes move both thresholds", func(t *testing.T) {
+		tuned := backgroundLimitsOf(Dependencies{Builtins: map[string]builtin.Setting{
+			string(denyRuleBackgroundSilent):    {Decision: builtin.Deny, AdviseMinutes: 10, DenyMinutes: 20},
+			string(denyRuleBackgroundUnbounded): {Decision: builtin.Deny, CeilingMinutes: 15},
+		}})
+		d, a := judgeBackgroundSilent(live, tuned, hint.NewGate(t.TempDir(), "s"), started.Add(11*time.Minute))
+		assert.False(t, d.refused())
+		assert.Contains(t, a.Say, "written nothing for over 10m0s")
+		d, _ = judgeBackgroundSilent(live, tuned, hint.NewGate(t.TempDir(), "s"), started.Add(21*time.Minute))
+		require.True(t, d.refused())
+		assert.Contains(t, d.Say, "written nothing for over 20m0s")
+		assert.Contains(t, d.Say, "`timeout 15m <command>`")
+	})
 	t.Run("a young task says nothing", func(t *testing.T) {
-		d, a := judgeBackgroundSilent(live, hint.Gate{}, started.Add(29*time.Minute))
+		d, a := judgeBackgroundSilent(live, limits, hint.Gate{}, started.Add(29*time.Minute))
 		assert.False(t, d.refused())
 		assert.Empty(t, a.Say)
 	})
@@ -322,20 +440,49 @@ func TestJudgeBackgroundSilent(t *testing.T) {
 		now := started.Add(2 * time.Hour)
 		require.NoError(t, os.Chtimes(output, now.Add(-time.Minute), now.Add(-time.Minute)))
 		result := strings.Replace(bgSearchResult, "/private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output", output, 1)
-		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, result), hint.Gate{}, now)
+		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, result), limits, hint.Gate{}, now)
 		assert.False(t, d.refused(), d.Say)
 		assert.Empty(t, a.Say)
 	})
 	t.Run("a watcher with an expiry is the host's to end", func(t *testing.T) {
 		watchStarted := bgTime(t, "2026-10-13T12:00:00Z")
 		long := strings.Replace(bgWatchCall, `"timeout_ms":600000`, `"timeout_ms":36000000`, 1)
-		d, a := judgeBackgroundSilent(writeTranscript(t, long, bgWatchResult), hint.Gate{}, watchStarted.Add(2*time.Hour))
+		d, a := judgeBackgroundSilent(writeTranscript(t, long, bgWatchResult), limits, hint.Gate{}, watchStarted.Add(2*time.Hour))
 		assert.False(t, d.refused())
 		assert.Empty(t, a.Say)
 	})
 	t.Run("an ended task is not judged", func(t *testing.T) {
-		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone), hint.Gate{}, started.Add(2*time.Hour))
+		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone), limits, hint.Gate{}, started.Add(2*time.Hour))
 		assert.False(t, d.refused())
 		assert.Empty(t, a.Say)
 	})
+}
+
+// Past the deny threshold a root's shell call is refused, naming the task's output file,
+// and a read of that file still passes: the refusal stops nothing and leaves the output
+// where the host wrote it.
+func TestJudgeSilentDenyLeavesTheOutputReadable(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	started := time.Now().Add(-2 * time.Hour).UTC()
+	output := filepath.Join(t.TempDir(), "bc0m5o2bg.output")
+	require.NoError(t, os.WriteFile(output, []byte("partial result\n"), 0o644))
+	require.NoError(t, os.Chtimes(output, started, started))
+	call := strings.Replace(bgSearchCall, "2026-10-13T11:37:41.120Z", started.Format(time.RFC3339Nano), 1)
+	result := strings.Replace(strings.Replace(bgSearchResult, "2026-10-13T11:37:42.674Z", started.Format(time.RFC3339Nano), 1),
+		"/private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output", output, 1)
+	transcript := writeTranscript(t, call, result)
+	judge := func(input string) types.GuardJudgment {
+		return Judge(ctx, Dependencies{}, Request{Input: input, Session: "s1", Host: "claude-code", Transcript: transcript})
+	}
+
+	v := judge("ls")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundSilent)}, judgedAs(v))
+	assert.Contains(t, v.Reason, "output: "+output)
+	assert.Contains(t, v.Reason, "its output file stays on disk")
+
+	read := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Read","tool_input":{"file_path":"` + output + `"}}`
+	assert.NotEqual(t, decisionDeny, judge(read).Decision, "a read of the output passes")
+	got, err := os.ReadFile(output)
+	require.NoError(t, err)
+	assert.Equal(t, "partial result\n", string(got))
 }
