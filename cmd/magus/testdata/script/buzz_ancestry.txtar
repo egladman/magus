@@ -1,0 +1,17 @@
+# A script's child sees the script's own process in MAGUS_INVOCATION_ANCESTORS, so a
+# magus it spawns can tell its parent's claim from a stranger's instead of refusing
+# MGS3009 as blind to its ancestry.
+
+exec magus buzz ancestry.buzz
+
+-- ancestry.buzz --
+import "std";
+import "proc";
+
+fun main(args: [str]) > void !> any {
+    final ancestors = proc\exec("sh", args: ["-c", "echo $MAGUS_INVOCATION_ANCESTORS"], opts: {"quiet": true}).stdout.trim();
+    final parent = proc\exec("sh", args: ["-c", "echo $PPID"], opts: {"quiet": true}).stdout.trim();
+    std\print("ancestors={ancestors} parent={parent}");
+    std\assert(ancestors != "", message: "no MAGUS_INVOCATION_ANCESTORS in the child");
+    std\assert(ancestors.indexOf("{parent}:") != null, message: "ancestry {ancestors} lacks the script process {parent}");
+}
