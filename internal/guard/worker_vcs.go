@@ -94,8 +94,15 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 }
 
 // mergesBase reports operand naming the base a worker may merge into its own branch: base
-// itself, its origin/ form, or the revision the job was handed or reported, by id.
+// itself, its origin/ form, the revision the job was handed or reported, by id, or the
+// branch of a job its row depends on. A job id is its branch name, so a stacked job reaches
+// the work it builds on without a second base.
 func mergesBase(operand, base string, row types.Job) bool {
+	if slices.ContainsFunc(row.DependsOn, func(dep string) bool {
+		return dep != "" && (operand == dep || operand == "origin/"+dep)
+	}) {
+		return true
+	}
 	if commitID(operand) {
 		for _, token := range []string{row.Checkpoint, row.ReportedBase} {
 			if rev, _ := types.ParseCheckpointToken(token); rev != "" && strings.HasPrefix(rev, operand) {

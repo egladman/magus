@@ -5,7 +5,36 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
+
+func TestMergesBase(t *testing.T) {
+	row := types.Job{DependsOn: []string{"worker-a", "worker-b"}}
+	for _, tc := range []struct {
+		name    string
+		operand string
+		base    string
+		want    bool
+	}{
+		{"the base", "main", "main", true},
+		{"the base's origin form", "origin/main", "refs/heads/main", true},
+		{"a depends_on branch", "worker-a", "main", true},
+		{"a depends_on branch's origin form", "origin/worker-b", "main", true},
+		{"a depends_on branch with no base resolved", "worker-a", "", true},
+		{"an unrelated branch", "worker-c", "main", false},
+		{"a prefix of a depends_on branch", "worker", "main", false},
+		{"another remote's depends_on branch", "upstream/worker-a", "main", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, mergesBase(tc.operand, tc.base, row))
+		})
+	}
+
+	t.Run("a row with no depends_on refuses a job branch", func(t *testing.T) {
+		assert.False(t, mergesBase("worker-a", "main", types.Job{}))
+	})
+}
 
 func TestWorkerVCSOp(t *testing.T) {
 	op := func(t *testing.T, line string) string {
