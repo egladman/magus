@@ -48,6 +48,13 @@ The discipline reaches the code too:
   can reach it. The `main-logic` conformance metric fails a main-package
   function that computes without calling another workspace package; the
   ratchet (`hack/policy/conformance.jsonl`) lists the ones that predate it.
+- **One file until it is long.** A concept stays in one file until that file
+  passes 1500 lines; only then does `R_<topic>.go` earn a place beside `R.go`.
+  A platform build, generated output and a test are their own files at any
+  size. The `file-split` conformance metric fails a concept sibling that would
+  fit in its root at 1500 lines or fewer, and says to rename one that shares
+  no symbol with its root. It moves with the `file-lines` ceiling, and the
+  ratchet lists the families that predate it.
 
 ### Capability is not a reason
 
