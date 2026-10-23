@@ -1,4 +1,3 @@
-import { must } from "../lib/guards";
 // tileView.ts - the DOM renderer for one tab's split-pane layout. A tab's body is a Pane tree
 // (tiling.ts): a single leaf when un-split (the common case) or a tree of splits after the operator
 // tiles it. This module renders that tree into nested CSS grids with draggable dividers, mounts a
@@ -399,12 +398,20 @@ export function createTileView(deps: TileDeps): TileView {
     return false;
   }
 
+  // A leaf with no mounted pane has no rect to compare, so it is not a candidate.
+  function neighborCandidates(): { id: string; rect: DOMRect }[] {
+    return leaves(tree)
+      .filter((l) => l.id !== focusId)
+      .flatMap((l) => {
+        const pane = panes.get(l.id);
+        return pane ? [{ id: l.id, rect: pane.host.getBoundingClientRect() }] : [];
+      });
+  }
+
   function focus(dir: Direction): void {
     const from = panes.get(focusId);
     if (!from) return;
-    const candidates = leaves(tree)
-      .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
+    const candidates = neighborCandidates();
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
     if (target) {
       setFocus(target);
@@ -421,9 +428,7 @@ export function createTileView(deps: TileDeps): TileView {
   function move(dir: Direction): void {
     const from = panes.get(focusId);
     if (!from) return;
-    const candidates = leaves(tree)
-      .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
+    const candidates = neighborCandidates();
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
     if (!target) return;
     tree = swapLeaves(tree, focusId, target);

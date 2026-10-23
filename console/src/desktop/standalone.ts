@@ -14,6 +14,7 @@
 // console drives activate() itself. The log viewer and dashboard satisfy this; the graph explorer
 // does not yet.
 
+import { asError } from "../lib/result";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
 export interface StandaloneApp {
@@ -32,6 +33,16 @@ const noSearch: SearchProvider<null> = {
   parse: () => null,
   apply: () => ({ matches: 0 }),
 };
+
+// failedPage shows why an app did not load in its own pane, where the reader is already looking,
+// and still hands the shell the lifecycle it requires.
+function failedPage(host: HTMLElement, id: string, error: Error): PageController<null, null> {
+  const note = document.createElement("p");
+  note.setAttribute("role", "alert");
+  note.textContent = id + " failed to load: " + error.message;
+  host.replaceChildren(note);
+  return { search: noSearch, setVisible: () => {}, deactivate: () => host.replaceChildren() };
+}
 
 // The shape the factory calls on a dynamically imported app bundle. A streaming app (the
 // dashboard, the log viewer) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
@@ -94,7 +105,12 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
         link.href = url(s.css);
         document.head.append(link);
       }
-      const mod = (await import(url(s.bundle))) as HostModule;
+      let mod: HostModule;
+      try {
+        mod = (await import(url(s.bundle))) as HostModule;
+      } catch (e) {
+        return failedPage(host, s.id, asError(e));
+      }
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
       // app hands back.
       const boot = mod.activate(host);
@@ -140,16 +156,26 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       // Import the bundle BEFORE the scaffold exists so the app's standalone auto-boot (guarded on a
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
-      const mod = (await import(artUrl(s.bundle))) as BootModule;
+      let mod: BootModule;
+      let scaffoldText: string;
+      try {
+        mod = (await import(artUrl(s.bundle))) as BootModule;
+        scaffoldText = await (await fetch(artUrl(scaffold))).text();
+      } catch (e) {
+        return failedPage(host, s.id, asError(e));
+      }
       // Fetch the app's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
       // app's own body, appended into the pane host.
-      const res = await fetch(artUrl(scaffold));
-      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const doc = new DOMParser().parseFromString(scaffoldText, "text/html");
       const main = doc.querySelector("main");
-      if (!main)
-        throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + scaffold + ")");
+      if (!main) {
+        const missing = new Error(
+          "scaffold.html missing its <main> (built to gen/" + scaffold + ")",
+        );
+        return failedPage(host, s.id, missing);
+      }
       host.append(document.importNode(main, true));
       mod.activate();
       return {

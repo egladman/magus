@@ -797,23 +797,33 @@ function makeFailureInterceptor(host: string): Interceptor {
   return (next) => async (req) => {
     const report = (e: unknown): void =>
       reportRpcFailure(host, req.service.typeName, req.method.name, e);
-    try {
-      const res = await next(req);
-      if (!res.stream) return res;
-      const inner = res.message;
-      async function* guarded() {
-        try {
-          yield* inner;
-        } catch (e) {
-          report(e);
-          throw e;
-        }
-      }
-      return { ...res, message: guarded() };
-    } catch (e) {
-      report(e);
-      throw e;
-    }
+    const pending = next(req);
+    // Reporting on a branch leaves the rejection on `pending` for the awaiting caller to see.
+    pending.catch(report);
+    const res = await pending;
+    if (!res.stream) return res;
+    return { ...res, message: reportingIterable(res.message, report) };
+  };
+}
+
+// reportingIterable passes every item through and reports a failing next() while the stream is
+// consumed; the failure itself still reaches the consumer.
+function reportingIterable<T>(
+  inner: AsyncIterable<T>,
+  report: (e: unknown) => void,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      const it = inner[Symbol.asyncIterator]();
+      return {
+        next: () => {
+          const step = it.next();
+          step.catch(report);
+          return step;
+        },
+        return: (value) => it.return?.(value) ?? Promise.resolve({ done: true, value }),
+      };
+    },
   };
 }
 
