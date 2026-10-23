@@ -1245,9 +1245,9 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 // refusal names. They deny by default (ADR 0013), and a workspace may set one to advise.
 var recoverableRules = []string{
 	"architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
-	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
+	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "interpreter-script", "magus-timeout",
 	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
-	"read-paging", "scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",
+	"read-paging", "search-translation", "sed-in-place", "sibling-checkout",
 	"spawn-unbriefed", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-tool",
 	"unknown-env",
 }

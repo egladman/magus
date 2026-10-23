@@ -55,6 +55,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocFilterWithoutInput},
 	{doc: ruleDocGrepReader},
 	{doc: ruleDocInterpreterRewrite},
+	{doc: ruleDocInterpreterScript},
 	{doc: ruleDocConflictRewrite},
 	{doc: ruleDocSpawnUnbriefed},
 	{doc: ruleDocBuzzUnbriefed},
@@ -73,7 +74,6 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocPolicyUnloaded},
 	{doc: ruleDocRawTool},
 	{doc: ruleDocAgentSignOff},
-	{doc: ruleDocScriptedRewrite},
 	{doc: ruleDocSedInPlace},
 	{doc: ruleDocSharedStash},
 	{doc: ruleDocSiblingCheckout},
@@ -268,6 +268,18 @@ var ruleDocInterpreterRewrite = types.RuleDoc{
 		"Only a write's destination counts: the path an `open(..., 'w')`, a pathlib or `writeFile` writer, an in-place flag or an awk redirect names, a variable read through its assignment. A tracked path the program carries as data, in a list it prints to stdout or a report it writes to scratch, is not one. A destination spelled from no literal at all, such as argv, is read as the interpreter's operands.",
 }
 
+var ruleDocInterpreterScript = types.RuleDoc{
+	Name:    string(denyRuleInterpreterScript),
+	Catches: "an ad-hoc script in python, node, perl or ruby, where Buzz is the workspace's scripting language",
+	Why: "Buzz is the one scripting language here: `magus buzz -e '<buzz>'` runs a program with fs, json and proc built in, the magus-buzz-lang skill carries its syntax, and the guard reads what the program does. " +
+		"A python or perl one-liner arrives as one string the guard cannot follow, and its commonest shape, a substitute-and-write, cannot tell your identifier from a dependency's of the same name. " +
+		"It denies python, python3 and python3.x given -c, a `-` operand, no program at all (a heredoc or piped stdin), or a .py file, and a .py file run directly; node given -e, -p, --eval, --print, `-` or no program; perl with any flag cluster carrying e, E or i, or reading its program from stdin; ruby given -e or -i, or reading stdin. " +
+		"Untouched: --version, -V and --help, `python -m`, `node file.js`, `perl file.pl`, bash and sh, `magus run` and `magus buzz`. " +
+		"A script file is judged by its program too: a node, perl or ruby file that substitutes and writes back a path in the workspace, and a write that leaves one, get this verdict; a program whose every named path lies outside the workspace is untouched. " +
+		"A Buzz program is held to the line it would be typed as: every proc\\exec and proc\\shell a `magus buzz -e` body, stdin heredoc or `magus buzz <script>` file starts, spelled from literals, is judged as that command, so `proc\\exec(\"go\", args: [\"test\", \"./...\"])` meets raw-tool the way `go test ./...` does. " +
+		"That is the guard reading a hooked agent call, not a limit on Buzz: the proc module and the interpreter run anything, and a script run outside the harness is never judged.",
+}
+
 var ruleDocConflictRewrite = types.RuleDoc{
 	Name:    string(denyRuleConflictRewrite),
 	Catches: "an inline interpreter rewriting a file that holds merge conflict markers",
@@ -437,18 +449,6 @@ var ruleDocAgentSignOff = types.RuleDoc{
 	Why: "This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. " +
 		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. " +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run.",
-}
-
-var ruleDocScriptedRewrite = types.RuleDoc{
-	Name:    string(denyRuleScriptedRewrite),
-	Catches: "a scripted substitute-and-write, which cannot tell your symbol from a dependency's",
-	Why: "A regex cannot tell YOUR symbol from a dependency's symbol of the same name. " +
-		"A `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. " +
-		"The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. " +
-		"Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for \"no matches\" is how a rename misses half its sites. " +
-		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. " +
-		"A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched. " +
-		"An APPEND passes, since it adds to the end and cannot mangle a line already there: a heredoc appended with `cat >> f <<EOF` or `tee -a`, whatever program its text documents, and a program whose every file write opens in append mode (`open(p, 'a')`, perl's `'>>'`) or goes to its own stdout.",
 }
 
 var ruleDocSedInPlace = types.RuleDoc{

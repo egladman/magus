@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1667,7 +1666,7 @@ func TestInPlaceSedLeavesAScratchFile(t *testing.T) {
 	for _, cmd := range []string{
 		"sed -i '' 's/^main();$/x/' /private/tmp/claude-501/x/scratchpad/probe.buzz",
 		"sed -i 's/a/b/' /tmp/x/f.txt",
-		`S=/private/tmp/c/scratchpad; sed -i '' 's/a/b/' $S/last.py && python3 $S/last.py`,
+		`S=/private/tmp/c/scratchpad; sed -i '' 's/a/b/' $S/last.sh && bash $S/last.sh`,
 		"cd /private/tmp/c/scratchpad/exp && sed -i '' 's|a|b|' M_*.yml && grep formula M_comment.yml",
 		"sed -i -e 's/a/b/' /tmp/x/one.txt /tmp/x/two.txt",
 	} {
@@ -1710,7 +1709,6 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 		note    string
 	}{
 		{"sed -i '' 's/a/b/' f.go", denyRuleSedInPlace, rename},
-		{"perl -pi -e 's/a/b/' f.go", denyRuleScriptedRewrite, rename},
 		{"magus ls targets . | wc -l", denyRuleOutputPipe, typed},
 		{"magus run lint . > /tmp/x.txt", denyRuleOutputRedirect, typed},
 		{"jj --no-pager workspace forget", denyRuleWorktreeRemove, prune},
@@ -1725,126 +1723,6 @@ func TestDenyTextsPointAtTheReferenceScripts(t *testing.T) {
 	at := location{workspace: root, dir: root}
 	got := denyInterpreterRewrite(at, `python3 -c "open('internal/x.go','w').write(x)"`, DialectBash)
 	assert.True(t, strings.HasSuffix(got, rename), got)
-}
-
-// TestGuardDeniesScriptedRewrite: `sed -i` is denied, so the next thing to hand is a
-// python one-liner that substitutes and writes: the same edit, by a route the sed rule
-// cannot see. This is not hypothetical: a `\.Sum\b` rewrite aimed at one proto field also
-// rewrote the OTel SDK's metricdata.Sum and a histogram data point's dp.Sum, because a
-// pattern cannot tell one project's symbol from a dependency's symbol of the same name.
-//
-// The negative cases matter as much: an interpreter that only WRITES is ordinary authoring
-// and must stay available, or the guard costs more than the mistake it prevents.
-func TestGuardDeniesScriptedRewrite(t *testing.T) {
-	t.Parallel()
-	for _, cmd := range []string{
-		`python3 -c "import io,re; s=io.open('f.go').read(); s=re.sub(r'\bA\b','B',s); io.open('f.go','w').write(s)"`,
-		`python3 - <<'PY'` + "\n" + `s=re.subn(r'\bP50\b','P50Seconds',s)` + "\n" + `io.open(p,'w').write(s)` + "\nPY",
-		`perl -pi -e 's/a/b/' f.go`,
-		`perl -i.bak -pe s/a/b/ f`,
-		`ruby -i -pe 'gsub(/a/,"b")' f.rb`,
-	} {
-		assert.NotEmpty(t, Evaluate(strict(testDependencies()), cmd).Deny, "expected a deny for %q", cmd)
-	}
-	for _, cmd := range []string{
-		// Authoring a file is not a rewrite: no substitution, nothing to mis-target.
-		`python3 -c "io.open('new.go','w').write(body)"`,
-		// Reading and reporting, however it greps, writes nothing.
-		`python3 -c "print(re.sub(r'a','b',s))"`,
-		`perl -ne 'print if /a/' f.go`,
-		`node -e "console.log(x.replace(/a/,'b'))"`,
-	} {
-		assert.Empty(t, Evaluate(strict(testDependencies()), cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
-	}
-}
-
-// TestScriptedRewritePassesAnAppend: an append adds to the end of a file and cannot mangle
-// a line already there, so a heredoc appended with cat or tee, and a program whose every
-// file write is an append, pass; a write that can change an existing line still denies.
-func TestScriptedRewritePassesAnAppend(t *testing.T) {
-	t.Parallel()
-	const rewriteText = "s = open(p).read().replace('a', 'b')\nopen(p, 'w').write(s)\n"
-	for _, tc := range []struct {
-		command string
-		denied  bool
-	}{
-		// A heredoc into cat or tee is text, whatever program it documents.
-		{command: "cat >> notes.md <<'EOF'\n" + rewriteText + "EOF"},
-		{command: "tee -a notes.md <<'EOF'\n" + rewriteText + "EOF"},
-		{command: "cat >> types/buzz_object.go <<'EOF'\ntype Skill struct{}\nEOF"},
-		// An unquoted delimiter with a stray `$(` does not parse; the body is still text.
-		{command: "cat >> notes.md <<EOF\nrun python3 with re.sub( then .write( and $(\nEOF"},
-		// A program whose every file write appends.
-		{command: "python3 - <<'PY'\nopen('CHANGELOG.md', 'a').write(s.replace('x', 'y'))\nPY"},
-		{command: "python3 - <<'PY'\nwith open(p, mode='a+') as f:\n    f.write(re.sub('x', 'y', s))\nPY"},
-		{command: `python3 -c "open('log.txt','ab').write(s.replace(b'x', b'y'))"`},
-		// A program writing its result to stdout, appended by the shell.
-		{command: "python3 - >> out.txt <<'PY'\nimport sys\nsys.stdout.write(open('f.go').read().replace('a', 'b'))\nPY"},
-
-		{command: "python3 - <<'PY'\n" + rewriteText + "PY", denied: true},
-		{command: "python3 - <<'PY'\nf = open(p, 'r+')\nf.write(f.read().replace('a', 'b'))\nPY", denied: true},
-		{command: "python3 - <<'PY'\nopen('log.txt', 'a').write(x)\nopen('f.go', 'w').write(s.replace('a', 'b'))\nPY", denied: true},
-		{command: "python3 - >> out.txt <<'PY'\n" + rewriteText + "PY", denied: true},
-		// An unparsable line still denies a rewrite typed on it.
-		{command: `python3 -c "s=s.replace('a','b'); open(p,'w').write(s)" 'unterminated`, denied: true},
-	} {
-		v := Evaluate(strict(testDependencies()), tc.command)
-		if tc.denied {
-			assert.Equal(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
-			continue
-		}
-		assert.NotEqual(t, denyRuleScriptedRewrite, v.Rule.Name, tc.command)
-	}
-}
-
-// TestScriptedRewriteLeavesPathsOutsideTheWorkspace keeps the refusal's own promise that a
-// scratch path is untouched: a script whose every named path lies outside the workspace is
-// not this rule's business, and one that names a path inside still is.
-func TestScriptedRewriteLeavesPathsOutsideTheWorkspace(t *testing.T) {
-	t.Parallel()
-	heredoc := func(paths ...string) string {
-		body := ""
-		for i, p := range paths {
-			body += fmt.Sprintf("p%d = '%s'\nopen(p%d, 'w').write(open(p%d).read().replace('a', 'b'))\n", i, p, i, i)
-		}
-		return "python3 - <<'PY'\n" + body + "PY"
-	}
-	rooted := Dependencies{scope: workspaceScope{root: "/work/repo", home: "/home/me"}}
-	for _, tt := range []struct {
-		deps    Dependencies
-		command string
-		denied  bool
-	}{
-		{Dependencies{}, heredoc("/private/tmp/claude-501/x/scratchpad/notes.md"), false},
-		{Dependencies{}, heredoc("/tmp/x/plan.md"), false},
-		{Dependencies{}, `perl -pi -e 's/a/b/' /tmp/x/f.txt`, false},
-		{rooted, heredoc("/work/other/f.md"), false},
-		{rooted, heredoc("~/notes/f.md"), false},
-		{Dependencies{}, heredoc("internal/guard/shell.go"), true},
-		{Dependencies{}, heredoc("/tmp/x/plan.md", "internal/guard/shell.go"), true},
-		{Dependencies{}, `perl -pi -e 's/a/b/' f.go`, true},
-		{rooted, heredoc("/work/repo/f.go"), true},
-		// A path the script computes proves nothing about where it lands.
-		{Dependencies{}, "python3 - <<'PY'\nopen(p,'w').write(open(p).read().replace('a','b'))\nPY", true},
-
-		// A relative path after a cd resolves from where the cd landed: the measured shape of
-		// a scratch edit the promise above did not cover.
-		{Dependencies{}, "cd /private/tmp/claude-501/x/scratchpad/audit && " + heredoc("audit.py"), false},
-		{Dependencies{}, `S=/private/tmp/c/scratchpad; cd "$S" && ` + heredoc("gofuncs.py"), false},
-		{Dependencies{}, "python3 - /tmp/x/scratchpad/count.py <<'PY'\nimport sys\np = sys.argv[1]\n" +
-			"open(p, 'w').write(open(p).read().replace('a', 'b'))\nPY", false},
-		{rooted, "cd /tmp/x && " + heredoc("/work/repo/f.go"), true},
-		{Dependencies{}, "cd internal && " + heredoc("guard/shell.go"), true},
-		{Dependencies{}, "cd /tmp/x && cd - && " + heredoc("f.go"), true},
-		{Dependencies{}, heredoc("f.go") + "\ncd /tmp/x", true},
-	} {
-		v := Evaluate(strict(tt.deps), tt.command)
-		if tt.denied {
-			assert.Equal(t, denyRuleScriptedRewrite, v.Rule.Name, tt.command)
-		} else {
-			assert.Empty(t, v.Deny, tt.command)
-		}
-	}
 }
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
@@ -2247,14 +2125,14 @@ func TestGuardDeniesProcessPoll(t *testing.T) {
 
 func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 	for rule, command := range map[denyRuleName]string{
-		denyRuleChainedRun:      "magus run generate . && magus run lint .",
-		denyRuleExitStatusEcho:  `./check.sh; echo $?`,
-		denyRuleOutputPipe:      "magus ls jobs | wc -l",
-		denyRuleOutputRedirect:  "magus run lint . > /tmp/x.txt",
-		denyRuleRawTool:         "go test ./...",
-		denyRuleScriptedRewrite: `perl -pi -e 's/a/b/' f.go`,
-		denyRuleSedInPlace:      sedInPlace,
-		denyRuleStageAll:        "git add -A",
+		denyRuleChainedRun:        "magus run generate . && magus run lint .",
+		denyRuleExitStatusEcho:    `./check.sh; echo $?`,
+		denyRuleOutputPipe:        "magus ls jobs | wc -l",
+		denyRuleOutputRedirect:    "magus run lint . > /tmp/x.txt",
+		denyRuleRawTool:           "go test ./...",
+		denyRuleInterpreterScript: `perl -pi -e 's/a/b/' f.go`,
+		denyRuleSedInPlace:        sedInPlace,
+		denyRuleStageAll:          "git add -A",
 	} {
 		t.Run(string(rule), func(t *testing.T) {
 			requireAdvisedOnce(t, Evaluate(advising(testDependencies()), command), rule)

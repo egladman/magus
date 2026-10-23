@@ -1059,87 +1059,6 @@ var scriptedRewriteInterpreters = map[string]bool{
 	"python": true, "python3": true, "perl": true, "ruby": true, "node": true,
 }
 
-// scriptedRewriteFires reports an interpreter running a regex substitution and writing the
-// result back, or perl/ruby invoked with -i.
-//
-// Narrow on purpose, as before: an interpreter that merely WRITES is ordinary authoring.
-// What is refused is substitute-then-write, the shape that cannot tell a symbol from a word
-// that looks like one.
-//
-// This one walks the AST itself rather than reading hint.Invocation, because the script is
-// commonly a HEREDOC and a heredoc body is a redirect rather than an argument. It is
-// deliberately the only rule that reads heredoc text: for this rule the heredoc IS the
-// program, while for every other rule it is data, and folding it into the shared command
-// words would make a heredoc that merely quotes `sed -i` a refused edit.
-//
-// A script whose every named path lands outside the workspace is not this rule's
-// business, which is the promise the refusal text makes about scratch paths.
-func scriptedRewriteFires(command string, d Dialect, scope workspaceScope) bool {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return scriptedRewriteRe.MatchString(dropDataHeredocs(command))
-	}
-	found := false
-	syntax.Walk(f, func(n syntax.Node) bool {
-		if found {
-			return false
-		}
-		st, ok := n.(*syntax.Stmt)
-		if !ok {
-			return true
-		}
-		call, ok := st.Cmd.(*syntax.CallExpr)
-		if !ok {
-			return true
-		}
-		for _, c := range peelWrappers(literalWords(call.Args), d) {
-			if !scriptedRewriteInterpreters[path.Base(c.Name)] {
-				continue
-			}
-			if hasFlag(c.Args, 'i', "in-place") && path.Base(c.Name) != "node" {
-				if !allOutside(scope, inPlaceFiles(c.Args)) {
-					found = true
-					return false
-				}
-				continue
-			}
-			script := interpreterScript(c.Args, heredocText(st))
-			if scriptRewrites(script) && !allOutside(scope, scriptPaths(script)) {
-				found = true
-				return false
-			}
-		}
-		return true
-	})
-	return found
-}
-
-// heredocOpenRe finds a heredoc operator and its delimiter on a line.
-var heredocOpenRe = regexp.MustCompile(`<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?`)
-
-// dropDataHeredocs removes the body of every heredoc whose opening line names no
-// interpreter, for the unparsable-line fallback: `cat >> notes.md <<EOF` appends text,
-// and a body that documents a python rewrite is not one. A line that fails to parse
-// usually does so INSIDE such a body, an unquoted delimiter with a stray `$(`.
-func dropDataHeredocs(command string) string {
-	lines := strings.Split(command, "\n")
-	var out []string
-	for i := 0; i < len(lines); i++ {
-		out = append(out, lines[i])
-		m := heredocOpenRe.FindStringSubmatch(lines[i])
-		if m == nil || scriptedRewriteInterpreterRe.MatchString(lines[i]) {
-			continue
-		}
-		for i+1 < len(lines) && strings.TrimSpace(lines[i+1]) != m[1] {
-			i++
-		}
-	}
-	return strings.Join(out, "\n")
-}
-
-// scriptedRewriteInterpreterRe names an interpreter scriptedRewriteRe reads a program for.
-var scriptedRewriteInterpreterRe = regexp.MustCompile(`\b(?:python3?|perl|ruby|node)\b`)
-
 // heredocText is the body of every heredoc redirected into a statement.
 func heredocText(st *syntax.Stmt) string {
 	var b strings.Builder
@@ -1206,16 +1125,6 @@ func overwritesMode(mode string) bool {
 		return false
 	}
 	return strings.ContainsAny(mode, "wx+")
-}
-
-// inPlaceFiles are the files a `perl -i`/`ruby -i` edits: its operands after the program,
-// which is the first operand unless -e supplied it.
-func inPlaceFiles(args []string) []string {
-	ops := operands(args, "eEIM")
-	if !hasFlag(args, 'e', "") && !hasFlag(args, 'E', "") && len(ops) > 0 {
-		ops = ops[1:]
-	}
-	return ops
 }
 
 // scriptPaths are the quoted strings in a program that read as paths: a separator or an

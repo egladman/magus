@@ -122,7 +122,7 @@ const (
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
-	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
+	denyRuleInterpreterScript denyRuleName = "interpreter-script"
 	denyRuleRawTool           denyRuleName = "raw-tool"
 	denyRuleThrowawayCopy     denyRuleName = "throwaway-copy"
 	denyRuleSiblingCheckout   denyRuleName = "sibling-checkout"
@@ -1838,18 +1838,6 @@ var (
 	// without the portability trap or the blind write.
 	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
 
-	// A scripted in-place rewrite: an inline interpreter that runs a REGEX SUBSTITUTION
-	// and writes the result back. It is the same edit `sed -i` is refused for, reached by
-	// a route the sed rule cannot see, and it is how a rename escapes the graph in
-	// practice: `sed -i` is denied, so the next thing to hand is a python one-liner.
-	//
-	// Deliberately narrow. An interpreter that merely WRITES a file is ordinary authoring
-	// and must stay available; what is refused is substitute-then-write, because that is
-	// the shape that cannot tell a symbol from a word that looks like one. A rewrite of
-	// prose or a config value is caught too: the false positive costs one explanation,
-	// while the false negative silently rewrote a dependency's identifier.
-	scriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
-
 	// sourceReadRe is the fallback when the argv parse fails: an unbounded dump of a
 	// source file. Keep the extension list in sync with sourceExt in parse.go.
 	sourceReadRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more)\b[^|&;]*\.(go|buzz|ts|tsx|js|jsx|rs|py|c|h|cc|cpp|java|kt|swift|rb|cs|zig)\b`)
@@ -1934,19 +1922,6 @@ var (
 
 	denyNotesAuthor    = "an agent may not author a note; if it belongs in the notes, say so and let the person run it."
 	denyNotesAuthorWhy = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read."
-
-	// Names the editor tool as the remedy, because that is the answer for most of what trips
-	// this: changing a string, a literal or a few lines in one file. The rename branch sits
-	// in the rationale and is marked as a branch.
-	//
-	// Leading with `refs --occurrences` and the `.Sum` argument was advice about renaming a
-	// SYMBOL across a tree. Read while replacing a literal in one test file, it named a tool
-	// that takes a symbol the reader does not have, and a correct deny whose remediation does
-	// not fit is one the reader learns to route around.
-	denyScriptedRewrite    = "a scripted rewrite writes before anyone reads a diff; use your editor tool."
-	denyScriptedRewriteWhy = "Your editor tool reads the file first and reports what it changed.\n" +
-		"Renaming a symbol across the tree instead? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives verified, column-precise sites to edit; run `" + hint.GraphBuild.String() + "` first if it reports not-indexed, which means unknown rather than absent.\n" +
-		"A regex cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
 
 	denySedInPlace    = "`sed -i` reads differently on GNU and macOS; use your editor tool."
 	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
@@ -2554,7 +2529,6 @@ var (
 	}
 	referenceScripts = map[denyRuleName]referenceScript{
 		denyRuleSedInPlace:         renameScript,
-		denyRuleScriptedRewrite:    renameScript,
 		denyRuleInterpreterRewrite: renameScript,
 		denyRuleOutputPipe:         typedResultScript,
 		denyRuleOutputRedirect:     typedResultScript,
@@ -2706,10 +2680,15 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	if parsed && captureFilterFires(cmds, command, d) {
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
-	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
+	if interp, ok := interpreterScripting(cmds, parsed, command); ok {
+		if v, ok := held.ends(deps, interpreterScriptVerdict(interp)); ok {
 			return v
 		}
+	}
+	// A Buzz program's proc calls start commands this line never spells, so each one is
+	// judged here as the line it would be typed as.
+	if v, ok := buzzSpawnVerdict(deps, held, command, d); ok {
+		return v
 	}
 	var advisory, chained ShellVerdict
 	// Held rather than returned, like the git advisories below: the rules that name a
