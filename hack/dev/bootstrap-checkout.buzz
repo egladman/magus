@@ -8,12 +8,14 @@
 //	magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready]
 //
 // --gate-ready makes the checkout ready to gate instead (gateReady): the build only when ./magus
-// is not at HEAD, then pools, stale skill installs, the graph and the symbol digest. run-gate,
-// rebase-branches-onto-base, merge-base-into-branches and land-commits call it before they gate.
+// is not at HEAD, then pools, untracked skill installs the placed ./magus would write differently,
+// the graph and the symbol digest. run-gate, rebase-branches-onto-base, merge-base-into-branches
+// and land-commits call it before they gate.
 //
-// --here builds in the current checkout, which must be clean. --restart then stops and
-// starts the daemon with the new binary and checks `version` again, since the daemon has
-// no hot reload. When the checkout has a mise.toml and mise is on PATH, it runs
+// The daemon stops before a build, so a project lock it holds cannot fail the build with exit 75.
+// --here builds in the current checkout, which must be clean. --restart ends with the daemon
+// started on the new binary (and, outside --gate-ready, checks `version` again), since the
+// daemon has no hot reload. When the checkout has a mise.toml and mise is on PATH, it runs
 // `mise trust <dir>/mise.toml` first, because untrusted config fails the build without
 // naming mise.
 namespace bootstrapcheckout;
@@ -126,8 +128,19 @@ export object Host {
     git: fun (dir: str, args: [str]) > Ran !> any,
     magus: fun (dir: str, args: [str]) > Ran !> any,
     build: fun (dir: str) > str !> any,
-    stamped: fun (path: str) > bool !> any,
+    stampOf: fun (path: str) > str !> any,
+    freshSkills: fun (dir: str) > str !> any,
     removeDir: fun (path: str) > void !> any,
+}
+
+// stampLine is the generated-by line of a skill file's text, "" when it carries none.
+export fun stampLine(text: str) > str {
+    foreach (line in text.split("\n")) {
+        if (line.indexOf(STAMP) != null) {
+            return line.trim();
+        }
+    }
+    return "";
 }
 
 fun lines(text: str) > [str] {
@@ -147,16 +160,37 @@ fun must(r: Ran, what: str) > str !> any {
     return r.stdout;
 }
 
+// stopDaemon stops the checkout's daemon when one runs, so a project lock it holds cannot fail
+// the build with exit 75. It raises when a running daemon will not stop.
+fun stopDaemon(h: Host, dir: str) > str !> any {
+    if (h.magus(dir, args: ["server", "status"]).code != 0) {
+        return "no daemon was running";
+    }
+    must(h.magus(dir, args: ["server", "stop"]), what: "magus server stop");
+    return "stopped the daemon";
+}
+
+fun startDaemon(h: Host, dir: str) > str !> any {
+    must(h.magus(dir, args: ["server", "start"]), what: "magus server start");
+    return "started the daemon";
+}
+
 // gateReady makes the checkout at dir ready to gate, and returns a line per thing it did. A
 // ./magus built at another commit than the tree fails the gate's symbol index with MGS7003, so
 // it builds one at HEAD when the binary is not, stops the pool parents other builds left, removes
-// the untracked skill installs an agent install stamped (never a tracked file), then builds the
-// graph and the symbol digest. Running it twice does the build and the removals once.
-export fun gateReady(h: Host, dir: str) > [str] !> any {
+// the untracked skill installs whose stamp differs from the one the placed ./magus writes (never
+// a tracked file, never a current install), then builds the graph and the symbol digest. Running
+// it twice does the build and the removals once. The daemon stops before a build, and with
+// restart it is running again at the end.
+export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     final did = mut [<str>];
     final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
     final version = h.magus(dir, args: ["version", "-o", "json"]);
-    if (version.code == 0 and (builtAt(version.stdout, head: head) catch false)) {
+    final built = version.code == 0 and (builtAt(version.stdout, head: head) catch false);
+    if (restart or !built) {
+        did.append(stopDaemon(h, dir: dir));
+    }
+    if (built) {
         did.append("./magus is built at HEAD {head}");
     } else {
         did.append(h.build(dir));
@@ -164,17 +198,28 @@ export fun gateReady(h: Host, dir: str) > [str] !> any {
     must(h.magus(dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
     did.append("stopped the pool parents of other builds");
     final others = lines(must(h.git(dir, args: ["ls-files", "--others", "--"] + SKILL_DIRS), what: "git ls-files --others"));
+    var fresh = "";
     foreach (skill in skillInstalls(others)) {
         final tracked = lines(must(h.git(dir, args: ["ls-files", "--", skill]), what: "git ls-files {skill}"));
-        if (tracked.len() == 0 and h.stamped(fs\join(dir, name: "{skill}/SKILL.md"))) {
+        final stamp = h.stampOf(fs\join(dir, name: "{skill}/SKILL.md"));
+        if (tracked.len() > 0 or stamp == "") {
+            continue;
+        }
+        if (fresh == "") {
+            fresh = h.freshSkills(dir);
+        }
+        if (stamp != h.stampOf(fs\join(fresh, name: "{skill}/SKILL.md"))) {
             h.removeDir(fs\join(dir, name: skill));
-            did.append("removed the untracked skill install {skill}");
+            did.append("removed the stale untracked skill install {skill}");
         }
     }
     must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
     did.append("built the graph");
     must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
     did.append("generated the symbol digest");
+    if (restart) {
+        did.append(startDaemon(h, dir: dir));
+    }
     return did;
 }
 
@@ -193,10 +238,21 @@ export fun liveHost() > Host {
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         build = fun (dir: str) > str !> any {
-            return build(dir, restart: false);
+            return build(dir);
         },
-        stamped = fun (path: str) > bool !> any {
-            return fs\isFile(path) and fs\readFile(path).indexOf(STAMP) != null;
+        stampOf = fun (path: str) > str !> any {
+            if (!fs\isFile(path)) {
+                return "";
+            }
+            return stampLine(fs\readFile(path));
+        },
+        freshSkills = fun (dir: str) > str !> any {
+            final root = fs\tempDir("fresh-skills-");
+            final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: {"quiet": true, "allow_failure": true});
+            if (r.code != 0) {
+                throw "gate-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
+            }
+            return root;
         },
         removeDir = fun (path: str) > void !> any {
             fs\removeAll(path);
@@ -213,7 +269,7 @@ fun hasMise() > bool {
     }
 }
 
-fun build(dir: str, restart: bool) > str !> any {
+fun build(dir: str) > str !> any {
     if (!fs\isDir(dir)) {
         throw "bootstrap-checkout: {dir} is not a directory\n{USAGE}";
     }
@@ -235,15 +291,6 @@ fun build(dir: str, restart: bool) > str !> any {
     if (mismatch != "") {
         throw mismatch;
     }
-    if (restart) {
-        proc\exec(bin, args: ["server", "stop"], dir: dir);
-        proc\exec(bin, args: ["server", "start"], dir: dir);
-        final stale = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: {"quiet": true}).stdout, head: head);
-        if (stale != "") {
-            throw stale;
-        }
-        return "placed {bin}, built at {head}, daemon restarted";
-    }
     return "placed {bin}, built at {head}";
 }
 
@@ -263,18 +310,30 @@ export fun main(args: [str]) > void !> any {
         throw "{unnamed}\n{USAGE}";
     }
     final dir = if (here) vcs\root() else checkout;
+    final restart = parsed.values["--restart"] != null;
+    final h = liveHost();
     if (parsed.values["--gate-ready"] != null) {
-        foreach (line in gateReady(liveHost(), dir: dir)) {
+        foreach (line in gateReady(h, dir: dir, restart: restart)) {
             std\print(line);
         }
         return;
     }
-    std\print(build(dir, restart: parsed.values["--restart"] != null));
+    std\print(stopDaemon(h, dir: dir));
+    std\print(build(dir));
+    if (restart) {
+        std\print(startDaemon(h, dir: dir));
+        final head = vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+        final stale = versionMismatch(h.magus(dir, args: ["version", "-o", "json"]).stdout, head: head);
+        if (stale != "") {
+            throw stale;
+        }
+    }
 }
 
 // stubHost answers gateReady from a table keyed by the command line and records each call;
-// a command the table lacks exits 0 with no output.
-fun stubHost(answers: {str: Ran}, stamped: [str], calls: mut [str]) > Host {
+// a command the table lacks exits 0 with no output, so a daemon is running unless the table
+// says `server status` fails. stamps maps a SKILL.md path to its generated-by line.
+fun stubHost(answers: {str: Ran}, stamps: {str: str}, calls: mut [str]) > Host {
     return Host{
         git = fun (dir: str, args: [str]) > Ran !> any {
             final line = "git {args.join(" ")}";
@@ -290,8 +349,12 @@ fun stubHost(answers: {str: Ran}, stamped: [str], calls: mut [str]) > Host {
             calls.append("build {dir}");
             return "placed {dir}/magus";
         },
-        stamped = fun (path: str) > bool !> any {
-            return stamped.indexOf(path) != null;
+        stampOf = fun (path: str) > str !> any {
+            return stamps[path] ?? "";
+        },
+        freshSkills = fun (dir: str) > str !> any {
+            calls.append("fresh {dir}");
+            return "/fresh";
         },
         removeDir = fun (path: str) > void !> any {
             calls.append("remove {path}");
@@ -312,23 +375,36 @@ test "skill installs are the directories of an untracked SKILL.md one level unde
     assert\equal(got, want: [".claude/skills/magus-run", ".agents/skills/magus-query"], message: "dirs");
 }
 
-test "gate-ready rebuilds a skewed binary, removes stamped untracked installs only, then builds the graph and digest" {
+test "the stamp is the generated-by line, and a file without one has none" {
+    assert\equal(stampLine("body\n<!-- generated by: magus agent install; skill-content: abc -->\n"), want: "<!-- generated by: magus agent install; skill-content: abc -->", message: "stamp");
+    assert\equal(stampLine("body only\n"), want: "", message: "none");
+}
+
+test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph and digest" {
     final calls = mut [<str>];
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "def456"}` },
-        "git ls-files --others -- .claude/skills .agents/skills .opencode/skills": Ran{ stdout = ".claude/skills/magus-run/SKILL.md\n.claude/skills/mine/SKILL.md\n.claude/skills/kept/SKILL.md\n" },
+        "git ls-files --others -- .claude/skills .agents/skills .opencode/skills": Ran{ stdout = ".claude/skills/magus-run/SKILL.md\n.claude/skills/fresh/SKILL.md\n.claude/skills/plain/SKILL.md\n.claude/skills/kept/SKILL.md\n" },
         "git ls-files -- .claude/skills/kept": Ran{ stdout = ".claude/skills/kept/ref.md\n" },
-    }, stamped: ["/c/.claude/skills/magus-run/SKILL.md", "/c/.claude/skills/kept/SKILL.md"], calls: calls);
-    final did = gateReady(h, dir: "/c");
+    }, stamps: {
+        "/c/.claude/skills/magus-run/SKILL.md": "v1",
+        "/fresh/.claude/skills/magus-run/SKILL.md": "v2",
+        "/c/.claude/skills/fresh/SKILL.md": "v2",
+        "/fresh/.claude/skills/fresh/SKILL.md": "v2",
+        "/c/.claude/skills/kept/SKILL.md": "v1",
+    }, calls: calls);
+    final did = gateReady(h, dir: "/c", restart: false);
     assert\equal(did, want: [
+        "stopped the daemon",
         "placed /c/magus",
         "stopped the pool parents of other builds",
-        "removed the untracked skill install .claude/skills/magus-run",
+        "removed the stale untracked skill install .claude/skills/magus-run",
         "built the graph",
         "generated the symbol digest",
     ], message: "did");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("remove")), want: ["remove /c/.claude/skills/magus-run"], message: "one removal");
+    assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
     assert\equal(calls[calls.len() - 1], want: "magus run symbol-digest-generate .", message: "digest last");
 }
 
@@ -337,9 +413,38 @@ test "gate-ready keeps a binary at HEAD and says so" {
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
-    }, stamped: [<str>], calls: calls);
-    assert\equal(gateReady(h, dir: "/c")[0], want: "./magus is built at HEAD abc123", message: "kept");
+    }, stamps: {}, calls: calls);
+    assert\equal(gateReady(h, dir: "/c", restart: false)[0], want: "./magus is built at HEAD abc123", message: "kept");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("build")).len(), want: 0, message: "no build");
+    assert\equal(calls.indexOf("magus server stop"), want: null, message: "daemon left alone");
+}
+
+test "gate-ready with restart stops the daemon, and ends with it running, saying so" {
+    final calls = mut [<str>];
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
+        "magus server status": Ran{ code = 1 },
+    }, stamps: {}, calls: calls);
+    final did = gateReady(h, dir: "/c", restart: true);
+    assert\equal(did[0], want: "no daemon was running", message: "first");
+    assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
+    assert\equal(calls[calls.len() - 1], want: "magus server start", message: "start last");
+}
+
+test "a daemon that will not start fails gate-ready loudly" {
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
+        "magus server start": Ran{ code = 1, stderr = "no socket" },
+    }, stamps: {}, calls: mut [<str>]);
+    var why = "";
+    try {
+        gateReady(h, dir: "/c", restart: true);
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why, want: "gate-ready: magus server start: exit 1: no socket", message: why);
 }
 
 test "a failed graph build stops gate-ready, naming the command" {
@@ -347,10 +452,10 @@ test "a failed graph build stops gate-ready, naming the command" {
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
         "magus graph build": Ran{ code = 1, stderr = "boom" },
-    }, stamped: [<str>], calls: mut [<str>]);
+    }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
-        gateReady(h, dir: "/c");
+        gateReady(h, dir: "/c", restart: false);
     } catch (e: str) {
         why = e;
     }
