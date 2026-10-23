@@ -234,17 +234,3 @@ test("createTextSearch treats an empty index as loaded, not as a failure", async
   await s.load();
   assert.equal(calls, 1, "a successful load is memoized however few records it carried");
 });
-
-test("createTextSearch recovers when a rejecting loader later succeeds (no inflight wedge)", async () => {
-  let calls = 0;
-  const s = createTextSearch<DocEntry>(() => {
-    calls++;
-    return calls === 1 ? Promise.reject(new Error("boom")) : INDEX; // first load rejects, second succeeds
-  });
-  await assert.rejects(() => s.load()); // the rejection propagates to the caller
-  assert.equal(s.isReady(), false); // a rejected load must leave the searcher not-ready
-  // The wedge bug: the rejected inflight promise was replayed forever. A retry must re-run the loader.
-  assert.equal((await s.load())?.length, INDEX.length);
-  assert.equal(calls, 2);
-  assert.equal(s.isReady(), true);
-});

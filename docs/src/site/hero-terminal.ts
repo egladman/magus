@@ -246,14 +246,10 @@ export function initHeroTerminal(): void {
     // Not warm yet: await the same shared promise. Reached only if someone types
     // faster than the idle-time warm, so no spinner - a progress indicator here
     // would advertise a wait that is almost always already over.
-    ensureBuzz().then(
-      function () {
-        run(cmd);
-      },
-      function () {
-        write("the interpreter did not load; try the playground instead", "term-err");
-      },
-    );
+    ensureBuzz().then(function (load) {
+      if (load.ok) run(cmd);
+      else write("the interpreter did not load; try the playground instead", "term-err");
+    });
   }
 
   input.addEventListener("keydown", function (ev) {

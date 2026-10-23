@@ -193,10 +193,15 @@ export function initRunExample(): void {
       // examples stay on the plain evalBuzz path (print output).
       const recorder = pre.hasAttribute("data-magus-recorder");
       ensureBuzz()
-        .then(() => {
-          const buzz = window.buzz;
-          if (!buzz) throw new Error("buzz.evalBuzz not ready");
+        .then((load) => {
           const pnl = panel();
+          const buzz = window.buzz;
+          if (!load.ok || !buzz) {
+            pnl.textContent =
+              "Failed to load the Buzz runtime: " + (load.ok ? "buzz.evalBuzz not ready" : load.error);
+            pnl.classList.add("failed");
+            return;
+          }
           const src = code.textContent ?? "";
           if (recorder) {
             const r = buzz.evalBuzzWithRecorder(src);
@@ -207,12 +212,6 @@ export function initRunExample(): void {
             pnl.textContent = r && r.output ? r.output : "(no output)";
             pnl.classList.toggle("failed", !(r && r.ok));
           }
-        })
-        .catch((e) => {
-          const pnl = panel();
-          pnl.textContent =
-            "Failed to load the Buzz runtime: " + (e instanceof Error ? e.message : String(e));
-          pnl.classList.add("failed");
         })
         .finally(() => {
           runBtn.disabled = false;

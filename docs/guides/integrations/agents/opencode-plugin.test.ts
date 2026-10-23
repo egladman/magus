@@ -48,6 +48,7 @@ function stubBun(reply: ((call: SpawnCall) => Canned | null) | null): SpawnCall[
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
     const call = { bin: spawned[0], argv: spawned.slice(1), stdin };
     calls.push(call);
+    // platform double: Bun.spawn
     if (reply === null) throw new Error("spawn failed: no such file or directory");
     const verdict = reply(call);
     const body = verdict === null ? "" : JSON.stringify(verdict);
