@@ -143,9 +143,9 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 	return out
 }
 
-// leasedBoundary is every path another [job.Editing] lease claims. A terminal or exited
-// row claims nothing: that is the same rule the overlap report follows, and the reason a
-// worker releasing a path early lets a waiter start against it.
+// leasedBoundary is every path another [job.Editing] lease owns ([types.Job.HardPaths]). A
+// terminal or exited row claims nothing: that is the same rule the overlap report follows,
+// and the reason a worker releasing a path early lets a waiter start against it.
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
 // parent's boundary, so listing the parent's paths would put the child's own out of reach.
@@ -157,7 +157,7 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
-		for _, p := range other.WritePaths {
+		for _, p := range other.HardPaths() {
 			out = append(out, job.TermsBoundary{
 				Path:   p,
 				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),

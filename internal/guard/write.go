@@ -293,6 +293,17 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	me, enrolled := leaseRow(ctx, location, graded)
 	enrolled = enrolled && me.State.Live()
 	live := editingLeases(leases)
+	// A soft path its holder already wrote is owned, and only that holder's diff says so;
+	// the read costs a footprint, so it runs only for a write landing in someone's soft path.
+	if slices.ContainsFunc(live, func(u types.Job) bool {
+		_, soft, _ := declarationCovering(u.SoftPaths, rel)
+		return soft && u.ID != graded
+	}) {
+		loc := location.jobs()
+		loc.Root, loc.DryRun = checkout, isDryRun(ctx)
+		leases = job.HardenWritten(ctx, job.NewStore(loc), leases)
+		live = editingLeases(leases)
+	}
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
 	}
@@ -720,7 +731,7 @@ func owningLeases(rows, live []types.Job) []types.Job {
 	})
 }
 
-// findOwner finds the live lease whose write paths cover rel, skipping the id in exclude.
+// findOwner finds the live lease whose [types.Job.HardPaths] cover rel, skipping exclude.
 //
 // Store order breaks ties. Two leases declaring one path is an overlap the store already
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
@@ -734,7 +745,7 @@ func findOwner(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 		if u.ID == exclude || u.Overdue(now) {
 			continue
 		}
-		_, ok, err := declarationCovering(u.WritePaths, rel)
+		_, ok, err := declarationCovering(u.HardPaths(), rel)
 		if err != nil {
 			return types.Job{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
 		}

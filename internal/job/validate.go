@@ -48,7 +48,7 @@ import (
 // ambiguity check. The guard grades the checks against rows rather than sweep the store
 // again.
 func validateMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) types.JobValidation {
-	rows = hardenWritten(ctx, store, rows)
+	rows = HardenWritten(ctx, store, rows)
 	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
 	prev, updates := mergeBase(rows, id, merge)
 	merged := prev.Clone()

@@ -147,7 +147,7 @@ func liveHolders(rows []types.Job, id, file string) []types.Job {
 		if r.ID == id || !Editing(r) {
 			continue
 		}
-		if slices.ContainsFunc(r.WritePaths, func(entry string) bool {
+		if slices.ContainsFunc(r.HardPaths(), func(entry string) bool {
 			return covers(entry, file) && !releasedReach(r, entry, file)
 		}) {
 			out = append(out, r)

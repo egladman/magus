@@ -217,6 +217,25 @@ func TestLeasedBoundarySkipsAnExitedRow(t *testing.T) {
 	assert.Equal(t, []string{"internal/hint"}, owners)
 }
 
+// A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
+func TestLeasedBoundarySkipsASoftPath(t *testing.T) {
+	t.Parallel()
+
+	held := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
+	soft := held
+	soft.SoftPaths = []string{"internal/job/plan_test.go"}
+	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
+	owned := func(other types.Job) []string {
+		var out []string
+		for _, b := range leasedBoundary(me, []types.Job{me, other}) {
+			out = append(out, b.Path)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"internal/job/plan.go"}, owned(soft))
+	assert.Equal(t, []string{"internal/job/plan.go", "internal/job/plan_test.go"}, owned(held), "a hardened path is owned")
+}
+
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	t.Parallel()
 
