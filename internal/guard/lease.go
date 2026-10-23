@@ -359,9 +359,10 @@ func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command 
 const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 
 // denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
-// row's check, a slice of the work that check composes, a dependency install, and the
-// targets declaring an output in its write paths, or refuses nothing. Two worktrees share
-// no cache key, so a second run of some other target only doubles the load.
+// row's check, a slice of the work that check composes, a dependency install, the targets
+// declaring an output in its write paths, and the generators of an output its write paths
+// regenerate outside them that no other live lease holds, or refuses nothing. Two
+// worktrees share no cache key, so a second run of some other target only doubles the load.
 //
 // A slice passes because it is the iteration the check exists to end in: `go-test . --
 // -run X` under a `test .` check runs a part of the check's own work, and refusing it sent
@@ -406,6 +407,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		switch {
 		case v.unchecked != nil:
 			return uncheckedDenial(v, me, checks, deps.DefaultCharms)
+		case v.held != "":
+			return heldDenial(v, me)
 		case v.op:
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
@@ -461,6 +464,8 @@ type rowJudge struct {
 	graph     func() (types.TargetGraphOutput, error)
 	produces  lazyProducers
 	composes  lazyProducers
+	// others are the live rows besides row, for who else holds an output a run regenerates.
+	others func() []types.Job
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -468,6 +473,15 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 	graph := lazyTargetGraph(ctx, workspace)
 	return rowJudge{
 		deps: deps, row: row, checks: checks, root: at.workspace, dir: at.dir, workspace: workspace, graph: graph,
+		others: sync.OnceValue(func() []types.Job {
+			var live []types.Job
+			for _, r := range actingLeaseStanding(ctx, deps, row.ID).rows {
+				if r.ID != row.ID && r.State.Live() {
+					live = append(live, r)
+				}
+			}
+			return live
+		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, workspace, row.WritePaths)
 		}),
@@ -504,6 +518,11 @@ type runVerdict struct {
 	// the projects the run selects.
 	op        bool
 	composers []string
+	// held is an output the run regenerates that another live lease holds, and holder that
+	// lease: its write paths cover the output, or it regenerates the output too and was
+	// declared first.
+	held   string
+	holder types.Job
 	// unchecked is why the run could not be judged: the workspace it is read against did
 	// not load.
 	unchecked error
@@ -513,31 +532,99 @@ type runVerdict struct {
 // default_charms, is held to the write paths; a target whose chain declares no write
 // passes, since nothing says what it touches. A spell op run on its own under an rw charm
 // it honors is refused: an op declares no writes, so it would always pass.
+//
+// A generator of an output the row's own write paths regenerate outside them (MGS3044) is
+// permitted too, and that output counts as inside the write paths: the worker regenerates
+// it and commits it with the change rather than leave its lint stale. It is refused when
+// another live lease holds the output, so two leases never overwrite each other's copy.
 func (j rowJudge) verdict(r targetRun) runVerdict {
 	r, err := r.fromDir(j.root, j.dir, j.workspace)
 	v := runVerdict{run: r}
-	switch {
-	case err != nil:
+	if err != nil {
 		v.unchecked = err
-	case r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes):
+		return v
+	}
+	v.permitted = r.allowed(j.checks, j.produces) || r.composedByCheck(j.composes)
+	if !v.permitted && r.installs(j.deps) {
 		v.permitted = true
-		if r.verb != "run" || !r.rewrites(j.deps.DefaultCharms) {
-			break
-		}
-		ws, err := j.workspace()
-		if err != nil {
+		return v
+	}
+	if r.verb != "run" {
+		return v
+	}
+	ws, err := j.workspace()
+	if err != nil {
+		if v.permitted && r.rewrites(j.deps.DefaultCharms) {
 			v.unchecked = fmt.Errorf("reading what %s writes: %w", r.target, err)
-			break
 		}
-		if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
-			v.op, v.composers = true, r.composers(j.graph)
-			break
+		return v
+	}
+	projects := r.selected(ws)
+	own := r.ownOutputs(job.RegeneratedOutside(j.root, j.row, projects, nil))
+	if !v.permitted {
+		if !r.regeneratesOwn(own) {
+			return v
 		}
-		v.outside = r.writesOutside(ws, j.row.WritePaths)
-	case r.installs(j.deps):
 		v.permitted = true
 	}
+	if v.held, v.holder = j.heldBy(own, projects); v.held != "" {
+		return v
+	}
+	if !r.rewrites(j.deps.DefaultCharms) {
+		return v
+	}
+	if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
+		v.op, v.composers = true, r.composers(j.graph)
+		return v
+	}
+	v.outside = r.writesOutside(projects, j.row.WritePaths, own)
 	return v
+}
+
+// heldBy is the first output of own another live lease holds, and that lease: one whose
+// write paths cover the output, or one that regenerates it too from its own write paths
+// and was declared before the row. The first holder regenerates it and the other waits, so
+// neither silently overwrites the other's copy.
+func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project) (string, types.Job) {
+	if len(own) == 0 {
+		return "", types.Job{}
+	}
+	for _, other := range j.others() {
+		var theirs []job.RegeneratedOutput
+		if !other.ReadOnly && (other.Created < j.row.Created || other.Created == j.row.Created && other.ID < j.row.ID) {
+			theirs = job.RegeneratedOutside(j.root, other, projects, nil)
+		}
+		for _, o := range own {
+			pattern := strings.Fields(o.Output)[0]
+			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
+				return o.Output, other
+			}
+		}
+	}
+	return "", types.Job{}
+}
+
+// writePathsTouch reports whether any of writePaths can name a file pattern names.
+func writePathsTouch(writePaths []string, pattern string) bool {
+	return slices.ContainsFunc(writePaths, func(raw string) bool {
+		file, _ := types.SplitClaim(raw)
+		return types.PathsIntersect(file, pattern)
+	})
+}
+
+// heldDenial words the refusal of a regenerate whose output another live lease holds.
+func heldDenial(v runVerdict, me types.Job) denial {
+	wait := hint.JobWait.With(v.holder.ID)
+	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
+	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
+		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` regenerates `%s` held by live lease %s; run `%s`.", v.run.target, v.held, v.holder.ID, wait),
+		Why: fmt.Sprintf("A lease regenerates and commits an output its own write paths regenerate, unless another live lease holds that output: %s.\n"+
+			"The first holder regenerates it and the other waits, so neither silently overwrites the other's copy. Once lease %s ends, run `%s` again; if it never needs the output, the checkout's integrator, "+integratorIs+", regenerates it after integration.",
+			why, v.holder.ID, v.run.target),
+	}
 }
 
 // rewriteDenial words the refusal of a run the rw charm would have write past the row's
@@ -894,21 +981,12 @@ func (r targetRun) readOnly(defaults []string) string {
 // declarations, in every project the run selects: its target's ctx.writesFiles and
 // ctx.modifiesExistingFiles globs, and the ctx.modifiesExistingFiles globs of each step
 // its ctx.needs chain reaches in that project. It returns the rooted globs no write path
-// covers.
+// covers and own does not name: own are the outputs the row's write paths regenerate,
+// which count as inside them.
 //
 // A needed step's outputs and another project's steps are left out: they build what the
 // run consumes, and another project's ci settles its own formatting.
-func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) (outside []string) {
-	var projects []*types.Project
-	if slices.Contains(r.selection(), "/") {
-		projects = ws.All()
-	} else {
-		for _, p := range r.selection() {
-			if found := ws.Get(path.Clean(p)); found != nil {
-				projects = append(projects, found)
-			}
-		}
-	}
+func (r targetRun) writesOutside(projects []*types.Project, writePaths []string, own []job.RegeneratedOutput) (outside []string) {
 	name := targetName(r.target)
 	for _, p := range projects {
 		var globs []types.Glob
@@ -920,12 +998,51 @@ func (r targetRun) writesOutside(ws types.WorkspaceReader, writePaths []string) 
 		}
 		// A nil lookup keeps the chain in p.
 		for _, g := range append(globs, types.ChainUpdates(p, name, nil)...) {
-			if !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
+			regenerated := slices.ContainsFunc(own, func(o job.RegeneratedOutput) bool { return o.Project() == p.Path && o.Output == g.String() })
+			if !regenerated && !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
 				outside = append(outside, g.Pattern)
 			}
 		}
 	}
 	return outside
+}
+
+// selected is the projects the run selects, read from ws: every project for `/`.
+func (r targetRun) selected(ws types.WorkspaceReader) []*types.Project {
+	if slices.Contains(r.selection(), "/") {
+		return ws.All()
+	}
+	var projects []*types.Project
+	for _, p := range r.selection() {
+		if found := ws.Get(path.Clean(p)); found != nil {
+			projects = append(projects, found)
+		}
+	}
+	return projects
+}
+
+// ownOutputs are the outputs among regenerated that the run's target produces.
+func (r targetRun) ownOutputs(regenerated []job.RegeneratedOutput) []job.RegeneratedOutput {
+	name := targetName(r.target)
+	return slices.DeleteFunc(regenerated, func(o job.RegeneratedOutput) bool {
+		_, target, _ := strings.Cut(o.Target, ":")
+		return targetName(target) != name
+	})
+}
+
+// regeneratesOwn reports a run of a generator whose outputs the row's write paths
+// regenerate, own, in every project it names. A run over every project needs one.
+func (r targetRun) regeneratesOwn(own []job.RegeneratedOutput) bool {
+	if len(own) == 0 {
+		return false
+	}
+	selected := r.selection()
+	if slices.Contains(selected, "/") {
+		return true
+	}
+	return !slices.ContainsFunc(selected, func(p string) bool {
+		return !slices.ContainsFunc(own, func(o job.RegeneratedOutput) bool { return o.Project() == path.Clean(p) })
+	})
 }
 
 // leaseCoversGlob reports whether writePaths cover every path glob can match.

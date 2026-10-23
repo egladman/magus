@@ -105,6 +105,7 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
 	ws.EXPECT().Get(".").Return(project).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: ".", Nodes: []types.TargetGraphNode{{Name: "test"}, {Name: "lint"}}},
 	}}, nil).Maybe()

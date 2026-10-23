@@ -480,6 +480,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 		"flow-generate":     {{Glob: "figures/flow.md"}},
 	}}
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 }
 
@@ -518,6 +519,7 @@ func composingWorkspace(t *testing.T) Dependencies {
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
 	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	return Dependencies{
 		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
 		Spells:  spellCatalog,
@@ -840,6 +842,7 @@ func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
 	}
 	ws.EXPECT().Get(".").Return(root).Maybe()
 	ws.EXPECT().Get("libs/md").Return(&types.Project{Path: "libs/md", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.go"}}}}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{root}).Maybe()
 	return ws
 }
@@ -856,6 +859,7 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 		MagusfileTargets: []string{"dprint"},
 		TargetUpdates:    map[string][]types.UpdateRef{"dprint": {{Glob: "**/*.md"}}},
 	}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := types.Job{
 		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
@@ -939,6 +943,7 @@ func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	docs := &types.Project{Path: "docs", MagusfileTargets: []string{"format"}, TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "**/*.md"}}}}
 	ws.EXPECT().Where(at.dir).Return(docs, true).Maybe()
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
@@ -2588,4 +2593,97 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 		"a cd the line does not determine places nothing")
 	assert.Empty(t, denyWriteOutsideLease(ctx, from("internal/ledger"), "lease-b", `cp x "${OUT}store.go"`),
 		"an expansion places the word nowhere rather than dropping the parameter")
+}
+
+func regeneratingLease(id string) types.Job {
+	return types.Job{
+		ID: id, Criteria: "add a flag", WritePaths: []string{"cli/registry.go"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+}
+
+// regeneratingWorkspace is a root whose api-generate writes testdata/api.lock from every Go
+// file, and whose docs-generate writes gen/flags.go from them and also rewrites README.md.
+func regeneratingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get(".").Return(&types.Project{
+		Path: ".", Sources: types.MustParseGlobs("**/*.go"),
+		MagusfileTargets: []string{"test", "lint", "api-generate", "docs-generate"},
+		TargetOutputs: map[string][]types.OutputRef{
+			"api-generate":  {{Glob: "testdata/api.lock"}},
+			"docs-generate": {{Glob: "gen/flags.go"}},
+		},
+		TargetUpdates: map[string][]types.UpdateRef{"docs-generate": {{Glob: "README.md"}}},
+	}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// TestWorkerRegeneratesItsOwnOutputs pins gap 177: a worker whose change leaves an output
+// outside its write paths stale (MGS3044) may run that output's generator and commit what
+// it writes, so its lint goal is not failed by an MGS4006 it may not fix. Only such
+// outputs: a generator that also writes elsewhere is refused, and a hand edit stays refused.
+func TestWorkerRegeneratesItsOwnOutputs(t *testing.T) {
+	row := regeneratingLease("z/flag")
+	ctx, root := fleetFixture(t, row)
+	deps := regeneratingWorkspace(t)
+
+	for _, tt := range []struct {
+		name, command, deny string
+	}{
+		{"the generator of its own output", "./magus run api-generate .", ""},
+		{"that generator under rw", "./magus run api-generate:rw .", ""},
+		{"a generator that also rewrites a file outside", "./magus run docs-generate:rw .", "rewrites files outside lease z/flag's write paths"},
+		{"a target writing nothing it regenerates", "./magus run lint .", "is not lease z/flag's check"},
+		{"its generator on another project", "./magus run api-generate docs", "is not lease z/flag's check"},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if tt.deny == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, tt.deny, tt.name)
+	}
+	assert.Contains(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run docs-generate:rw .").Why, "`README.md`",
+		"the refusal names the write that is not its own output")
+
+	edit := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "testdata/api.lock"))
+	assert.Equal(t, decisionDeny, edit.Decision, "a hand edit of the output stays refused: %s", edit.Reason)
+}
+
+// TestWorkerRegenerateWaitsForTheFirstHolder: an output two live leases regenerate is
+// regenerated by the one declared first, and one whose write paths hold it is that lease's
+// alone. The other waits rather than overwrite it.
+func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
+	deps := regeneratingWorkspace(t)
+	owner := types.Job{
+		ID: "a/lock", Criteria: "own the lock", WritePaths: []string{"testdata/api.lock"},
+		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	}
+	ended := owner
+	ended.State = types.StatePass
+	for _, tt := range []struct {
+		name   string
+		other  types.Job
+		holder string
+	}{
+		{"a lease whose write paths hold the output", owner, "a/lock"},
+		{"a lease declared first regenerating it too", regeneratingLease("a/first"), "a/first"},
+		{"a lease declared after it", regeneratingLease("zz/later"), ""},
+		{"an ended lease", ended, ""},
+	} {
+		row := regeneratingLease("z/flag")
+		ctx, _ := fleetFixture(t, tt.other, row)
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run api-generate:rw .")
+		if tt.holder == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "held by live lease "+tt.holder+"; run `"+hint.JobWait.With(tt.holder)+"`.", tt.name)
+	}
 }
