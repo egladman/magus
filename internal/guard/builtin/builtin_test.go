@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -304,6 +305,16 @@ func TestResolveChecksEachParameter(t *testing.T) {
 			`built-in rule "root-heavy-command": calls is 1; give 2 or more, or leave it out`},
 		{"chars below 1000", rootResultCap, Setting{Decision: Advise, Chars: 999},
 			`built-in rule "root-result-cap": chars is 999; give 1000 or more, or leave it out`},
+		{"a ceiling below 1", backgroundUnbounded, Setting{Decision: Deny, CeilingMinutes: -5},
+			`built-in rule "background-unbounded": ceiling_minutes is -5; give 1 or more, or leave it out`},
+		{"a ceiling on the silence rule", backgroundSilent, Setting{Decision: Deny, CeilingMinutes: 30},
+			`built-in rule "background-silent" takes no ceiling_minutes parameter; only background-unbounded does`},
+		{"a deny no later than the advice", backgroundSilent, Setting{Decision: Deny, AdviseMinutes: 45, DenyMinutes: 45},
+			`built-in rule "background-silent": deny_minutes (45) must be more than advise_minutes (45)`},
+		{"a deny below the default advice", backgroundSilent, Setting{Decision: Deny, DenyMinutes: 20},
+			`built-in rule "background-silent": deny_minutes (20) must be more than advise_minutes (30)`},
+		{"an advice past the default deny", backgroundSilent, Setting{Decision: Deny, AdviseMinutes: 90},
+			`built-in rule "background-silent": deny_minutes (60) must be more than advise_minutes (90)`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Resolve(map[string]Setting{tc.rule: tc.s})
@@ -315,15 +326,32 @@ func TestResolveChecksEachParameter(t *testing.T) {
 	}
 
 	ok := map[string]Setting{
-		rootContextBudget: {Decision: Advise, Tokens: 1_000_000},
-		rootHeavyCommand:  {Decision: Advise, Calls: 2},
-		rootResultCap:     {Decision: Advise, Chars: 1000},
+		rootContextBudget:   {Decision: Advise, Tokens: 1_000_000},
+		rootHeavyCommand:    {Decision: Advise, Calls: 2},
+		rootResultCap:       {Decision: Advise, Chars: 1000},
+		backgroundSilent:    {Decision: Deny, AdviseMinutes: 1, DenyMinutes: 2},
+		backgroundUnbounded: {Decision: Deny, CeilingMinutes: 1},
 	}
 	got, err := Resolve(ok)
 	require.NoError(t, err)
 	for name, s := range ok {
 		assert.Equal(t, s, got[name], "each parameter at its floor loads")
 	}
+}
+
+// The background rules ship their minutes: unset reads 30, 30 and 60, and a set figure
+// replaces only its own.
+func TestBackgroundMinutes(t *testing.T) {
+	t.Parallel()
+	var unset Setting
+	assert.Equal(t, 30*time.Minute, unset.Ceiling())
+	assert.Equal(t, 30*time.Minute, unset.SilentAdvise())
+	assert.Equal(t, 60*time.Minute, unset.SilentDeny())
+
+	set := Setting{CeilingMinutes: 45, AdviseMinutes: 20}
+	assert.Equal(t, 45*time.Minute, set.Ceiling())
+	assert.Equal(t, 20*time.Minute, set.SilentAdvise())
+	assert.Equal(t, 60*time.Minute, set.SilentDeny())
 }
 
 // No window is built in to bound tokens by: a value no model could reach loads, since only
@@ -355,7 +383,7 @@ func TestSetParam(t *testing.T) {
 	for i, p := range paramSpecs {
 		require.True(t, s.SetParam(p.name, i+1), p.name)
 	}
-	assert.Equal(t, Setting{Lines: 1, Tokens: 2, Calls: 3, Chars: 4}, s)
+	assert.Equal(t, Setting{Lines: 1, Tokens: 2, Calls: 3, Chars: 4, CeilingMinutes: 5, AdviseMinutes: 6, DenyMinutes: 7}, s)
 	assert.False(t, s.SetParam("markers", 1), "markers are a list, not a number")
 	assert.False(t, s.SetParam("decision", 1))
 }
