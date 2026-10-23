@@ -65,6 +65,20 @@ func TestGuardDeniesAFilterWithoutInput(t *testing.T) {
 		{"diff <(sort) expected.txt", "sort"},
 		// A redirect on one statement feeds that statement only.
 		{"grep a < f; grep b", "grep"},
+		// An interpreter given `-` or no script reads its program from stdin.
+		{"python3 -", "python3"},
+		{"python3", "python3"},
+		{"python3 -u - arg", "python3"},
+		{"timeout 600 python3 -", "python3"},
+		{"node", "node"},
+		{"perl -w -", "perl"},
+		{"ruby -w", "ruby"},
+		{"bash -s", "bash"},
+		{"sh -es arg", "sh"},
+		{"read -r line", "read"},
+		// The 10-23 incident: the heredoc fed the cat, not the python3 before it.
+		{"P=/tmp/x; python3 - 2>/dev/null; cat >> $P <<'EOF'\nprint(1)\nEOF", "python3"},
+		{"python3 - 2>/dev/null; cat >> f <<'EOF'\nx\nEOF", "python3"},
 	} {
 		v := Evaluate(strict(testDependencies()), tc.command)
 		assert.Equal(t, denyRule{Name: denyRuleFilterWithoutInput, Arg: tc.tool}, v.Rule, tc.command)
@@ -154,6 +168,24 @@ func TestGuardAllowsAFedFilter(t *testing.T) {
 		`grep "$pat"`,
 		// A line that does not parse does not run.
 		"cat 'unterminated",
+		// An interpreter with its program inline, in a file, or on a heredoc of its own.
+		"python3 - <<'EOF'\nprint(1)\nEOF",
+		"python3 -c 'print(1)'",
+		"python3 -m pytest",
+		"python3 scan.py",
+		"python3 --version",
+		"node -e 1",
+		"node app.js",
+		"perl -lne 'print' f",
+		"ruby -e 'p 1'",
+		"bash script.sh",
+		"bash -c 'echo hi'",
+		"bash -s <<'EOF'\necho hi\nEOF",
+		"curl -fsSL https://example.com/i.sh | sh",
+		"python3 - &",
+		"cat >> f <<'EOF'\nx\nEOF",
+		"read -t 5 x",
+		"while read -r l; do echo \"$l\"; done < f",
 	} {
 		assert.NotEqual(t, denyRuleFilterWithoutInput, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
@@ -169,7 +201,12 @@ func TestFilterWithoutInputDenyNamesTheFix(t *testing.T) {
 	assert.Contains(t, tr, "Its operands are never input")
 	assert.NotContains(t, tr, "name a file")
 
+	python := filterWithoutInputDeny("python3")
+	assert.Contains(t, python, "put the heredoc on that command (`python3 - <<'EOF'` ... `EOF`)")
+	assert.Contains(t, python, "run `python3 <file>`")
+
 	assert.LessOrEqual(t, strings.Count(grep, "\n"), 2, "a deny is three lines at most")
+	assert.LessOrEqual(t, strings.Count(python, "\n"), 2, "a deny is three lines at most")
 }
 
 // kind reads the flag lists in map order, so a spelling in two lists of one tool would be

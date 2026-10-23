@@ -2295,7 +2295,10 @@ func probesForeignProcess(c hint.Invocation) bool {
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
 	lead := "`" + tool + "` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n"
-	if stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand {
+	switch stdinReaders[tool].operands {
+	case operandsAreScript:
+		lead = "`" + tool + "` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`" + tool + " - <<'EOF'` ... `EOF`), or write the program to a file and run `" + tool + " <file>`.\n"
+	case operandsNeverInput, operandsAreCommand:
 		lead = "`" + tool + "` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\n" +
 			"Its operands are never input. "
 	}

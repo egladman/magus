@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -55,12 +57,14 @@ func TestLiveBackgroundTasks(t *testing.T) {
 	searchStarted := bgTime(t, "2026-10-13T11:37:41.120Z")
 	movedStarted := bgTime(t, "2026-10-13T11:42:00Z")
 	watchStarted := bgTime(t, "2026-10-13T12:00:00Z")
-	search := backgroundTask{ID: "bc0m5o2bg", Command: "cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c", Started: searchStarted}
-	moved := backgroundTask{ID: "bwu4rorj7", Command: "grep -rhoE 'git (rm|mv)' --include='*.jsonl' .", Started: movedStarted}
+	search := backgroundTask{ID: "bc0m5o2bg", Command: "cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c", Started: searchStarted, Output: "/private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output"}
+	moved := backgroundTask{ID: "bwu4rorj7", Command: "grep -rhoE 'git (rm|mv)' --include='*.jsonl' .", Started: movedStarted, Output: "/private/tmp/claude-501/p/s/tasks/bwu4rorj7.output"}
 	watch := backgroundTask{ID: "bpbnai1yv", Command: "until grep -q . /tmp/t.output; do sleep 3; done; echo done", Started: watchStarted, Expires: watchStarted.Add(10 * time.Minute)}
 	persistent := strings.Replace(bgWatchCall, `"persistent":"false"`, `"persistent":true`, 1)
 	noWatchExpiry := watch
 	noWatchExpiry.Expires = time.Time{}
+	heardWatch := watch
+	heardWatch.Heard = bgTime(t, "2026-10-13T12:01:00Z")
 
 	cases := []struct {
 		name  string
@@ -80,7 +84,7 @@ func TestLiveBackgroundTasks(t *testing.T) {
 		{"both live, in start order", []string{bgSearchCall, bgSearchResult, movedCall, movedResult}, movedStarted.Add(time.Hour), []backgroundTask{search, moved}},
 		{"a root's queued and delivered notices end them", []string{bgSearchCall, bgSearchResult, movedCall, movedResult, rootNoticeQueued, rootNoticeDelivered}, movedStarted.Add(time.Hour), nil},
 		{"a quoted or printed notice ends nothing", []string{bgSearchCall, bgSearchResult, quotedNotice, searchPrinted}, searchStarted.Add(time.Hour), []backgroundTask{search}},
-		{"a watcher is live until it expires", []string{bgWatchCall, bgWatchResult, bgWatchEvent}, watchStarted.Add(5 * time.Minute), []backgroundTask{watch}},
+		{"a watcher is live until it expires", []string{bgWatchCall, bgWatchResult, bgWatchEvent}, watchStarted.Add(5 * time.Minute), []backgroundTask{heardWatch}},
 		{"a watcher past its expiry is not", []string{bgWatchCall, bgWatchResult}, watchStarted.Add(10 * time.Minute), nil},
 		{"a watcher's stream ending ends it", []string{bgWatchCall, bgWatchResult, bgWatchEnded}, watchStarted.Add(5 * time.Minute), nil},
 		{"a persistent watcher never expires", []string{persistent, bgWatchResult}, watchStarted.Add(24 * time.Hour), []backgroundTask{noWatchExpiry}},
@@ -188,6 +192,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 		{`exec </dev/null; cd ~/.claude/projects; grep -rhoE '(denied|refused)' --include='*.jsonl' -- -Users-dev* 2>/dev/null | sort | uniq -c | sort -rn | head -8`, "grep"},
 		{`S=/tmp/scratch; python3 -I $S/scan.py $S/db/scan.json`, "python3"},
 		{`sleep 540; echo tick`, "sleep"},
+		{`sleep 1000`, "sleep"},
 		{`while true; do sleep 5; done`, "while"},
 		{`magus status --watch=15s`, "magus"},
 		{`bash -c 'grep -r x .'`, "grep"},
@@ -200,6 +205,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 		{`magus job wait w --timeout 10m -- rg x`, "magus"},
 
 		{`timeout 600 grep -r x .`, ""},
+		{`timeout 600 x &`, ""},
 		{`gtimeout --kill-after=10 300 rg x`, ""},
 		{`timeout -k 5 1.5m python3 scan.py`, ""},
 		{`cd /repo && timeout 60 make`, ""},
@@ -223,7 +229,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 			}
 			require.True(t, d.refused())
 			assert.Contains(t, d.Say, "`"+tc.want+"` runs in the background")
-			assert.Contains(t, d.Say, "magus job exec --timeout <duration> -- <command>")
+			assert.Contains(t, d.Say, "`timeout 30m <command>` or `magus job exec --timeout 30m -- <command>`")
 			assert.Contains(t, d.Why, "`timeout N` or `gtimeout N`", "the other remedy is behind the ref")
 		})
 	}
@@ -278,4 +284,58 @@ func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 
 	timer := judge("sleep 540")
 	assert.Equal(t, string(denyRuleSleepPoll), timer.Rule, timer.Reason)
+}
+
+func TestJudgeBackgroundSilent(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	live := writeTranscript(t, bgSearchCall, bgSearchResult)
+
+	t.Run("a task silent past the advisory threshold is advised once", func(t *testing.T) {
+		said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
+		d, a := judgeBackgroundSilent(live, said, started.Add(31*time.Minute))
+		assert.False(t, d.refused())
+		assert.Equal(t, "magus workspace: a shell command this session ran in the background has written nothing for over 30m0s; stop any that is stuck:\n"+
+			"  bc0m5o2bg  started 11:37:41Z, 31m0s ago: cd ~/.claude/projects; grep -rhoE 'denied' --include='*.jsonl' . | sort | uniq -c (silent 31m0s)\n"+
+			`    stop it: TaskStop {"task_id": "bc0m5o2bg"}`, a.Say)
+		_, again := judgeBackgroundSilent(live, said, started.Add(32*time.Minute))
+		assert.Empty(t, again.Say, "the same task is advised once per session")
+	})
+	t.Run("past the deny threshold every call is refused", func(t *testing.T) {
+		said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
+		for range 2 {
+			d, a := judgeBackgroundSilent(live, said, started.Add(61*time.Minute))
+			require.True(t, d.refused())
+			assert.Empty(t, a.Say)
+			assert.Contains(t, d.Say, "has written nothing for over 1h0m0s; stop it before anything else")
+			assert.Contains(t, d.Say, "bc0m5o2bg  started 11:37:41Z, 1h1m0s ago")
+			assert.Contains(t, d.Say, `TaskStop {"task_id": "bc0m5o2bg"}`)
+		}
+	})
+	t.Run("a young task says nothing", func(t *testing.T) {
+		d, a := judgeBackgroundSilent(live, hint.Gate{}, started.Add(29*time.Minute))
+		assert.False(t, d.refused())
+		assert.Empty(t, a.Say)
+	})
+	t.Run("an output file written lately is not silence", func(t *testing.T) {
+		output := filepath.Join(t.TempDir(), "bc0m5o2bg.output")
+		require.NoError(t, os.WriteFile(output, []byte("x\n"), 0o644))
+		now := started.Add(2 * time.Hour)
+		require.NoError(t, os.Chtimes(output, now.Add(-time.Minute), now.Add(-time.Minute)))
+		result := strings.Replace(bgSearchResult, "/private/tmp/claude-501/p/s/tasks/bc0m5o2bg.output", output, 1)
+		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, result), hint.Gate{}, now)
+		assert.False(t, d.refused(), d.Say)
+		assert.Empty(t, a.Say)
+	})
+	t.Run("a watcher with an expiry is the host's to end", func(t *testing.T) {
+		watchStarted := bgTime(t, "2026-10-13T12:00:00Z")
+		long := strings.Replace(bgWatchCall, `"timeout_ms":600000`, `"timeout_ms":36000000`, 1)
+		d, a := judgeBackgroundSilent(writeTranscript(t, long, bgWatchResult), hint.Gate{}, watchStarted.Add(2*time.Hour))
+		assert.False(t, d.refused())
+		assert.Empty(t, a.Say)
+	})
+	t.Run("an ended task is not judged", func(t *testing.T) {
+		d, a := judgeBackgroundSilent(writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone), hint.Gate{}, started.Add(2*time.Hour))
+		assert.False(t, d.refused())
+		assert.Empty(t, a.Say)
+	})
 }

@@ -34,6 +34,24 @@ const denyRuleBackgroundLeft denyRuleName = "background-left"
 // denyRuleBackgroundUnbounded names the refusal of a backgrounded shell command nothing ends.
 const denyRuleBackgroundUnbounded denyRuleName = "background-unbounded"
 
+// backgroundCeiling is the bound an unbounded background command's refusal names. It
+// equals backgroundSilentAdvise, so a command run at the ceiling ends before the health
+// check would speak of it.
+const backgroundCeiling = 30 * time.Minute
+
+// backgroundSilentAdvise is how long a background task may go without new output before
+// each later call is advised of it: past half an hour, a quiet task is more likely stuck
+// than slow.
+const backgroundSilentAdvise = 30 * time.Minute
+
+// backgroundSilentDeny is how long it may go before each later call is refused until it
+// is stopped: twice the advisory, so the advice had a chance to be read and acted on.
+const backgroundSilentDeny = 60 * time.Minute
+
+// denyRuleBackgroundSilent names the advice, then the refusal, a session gets while one
+// of its background tasks has gone silent.
+const denyRuleBackgroundSilent denyRuleName = "background-silent"
+
 // rootBackgroundAge is how old a root session's background task must be before its stop
 // names it. A root wakes on a task's completion notice, so a young task is one it waits on.
 const rootBackgroundAge = 30 * time.Minute
@@ -61,7 +79,7 @@ func decodeStop(raw string) (stopEnvelope, bool) {
 }
 
 // advisoryBackgroundLeft holds a root's background-left advice to one firing per task per
-// session; see backgroundAdvisedKey.
+// session; see backgroundTaskKey.
 const advisoryBackgroundLeft hint.MarkerKind = "background-left"
 
 // judgeStop answers an agent's stop event from the background tasks its transcript leaves
@@ -98,7 +116,7 @@ func judgeStop(deps Dependencies, said hint.Gate, raw string, now time.Time) (ty
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
 		tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
-			return now.Sub(t.Started) < rootBackgroundAge || said.MarkFired(backgroundAdvisedKey(t))
+			return now.Sub(t.Started) < rootBackgroundAge || said.MarkFired(backgroundTaskKey(advisoryBackgroundLeft, t))
 		})
 	}
 	if len(tasks) == 0 {
@@ -189,15 +207,82 @@ func stoppableTasks(tasks []backgroundTask, now time.Time) string {
 	return strings.Join(lines, "\n")
 }
 
-// backgroundAdvisedKey names t's background-left marker: its id, or its start and command
+// backgroundTaskKey names t's marker under kind: its id, or its start and command
 // when the transcript never named one, hashed so the file name holds no command text.
-func backgroundAdvisedKey(t backgroundTask) hint.MarkerKind {
+func backgroundTaskKey(kind hint.MarkerKind, t backgroundTask) hint.MarkerKind {
 	subject := t.ID
 	if subject == "" {
 		subject = t.Started.UTC().Format(time.RFC3339Nano) + "\x00" + t.Command
 	}
 	sum := sha256.Sum256([]byte(subject))
-	return advisoryBackgroundLeft + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+	return kind + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+}
+
+// judgeBackgroundSilent is a root session's per-call word on its background tasks that
+// have gone silent: a refusal naming each silent past backgroundSilentDeny, else advice
+// naming each silent past backgroundSilentAdvise, once per task on said. A watcher with an
+// expiry is left out, since the host ends it.
+func judgeBackgroundSilent(transcript string, said hint.Gate, now time.Time) (denial, advice) {
+	if transcript == "" {
+		return denial{}, advice{}
+	}
+	tasks, err := liveBackgroundTasks(transcript, now)
+	if err != nil {
+		return denial{}, advice{}
+	}
+	silentFor := func(t backgroundTask) time.Duration { return now.Sub(lastHeard(t)) }
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
+		return !t.Expires.IsZero() || silentFor(t) < backgroundSilentAdvise
+	})
+	why := "A background task's output file and event notices are the only sign it is working. One that writes nothing for half an hour is more likely waiting on a stdin nobody feeds, a lock, or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat that way for eight hours. " +
+		fmt.Sprintf("Past %s of silence each call is advised, once per task; past %s each call is refused until the task is stopped. ", backgroundSilentAdvise, backgroundSilentDeny) +
+		"Silence is measured from the task's start, its output file's last write, and its newest event notice, whichever is latest. A watcher with an expiry is not judged: the host ends it."
+	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < backgroundSilentDeny }); len(stuck) > 0 {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s",
+				plural(len(stuck), "a shell command", "shell commands"), plural(len(stuck), "has", "have"), backgroundSilentDeny, plural(len(stuck), "it", "each"), silentTasks(stuck, now)),
+			Why: why,
+		}, advice{}
+	}
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return said.MarkFired(backgroundTaskKey(hint.MarkerKind(denyRuleBackgroundSilent), t)) })
+	if len(tasks) == 0 {
+		return denial{}, advice{}
+	}
+	return denial{}, advice{
+		Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop any that is stuck:\n%s",
+			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "has", "have"), backgroundSilentAdvise, silentTasks(tasks, now)),
+		Why: why,
+	}
+}
+
+// silentTasks lists tasks as stoppableTasks does, each with how long it has been silent.
+func silentTasks(tasks []backgroundTask, now time.Time) string {
+	lines := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		line := stoppableTasks([]backgroundTask{t}, now)
+		head, rest, _ := strings.Cut(line, "\n")
+		line = fmt.Sprintf("%s (silent %s)", head, now.Sub(lastHeard(t)).Round(time.Second))
+		if rest != "" {
+			line += "\n" + rest
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// lastHeard is when t last showed it was working: its start, its output file's last
+// write, or its newest event notice.
+func lastHeard(t backgroundTask) time.Time {
+	last := t.Started
+	if t.Heard.After(last) {
+		last = t.Heard
+	}
+	if t.Output != "" {
+		if info, err := os.Stat(t.Output); err == nil && info.ModTime().After(last) {
+			last = info.ModTime()
+		}
+	}
+	return last
 }
 
 // backgroundTask is one shell command a host runs in the background for an agent: a
@@ -209,6 +294,10 @@ type backgroundTask struct {
 	Started time.Time
 	// Expires is when the host ends the task on its own, zero when it never does.
 	Expires time.Time
+	// Output is the file the host writes the task's output to, "" when it named none.
+	Output string
+	// Heard is the newest event notice the task sent, zero for none.
+	Heard time.Time
 }
 
 // The host's words for a shell command it runs in the background: asked for, timed out
@@ -216,6 +305,9 @@ type backgroundTask struct {
 // the id. Anchored, so a result that merely prints one of these (a search over
 // transcripts) starts nothing.
 var backgroundIDPattern = regexp.MustCompile(`^(?:Command running in background with ID: |Command did not complete[^\n]*? moved to the background \(ID: |Monitor started \(task )([A-Za-z0-9_-]+)`)
+
+// backgroundOutputPattern is the file the same result says the task writes to.
+var backgroundOutputPattern = regexp.MustCompile(`Output is being written to: (\S+)\.(?:\s|$)`)
 
 // A task's completion notice. Only one carrying a status reports the task ended: a
 // watcher's event notices carry none.
@@ -279,6 +371,7 @@ func liveBackgroundTasks(transcript string, now time.Time) ([]backgroundTask, er
 		commands: map[string]backgroundTask{},
 		live:     map[string]*backgroundTask{},
 		endedIDs: map[string]bool{},
+		heard:    map[string]time.Time{},
 	}
 	reader := bufio.NewReaderSize(f, 1<<20)
 	for {
@@ -305,6 +398,8 @@ type taskReader struct {
 	order []string
 	// endedIDs holds the task ids a notice or a stop ended.
 	endedIDs map[string]bool
+	// heard is each task id's newest event notice.
+	heard map[string]time.Time
 }
 
 func (r *taskReader) read(line []byte) {
@@ -313,14 +408,14 @@ func (r *taskReader) read(line []byte) {
 		return
 	}
 	at, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
-	r.notices(rec.Attachment.Prompt)
+	r.notices(rec.Attachment.Prompt, at)
 	if s, ok := rec.Content.(string); ok {
-		r.notices(s)
+		r.notices(s, at)
 	}
 	var text string
 	if json.Unmarshal(rec.Message.Content, &text) == nil {
 		if rec.Type != "assistant" {
-			r.notices(text)
+			r.notices(text, at)
 		}
 		return
 	}
@@ -337,7 +432,7 @@ func (r *taskReader) read(line []byte) {
 		case "text":
 			// An agent quoting a notice in its own reply ended nothing.
 			if rec.Type != "assistant" {
-				r.notices(b.Text)
+				r.notices(b.Text, at)
 			}
 		}
 	}
@@ -393,7 +488,8 @@ func (r *taskReader) callResult(b transcriptBlock) {
 	if b.IsError {
 		return
 	}
-	m := backgroundIDPattern.FindStringSubmatch(blockText(b.Content))
+	text := blockText(b.Content)
+	m := backgroundIDPattern.FindStringSubmatch(text)
 	if m == nil {
 		return
 	}
@@ -405,6 +501,9 @@ func (r *taskReader) callResult(b transcriptBlock) {
 		r.start(b.ToolUseID, task)
 	}
 	r.live[b.ToolUseID].ID = m[1]
+	if out := backgroundOutputPattern.FindStringSubmatch(text); out != nil {
+		r.live[b.ToolUseID].Output = out[1]
+	}
 }
 
 // blockText is a result's text, whether the host wrote it as a string or as text blocks.
@@ -424,12 +523,18 @@ func blockText(raw json.RawMessage) string {
 	return b.String()
 }
 
-func (r *taskReader) notices(text string) {
+func (r *taskReader) notices(text string, at time.Time) {
 	if !strings.Contains(text, "<task-notification>") {
 		return
 	}
 	for _, m := range taskNoticePattern.FindAllStringSubmatch(text, -1) {
 		if noticeStatus.FindStringSubmatch(m[1]) == nil {
+			// A watcher's event: the task is alive and was heard from.
+			if id := noticeTaskID.FindStringSubmatch(m[1]); id != nil {
+				if key := strings.TrimSpace(id[1]); at.After(r.heard[key]) {
+					r.heard[key] = at
+				}
+			}
 			continue
 		}
 		if id := noticeTaskID.FindStringSubmatch(m[1]); id != nil {
@@ -448,7 +553,9 @@ func (r *taskReader) result(now time.Time) []backgroundTask {
 		if !ok || (t.ID != "" && r.endedIDs[t.ID]) || (!t.Expires.IsZero() && !now.Before(t.Expires)) {
 			continue
 		}
-		out = append(out, *t)
+		task := *t
+		task.Heard = r.heard[t.ID]
+		out = append(out, task)
 	}
 	return out
 }
@@ -471,8 +578,9 @@ func denyUnboundedBackground(command string, background bool, d Dialect) denial 
 	if program == "" {
 		return denial{}
 	}
+	ceiling := fmt.Sprintf("%dm", int(backgroundCeiling.Minutes()))
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; use `magus job exec --timeout <duration> -- <command>`.", program),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the default ceiling: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", program, ceiling, ceiling),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
 			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +

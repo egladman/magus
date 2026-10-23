@@ -45,6 +45,7 @@ type ruleDocEntry struct {
 
 var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBackgroundLeft},
+	{doc: ruleDocBackgroundSilent},
 	{doc: ruleDocBackgroundUnbounded},
 	{doc: ruleDocBacktickSubstitution},
 	{doc: ruleDocBusyWait},
@@ -174,11 +175,21 @@ var ruleDocBackgroundLeft = types.RuleDoc{
 		"Reads the host's transcript by shape, so a host whose transcript records no background task in that shape is never refused. Set to advise, a subagent's stop is advised too.",
 }
 
+var ruleDocBackgroundSilent = types.RuleDoc{
+	Name:    string(denyRuleBackgroundSilent),
+	Catches: "a background task of the session that has written nothing for half an hour or more",
+	Why: "A background task's output file and event notices are the only sign it is working, and one that writes nothing for half an hour is more likely waiting on a stdin nobody feeds, a lock or a prompt than doing slow work: a `python3 -` reading an unfed stdin sat for eight hours that way. " +
+		"On each shell call of a root session magus reads the session's transcript for the background tasks still running, as background-left does, and measures each one's silence from the latest of its start, its output file's last write and its newest event notice. " +
+		"Past 30 minutes of silence the call is advised, once per task per session; past 60 minutes every shell call that is not a read is refused, naming each task's id, age, silence, command and the TaskStop call that ends it. " +
+		"A watcher with an expiry is not judged, since the host ends it. A subagent's tasks are background-left's at its stop. The host's hook input carries no list of background tasks, so the transcript is the record read.",
+}
+
 var ruleDocBackgroundUnbounded = types.RuleDoc{
 	Name:    string(denyRuleBackgroundUnbounded),
 	Catches: "a shell command run in the background with nothing to end it",
 	Why: "A backgrounded command outlives the agent that started it, and the host stops it only when asked. " +
 		"It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. " +
+		"The refusal names a default ceiling of 30 minutes (`timeout 30m`), the span after which background-silent starts speaking of a quiet task. " +
 		"timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.",
 }
 
@@ -240,10 +251,11 @@ var ruleDocExitStatusEcho = types.RuleDoc{
 
 var ruleDocFilterWithoutInput = types.RuleDoc{
 	Name:    string(denyRuleFilterWithoutInput),
-	Catches: "a filter with no file, pipe or redirect, which reads a stdin nothing feeds",
+	Catches: "a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds",
 	Why: "A filter given no input reads stdin, and under an agent harness stdin is the harness's own: where the harness holds it open, nothing writes to it and nothing closes it, so the call waits past the tool timeout and goes on waiting in the background. " +
 		"Name the input: a file operand, a pipe into the command, or a `<`, `<<` or `<<<` redirect on it or on a loop or block around it. " +
 		"It reads each tool's own flag grammar, so `grep -e pat file`, `jq --arg k v . f` and `head -n 5 file` are fed, and `tr`, `tee` and `xargs` fire whenever nothing feeds them, because their operands are never input. " +
+		"python, node, perl, ruby and the shells fire given `-` or no script and no inline program, and a shell given `-s`: a `python3 -` whose heredoc sat on a later `cat` waited eight hours. `read` fires without `-t` or `-u`. " +
 		"A recursive grep with no path passes: GNU grep, macOS's BSD grep and the ugrep a host may put behind `grep` all search the working directory then. " +
 		"What the guard cannot classify passes, because it refuses only what it can prove: an unknown flag, an unquoted expansion that may split into several words, `jq -n`, an awk program with a BEGIN block, a command inside a function body. " +
 		"ripgrep with no path passes for the same reason: it searches the working directory unless stdin is a pipe or a file, which a hook cannot see.",
