@@ -716,7 +716,7 @@ func TestConformanceFileSplit(t *testing.T) {
 		Key: row.Key, N: 2, Value: 1500, Anchor: 1500, Source: types.ConformanceFromAnchor,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
-		{ID: "internal/r/r_cache.go", Source: "internal/r/r_cache.go:1", Measure: 900, Home: "internal/r/r.go"},
+			{ID: "internal/r/r_cache.go", Source: "internal/r/r_cache.go:1", Measure: 900, Home: "internal/r/r.go"},
 		},
 	}, row, "only the concept siblings, both of which would fit in r.go; a floor proposes nothing")
 
