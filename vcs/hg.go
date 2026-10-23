@@ -1196,6 +1196,9 @@ func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string
 	}
 	share := []string{"share", "--config", "extensions.share=", "--noupdate"}
 	if branch != "" {
+		if err := hgRefuseTakenBookmark(ctx, root, branch); err != nil {
+			return err
+		}
 		share = append(share, "--bookmarks")
 	}
 	if err := runVCS(ctx, "hg", root, append(share, "--", root, dir)); err != nil {
@@ -1210,6 +1213,29 @@ func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string
 		}
 	}
 	return recordMadeCheckout(ctx, hgMetaDir(root), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir)})
+}
+
+// hgRefuseTakenBookmark errors when root or one of its checkouts already has a bookmark
+// called name. `hg bookmark` moves an existing bookmark without complaint, which would
+// repoint another checkout's branch. A share writes its bookmarks to its own .hg, so the
+// source's listing alone misses a checkout's branch.
+func hgRefuseTakenBookmark(ctx context.Context, root, name string) error {
+	checkouts, err := madeCheckoutDirs(hgMetaDir(root))
+	if err != nil {
+		return err
+	}
+	for _, dir := range append([]string{root}, checkouts...) {
+		cmd := vcsExec(ctx, "hg", "bookmarks", "--template", "{bookmark}\\n")
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			return fmt.Errorf("vcs: hg bookmarks in %s: %w", dir, err)
+		}
+		if slices.Contains(strings.Split(string(out), "\n"), name) {
+			return fmt.Errorf("vcs: hg bookmark %q is already taken in %s", name, dir)
+		}
+	}
+	return nil
 }
 
 // RemoveCheckout implements types.CheckoutProvisioner. A share owns nothing in its source,

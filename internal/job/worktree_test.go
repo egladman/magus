@@ -114,17 +114,18 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	later := repo.Commit("later", map[string]string{"b.go": "package b\n"})
 
 	for name, tc := range map[string]struct {
+		id         string
 		build      types.MagusBuild
 		checkpoint string
 		base       string
 	}{
-		"the forker's revision is past the build": {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
-		"a checkpoint past the build":             {build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
-		"a checkpoint before the build":           {build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
+		"the forker's revision is past the build": {id: "past-build", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, base: later},
+		"a checkpoint past the build":             {id: "checkpoint-past", build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built}, checkpoint: later, base: later},
+		"a checkpoint before the build":           {id: "checkpoint-before", build: types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later}, checkpoint: built, base: built},
 	} {
 		t.Run(name, func(t *testing.T) {
 			bin, ctx := forkersBinary(t, tc.build)
-			wt, made, err := s.ForkWorktree(ctx, name, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
+			wt, made, err := s.ForkWorktree(ctx, tc.id, filepath.Join(t.TempDir(), "w"), tc.checkpoint, bin)
 			require.NoError(t, err)
 			require.True(t, made)
 			assert.Equal(t, tc.base, wt.Base)
