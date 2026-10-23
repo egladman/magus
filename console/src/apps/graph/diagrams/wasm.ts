@@ -294,20 +294,17 @@ export function linkTo(anchorHref: string, anchor: string): string {
   return anchorHref.replace(/\{path\}|\{line\}/g, (m) => (m === "{path}" ? anchor : ""));
 }
 
-// actorNames is the handler's: figure keys an actor by name, so a label two nodes share takes
-// the node's anchor. Aligned with nodes by index.
-export function actorNames(nodes: readonly DeclaredNode[]): string[] {
+// nameActors is the handler's actorNames: figure keys an actor by name, so a label two nodes
+// share takes the node's anchor. Each node comes back with its name.
+export function nameActors<T extends DeclaredNode>(
+  nodes: readonly T[],
+): { node: T; name: string }[] {
   const count = new Map<string, number>();
   for (const n of nodes) count.set(n.label, (count.get(n.label) ?? 0) + 1);
-  return nodes.map((n) =>
-    (count.get(n.label) ?? 0) > 1 ? n.label + " (" + n.anchor + ")" : n.label,
-  );
-}
-
-function nameAt(names: readonly string[], i: number): string {
-  const name = names[i];
-  if (name === undefined) throw new Error("actorNames returned no name for node " + i);
-  return name;
+  return nodes.map((node) => ({
+    node,
+    name: (count.get(node.label) ?? 0) > 1 ? node.label + " (" + node.anchor + ")" : node.label,
+  }));
 }
 
 // IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
@@ -317,8 +314,7 @@ export const IMPORTS = "imports";
 // directory, an actor as external:<name>), which the SVG's data-edge pairs also use.
 export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): DeclaredNode[] {
   if (claim === IMPORTS) return nodes.map((n) => ({ ...n, id: n.anchor }));
-  const names = actorNames(nodes);
-  return nodes.map((n, i) => ({ ...n, id: "external:" + names[i] }));
+  return nameActors(nodes).map(({ node, name }) => ({ ...node, id: "external:" + name }));
 }
 
 export interface FigureMeta {
@@ -395,17 +391,16 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
     );
     return { ...base, graphEdges: true, boxes };
   }
-  const names = actorNames(decl.nodes);
   const actors = new Map<string, Actor>();
-  decl.nodes.forEach((n, i) =>
+  for (const { node: n, name } of nameActors(decl.nodes)) {
     actors.set(n.id, {
-      name: nameAt(names, i),
+      name,
       sub: "",
       tag: "",
       link: linkTo(meta.anchorHref, n.anchor),
       look: "plain",
-    }),
-  );
+    });
+  }
   const flows = decl.edges.map(([src, dst]): Flow => {
     const a = actors.get(src);
     const b = actors.get(dst);
@@ -441,14 +436,12 @@ export function linkedRows(linked: LinkedFigure): DeclaredNode[] {
 // edge carrying the edge's stroke and label. A seed is tagged "edited" and takes the accent only
 // while the figure has room for it, so a change that edits many projects is still drawn.
 export function figureForLink(linked: LinkedFigure): Figure {
-  const rows = linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label }));
-  const names = actorNames(rows);
   const accent = linked.nodes.filter((n) => n.seed).length <= MAX_ACCENT;
   const actors = new Map<string, Actor>(
-    linked.nodes.map((n, i) => [
+    nameActors(linked.nodes.map((n) => ({ ...n, anchor: n.id }))).map(({ node: n, name }) => [
       n.id,
       {
-        name: nameAt(names, i),
+        name,
         sub: "",
         tag: n.seed ? "edited" : "",
         link: "",
