@@ -778,6 +778,29 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
+// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or schema
+// version this build lacks: a job row, a stored output, or the run history. The record is
+// kept on disk unchanged. A job row stays listed and graded but is not written; a stored
+// output is not read; a run sizes its claims from declarations and records no history.
+const StoreRecordsNewer DiagnosticCode = "MGS3047"
+
+// PeerFromAnotherBuild is a magus process that answered from another build: a broker
+// that speaks another protocol, or a server, pool parent or MCP server started by another
+// magus. The command goes on without what that peer serves, or under `broker: required`
+// stops. The old socket protocol (ServerProtocolOutdated) is one cause of it.
+const PeerFromAnotherBuild DiagnosticCode = "MGS3048"
+
+// LegacyStorePresent is a store's file from an older magus left beside the file that
+// replaced it. Neither is touched: two files would be two accounts of the same records
+// while an older magus still writes the old one.
+const LegacyStorePresent DiagnosticCode = "MGS3049"
+
+// StoreLineUndecodable is a line in a magus store that is not a record at all: not JSON,
+// cut short, or of the wrong shape. The store is not read, and the error names its path
+// and line: skipping the line could drop a lease. A record a newer magus wrote decodes and
+// is StoreRecordsNewer instead.
+const StoreLineUndecodable DiagnosticCode = "MGS3050"
+
 // JobStoreWriterOlder is a job store whose header requires a schema feature this magus
 // lacks: nothing is read or written until a magus that implements it runs.
 const JobStoreWriterOlder DiagnosticCode = "MGS3051"
@@ -1121,6 +1144,10 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputOutsideWritePaths,
 	GateNotRun,
 	CheckoutConfigHeld,
+	StoreRecordsNewer,
+	PeerFromAnotherBuild,
+	LegacyStorePresent,
+	StoreLineUndecodable,
 	JobStoreWriterOlder,
 	RaceDetected,
 	OutputOverlapDetected,
@@ -1207,6 +1234,7 @@ var retryTable = map[DiagnosticCode]RetryChange{
 	OutputOutsideWritePaths:  RetryAfterConfig,
 	GateNotRun:               RetryAfterConfig,
 	CheckoutConfigHeld:       RetryAfterConfig,
+	StoreRecordsNewer:        RetryAfterUpgrade,
 	JobStoreWriterOlder:      RetryAfterUpgrade,
 	BearerRejected:           RetryAfterPerson,
 	NoAuthToken:              RetryAfterPerson,
