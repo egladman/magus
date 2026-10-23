@@ -10,3 +10,7 @@
 - **No TypeScript in the repository throws.** The lint rule that kept the console and the
   mod free of `throw` now reads every hand-written TypeScript file. The docs site reports a
   Buzz runtime or search index that failed to load as a value instead of a rejected promise.
+- **The OpenCode plugin's one throw sits in one adapter.** OpenCode's `tool.execute.before`
+  can stop a call only by rejecting, so the plugin decides with a value and throws on a single
+  line under `// platform contract: opencode tool.execute.before`. The never-throws lint
+  accepts that marker for a listed contract and refuses any other.

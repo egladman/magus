@@ -11,6 +11,13 @@
 //	// platform double: fetch
 //	globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
 //
+// One allowance, in app code: the single throw a host's hook contract demands, where the host
+// gives a plugin no other way to stop a call. The line above it names the contract, from
+// CONTRACTS, and only a `throw` qualifies (a reject or a rejecting promise never does):
+//
+//	// platform contract: opencode tool.execute.before
+//	throw new Error(reason);
+//
 // Tier 2, measured shape: the fix returns a Result, a refactor anyone can do. There is no
 // baseline: a file it reads has no violation.
 namespace typescriptthrows;
@@ -25,6 +32,13 @@ import "hack/lint/support" as support;
 export final PLATFORM_APIS = ["fetch", "Response.text", "navigator.clipboard.writeText", "Connect client", "Bun.spawn"];
 
 final MARKER = "// platform double: ";
+
+// CONTRACTS are the host hooks that stop a call only by throwing: OpenCode's tool.execute.before
+// returns Promise<void> and lets a plugin change nothing but args, so a rejection is its one
+// block. The logic around the throw returns a Result; only the adapter at the hook boundary throws.
+export final CONTRACTS = ["opencode tool.execute.before"];
+
+final CONTRACT_MARKER = "// platform contract: ";
 
 // THROW matches the statement, not the word: `throw` followed by what it throws. A keyword list
 // in a string ("catch throw true") has no operand after it.
@@ -89,16 +103,36 @@ fun named(line: str) > str? {
     return if (PLATFORM_APIS.indexOf(api) != null) api else null;
 }
 
+// contract answers the contract a marker line names, or null when the line is no contract
+// marker; an unlisted name comes back as itself, so the caller can refuse it by name.
+fun contract(line: str) > str? {
+    final t = line.trim();
+    if (!t.startsWith(CONTRACT_MARKER)) {
+        return null;
+    }
+    return t.sub(CONTRACT_MARKER.len(), len: t.len() - CONTRACT_MARKER.len());
+}
+
 fun judge(path: str, src: str, found: mut [Finding]) > void {
     final inTest = isTest(path);
     final apis = PLATFORM_APIS.join(", ");
+    final contracts = CONTRACTS.join(", ");
     var prev = "";
     var n = 0;
     foreach (line in src.split("\n")) {
         n = n + 1;
         final what = kind(code(line));
         if (what -> k) {
-            if (!inTest) {
+            final promised = contract(prev);
+            if (!inTest and k == "a throw" and promised != null and CONTRACTS.indexOf(promised!) != null) {
+                prev = line;
+                continue;
+            }
+            if (!inTest and k == "a throw" and promised != null) {
+                found.append(Finding{ path = path, line = n,
+                    message = "a throw under the platform contract \"{promised!}\", which is not a listed contract",
+                    fix = "Return a Result instead. The only contracts that may throw are: {contracts}." });
+            } else if (!inTest) {
                 found.append(Finding{ path = path, line = n,
                     message = "{k} in hand-written TypeScript; a fallible call here returns a Result",
                     fix = "Return fail(...) or failFrom(...) from lib/result, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
@@ -139,4 +173,17 @@ test "a test double passes only under a marker naming a platform API" {
 test "a throw in the mod's tsx is read with or without a semicolon" {
     final got = check(support\fixture({"docs/guides/integrations/agents/claude-code-mod/hooks/a.tsx": "  throw err\n  throw err;\n"}));
     assert\equal(got.len(), want: 2, message: "with and without a semicolon");
+}
+
+test "a throw passes under a listed platform contract and fails under any other" {
+    final src = "// platform contract: opencode tool.execute.before\nthrow new Error(reason);\n// platform contract: express middleware\nthrow new Error(reason);\nthrow new Error(reason);\n";
+    final got = check(support\fixture({"docs/guides/integrations/agents/a.ts": src}));
+    assert\equal(got.len(), want: 2, message: "an unlisted contract and no marker");
+    assert\equal(got[0].line, want: 4, message: "the unlisted contract");
+    assert\equal(got[1].line, want: 5, message: "no marker");
+}
+
+test "a platform contract excuses a throw only, never a reject" {
+    final src = "// platform contract: opencode tool.execute.before\nconst a = Promise.reject(new Error(\"x\"));\n";
+    assert\equal(check(support\fixture({"console/src/a.ts": src})).len(), want: 1, message: "the reject");
 }

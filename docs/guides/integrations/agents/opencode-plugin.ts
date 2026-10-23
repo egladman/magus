@@ -1,6 +1,8 @@
 // magus guard hook for OpenCode. OpenCode has no shell-command hook config: a
 // plugin intercepts tool calls instead, and throwing from tool.execute.before
-// blocks the call.
+// blocks the call: its signature returns Promise<void> and lets a plugin change only the
+// args, so a rejection is the one way to stop a call
+// (https://github.com/anomalyco/opencode/blob/v1.19.4/packages/plugin/src/index.ts#L266-L269).
 //
 // This file is the source of truth. Copy it to .opencode/plugins/ in the project, never
 // to ~/.config/opencode/plugins/, and adjust to taste; nothing in it is magus-internal.
@@ -78,6 +80,9 @@ type Verdict =
   | { schema_version: number; decision: "advise"; context: string }
   | { schema_version: number; decision: "deny"; reason: string }
   | { schema_version: number; decision: "ask"; reason: string };
+
+/** What a verdict means for the call: stop it with the reason, or let it run holding a context. */
+type Decided = { block: true; reason: string } | { block: false; context: string };
 
 /** A verdict envelope before its decision is trusted: another process's stdout. */
 type Envelope = { schema_version: number; decision: unknown } & Record<string, unknown>;
@@ -489,28 +494,45 @@ export const MagusGuard: Plugin = async (ctx) => {
     });
 
   /**
-   * Throws on a deny, which is OpenCode's only way to stop a call, and on an ask that
-   * OpenCode's own prompt will not reach. Returns an advise's context for the caller to
-   * hold until the call lands, and "" for everything else.
+   * Judges a verdict without throwing: a block carries the reason the model reads, an allow
+   * carries an advise's context for the caller to hold until the call lands, "" otherwise.
    */
-  const apply = (verdict: Verdict | null, promptable: boolean): string => {
-    if (verdict === null) return "";
+  const decide = (verdict: Verdict | null, promptable: boolean): Decided => {
+    if (verdict === null) return { block: false, context: "" };
     switch (verdict.decision) {
       case "deny":
-        throw new Error(`[magus guard] ${verdict.reason}`);
+        return { block: true, reason: `[magus guard] ${verdict.reason}` };
       case "ask":
-        if (promptable) return "";
-        throw new Error(
-          `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
+        if (promptable) return { block: false, context: "" };
+        return {
+          block: true,
+          reason:
+            `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
             "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt " +
             'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
             "Ask them to run it from their own terminal.",
-        );
+        };
       case "advise":
-        return verdict.context;
+        return { block: false, context: verdict.context };
       case "pass":
-        return "";
+        return { block: false, context: "" };
     }
+    const exhausted: never = verdict;
+    return exhausted;
+  };
+
+  /**
+   * The one place this file throws: tool.execute.before returns Promise<void> and takes only
+   * `args` to mutate, so a rejection is the only way to stop a call. Returns an advise's
+   * context, or "" when there is none.
+   */
+  const apply = (verdict: Verdict | null, promptable: boolean): string => {
+    const decided = decide(verdict, promptable);
+    if (decided.block) {
+      // platform contract: opencode tool.execute.before
+      throw new Error(decided.reason);
+    }
+    return decided.context;
   };
 
   /** Holds an advisory for the call it judged, so tool.execute.after can deliver it. */

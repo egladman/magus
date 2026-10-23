@@ -516,7 +516,7 @@ function buildSnippet(text: string, terms: string[], windowChars = 150): string 
 // searcher object, so an app need not thread the index through every call. The source is the
 // injected dependency: either the records themselves (ready immediately) or a loader the app
 // owns (its own retrieval, cache path, and locations - none of which live here). load() resolves
-// the loader once and memoizes it; a FAILED load (null, or a rejection) leaves the searcher
+// the loader once and memoizes it; a FAILED load (null) leaves the searcher
 // not-ready so a later load() retries rather than wedging, while an EMPTY array is a successful
 // load of zero records and caches like any other. runSearch() ranks the loaded records, or
 // returns null before they land (distinct from an empty array, which means "loaded, no matches").
@@ -558,8 +558,8 @@ export function createTextSearch<E extends TextSearchEntry>(
       if (data != null) cached = data;
       return data;
     });
-    // Clear inflight once the load settles, whether it fulfilled, rejected, or yielded null.
-    // A rejected or null load leaves `cached` null, so isReady() stays false and the next
+    // Clear inflight once the load settles, whether it fulfilled or yielded null.
+    // A null load leaves `cached` null, so isReady() stays false and the next
     // load() re-runs the loader rather than replaying the same failed promise forever.
     inflight = p.finally(() => {
       inflight = null;
