@@ -1,7 +1,8 @@
 // Cost: one merge and one regeneration per branch, and a push each.
 //
-// Brings a list of stacked branches up to date, in order. Each branch is switched to and merged with
-// the previous branch (the first with --base), `magus vcs resolve --against` settling the
+// Brings a list of stacked branches up to date, in order. Each branch is switched to, made
+// gate-ready (bootstrap-checkout.buzz) so ./magus is built at its head, and merged with the
+// previous branch (the first with --base), `magus vcs resolve --against` settling the
 // generated files the merge conflicts in, then committed and pushed before the next. It stops
 // at the first branch holding a conflict in a source file and lists the files. The tree must be
 // clean. --dry-run prints the steps and runs none.
@@ -13,6 +14,7 @@ import "flags";
 import "magus";
 import "std";
 import "vcs";
+import "hack/dev/bootstrap-checkout" as bootstrap;
 
 import "assert";
 
@@ -61,6 +63,7 @@ export fun resolveArgv(against: str) > [str] {
 export fun plan(s: Step) > [str] {
     return [
         "git switch {s.branch}",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus {resolveArgv(s.against).join(" ")}",
         "git commit --no-edit (when the merge is in progress)",
         "git push origin {s.branch}",
@@ -82,6 +85,9 @@ fun git(args: [str]) > str !> any {
 
 fun update(s: Step) > void !> any {
     git(["switch", s.branch]);
+    foreach (line in bootstrap\gateReady(bootstrap\liveHost(), dir: vcs\root())) {
+        std\print("gate-ready: {line}");
+    }
     final resolved = magus\cmd("vcs", args: resolveArgv(s.against).sub(1), opts: {"quiet": true, "allow_failure": true});
     final unmerged = mut [<str>];
     foreach (path in git(["diff", "--name-only", "--diff-filter=U"]).split("\n")) {
@@ -152,6 +158,7 @@ test "a step's argv and plan name the branch and what it merges" {
     assert\equal(resolveArgv("origin/main"), want: ["vcs", "resolve", "--against", "origin/main"], message: "argv");
     assert\equal(plan(Step{ branch = "b", against = "a" }), want: [
         "git switch b",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus vcs resolve --against a",
         "git commit --no-edit (when the merge is in progress)",
         "git push origin b",

@@ -7,7 +7,8 @@
 // below it. The work runs in a fresh checkout a `magus job fork --checkout` row owns, so the
 // tree this runs from is never touched. Per branch, in order: `git rebase --onto` --base (the
 // first) or the rebased branch below, a generated file a conflict names taken from the
-// replayed commit, `magus affected ci` to gate and regenerate, the regeneration committed, then
+// replayed commit, gate-ready (bootstrap-checkout.buzz) so the checkout's ./magus is built at the
+// rebased head, `magus affected ci` to gate and regenerate, the regeneration committed, then
 // `git push --force-with-lease` against the head it read. It stops at the first conflict in a
 // source file and lists the files. --dry-run prints the steps and runs none.
 //
@@ -19,11 +20,13 @@ namespace rebasebranchesontobase;
 
 import "encoding/json";
 import "flags";
+import "fs";
 import "magus";
 import "proc";
 import "serialize";
 import "std";
 import "vcs";
+import "hack/dev/bootstrap-checkout" as bootstrap;
 import "hack/dev/merge-base-into-branches" as mergebase;
 
 import "assert";
@@ -58,12 +61,14 @@ export object Ran {
 }
 
 // Shell is every git, gh and magus call the script makes, so a test answers them. git and
-// run never raise on a failed command; the caller reads code. dir "" is this checkout.
+// run never raise on a failed command; the caller reads code. dir "" is this checkout; run in
+// another dir runs that checkout's own ./magus. ready is bootstrap-checkout's gateReady.
 export object Shell {
     git: fun (dir: str, args: [str]) > Ran !> any,
     gh: fun (args: [str]) > str !> any,
     run: fun (dir: str, sub: str, args: [str]) > Ran !> any,
     generated: fun (paths: [str]) > [str] !> any,
+    ready: fun (dir: str) > [str] !> any,
 }
 
 // squashedBase is the merged pull request whose head is newest among exclusive, the commits
@@ -132,6 +137,7 @@ export fun plan(s: Step, base: str) > [str] {
     return [
         "git {rebaseArgv(onto, s: s).join(" ")}",
         "git checkout --theirs each generated file a conflict names; stop at a source file",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus affected ci",
         "git commit -m \"{regenerateMessage(base)}\" (when the gate regenerated anything)",
         "git {pushArgv(s).join(" ")}",
@@ -238,6 +244,9 @@ fun settle(sh: Shell, checkout: str, s: Step, started: Ran) > void !> any {
 // rebase runs one step in checkout and returns the rebased head.
 export fun rebase(sh: Shell, checkout: str, s: Step, onto: str, base: str) > str !> any {
     settle(sh, checkout: checkout, s: s, started: sh.git(checkout, args: rebaseArgv(onto, s: s)));
+    foreach (line in sh.ready(checkout)) {
+        std\print("gate-ready: {line}");
+    }
     final gate = sh.run(checkout, sub: "affected", args: ["ci"]);
     if (gate.code != 0) {
         throw "rebase-branches-onto-base: `magus affected ci` failed on the rebased {s.branch}; {checkout} keeps it, nothing was pushed:\n{gate.stdout}{gate.stderr}";
@@ -307,10 +316,17 @@ fun liveShell() > Shell {
             if (dir != "") {
                 opts["dir"] = dir;
             }
+            if (dir != "") {
+                final ran = proc\exec(fs\join(dir, name: "magus"), args: [sub] + args, dir: dir, opts: {"allow_failure": true});
+                return Ran{ stdout = ran.stdout, stderr = ran.stderr, code = ran.code };
+            }
             final r = magus\cmd(sub, args: args, opts: opts);
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         generated = findGenerated,
+        ready = fun (dir: str) > [str] !> any {
+            return bootstrap\gateReady(bootstrap\liveHost(), dir: dir);
+        },
     };
 }
 
@@ -366,6 +382,10 @@ fun fake(answers: {str: Ran}, gh: str, generated: [str], calls: mut [str]) > She
         generated = fun (paths: [str]) > [str] !> any {
             return paths.filter(fun (index: int, p: str) > bool => generated.indexOf(p) != null);
         },
+        ready = fun (dir: str) > [str] !> any {
+            calls.append("ready {dir}");
+            return ["built"];
+        },
     };
 }
 
@@ -413,7 +433,7 @@ test "the plan names the rebase, the gate and a push leased on the head it read"
     final base = "origin/main";
     final first = Step{ branch = "a", head = "h1", cut = "s", onto = base };
     assert\equal(plan(first, base: base)[0], want: "git rebase --onto origin/main s h1", message: "first");
-    assert\equal(plan(first, base: base)[4], want: "git push --force-with-lease=refs/heads/a:h1 origin HEAD:refs/heads/a", message: "push");
+    assert\equal(plan(first, base: base)[5], want: "git push --force-with-lease=refs/heads/a:h1 origin HEAD:refs/heads/a", message: "push");
     final second = Step{ branch = "b", head = "h2", cut = "h1", onto = "a" };
     assert\equal(plan(second, base: base)[0], want: "git rebase --onto <rebased a> h1 h2", message: "later");
 }
@@ -434,6 +454,7 @@ test "a generated conflict takes the replayed side and the gate's regeneration i
         "git checkout --theirs -- MAGUS.md",
         "git add -A -- MAGUS.md",
         "git -c core.editor=true rebase --continue",
+        "ready /c",
         "magus affected ci",
         "git status --porcelain",
         "git add -A",
