@@ -811,17 +811,23 @@ export function activate(host: HTMLElement): AppInstance {
   readingSince.type = "button";
   const readingPop = popover(readingSince, "Reading command");
   const readingCopy = clipboardCopy("Copy command", (command, done) => {
-    (navigator.clipboard?.writeText(command) ?? Promise.reject(new Error("no clipboard"))).then(
+    const copyFailed = (why: string): void =>
+      reportFailure(
+        "Review",
+        "Could not copy the command (" + why + "). Select it and copy it by hand.",
+        "reading:copy",
+      );
+    const clipboard = navigator.clipboard;
+    if (!clipboard) {
+      copyFailed("no clipboard");
+      return;
+    }
+    clipboard.writeText(command).then(
       () => {
         done();
         announce("Command copied");
       },
-      (e: unknown) =>
-        reportFailure(
-          "Review",
-          "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
-          "reading:copy",
-        ),
+      (e: unknown) => copyFailed(String(e)),
     );
   });
   readingCopy.el.setAttribute("aria-label", "Command that tells the review you are reading");
@@ -1632,16 +1638,12 @@ export function activate(host: HTMLElement): AppInstance {
       contextBody.textContent = "Connect a server to read the current working-tree file.";
       return;
     }
-    try {
-      const end = hunk.newStart + Math.max(1, hunk.newCount) - 1;
-      const result = await fetchContext(hp, file.path, asOf, hunk.newStart, end, request.signal);
-      if (disposed || requestID !== contextRequestID) return;
-      contextTitle.textContent = `${result.path}:${result.start}`;
-      contextBody.textContent = result.lines
-        .map((line, index) => `${String(result.start + index).padStart(5)}  ${line}`)
-        .join("\n");
-    } catch (error) {
-      if (disposed || requestID !== contextRequestID || request.signal.aborted) return;
+    const end = hunk.newStart + Math.max(1, hunk.newCount) - 1;
+    const fetched = await fetchContext(hp, file.path, asOf, hunk.newStart, end, request.signal);
+    if (disposed || requestID !== contextRequestID) return;
+    if (!fetched.ok) {
+      if (request.signal.aborted) return;
+      const error = fetched.error;
       const why =
         error instanceof HttpError && error.status === 409
           ? "The review snapshot changed. Refresh the diff before peeking at surrounding code."
@@ -1649,7 +1651,13 @@ export function activate(host: HTMLElement): AppInstance {
       contextBody.textContent = "";
       contextAlert.replaceChildren(inlineAlert({ variant: "danger", title: why }));
       reportFailure("Review", why, "context:failed");
+      return;
     }
+    const result = fetched.value;
+    contextTitle.textContent = `${result.path}:${result.start}`;
+    contextBody.textContent = result.lines
+      .map((line, index) => `${String(result.start + index).padStart(5)}  ${line}`)
+      .join("\n");
   };
 
   const showSession = async (file: DiffFile, touch: DiffTouch): Promise<void> => {
@@ -1759,17 +1767,16 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     polling = true;
-    try {
-      const next = await fetchReviewSession(hp, controller.signal);
-      if (!disposed) applySession(next);
-    } catch (e) {
-      if (disposed) return;
-      setCollaboration("degraded");
-      reportSessionFailure(hp, "the review session", e);
-    } finally {
-      polling = false;
-      schedulePoll();
+    const next = await fetchReviewSession(hp, controller.signal);
+    polling = false;
+    if (!disposed) {
+      if (next.ok) applySession(next.value);
+      else {
+        setCollaboration("degraded");
+        reportSessionFailure(hp, "the review session", next.error);
+      }
     }
+    schedulePoll();
   };
   const startPolling = (): void => schedulePoll();
 
@@ -3275,18 +3282,15 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const hp = host_();
     if (!hp) return "Connect a server to publish.";
-    try {
-      const next = await publish(hp, summary, verdict, controller.signal);
-      if (disposed) return "";
-      applySession(next);
-      // Re-read the review, so what just left comes back as a thread beside the code it is
-      // about. Without it the remarks would vanish from the app at the moment they became
-      // the only permanent thing on it.
-      await loadReview();
-      return "";
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
+    const published = await publish(hp, summary, verdict, controller.signal);
+    if (!published.ok) return published.error.message;
+    if (disposed) return "";
+    applySession(published.value);
+    // Re-read the review, so what just left comes back as a thread beside the code it is
+    // about. Without it the remarks would vanish from the app at the moment they became
+    // the only permanent thing on it.
+    await loadReview();
+    return "";
   };
 
   // replyHere answers the conversation nearest the cursor, so it can be finished without leaving
@@ -3415,16 +3419,13 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const hp = host_();
     if (!hp) return "Connect a server to reply.";
-    try {
-      await reply(hp, threadId, body, controller.signal);
-      if (disposed) return "";
-      // Re-read rather than appending locally: the thread belongs to the host, and this is
-      // also how the reader finds out what else was said while they were typing.
-      await loadReview();
-      return "";
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
+    const replied = await reply(hp, threadId, body, controller.signal);
+    if (!replied.ok) return replied.error.message;
+    if (disposed) return "";
+    // Re-read rather than appending locally: the thread belongs to the host, and this is
+    // also how the reader finds out what else was said while they were typing.
+    await loadReview();
+    return "";
   };
 
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
@@ -3694,7 +3695,14 @@ export function activate(host: HTMLElement): AppInstance {
   const byKey = new Map<string, () => void>();
   for (const c of COMMANDS) {
     if (!c.key) continue;
-    if (byKey.has(c.key)) throw new Error(`diff: two commands claim the "${c.key}" key: ${c.id}`);
+    if (byKey.has(c.key)) {
+      reportFailure(
+        "Review",
+        `Two commands claim the "${c.key}" key; ${c.id} is unbound.`,
+        "keymap:duplicate",
+      );
+      continue;
+    }
     byKey.set(c.key, c.run);
   }
   scroll.addEventListener(
@@ -3790,22 +3798,12 @@ export function activate(host: HTMLElement): AppInstance {
       showConnectPrompt({ connection: "none" });
       return;
     }
-    let files: readonly WireFile[];
-    let digest = "";
-    try {
-      const res = await fetchPatch(hp, controller.signal);
-      if (superseded()) return;
-      if (res.clean) {
-        showEmpty("Nothing to read", "The working tree is clean. Every change is committed.");
-        return;
-      }
-      files = res.files;
-      digest = res.digest;
-    } catch (e) {
-      if (superseded()) return;
+    const fetched = await fetchPatch(hp, controller.signal);
+    if (superseded()) return;
+    if (!fetched.ok) {
+      const e = fetched.error;
       if (isUnreachable(e)) {
-        const reason = e instanceof Error ? e.message : String(e);
-        showConnectPrompt({ connection: "disconnected", host: hp, reason });
+        showConnectPrompt({ connection: "disconnected", host: hp, reason: e.message });
         return;
       }
       const status = e instanceof HttpError ? e.status : 0;
@@ -3817,6 +3815,12 @@ export function activate(host: HTMLElement): AppInstance {
         reportFailure("Review", `Could not read the diff: ${String(e)}`, "diff:read");
       return;
     }
+    if (fetched.value.clean) {
+      showEmpty("Nothing to read", "The working tree is clean. Every change is committed.");
+      return;
+    }
+    const files: readonly WireFile[] = fetched.value.files;
+    const digest = fetched.value.digest;
 
     const parsed = fromWire(files);
     if (parsed.length === 0) {
@@ -3845,37 +3849,38 @@ export function activate(host: HTMLElement): AppInstance {
 
     // PHASE TWO: annotate and attach the session. Failure here leaves a working diff viewer
     // rather than an error - the annotations are the differentiator, not the product.
-    try {
-      const snapshot = digest;
-      const sess = await fetchSession(
-        hp,
-        parsed.map((f) => f.path),
-        controller.signal,
-      );
-      if (superseded()) return;
-      if (sess.as_of && sess.as_of !== snapshot) {
-        // Do not decorate an older patch with a session computed after it moved. The plain reader
-        // remains usable, but all paired affordances are honestly held until the reader refreshes.
-        setCollaboration("stale");
-        return;
-      }
-      if (!applySession(sess)) return;
-      state.changeset = order(parsed, sess);
-      await rebuild();
-      startPolling();
-      // PHASE THREE: the review. Last, and not awaited by anything above it, because it is the
-      // only call that leaves this machine - a forge taking ten seconds must cost the reader
-      // nothing but a chip that arrives late.
-      void loadReview();
-      // Beside it, for the same reason: it forks once per branch, so it arrives rather than
-      // being waited on.
-      void loadBranches();
-    } catch (e) {
+    const snapshot = digest;
+    const fetchedSession = await fetchSession(
+      hp,
+      parsed.map((f) => f.path),
+      controller.signal,
+    );
+    if (superseded()) return;
+    if (!fetchedSession.ok) {
       // Keep the reader available, but never imply that comments, read marks, or suggestions are
       // synchronized when the pairing step did not complete.
       setCollaboration("degraded");
-      reportSessionFailure(hp, "the diff annotations", e);
+      reportSessionFailure(hp, "the diff annotations", fetchedSession.error);
+      return;
     }
+    const sess = fetchedSession.value;
+    if (sess.as_of && sess.as_of !== snapshot) {
+      // Do not decorate an older patch with a session computed after it moved. The plain reader
+      // remains usable, but all paired affordances are honestly held until the reader refreshes.
+      setCollaboration("stale");
+      return;
+    }
+    if (!applySession(sess)) return;
+    state.changeset = order(parsed, sess);
+    await rebuild();
+    startPolling();
+    // PHASE THREE: the review. Last, and not awaited by anything above it, because it is the
+    // only call that leaves this machine - a forge taking ten seconds must cost the reader
+    // nothing but a chip that arrives late.
+    void loadReview();
+    // Beside it, for the same reason: it forks once per branch, so it arrives rather than
+    // being waited on.
+    void loadBranches();
   };
 
   // The pane-width defaults. Installed here, at the foot of activate(), because it drives setMode
