@@ -2923,7 +2923,7 @@ func TestCommitPushAndCheckoutRunNoHooks(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, g.Push(ctx, f.clone, types.PushLease{Remote: "origin", Ref: "refs/heads/main", To: id, Expected: base}))
-	require.NoError(t, g.CreateCheckout(ctx, f.clone, filepath.Join(t.TempDir(), "co"), id))
+	require.NoError(t, g.CreateCheckout(ctx, f.clone, filepath.Join(t.TempDir(), "co"), id, ""))
 
 	_, statErr := os.Stat(marker)
 	assert.ErrorIs(t, statErr, os.ErrNotExist, "a hook ran")
@@ -3157,10 +3157,10 @@ func TestCheckoutLifecycle(t *testing.T) {
 	ctx := t.Context()
 	co := filepath.Join(t.TempDir(), "co")
 
-	require.Error(t, g.CreateCheckout(ctx, dir, filepath.Join(dir, "inside"), "HEAD"), "inside root, discovery would index it")
-	require.Error(t, g.CreateCheckout(ctx, dir, "relative", "HEAD"))
-	require.NoError(t, g.CreateCheckout(ctx, dir, co, "HEAD"))
-	require.Error(t, g.CreateCheckout(ctx, dir, co, "HEAD"), "an existing directory is not replaced")
+	require.Error(t, g.CreateCheckout(ctx, dir, filepath.Join(dir, "inside"), "HEAD", ""), "inside root, discovery would index it")
+	require.Error(t, g.CreateCheckout(ctx, dir, "relative", "HEAD", ""))
+	require.NoError(t, g.CreateCheckout(ctx, dir, co, "HEAD", ""))
+	require.Error(t, g.CreateCheckout(ctx, dir, co, "HEAD", ""), "an existing directory is not replaced")
 
 	listed, err := g.Checkouts(ctx, dir)
 	require.NoError(t, err)
@@ -3364,7 +3364,7 @@ func TestCreateCheckoutResolvesSymlinksBeforeRefusingAPathInside(t *testing.T) {
 	link := filepath.Join(t.TempDir(), "link")
 	require.NoError(t, os.Symlink(dir, link))
 
-	err := gitVCS{}.CreateCheckout(t.Context(), dir, filepath.Join(link, "inside"), "HEAD")
+	err := gitVCS{}.CreateCheckout(t.Context(), dir, filepath.Join(link, "inside"), "HEAD", "")
 	require.ErrorContains(t, err, "lies inside")
 }
 
@@ -3406,7 +3406,7 @@ func hostileGitDir(t *testing.T, root, script string) string {
 func TestGitInACheckoutReadsTheRepositoryItWasMadeIn(t *testing.T) {
 	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	co := filepath.Join(t.TempDir(), "co")
-	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD", ""))
 	marker := filepath.Join(t.TempDir(), "ran")
 	evil := hostileGitDir(t, root, markerScript(t, marker))
 	require.NoError(t, os.WriteFile(filepath.Join(co, "a.txt"), []byte("changed\n"), 0o644))
@@ -3452,7 +3452,7 @@ func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			co := filepath.Join(t.TempDir(), "co")
-			require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+			require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD", ""))
 			made, ok := madeCheckout(co)
 			require.True(t, ok)
 			file := tamper(co, made.gitDir)
@@ -3479,7 +3479,7 @@ func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
 	gitRun(t, root, "update-index", "--add", "--cacheinfo", "160000,"+gitTestOutput(t, sub, "rev-parse", "HEAD")+",sub")
 	gitRun(t, root, "commit", "-q", "-m", "sub")
 	co := filepath.Join(t.TempDir(), "co")
-	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD", ""))
 
 	populated := filepath.Join(co, "sub")
 	require.NoError(t, os.Remove(populated))
@@ -3504,7 +3504,7 @@ func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
 func TestRemoveCheckoutIgnoresARewrittenRegistration(t *testing.T) {
 	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	co := filepath.Join(t.TempDir(), "co")
-	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
+	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD", ""))
 	made, ok := madeCheckout(co)
 	require.True(t, ok)
 	victim := t.TempDir()
@@ -3589,7 +3589,7 @@ func TestStartMergeInALinkedCheckoutReportsConflicts(t *testing.T) {
 	dir, revs := mergeFixture(t)
 	g := gitVCS{}
 	co := filepath.Join(t.TempDir(), "co")
-	require.NoError(t, g.CreateCheckout(t.Context(), dir, co, revs["ours"]))
+	require.NoError(t, g.CreateCheckout(t.Context(), dir, co, revs["ours"], ""))
 
 	require.NoError(t, g.StartMerge(t.Context(), co, revs["theirs"], types.Person{}))
 	conflicts, err := g.Conflicts(t.Context(), co)
@@ -3649,7 +3649,7 @@ func buildStack(t *testing.T, root string) (string, error) {
 	}
 	build := func(onto, head string) (string, error) {
 		co := filepath.Join(t.TempDir(), "co")
-		if err := g.CreateCheckout(ctx, root, co, onto); err != nil {
+		if err := g.CreateCheckout(ctx, root, co, onto, ""); err != nil {
 			return "", err
 		}
 		defer func() { assert.NoError(t, g.RemoveCheckout(ctx, root, co)) }()

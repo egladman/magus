@@ -1156,12 +1156,13 @@ type GeneratedPathReporter interface {
 // and fails with a *CheckoutTamperedError once one of them has changed. hg and jj record
 // nothing: a call in their checkouts reads the store the checkout's own files name.
 type CheckoutProvisioner interface {
-	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
-	// absolute, must not exist, and must lie outside root, symlinks resolved, where
-	// discovery would index it as a copy of the workspace (MGS1002). A root that fetches
-	// missing objects on demand (a git partial clone) is refused: a merge in the checkout
-	// can then ask the remote for an object the merge itself wrote.
-	CreateCheckout(ctx context.Context, root, dir, rev string) error
+	// CreateCheckout materializes rev at dir on a new branch named branch, or on none when
+	// branch is empty; a name already taken is refused. dir must be absolute, must not
+	// exist, and must lie outside root, symlinks resolved, where discovery would index it
+	// as a copy of the workspace (MGS1002). A root that fetches missing objects on demand
+	// (a git partial clone) is refused: a merge in the checkout can then ask the remote
+	// for an object the merge itself wrote.
+	CreateCheckout(ctx context.Context, root, dir, rev, branch string) error
 	// RemoveCheckout removes the checkout at dir and its registration, whether or not the
 	// directory still exists. Commits made in it stay in the store. A checkout
 	// CreateCheckout did not make is removed only when that loses nothing: git removes a

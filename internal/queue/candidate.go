@@ -344,7 +344,7 @@ func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit
 			return types.Candidate{}, err
 		}
 	}
-	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
+	if err := v.CreateCheckout(ctx, root, cand.Dir, commit, ""); err != nil {
 		_ = os.RemoveAll(box)
 		return types.Candidate{}, err
 	}

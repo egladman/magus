@@ -205,7 +205,7 @@ func (declines[N]) GeneratedPaths(context.Context, string, string, []string) (ma
 	return nil, decline[N](types.CapGeneratedPathReporter)
 }
 
-func (declines[N]) CreateCheckout(context.Context, string, string, string) error {
+func (declines[N]) CreateCheckout(context.Context, string, string, string, string) error {
 	return decline[N](types.CapCheckoutProvisioner)
 }
 

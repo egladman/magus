@@ -3832,9 +3832,10 @@ func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error)
 	return co, nil
 }
 
-// CreateCheckout implements types.CheckoutProvisioner with a detached linked worktree,
-// locked with CheckoutLockReason, and records it for gitExec.
-func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+// CreateCheckout implements types.CheckoutProvisioner with a linked worktree on a new
+// branch, or detached when branch is empty, locked with CheckoutLockReason, and records
+// it for gitExec.
+func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string) error {
 	if err := checkRequiredRev(rev); err != nil {
 		return err
 	}
@@ -3860,8 +3861,13 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
-	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "add", "--quiet", "--detach",
-		"--lock", "--reason", CheckoutLockReason, "--", dir, rev); err != nil {
+	on := []string{"--detach"}
+	if branch != "" {
+		on = []string{"-b", branch}
+	}
+	args := append([]string{"worktree", "add", "--quiet"}, on...)
+	args = append(args, "--lock", "--reason", CheckoutLockReason, "--", dir, rev)
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, args...); err != nil {
 		return fmt.Errorf("git worktree add %s: %w", dir, err)
 	}
 	co, err := recordCheckout(ctx, root, dir)

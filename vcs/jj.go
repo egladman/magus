@@ -50,16 +50,21 @@ func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 }
 
 // CreateCheckout implements types.CheckoutProvisioner with `jj workspace add`, whose
-// working-copy commit starts empty on rev. The source's .jj records the workspace's
-// directory beside the name it was registered under, which `jj workspace list` omits.
-func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+// working-copy commit starts empty on rev. jj has no current branch to put it on, so the
+// workspace takes branch as its name and `<branch>@` names its working copy. The source's
+// .jj records the workspace's directory beside the name it was registered under, which
+// `jj workspace list` omits.
+func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string) error {
 	if err := checkRequiredRevsetRef(rev); err != nil {
 		return err
 	}
 	if err := checkNewCheckout(root, dir); err != nil {
 		return err
 	}
-	name := "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	name := branch
+	if name == "" {
+		name = "magus-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
 	if err := runVCS(ctx, "jj", root, []string{"workspace", "add", "--name", name, "--revision", rev, "--", dir}); err != nil {
 		return err
 	}

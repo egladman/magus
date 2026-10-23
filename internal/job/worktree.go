@@ -37,7 +37,7 @@ func MirroredBinary(exe, root string) string {
 	return exe
 }
 
-// ForkWorktree makes the checkout a fork of job id names at dir, from the revision
+// ForkWorktree makes the checkout a fork of job id names at dir, on a new branch named id, from the revision
 // checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
 // is placed only in a checkout at the commit it was built at, or at one that differs from it
@@ -112,7 +112,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 			binary = ""
 		}
 	}
-	if err := drv.CreateCheckout(ctx, source, dir, base.ID); err != nil {
+	if err := drv.CreateCheckout(ctx, source, dir, base.ID, id); err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix()}

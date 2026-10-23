@@ -1182,21 +1182,32 @@ func (v hgVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok boo
 	return hgCommitPushed(ctx, "hg", dir, id)
 }
 
-// CreateCheckout implements types.CheckoutProvisioner with `hg share`, updated to rev. A
+// CreateCheckout implements types.CheckoutProvisioner with `hg share`, updated to rev and
+// on an active bookmark named branch, kept in the source's bookmarks so it outlives the
+// share. A
 // share records nothing in its source, so the source's .hg keeps the record Checkouts and
 // RemoveCheckout read.
-func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
+func (v hgVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string) error {
 	if err := checkRequiredRevsetRef(rev); err != nil {
 		return err
 	}
 	if err := checkNewCheckout(root, dir); err != nil {
 		return err
 	}
-	if err := runVCS(ctx, "hg", root, []string{"share", "--config", "extensions.share=", "--noupdate", "--", root, dir}); err != nil {
+	share := []string{"share", "--config", "extensions.share=", "--noupdate"}
+	if branch != "" {
+		share = append(share, "--bookmarks")
+	}
+	if err := runVCS(ctx, "hg", root, append(share, "--", root, dir)); err != nil {
 		return err
 	}
 	if err := runVCS(ctx, "hg", dir, []string{"update", "--clean", "--rev", rev}); err != nil {
 		return errors.Join(err, os.RemoveAll(dir))
+	}
+	if branch != "" {
+		if err := runVCS(ctx, "hg", dir, []string{"bookmark", "--", branch}); err != nil {
+			return errors.Join(err, os.RemoveAll(dir))
+		}
 	}
 	return recordMadeCheckout(ctx, hgMetaDir(root), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir)})
 }

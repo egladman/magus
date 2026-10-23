@@ -42,6 +42,7 @@ func TestForkWorktreeMakesTheJobsCheckoutAtTheForkersRevision(t *testing.T) {
 	wt := *row.Worktree
 	assert.Equal(t, repo.Head(), wt.Base)
 	assert.FileExists(t, filepath.Join(wt.Root, "a.txt"), "the checkout holds the revision it was made at")
+	assert.Equal(t, "w1", repo.Git("-C", wt.Root, "symbolic-ref", "--short", "HEAD"), "the job commits on a branch named after it")
 	assert.Empty(t, wt.Binary)
 	assert.NoFileExists(t, filepath.Join(wt.Root, "magus"), "a forker running magus from PATH places none")
 
@@ -251,6 +252,7 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	dirty := forkInto(t, s, "dirty", "")
 	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
 	stranded := forkInto(t, s, "stranded", "")
+	repo.Git("-C", stranded.Worktree.Root, "switch", "-q", "--detach")
 	repo.Git("-C", stranded.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "local")
 	for _, id := range []string{"dirty", "stranded"} {
 		_, err := Exit(ctx, s, id, nil, nil)
