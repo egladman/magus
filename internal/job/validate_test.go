@@ -310,11 +310,13 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 		return row, notes.String()
 	}
 
-	row, note := resolve(declare("cli/registry.go"))
+	row, note := resolve(declare("docs/notes.md", "cli/registry.go"))
 	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
-	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true}, row.Goals[i].Check)
+	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
+		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
 	assert.Contains(t, note, `added the goal "lint"`)
+	assert.Contains(t, note, "magus run lint . --no-default-charms -- cli/registry.go docs/notes.md")
 
 	row, note = resolve(func(u *types.Job) {
 		declare("cli/registry.go")(u)
@@ -326,6 +328,15 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 	row, note = resolve(declare("docs/notes.md"))
 	assert.Empty(t, row.Goals, "no Go source, no lint goal")
 	assert.Empty(t, note)
+}
+
+func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {
+	t.Parallel()
+
+	files := []string{"cli/a.go", "libs/x/b.go", "libs/xy/c.go"}
+	assert.Equal(t, files, filesIn(".", files), "the root lints every written file")
+	assert.Equal(t, []string{"b.go"}, filesIn("libs/x", files), "relative to the project, and never a sibling sharing its prefix")
+	assert.Empty(t, filesIn("libs/z", files))
 }
 
 func TestAmbiguousSymbolProblemsRefuseAnUnresolvedGoalOnAnExistingSymbol(t *testing.T) {

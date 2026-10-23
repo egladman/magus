@@ -382,7 +382,10 @@ export fun pick(all: [Rule], sel: Selection) > [Rule] !> any {
     return picked;
 }
 
-// at keeps the findings located at one of paths, or every finding when paths is empty.
+// at keeps the findings located at one of paths, or every finding when paths is empty. A
+// finding at a directory holding one of paths is kept too: it is a whole project's verdict,
+// such as an index too stale to judge any of its files, and dropping it would pass them
+// unjudged.
 export fun at(found: [Finding], paths: [str]) > [Finding] {
     if (paths.len() == 0) {
         return found;
@@ -391,7 +394,7 @@ export fun at(found: [Finding], paths: [str]) > [Finding] {
     foreach (f in found) {
         var named = false;
         foreach (p in paths) {
-            named = named or f.path == p;
+            named = named or f.path == p or f.path == "." or p.startsWith(f.path + "/");
         }
         if (named) {
             kept.append(f);
@@ -496,6 +499,20 @@ test "with paths, only the findings at them are reported" {
     final kept = at(found, paths: ["b.lock", "c.lock"]);
     assert\equal(kept.len(), want: 1, message: "one named");
     assert\equal(kept[0].path, want: "b.lock", message: "the named file");
+}
+
+test "a job's write paths fail its lint only on a finding inside them" {
+    final rule = Rule{ name = "every", reads = ["*.lock"],
+        check = fun (files: [Path]) > [Finding] !> any => files.map(fun (i: int, f: Path) > Finding => Finding{ path = f.value, message = "m" }) };
+    final found = run([rule], files: ["mine.lock", "theirs.lock"]);
+    assert\equal(at(found, paths: ["mine.lock"]).len(), want: 1, message: "the finding in the write path fails it");
+    assert\equal(at(found, paths: ["other.lock"]).len(), want: 0, message: "a finding outside the write paths does not");
+}
+
+test "a project's verdict holds every path inside it, and no path outside it" {
+    final found = [Finding{ path = "libs/x", message = "index stale" }, Finding{ path = ".", message = "no index" }];
+    assert\equal(at(found, paths: ["libs/x/a.go"]).len(), want: 2, message: "both projects hold it");
+    assert\equal(at(found, paths: ["libs/xy/a.go"]).len(), want: 1, message: "a sibling sharing the prefix is outside libs/x");
 }
 
 test "render names the position, message, rule and indented fix" {

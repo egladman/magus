@@ -145,22 +145,44 @@ func waiveBut(ps types.JobProblems, waivers []types.JobWaiver) (kept, waived typ
 // lintGoals is a lint goal per project whose lint reads Go source the row writes and which
 // nothing runs: a worker checking only go-test leaves lint findings for the integrator.
 // The goal skips default charms so lint reports instead of rewriting the worker's tree.
+//
+// The goal passes the written files after `--`, relative to the goal's project, so lint
+// judges only them: a finding in a file the worker may not write is not the worker's to
+// meet, and full lint belongs to integration. Files rather than the write paths' globs,
+// because a check's args are matched verbatim and a shell expands a glob the worker pastes.
 func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
 		return nil
 	}
-	if !slices.ContainsFunc(writtenFiles(root, row), func(f string) bool { return path.Ext(f) == ".go" }) {
+	written := writtenFiles(root, row)
+	if !slices.ContainsFunc(written, func(f string) bool { return path.Ext(f) == ".go" }) {
 		return nil
 	}
+	slices.Sort(written)
 	var goals []types.Goal
 	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
 		if g.Target == lintTarget {
 			goal := g.Goal
 			goal.Check.NoDefaultCharms = true
+			goal.Check.Args = filesIn(g.Project, written)
 			goals = append(goals, goal)
 		}
 	}
 	return goals
+}
+
+// filesIn is the files under project, relative to it. The root project holds every file.
+func filesIn(project string, files []string) []string {
+	if project == "." {
+		return slices.Clone(files)
+	}
+	var in []string
+	for _, f := range files {
+		if rel, ok := strings.CutPrefix(f, project+"/"); ok {
+			in = append(in, rel)
+		}
+	}
+	return in
 }
 
 // ExtendFootprint is the write paths row's change reaches that it did not declare, and a
