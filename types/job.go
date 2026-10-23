@@ -1181,11 +1181,11 @@ func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 // JobClaim is one write path a holder added with a proof. Proof is the sentence the
 // store found it true by, At unix seconds and By who wrote it.
 type JobClaim struct {
-	Path     string           `json:"path"     yaml:"path"`
+	Path     string        `json:"path"     yaml:"path"`
 	Evidence ClaimEvidence `json:"evidence" yaml:"evidence"`
-	Proof    string           `json:"proof"    yaml:"proof"`
-	At       int64            `json:"at"       yaml:"at"`
-	By       Origin           `json:"by"       yaml:"by"`
+	Proof    string        `json:"proof"    yaml:"proof"`
+	At       int64         `json:"at"       yaml:"at"`
+	By       Origin        `json:"by"       yaml:"by"`
 }
 
 // FoldLegacyNames moves a field declared under its old name onto the one that carries it,
