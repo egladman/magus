@@ -656,6 +656,7 @@ export object ConformanceItem {
     id: str = "",
     source: str = "",
     measure: int = 0,
+    home: str = "",
 }
 
 export object ConformanceRow {
