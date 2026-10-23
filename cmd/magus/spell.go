@@ -549,7 +549,7 @@ func lockRegistryClient(spells config.SpellsConfig) func(context.Context, string
 		if err != nil {
 			return nil, err
 		}
-		c.Username, c.Password = user, pass.Reveal()
+		c.Credentials = oci.Credentials{Username: user, Password: pass}
 		return c, nil
 	}
 }
@@ -567,8 +567,7 @@ func pullSpell(ctx context.Context, client *oci.Client, ref oci.Reference, cache
 	dir, err := remotespell.Resolve(ctx, remotespell.Ref{Import: pinned.String(), OCI: pinned}, remotespell.Options{
 		CacheRoot: cacheRoot,
 		Client:    client.HTTP,
-		Username:  client.Username,
-		Password:  client.Password,
+		Credentials: client.Credentials,
 	})
 	if err != nil {
 		return spellPullResult{}, err
@@ -705,7 +704,7 @@ func registryClient(ctx context.Context, root, host, username string) (*oci.Clie
 		if err != nil {
 			return nil, err
 		}
-		c.Username, c.Password = username, pass
+		c.Credentials = oci.Credentials{Username: username, Password: secret.NewValue(pass)}
 		return c, nil
 	}
 	if _, ok := globalCfg.Spells.Registry(host); !ok {
@@ -722,7 +721,7 @@ func registryClient(ctx context.Context, root, host, username string) (*oci.Clie
 	if err != nil {
 		return nil, err
 	}
-	c.Username, c.Password = user, pass.Reveal()
+	c.Credentials = oci.Credentials{Username: user, Password: pass}
 	return c, nil
 }
 

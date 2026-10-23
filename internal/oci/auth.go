@@ -36,8 +36,8 @@ type tokenKey struct {
 // back with a token it hands to anybody. So "no credentials" is not "no token".
 //
 // The challenge is cached per registry and each token per (realm, service, scope), so
-// a push that uploads several blobs asks once. A cached token is not refreshed when it
-// expires; a Client is meant to live for one command.
+// a push that uploads several blobs asks once. An expired token is dropped by forget when
+// a request answers 401.
 func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (string, error) {
 	ch, err := c.challenge(ctx, ref.Registry)
 	if err != nil {
@@ -47,10 +47,10 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 	case "":
 		return "", nil
 	case "basic":
-		if c.Username == "" && c.Password == "" {
+		if c.Credentials.isZero() {
 			return "", fmt.Errorf("oci: %s asks for Basic credentials and none are configured", ref.Registry)
 		}
-		return "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Username, c.Password))), nil
+		return "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", c.Credentials.Username, c.Credentials.Password.Reveal()))), nil
 	}
 	key := tokenKey{realm: ch.realm, service: ch.service, scope: fmt.Sprintf("repository:%s:%s", ref.Repository, actions)}
 	c.mu.Lock()
@@ -73,6 +73,23 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 	return auth, nil
 }
 
+// forget drops the cached bearer token that auth names and reports whether a retry can
+// help: only a bearer token can be refreshed. A token already replaced by another request
+// is left in place.
+func (c *Client) forget(ref Reference, actions, auth string) bool {
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, cached := range c.tokens {
+		if cached == auth && key.scope == "repository:"+ref.Repository+":"+actions {
+			delete(c.tokens, key)
+		}
+	}
+	return true
+}
+
 // challenge pings host's /v2/ without credentials and reads what it asks for.
 func (c *Client) challenge(ctx context.Context, host string) (challenge, error) {
 	c.mu.Lock()
@@ -85,7 +102,7 @@ func (c *Client) challenge(ctx context.Context, host string) (challenge, error) 
 	if err != nil {
 		return challenge{}, err
 	}
-	resp, err := c.http().Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return challenge{}, fmt.Errorf("oci: reach %s: %w", host, err)
 	}
@@ -185,10 +202,10 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if c.Username != "" || c.Password != "" {
-		req.SetBasicAuth(c.Username, c.Password)
+	if !c.Credentials.isZero() {
+		req.SetBasicAuth(c.Credentials.Username, c.Credentials.Password.Reveal())
 	}
-	resp, err := c.http().Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return "", err
 	}

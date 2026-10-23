@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
 )
@@ -666,38 +667,7 @@ func (o httpOpts) client(r httpRetry) *http.Client {
 	return retry.NewHTTPClient(redirectGuardClient, ropts...)
 }
 
-const maxHTTPRedirects = 10
-
-var redirectGuardClient = &http.Client{CheckRedirect: guardRedirect}
-
-// guardRedirect covers what Go leaves: it strips only Authorization and Cookie, and a
-// caller may carry its credential in any header.
-func guardRedirect(next *http.Request, via []*http.Request) error {
-	if len(via) >= maxHTTPRedirects {
-		return fmt.Errorf("stopped after %d redirects", maxHTTPRedirects)
-	}
-	if via[len(via)-1].URL.Scheme == "https" && next.URL.Scheme != "https" {
-		return fmt.Errorf("refused a redirect from https to %s", next.URL.Redacted())
-	}
-	if next.URL.Host != via[0].URL.Host {
-		for name := range next.Header {
-			if isCredentialHeader(name) {
-				next.Header.Del(name)
-			}
-		}
-	}
-	return nil
-}
-
-func isCredentialHeader(name string) bool {
-	lower := strings.ToLower(name)
-	for _, word := range []string{"authorization", "cookie", "token", "secret", "key", "auth", "password", "credential"} {
-		if strings.Contains(lower, word) {
-			return true
-		}
-	}
-	return false
-}
+var redirectGuardClient = &http.Client{CheckRedirect: httpx.GuardRedirect}
 
 // shouldRetry is the retry policy derived from the curl-style options. Exactly
 // one of resp/err is non-nil. Transport errors retry on timeouts (and, when

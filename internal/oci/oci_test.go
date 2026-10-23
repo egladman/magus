@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -105,10 +106,43 @@ type inMemoryRegistry struct {
 	pageSize int
 	// link, when set, replaces the Link header tags/list would send.
 	link string
+
+	// requests counts every request the registry received.
+	requests int
+	// types holds the Content-Type each manifest was pushed with, by tag and digest.
+	types map[string]string
+	// accept records the Accept header of each manifest GET.
+	accept []string
+	// blobAuth records the Authorization header of each blob GET.
+	blobAuth []string
+	// enforceAuth makes manifest and blob requests need a token issued by /token and not
+	// since expired.
+	enforceAuth bool
+	valid       map[string]bool
+	issued      int
+	// rejectTokens makes /token issue tokens the registry then refuses.
+	rejectTokens bool
+	// blobRedirect, when set, answers a blob GET with a 307 to this base URL.
+	blobRedirect string
+	// uploadLocation, when set, replaces the upload session's Location.
+	uploadLocation string
+	// dockerDigest, when set, supplies the Docker-Content-Digest of a manifest PUT.
+	dockerDigest func(body []byte) string
+}
+
+// expire invalidates every token issued so far.
+func (r *inMemoryRegistry) expire() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.valid = map[string]bool{}
+}
+
+func (r *inMemoryRegistry) authorized(req *http.Request) bool {
+	return !r.enforceAuth || r.valid[strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")]
 }
 
 func newInMemoryRegistry(t *testing.T) *inMemoryRegistry {
-	r := &inMemoryRegistry{blobs: map[string][]byte{}, tags: map[string][]byte{}}
+	r := &inMemoryRegistry{blobs: map[string][]byte{}, tags: map[string][]byte{}, types: map[string]string{}, valid: map[string]bool{}}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(r.serve))
 	t.Cleanup(r.srv.Close)
 	return r
@@ -123,6 +157,7 @@ func (r *inMemoryRegistry) ref(repo, tag string) Reference {
 func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.requests++
 	p := req.URL.Path
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
@@ -139,19 +174,38 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
 		r.tokenAuth = append(r.tokenAuth, req.Header.Get("Authorization"))
-		_, _ = w.Write([]byte(`{"token":"issued"}`))
+		r.issued++
+		tok := fmt.Sprintf("issued-%d", r.issued)
+		r.valid[tok] = !r.rejectTokens
+		_, _ = w.Write([]byte(`{"token":"` + tok + `"}`))
 	case strings.HasPrefix(p, "/upload/"):
-		body, _ := io.ReadAll(req.Body)
-		r.blobs[req.URL.Query().Get("digest")] = body
+		body, err := io.ReadAll(req.Body)
+		want := req.URL.Query().Get("digest")
+		if err != nil || digest.FromBytes(body).String() != want {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		r.blobs[want] = body
 		w.WriteHeader(http.StatusCreated)
 	// Before the /blobs/ case, which its path also matches.
 	case strings.HasSuffix(p, "/blobs/uploads/"):
 		r.uploads++
-		w.Header().Set("Location", "/upload/1")
+		location := "/upload/1"
+		if r.uploadLocation != "" {
+			location = r.uploadLocation
+		}
+		w.Header().Set("Location", location)
 		w.WriteHeader(http.StatusAccepted)
 	case strings.HasSuffix(p, "/tags/list"):
 		r.serveTags(w, req)
 	case strings.Contains(p, "/blobs/"):
+		if !r.authorized(req) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if req.Method == http.MethodGet {
+			r.blobAuth = append(r.blobAuth, req.Header.Get("Authorization"))
+		}
 		b, ok := r.blobs[last]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -160,21 +214,39 @@ func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodHead {
 			return
 		}
+		if r.blobRedirect != "" {
+			w.Header().Set("Location", r.blobRedirect+"/"+last)
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		}
 		_, _ = w.Write(b)
 	case strings.Contains(p, "/manifests/"):
 		r.manifestAuth = append(r.manifestAuth, req.Header.Get("Authorization"))
+		if !r.authorized(req) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		if req.Method == http.MethodPut {
 			body, _ := io.ReadAll(req.Body)
+			d := digest.FromBytes(body).String()
 			r.tags[last] = body
 			// A registry also serves a manifest by its digest.
-			r.tags[digest.FromBytes(body).String()] = body
+			r.tags[d] = body
+			r.types[last], r.types[d] = req.Header.Get("Content-Type"), req.Header.Get("Content-Type")
+			if r.dockerDigest != nil {
+				w.Header().Set("Docker-Content-Digest", r.dockerDigest(body))
+			}
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
+		r.accept = append(r.accept, req.Header.Get("Accept"))
 		b, ok := r.tags[last]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+		if ct := r.types[last]; ct != "" {
+			w.Header().Set("Content-Type", ct)
 		}
 		_, _ = w.Write(b)
 	default:
@@ -454,7 +526,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	require.NoError(t, err)
 
 	authed := reg.client()
-	authed.Username, authed.Password = "bot", "s3cret-token"
+	authed.Credentials = Credentials{Username: "bot", Password: secret.NewValue("s3cret-token")}
 	_, err = authed.Artifact(t.Context(), reg.ref("team/graph", "v1"), testArtifactType)
 	require.NoError(t, err)
 	_, err = authed.Tags(t.Context(), reg.ref("team/graph", ""))
@@ -536,7 +608,7 @@ func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
 	reg.basicOnly = true
 	reg.mu.Unlock()
 	c := reg.client()
-	c.Username, c.Password = "bot", "s3cret-token"
+	c.Credentials = Credentials{Username: "bot", Password: secret.NewValue("s3cret-token")}
 
 	ref := reg.ref("team/x", "v1")
 	_, err := c.Push(t.Context(), ref, testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))

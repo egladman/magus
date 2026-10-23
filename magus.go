@@ -484,7 +484,7 @@ func (m *Magus) spellRegistryClient(ctx context.Context, host string) (*oci.Clie
 	if err != nil {
 		return nil, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
-	c.Username, c.Password = entry.Username, pass.Reveal()
+	c.Credentials = oci.Credentials{Username: entry.Username, Password: pass}
 	return c, nil
 }
 

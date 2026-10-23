@@ -687,14 +687,3 @@ func TestHTTPRedirectKeepsHeadersOnTheSameHost(t *testing.T) {
 	assert.Equal(t, "k", seen.Get("X-Api-Key"))
 }
 
-func TestGuardRedirectRefusesHTTPSToHTTP(t *testing.T) {
-	t.Parallel()
-	secure, err := http.NewRequest(http.MethodGet, "https://a.example/x", nil)
-	require.NoError(t, err)
-	plain, err := http.NewRequest(http.MethodGet, "http://a.example/x", nil)
-	require.NoError(t, err)
-
-	require.Error(t, guardRedirect(plain, []*http.Request{secure}))
-	require.NoError(t, guardRedirect(secure, []*http.Request{plain}))
-	require.NoError(t, guardRedirect(plain, []*http.Request{plain}))
-}

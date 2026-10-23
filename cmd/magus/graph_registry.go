@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -169,9 +170,8 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 		return fmt.Errorf("graph push: %w", err)
 	}
 	client := &oci.Client{
-		HTTP:     &http.Client{Timeout: graphRegistryTimeout},
-		Username: user,
-		Password: pass,
+		HTTP:        &http.Client{Timeout: graphRegistryTimeout},
+		Credentials: oci.Credentials{Username: user, Password: secret.NewValue(pass)},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
@@ -347,7 +347,7 @@ func tablePush(ctx context.Context, repo, user string) error {
 	if err != nil {
 		return fmt.Errorf("graph push -table: %w", err)
 	}
-	client := &oci.Client{HTTP: registryHTTP(), Username: user, Password: pass}
+	client := &oci.Client{HTTP: registryHTTP(), Credentials: oci.Credentials{Username: user, Password: secret.NewValue(pass)}}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	pushed, err := embedtable.Publish(ctx, client, dest, path)

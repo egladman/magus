@@ -32,12 +32,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -163,33 +166,88 @@ func (r Reference) manifestRef() string {
 // Client talks to registries. The zero value is usable and pulls anonymously. It is
 // safe for concurrent use, and must not be copied after first use.
 type Client struct {
-	// HTTP is the transport; nil means http.DefaultClient.
+	// HTTP is the transport; nil means a default client. Either way redirects follow
+	// httpx.GuardRedirect unless HTTP sets its own CheckRedirect.
 	HTTP *http.Client
-	// Username and Password authenticate every request, pull included, so a private
-	// repository reads the same way it is written. Both empty is the anonymous path,
-	// which is all a reader of a public repository needs. Password is never formatted
-	// into an error.
-	Username string
-	Password string
+	// Credentials authenticate every request, pull included, so a private repository
+	// reads the same way it is written. The zero value is the anonymous path, which is
+	// all a reader of a public repository needs.
+	Credentials Credentials
 
 	mu         sync.Mutex
 	challenges map[string]challenge // by registry host
 	tokens     map[tokenKey]string  // Authorization values by (realm, service, scope)
 }
 
+// Credentials is a registry login. The password is a secret.Value, revealed only where
+// the Authorization header or the token request is built.
+type Credentials struct {
+	Username string
+	Password secret.Value
+}
+
+func (c Credentials) isZero() bool { return c.Username == "" && c.Password.IsZero() }
+
+var defaultHTTP = &http.Client{CheckRedirect: httpx.GuardRedirect}
+
 func (c *Client) http() *http.Client {
-	if c.HTTP != nil {
+	if c.HTTP == nil {
+		return defaultHTTP
+	}
+	if c.HTTP.CheckRedirect != nil {
 		return c.HTTP
 	}
-	return http.DefaultClient
+	guarded := *c.HTTP
+	guarded.CheckRedirect = httpx.GuardRedirect
+	return &guarded
+}
+
+// offline repeats config.Offline: internal/config imports this package, so this one
+// cannot import it back. Keep the two in step.
+func offline() bool {
+	v := os.Getenv("MAGUS_OFFLINE")
+	return v != "" && v != "0" && v != "false"
+}
+
+// do sends req through the client. Every request this package makes goes through here,
+// so the offline check precedes all of them.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if offline() {
+		return nil, fmt.Errorf("oci %s %s: MAGUS_OFFLINE is set, so no request is sent", req.Method, req.URL.Redacted())
+	}
+	return c.http().Do(req)
+}
+
+// send builds and sends one request authorized for actions on ref's repository. A 401
+// that follows a cached bearer token means the token expired, so it is dropped and the
+// request is sent once more with a fresh one.
+func (c *Client) send(ctx context.Context, ref Reference, actions string, build func(auth string) (*http.Request, error)) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		auth, err := c.authorize(ctx, ref, actions)
+		if err != nil {
+			return nil, err
+		}
+		req, err := build(auth)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 && c.forget(ref, actions, auth) {
+			resp.Body.Close()
+			continue
+		}
+		return resp, nil
+	}
 }
 
 // Artifact is one pull in progress: the manifest, plus the token that fetched it. A
 // reader that wants several layers holds one of these, so neither the token exchange nor
 // the manifest GET is repeated per layer.
 //
-// It is NOT safe for concurrent use. Nothing here mutates, but the token expires, and a
-// handle that outlives its lifetime returns 401 on the next Blob rather than refreshing.
+// It is NOT safe for concurrent use.
 type Artifact struct {
 	// Manifest is the fetched manifest, exposed so a caller can walk descriptors that
 	// Layer's title lookup does not reach.
@@ -200,7 +258,6 @@ type Artifact struct {
 
 	client *Client
 	ref    Reference
-	auth   string
 }
 
 // ErrLayerMiss reports that the manifest carries no layer with the requested title. A
@@ -216,18 +273,14 @@ var ErrLayerMiss = errors.New("oci: no layer with that title")
 // and mean something entirely different, and the artifact type is the only field that
 // says what the blob was meant to be.
 func (c *Client) Artifact(ctx context.Context, ref Reference, wantArtifactType string) (*Artifact, error) {
-	auth, err := c.authorize(ctx, ref, "pull")
-	if err != nil {
-		return nil, err
-	}
-	m, raw, err := c.manifest(ctx, ref, auth)
+	m, raw, err := c.manifest(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	if wantArtifactType != "" && m.ArtifactType != wantArtifactType {
 		return nil, fmt.Errorf("oci: %s carries artifactType %q, wanted %q", ref, m.ArtifactType, wantArtifactType)
 	}
-	return &Artifact{Manifest: m, Raw: raw, client: c, ref: ref, auth: auth}, nil
+	return &Artifact{Manifest: m, Raw: raw, client: c, ref: ref}, nil
 }
 
 // ErrManifestDigest reports a manifest fetched by digest whose bytes hash to something
@@ -269,7 +322,7 @@ func (a *Artifact) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, e
 	if err := desc.Digest.Validate(); err != nil {
 		return nil, fmt.Errorf("oci: %s names an unusable layer digest %q: %w", a.ref, desc.Digest, err)
 	}
-	blob, err := a.client.blob(ctx, a.ref, a.auth, desc)
+	blob, err := a.client.blob(ctx, a.ref, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -285,13 +338,15 @@ func (a *Artifact) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, e
 	return blob, nil
 }
 
-func (c *Client) manifest(ctx context.Context, ref Reference, auth string) (ocispec.Manifest, []byte, error) {
-	req, err := c.newGetRequest(ctx, ref, auth, "/manifests/"+ref.manifestRef())
-	if err != nil {
-		return ocispec.Manifest{}, nil, err
-	}
-	req.Header.Set("Accept", ocispec.MediaTypeImageManifest)
-	resp, err := c.http().Do(req)
+func (c *Client) manifest(ctx context.Context, ref Reference) (ocispec.Manifest, []byte, error) {
+	resp, err := c.send(ctx, ref, "pull", func(auth string) (*http.Request, error) {
+		req, err := c.newGetRequest(ctx, ref, auth, "/manifests/"+ref.manifestRef())
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", ocispec.MediaTypeImageManifest)
+		return req, nil
+	})
 	if err != nil {
 		return ocispec.Manifest{}, nil, fmt.Errorf("oci: fetch %s: %w", ref, err)
 	}
@@ -324,12 +379,10 @@ func (c *Client) manifest(ctx context.Context, ref Reference, auth string) (ocis
 // blob fetches one layer, bounded by the size its own descriptor declares. The bound is
 // free (the manifest already stated it) and without it a registry answering a small
 // descriptor with an endless body reads until the process dies.
-func (c *Client) blob(ctx context.Context, ref Reference, auth string, want ocispec.Descriptor) ([]byte, error) {
-	req, err := c.newGetRequest(ctx, ref, auth, "/blobs/"+want.Digest.String())
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http().Do(req)
+func (c *Client) blob(ctx context.Context, ref Reference, want ocispec.Descriptor) ([]byte, error) {
+	resp, err := c.send(ctx, ref, "pull", func(auth string) (*http.Request, error) {
+		return c.newGetRequest(ctx, ref, auth, "/blobs/"+want.Digest.String())
+	})
 	if err != nil {
 		return nil, fmt.Errorf("oci: fetch %s blob: %w", ref, err)
 	}
@@ -444,22 +497,18 @@ func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreT
 	if err != nil {
 		return "", fmt.Errorf("push %s: %w", ref, err)
 	}
-	auth, err := c.authorize(ctx, ref, "push,pull")
-	if err != nil {
-		return "", err
-	}
 	// The empty config blob must exist before a manifest may reference it, even though
 	// every artifact in every repository shares the same two bytes.
-	if err := c.putBlob(ctx, ref, auth, emptyConfigPayload); err != nil {
+	if err := c.putBlob(ctx, ref, emptyConfigPayload); err != nil {
 		return "", err
 	}
 	for _, l := range content.Layers {
-		if err := c.putBlob(ctx, ref, auth, l.Payload); err != nil {
+		if err := c.putBlob(ctx, ref, l.Payload); err != nil {
 			return "", err
 		}
 	}
 	for _, tag := range tags {
-		if err := c.putManifest(ctx, ref, auth, tag, raw); err != nil {
+		if _, err := c.putManifest(ctx, ref, tag, ocispec.MediaTypeImageManifest, raw); err != nil {
 			return "", err
 		}
 	}
@@ -470,10 +519,6 @@ func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreT
 // pagination to the end. A next page on another host is refused, since the request
 // carries this repository's bearer token.
 func (c *Client) Tags(ctx context.Context, repo Reference) ([]string, error) {
-	auth, err := c.authorize(ctx, repo, "pull")
-	if err != nil {
-		return nil, err
-	}
 	next, err := url.Parse(c.base(repo) + "/tags/list")
 	if err != nil {
 		return nil, err
@@ -485,7 +530,7 @@ func (c *Client) Tags(ctx context.Context, repo Reference) ([]string, error) {
 			return nil, fmt.Errorf("oci: list %s: the registry paginated back to %s", repo, next)
 		}
 		seen[next.String()] = true
-		page, link, err := c.tagPage(ctx, repo, auth, next)
+		page, link, err := c.tagPage(ctx, repo, next)
 		if err != nil {
 			return nil, err
 		}
@@ -501,13 +546,15 @@ func (c *Client) Tags(ctx context.Context, repo Reference) ([]string, error) {
 	}
 }
 
-func (c *Client) tagPage(ctx context.Context, repo Reference, auth string, u *url.URL) ([]string, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, "", err
-	}
-	setAuth(req, auth)
-	resp, err := c.http().Do(req)
+func (c *Client) tagPage(ctx context.Context, repo Reference, u *url.URL) ([]string, string, error) {
+	resp, err := c.send(ctx, repo, "pull", func(auth string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+		setAuth(req, auth)
+		return req, nil
+	})
 	if err != nil {
 		return nil, "", fmt.Errorf("oci: list %s: %w", repo, err)
 	}
@@ -552,99 +599,60 @@ func nextPage(page *url.URL, link string) (next *url.URL, more bool, err error) 
 // putBlob uploads one blob through the two-step upload the v2 API defines: ask for a
 // session, then PUT the bytes with the digest. A blob the registry already holds is
 // skipped, which is what makes re-publishing an unchanged graph nearly free.
-func (c *Client) putBlob(ctx context.Context, ref Reference, auth string, payload []byte) error {
-	d := digest.FromBytes(payload)
-	have, err := c.blobExists(ctx, ref, auth, d)
-	if err != nil {
-		return err
-	}
-	if have {
-		return nil
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base(ref)+"/blobs/uploads/", nil)
-	if err != nil {
-		return err
-	}
-	setAuth(req, auth)
-	resp, err := c.http().Do(req)
-	if err != nil {
-		return fmt.Errorf("oci: start upload to %s: %w", ref.Repository, err)
-	}
-	// Closed AFTER the status check, not before: statusLine reads the body for whatever
-	// the registry said, and closing first discards the explanation of the very first
-	// error a misconfigured push hits.
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("oci: start upload to %s: %s", ref.Repository, statusLine(resp))
-	}
-	location := resp.Header.Get("Location")
-	if location == "" {
-		return fmt.Errorf("oci: start upload to %s: the registry returned no upload location", ref.Repository)
-	}
-
-	// The location may be absolute or registry-relative, and it may already carry a query.
-	upload, err := url.Parse(location)
-	if err != nil {
-		return fmt.Errorf("oci: upload location %q: %w", location, err)
-	}
-	if !upload.IsAbs() {
-		upload.Scheme, upload.Host = "https", ref.Registry
-	}
-	q := upload.Query()
-	q.Set("digest", d.String())
-	upload.RawQuery = q.Encode()
-
-	put, err := http.NewRequestWithContext(ctx, http.MethodPut, upload.String(), bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
-	setAuth(put, auth)
-	put.Header.Set("Content-Type", "application/octet-stream")
-	put.ContentLength = int64(len(payload))
-	done, err := c.http().Do(put)
-	if err != nil {
-		return fmt.Errorf("oci: upload %s: %w", d, err)
-	}
-	defer done.Body.Close()
-	if done.StatusCode != http.StatusCreated {
-		return fmt.Errorf("oci: upload %s: %s", d, statusLine(done))
-	}
-	return nil
+func (c *Client) putBlob(ctx context.Context, ref Reference, payload []byte) error {
+	d := ocispec.Descriptor{Digest: digest.FromBytes(payload), Size: int64(len(payload))}
+	return c.pushBlob(ctx, ref, d, bytes.NewReader(payload))
 }
 
-func (c *Client) blobExists(ctx context.Context, ref Reference, auth string, d digest.Digest) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, fmt.Sprintf("%s/blobs/%s", c.base(ref), d.String()), nil)
-	if err != nil {
-		return false, err
-	}
-	setAuth(req, auth)
-	resp, err := c.http().Do(req)
+func (c *Client) blobExists(ctx context.Context, ref Reference, actions string, d digest.Digest) (bool, error) {
+	resp, err := c.send(ctx, ref, actions, func(auth string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodHead, fmt.Sprintf("%s/blobs/%s", c.base(ref), d.String()), nil)
+		if err != nil {
+			return nil, err
+		}
+		setAuth(req, auth)
+		return req, nil
+	})
 	if err != nil {
 		return false, fmt.Errorf("oci: probe %s: %w", d, err)
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK, nil
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+	return false, fmt.Errorf("oci: probe %s: %s", d, statusLine(resp))
 }
 
-func (c *Client) putManifest(ctx context.Context, ref Reference, auth, tag string, body []byte) error {
+// putManifest PUTs body under reference (a tag or a digest) and returns the digest the
+// registry confirmed: its Docker-Content-Digest header when it sends one, which must
+// match the digest of body, else the computed one.
+func (c *Client) putManifest(ctx context.Context, ref Reference, reference, mediaType string, body []byte) (digest.Digest, error) {
 	dest := ref
-	dest.Tag = tag
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/manifests/%s", c.base(ref), tag), bytes.NewReader(body))
+	dest.Tag = reference
+	resp, err := c.send(ctx, ref, "push,pull", func(auth string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/manifests/%s", c.base(ref), reference), bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		setAuth(req, auth)
+		req.Header.Set("Content-Type", mediaType)
+		return req, nil
+	})
 	if err != nil {
-		return err
-	}
-	setAuth(req, auth)
-	req.Header.Set("Content-Type", ocispec.MediaTypeImageManifest)
-	resp, err := c.http().Do(req)
-	if err != nil {
-		return fmt.Errorf("oci: tag %s: %w", dest, err)
+		return "", fmt.Errorf("oci: tag %s: %w", dest, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("oci: tag %s: %s", dest, statusLine(resp))
+		return "", fmt.Errorf("oci: tag %s: %s", dest, statusLine(resp))
 	}
-	return nil
+	want := digest.FromBytes(body)
+	if got := resp.Header.Get("Docker-Content-Digest"); got != "" && got != want.String() {
+		return "", fmt.Errorf("oci: tag %s: the registry confirmed %s, the manifest is %s", dest, got, want)
+	}
+	return want, nil
 }
 
 // statusLine renders a failed response for a human: the status plus whatever the registry

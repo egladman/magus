@@ -373,7 +373,7 @@ func relockOne(ctx context.Context, path, tag string, opts LoadOptions) (LockEnt
 	if err != nil {
 		return LockEntry{}, err
 	}
-	if _, err := Resolve(ctx, ref, Options{CacheRoot: opts.CacheRoot, Client: c.HTTP, Username: c.Username, Password: c.Password}); err != nil {
+	if _, err := Resolve(ctx, ref, Options{CacheRoot: opts.CacheRoot, Client: c.HTTP, Credentials: c.Credentials}); err != nil {
 		return LockEntry{}, err
 	}
 	return LockEntry{Tag: tag, Digest: pinned.Digest}, nil
