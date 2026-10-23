@@ -42,9 +42,9 @@ func notesCmd(ctx context.Context, root string, args []string) error {
 	}
 	switch args[0] {
 	case "ls":
-		return notesList(root, args[1:])
+		return notesList(ctx, root, args[1:])
 	case "get":
-		return notesGet(root, args[1:])
+		return notesGet(ctx, root, args[1:])
 	case "edit":
 		return notesEdit(ctx, root, args[1:])
 	case "verify":
@@ -262,11 +262,13 @@ type notesListOutput struct {
 	Issues []store.Issue      `json:"issues"`
 }
 
-func notesList(root string, args []string) error {
+func notesList(ctx context.Context, root string, args []string) error {
 	var onlyShared, onlyPrivate, reproducible *bool
+	var tags tagList
 	_, err := cmdParse("notes ls", args, func(fs *flag.FlagSet) {
 		onlyShared, onlyPrivate = notesScopeFlags(fs)
 		reproducible = fs.Bool("reproducible", false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+		fs.Var(&tags, "tag", "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -301,6 +303,9 @@ func notesList(root string, args []string) error {
 			return err
 		}
 		for _, n := range ns {
+			if !n.HasTags(tags) {
+				continue
+			}
 			found = append(found, scopedNote{
 				Note:     n,
 				Scope:    string(st.scope),
@@ -343,14 +348,18 @@ func notesList(root string, args []string) error {
 	if len(found) == 0 {
 		fmt.Println("No notes yet. Write the first one with `" + hint.NotesEdit.With("<name>") + "`.")
 	} else {
+		finder := &notesFinder{root: root}
 		for _, n := range found {
 			fmt.Printf("%-8s %s  %s  (%s)\n", n.Scope, n.Name, n.Title, notesAnchorSummary(n.Note))
+			for _, line := range finder.block(ctx, n.Scope, n.Note) {
+				fmt.Println("  " + line)
+			}
 		}
 	}
 	return printNotesIssues(issues, false)
 }
 
-func notesGet(root string, args []string) error {
+func notesGet(ctx context.Context, root string, args []string) error {
 	var getShared, getPrivate *bool
 	pos, err := cmdParse("notes get", args, func(fs *flag.FlagSet) {
 		getShared, getPrivate = notesScopeFlags(fs)
@@ -395,6 +404,10 @@ func notesGet(root string, args []string) error {
 		})
 	}
 	printNote(n, st.scope)
+	finder := &notesFinder{root: root}
+	for _, line := range finder.block(ctx, string(st.scope), n) {
+		fmt.Println(line)
+	}
 	return nil
 }
 
@@ -824,15 +837,25 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 func notesCapture(ctx context.Context, root string, args []string) error {
 	var title, name string
 	var tags tagList
+	var anchors stringList
+	var gap bool
 	var shared, private *bool
 	pos, err := cmdParse("notes capture", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&title, "title", "", "Title for the note (defaults to naming the reviewed base)")
 		fs.StringVar(&name, "name", "", "Note name (defaults to review-<patch digest>)")
 		fs.Var(&tags, "tag", "Tag to set on the note; repeatable")
+		fs.BoolVar(&gap, "gap", false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
+		fs.Var(&anchors, "anchor", "With --gap, what the gap is about (repeatable): symbol:<key>, file:<path>#<decl>, diagnostic:<code>, or any note anchor")
 		shared, private = notesScopeFlags(fs)
 	})
 	if err != nil {
 		return err
+	}
+	if gap {
+		return notesCaptureGap(ctx, root, store.Gap{Title: title, Anchors: anchors, Refs: pos, Tags: tags}, name, *shared, *private)
+	}
+	if len(anchors) > 0 {
+		return exit.Usagef("magus notes capture: --anchor needs --gap, a review thread is anchored by the files it discussed")
 	}
 	if len(pos) > 0 {
 		return exit.Usagef("magus notes capture: unexpected argument %q; the thread to capture is the review under way", pos[0])
@@ -853,30 +876,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
 
-	// Private by default, and the asymmetry is deliberate rather than timid. A capture is
-	// quoted material whose value is to the person who was in the room; committing one puts
-	// somebody else's half-finished sentence in front of review under your name. Ask for
-	// --shared when the team should have it.
-	scope, err := notesScope(*shared, *private)
+	target, err := captureStore(root, *shared, *private)
 	if err != nil {
 		return err
 	}
-	defaulted := scope == ""
-	if defaulted {
-		scope = knowledge.ScopePrivate
-	}
-	stores, err := notesStores(root, scope)
-	if err != nil {
-		// A workspace that declares only a shared store is the common one, so the default
-		// landing on a store it has not got must teach both ways out rather than only the
-		// one notesStores knows about. It does NOT quietly fall back to shared: that would
-		// turn a safety default into a surprise commit of somebody's half-finished sentence.
-		if defaulted {
-			return fmt.Errorf("pass --shared to put this transcript in the repository, where review sees it: %w", err)
-		}
-		return err
-	}
-	target := stores[0]
 
 	capture := captureFromSession(sess, comments, title, tags)
 	noteName := name
@@ -938,6 +941,68 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	if changed != 0 {
 		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
+	}
+	return nil
+}
+
+// captureStore picks the store a capture is written to: private by default, because
+// committing a capture puts quoted, half-finished words in front of review under your
+// name. --shared is how the team gets it.
+func captureStore(root string, shared, private bool) (notesStore, error) {
+	scope, err := notesScope(shared, private)
+	if err != nil {
+		return notesStore{}, err
+	}
+	defaulted := scope == ""
+	if defaulted {
+		scope = knowledge.ScopePrivate
+	}
+	stores, err := notesStores(root, scope)
+	if err != nil {
+		// Never a quiet fall back to shared: that turns a safety default into a surprise
+		// commit. A shared-only workspace is common, so the error names --shared.
+		if defaulted {
+			return notesStore{}, fmt.Errorf("pass --shared to put this capture in the repository, where review sees it: %w", err)
+		}
+		return notesStore{}, err
+	}
+	return stores[0], nil
+}
+
+// notesCaptureGap records a harness gap. Every anchor is resolved against the graph before
+// anything is written, so a gap that could not be found again is refused rather than stored.
+func notesCaptureGap(ctx context.Context, root string, g store.Gap, name string, shared, private bool) error {
+	target, err := captureStore(root, shared, private)
+	if err != nil {
+		return err
+	}
+	res, err := notesResolver(ctx, root)
+	if err != nil {
+		return fmt.Errorf("magus notes capture --gap: its anchors cannot be resolved because the knowledge graph would not load: %w", err)
+	}
+	scoped := res.ForScope(string(target.scope))
+	rev := notesRevision(ctx, root)
+	g.AsOf, g.Captured = rev, time.Now()
+	n, err := g.Note(ctx, name, scoped)
+	if err != nil {
+		return fmt.Errorf("magus notes capture --gap: %w", err)
+	}
+	if _, err := store.Get(target.dir, n.Name); err == nil {
+		return fmt.Errorf("magus notes capture --gap: %q already exists in the %s store, pass --name to keep both", n.Name, target.scope)
+	}
+	if err := store.Save(target.dir, n); err != nil {
+		return fmt.Errorf("magus notes capture --gap: %w", err)
+	}
+	if _, err := store.RecordDigests(ctx, target.dir, n.Name, rev, scoped); err != nil {
+		return fmt.Errorf("magus notes capture --gap: captured %q, but recording its anchors failed: %w", n.Name, err)
+	}
+	saved, err := store.Get(target.dir, n.Name)
+	if err != nil {
+		return fmt.Errorf("magus notes capture --gap: wrote %q, but it does not read back as a note: %w", n.Name, err)
+	}
+	fmt.Printf("Captured gap %s into %s [%s] (%s).\n", saved.Name, notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
+	for _, line := range store.FindBlock(ctx, scoped, saved) {
+		fmt.Println(line)
 	}
 	return nil
 }
@@ -1233,4 +1298,32 @@ func (t *tagList) Set(v string) error {
 	}
 	*t = append(*t, v)
 	return nil
+}
+
+// notesFinder loads the graph at most once, and only for a note with find lines, so
+// listing plain notes costs no graph load.
+type notesFinder struct {
+	root   string
+	loaded bool
+	res    *knowledge.NoteResolver
+	err    error
+}
+
+func (f *notesFinder) block(ctx context.Context, scope string, n store.Note) []string {
+	if len(n.Find) == 0 {
+		return nil
+	}
+	if !f.loaded {
+		f.loaded = true
+		res, err := notesResolver(ctx, f.root)
+		if err != nil {
+			f.err = err
+		} else {
+			f.res = &res
+		}
+	}
+	if f.res == nil {
+		return append(store.FindBlock(ctx, nil, n), "  because: "+f.err.Error())
+	}
+	return store.FindBlock(ctx, f.res.ForScope(scope), n)
 }
