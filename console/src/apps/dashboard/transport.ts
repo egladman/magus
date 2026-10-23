@@ -462,7 +462,8 @@ export class DashboardTransport {
     this.samples = history.concat(this.samples);
     if (this.samples.length > GRID_MAX)
       this.samples = this.samples.slice(this.samples.length - GRID_MAX);
-    if (this.samples.length) this.lastSampleAt = this.samples[this.samples.length - 1].at;
+    const newest = this.samples[this.samples.length - 1];
+    if (newest) this.lastSampleAt = newest.at;
     this.store.set({ samples: this.samples });
   }
 

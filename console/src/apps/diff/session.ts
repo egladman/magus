@@ -271,7 +271,7 @@ export interface DiffComment {
   // line is the new-side line the remark anchors to. A hunk index cannot serve - it means
   // nothing outside the session that produced it - so a draft carrying no line is one no host
   // can place, and the publisher drops it rather than guessing.
-  readonly line?: number;
+  readonly line?: number | undefined;
 }
 
 // ReviewComment is one comment already on the host's review, written by anybody. Read-only:
@@ -464,7 +464,7 @@ export interface SeenOp {
 export type SessionOp =
   | { op: "cursor"; path: string; hunk: number }
   | { op: "viewed"; digest: string; on: boolean }
-  | { op: "comment"; path: string; hunk: number; line?: number; body: string }
+  | { op: "comment"; path: string; hunk: number; line?: number | undefined; body: string }
   | { op: "discard"; id: string }
   | { op: "resolve"; id: string; on: boolean }
   | { op: "answer"; id: string; on: boolean }
@@ -690,8 +690,8 @@ export interface RunVerdict {
   readonly finished_ms?: number;
   readonly duration_ms?: number;
   readonly error?: string;
-  readonly undeclared?: string;
-  readonly available?: readonly string[];
+  readonly undeclared?: string | undefined;
+  readonly available?: readonly string[] | undefined;
 }
 
 // runTarget asks the local workspace to run one declared target for one project, or - with

@@ -301,8 +301,8 @@ interface State {
 // Verdict is one project's last run of its test target, as the app knows it.
 interface Verdict {
   readonly state: "running" | "passed" | "failed" | "unknown";
-  readonly error?: string;
-  readonly durationMs?: number;
+  readonly error?: string | undefined;
+  readonly durationMs?: number | undefined;
   // asOf is the changeset digest that was on screen when this landed. A verdict whose asOf is not
   // the current digest describes code the reader has moved past.
   readonly asOf: string;
@@ -3679,7 +3679,13 @@ export function activate(host: HTMLElement): AppInstance {
   // dispatch and display both, which is what stops the two drifting - a rebinding that
   // updated only the handler would otherwise leave the sheet teaching the old key.
   for (const c of COMMANDS)
-    registerCommand({ id: c.id, label: c.label, group: "Diff", run: c.run, key: c.key });
+    registerCommand({
+      id: c.id,
+      label: c.label,
+      group: "Diff",
+      run: c.run,
+      ...(c.key ? { key: c.key } : {}),
+    });
 
   // Built one at a time rather than from an array, because `new Map(pairs)` keeps the LAST
   // pair for a duplicate key and says nothing. A second command claiming a bound key then
@@ -3891,7 +3897,8 @@ export function activate(host: HTMLElement): AppInstance {
     typeof ResizeObserver === "undefined"
       ? null
       : new ResizeObserver((entries) => {
-          if (!disposed) applyPaneWidth(entries[0].contentRect.width);
+          const entry = entries[0];
+          if (!disposed && entry) applyPaneWidth(entry.contentRect.width);
         });
   paneResize?.observe(root);
   controller.signal.addEventListener("abort", () => paneResize?.disconnect(), { once: true });

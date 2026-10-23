@@ -247,11 +247,11 @@ function renderStatusBar(s: DashboardState): void {
   publishStatus({
     connection,
     label: connectionLabel,
-    health,
+    ...(health !== undefined ? { health } : {}),
     hint: demoing ? "Demo data is synthetic. Click to change the server address." : "",
     // The two processes behind the board in one line, the tokens `magus status --compact` prints.
-    count: s.status ? processSummary(s.status) : undefined,
-    observing,
+    ...(s.status ? { count: processSummary(s.status) } : {}),
+    ...(observing ? { observing } : {}),
   });
 }
 
@@ -294,7 +294,13 @@ function wireNotifications(): void {
           ref && s.liveHost
             ? { label: "Open in log viewer", href: logsLink(s.liveHost, { ref }) }
             : undefined;
-        notify({ source: "Dashboard", kind: "error", key, message: t.label + " failed.", link });
+        notify({
+          source: "Dashboard",
+          kind: "error",
+          key,
+          message: t.label + " failed.",
+          ...(link ? { link } : {}),
+        });
       }
     }
   });
@@ -719,7 +725,7 @@ function wireKeys(): void {
       e.preventDefault();
       run();
     },
-    { signal: lifecycleAbort?.signal },
+    lifecycleAbort ? { signal: lifecycleAbort.signal } : {},
   );
   // preventScroll: the dashboard is a long scrolling page, and focusing its root would otherwise
   // be indistinguishable from the reader having scrolled somewhere.
@@ -776,7 +782,7 @@ export function activate(): void {
         const pageId = button.dataset.openApp;
         if (pageId) openApp({ pageId });
       },
-      { signal: lifecycleAbort?.signal },
+      lifecycleAbort ? { signal: lifecycleAbort.signal } : {},
     );
   });
 

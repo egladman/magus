@@ -154,8 +154,9 @@ export function activityTile(): Tile {
     if (targets.length < 2) {
       openOne.hidden = false;
       picker.el.hidden = true;
-      if (targets.length === 1 && liveHost && targets[0].invocation) {
-        openHref = logsLink(liveHost, { inv: targets[0].invocation });
+      const only = targets[0];
+      if (only?.invocation && liveHost) {
+        openHref = logsLink(liveHost, { inv: only.invocation });
       }
       return;
     }

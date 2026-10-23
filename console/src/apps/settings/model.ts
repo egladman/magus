@@ -102,7 +102,7 @@ export type ImportResult =
       appliedLayout: (keyof LayoutSettings)[];
       unknown: string[];
       skipped: string[];
-      newerSchema?: number;
+      newerSchema?: number | undefined;
     }
   | { ok: false; error: string };
 
@@ -367,11 +367,16 @@ export function diffLines(before: string, after: string): DiffLine[] {
   const b = after.split("\n");
   const n = a.length;
   const m = b.length;
-  // lcs[i][j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
-  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  // lcs[i * width + j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
+  // Every read stays inside the (n+1) x (m+1) table, so the ?? fallbacks never fire.
+  const width = m + 1;
+  const lcs = new Array<number>((n + 1) * width).fill(0);
+  const cell = (i: number, j: number): number => lcs[i * width + j] ?? 0;
+  const lineOf = (lines: string[], k: number): string => lines[k] ?? "";
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      lcs[i * width + j] =
+        a[i] === b[j] ? cell(i + 1, j + 1) + 1 : Math.max(cell(i + 1, j), cell(i, j + 1));
     }
   }
   const out: DiffLine[] = [];
@@ -379,23 +384,23 @@ export function diffLines(before: string, after: string): DiffLine[] {
   let j = 0;
   while (i < n && j < m) {
     if (a[i] === b[j]) {
-      out.push({ kind: "same", text: a[i] });
+      out.push({ kind: "same", text: lineOf(a, i) });
       i++;
       j++;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      out.push({ kind: "del", text: a[i] });
+    } else if (cell(i + 1, j) >= cell(i, j + 1)) {
+      out.push({ kind: "del", text: lineOf(a, i) });
       i++;
     } else {
-      out.push({ kind: "add", text: b[j] });
+      out.push({ kind: "add", text: lineOf(b, j) });
       j++;
     }
   }
   while (i < n) {
-    out.push({ kind: "del", text: a[i] });
+    out.push({ kind: "del", text: lineOf(a, i) });
     i++;
   }
   while (j < m) {
-    out.push({ kind: "add", text: b[j] });
+    out.push({ kind: "add", text: lineOf(b, j) });
     j++;
   }
   return out;

@@ -204,7 +204,7 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   const buttons = new Map<string, HTMLButtonElement>();
   const items = new Map<string, HTMLElement>();
   const panelById = new Map<string, HTMLElement>();
-  let activeId = tabs[0].id;
+  let activeId = tabs[0]?.id ?? "";
 
   const visibleIds = (): string[] =>
     tabs.map((t) => t.id).filter((id) => !must(items.get(id)).hidden);
@@ -236,6 +236,7 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
     else if (ev.key === "Home") next = 0;
     else if (ev.key === "End") next = ids.length - 1;
     const nid = ids[next];
+    if (nid === undefined) return;
     show(nid);
     must(buttons.get(nid)).focus();
   }
@@ -723,7 +724,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     // the "default" preset, so untouched bindings read as Default (they genuinely are the defaults).
     const activeProfile = (): string => {
       const cur = keymapDraft.get();
-      for (const p of presetList) if (keymapsEqual(cur, presets[p.id])) return p.id;
+      for (const p of presetList) {
+        const preset = presets[p.id];
+        if (preset && keymapsEqual(cur, preset)) return p.id;
+      }
       return "custom";
     };
 

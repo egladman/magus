@@ -265,7 +265,7 @@ export async function loadRunPlan(
     res = await fetch(runPlanUrl(host, target), {
       headers: authHeaders(),
       cache: "no-store",
-      signal,
+      ...(signal ? { signal } : {}),
     });
   } catch (e) {
     reportFetchFailure(host, "the target plan", e);

@@ -555,7 +555,7 @@ export type JobsRead =
 // when the truth is "this server will not say" has been told the wrong thing.
 export async function listJobs(client: JobClient, signal?: AbortSignal): Promise<JobsRead> {
   try {
-    const resp = await client.listJobs({}, { signal });
+    const resp = await client.listJobs({}, signal ? { signal } : {});
     return { kind: "ok", jobs: resp.jobs, overlaps: resp.overlaps };
   } catch (e) {
     const kind = isCapabilityDenied(e) ? "denied" : isUnreachable(e) ? "unreachable" : "unreadable";
@@ -579,7 +579,7 @@ export async function submitJob(
   signal?: AbortSignal,
 ): Promise<SubmitOutcome> {
   try {
-    const resp = await client.runJob({ name }, { signal });
+    const resp = await client.runJob({ name }, signal ? { signal } : {});
     return resp.state === SubmitState.ALREADY_RUNNING
       ? { kind: "already-running" }
       : { kind: "started" };

@@ -32,7 +32,7 @@ export function serverTile(): Tile {
       if (sv.watch.length)
         rows.push({
           term: "Watching",
-          value: sv.watch.length === 1 ? sv.watch[0] : sv.watch.length + " workspaces",
+          value: sv.watch.length === 1 ? (sv.watch[0] ?? "") : sv.watch.length + " workspaces",
         });
     }
     const signature = JSON.stringify(rows.map((r) => [r.term, r.value]));
