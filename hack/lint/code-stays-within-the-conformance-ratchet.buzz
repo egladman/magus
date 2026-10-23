@@ -106,9 +106,10 @@ export fun judge(report: {str: any}) > [Finding] !> any {
 export fun fixFor(metric: str, value: int, home: str) > str {
     final known = "or add it to a known entry in " + RATCHET + " with a reason a reviewer can check.";
     if (metric == "main-logic") {
+        final where = if (home == "") "its file references no library package yet" else "{home}, which its file references most";
         return "A main package only wires: parse flags, build dependencies, call a package, print the result. "
             + "This computes and calls no other workspace package; move it into the package that owns its data "
-            + "({home}, which its file references most), " + known;
+            + "({where}), " + known;
     }
     if (metric == "store-path-export") {
         return "Only {home} may know where its store lives, and the measure counts the files outside it that do. "
@@ -271,6 +272,8 @@ test "a boundary violation names where the item belongs" {
     final got = judge(report([fresh()], rows: [row], stale: [<any>]));
     assert\equal(got.len(), want: 1, message: "main-logic is enforced");
     assert\equal(got[0].fix.indexOf("(internal/sessions, which its file references most)") != null, want: true, message: got[0].fix);
+    final nowhere = fixFor("main-logic", value: 119, home: "");
+    assert\equal(nowhere.indexOf("(its file references no library package yet)") != null, want: true, message: nowhere);
     final store = fixFor("store-path-export", value: 0, home: "internal/hint");
     assert\equal(store.indexOf("Only internal/hint may know where its store lives") != null, want: true, message: store);
     assert\equal(fixFor("file-lines", value: 938, home: "").indexOf("Bring it under 938, or add it") == 0, want: true,
