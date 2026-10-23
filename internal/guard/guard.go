@@ -1456,7 +1456,7 @@ func (d Dependencies) judging(dir string) judgeSource {
 // holds: Evaluate's, then the ones that read the filesystem. Each is graded before it is
 // ranked, so a demoted one outranks only an advisory.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
-	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(ctx, deps, callDir, line, d))
+	v := rankOwnBuild(Evaluate(deps, hardResetAsSwitch(ctx, deps, at, callDir, line, d)), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
 	// lines around it that the script sets up.
 	script := denyScriptContent(deps, callDir, line, d)
