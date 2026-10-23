@@ -9,6 +9,7 @@
 // only hit the real shared keymap cell on Save or Save & Apply.
 
 import type { PageController, PageModule, SearchProvider } from "../../desktop/page";
+import { succeed, type Result } from "../../lib/result";
 import { createKeybindingsEditor, type KeybindingsDeps } from "../../desktop/keybindings";
 import { formatChord, isMac, mergeKeymap, type Keymap } from "../../desktop/commands";
 import {
@@ -1071,10 +1072,10 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
   return {
     id: "settings",
     title: "Settings",
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       ensureStylesheet(cssId, new URL("./" + cssFile, import.meta.url).href);
       const teardown = buildSettings(host, deps);
-      return {
+      return succeed({
         search: noSearch,
         // The console's app contract (page.ts). Settings is a form over persisted cells: no
         // timer, no stream, and no slice of the shared status bar, so there is nothing to go quiet
@@ -1085,7 +1086,7 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
           teardown();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
 }

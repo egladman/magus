@@ -83,3 +83,9 @@ export function inlineAlert(opts: InlineAlertOptions): HTMLElement {
   }
   return alert;
 }
+
+// appLoadFailure is what a pane shows when its app could not load: the reason, where the reader
+// is already looking.
+export function appLoadFailure(appId: string, error: Error): HTMLElement {
+  return inlineAlert({ variant: "danger", title: appId + " failed to load", body: error.message });
+}

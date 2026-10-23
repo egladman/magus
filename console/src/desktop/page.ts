@@ -9,13 +9,16 @@
 // PageModule<LogState, ParsedQuery>, etc. - so each app keeps its state and its
 // query grammar strongly typed instead of collapsing to `any` at the console boundary.
 
+import type { Result } from "../lib/result";
+
 export interface PageModule<S, Q> {
   readonly id: string; // "dashboard" | "graph" | "logs"
   readonly title: string;
   // Build the app into `host` and return the controller the console drives. Async so
   // the heavy per-app bundle (d3-force, protobuf) is a dynamic import() - a tab
-  // stays cheap until it is actually opened.
-  activate(host: HTMLElement): Promise<PageController<S, Q>>;
+  // stays cheap until it is actually opened. An app that cannot load fails with the
+  // reason, and the console shows it in the pane.
+  activate(host: HTMLElement): Promise<Result<PageController<S, Q>>>;
 }
 
 export interface PageController<S, Q> {

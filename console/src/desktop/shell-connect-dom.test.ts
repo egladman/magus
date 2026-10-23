@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { requireServer } from "./connectPrompt";
 import { signalAuthLost } from "../lib/server";
 import type { PageController, PageModule } from "./page";
+import { fail, succeed, type Result } from "../lib/result";
 import { createTileView, type TileView } from "./tileView";
 import { rememberHost, setDefaultHost } from "../lib/settings";
 
@@ -33,20 +34,20 @@ function stubApp(id: string): Stub {
     module: {
       id,
       title: id,
-      async activate(host): Promise<PageController<unknown, unknown>> {
+      async activate(host): Promise<Result<PageController<unknown, unknown>>> {
         stub.activations++;
         const main = document.createElement("main");
         main.dataset.stubApp = id;
         main.textContent = "app data";
         host.append(main);
-        return {
+        return succeed({
           search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
           setVisible: (v) => stub.visible.push(v),
           deactivate: () => {
             stub.deactivations++;
             host.replaceChildren();
           },
-        };
+        });
       },
     },
   };
@@ -61,7 +62,8 @@ function tileFor(
   const tile = createTileView({
     seed: { kind: "leaf", id: "p1", pageId: seedPage },
     apps: [],
-    mountApp: async (pageId, host) => (await registry.get(pageId)?.activate(host)) ?? null,
+    mountApp: async (pageId, host) =>
+      (await registry.get(pageId)?.activate(host)) ?? fail("no app is registered as " + pageId),
     onLayoutChange() {},
   });
   document.body.append(tile.el);

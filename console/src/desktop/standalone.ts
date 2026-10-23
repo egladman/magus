@@ -14,7 +14,7 @@
 // console drives activate() itself. The log viewer and dashboard satisfy this; the graph explorer
 // does not yet.
 
-import { asError } from "../lib/result";
+import { fail, failFrom, succeed, type Result } from "../lib/result";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
 export interface StandaloneApp {
@@ -33,16 +33,6 @@ const noSearch: SearchProvider<null> = {
   parse: () => null,
   apply: () => ({ matches: 0 }),
 };
-
-// failedPage shows why an app did not load in its own pane, where the reader is already looking,
-// and still hands the shell the lifecycle it requires.
-function failedPage(host: HTMLElement, id: string, error: Error): PageController<null, null> {
-  const note = document.createElement("p");
-  note.setAttribute("role", "alert");
-  note.textContent = id + " failed to load: " + error.message;
-  host.replaceChildren(note);
-  return { search: noSearch, setVisible: () => {}, deactivate: () => host.replaceChildren() };
-}
 
 // The shape the factory calls on a dynamically imported app bundle. A streaming app (the
 // dashboard, the log viewer) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
@@ -97,7 +87,7 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
   return {
     id: s.id,
     title: s.title,
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       if (!document.getElementById(cssId)) {
         const link = document.createElement("link");
         link.id = cssId;
@@ -105,18 +95,19 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
         link.href = url(s.css);
         document.head.append(link);
       }
-      let mod: HostModule;
+      let mod: unknown;
       try {
-        mod = (await import(url(s.bundle))) as HostModule;
+        mod = await import(url(s.bundle));
       } catch (e) {
-        return failedPage(host, s.id, asError(e));
+        return failFrom(e);
       }
+      if (!isHostModule(mod)) return fail(s.bundle + " does not export activate(host)");
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
       // app hands back.
       const boot = mod.activate(host);
       const instance: AppInstance | null =
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
-      return {
+      return succeed({
         search: noSearch,
         // PageController's lifecycle is mandatory even when an app is static. The normalizer
         // makes that contract true for dynamically loaded modules while preserving their simple
@@ -126,7 +117,7 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
           instance?.deactivate();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
 }
@@ -143,7 +134,7 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
   return {
     id: s.id,
     title: s.title,
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       // The app's page-scoped stylesheet, added once (idempotent by id); the console page itself does
       // not load it.
       if (!document.getElementById(cssId)) {
@@ -156,29 +147,25 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       // Import the bundle BEFORE the scaffold exists so the app's standalone auto-boot (guarded on a
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
-      let mod: BootModule;
+      let mod: unknown;
       let scaffoldText: string;
       try {
-        mod = (await import(artUrl(s.bundle))) as BootModule;
+        mod = await import(artUrl(s.bundle));
         scaffoldText = await (await fetch(artUrl(scaffold))).text();
       } catch (e) {
-        return failedPage(host, s.id, asError(e));
+        return failFrom(e);
       }
+      if (!isBootModule(mod)) return fail(s.bundle + " does not export activate()");
       // Fetch the app's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
       // app's own body, appended into the pane host.
       const doc = new DOMParser().parseFromString(scaffoldText, "text/html");
       const main = doc.querySelector("main");
-      if (!main) {
-        const missing = new Error(
-          "scaffold.html missing its <main> (built to gen/" + scaffold + ")",
-        );
-        return failedPage(host, s.id, missing);
-      }
+      if (!main) return fail("scaffold.html missing its <main> (built to gen/" + scaffold + ")");
       host.append(document.importNode(main, true));
       mod.activate();
-      return {
+      return succeed({
         search: noSearch,
         // An app that writes the shared status bar exports setVisible so it can go quiet while
         // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live
@@ -196,7 +183,28 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
           mod.deactivate?.();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
+}
+
+// A bundle is loaded by URL, so tsc never sees its exports: these check the shape the console is
+// about to call before it calls it.
+function isHostModule(mod: unknown): mod is HostModule {
+  return isObject(mod) && typeof mod.activate === "function";
+}
+
+function isBootModule(mod: unknown): mod is BootModule {
+  if (!isObject(mod) || typeof mod.activate !== "function") return false;
+  if (mod.setVisible !== undefined && typeof mod.setVisible !== "function") return false;
+  if (mod.deactivate !== undefined && typeof mod.deactivate !== "function") return false;
+  return mod.docTitle === undefined || isTitleSource(mod.docTitle);
+}
+
+function isTitleSource(v: unknown): v is TitleSource {
+  return isObject(v) && typeof v.get === "function" && typeof v.subscribe === "function";
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
 }

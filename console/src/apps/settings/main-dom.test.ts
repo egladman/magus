@@ -70,7 +70,9 @@ function deps(): SettingsDeps {
 }
 
 async function mount(): Promise<void> {
-  page = await settingsApp(deps()).activate(host);
+  const activated = await settingsApp(deps()).activate(host);
+  assert.ok(activated.ok);
+  page = activated.value;
   await settle();
 }
 

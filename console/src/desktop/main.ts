@@ -102,6 +102,7 @@ import { browserInstallHost, createInstallStore } from "../lib/install";
 import { registerServiceWorker, watchServedBuild } from "../lib/sw";
 import { showRefreshToast } from "../lib/refresh-toast";
 import type { PageController, PageModule } from "./page";
+import { fail, type Result } from "../lib/result";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
 // "keymap" overrides (the same cell the apps read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
@@ -604,14 +605,14 @@ export function startConsole(
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
   // mountApp is how a tile mounts one app into a pane host: resolve the registered module and
-  // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
+  // activate it, returning its controller, or why it could not. A tile calls this per leaf, so all
   // the per-app lazy-import machinery (standalone/moduleApp) is reused unchanged.
   async function mountApp(
     pageId: string,
     host: HTMLElement,
-  ): Promise<PageController<unknown, unknown> | null> {
+  ): Promise<Result<PageController<unknown, unknown>>> {
     const m = registry.get(pageId);
-    if (!m) return null;
+    if (!m) return fail("no app is registered as " + pageId);
     return await m.activate(host);
   }
 

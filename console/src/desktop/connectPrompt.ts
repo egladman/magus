@@ -16,6 +16,8 @@ import {
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
+import { succeed } from "../lib/result";
+import { appLoadFailure } from "../ui/alert";
 import { emptyStateShell } from "../ui/empty-state";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 import type { ConnectionState } from "./status";
@@ -187,7 +189,7 @@ export function requireServer<S, Q>(
   return {
     id: module.id,
     title: module.title,
-    activate: async (host) => gatedPage(module, host, need, ready()),
+    activate: async (host) => succeed(gatedPage(module, host, need, ready())),
   };
 }
 
@@ -292,8 +294,13 @@ function gatedPage<S, Q>(
     if (closed || inner || opening || !ready() || (!force && host.closest("[hidden]"))) return;
     opening = true;
     host.replaceChildren();
-    void module.activate(host).then((controller) => {
+    void module.activate(host).then((activated) => {
       opening = false;
+      if (!activated.ok) {
+        if (!closed) host.replaceChildren(appLoadFailure(module.id, activated.error));
+        return;
+      }
+      const controller = activated.value;
       if (closed) {
         controller.deactivate();
         return;

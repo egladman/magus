@@ -1,6 +1,7 @@
 import { persisted } from "../lib/persist";
 import { createTextSearch, type TextSearchEntry } from "@magus/textsearch";
 import type { PageModule, PageController, SearchProvider } from "../desktop/page";
+import { succeed, type Result } from "../lib/result";
 
 // One docs-index record. It carries a url (for the result link) on top of the fields the
 // shared ranker reads; the engine ignores url and hands it back on each result. This is the
@@ -671,7 +672,7 @@ export function referenceApp(): PageModule<null, null> {
   return {
     id: "reference",
     title: "Reference",
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       const root = document.createElement("div");
       root.dataset.app = "reference";
       const body = document.createElement("div");
@@ -691,7 +692,7 @@ export function referenceApp(): PageModule<null, null> {
       }
       root.append(body);
       host.append(root);
-      return { search: noRefSearch, setVisible() {}, deactivate: () => {} };
+      return succeed({ search: noRefSearch, setVisible() {}, deactivate: () => {} });
     },
   };
 }
