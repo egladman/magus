@@ -4,7 +4,7 @@
 
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
-import { errMessage } from "../lib/guards";
+import { asError, type Result } from "./result";
 
 const LABEL = ".console-render-btn__label, .pf-v6-c-menu__item-text";
 const FLASH_MS = 1500;
@@ -36,25 +36,33 @@ export interface CopyOptions {
 // copyText writes text to the clipboard and reports the outcome on the control and, on failure, in a
 // toast. It resolves to whether the write happened.
 export async function copyText(text: string, opts: CopyOptions): Promise<boolean> {
-  try {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      throw new Error("the browser does not offer clipboard access here");
-    }
-    await navigator.clipboard.writeText(text);
+  const written = await writeClipboard(text);
+  if (written.ok) {
     flashLabel(opts.button ?? null, "Copied");
     if (opts.confirm) showToast(opts.source, opts.confirm, "ok", { ms: 2500 });
     return true;
+  }
+  flashLabel(opts.button ?? null, "Copy failed");
+  reportFailure(
+    opts.source,
+    "Could not copy " +
+      opts.what +
+      ": " +
+      written.error.message +
+      ". Select the text and copy it by hand.",
+    "copy:" + opts.what,
+  );
+  return false;
+}
+
+async function writeClipboard(text: string): Promise<Result<null>> {
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    return { ok: false, error: new Error("the browser does not offer clipboard access here") };
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return { ok: true, value: null };
   } catch (e) {
-    flashLabel(opts.button ?? null, "Copy failed");
-    reportFailure(
-      opts.source,
-      "Could not copy " +
-        opts.what +
-        ": " +
-        errMessage(e) +
-        ". Select the text and copy it by hand.",
-      "copy:" + opts.what,
-    );
-    return false;
+    return { ok: false, error: asError(e) };
   }
 }

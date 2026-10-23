@@ -13,6 +13,7 @@ import { must } from "../../lib/guards";
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
+import { asError, type Result } from "../../render/result";
 import { JournalSchema } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {
@@ -545,19 +546,9 @@ async function loadFromURL(): Promise<void> {
   }
   if (params.src) {
     setStatus("Fetching the log...");
-    try {
-      const u = new URL(params.src, location.href);
-      if (u.protocol !== "https:" && u.protocol !== "http:") {
-        throw new Error("only http and https addresses are read");
-      }
-      const r = await fetch(params.src, { headers: { Accept: "text/plain" } });
-      // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
-      // setStatus raises the failure toast itself.
-      if (!r.ok) throw new Error("the address answered HTTP " + r.status);
-      loadText(await r.text(), ref);
-    } catch (e) {
-      setStatus("Could not fetch the log: " + errMessage(e) + ".", true);
-    }
+    const fetched = await fetchLogText(params.src);
+    if (fetched.ok) loadText(fetched.value, ref);
+    else setStatus("Could not fetch the log: " + fetched.error.message + ".", true);
     return;
   }
   // #inv= and a bare #ref= address a stored run in the LOCAL cache - what the run browser writes
@@ -589,6 +580,22 @@ async function loadFromURL(): Promise<void> {
     return;
   }
   // Nothing to show: leave the empty state visible.
+}
+
+async function fetchLogText(src: string): Promise<Result<string>> {
+  try {
+    const u = new URL(src, location.href);
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      return { ok: false, error: new Error("only http and https addresses are read") };
+    }
+    const r = await fetch(src, { headers: { Accept: "text/plain" } });
+    // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
+    // setStatus raises the failure toast itself.
+    if (!r.ok) return { ok: false, error: new Error("the address answered HTTP " + r.status) };
+    return { ok: true, value: await r.text() };
+  } catch (e) {
+    return { ok: false, error: asError(e) };
+  }
 }
 
 function loadText(text: string, ref: string): void {

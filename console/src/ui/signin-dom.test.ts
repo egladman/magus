@@ -27,13 +27,13 @@ function choices(): HTMLButtonElement[] {
 
 function rowFor(root: string): HTMLButtonElement {
   const b = choices().find((c) => c.dataset.root === root);
-  if (!b) throw new Error("no row for " + root);
+  assert.ok(b, "no row for " + root);
   return b;
 }
 
 function confirmBtn(): HTMLButtonElement {
   const b = document.querySelector<HTMLButtonElement>(".console-shell-signin__confirm");
-  if (!b) throw new Error("no confirm button");
+  assert.ok(b, "no confirm button");
   return b;
 }
 
