@@ -17,6 +17,7 @@ check, fix first error, run.{{end}}
 {{cmd "buzz"}} --check script.buzz    # parse and type-check: every error, nothing runs
 {{cmd "buzz"}} script.buzz a b        # run it: magus calls main(args) for you
 {{cmd "buzz"}} -t script.buzz         # run its test "..." {} blocks
+{{cmd "buzz"}} -e 'import "std"; std\print(1);'    # inline: needs no main; files and stdin still do
 ```
 
 {{if .Full}}1. Run `--check` after every edit. Fix the FIRST error, then check again:
@@ -152,7 +153,7 @@ checker accepts it and result wrong.{{end}}
 | `final c = Counter{};` then a method that assigns `this.n` | `final c = mut Counter{};` | `cannot mutate immutable object` at run time |
 | `return null;` from `> int` | declare `> int?`; unwrap with `?? fallback`, `if (x -> v)`, or `x!` | nothing |
 | `x = 2;` after `final x = 1;` | `var x = 1;` | `cannot assign to final "x"` |
-| `if` or `for` at the top of the file | put it in `main` | `not allowed at the top level` |
+| `if` or `for` at the top of a file | put it in `main`; only `{{cmd "buzz"}} -e` allows top-level statements | `not allowed at the top level` |
 | a call to `fs\...`, `json\parse`, ... in a plain function | declare the function `!> any`, or end the call with `catch fallback` | `[BZZ1006] call may raise but is neither declared with !> nor caught` |
 | `import "json";` | `import "encoding/json";` (also yaml, toml, csv, xml, base64, hex, url, ini) | `module not found` |
 | `total + doc["qty"]` with doc from JSON | `std\toInt(doc["qty"])`: JSON numbers are `double` | `expected int, got double` at run time |
@@ -183,7 +184,7 @@ checker accepts it and result wrong.{{end}}
 `final c = Counter{};` then method that assigns `this.n`: `final c = mut Counter{};`; `cannot mutate immutable object` at run time
 `return null;` from `> int`: declare `> int?`; unwrap with `?? fallback`, `if (x -> v)`, or `x!`; nothing
 `x = 2;` after `final x = 1;`: `var x = 1;`; `cannot assign to final "x"`
-`if` or `for` at top of file: put it in `main`; `not allowed at the top level`
+`if` or `for` at top of file: put it in `main`, except `{{cmd "buzz"}} -e`; `not allowed at the top level`
 call to `fs\...`, `json\parse`, ... in plain function: declare function `!> any`, or end call with `catch fallback`; `[BZZ1006] call may raise but is neither declared with !> nor caught`
 `import "json";`: `import "encoding/json";` (also yaml, toml, csv, xml, base64, hex, url, ini); `module not found`
 `total + doc["qty"]` with doc from JSON: `std\toInt(doc["qty"])`: JSON numbers `double`; `expected int, got double` at run time
