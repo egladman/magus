@@ -13,6 +13,7 @@ import "fs";
 import "crypto";
 import "vcs";
 import "assert";
+import "magus";
 
 // expand flattens a mixed list of file and directory paths into the files under them, so
 // a gate can name a generated TREE the way its outputs are declared and not have to know
@@ -80,10 +81,38 @@ export fun saveFiles(paths: [str]) > str !> any {
     return saved;
 }
 
-// restore undoes what a check's generators wrote to moved: a saved file returns to its
-// saved bytes, a path that was clean returns to HEAD, and a new untracked file is removed.
-export fun restore(moved: [str], saved: str, dirtyBefore: [str]) > void !> any {
+// declaredOutputs is the part of moved some target declares as an output. Only those are
+// a generator's to undo; any other path that moved was edited by a person or agent while
+// the generators ran.
+export fun declaredOutputs(moved: [str]) > [str] !> any {
+    var outputs: mut [str] = mut [<str>];
+    if (moved.len() == 0) { return outputs; }
+    foreach (f in magus\describe.file(moved).files) {
+        if (f.role == "output") { outputs.append(f.path); }
+    }
+    return outputs;
+}
+
+// leftAlone is the part of moved that is not in outputs.
+export fun leftAlone(moved: [str], outputs: [str]) > [str] {
+    var left: mut [str] = mut [<str>];
     foreach (p in moved) {
+        if (outputs.indexOf(p) == null) { left.append(p); }
+    }
+    return left;
+}
+
+// leftNote names the paths restore skipped, so a reader does not assume everything that
+// moved was put back.
+export fun leftNote(left: [str]) > str {
+    if (left.len() == 0) { return ""; }
+    return "\n  changed during the run, left as it is: " + left.join(", ");
+}
+
+// restore undoes what a check's generators wrote to outputs: a saved file returns to its
+// saved bytes, a path that was clean returns to HEAD, and a new untracked file is removed.
+export fun restore(outputs: [str], saved: str, dirtyBefore: [str]) > void !> any {
+    foreach (p in outputs) {
         final kept = fs\join(saved, name: p);
         if (fs\isFile(kept)) {
             fs\copyFile(kept, dst: p);
@@ -129,6 +158,28 @@ test "VCS snapshots keep an existing untracked directory opaque" {
     fs\writeFile(generated + "/artifact", content: "generated");
     assert\contains(vcsChangedSince(before, [evals, generated]), item: generated,
         message: "new directory is still drift");
+}
+
+test "restore puts back only the outputs and names the rest" {
+    final root = fs\tempDir("drift-restore-");
+    final generated = root + "/generated.txt";
+    final edited = root + "/edited.md";
+    fs\writeFile(generated, content: "before");
+    fs\writeFile(edited, content: "before");
+    final savedDir = saveFiles([generated, edited]);
+    fs\writeFile(generated, content: "generator wrote this");
+    fs\writeFile(edited, content: "edited during the run");
+
+    final moved = [generated, edited];
+    final outputs = [generated];
+    restore(outputs, saved: savedDir, dirtyBefore: moved);
+
+    assert\equal(fs\readFile(generated), want: "before", message: "output restored");
+    assert\equal(fs\readFile(edited), want: "edited during the run", message: "edit kept");
+    final left = leftAlone(moved, outputs: outputs);
+    assert\equal(left, want: [edited], message: "left paths");
+    assert\contains(leftNote(left), item: edited, message: "note names the path");
+    assert\equal(leftNote([]), want: "", message: "nothing left, no note");
 }
 
 // secondCause is the half of a drift message that names the OTHER owner. A gate fires for
