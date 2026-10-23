@@ -490,3 +490,14 @@ kernel checked before start, and magus built on the host and run in a Chainguard
 whose git meets magus's floor (the Go image `mise.toml` pins ships an older one). It cannot
 keep a digest pin, no implicit pull, a TTY, stdin, or signals waited for without a timer.
 The rest of this page is unchanged.
+
+### 2026-10-23: assembling an image is no longer refused
+
+Eli decided that magus may assemble an OCI image from files a target built, so "build an
+image" is struck from What magus never does. The refusal was written about running an
+invocation in a container, where building an image meant driving a runtime. Assembly needs
+no runtime and executes nothing: it is a deterministic transform of files into an image
+layout on disk. magus still never runs a container, never reads or authors a Dockerfile or
+Containerfile, and never detects a runtime. The rest of that list, including exposing no
+container API to Buzz, is unchanged. [ADR 0016](0016-magus-assembles-oci-images.md) records
+the decision and its limits.
