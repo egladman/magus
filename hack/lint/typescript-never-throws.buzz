@@ -1,6 +1,5 @@
 // typescript-never-throws refuses a `throw`, a `Promise.reject` or a `new Promise` whose
-// executor takes a reject, in the hand-written TypeScript of the console and the Claude Code
-// mod. A fallible call there returns a Result (console/src/lib/result.ts), so its caller has
+// executor takes a reject, in every hand-written TypeScript file in the repository. A fallible call there returns a Result (console/src/lib/result.ts), so its caller has
 // to read the failure; an exception unwinds past every caller that forgot to catch it. Code
 // that cannot be reached ends `const exhausted: never = value; return exhausted;`, which the
 // compiler checks and nothing throws.
@@ -12,11 +11,8 @@
 //	// platform double: fetch
 //	globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
 //
-// The rest of the repository's TypeScript (docs/src, libs/textsearch, the OpenCode plugin)
-// still throws, and joins reads() once it does not.
-//
 // Tier 2, measured shape: the fix returns a Result, a refactor anyone can do. There is no
-// baseline: the change that added this rule left the files it reads with no violation.
+// baseline: a file it reads has no violation.
 namespace typescriptthrows;
 
 import "assert";
@@ -26,7 +22,7 @@ import "hack/lint/support" as support;
 
 // PLATFORM_APIS are the APIs whose failure a test double may imitate by throwing: each fails
 // that way in the browser or the runtime, so a test of the code that handles it has to.
-export final PLATFORM_APIS = ["fetch", "Response.text", "navigator.clipboard.writeText", "Connect client"];
+export final PLATFORM_APIS = ["fetch", "Response.text", "navigator.clipboard.writeText", "Connect client", "Bun.spawn"];
 
 final MARKER = "// platform double: ";
 
@@ -37,8 +33,7 @@ final REJECT = std\pattern(`\bPromise\.reject\s*\(`);
 final REJECTING = std\pattern(`\bnew\s+Promise\s*(<[^>]*>)?\s*\(\s*(async\s*)?(\(\s*[\w$]+\s*(:[^,)]*)?,|function\s*\(\s*[\w$]+\s*(:[^,)]*)?,)`);
 
 export fun reads() > [str] {
-    return ["console/src/**/*.ts", "docs/guides/integrations/agents/claude-code-mod/**/*.ts",
-            "docs/guides/integrations/agents/claude-code-mod/**/*.tsx"];
+    return ["**/*.ts", "**/*.tsx"];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {

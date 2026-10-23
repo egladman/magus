@@ -59,6 +59,7 @@ import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
+import "hack/lint/typescript-never-throws" as typescriptthrows;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
@@ -108,6 +109,7 @@ export fun rules() > [Rule] {
         Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
         Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
         Rule{ name = "sdk-exports", reads = sdkexports\reads(), check = sdkexports\check },
+        Rule{ name = "typescript-never-throws", reads = typescriptthrows\reads(), check = typescriptthrows\check },
     ];
 }
 
