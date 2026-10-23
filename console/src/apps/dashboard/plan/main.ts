@@ -447,7 +447,7 @@ async function fetchStatus(
   try {
     const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
     const resp = await client.getStatus({}, { signal: deadline(signal) });
-    return { status: resp.status, failed: "" };
+    return { ...(resp.status ? { status: resp.status } : {}), failed: "" };
   } catch (e) {
     return { failed: why(e) };
   }

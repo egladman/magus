@@ -124,7 +124,8 @@ export function attentionVerdict(read: AttentionRead, nowMs: number = Date.now()
   }
 
   const n = read.requests.length;
-  if (n === 0) {
+  const oldest = read.requests[0];
+  if (!oldest) {
     return {
       state: "clear",
       line: "Nobody waiting",
@@ -133,7 +134,6 @@ export function attentionVerdict(read: AttentionRead, nowMs: number = Date.now()
         " close only when someone disposes of them.",
     };
   }
-  const oldest = read.requests[0];
   const age = ageLabel(oldest.opened_ms, nowMs);
   return {
     state: "attention",

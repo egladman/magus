@@ -404,7 +404,8 @@ function renderIndexTree(
   attachTreeKeys(list)();
 }
 
-// The grouping modes the toggle offers, in order. The first is the resting one.
+// The grouping modes the toggle offers, in order. DEFAULT_INDEX_MODE is the resting one.
+const DEFAULT_INDEX_MODE: IndexMode = "kind";
 const INDEX_MODES: ReadonlyArray<{ id: IndexMode; label: string; title: string }> = [
   { id: "kind", label: "By kind", title: "Group by the source that recorded the event" },
   {
@@ -415,7 +416,7 @@ const INDEX_MODES: ReadonlyArray<{ id: IndexMode; label: string; title: string }
 ];
 
 // indexModeCell remembers which grouping the reader last chose, so reopening Activity resumes it.
-const indexModeCell = persisted<IndexMode>("activity-index-mode", INDEX_MODES[0].id);
+const indexModeCell = persisted<IndexMode>("activity-index-mode", DEFAULT_INDEX_MODE);
 
 // mountIndexControls docks the grouping toggle and the filter box between the index header and the
 // tree. It reuses the run browser's control strip and segmented-toggle rules rather than authoring a
@@ -555,7 +556,7 @@ export function activate(host: HTMLElement): AppInstance {
   let indexEvents: ActivityEvent[] = [];
   let indexSelect: (index: number) => void = () => {};
   const indexState: IndexState = { open: new Map(), current: null };
-  let indexMode: () => IndexMode = () => INDEX_MODES[0].id;
+  let indexMode: () => IndexMode = () => DEFAULT_INDEX_MODE;
   let indexField: FilterField | null = null;
 
   function repaintIndex(): void {
@@ -691,8 +692,9 @@ export function activate(host: HTMLElement): AppInstance {
     // Sections map 1:1 onto events in order, so events[i] is the event section i was built from.
     // Only a failure takes the accent rule: a green rule on every passing event is noise, and the
     // outcome is a Label in the head either way.
-    const sectionEls: HTMLElement[] = model.sections.map((sec, i) => {
+    const sectionEls: HTMLElement[] = model.sections.flatMap((sec, i) => {
       const ev = events[i];
+      if (!ev) return [];
       const el = buildSection(sec, {
         status: sec.meta?.status === "fail" ? "fail" : "",
         copyText: sec.lines.join("\n"),
@@ -701,7 +703,7 @@ export function activate(host: HTMLElement): AppInstance {
         fillTitle: (title) => fillHead(title, ev, now),
       });
       attachPayloadExpand(el, ev);
-      return el;
+      return [el];
     });
     for (const el of sectionEls) refs.body.append(el);
     const has = events.length > 0;

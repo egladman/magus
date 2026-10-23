@@ -100,11 +100,13 @@ export interface ConnView {
 
 // ---- status view-model (SSE) -----------------------------------------------
 
+const UNKNOWN_HEALTH = { label: "unknown", cls: "" };
+
 const HEALTH: Record<number, { label: string; cls: string }> = {
   [Health.HEALTHY]: { label: "healthy", cls: "ok" },
   [Health.DEGRADED]: { label: "degraded", cls: "warn" },
   [Health.DOWN]: { label: "down", cls: "fail" },
-  [Health.UNSPECIFIED]: { label: "unknown", cls: "" },
+  [Health.UNSPECIFIED]: UNKNOWN_HEALTH,
 };
 
 export interface HealthView {
@@ -126,7 +128,7 @@ export interface CacheView {
 export interface RunningTargetView {
   args: string[];
   step: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   invocation: string;
   // Which workspace this unit of work belongs to. The wire has carried it all along; the mapping
   // dropped it, which is why nothing downstream could be scoped to a workspace. Running targets and
@@ -136,13 +138,13 @@ export interface RunningTargetView {
 }
 export interface WorkspaceView {
   root: string;
-  hits?: number;
-  misses?: number;
-  errors?: number;
-  lastAccessTime?: Timestamp;
+  hits?: number | undefined;
+  misses?: number | undefined;
+  errors?: number | undefined;
+  lastAccessTime?: Timestamp | undefined;
   // Name of the selected secret-provider spell; "" or undefined means the built-in
   // environment provider. The NAME only - the wire carries no reference and no value.
-  secretProvider?: string;
+  secretProvider?: string | undefined;
 }
 export interface ServiceView {
   id: string;
@@ -151,7 +153,7 @@ export interface ServiceView {
   ports: string[];
   state: string;
   dependents: number;
-  startedAt?: Timestamp;
+  startedAt?: Timestamp | undefined;
 }
 // LockView is one held per-project workspace lock and the process holding it.
 //
@@ -164,7 +166,7 @@ export interface LockView {
   pid: number;
   command: string;
   dir: string;
-  acquireTime?: Timestamp;
+  acquireTime?: Timestamp | undefined;
   // Supplied by the server so this renderer cannot drift from the CLI's judgment.
   staleAfterSeconds: number;
 }
@@ -183,7 +185,7 @@ export interface ClaimView {
   memoryMb: number;
   dir: string;
   command: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
 }
 
 // BrokerView is the per-user process holding this host's slots, declared memory and shared
@@ -194,7 +196,7 @@ export interface BrokerView {
   protocol: number;
   socket: string;
   executable: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   budgetSlots: number;
   heldSlots: number;
   budgetMb: number;
@@ -210,7 +212,7 @@ export interface ServerView {
   version: string;
   socket: string;
   executable: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   listeners: { kind: string; address: string }[];
   watch: string[];
 }
@@ -334,7 +336,7 @@ function mapCache(cache: Pool["cache"] | undefined): CacheView {
 export function mapStatus(st: Status): StatusView {
   const pool = st.pool;
   return {
-    health: HEALTH[st.health] || HEALTH[Health.UNSPECIFIED],
+    health: HEALTH[st.health] ?? UNKNOWN_HEALTH,
     pool: {
       capacity: pool ? pool.capacity : 0,
       running: pool ? pool.running : 0,
@@ -781,8 +783,8 @@ export interface ModelTierRowView {
   forksPerId: number;
   reworkPerJob: number;
   wideningsPerJob: number;
-  meanCostUsd?: number;
-  medianTokens?: number;
+  meanCostUsd?: number | undefined;
+  medianTokens?: number | undefined;
 }
 export interface ModelTierView {
   rows: ModelTierRowView[];

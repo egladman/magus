@@ -86,9 +86,11 @@ function hostLabel(host: string): string {
 // dashboard receives no provider registry and contains no provider-specific styling or allowlist.
 // FNV-1a keeps the same id in the same color across frames while the small palette remains legible
 // against the console's neutral background.
+const DEFAULT_ACCENT = "var(--console-clay)";
+
 function hostAccent(host: string): string {
   const palette = [
-    "var(--console-clay)",
+    DEFAULT_ACCENT,
     "var(--console-spruce)",
     "var(--console-indigo)",
     "var(--console-moss)",
@@ -97,7 +99,7 @@ function hostAccent(host: string): string {
   for (let i = 0; i < host.length; i++) {
     hash = Math.imul(hash ^ host.charCodeAt(i), 0x01000193);
   }
-  return palette[(hash >>> 0) % palette.length];
+  return palette[(hash >>> 0) % palette.length] ?? DEFAULT_ACCENT;
 }
 
 function applyHostAccent(element: HTMLElement, host: string): void {

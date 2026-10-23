@@ -43,6 +43,7 @@ export function cacheRateSeries(samples: SampleView[]): RatePoint[] {
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1];
     const b = samples[i];
+    if (!a || !b) continue;
     out.push({ atMs: b.at, rate: intervalRate(a, b) });
   }
   return out;

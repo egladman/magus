@@ -120,6 +120,13 @@ const CATALOG = SCENARIO_CATALOG;
 
 const TRIGGERS = ["cli", "watch", "ci"];
 
+const FALLBACK_TARGET: (typeof CATALOG)[number] = { project: ".", target: "lint", durMs: 3100 };
+
+// cycleOr returns items[i mod items.length], or fallback when items is empty.
+function cycleOr<T>(items: readonly T[], i: number, fallback: T): T {
+  return items[i % items.length] ?? fallback;
+}
+
 export function startDemo(store: Store<DashboardState>): DemoHandle {
   const rng = makeRng(0x9e3779b9);
   const t0 = Date.now();
@@ -140,7 +147,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   // always [running, queued]. When the running one finishes, the queued promotes and
   // a fresh queued is appended; a run caps at a few targets, then a new run starts.
   let catIdx = 0;
-  const nextCat = () => CATALOG[catIdx++ % CATALOG.length];
+  const nextCat = () => cycleOr(CATALOG, catIdx++, FALLBACK_TARGET);
   const ref = (n: number): string => "out" + (0x1a2b3c + n * 0x111).toString(16).slice(0, 6);
   const invId = (n: number): string => (0xa1b2c3d4e5f6 + n * 0x1357).toString(16).slice(0, 12);
 
@@ -187,7 +194,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   function startRun(now: number): RunView {
     const run: RunView = {
       inv: invId(invN++),
-      trigger: TRIGGERS[invN % TRIGGERS.length],
+      trigger: cycleOr(TRIGGERS, invN, "cli"),
       targets: [newTarget("running", now, null)],
     };
     for (let i = 0; i < RUN_WIDTH; i++) run.targets.push(newTarget("queued", null, null));
@@ -210,9 +217,12 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       t.state = "passed";
       t.terminal = true;
     }
-    past.targets[0].endMs = t0 - 42_000;
-    past.targets[0].startMs = t0 - 46_000;
-    past.targets[0].durationMs = 4000;
+    const first = past.targets[0];
+    if (first) {
+      first.endMs = t0 - 42_000;
+      first.startMs = t0 - 46_000;
+      first.durationMs = 4000;
+    }
     past.targets[1] = newTarget("cached", t0 - 42_000, t0 - 41_800);
     past.targets.push(newTarget("passed", t0 - 41_000, t0 - 35_500));
     startRun(t0 - 9_000); // the live run: [running, queued]
@@ -691,7 +701,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         .map((t) => ({
           args: t.project ? ["run", t.target, t.project] : ["run", t.target],
           step: t.target === "test" ? "go test ./..." : "",
-          startTime: t.startMs != null ? timestampFromMs(t.startMs) : undefined,
+          ...(t.startMs != null ? { startTime: timestampFromMs(t.startMs) } : {}),
           invocation: run.inv,
           // All of the scenario's work belongs to acme; magus sits idle beside it. That is what makes
           // the workspace scope demonstrable offline - scope to magus and the live list empties.
@@ -799,7 +809,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           memoryMb: 512,
           dir: "/Users/eli/Repos/acme",
           command: "magus " + t.args.join(" "),
-          startTime: t.startTime,
+          ...(t.startTime ? { startTime: t.startTime } : {}),
         })),
         idleExitSeconds: 600,
       },
@@ -827,7 +837,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   function appendLog(): void {
     const n = 1 + Math.floor(rng() * 2); // 1-2 lines per tick (see LOG_TICK_MS on the pacing)
     for (let i = 0; i < n; i++) {
-      logBuf.push(LOG_SNIPPETS[logIdx++ % LOG_SNIPPETS.length]);
+      logBuf.push(cycleOr(LOG_SNIPPETS, logIdx++, ""));
     }
     while (logBuf.length > LOG_MAX) logBuf.shift();
   }

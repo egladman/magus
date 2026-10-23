@@ -118,7 +118,7 @@ export function demoEvents(now: number): ActivityEvent[] {
       actor: e.actor,
       action: e.action,
       outcome: e.ok ? Outcome.OK : Outcome.ERROR,
-      duration: e.durationMs != null ? dur(e.durationMs) : undefined,
+      ...(e.durationMs != null ? { duration: dur(e.durationMs) } : {}),
       error: e.error ?? "",
       requestBytes: e.requestBytes != null ? BigInt(e.requestBytes) : 0n,
       requestRef: e.requestRef ?? "",

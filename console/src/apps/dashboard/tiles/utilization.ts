@@ -104,6 +104,7 @@ export function utilizationTile(): Tile {
     const frag = document.createDocumentFragment();
     for (let i = 0; i < n; i++) {
       const s = samples[i];
+      if (!s) continue;
       const col = Math.floor(i / GRID_ROWS),
         row = i % GRID_ROWS;
       const { fill, opacity } = utilColor(s);
@@ -123,10 +124,9 @@ export function utilizationTile(): Tile {
     }
     svg.appendChild(frag);
     grid.replaceChildren(svg);
-    card.setNote(n ? `${n} samples, newest ${clock(samples[n - 1].at)}` : "no samples yet");
-    readout.textContent = n
-      ? "Newest sample: " + describe(samples[n - 1]) + "."
-      : "No samples yet.";
+    const newest = samples[n - 1];
+    card.setNote(newest ? `${n} samples, newest ${clock(newest.at)}` : "no samples yet");
+    readout.textContent = newest ? "Newest sample: " + describe(newest) + "." : "No samples yet.";
   }
 
   const offTheme = onThemeChange(render);
