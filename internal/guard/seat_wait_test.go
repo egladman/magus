@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // Every way MGS3009's hint and the budget denies teach a wait passes a worker: the wait piped
@@ -73,4 +74,51 @@ func TestEveryServedWaitPassesTheGuardForEveryRole(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A wait on the pid of a run holding a seat spends the budget wait outside the call that
+// runs; a pid no run holds is some other process.
+func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
+	worker := figuresLease()
+	worker.Parent = "figures"
+	ctx, _ := fleetFixture(t, worker)
+	standBudget(t, types.MachineSnapshot{Holders: []types.MachineClaimant{{PID: 4242, Target: "go-test", Project: "."}}})
+	for _, line := range []string{
+		"caffeinate -w 4242",
+		"caffeinate -i -w 4242",
+		"wait 4242",
+		"lsof -p 4242",
+		"kill -0 4242 && ./magus run go-test .",
+	} {
+		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(v), line)
+	}
+	for _, line := range []string{
+		"caffeinate -w 9999",
+		"wait 9999",
+		"lsof -p 9999",
+		"caffeinate -i ./magus run go-test .",
+	} {
+		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
+		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "%s: %s", line, v.Reason)
+	}
+}
+
+// The unbound root is refused a run, so its retry remedy forks a job rather than piping
+// into the run.
+func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
+	cacheDir := t.TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "lint", ".")
+	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir})
+
+	root := denyRefusedRetry(ctx, Dependencies{}, "", "./magus run lint .")
+	require.True(t, root.refused())
+	assert.Contains(t, root.Say, hint.JobFork.String())
+
+	leased := denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus run lint .")
+	require.True(t, leased.refused())
+	assert.Contains(t, leased.Say, "status --wait | ")
+	assert.NotContains(t, leased.Say, hint.JobFork.String())
 }
