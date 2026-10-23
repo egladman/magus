@@ -1,7 +1,10 @@
 package rankeval
 
 import (
+	"bytes"
 	"math"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -165,14 +168,82 @@ func (s *rankevalSuite) TestSummarizeText() {
 	assert.Contains(t, text, "== agent-agreement (report-only): not built\n")
 }
 
+func configured(config Config, rep SetReport) SetReport {
+	rep.Config = config
+	return rep
+}
+
 func (s *rankevalSuite) TestSummarizeReportRoundTripsJSON() {
 	t := s.T()
-	rep := Report{Sets: []SetReport{Summarize(SetJudgedDev, sampleRuns()), {Set: SetFigures, Absent: "not built"}}}
+	rep := Report{Sets: []SetReport{
+		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
+		{Set: SetFigures, Config: ConfigEmbedOff, Absent: "not built"},
+	}}
 	b, err := marshalJSON(rep)
 	require.NoError(t, err)
 	var back Report
 	require.NoError(t, unmarshalStrictJSON(b, &back))
 	assert.Equal(t, rep, back)
+}
+
+func (s *rankevalSuite) TestSetReportRefusesAnUnknownConfig() {
+	t := s.T()
+	_, err := marshalJSON(SetReport{Set: SetJudgedDev})
+	assert.ErrorContains(t, err, `config "" is not one of`)
+	var back SetReport
+	err = unmarshalStrictJSON([]byte(`{"eval_set":"judged-dev","config":"embed=maybe","overall":{}}`), &back)
+	assert.ErrorContains(t, err, `config "embed=maybe" is not one of`)
+}
+
+func (s *rankevalSuite) TestBaselineKeepsTheLastLinePerSetAndConfig() {
+	t := s.T()
+	path := filepath.Join(t.TempDir(), "baseline.jsonl")
+	rep := Report{Sets: []SetReport{
+		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
+		configured(ConfigEmbedOff, Summarize(SetJudgedDev, sampleRuns()[:2])),
+		{Set: SetFigures, Config: ConfigEmbedOn, Absent: "not built"},
+	}}
+	require.NoError(t, WriteBaseline(path, rep))
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, bytes.Count(raw, []byte("\n")), "one line per set and config")
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close()
+	back, err := ReadBaseline(f)
+	require.NoError(t, err)
+	assert.Equal(t, rep, back)
+
+	newer := configured(ConfigEmbedOn, SetReport{Set: SetJudgedDev, Absent: "rebuilt"})
+	line, err := marshalJSON(newer)
+	require.NoError(t, err)
+	require.NoError(t, appendLine(path, line))
+	f2, err := os.Open(path)
+	require.NoError(t, err)
+	defer f2.Close()
+	back, err = ReadBaseline(f2)
+	require.NoError(t, err)
+	assert.Equal(t, []SetReport{newer, rep.Sets[1], rep.Sets[2]}, back.Sets, "the later line replaces the earlier in place")
+}
+
+func (s *rankevalSuite) TestCompareMatchesConfigs() {
+	t := s.T()
+	none := func(int) string { return "" }
+	base := Report{Sets: []SetReport{
+		{Set: SetJudgedDev, Config: ConfigEmbedOn, Scores: scores(none, 0.2, 0.4, 0.1)},
+		{Set: SetJudgedDev, Config: ConfigEmbedOff, Scores: scores(none, 0.9, 0.5, 0.7)},
+	}}
+	now := Report{Sets: []SetReport{
+		{Set: SetJudgedDev, Config: ConfigEmbedOff, Scores: scores(none, 0.8, 0.6, 0.7)},
+	}}
+	cs := Compare(base, now)
+	require.Len(t, cs, 2)
+	for _, c := range cs {
+		assert.Equal(t, ConfigEmbedOff, c.Config)
+		assert.InDelta(t, 0.7, c.Base, 1e-12, "embed=off is compared with embed=off, never with embed=on")
+		assert.InDelta(t, 0.7, c.Now, 1e-12)
+	}
 }
 
 func scores(cluster func(i int) string, values ...float64) []QueryScore {

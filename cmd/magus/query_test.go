@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
@@ -443,7 +444,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	b, err := json.Marshal(searchLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)))
+	b, err := json.Marshal(searchLoaded(ctx, g, read, embedtable.Cached, measuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -496,7 +497,7 @@ func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb stri
 	}
 	switch verb {
 	case readQuery:
-		return searchLoaded(ctx, g, read, gs.coverage)
+		return searchLoaded(ctx, g, read, embedtable.Cached, gs.coverage)
 	case readExplain:
 		return explainLoaded(ctx, g, read, gs.coverage)
 	case readRefs:

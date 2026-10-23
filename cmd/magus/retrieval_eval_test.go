@@ -22,10 +22,12 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/embed/rankeval"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -36,10 +38,28 @@ import (
 const (
 	envCandidate  = "MAGUS_EVAL_CANDIDATE"
 	envReportOnly = "MAGUS_EVAL_REPORT_ONLY"
+	envBaseline   = "MAGUS_RETRIEVAL_EVAL_BASELINE"
 )
+
+// evalEnv is the environment the eval was started with. TestMain scrubs the process
+// environment and moves the user's cache, before any test runs, so these are read from
+// package initialization, which runs first. The eval needs the real cache: it holds the
+// graph under test and the embed table.
+var evalEnv = func() map[string]string {
+	env := map[string]string{}
+	for _, name := range []string{envCandidate, envReportOnly, envBaseline} {
+		env[name] = os.Getenv(name)
+	}
+	if dir, err := xdg.CacheDir(); err == nil {
+		env["XDG_CACHE_HOME"] = dir
+	}
+	return env
+}()
 
 func TestRetrievalEval(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
+	require.NotEmpty(t, evalEnv["XDG_CACHE_HOME"], "the user's cache root did not resolve")
+	t.Setenv("XDG_CACHE_HOME", evalEnv["XDG_CACHE_HOME"])
 	root, err := workspace.FindRoot("")
 	require.NoError(t, err)
 	data := filepath.Join(root, "testdata", "retrieval")
@@ -86,13 +106,13 @@ func TestRetrievalEval(t *testing.T) {
 		require.NoError(t, err)
 		bySet[rankeval.SetJudgedDev] = rankeval.JudgedJudgments(queries, gold, rankeval.SetJudgedDev)
 		holdout := rankeval.JudgedJudgments(queries, gold, rankeval.SetJudgedHoldout)
-		switch candidate := os.Getenv(envCandidate); {
+		switch candidate := evalEnv[envCandidate]; {
 		case len(holdout) == 0:
 			absent[rankeval.SetJudgedHoldout] = "queries.jsonl holds no judged-holdout query"
 		case candidate == "":
 			absent[rankeval.SetJudgedHoldout] = fmt.Sprintf("sealed, %d queries; %s=<candidate> reads it once", len(holdout), envCandidate)
 		default:
-			reportOnlyRead = os.Getenv(envReportOnly) == "1"
+			reportOnlyRead = evalEnv[envReportOnly] == "1"
 			readHoldout(t, filepath.Join(data, "holdout-reads.jsonl"), queries, candidate, reportOnlyRead)
 			bySet[rankeval.SetJudgedHoldout] = holdout
 		}
@@ -105,31 +125,45 @@ func TestRetrievalEval(t *testing.T) {
 	for _, set := range rankeval.EvalSets {
 		all = append(all, bySet[set]...)
 	}
-	workers := runtime.GOMAXPROCS(0)
-	start := time.Now()
-	runs, err := rankeval.Replay(ctx, all, workers, r.replay)
-	require.NoError(t, err)
-	elapsed := time.Since(start)
-
-	runsBySet := map[rankeval.EvalSet][]rankeval.Run{}
-	for _, run := range runs {
-		runsBySet[run.Judgment.Set] = append(runsBySet[run.Judgment.Set], run)
+	// A missing table fails the embed=on replay here: it would otherwise be a run of
+	// embed=off under the wrong name.
+	_, err = embedtable.Cached()
+	require.NoError(t, err, "embed=on needs the table: run `magus graph pull -table`")
+	tables := map[rankeval.Config]func() (*embed.Table, error){
+		rankeval.ConfigEmbedOn:  embedtable.Cached,
+		rankeval.ConfigEmbedOff: nil,
 	}
-	report := rankeval.Report{Sets: make([]rankeval.SetReport, 0, len(rankeval.EvalSets))}
-	for _, set := range rankeval.EvalSets {
-		if why, ok := absent[set]; ok {
-			report.Sets = append(report.Sets, rankeval.SetReport{Set: set, Absent: why})
-			continue
+	workers := runtime.GOMAXPROCS(0)
+	runsBySet := map[rankeval.Config]map[rankeval.EvalSet][]rankeval.Run{}
+	for _, config := range rankeval.Configs {
+		r.table = tables[config]
+		start := time.Now()
+		runs, err := rankeval.Replay(ctx, all, workers, r.replay)
+		require.NoError(t, err)
+		fmt.Printf("%s: replayed %d judgments in %s on %d workers\n", config, len(runs), time.Since(start).Round(time.Millisecond), workers)
+		runsBySet[config] = map[rankeval.EvalSet][]rankeval.Run{}
+		for _, run := range runs {
+			runsBySet[config][run.Judgment.Set] = append(runsBySet[config][run.Judgment.Set], run)
 		}
-		report.Sets = append(report.Sets, rankeval.Summarize(set, runsBySet[set]))
+	}
+	report := rankeval.Report{Sets: make([]rankeval.SetReport, 0, len(rankeval.EvalSets)*len(rankeval.Configs))}
+	for _, set := range rankeval.EvalSets {
+		for _, config := range rankeval.Configs {
+			if why, ok := absent[set]; ok {
+				report.Sets = append(report.Sets, rankeval.SetReport{Set: set, Config: config, Absent: why})
+				continue
+			}
+			rep := rankeval.Summarize(set, runsBySet[config][set])
+			rep.Config = config
+			report.Sets = append(report.Sets, rep)
+		}
 	}
 	fmt.Print(report.Text())
 	if reportOnlyRead {
 		fmt.Printf("%s was read report-only: its scores above inform no choice\n", rankeval.SetJudgedHoldout)
 	}
-	fmt.Printf("replayed %d judgments in %s on %d workers\n", len(runs), elapsed.Round(time.Millisecond), workers)
-	printComparisons(t, filepath.Join(data, "baseline.json"), report)
-	if dest := os.Getenv("MAGUS_RETRIEVAL_EVAL_BASELINE"); dest != "" {
+	printComparisons(t, filepath.Join(data, "baseline.jsonl"), report)
+	if dest := evalEnv[envBaseline]; dest != "" {
 		writeRetrievalBaseline(t, root, dest, report)
 	}
 }
@@ -261,7 +295,7 @@ func TestDefinitionLookupSeedsTheSymbolLayer(t *testing.T) {
 	probed := func(_ string, seeded bool) knowledge.Coverage {
 		return knowledge.Coverage{Seeded: seeded, Probed: true}
 	}
-	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), graphRead{Input: lookup[0].Query, Nearest: true}, probed)
+	res := searchLoaded(context.Background(), r.loadedGraph(lookup[0].Query), graphRead{Input: lookup[0].Query, Nearest: true}, nil, probed)
 	require.Equal(t, types.VerdictFound, res.Out.Answer.Verdict)
 	require.Equal(t, "symbol:readIndex", res.Out.Matches[0].ID)
 }
@@ -278,14 +312,15 @@ func definitionQuery(ident string) string {
 // query, with the randomization test, t-interval and Holm adjustment Compare runs.
 func printComparisons(t *testing.T, file string, now rankeval.Report) {
 	t.Helper()
-	data, err := os.ReadFile(file)
+	f, err := os.Open(file)
 	if errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("no baseline at %s; nothing to compare against\n", file)
 		return
 	}
 	require.NoError(t, err)
-	var base rankeval.Report
-	require.NoError(t, json.UnmarshalStrict(data, &base), "decode %s", file)
+	defer f.Close()
+	base, err := rankeval.ReadBaseline(f)
+	require.NoError(t, err, "decode %s", file)
 	fmt.Printf("against %s:\n%s", file, rankeval.ComparisonText(rankeval.Compare(base, now)))
 }
 
@@ -296,8 +331,6 @@ func writeRetrievalBaseline(t *testing.T, root, dest string, now rankeval.Report
 	if !filepath.IsAbs(dest) {
 		dest = filepath.Join(root, dest)
 	}
-	data, err := json.MarshalIndent(now, "", "  ")
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(dest, append(data, '\n'), 0o644))
+	require.NoError(t, rankeval.WriteBaseline(dest, now))
 	fmt.Printf("wrote this report to %s\n", dest)
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -1103,10 +1104,11 @@ func measuredCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config)
 
 // searchLoaded is searchGraph over g, a graph loaded once for many reads: it must hold
 // every symbol shard when read seeds the symbol layer, and only the default graph
-// otherwise.
-func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, coverage coverageFunc) queryResult {
+// otherwise. table loads the embed table, nil to rank without it; searchGraph passes
+// embedtable.Cached.
+func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, table func() (*embed.Table, error), coverage coverageFunc) queryResult {
 	stop := traceFromContext(ctx).phase("query.search")
-	out := g.QueryPage(read.Input, read.Budget, 0, 0, embedtable.Cached)
+	out := g.QueryPage(read.Input, read.Budget, 0, 0, table)
 	stop()
 	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
 }
