@@ -45,8 +45,8 @@ func MirroredBinary(exe, root string) string {
 // not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
 // is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
 // was built at (see [changedBuildInputs]): anywhere else it would judge another tree, so the
-// checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill. made is false when the job already owns the checkout at dir,
-// which is returned as it stands. A job owning another standing checkout, a checkpoint
+// checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
+// made is false when the job already owns the checkout at dir, which is returned as it stands. A job owning another standing checkout, a checkpoint
 // carrying uncommitted changes the new checkout would not hold, a binary whose commit is
 // unrecorded, unknown to the repository or carries uncommitted changes, and a version
 // control that cannot make one are refused.
