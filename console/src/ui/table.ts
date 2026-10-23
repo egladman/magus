@@ -6,6 +6,9 @@ import { h } from "../desktop/view";
 
 export type SortDir = "asc" | "desc";
 
+// sortKey of a table built with no columns: it matches no column, so nothing sorts.
+const NO_SORT_KEY = "";
+
 export interface Column<T> {
   key: string;
   label: string;
@@ -99,7 +102,7 @@ export class SortableTable<T> {
 
   constructor(cols: Column<T>[], opts: SortableTableOptions = {}) {
     this.cols = cols;
-    this.sortKey = opts.sortKey ?? cols[0].key;
+    this.sortKey = opts.sortKey ?? cols[0]?.key ?? NO_SORT_KEY;
     this.sortDir = opts.sortDir ?? this.firstDir(this.sortKey);
 
     // The wrapper is the container PF's grid breakpoints key on, so the table stacks when its PANE is
@@ -243,7 +246,8 @@ export class SortableTable<T> {
   private render(): void {
     const col = this.cols.find((c) => c.key === this.sortKey) ?? this.cols[0];
     const sign = this.sortDir === "asc" ? 1 : -1;
-    const sorted = this.rows.slice().sort((a, b) => sign * compare(col.sort(a), col.sort(b)));
+    const sorted = this.rows.slice();
+    if (col) sorted.sort((a, b) => sign * compare(col.sort(a), col.sort(b)));
     this.tbody.replaceChildren();
     for (const row of sorted) {
       const tr = h("tr", "pf-v6-c-table__tr");

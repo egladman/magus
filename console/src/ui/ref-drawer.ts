@@ -31,7 +31,7 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
     : ["../search-index.json", "search-index.json"];
   for (const url of candidates) {
     try {
-      const r = await fetch(url, { signal });
+      const r = await fetch(url, signal ? { signal } : {});
       if (!r.ok) continue;
       const data = (await r.json()) as RefEntry[];
       if (Array.isArray(data)) return data;
@@ -359,7 +359,8 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
           a.scrollIntoView({ block: "nearest" });
         } else a.removeAttribute("aria-selected");
       });
-      if (sel >= 0 && opts[sel]) searchInput.setAttribute("aria-activedescendant", opts[sel].id);
+      const selected = opts[sel];
+      if (selected) searchInput.setAttribute("aria-activedescendant", selected.id);
       else searchInput.removeAttribute("aria-activedescendant");
     };
 
@@ -493,9 +494,10 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
         sel = (sel <= 0 ? opts.length : sel) - 1;
         highlight();
       } else if (e.key === "Enter") {
-        if (sel >= 0 && opts[sel]) {
+        const selected = opts[sel];
+        if (selected) {
           e.preventDefault();
-          window.open(opts[sel].href, "_blank", "noopener");
+          window.open(selected.href, "_blank", "noopener");
         }
       } else if (e.key === "Escape" && !resultsEl.hidden) {
         // Swallow Escape while a result list is open so it closes the list, not the whole panel.

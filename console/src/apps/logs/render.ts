@@ -187,8 +187,10 @@ function lineRangeFromHash(): { start: number; end: number } | null {
   for (const part of location.hash.replace(/^#/, "").split("&")) {
     const m = /^L(\d+)(?:-L?(\d+))?$/.exec(part);
     if (!m) continue;
-    const a = parseInt(m[1], 10);
-    const b = m[2] ? parseInt(m[2], 10) : a;
+    const [, startText, endText] = m;
+    if (startText === undefined) continue;
+    const a = parseInt(startText, 10);
+    const b = endText ? parseInt(endText, 10) : a;
     return { start: Math.min(a, b), end: Math.max(a, b) };
   }
   return null;

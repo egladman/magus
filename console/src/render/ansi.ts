@@ -31,7 +31,7 @@ export const STATUS_RE = /^\s*\[(pass|fail|warn|error|info|dry|summary)\]/i;
 
 export function statusToken(raw: string): string {
   const m = STATUS_RE.exec(stripAnsi(raw));
-  return m ? m[1].toLowerCase() : "";
+  return m?.[1]?.toLowerCase() ?? "";
 }
 
 // --- ANSI SGR parsing ---------------------------------------------------------

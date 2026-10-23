@@ -30,7 +30,7 @@ export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
   const stream = must(new Response(bytes).body).pipeThrough(new CompressionStream("gzip"));
   const gz = new Uint8Array(await new Response(stream).arrayBuffer());
   let bin = "";
-  for (let i = 0; i < gz.length; i++) bin += String.fromCharCode(gz[i]);
+  for (const byte of gz) bin += String.fromCharCode(byte);
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 

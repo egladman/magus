@@ -162,10 +162,10 @@ function buildSpans(events: Event[], invocation: InvocationView): SpanTree {
     const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
     const steps: Step[] = [];
     const timed = g.execs.filter((x) => x.t !== null) as { t: number; text: string }[];
-    for (let i = 0; i < timed.length; i++) {
-      const ss = timed[i].t;
-      const ee = i + 1 < timed.length ? timed[i + 1].t : e;
-      steps.push({ label: timed[i].text || "step", s: ss, e: Math.max(ss, ee) });
+    for (const [i, step] of timed.entries()) {
+      const ss = step.t;
+      const ee = timed[i + 1]?.t ?? e;
+      steps.push({ label: step.text || "step", s: ss, e: Math.max(ss, ee) });
     }
     targets.push({
       label,

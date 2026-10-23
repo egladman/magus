@@ -87,7 +87,7 @@ function buildJournal(
   for (const { run, start } of placed) {
     const at0 = base + start;
     const execs = run.execs ?? [];
-    for (let i = 0; i < execs.length; i++) {
+    for (const [i, text] of execs.entries()) {
       const at = at0 + Math.round((run.durationMs * i) / Math.max(1, execs.length));
       events.push(
         create(EventSchema, {
@@ -95,7 +95,7 @@ function buildJournal(
           time: demoTs(at),
           project: run.project,
           target: run.target,
-          text: execs[i],
+          text,
         }),
       );
     }
@@ -249,9 +249,9 @@ export function startDemo(): void {
 
   // Prime the first frame with enough events that a target span exists immediately (so the
   // waterfall is never momentarily empty): the STARTED/SCOPE preamble plus the first EXEC.
-  let i = 0;
   const prime = Math.min(3, ordered.length);
-  for (; i < prime; i++) state.liveEvents.push(ordered[i]);
+  state.liveEvents.push(...ordered.slice(0, prime));
+  let i = prime;
   scheduleLiveRender();
 
   const BATCH = 3;
@@ -264,7 +264,9 @@ export function startDemo(): void {
       setLiveStatus("done");
       return;
     }
-    for (let k = 0; k < BATCH && i < ordered.length; k++) state.liveEvents.push(ordered[i++]);
+    const batch = ordered.slice(i, i + BATCH);
+    state.liveEvents.push(...batch);
+    i += batch.length;
     scheduleLiveRender();
   }, TICK_MS);
 

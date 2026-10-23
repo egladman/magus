@@ -49,7 +49,7 @@ interface EventGroup {
   project: string;
   target: string;
   body: string[];
-  result: { status: Status; duration?: Duration; ref: string } | null;
+  result: { status: Status; duration?: Duration | undefined; ref: string } | null;
 }
 
 // buildModelFromEvents turns an event stream (a whole Journal's events, or the live events

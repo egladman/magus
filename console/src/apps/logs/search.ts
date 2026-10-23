@@ -74,10 +74,10 @@ export function clearMarks(): void {
 
 export function setActiveMark(i: number): void {
   if (!searchMarks.length) return;
-  if (activeMark >= 0 && searchMarks[activeMark])
-    searchMarks[activeMark].removeAttribute("data-active");
+  searchMarks[activeMark]?.removeAttribute("data-active");
   activeMark = (i + searchMarks.length) % searchMarks.length;
   const mark = searchMarks[activeMark];
+  if (!mark) return;
   mark.setAttribute("data-active", "");
   // Expand a collapsed section so the active match is visible.
   const sec = mark.closest(".console-render-section");

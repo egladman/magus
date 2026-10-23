@@ -577,8 +577,9 @@ export function renderRunTree(
   const ctx: TreeCtx = { root: tree, state, order: [], onSelect };
   // The first branch opens on load so the newest run's targets are visible without a click. Only
   // on a FIRST paint: once the reader has opened or closed anything, their state is the answer.
-  if (!state.expanded.size && specs.length && specs[0].children?.length) {
-    state.expanded.add(specs[0].id);
+  const firstSpec = specs[0];
+  if (!state.expanded.size && firstSpec?.children?.length) {
+    state.expanded.add(firstSpec.id);
   }
   for (const spec of specs) list.append(makeNode(spec, ctx));
   tree.append(list);

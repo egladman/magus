@@ -30,7 +30,7 @@ export interface CopyOptions {
   button?: HTMLElement | null;
   // A confirmation toast for a control the reader cannot watch, such as a menu item whose menu
   // has already closed.
-  confirm?: string;
+  confirm?: string | undefined;
 }
 
 // copyText writes text to the clipboard and reports the outcome on the control and, on failure, in a

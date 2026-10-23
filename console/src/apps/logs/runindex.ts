@@ -16,7 +16,7 @@ export interface RunSummary {
   target: string;
   inv?: string;
   failed: boolean;
-  error?: string;
+  error?: string | undefined;
   timestamp_ms: number;
   duration_ms: number;
 }
@@ -27,7 +27,7 @@ export interface RunSummary {
 // empty on a run that was interrupted before it wrote a finished event.
 export interface RunLog {
   inv: string;
-  arguments?: string[];
+  arguments?: string[] | undefined;
   trigger?: string;
   started_ms: number;
   finished_ms?: number;
@@ -53,16 +53,16 @@ export interface NodeSpec {
   // When label is a RELATIVE time, the instant it was computed from. It rides along so a slow ticker
   // can rewrite the label in place as time passes, without re-rendering the tree - a re-render every
   // tick would take focus off whatever node a keyboard reader was on.
-  timeMs?: number;
+  timeMs?: number | undefined;
   // A second, dimmer line under the label (PF's node description). Carries what a compact label
   // cannot: an invocation's argv under its relative time, a target's outcome under its name.
   description?: string;
-  count?: number;
+  count?: number | undefined;
   countUnit?: string;
-  status?: "pass" | "fail" | "mixed";
+  status?: "pass" | "fail" | "mixed" | undefined;
   title?: string;
   children?: NodeSpec[];
-  select?: Selection;
+  select?: Selection | undefined;
   // The id a caller keys expansion and current-node state off. Stable across refreshes so a
   // reload does not collapse the branch the reader was reading.
   id: string;

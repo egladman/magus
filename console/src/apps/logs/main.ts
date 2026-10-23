@@ -571,7 +571,7 @@ async function loadFromURL(): Promise<void> {
     // demo carries through: under #demo the ref names a run of the synthetic scenario, and reaching
     // for a server for it would fail on a machine that has none - which is the whole point of demo.
     if (params.inv) await openInvocation(params.inv, params.inv, demo, host, token);
-    else await openRunOutput(params.ref, undefined, "", demo, host, token);
+    else if (params.ref) await openRunOutput(params.ref, undefined, "", demo, host, token);
     return;
   }
   // No static content requested: connect live if an explicit `#port=` link resolves. A static
@@ -836,7 +836,7 @@ function wireFullscreen(): void {
     () => {
       setBtnLabel(btn, document.fullscreenElement === panel ? "Exit fullscreen" : "Fullscreen");
     },
-    { signal: lifecycleAbort?.signal },
+    lifecycleAbort ? { signal: lifecycleAbort.signal } : {},
   );
 }
 
