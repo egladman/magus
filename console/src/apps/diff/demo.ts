@@ -58,8 +58,9 @@ const AGENT = {
 // parsed fixture rather than repeated here, so the order cannot drift from the patch it orders.
 function ref(path: string, index: number): DiffHunkRef {
   const hunk = DEMO_FILES.find((f) => f.path === path)?.hunks?.find((h) => h.index === index);
-  if (!hunk) throw new Error(`demo order names ${path} hunk ${index}, which the fixture lacks`);
-  return { path, index, digest: hunk.digest };
+  // A hunk the fixture lacks gets a digest no hunk carries, so the order leaves it unplaced and
+  // demo.test.ts, which checks every hunk is placed once, fails on it.
+  return { path, index, digest: hunk?.digest ?? `fixture lacks ${path} hunk ${index}` };
 }
 
 function placed(

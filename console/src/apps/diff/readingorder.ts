@@ -29,7 +29,7 @@ export interface ReadingHunk extends HunkAddress {
 // ReadingStep is one screen of the pass. group is absent when there is no order to place it in.
 export interface ReadingStep {
   readonly number: number;
-  readonly group?: DiffGroupKind;
+  readonly group?: DiffGroupKind | undefined;
   readonly groupLabel: string;
   readonly hunks: readonly ReadingHunk[];
 }
@@ -128,7 +128,7 @@ export interface StepHead {
   // position counts the steps on screen from 1; the server's number can skip the folded ones.
   readonly position: number;
   readonly total: number;
-  readonly group?: DiffGroupKind;
+  readonly group?: DiffGroupKind | undefined;
   readonly label: string;
   readonly hunks: number;
 }

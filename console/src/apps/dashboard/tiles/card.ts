@@ -223,7 +223,9 @@ export class Card {
     if (opts.term) {
       // The TITLE itself is the reference link: clicking it opens the term's glossary entry.
       // No separate labeled link beside it - that just repeated the title ("Workspaces Workspace").
-      h.append(glossaryLink(opts.term, { label: title, slug: opts.slug }));
+      h.append(
+        glossaryLink(opts.term, { label: title, ...(opts.slug ? { slug: opts.slug } : {}) }),
+      );
     } else {
       h.textContent = title;
     }

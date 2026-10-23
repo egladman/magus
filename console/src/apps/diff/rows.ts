@@ -126,6 +126,7 @@ export function placeThreads(
   // top-level comment still has one; placing each comment on its own would split a thread across
   // hunks.
   for (const [head, ...replies] of groupThreads(threads)) {
+    if (!head) continue;
     const all = [head, ...replies];
     if (head.hunk >= 0 && shown.has(head.path)) {
       for (const t of all) push(atHunk, commentKey(head.path, head.hunk), t);

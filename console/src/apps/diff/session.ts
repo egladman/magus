@@ -271,7 +271,7 @@ export interface DiffComment {
   // line is the new-side line the remark anchors to. A hunk index cannot serve - it means
   // nothing outside the session that produced it - so a draft carrying no line is one no host
   // can place, and the publisher drops it rather than guessing.
-  readonly line?: number;
+  readonly line?: number | undefined;
 }
 
 // ReviewComment is one comment already on the host's review, written by anybody. Read-only:
@@ -392,6 +392,51 @@ export interface DiffContext {
   readonly lines: readonly string[];
 }
 
+// Result is what a read or write here answers instead of throwing: the value, or the Error a
+// caller shows, skips or returns. A refused status is an HttpError, so callers can tell it apart.
+export type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
+
+function failed(e: unknown): { ok: false; error: Error } {
+  return { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
+}
+
+// getJSON is the one place the reads below meet fetch and res.json, which reject on a dropped
+// connection, an abort or a body that is not JSON.
+async function getJSON<T>(url: string, signal: AbortSignal): Promise<Result<T>> {
+  try {
+    const res = await fetch(url, { headers: authHeaders(), signal });
+    if (!res.ok) return { ok: false, error: new HttpError(res.status) };
+    const value: T = await res.json();
+    return { ok: true, value };
+  } catch (e) {
+    return failed(e);
+  }
+}
+
+// postSessionOp sends one op to the session route. A refusal carries the server's own words,
+// since they are the only thing that tells the reader which of several situations they are in.
+async function postSessionOp(
+  host: string,
+  op: Record<string, string>,
+  signal: AbortSignal,
+): Promise<Result<Response>> {
+  try {
+    const res = await fetch(`http://${host}/api/v1/diff/session`, {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(op),
+      signal,
+    });
+    if (!res.ok) {
+      const refusal = await readRefusal(res);
+      return failed(new Error(refusal?.message ?? `server answered ${res.status}`));
+    }
+    return { ok: true, value: res };
+  } catch (e) {
+    return failed(e);
+  }
+}
+
 // Fetches user-requested working-tree context for one hunk.
 export async function fetchContext(
   host: string,
@@ -400,7 +445,7 @@ export async function fetchContext(
   start: number,
   end: number,
   signal: AbortSignal,
-): Promise<DiffContext> {
+): Promise<Result<DiffContext>> {
   const q = new URLSearchParams({
     path,
     as_of: asOf,
@@ -408,19 +453,12 @@ export async function fetchContext(
     end: String(end),
     radius: "12",
   });
-  const res = await fetch(`http://${host}/api/v1/diff/context?${q}`, {
-    headers: authHeaders(),
-    signal,
-  });
-  if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffContext;
+  return getJSON(`http://${host}/api/v1/diff/context?${q}`, signal);
 }
 
 // fetchPatch reads the working tree's unified patch. Fast path, painted immediately.
-export async function fetchPatch(host: string, signal: AbortSignal): Promise<DiffResponse> {
-  const res = await fetch(`http://${host}/api/v1/diff/patch`, { headers: authHeaders(), signal });
-  if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffResponse;
+export function fetchPatch(host: string, signal: AbortSignal): Promise<Result<DiffResponse>> {
+  return getJSON(`http://${host}/api/v1/diff/patch`, signal);
 }
 
 // fetchSession reads the annotated changeset and attaches the shared session.
@@ -428,22 +466,18 @@ export async function fetchPatch(host: string, signal: AbortSignal): Promise<Dif
 // The paths are the ones the caller is ACTUALLY reviewing, taken from the patch it already
 // parsed rather than re-derived server-side. Re-deriving would race an edit made since the
 // patch was read and annotate a file the reader cannot see.
-export async function fetchSession(
+export function fetchSession(
   host: string,
   paths: readonly string[],
   signal: AbortSignal,
-): Promise<DiffReview> {
+): Promise<Result<DiffReview>> {
   const q = paths.map((p) => `path=${encodeURIComponent(p)}`).join("&");
-  const res = await fetch(`http://${host}/api/v1/diff?${q}`, { headers: authHeaders(), signal });
-  if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffReview;
+  return getJSON(`http://${host}/api/v1/diff?${q}`, signal);
 }
 
 // Fetches the live session without replacing the review snapshot.
-export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffReview> {
-  const res = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders(), signal });
-  if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffReview;
+export function fetchReviewSession(host: string, signal: AbortSignal): Promise<Result<DiffReview>> {
+  return getJSON(`http://${host}/api/v1/diff/session`, signal);
 }
 
 // SessionOp is one mutation of the human's half of the session. Every one of these is stamped
@@ -464,7 +498,7 @@ export interface SeenOp {
 export type SessionOp =
   | { op: "cursor"; path: string; hunk: number }
   | { op: "viewed"; digest: string; on: boolean }
-  | { op: "comment"; path: string; hunk: number; line?: number; body: string }
+  | { op: "comment"; path: string; hunk: number; line?: number | undefined; body: string }
   | { op: "discard"; id: string }
   | { op: "resolve"; id: string; on: boolean }
   | { op: "answer"; id: string; on: boolean }
@@ -539,20 +573,15 @@ export async function publish(
   summary: string,
   verdict: ReviewVerdict,
   signal: AbortSignal,
-): Promise<DiffReview> {
-  const res = await fetch(`http://${host}/api/v1/diff/session`, {
-    method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ op: "publish", summary, verdict }),
-    signal,
-  });
-  if (!res.ok) {
-    // The server's body is the reason - "no pull request for this branch", "no credential",
-    // an HTTP status from the host - and it is the only thing that tells the reader which of
-    // several unrelated situations they are in.
-    throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
+): Promise<Result<DiffReview>> {
+  const posted = await postSessionOp(host, { op: "publish", summary, verdict }, signal);
+  if (!posted.ok) return posted;
+  try {
+    const value: DiffReview = await posted.value.json();
+    return { ok: true, value };
+  } catch (e) {
+    return failed(e);
   }
-  return (await res.json()) as DiffReview;
 }
 
 // reply answers one conversation on the host's review.
@@ -561,7 +590,7 @@ export async function publish(
 // is itself a root (see rootOf in rows.ts). The host threads a reply by its root, so any other
 // comment's id would start a second conversation instead of joining this one.
 //
-// Throws like publish and for the same reason: it is a sentence a colleague is waiting for,
+// Fails like publish and for the same reason: it is a sentence a colleague is waiting for,
 // and a reader told it was sent when it never left will believe the conversation is finished.
 //
 // It returns nothing useful, deliberately. A reply belongs to the host's record, so the way to
@@ -572,16 +601,9 @@ export async function reply(
   root: string,
   body: string,
   signal: AbortSignal,
-): Promise<void> {
-  const res = await fetch(`http://${host}/api/v1/diff/session`, {
-    method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ op: "reply", root, body }),
-    signal,
-  });
-  if (!res.ok) {
-    throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
-  }
+): Promise<Result<null>> {
+  const posted = await postSessionOp(host, { op: "reply", root, body }, signal);
+  return posted.ok ? { ok: true, value: null } : posted;
 }
 
 // fetchThreadText reads one conversation as `magus diff --thread` prints it: the comments, the
@@ -690,8 +712,8 @@ export interface RunVerdict {
   readonly finished_ms?: number;
   readonly duration_ms?: number;
   readonly error?: string;
-  readonly undeclared?: string;
-  readonly available?: readonly string[];
+  readonly undeclared?: string | undefined;
+  readonly available?: readonly string[] | undefined;
 }
 
 // runTarget asks the local workspace to run one declared target for one project, or - with
@@ -778,7 +800,7 @@ export class HttpError extends Error {
   }
 }
 
-// reportSessionFailure reports what a throwing read here (fetchSession, fetchReviewSession) failed
+// reportSessionFailure reports what a failed read here (fetchSession, fetchReviewSession) came back
 // with, since those leave the reporting to the caller.
 export function reportSessionFailure(host: string, what: string, e: unknown): void {
   if (e instanceof HttpError) reportHttpStatus(host, what, e.status);

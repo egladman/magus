@@ -20,7 +20,15 @@ test("context requests carry the reviewed patch identity", async () => {
     return new Response(JSON.stringify({ path: "a.go", as_of: "snapshot-a", start: 2, lines: [] }));
   }) as typeof fetch;
   try {
-    await fetchContext("127.0.0.1:7391", "a.go", "snapshot-a", 3, 3, new AbortController().signal);
+    const got = await fetchContext(
+      "127.0.0.1:7391",
+      "a.go",
+      "snapshot-a",
+      3,
+      3,
+      new AbortController().signal,
+    );
+    assert.equal(got.ok, true);
     const query = new URL(url).searchParams;
     assert.equal(query.get("path"), "a.go");
     assert.equal(query.get("as_of"), "snapshot-a");
@@ -43,16 +51,17 @@ const noPullRequest = JSON.stringify({
   error: { code: 409, message: "MGS9012: no pull request for this branch", status: "ABORTED" },
 });
 
-test("publish throws the envelope's message, not the raw JSON", async () => {
-  await withResponse(new Response(noPullRequest, { status: 409 }), () =>
-    assert.rejects(
-      publish("127.0.0.1:7391", "", "comment", new AbortController().signal),
-      new Error("MGS9012: no pull request for this branch"),
-    ),
+test("publish fails with the envelope's message, not the raw JSON", async () => {
+  const got = await withResponse(new Response(noPullRequest, { status: 409 }), () =>
+    publish("127.0.0.1:7391", "", "comment", new AbortController().signal),
   );
+  assert.deepEqual(got, {
+    ok: false,
+    error: new Error("MGS9012: no pull request for this branch"),
+  });
 });
 
-test("reply throws the envelope's message, and a plain body or none still shows", async () => {
+test("reply fails with the envelope's message, and a plain body or none still shows", async () => {
   const signal = new AbortController().signal;
   const reasons: [string, number, string][] = [
     [noPullRequest, 409, "MGS9012: no pull request for this branch"],
@@ -60,9 +69,10 @@ test("reply throws the envelope's message, and a plain body or none still shows"
     ["", 502, "server answered 502"],
   ];
   for (const [body, status, message] of reasons) {
-    await withResponse(new Response(body, { status }), () =>
-      assert.rejects(reply("127.0.0.1:7391", "t1", "hi", signal), new Error(message)),
+    const got = await withResponse(new Response(body, { status }), () =>
+      reply("127.0.0.1:7391", "t1", "hi", signal),
     );
+    assert.deepEqual(got, { ok: false, error: new Error(message) });
   }
 });
 
