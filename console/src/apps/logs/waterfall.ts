@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // waterfall.ts - the trace-waterfall (Timeline) view. A Datadog-style waterfall of the
 // invocation: the magus OTel model is invocation=trace, target-exec=span, step=child span. The
 // magus.viewer.v1alpha1 wire format carries no explicit trace_id/span_id, so the span tree is
@@ -451,8 +450,8 @@ export function updateFocusUI(spans: SpanMulti | null): void {
   const active = state.timeline && !!spans && !!spans.groups && spans.groups.length > 0;
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
-    if (state.focusWin && active) {
-      const d = clampFocus(must(spans));
+    if (state.focusWin && active && spans) {
+      const d = clampFocus(spans);
       win.textContent = durMsText(d.t1 - d.t0) + " window";
       win.hidden = false;
     } else win.hidden = true;

@@ -1,4 +1,4 @@
-import { must, errMessage } from "../../lib/guards";
+import { errMessage } from "../../lib/guards";
 import { fail, failFrom, succeed, type Result } from "../../lib/result";
 import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import type { AppInstance } from "../../desktop/standalone";
@@ -779,11 +779,17 @@ function setHidden(ids: Iterable<string> | null): void {
   syncSimMembership();
 }
 
+// matchedNodes is the nodes the current query matched, or every node when there is no query.
+function matchedNodes(): GNode[] {
+  const matched = matchSet;
+  return matched ? graph.nodes.filter((n) => matched.has(n.id)) : graph.nodes;
+}
+
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
 // Stops the force simulation so no ticks disturb the fixed positions.
 function applyLayeredMode() {
-  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const visNodes = matchedNodes();
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "layered layout is capped at 500 nodes: narrow with a query or the local graph",
@@ -814,7 +820,7 @@ function applyLayeredMode() {
 // membership in wavesMeta so draw() can paint column bands/headers and
 // switchLayout can report parallelism.
 function applyWavesMode() {
-  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const visNodes = matchedNodes();
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "waves layout is capped at 500 nodes: narrow with a query or the local graph",
@@ -869,7 +875,7 @@ function enterRadialPick(): void {
 function applyRadialMode(): Set<string> | null {
   const center = selected ?? focusId;
   if (!center) return null; // switchLayout guards via layoutBlockedReason; safe fallback
-  const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const subsetAll = matchedNodes();
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
   // Undirected rather than graph.links: an ego neighborhood spans every edge kind, not just
@@ -4726,10 +4732,9 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
     "</span>" +
     '<button type="button" class="pf-v6-c-button pf-m-plain console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">' +
     '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span></button>';
-  must(wrap.querySelector<HTMLElement>(".console-graph-views__copy")).addEventListener(
-    "click",
-    () => copyCommand(cmd),
-  );
+  wrap
+    .querySelector<HTMLElement>(".console-graph-views__copy")
+    ?.addEventListener("click", () => copyCommand(cmd));
 }
 
 // copyCommand puts a shell command on the clipboard and says so, or says why not: writeText rejects
@@ -5675,14 +5680,15 @@ export async function activate() {
   // that runs last - so revealWholeGraph's canvas-size poll and bootLive's FindAffected both started
   // while it was still null, and both silently opted out of cancellation. Every comment promising
   // "into every RPC" or "torn down takes the poll with it" was false for exactly those two.
-  lifecycleAbort = new AbortController();
+  const lifecycle = new AbortController();
+  lifecycleAbort = lifecycle;
 
   // Collapse the stage tools behind the PF toolbar kebab on narrow viewports (the shared
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
   // works in the live/empty states as well.
   wireToolbarOverflow();
   // Before any early return too: the Figures mode works whether or not a graph loads.
-  wireGraphModes(lifecycleAbort.signal);
+  wireGraphModes(lifecycle.signal);
 
   // Register file-open listeners before any early return so the installed PWA
   // can open a .json file even when the demo graph fails to load (no #data/#src
@@ -5693,7 +5699,7 @@ export async function activate() {
   canvas.addEventListener("dragover", (e) => e.preventDefault());
   canvas.addEventListener("drop", (e) => {
     e.preventDefault();
-    readGraphFile(must(e.dataTransfer).files[0]);
+    readGraphFile(e.dataTransfer?.files[0]);
   });
 
   // File handler: when the installed PWA is launched with "Open with" on a .json file,
@@ -5716,7 +5722,7 @@ export async function activate() {
 
   // Attempt a live-mode connection on an explicit server attach (#port, or the
   // server-origin/shared console). Returns true if handled; false falls through.
-  if (await bootLive()) return;
+  if (await bootLive(lifecycle.signal)) return;
 
   // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
   // #demo / deep-link boot). A cold visit returns instantly, so the spinner never visibly flashes.
@@ -5754,16 +5760,15 @@ export async function activate() {
     if (empty) empty.hidden = false;
   }
 
-  bootWireEvents();
+  bootWireEvents(lifecycle.signal);
 }
 
 // bootWireEvents wires all the event listeners that are the same for both the
 // normal load path and the live-mode load path. Called at the end of boot() and
 // from the live-mode path before it returns.
-function bootWireEvents() {
+function bootWireEvents(lifecycleSignal: AbortSignal) {
   // The controller is activate()'s, not this function's - see the note there. Every
   // addEventListener below routes through its signal, so deactivate() removes them with one abort().
-  const lifecycleSignal = must(lifecycleAbort).signal;
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
@@ -5965,7 +5970,7 @@ function bootWireEvents() {
       searchEl.value = q;
       applyQuery(q);
       searchEl.focus();
-      must(document.querySelector<HTMLElement>(".console-graph-app")).scrollIntoView({
+      document.querySelector<HTMLElement>(".console-graph-app")?.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
       });
@@ -6146,7 +6151,7 @@ function bootWireEvents() {
 
   // The question builder, behind the kebab beside the filter box. It owns the views and the
   // filter grammar that used to be two columns of chips.
-  queryBuilder = createQueryBuilder({
+  const builder = createQueryBuilder({
     // Offered values come from the LOADED graph, so a picker never suggests a kind that matches
     // nothing here.
     kinds: () => [...new Set(graph?.nodes.map((n) => n.kind) ?? [])].sort(),
@@ -6179,7 +6184,7 @@ function bootWireEvents() {
   });
   // Mounted in the detail column: it takes that column while open, so the canvas beside it stays
   // visible and acts as the preview. setDetailMode owns which of the three the column shows.
-  const builder = must(queryBuilder);
+  queryBuilder = builder;
   el("query-builder-host")?.append(builder.el);
   el("query-builder-btn")?.addEventListener("click", () => {
     if (builder.isOpen()) {
@@ -6207,7 +6212,7 @@ function bootWireEvents() {
 
 // bootLive: live-mode boot path. Fetches skeleton, wires SSE, then returns.
 // Returns true if live mode connected, false to fall through to normal load.
-async function bootLive() {
+async function bootLive(lifecycleSignal: AbortSignal) {
   const params = hashParams();
   // A static graph was explicitly requested (#data/#src): never take over the live path, so those
   // offline links keep working even when a default server is configured.
@@ -6341,7 +6346,7 @@ async function bootLive() {
     liveConnect();
 
     // Wire all common event listeners.
-    bootWireEvents();
+    bootWireEvents(lifecycleSignal);
     return true;
   } catch (e) {
     return connectFailed(errMessage(e));

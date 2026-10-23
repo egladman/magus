@@ -21,9 +21,7 @@ test("an empty workspace yields no tab views", () => {
 
 test("no tab is active when activeId points nowhere", () => {
   const ws = { tabs: [{ id: "a", pageId: "logs", title: "Log viewer" }], activeId: null };
-  assert.deepEqual(tabViews(ws), [
-    { id: "a", title: "Log viewer", active: false },
-  ]);
+  assert.deepEqual(tabViews(ws), [{ id: "a", title: "Log viewer", active: false }]);
 });
 
 // --- auto-naming: a tab titled after the document its app has open ------------------------

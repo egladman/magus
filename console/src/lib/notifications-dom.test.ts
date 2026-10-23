@@ -6,9 +6,12 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { mountNotificationCenter, type NotificationCenter } from "./notifications";
 import { mountToastGroup } from "./toast";
-import { must } from "./guards";
 
-const panel = (): HTMLElement => must(document.getElementById("console-notifypanel"));
+const panel = (): HTMLElement => {
+  const el = document.getElementById("console-notifypanel");
+  assert.ok(el);
+  return el;
+};
 const entries = (): HTMLElement[] => [
   ...panel().querySelectorAll<HTMLElement>(".pf-v6-c-notification-drawer__list-item"),
 ];
@@ -38,12 +41,14 @@ describe("the notification drawer", () => {
     const p = panel();
     assert.ok(p.classList.contains("pf-v6-c-notification-drawer"));
     assert.equal(p.getAttribute("role"), "dialog");
-    const title = must(p.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__header-title"));
+    const title = p.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__header-title");
+    assert.ok(title);
     assert.equal(title.tagName, "H2");
     assert.equal(p.getAttribute("aria-labelledby"), title.id);
-    const close = must(
-      p.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__header-action-close button"),
+    const close = p.querySelector<HTMLElement>(
+      ".pf-v6-c-notification-drawer__header-action-close button",
     );
+    assert.ok(close);
     assert.equal(close.getAttribute("aria-label"), "Close notifications");
     assert.ok(close.querySelector("svg"), "the close mark is an svg, not a text glyph");
     assert.equal(p.querySelector(".pf-v6-c-notification-drawer__list")?.tagName, "UL");
@@ -57,14 +62,16 @@ describe("the notification drawer", () => {
     assert.ok(ok?.classList.contains("pf-m-success"));
     assert.ok(failed?.classList.contains("pf-m-danger"));
     assert.ok(failed?.querySelector(".pf-v6-c-notification-drawer__list-item-header-icon svg"));
-    const title = must(
-      failed?.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-header-title"),
+    const title = failed?.querySelector<HTMLElement>(
+      ".pf-v6-c-notification-drawer__list-item-header-title",
     );
+    assert.ok(title);
     assert.equal(title.tagName, "H3");
     assert.match(title.textContent ?? "", /Danger notification:\s+build failed/);
-    const dismiss = must(
-      failed?.querySelector<HTMLElement>(".pf-v6-c-notification-drawer__list-item-action button"),
+    const dismiss = failed?.querySelector<HTMLElement>(
+      ".pf-v6-c-notification-drawer__list-item-action button",
     );
+    assert.ok(dismiss);
     assert.equal(dismiss.getAttribute("aria-label"), "Dismiss notification: build failed");
     dismiss.click();
     assert.equal(entries().length, 1);
@@ -92,7 +99,8 @@ describe("the notification drawer", () => {
       center.store.notify({ source: "Runs", message: "done", at: Date.now() - 125_000 });
       center.open();
       assert.ok(tick, "opening starts the ticker");
-      const time = must(panel().querySelector<HTMLElement>("time[data-time]"));
+      const time = panel().querySelector<HTMLElement>("time[data-time]");
+      assert.ok(time);
       time.textContent = "stale";
       tick?.();
       assert.equal(time.textContent, "2m ago");
@@ -108,19 +116,17 @@ describe("the notification drawer", () => {
     center.store.notify({ source: "Runs", message: "one", at: 1 });
     center.store.notify({ source: "Runs", message: "two", at: 2 });
     center.open();
-    const clear = must(
-      [...panel().querySelectorAll<HTMLButtonElement>("button")].find(
-        (b) => b.textContent === "Clear all",
-      ),
+    const clear = [...panel().querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === "Clear all",
     );
+    assert.ok(clear);
     clear.click();
     assert.equal(center.store.list().length, 0);
 
-    const undo = must(
-      [...document.querySelectorAll<HTMLButtonElement>("#console-toasts button")].find(
-        (b) => b.textContent === "Undo",
-      ),
+    const undo = [...document.querySelectorAll<HTMLButtonElement>("#console-toasts button")].find(
+      (b) => b.textContent === "Undo",
     );
+    assert.ok(undo);
     undo.click();
     assert.deepEqual(
       center.store.list().map((n) => n.message),

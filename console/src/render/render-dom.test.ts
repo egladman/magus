@@ -6,7 +6,6 @@
 import assert from "node:assert/strict";
 import { test as nodeTest, type TestContext } from "node:test";
 import { NOTIFY_EVENT, type NotifyInput } from "../lib/notifications";
-import { must } from "../lib/guards";
 import { copyText } from "./clipboard";
 import { createFilterField } from "./filterField";
 import { buildSection, createSection, setSectionOpen } from "./sections";
@@ -47,7 +46,8 @@ test("the filter field reports its text after a pause, and clears at once", asyn
   document.body.append(field.el);
 
   assert.equal(field.input.getAttribute("aria-label"), "Filter things");
-  const clear = must(field.el.querySelector<HTMLButtonElement>(".console-filter__clear"));
+  const clear = field.el.querySelector<HTMLButtonElement>(".console-filter__clear");
+  assert.ok(clear);
   assert.equal(clear.hidden, true, "nothing to clear in an empty box");
 
   field.input.value = "abc";
@@ -86,8 +86,10 @@ test("Escape clears a filter that has text and stops there", () => {
 test("the result count is shown and spoken", () => {
   const field = createFilterField({ label: "f", placeholder: "f", onChange: () => {} });
   document.body.append(field.el);
-  const count = must(field.el.querySelector<HTMLElement>(".console-filter__count"));
-  const spoken = must(field.el.querySelector<HTMLElement>("[role=status]"));
+  const count = field.el.querySelector<HTMLElement>(".console-filter__count");
+  assert.ok(count);
+  const spoken = field.el.querySelector<HTMLElement>("[role=status]");
+  assert.ok(spoken);
   assert.equal(count.hidden, true);
 
   field.setResults("3 of 12", "3 of 12 runs match the filter");
@@ -208,10 +210,13 @@ function treeOf(): HTMLElement {
     '<li role="treeitem" id="b1" aria-selected="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node">B1</button></div></li>' +
     "</ul></li></ul>";
   document.body.append(root);
-  return must(root.querySelector<HTMLElement>("ul"));
+  const ul = root.querySelector<HTMLElement>("ul");
+  assert.ok(ul);
+  return ul;
 }
 
-function press(el: Element, key: string): void {
+function press(el: Element | null, key: string): void {
+  assert.ok(el, `no element to press ${key} on`);
   el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 }
 
@@ -231,16 +236,17 @@ test("the tree is one Tab stop on its items, and the arrow keys walk the visible
     "the row buttons stay out of the tab order",
   );
 
-  const a = must(document.getElementById("a"));
+  const a = document.getElementById("a");
+  assert.ok(a);
   a.focus();
   press(a, "ArrowDown");
   assert.equal(document.activeElement?.id, "a1");
   assert.deepEqual(stops(), ["a1"], "the tab stop follows focus");
-  press(must(document.activeElement), "ArrowDown");
+  press(document.activeElement, "ArrowDown");
   assert.equal(document.activeElement?.id, "b", "a collapsed branch's children are skipped");
-  press(must(document.activeElement), "End");
+  press(document.activeElement, "End");
   assert.equal(document.activeElement?.id, "b");
-  press(must(document.activeElement), "Home");
+  press(document.activeElement, "Home");
   assert.equal(document.activeElement?.id, "a");
 
   // Left on an open branch closes it (the row's own click does the toggling), and on a leaf climbs.
@@ -248,14 +254,17 @@ test("the tree is one Tab stop on its items, and the arrow keys walk the visible
   a.addEventListener("click", () => toggled++);
   press(a, "ArrowLeft");
   assert.equal(toggled, 1);
-  const leaf = must(document.getElementById("a1"));
+  const leaf = document.getElementById("a1");
+  assert.ok(leaf);
   leaf.focus();
   press(leaf, "ArrowLeft");
   assert.equal(document.activeElement?.id, "a");
 
   // Enter on a focused item presses that item's own row button.
   let pressed = 0;
-  must(leaf.querySelector("button")).addEventListener("click", () => pressed++);
+  const button = leaf.querySelector("button");
+  assert.ok(button);
+  button.addEventListener("click", () => pressed++);
   press(leaf, "Enter");
   assert.equal(pressed, 1);
 });

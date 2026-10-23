@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // main.ts - the Log Viewer composition root. A purpose-built, read-only viewer for a magus
 // run's captured output: the #data= fragment carries a magus.viewer.v1alpha1 Journal (protobuf,
 // gzip+base64url), decoded here and rendered pretty from its STRUCTURE (per-target groups, exec
@@ -520,7 +519,8 @@ async function loadFromURL(): Promise<void> {
   // to read a synthetic journal; returning first is what made that path unreachable from a URL.
   const demo = wantsDemo(parseHash());
   if (demo && !params.inv && !params.ref) {
-    startDemo();
+    const started = startDemo();
+    if (!started.ok) setStatus("The demo could not start: " + started.error.message, true);
     return;
   }
   if (params.data) {
@@ -643,9 +643,8 @@ function finishLoad(ref: string, statusMsg: string, name?: string): void {
   setStatus("");
   publishStatus({ count: statusMsg });
   const foldBtn = el("fold-all-btn");
-  if (foldBtn)
-    (foldBtn as HTMLButtonElement).disabled =
-      state.timeline || must(state.model).titled === 0 || !state.pretty;
+  if (foldBtn instanceof HTMLButtonElement)
+    foldBtn.disabled = state.timeline || (state.model?.titled ?? 0) === 0 || !state.pretty;
   const copyBtn = el("copy-all-btn");
   if (copyBtn) (copyBtn as HTMLButtonElement).disabled = false;
   const cmdBtn = el("copy-cmd-btn");

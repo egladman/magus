@@ -22,9 +22,8 @@ import {
   shortName,
   workspaceScope,
 } from "../lib/scope";
-import { must } from "../lib/guards";
 import { wireMenu } from "./menu";
-import { menuToggle } from "./menu-toggle";
+import { labeledMenuToggle } from "./menu-toggle";
 
 export interface WorkspacePickerOptions {
   // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-app
@@ -69,9 +68,8 @@ export function initWorkspacePicker(
 
   // A menu toggle, whose caret is what tells a sighted reader this opens a menu: without it the value
   // reads as a status readout rather than as something to press.
-  const btn = menuToggle({ text: "", variant: "plain" });
+  const { button: btn, text: label } = labeledMenuToggle({ text: "", variant: "plain" });
   btn.id = "console-scope-btn";
-  const label = must(btn.querySelector<HTMLElement>(".pf-v6-c-menu-toggle__text"));
   label.classList.add("console-shell-scope__label");
   wrap.append(caption, btn);
 

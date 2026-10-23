@@ -50,12 +50,12 @@ import {
   consumeLiveToken,
   createServerTransport,
 } from "../../lib/server";
-import { errMessage, must } from "../../lib/guards";
+import { errMessage } from "../../lib/guards";
 import { persisted } from "../../lib/persist";
 import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../../desktop/view";
 import { inlineAlert } from "../../ui/alert";
-import { emptyStateShell } from "../../ui/empty-state";
+import { emptyStateWithIcon } from "../../ui/empty-state";
 import { statusGlyph, statusMark } from "../../ui/status";
 import {
   renderConnectPrompt,
@@ -100,7 +100,7 @@ function buildScaffold(host: HTMLElement): Refs {
 
   const iconHolder = document.createElement("template");
   iconHolder.innerHTML = EMPTY_ICON;
-  const state = emptyStateShell({
+  const state = emptyStateWithIcon({
     heading: "h2",
     classes: "console-render-empty",
     icon: iconHolder.content,
@@ -117,7 +117,7 @@ function buildScaffold(host: HTMLElement): Refs {
     notice,
     body,
     empty: state.root,
-    emptyIcon: must(state.icon),
+    emptyIcon: state.icon,
     emptySlots: { title: state.title, message: emptyMessage, actions: state.actions },
   };
 }

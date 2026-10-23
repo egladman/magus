@@ -14,7 +14,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Command, Keymap } from "./commands";
 import { createKeybindingsOverlay } from "./keybindings";
-import { must } from "../lib/guards";
 import type { Persisted } from "../lib/persist";
 
 const commands: Command[] = [{ id: "tab.new", label: "New tab", group: "Tabs", run() {} }];
@@ -121,8 +120,10 @@ test("each row's Record, Clear and reset controls name their command", () => {
 test("the overlay describes itself with one help paragraph", () => {
   const overlay = createKeybindingsOverlay({ commands, defaults, keymap: cell() });
   document.body.append(overlay.el);
-  const box = must(overlay.el.querySelector<HTMLElement>(".pf-v6-c-modal-box"));
-  const description = must(box.querySelector<HTMLElement>(".pf-v6-c-modal-box__description"));
+  const box = overlay.el.querySelector<HTMLElement>(".pf-v6-c-modal-box");
+  assert.ok(box);
+  const description = box.querySelector<HTMLElement>(".pf-v6-c-modal-box__description");
+  assert.ok(description);
   assert.equal(box.getAttribute("aria-describedby"), description.id);
   assert.ok(box.querySelector(".pf-v6-c-modal-box__header-main .pf-v6-c-modal-box__title"));
   assert.equal(overlay.el.querySelectorAll("[data-kbdesc]").length, 0);

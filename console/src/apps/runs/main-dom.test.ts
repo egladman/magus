@@ -18,7 +18,6 @@
 
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
-import { must } from "../../lib/guards";
 import { setDefaultHost } from "../../lib/settings";
 import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
@@ -181,8 +180,10 @@ test("the facets list only values that occur, and a click writes its term into t
     ?.querySelectorAll(".console-runs__facet-value");
   assert.equal(projects?.length, 2, "only the two projects that actually ran");
 
-  const docs = [...(projects ?? [])].find((b) => text(b).startsWith("docs")) as HTMLElement;
-  must(docs.querySelector<HTMLElement>("button")).click();
+  const docs = [...(projects ?? [])].find((b) => text(b).startsWith("docs"));
+  const docsButton = docs?.querySelector<HTMLElement>("button");
+  assert.ok(docsButton);
+  docsButton.click();
   await settle();
 
   const query = host.querySelector<HTMLInputElement>(".console-runs__field input");
@@ -282,7 +283,8 @@ test("no server, nothing kept, and nothing matching are three different empty st
 
   serve([output()], [runLog()]);
   const full = await remount();
-  const query = must(full.querySelector<HTMLInputElement>(".console-runs__field input"));
+  const query = full.querySelector<HTMLInputElement>(".console-runs__field input");
+  assert.ok(query);
   query.value = "project:nothing-matches-this";
   query.dispatchEvent(new Event("input"));
   await settleFilter();
@@ -334,7 +336,8 @@ test("the highlighted row is the run the detail pane shows", async () => {
   assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
 
   const rows = [...host.querySelectorAll<HTMLElement>(".console-runs__row")];
-  const other = must(rows.find((r) => r.getAttribute("aria-current") !== "true"));
+  const other = rows.find((r) => r.getAttribute("aria-current") !== "true");
+  assert.ok(other);
   const otherInv = other.dataset.inv;
   other.click();
   await settle();
@@ -342,7 +345,8 @@ test("the highlighted row is the run the detail pane shows", async () => {
   assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
 
   // A filter that hides the choice moves both to the newest run that is left, together.
-  const query = must(host.querySelector<HTMLInputElement>(".console-runs__field input"));
+  const query = host.querySelector<HTMLInputElement>(".console-runs__field input");
+  assert.ok(query);
   query.value = otherInv === "invB" ? "project:console" : "project:docs";
   query.dispatchEvent(new Event("input"));
   await settleFilter();
@@ -357,7 +361,8 @@ test("a row names its outcome in words and marks the current run for assistive t
   serve([output({ failed: true })], [runLog({ status: "STATUS_FAIL" })]);
   const host = await mount();
 
-  const row = must(host.querySelector<HTMLElement>(".console-runs__list > li.console-runs__row"));
+  const row = host.querySelector<HTMLElement>(".console-runs__list > li.console-runs__row");
+  assert.ok(row);
   assert.ok(row.classList.contains("pf-m-clickable"));
   assert.equal(row.tabIndex, 0, "the item takes the tab stop");
   assert.ok(row.querySelector(".pf-v6-c-data-list__item-row > .pf-v6-c-data-list__item-content"));
@@ -396,14 +401,19 @@ test("the filter counts its results and clears from the box", async () => {
     [runLog({ id: "invA" }), runLog({ id: "invB" })],
   );
   const host = await mount();
-  const query = must(host.querySelector<HTMLInputElement>(".console-runs__field input"));
+  const query = host.querySelector<HTMLInputElement>(".console-runs__field input");
+  assert.ok(query);
   query.value = "project:docs";
   query.dispatchEvent(new Event("input"));
   await settleFilter();
 
   assert.equal(text(host.querySelector(".console-runs__field .console-filter__count")), "1 of 2");
   assert.match(text(host.querySelector(".console-runs__field [role=status]")), /1 of 2 runs match/);
-  must(host.querySelector<HTMLElement>(".console-runs__field .console-filter__clear")).click();
+  const clearFilter = host.querySelector<HTMLElement>(
+    ".console-runs__field .console-filter__clear",
+  );
+  assert.ok(clearFilter);
+  clearFilter.click();
   await settle();
   assert.equal(query.value, "");
   assert.equal(host.querySelectorAll(".console-runs__row").length, 2);

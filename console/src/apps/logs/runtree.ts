@@ -9,7 +9,6 @@ import {
   type Output,
 } from "@wire/viewer/v1alpha1/viewer_pb";
 import { createServerTransport } from "../../lib/server";
-import { must } from "../../lib/guards";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer
 // that lists prior runs so a reader can find one WITHOUT a ref somebody printed on a terminal.
 // Two orderings of the same rows, switched in the panel header: "Runs" nests invocation ->
@@ -435,7 +434,7 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
     const group = document.createElement("ul");
     group.className = "pf-v6-c-tree-view__list";
     group.setAttribute("role", "group");
-    for (const child of must(spec.children)) group.append(makeNode(child, ctx));
+    for (const child of spec.children ?? []) group.append(makeNode(child, ctx));
     li.append(group);
   }
 

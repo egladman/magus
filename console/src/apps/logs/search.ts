@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // search.ts - find-in-page over the rendered log body. Case-insensitive substring highlight
 // that wraps matches in <mark> (preserving the surrounding ANSI-colored spans), tracks an
 // active match, and steps through them (Enter / prev / next), expanding a collapsed section so
@@ -41,7 +40,7 @@ function highlightIn(lc: Element, needle: string): void {
   let n: Node | null;
   while ((n = walker.nextNode())) textNodes.push(n);
   for (const node of textNodes) {
-    const text = must(node.nodeValue);
+    const text = node.nodeValue ?? "";
     const lower = text.toLowerCase();
     let idx = lower.indexOf(needle);
     if (idx < 0) continue;
@@ -63,9 +62,9 @@ function highlightIn(lc: Element, needle: string): void {
 
 export function clearMarks(): void {
   for (const mark of searchMarks) {
-    const parent = mark.parentNode as (Node & ParentNode) | null;
+    const parent = mark.parentNode;
     if (!parent) continue;
-    parent.replaceChild(document.createTextNode(must(mark.textContent)), mark);
+    parent.replaceChild(document.createTextNode(mark.textContent ?? ""), mark);
     parent.normalize();
   }
   searchMarks = [];

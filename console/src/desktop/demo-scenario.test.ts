@@ -6,8 +6,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { must } from "../lib/guards";
 import {
+  type ScenarioRun,
   scenarioRuns,
   scenarioActivity,
   scenarioInsight,
@@ -71,7 +71,11 @@ test("activity is newest-first, all in the scenario workspace", () => {
 
 test("each run-driving MCP call ties to its run by ref, timing, and duration", () => {
   const runs = scenarioRuns(NOW);
-  const byInv = (inv: string) => must(runs.find((r) => r.inv === inv));
+  const byInv = (inv: string): ScenarioRun => {
+    const run = runs.find((r) => r.inv === inv);
+    assert.ok(run, `no run ${inv}`);
+    return run;
+  };
   const events = scenarioActivity(NOW);
   // Every call is the client tool; a run's result is the one whose preview opens with a verdict glyph.
   const runCalls = events.filter(
@@ -100,7 +104,7 @@ test("the failed output lookup names the pruned ref; the sandbox denial mirrors 
   const events = scenarioActivity(NOW);
   const lookup = events.find((e) => e.action === "client" && e.error?.includes(PRUNED_REF));
   assert.ok(lookup && !lookup.ok, "the lookup failed");
-  assert.match(must(lookup.error), new RegExp(PRUNED_REF), "it names the pruned ref");
+  assert.match(lookup.error ?? "", new RegExp(PRUNED_REF), "it names the pruned ref");
 
   const denial = events.find((e) => e.kind === "sandbox");
   const generate = runs.find((r) => r.target === "generate");
@@ -108,7 +112,7 @@ test("the failed output lookup names the pruned ref; the sandbox denial mirrors 
   assert.equal(generate.state, "failed");
   // Same instant and same story on both apps.
   assert.equal(denial.timeMs, generate.endMs);
-  assert.match(must(generate.error), /sandbox/);
+  assert.match(generate.error ?? "", /sandbox/);
 });
 
 test("insight names scenario files, dates derive from now, and identity:test is the volatile one", () => {
@@ -156,8 +160,10 @@ test("every run in the history is a target the live catalog also knows", () => {
 // is what makes the web side of the story a closed thread rather than a loose end a reader notices.
 test("the failing typecheck is followed by a passing run of the same target", () => {
   const runs = scenarioRuns(NOW);
-  const broke = must(runs.find((r) => r.target === "typecheck" && r.state === "failed"));
-  const fixed = must(runs.find((r) => r.target === "typecheck" && r.state === "passed"));
+  const broke = runs.find((r) => r.target === "typecheck" && r.state === "failed");
+  assert.ok(broke);
+  const fixed = runs.find((r) => r.target === "typecheck" && r.state === "passed");
+  assert.ok(fixed);
   assert.equal(fixed.project, broke.project, "same project");
   assert.ok(fixed.endMs > broke.endMs, "the pass comes after the failure");
 });

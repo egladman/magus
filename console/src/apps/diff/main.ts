@@ -133,9 +133,8 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import { must } from "../../lib/guards";
 import { inlineAlert } from "../../ui/alert";
-import { emptyStateShell } from "../../ui/empty-state";
+import { emptyStateWithIcon } from "../../ui/empty-state";
 import { expandableSection } from "../../ui/expandable";
 import { statusGlyph, statusIcon, statusText, type Status } from "../../ui/status";
 import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
@@ -921,7 +920,7 @@ export function activate(host: HTMLElement): AppInstance {
   overview.setAttribute("aria-label", "Changeset overview");
   overviewButton.setAttribute("aria-controls", overview.id);
   // A spinner only while the first read is in flight; every other empty state is an answer.
-  const emptyState = emptyStateShell({
+  const emptyState = emptyStateWithIcon({
     heading: "h1",
     title: "Loading",
     classes: "console-diff-empty",
@@ -929,7 +928,7 @@ export function activate(host: HTMLElement): AppInstance {
     ways: true,
   });
   const empty = emptyState.root;
-  const emptyIcon = must(emptyState.icon);
+  const emptyIcon = emptyState.icon;
   emptyIcon.classList.add("console-diff-empty__spinner");
   const emptyMessage = h("p", undefined, "Reading the working tree.");
   emptyState.body.append(emptyMessage);

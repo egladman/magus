@@ -4,7 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
-import { must } from "../../lib/guards";
 import {
   PAYLOAD_MAX_BYTES,
   activityToModel,
@@ -93,8 +92,8 @@ test("an ok mcp call accents pass and heads with action+actor", () => {
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);
-  assert.match(must(sec.title), /client {2}agent:claude/);
-  assert.match(must(sec.title), /mcp, ok/);
+  assert.match(sec.title ?? "", /client {2}agent:claude/);
+  assert.match(sec.title ?? "", /mcp, ok/);
 });
 
 test("an agent command observation renders as an agent event, not an execution result", () => {
@@ -109,8 +108,8 @@ test("an agent command observation renders as an agent event, not an execution r
   );
   assert.equal(sec.meta?.label, "agent");
   assert.equal(sec.meta?.status, "pass");
-  assert.match(must(sec.title), /Bash {2}session:abc/);
-  assert.match(must(sec.title), /agent, ok/);
+  assert.match(sec.title ?? "", /Bash {2}session:abc/);
+  assert.match(sec.title ?? "", /agent, ok/);
   assert.ok(sec.lines.includes("guard: deny"));
 });
 
@@ -119,7 +118,7 @@ test("an errored call accents fail and leads its body with the error text", () =
     ev({ action: "client", outcome: Outcome.ERROR, error: "target not found" }),
   );
   assert.equal(sec.meta?.status, "fail");
-  assert.match(must(sec.title), /, error/);
+  assert.match(sec.title ?? "", /, error/);
   assert.equal(sec.lines[1], "target not found");
 });
 

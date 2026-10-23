@@ -16,7 +16,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test as nodeTest, type TestContext } from "node:test";
 import { INV_CI } from "../../desktop/demo-scenario";
-import { must } from "../../lib/guards";
 import { NOTIFY_EVENT, type NotifyInput } from "../../lib/notifications";
 import { activate, deactivate, docTitle } from "./main";
 import { bindRefSlot, resolveDom, setRefIdentity, setStatus } from "./dom";
@@ -72,7 +71,9 @@ function panel(): void {
 }
 
 function loadCi(): void {
-  state.currentJournal = must(demoJournal(INV_CI));
+  const journal = demoJournal(INV_CI);
+  assert.ok(journal);
+  state.currentJournal = journal;
   state.currentJournals = null;
   const built = buildModelMulti(waterfallSource());
   state.model = { sections: built.sections, titled: built.titled };
@@ -92,21 +93,24 @@ test("a section head holds a toggle and its actions side by side, never one insi
   assert.ok(heads.length > 0, "the run has sections");
   assert.equal(document.querySelectorAll("button button").length, 0, "no button contains a button");
   for (const head of heads) {
-    const toggle = must(
-      head.querySelector<HTMLElement>(":scope > .console-render-section__toggle"),
-    );
+    const toggle = head.querySelector<HTMLElement>(":scope > .console-render-section__toggle");
+    assert.ok(toggle);
     assert.equal(toggle.tagName, "BUTTON");
-    const lines = must(head.nextElementSibling);
+    const lines = head.nextElementSibling;
+    assert.ok(lines);
     assert.equal(toggle.getAttribute("aria-controls"), lines.id, "the toggle names what it folds");
-    const actions = must(head.querySelector(":scope > .console-render-section__actions"));
+    const actions = head.querySelector(":scope > .console-render-section__actions");
+    assert.ok(actions);
     assert.equal(actions.contains(toggle), false);
     assert.equal(actions.getAttribute("role"), "group");
     const labels = [...actions.querySelectorAll("button")].map((b) => text(b));
     assert.equal(labels[0], "Copy", "sentence case, the same voice as the toolbar");
   }
 
-  const section = must(heads[0]?.parentElement);
-  const toggle = must(heads[0]?.querySelector<HTMLElement>(".console-render-section__toggle"));
+  const section = heads[0]?.parentElement;
+  assert.ok(section);
+  const toggle = heads[0]?.querySelector<HTMLElement>(".console-render-section__toggle");
+  assert.ok(toggle);
   const was = toggle.getAttribute("aria-expanded");
   toggle.click();
   assert.notEqual(toggle.getAttribute("aria-expanded"), was);
@@ -119,11 +123,13 @@ test("the waterfall names every result in words and has a table twin", () => {
   state.timeline = true;
   renderWaterfall();
 
-  const svg = must(document.querySelector<SVGElement>(".console-log-waterfall__svg"));
+  const svg = document.querySelector<SVGElement>(".console-log-waterfall__svg");
+  assert.ok(svg);
   assert.equal(svg.getAttribute("aria-hidden"), "true", "the table is the accessible reading");
   assert.equal(svg.getAttribute("role"), null);
 
-  const table = must(document.querySelector<HTMLTableElement>(".pf-v6-screen-reader table"));
+  const table = document.querySelector<HTMLTableElement>(".pf-v6-screen-reader table");
+  assert.ok(table);
   assert.match(text(table.querySelector("caption")), /Targets and steps/);
   const rows = [...table.querySelectorAll("tbody tr")];
   assert.ok(rows.length > 0);
@@ -154,12 +160,15 @@ test("the waterfall names every result in words and has a table twin", () => {
 test("a filter that matches nothing offers a way back", () => {
   panel();
   loadCi();
-  mountFilterField(must(document.body.appendChild(document.createElement("div"))));
+  mountFilterField(document.body.appendChild(document.createElement("div")));
   applyFilterFromInput("zzz-matches-nothing");
 
-  const note = must(document.querySelector<HTMLElement>(".console-log-filter__empty"));
+  const note = document.querySelector<HTMLElement>(".console-log-filter__empty");
+  assert.ok(note);
   assert.match(text(note), /No lines match the filter/);
-  must(note.querySelector<HTMLElement>("button")).click();
+  const clear = note.querySelector<HTMLElement>("button");
+  assert.ok(clear);
+  clear.click();
   assert.equal(state.filterQuery, "", "Clear filter clears it");
   assert.equal(document.querySelector(".console-log-filter__empty"), null);
 });
@@ -168,7 +177,8 @@ test("a failure is a strip with role=alert and a toast", () => {
   panel();
   setStatus("Could not decode the log: bad gzip.", true);
 
-  const alert = must(document.querySelector<HTMLElement>("#log-status [role=alert]"));
+  const alert = document.querySelector<HTMLElement>("#log-status [role=alert]");
+  assert.ok(alert);
   assert.match(text(alert), /Could not decode the log/);
   assert.ok(
     notices.some((n) => n.kind === "error" && n.toast === true),
@@ -176,7 +186,7 @@ test("a failure is a strip with role=alert and a toast", () => {
   );
 
   setStatus("");
-  assert.equal(must(document.getElementById("log-status")).hidden, true);
+  assert.equal(document.getElementById("log-status")?.hidden, true);
 });
 
 test("a tree row's outcome is a word, selection is aria-selected, and the tree is named", () => {
@@ -193,10 +203,11 @@ test("a tree row's outcome is a word, selection is aria-selected, and the tree i
   const picked: string[] = [];
   renderRunTree(box, specs, treeState, (sel) => picked.push(sel.kind));
 
-  const tree = must(box.querySelector<HTMLElement>('[role="tree"]'));
+  const tree = box.querySelector<HTMLElement>('[role="tree"]');
+  assert.ok(tree);
   assert.equal(tree.getAttribute("aria-label"), "Recent runs");
-  assert.ok(must(tree.parentElement).classList.contains("pf-m-compact"));
-  assert.ok(must(tree.parentElement).classList.contains("pf-m-truncate"));
+  assert.ok(tree.parentElement?.classList.contains("pf-m-compact"));
+  assert.ok(tree.parentElement?.classList.contains("pf-m-truncate"));
   assert.equal(
     [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')].filter((li) => li.tabIndex === 0)
       .length,
@@ -221,19 +232,21 @@ test("a tree row's outcome is a word, selection is aria-selected, and the tree i
   );
   assert.ok(withStatus.length > 0);
   for (const li of withStatus) {
-    const mark = must(
-      li.querySelector<HTMLElement>(":scope > .pf-v6-c-tree-view__content [data-status]"),
+    const mark = li.querySelector<HTMLElement>(
+      ":scope > .pf-v6-c-tree-view__content [data-status]",
     );
+    assert.ok(mark);
     assert.match(text(mark), /Passed|Failed|Partly failed/, "the outcome is in the row's text");
     assert.ok(mark.querySelector(".pf-v6-c-icon"), "with a shape");
   }
 
-  const selectable = must(
-    [...tree.querySelectorAll<HTMLElement>("li[data-leaf][aria-selected]")].find(
-      (li) => li.getAttribute("aria-selected") === "false",
-    ),
+  const selectable = [...tree.querySelectorAll<HTMLElement>("li[data-leaf][aria-selected]")].find(
+    (li) => li.getAttribute("aria-selected") === "false",
   );
-  must(selectable.querySelector<HTMLElement>(".pf-v6-c-tree-view__node")).click();
+  assert.ok(selectable);
+  const node = selectable.querySelector<HTMLElement>(".pf-v6-c-tree-view__node");
+  assert.ok(node);
+  node.click();
   assert.equal(selectable.getAttribute("aria-selected"), "true");
   assert.equal(tree.querySelectorAll('li[aria-selected="true"]').length, 1);
   assert.deepEqual(picked.length, 1);
@@ -253,19 +266,21 @@ test("the floating run browser has a scrim and closes on Escape", () => {
   };
   try {
     document.body.innerHTML = '<section id="host"><div id="scroll"></div></section>';
-    const scroll = must(document.getElementById("scroll"));
-    const panelApi = must(
-      mountCollapsiblePanel({
-        scroll,
-        title: "Recent runs",
-        label: "Recent runs",
-        bodyTitle: "Output",
-        onRefresh: () => {},
-        hideWhenEmpty: false,
-      }),
-    );
-    const aside = must(document.querySelector<HTMLElement>(".console-log-runs"));
-    const scrim = must(document.querySelector<HTMLElement>(".console-log-split__scrim"));
+    const scroll = document.getElementById("scroll");
+    assert.ok(scroll);
+    const panelApi = mountCollapsiblePanel({
+      scroll,
+      title: "Recent runs",
+      label: "Recent runs",
+      bodyTitle: "Output",
+      onRefresh: () => {},
+      hideWhenEmpty: false,
+    });
+    assert.ok(panelApi);
+    const aside = document.querySelector<HTMLElement>(".console-log-runs");
+    assert.ok(aside);
+    const scrim = document.querySelector<HTMLElement>(".console-log-split__scrim");
+    assert.ok(scrim);
     const tell = (width: number): void =>
       callbacks.forEach((cb) => cb([{ contentRect: { width } }]));
 
@@ -310,7 +325,8 @@ test("with nothing loaded the toolbar is hidden and the empty state is the conne
   location.hash = "";
   activate();
   try {
-    const panelEl = must(document.getElementById("log-panel"));
+    const panelEl = document.getElementById("log-panel");
+    assert.ok(panelEl);
     assert.equal(
       panelEl.hasAttribute("data-loaded"),
       false,
@@ -335,9 +351,10 @@ test("a run opened from a link is titled by its command, not its id", async () =
   try {
     await new Promise((r) => setTimeout(r, 60));
     assert.equal(docTitle.get(), "magus affected ci");
-    const panelEl = must(document.getElementById("log-panel"));
+    const panelEl = document.getElementById("log-panel");
+    assert.ok(panelEl);
     assert.equal(panelEl.hasAttribute("data-loaded"), true, "the toolbar appears with the log");
-    assert.equal(must(document.getElementById("log-empty")).hidden, true);
+    assert.equal(document.getElementById("log-empty")?.hidden, true);
     assert.equal(text(document.querySelector(".console-log-body__title")), "magus affected ci");
   } finally {
     deactivate();

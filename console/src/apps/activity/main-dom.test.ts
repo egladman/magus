@@ -11,7 +11,6 @@
 
 import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
-import { must } from "../../lib/guards";
 import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
 
@@ -386,7 +385,8 @@ test("the index tree is named, has one tab stop, and moves with the arrow keys",
   serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
   const host = await mount();
 
-  const tree = must(host.querySelector<HTMLElement>('[role="tree"]'));
+  const tree = host.querySelector<HTMLElement>('[role="tree"]');
+  assert.ok(tree);
   assert.equal(tree.getAttribute("aria-label"), "Events");
   // The tab stop is the tree item, as in PF's own markup; the row buttons stay out of the tab order.
   const items = [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')];
@@ -401,13 +401,15 @@ test("the index tree is named, has one tab stop, and moves with the arrow keys",
     "branches carry aria-selected as well as leaves",
   );
 
-  const first = must(items.find((n) => n.tabIndex === 0));
+  const first = items.find((n) => n.tabIndex === 0);
+  assert.ok(first);
   first.focus();
   first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   assert.notEqual(document.activeElement, first, "ArrowDown moves to the next visible row");
   assert.equal(items.filter((n) => n.tabIndex === 0).length, 1, "and the tab stop follows");
 
-  const leaf = must(tree.querySelector<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node"));
+  const leaf = tree.querySelector<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node");
+  assert.ok(leaf);
   assert.match(leaf.textContent ?? "", /OK|Error/, "the outcome is in the row's text");
   leaf.click();
   assert.equal(leaf.getAttribute("aria-current"), "true");
@@ -422,11 +424,13 @@ test("choosing an event in the index marks and focuses its section", async () =>
   // The grouping is remembered across mounts, and a session grouping lists fewer events.
   modeButton(host, "kind").click();
 
-  const leaf = must(host.querySelectorAll<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node")[1]);
+  const leaf = host.querySelectorAll<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node")[1];
+  assert.ok(leaf);
   leaf.click();
   const marked = host.querySelectorAll(".console-render-section__head[data-highlight]");
   assert.equal(marked.length, 1);
-  const toggle = must(marked[0]?.querySelector<HTMLElement>(".console-render-section__toggle"));
+  const toggle = marked[0]?.querySelector<HTMLElement>(".console-render-section__toggle");
+  assert.ok(toggle);
   assert.equal(document.activeElement, toggle);
 });
 
@@ -436,12 +440,15 @@ test("an event head separates source, outcome and time, and a pass has no accent
   serve([mcpEvent()], { body: "unused" });
   const host = await mount();
 
-  const section = must(host.querySelector<HTMLElement>(".console-render-section"));
-  const head = must(section.querySelector<HTMLElement>(".console-render-section__title"));
+  const section = host.querySelector<HTMLElement>(".console-render-section");
+  assert.ok(section);
+  const head = section.querySelector<HTMLElement>(".console-render-section__title");
+  assert.ok(head);
   assert.match(text(head.querySelector(".console-activity-head__kind")), /mcp/);
   assert.match(text(head.querySelector(".console-activity-head__outcome")), /OK/);
   assert.ok(head.querySelector("time[datetime]"), "the time is a <time> of its own");
-  const toggle = must(section.querySelector<HTMLElement>(".console-render-section__toggle"));
+  const toggle = section.querySelector<HTMLElement>(".console-render-section__toggle");
+  assert.ok(toggle);
   assert.equal(
     toggle.getAttribute("aria-controls"),
     section.querySelector(".console-render-section__lines")?.id,
@@ -468,13 +475,16 @@ test("a failed refresh keeps the page and offers a retry", async () => {
       headers: new Headers({ "content-type": "application/json" }),
       json: () => Promise.resolve({ code: "unavailable", message: "server went away" }),
     } as unknown as Response)) as typeof fetch;
-  must(
-    host.querySelector<HTMLElement>('.console-log-runs__head button[aria-label="Refresh"]'),
-  ).click();
+  const refresh = host.querySelector<HTMLElement>(
+    '.console-log-runs__head button[aria-label="Refresh"]',
+  );
+  assert.ok(refresh);
+  refresh.click();
   await settle();
 
   assert.equal(host.querySelectorAll(".console-render-section").length, 1, "the events stay");
-  const notice = must(host.querySelector<HTMLElement>(".console-activity-notice"));
+  const notice = host.querySelector<HTMLElement>(".console-activity-notice");
+  assert.ok(notice);
   assert.equal(notice.hidden, false);
   assert.match(text(notice), /Could not refresh activity/);
   assert.equal(text(notice.querySelector("button")), "Retry");
@@ -498,11 +508,11 @@ test("the index filter appears past a handful of events and narrows the tree", a
   );
   const long = await mount();
   modeButton(long, "kind").click();
-  const field = must(
-    long.querySelector<HTMLElement>(".console-log-runs__controls .console-filter"),
-  );
+  const field = long.querySelector<HTMLElement>(".console-log-runs__controls .console-filter");
+  assert.ok(field);
   assert.equal(field.hidden, false);
-  const input = must(field.querySelector<HTMLInputElement>("input"));
+  const input = field.querySelector<HTMLInputElement>("input");
+  assert.ok(input);
   input.value = "call-3";
   input.dispatchEvent(new Event("input"));
   await new Promise((r) => setTimeout(r, 200));
