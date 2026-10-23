@@ -139,8 +139,8 @@ export function projectOwners(
   const reach = (root: string, stop: (id: string) => boolean, visit: (id: string) => void) => {
     const seen = new Set([root]);
     const queue = [root];
-    for (let i = 0; i < queue.length; i++) {
-      for (const next of children.get(queue[i]) ?? []) {
+    for (const at of queue) {
+      for (const next of children.get(at) ?? []) {
         if (seen.has(next)) continue;
         seen.add(next);
         visit(next);

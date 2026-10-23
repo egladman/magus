@@ -37,8 +37,11 @@ export function parseViewBox(s: string | null): ViewBox | null {
     .trim()
     .split(/[\s,]+/)
     .map(Number);
-  if (n.length !== 4 || n.some((v) => !Number.isFinite(v)) || n[2] <= 0 || n[3] <= 0) return null;
-  return { x: n[0], y: n[1], w: n[2], h: n[3] };
+  const [x, y, w, h] = n;
+  if (n.length !== 4 || n.some((v) => !Number.isFinite(v))) return null;
+  if (x === undefined || y === undefined || w === undefined || h === undefined) return null;
+  if (w <= 0 || h <= 0) return null;
+  return { x, y, w, h };
 }
 
 export function formatViewBox(v: ViewBox): string {
@@ -155,7 +158,8 @@ export function readingOrder(nodes: readonly Placed[]): string[] {
   const rows: Placed[][] = [];
   for (const n of sorted) {
     const row = rows[rows.length - 1];
-    if (row && Math.abs(n.y - row[0].y) <= ROW_SLACK) row.push(n);
+    const rowTop = row?.[0]?.y;
+    if (row && rowTop !== undefined && Math.abs(n.y - rowTop) <= ROW_SLACK) row.push(n);
     else rows.push([n]);
   }
   return rows.flatMap((r) => r.sort((a, b) => a.x - b.x).map((n) => n.id));
@@ -259,7 +263,8 @@ function readPosition(el: Element): Point {
     .trim()
     .split(/[\s,]+/)
     .map(Number);
-  if (pts.length >= 2 && pts.every(Number.isFinite)) return { x: pts[0], y: pts[1] };
+  const [px, py] = pts;
+  if (px !== undefined && py !== undefined && pts.every(Number.isFinite)) return { x: px, y: py };
   return { x: 0, y: 0 };
 }
 

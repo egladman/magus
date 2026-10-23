@@ -44,7 +44,9 @@ export function showStatus(
     button.addEventListener("click", () => action.run());
     actions = [button];
   }
-  host.append(inlineAlert({ variant: level, title: msg, actions, live: true }));
+  host.append(
+    inlineAlert({ variant: level, title: msg, ...(actions ? { actions } : {}), live: true }),
+  );
   if (level === "danger") reportFailure(SOURCE, msg, "graph:" + msg);
   else if (level === "warning")
     notify({ source: SOURCE, message: msg, kind: "warn", key: "graph:" + msg, toast: true });

@@ -140,7 +140,7 @@ interface LaunchQueue {
 }
 declare global {
   interface Window {
-    _liveAffectedIds?: Set<string>;
+    _liveAffectedIds?: Set<string> | undefined;
     launchQueue?: LaunchQueue;
   }
 }
@@ -277,7 +277,7 @@ let focusDepth = 2; // hops included in the focus graph
 // (#layout=force|layered|waves|radial). The scale guard refuses layered/waves
 // for more than 500 visible nodes; radial requires a selected/focused center.
 type LayoutMode = "force" | "layered" | "waves" | "radial";
-function isLayoutMode(s: string): s is LayoutMode {
+function isLayoutMode(s: string | undefined): s is LayoutMode {
   return s === "force" || s === "layered" || s === "waves" || s === "radial";
 }
 let layoutMode: LayoutMode = "force";
@@ -638,9 +638,13 @@ function incidentEdges(id: string) {
   for (const e of graph.links) {
     const s = endpointId(e.source);
     const t = endpointId(e.target);
-    const transport = declaredCall(e)?.transport || undefined;
-    if (s === id) out.push({ rel: e.relation, other: t, confidence: e.confidence, transport });
-    if (t === id) inc.push({ rel: e.relation, other: s, confidence: e.confidence, transport });
+    const transport = declaredCall(e)?.transport;
+    const optional = {
+      ...(e.confidence !== undefined ? { confidence: e.confidence } : {}),
+      ...(transport ? { transport } : {}),
+    };
+    if (s === id) out.push({ rel: e.relation, other: t, ...optional });
+    if (t === id) inc.push({ rel: e.relation, other: s, ...optional });
   }
   return { out, inc };
 }
@@ -960,7 +964,7 @@ function cycleLayout() {
   const start = LAYOUT_ORDER.indexOf(layoutMode);
   for (let i = 1; i <= LAYOUT_ORDER.length; i++) {
     const next = LAYOUT_ORDER[(start + i) % LAYOUT_ORDER.length];
-    if (!layoutBlockedReason(next)) {
+    if (next !== undefined && !layoutBlockedReason(next)) {
       layoutPickedByHand = true;
       switchLayout(next);
       return;
@@ -1304,7 +1308,8 @@ function draw() {
     }
     if (minY <= maxY) {
       wavesMeta.forEach((ids, i) => {
-        const first = graph.byId.get(ids[0]);
+        const firstId = ids[0];
+        const first = firstId === undefined ? undefined : graph.byId.get(firstId);
         if (!first || first.x == null) return;
         const waveX = first.x;
         if (i % 2 === 0) {
@@ -1492,17 +1497,19 @@ function draw() {
         ? [{ x: sx, y: sy }, { x: tx, y: ty }, ...e.points].sort((a, b) => a.x - b.x)
         : null;
     ctx.beginPath();
-    if (routePts) {
+    const routeFirst = routePts?.[0];
+    const routeLast = routePts?.[routePts.length - 1];
+    if (routePts && routeFirst && routeLast) {
       // Smooth curve through the bend points via quadratic segments to their
       // midpoints (a cheap Catmull-Rom-ish approximation), ending with a
       // straight segment into the final endpoint.
-      ctx.moveTo(routePts[0].x, routePts[0].y);
-      for (let i = 1; i < routePts.length - 1; i++) {
-        const midX = (routePts[i].x + routePts[i + 1].x) / 2,
-          midY = (routePts[i].y + routePts[i + 1].y) / 2;
-        ctx.quadraticCurveTo(routePts[i].x, routePts[i].y, midX, midY);
+      ctx.moveTo(routeFirst.x, routeFirst.y);
+      for (const [i, p] of routePts.entries()) {
+        const q = routePts[i + 1];
+        if (i === 0 || q === undefined) continue;
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
       }
-      ctx.lineTo(routePts[routePts.length - 1].x, routePts[routePts.length - 1].y);
+      ctx.lineTo(routeLast.x, routeLast.y);
     } else if (isDagMode()) {
       // Short edge (single layer span, no bend points): a gentle horizontal-out
       // bezier so the DAG still reads as flow instead of a ruler-straight line.
@@ -1517,9 +1524,7 @@ function draw() {
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
     if (call?.transport && active) {
-      const mid = routePts
-        ? routePts[routePts.length >> 1]
-        : { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+      const mid = routePts?.[routePts.length >> 1] ?? { x: (sx + tx) / 2, y: (sy + ty) / 2 };
       transportLabels.push({ x: mid.x, y: mid.y, text: call.transport, incident });
     }
 
@@ -1548,9 +1553,11 @@ function draw() {
       let fromX = fromNode === s ? sx : tx,
         fromY = fromNode === s ? sy : ty;
       if (routePts && routePts.length > 2) {
-        const nearest = routePts[0].x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
-        fromX = nearest.x;
-        fromY = nearest.y;
+        const nearest = routePts[0]?.x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
+        if (nearest) {
+          fromX = nearest.x;
+          fromY = nearest.y;
+        }
       }
       const dx = tipAttachX - fromX,
         dy = tipAttachY - fromY;
@@ -1823,7 +1830,7 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (!shown(n)) continue;
+      if (!n || !shown(n)) continue;
       if (dots) {
         if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
         continue;
@@ -2543,7 +2550,7 @@ function whenCanvasSized(): Promise<void> {
 // app into a pane that is still display:none for seconds, and every fit in that window - a
 // view's, a focus's, radial's - would otherwise be computed against a zero viewport, clamp to the
 // minimum scale and be silently dropped. Only the LAST one is worth replaying: they supersede.
-let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
+let pendingFit: { ids: Set<string> | null; glideMs?: number | undefined } | null = null;
 let pendingFitArmed = false;
 
 // worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
@@ -2819,7 +2826,7 @@ function parseQuery(str: string) {
   const terms: QueryTerm[] = [];
   let i = 0;
   while (i < str.length) {
-    while (i < str.length && /\s/.test(str[i])) i++;
+    while (i < str.length && /\s/.test(str.charAt(i))) i++;
     if (i >= str.length) break;
     let negated = false;
     if (str[i] === "-") {
@@ -2828,8 +2835,9 @@ function parseQuery(str: string) {
     }
     let field: string | null = null;
     const fm = /^([a-zA-Z]+):/.exec(str.slice(i));
-    if (fm && QUERY_FIELDS.includes(fm[1].toLowerCase())) {
-      field = fm[1].toLowerCase();
+    const prefix = fm?.[1]?.toLowerCase();
+    if (fm && prefix !== undefined && QUERY_FIELDS.includes(prefix)) {
+      field = prefix;
       i += fm[0].length;
     }
     let value;
@@ -2839,7 +2847,7 @@ function parseQuery(str: string) {
       i = end < 0 ? str.length : end + 1;
     } else {
       let j = i;
-      while (j < str.length && !/\s/.test(str[j])) j++;
+      while (j < str.length && !/\s/.test(str.charAt(j))) j++;
       value = str.slice(i, j);
       i = j;
     }
@@ -3393,13 +3401,12 @@ function setLegendTitle(text: string) {
 function renderGroupLegend(preset: string) {
   const counts = new Array<number>(groups.length).fill(0);
   for (const n of graph.nodes) {
-    for (let i = 0; i < groups.length; i++) {
-      const g = groups[i];
+    for (const [i, g] of groups.entries()) {
       const hit = g.nodeSet
         ? g.nodeSet.has(n.id)
         : g.terms.length > 0 && g.terms.every((t) => termMatches(n, t));
       if (hit) {
-        counts[i]++;
+        counts[i] = (counts[i] ?? 0) + 1;
         break; // first match wins, exactly as matchGroupColor resolves it
       }
     }
@@ -3820,7 +3827,10 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   // flavor default like an invalid layout value would.
   const fragParams = hashParams();
   const radialNodeOk =
-    fragParams.layout === "radial" && !!fragParams.node && graph.byId.has(fragParams.node);
+    fragParams.layout === "radial" &&
+    fragParams.node !== undefined &&
+    fragParams.node !== "" &&
+    graph.byId.has(fragParams.node);
   const requestedLayout: LayoutMode =
     isLayoutMode(fragParams.layout) && (fragParams.layout !== "radial" || radialNodeOk)
       ? fragParams.layout
@@ -3829,7 +3839,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
         : "force";
   layoutMode = requestedLayout;
   layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
-  if (layoutMode === "radial") selected = fragParams.node;
+  if (layoutMode === "radial") selected = fragParams.node ?? null;
   wavesMeta = null;
   syncLayoutToggle();
   if (isDagMode()) {
@@ -4820,7 +4830,7 @@ function renderSuggestions() {
       .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
-      chips[Number(b.dataset.i)].action();
+      chips[Number(b.dataset.i)]?.action();
       wrap.hidden = true; // hide after first use
     });
   });
@@ -4838,6 +4848,14 @@ interface PresetGroup {
   color: string;
   nodeSet?: Set<string>;
 }
+const PRESET_FALLBACK_COLOR = "#8b5cf6";
+
+// paletteColor cycles a preset's palette; the fallback only answers an empty palette, which no
+// preset declares.
+function paletteColor(palette: readonly string[], i: number): string {
+  return palette[i % palette.length] ?? PRESET_FALLBACK_COLOR;
+}
+
 interface ColorPreset {
   id: string;
   label: string;
@@ -4863,7 +4881,7 @@ const COLOR_PRESETS: ColorPreset[] = [
       ];
       return spellIds.map((id, i) => ({
         query: "id:" + id,
-        color: palette[i % palette.length],
+        color: paletteColor(palette, i),
       }));
     },
   },
@@ -4887,7 +4905,7 @@ const COLOR_PRESETS: ColorPreset[] = [
         // matcher prepends "project:" again, producing "project:project:web" which
         // matches nothing. Strip the leading "project:" so the query is "project:web".
         const bare = id.startsWith("project:") ? id.slice("project:".length) : id;
-        return { query: "project:" + bare, color: palette[i % palette.length] };
+        return { query: "project:" + bare, color: paletteColor(palette, i) };
       });
     },
   },
@@ -4946,7 +4964,7 @@ const COLOR_PRESETS: ColorPreset[] = [
         .sort((a, b) => a[0] - b[0])
         .map(([l, ids_]) => {
           const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
-          return { query: "layer:" + l, color: palette[idx], nodeSet: new Set(ids_) };
+          return { query: "layer:" + l, color: paletteColor(palette, idx), nodeSet: new Set(ids_) };
         });
     },
   },
@@ -4970,10 +4988,14 @@ const COLOR_PRESETS: ColorPreset[] = [
           palette.length - 1,
           Math.floor((i * palette.length) / timed.length),
         );
-        buckets[bucket].add(n.id);
+        buckets[bucket]?.add(n.id);
       });
       return buckets
-        .map((nodeSet, i) => ({ query: "duration q" + (i + 1), color: palette[i], nodeSet }))
+        .map((nodeSet, i) => ({
+          query: "duration q" + (i + 1),
+          color: paletteColor(palette, i),
+          nodeSet,
+        }))
         .filter((g) => g.nodeSet.size > 0);
     },
   },
@@ -5382,15 +5404,15 @@ function publishLiveStatus() {
     // the shell's poller answers - claiming the dot to say "not connected" had this app
     // reporting on a server it never asked about.
     const nodes = graph?.nodes.length ?? 0;
-    const count = nodes ? nodes + " nodes" : undefined;
+    const count = nodes ? { count: nodes + " nodes" } : {};
     publishStatus(
       liveHost
         ? {
             connection: liveConnected ? "connected" : "connecting",
             label: liveConnected ? "connected" : "connecting...",
-            count,
+            ...count,
           }
-        : { count },
+        : count,
     );
   }
 }
@@ -5466,7 +5488,7 @@ function computeDefaultProjection(hasFragmentDirective: boolean) {
 // applyLayoutAndSimulation picks the layout mode (fragment override, else the
 // per-flavor default), starts the force simulation, and runs the layered
 // layout with its scale-guard fallback. Shared by boot() and bootLive().
-function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) {
+function applyLayoutAndSimulation(requestedLayout: string | undefined, flavor: GraphFlavor) {
   if (
     requestedLayout === "force" ||
     requestedLayout === "layered" ||
@@ -5654,6 +5676,7 @@ export async function activate() {
       if (!launchParams.files || launchParams.files.length === 0) return;
       try {
         const fileHandle = launchParams.files[0];
+        if (!fileHandle) return;
         const f = await fileHandle.getFile();
         readGraphFile(f);
       } catch (e) {

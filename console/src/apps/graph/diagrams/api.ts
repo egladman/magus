@@ -115,7 +115,11 @@ async function read<T>(
   const doFetch = opts.fetch ?? fetch;
   let res: Response;
   try {
-    res = await doFetch(url, { headers: authHeaders(), cache: "no-store", signal: opts.signal });
+    res = await doFetch(url, {
+      headers: authHeaders(),
+      cache: "no-store",
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
   } catch (e) {
     // reported: reportFetchFailure is the toast, the read is the inline notice
     if (errName(e) === "AbortError") return { kind: "aborted" };

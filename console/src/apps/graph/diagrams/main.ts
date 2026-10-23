@@ -286,7 +286,7 @@ function command(before: string, cmd: string, after = "."): HTMLElement {
   return p;
 }
 
-const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
+const READ_NOTICE: Record<DiagramFailure["kind"], { tone: NoticeTone; title: string }> = {
   refused: { tone: "warning", title: "This figure is too big to draw through this lens" },
   unindexed: { tone: "warning", title: "No symbol index to draw imports from" },
   "bad-lens": { tone: "warning", title: "The lens names something the figure does not have" },

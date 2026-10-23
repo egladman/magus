@@ -69,7 +69,7 @@ export function targetGraphToNodeLink(tg: TargetGraphOutput): {
         id,
         kind: "target",
         label: n.name,
-        doc: n.doc || undefined,
+        ...(n.doc ? { doc: n.doc } : {}),
         attrs: { project: p.path },
       });
       nodeIds.add(id);

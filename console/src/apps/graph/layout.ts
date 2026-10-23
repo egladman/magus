@@ -50,6 +50,16 @@ interface DummyChain {
   layers: number[];
 }
 
+// dummySlots pairs each dummy id with its layer; a chain whose two arrays disagree is a bug in
+// buildDummyChains, so it throws.
+function dummySlots(chain: DummyChain): [string, number][] {
+  return chain.ids.map((id, i): [string, number] => {
+    const layer = chain.layers[i];
+    if (layer === undefined) throw new Error("dummy " + id + " has no layer");
+    return [id, layer];
+  });
+}
+
 type DepEdge = { s: string; t: string; linkRef: GLink };
 
 // computeLayers runs the shared cycle-break + longest-path layering pass.
@@ -106,15 +116,17 @@ function computeLayers(
     const dfsStack: [string, number][] = [[startId, 0]];
     while (dfsStack.length) {
       const top = dfsStack[dfsStack.length - 1];
+      if (!top) break;
       const [nid, idx] = top;
       if (idx === 0) {
         visited.add(nid);
         inStack.add(nid);
       }
       const children = outSnap.get(nid) || [];
-      if (idx < children.length) {
+      const child = children[idx];
+      if (child !== undefined) {
         top[1]++;
-        const { origTarget, edgeRef } = children[idx];
+        const { origTarget, edgeRef } = child;
         if (inStack.has(origTarget)) {
           // Back-edge: reverse it for layout only. The snapshot key (origTarget)
           // does not change; we only mutate the edge object so predMap is correct.
@@ -205,7 +217,10 @@ function buildDummyChains(
 function chainSegments(e: { s: string; t: string }, chain: DummyChain): { s: string; t: string }[] {
   const seq = [e.s, ...[...chain.ids].reverse(), e.t]; // high layer -> low layer
   const segs: { s: string; t: string }[] = [];
-  for (let i = 0; i < seq.length - 1; i++) segs.push({ s: seq[i], t: seq[i + 1] });
+  for (const [i, s] of seq.entries()) {
+    const t = seq[i + 1];
+    if (t !== undefined) segs.push({ s, t });
+  }
   return segs;
 }
 
@@ -250,10 +265,9 @@ export function layoutLayered(
   // them, but they are NEVER pushed into the real `nodes` array.
   const chains = buildDummyChains(depEdges, layerOf);
   for (const chain of chains.values()) {
-    for (let i = 0; i < chain.ids.length; i++) {
-      const layer = chain.layers[i];
+    for (const [id, layer] of dummySlots(chain)) {
       if (!layerGroups.has(layer)) layerGroups.set(layer, []);
-      layerGroups.get(layer)?.push(chain.ids[i]);
+      layerGroups.get(layer)?.push(id);
     }
   }
   for (const arr of layerGroups.values()) arr.sort();
@@ -332,8 +346,7 @@ export function layoutLayered(
     if (!arr) continue;
     const layerH = arr.length * rowH;
     const yOffset = (totalH - layerH) / 2 + rowH / 2;
-    for (let i = 0; i < arr.length; i++) {
-      const id = arr[i];
+    for (const [i, id] of arr.entries()) {
       const x = l * colW + colW / 2;
       const y = yOffset + i * rowH;
       const n = byId.get(id);
@@ -398,10 +411,9 @@ export function layoutWaves(
   // simply appended (no barycenter to join - waves use a strict grid).
   const chains = buildDummyChains(depEdges, layerOf);
   for (const chain of chains.values()) {
-    for (let i = 0; i < chain.ids.length; i++) {
-      const layer = chain.layers[i];
+    for (const [id, layer] of dummySlots(chain)) {
       if (!waveGroups.has(layer)) waveGroups.set(layer, []);
-      waveGroups.get(layer)?.push(chain.ids[i]);
+      waveGroups.get(layer)?.push(id);
     }
   }
 
@@ -416,8 +428,7 @@ export function layoutWaves(
     if (!arr) continue;
     const layerH = arr.length * rowH;
     const yOffset = (totalH - layerH) / 2 + rowH / 2;
-    for (let i = 0; i < arr.length; i++) {
-      const id = arr[i];
+    for (const [i, id] of arr.entries()) {
       const x = l * colW + colW / 2;
       const y = yOffset + i * rowH;
       const n = byId.get(id);

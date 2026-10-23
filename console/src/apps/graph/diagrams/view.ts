@@ -143,7 +143,7 @@ export function notice(tone: NoticeTone, title: string, body: string | Node): HT
   const el = inlineAlert({
     variant: tone,
     title,
-    body: body === "" ? undefined : body,
+    ...(body === "" ? {} : { body }),
     live: true,
   });
   el.classList.add("console-diagrams__notice");
