@@ -1,4 +1,3 @@
-import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console app's demo derives from.
 //
 // The console's server-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
@@ -430,10 +429,11 @@ export interface ScenarioActivity {
 export function scenarioActivity(now: number): ScenarioActivity[] {
   const runs = scenarioRuns(now);
   // Each MCP-triggered invocation holds a single run, so lookup by invocation id is unambiguous.
-  const run = (inv: string): ScenarioRun => must(runs.find((x) => x.inv === inv));
+  const run = (inv: string): ScenarioRun | undefined => runs.find((x) => x.inv === inv);
   const fresh = run(INV_BUILD_FRESH);
   const fix = run(INV_TEST_FIX);
   const broke = run(INV_TEST_BREAK);
+  if (!fresh || !fix || !broke) return [];
   const at = (min: number): number => now - min * MIN;
   return [
     {

@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test, beforeEach } from "node:test";
+import { fail, succeed, type Result } from "../lib/result";
 import {
   BADGE_MAX,
   badgeLabel,
@@ -23,22 +24,22 @@ test("a count renders as itself until the cap, then as 'more'", () => {
 });
 
 test("a count passes straight through", async () => {
-  assert.equal(await fetchDiffCount(HOST, async () => 7), 7);
+  assert.equal(await fetchDiffCount(HOST, async () => succeed(7)), 7);
 });
 
 // Zero is a real measurement and must survive the round trip - it is the RENDERER that decides an
 // empty count is not worth a mark, and it cannot decide that if the fetch flattens 0 to null.
 test("zero is a reading, not an absence", async () => {
-  assert.equal(await fetchDiffCount(HOST, async () => 0), 0);
+  assert.equal(await fetchDiffCount(HOST, async () => succeed(0)), 0);
 });
 
 // A server without the diff route cannot grow one while it runs, so asking again every 15s for the
 // life of the page is the console-spam lib/server.ts's readiness probe goes out of its way to avoid.
 test("a server with no diff route is not asked twice", async () => {
   let calls = 0;
-  const routeless = async (): Promise<never> => {
+  const routeless = async (): Promise<Result<number | null>> => {
     calls++;
-    throw new RoutelessError("404");
+    return fail(new RoutelessError("404"));
   };
   assert.equal(await fetchDiffCount(HOST, routeless), null);
   assert.equal(await fetchDiffCount(HOST, routeless), null);
@@ -49,28 +50,26 @@ test("a server with no diff route is not asked twice", async () => {
 // would otherwise blank the badge for the rest of the session.
 test("an outage keeps being retried, and recovers", async () => {
   let calls = 0;
-  const down = async (): Promise<never> => {
+  const down = async (): Promise<Result<number | null>> => {
     calls++;
-    throw new Error("500");
+    return fail(new Error("500"));
   };
   await fetchDiffCount(HOST, down);
   await fetchDiffCount(HOST, down);
   assert.equal(calls, 2);
-  assert.equal(await fetchDiffCount(HOST, async () => 4), 4);
+  assert.equal(await fetchDiffCount(HOST, async () => succeed(4)), 4);
 });
 
 test("the latch does not spread to another server", async () => {
-  await fetchDiffCount(HOST, async () => {
-    throw new RoutelessError("404");
-  });
-  assert.equal(await fetchDiffCount("127.0.0.1:9999", async () => 2), 2);
+  await fetchDiffCount(HOST, async () => fail(new RoutelessError("404")));
+  assert.equal(await fetchDiffCount("127.0.0.1:9999", async () => succeed(2)), 2);
 });
 
 test("no host is no request", async () => {
   let calls = 0;
   await fetchDiffCount("", async () => {
     calls++;
-    return 1;
+    return succeed(1);
   });
   assert.equal(calls, 0);
 });
