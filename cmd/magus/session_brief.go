@@ -1,10 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,6 +74,10 @@ const briefMaxLeases = 12
 // spend the window on rows the count already stands for.
 const briefMaxAttention = 5
 
+// briefMaxJobs bounds the job tree, as briefMaxLeases bounds leases. Each job named costs a
+// VCS read of its checkout, so the bound also caps what the brief spends on the backend.
+const briefMaxJobs = 12
+
 // sessionBrief is the whole payload, and the -o json shape.
 type sessionBrief struct {
 	Workspace string `json:"workspace"`
@@ -86,8 +92,11 @@ type sessionBrief struct {
 	// OtherLeases counts the live leases the brief does not name: every other checkout's,
 	// and this checkout's past briefMaxLeases. The store is repository-wide, so naming them
 	// spent the window on work this session cannot touch.
-	OtherLeases int            `json:"other_leases,omitempty"`
-	Failures    []briefFailure `json:"failures,omitempty"`
+	OtherLeases int `json:"other_leases,omitempty"`
+	// Jobs is the tree of jobs this session owns, nil when it owns none. A store that could
+	// not be read is Unread on a non-nil value, so it never reads as a session with no jobs.
+	Jobs     *briefJobTree  `json:"jobs,omitempty"`
+	Failures []briefFailure `json:"failures,omitempty"`
 	// Attention is the open attention queue, the same count `session ls` prints. Nil means
 	// the brief was not gathered, which prints nothing; a store that could not be read is
 	// Unread on a non-nil value, so the two never read as an empty queue.
@@ -166,6 +175,48 @@ type briefLease struct {
 	Exec       string `json:"exec"`
 	Criteria   string `json:"criteria,omitempty"`
 	Validation string `json:"validation,omitempty"`
+}
+
+// briefJobTree is the jobs under this session's root, parent first, up to briefMaxJobs.
+type briefJobTree struct {
+	// Root is the job this session acts under, whose forks the tree lists; empty for a
+	// root session, whose tree is every job forked from this checkout.
+	Root string     `json:"root,omitempty"`
+	Jobs []briefJob `json:"jobs,omitempty"`
+	More int        `json:"more,omitempty"`
+	// Uncollected are the tree's exited jobs no `magus job wait` graded, past the cap too:
+	// a job nobody waits on ends as no_return with its work unread.
+	Uncollected []string `json:"uncollected,omitempty"`
+	// Unread says why the job store could not be read, empty when it was.
+	Unread string `json:"unread,omitempty"`
+}
+
+// briefJob is one job in the tree, with where its work stands in its own checkout and
+// the step the row says comes next.
+type briefJob struct {
+	ID    string `json:"id"`
+	State string `json:"state,omitempty"`
+	Depth int    `json:"depth,omitempty"`
+	// Checkout is where the job's work lives: the checkout its fork made, else the one it
+	// was taken in. Empty before either exists; Gone when the directory is not there.
+	Checkout string         `json:"checkout,omitempty"`
+	Gone     bool           `json:"gone,omitempty"`
+	Branch   string         `json:"branch,omitempty"`
+	Head     string         `json:"head,omitempty"`
+	Unpushed *briefUnpushed `json:"unpushed,omitempty"`
+	// DependsOn is each declared dependency with the state it is in; one is satisfied
+	// only at pass, as `magus job wait` grades it.
+	DependsOn []briefDependency `json:"depends_on,omitempty"`
+	// Risk is the first unresolved risk the job's filed result names.
+	Risk string `json:"risk,omitempty"`
+	Next string `json:"next,omitempty"`
+}
+
+// briefDependency is one depends_on entry; an empty State is a job no row declares.
+type briefDependency struct {
+	ID        string `json:"id"`
+	State     string `json:"state,omitempty"`
+	Satisfied bool   `json:"satisfied"`
 }
 
 // briefAttention is the open attention queue reduced to a count, the row that has waited
@@ -279,7 +330,17 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	if res, err := vcs.Resolve(ctx, root, "", vcsOpts); err == nil && res.VCS != nil {
 		brief.readVCS(ctx, res, ws)
 	}
-	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
+	if rows, err := readJobRows(ctx, root); err != nil {
+		brief.Jobs = &briefJobTree{Unread: err.Error()}
+	} else {
+		acting, _, _ := checkoutLease(ctx, root)
+		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
+		brief.Jobs = sessionJobTree(ctx, rows, acting, root, vcsOpts)
+		if brief.Jobs != nil {
+			// The tree names the jobs this session owns, which is the count a reader acts on.
+			brief.OtherLeases = 0
+		}
+	}
 	brief.Failures = lastRunFailures(root)
 	brief.Attention = briefAttentionQueue(root)
 	if wired, err := workspace.WiredHarnesses(ws); err == nil {
@@ -399,16 +460,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // same filter the write guard applies, so the brief and the refusals agree about which
 // leases are live. It names those taken in this checkout and the caller's own binding,
 // editing jobs first, up to briefMaxLeases, and counts the rest.
-func briefLeases(ctx context.Context, root string) (leases []briefLease, others int) {
-	store, err := openJobs(ctx, root, jobOpen{})
-	if err != nil {
-		return nil, 0
-	}
-	rows, err := store.List()
-	if err != nil {
-		return nil, 0
-	}
-	acting, _, _ := checkoutLease(ctx, root)
+func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, others int) {
 	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
@@ -442,6 +494,124 @@ func briefLeases(ctx context.Context, root string) (leases []briefLease, others 
 		return live, others
 	}
 	return live[:briefMaxLeases], others + len(live) - briefMaxLeases
+}
+
+// readJobRows lists the repository's job store once for both the leases and the tree.
+func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		return nil, err
+	}
+	return store.List()
+}
+
+// sessionJobTree is the jobs under this session's root, nil when it owns none. The CLI
+// cannot see the host session, so the checkout names the root: the job acted under here,
+// else the jobs forked from here, each tree only while something in it is live or still
+// holds a checkout.
+func sessionJobTree(ctx context.Context, rows []types.Job, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
+	var tree []types.Job
+	if acting != "" {
+		tree = types.JobDescendants(rows, acting)
+	} else {
+		for _, row := range rows {
+			if row.Parent != "" || row.Worktree == nil || filepath.Clean(row.Worktree.Source) != filepath.Clean(root) {
+				continue
+			}
+			sub := append([]types.Job{row}, types.JobDescendants(rows, row.ID)...)
+			if slices.ContainsFunc(sub, func(j types.Job) bool { return j.State.Live() || j.Worktree.Standing() }) {
+				tree = append(tree, sub...)
+			}
+		}
+	}
+	if len(tree) == 0 {
+		return nil
+	}
+	out := &briefJobTree{Root: acting}
+	// The root's own row is not in the tree, so its forks are the top level.
+	for _, line := range jobTreeOrder(withoutParent(tree, acting)) {
+		if line.lease.State == types.StateExited && line.lease.Rejection == nil {
+			out.Uncollected = append(out.Uncollected, line.lease.ID)
+		}
+		if len(out.Jobs) == briefMaxJobs {
+			out.More++
+			continue
+		}
+		job := briefTreeJob(ctx, rows, line.lease, vcsOpts)
+		job.Depth = line.depth
+		out.Jobs = append(out.Jobs, job)
+	}
+	return out
+}
+
+// withoutParent clears parent from rows' Parent, so jobTreeOrder places its children at
+// the top level rather than after a row the tree does not carry.
+func withoutParent(rows []types.Job, parent string) []types.Job {
+	if parent == "" {
+		return rows
+	}
+	out := slices.Clone(rows)
+	for i := range out {
+		if out[i].Parent == parent {
+			out[i].Parent = ""
+		}
+	}
+	return out
+}
+
+// briefTreeJob reads one job's row and its checkout.
+func briefTreeJob(ctx context.Context, rows []types.Job, row types.Job, vcsOpts types.VCSOptions) briefJob {
+	job := briefJob{ID: row.ID, State: string(row.State), Checkout: row.CheckoutRoot}
+	if row.Worktree.Standing() {
+		job.Checkout = row.Worktree.Root
+	}
+	for _, dep := range row.DependsOn {
+		d := briefDependency{ID: dep}
+		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == dep }); i >= 0 {
+			d.State = string(rows[i].State)
+			d.Satisfied = rows[i].State == types.StatePass
+		}
+		job.DependsOn = append(job.DependsOn, d)
+	}
+	if row.Result != nil && len(row.Result.UnresolvedRisks) > 0 {
+		job.Risk = row.Result.UnresolvedRisks[0]
+	}
+	if job.Checkout != "" {
+		if _, err := os.Stat(job.Checkout); err != nil {
+			job.Gone = true
+		} else if res, err := vcs.Resolve(ctx, job.Checkout, "", vcsOpts); err == nil && res.VCS != nil {
+			if meta, err := res.VCS.Metadata(ctx, job.Checkout); err == nil {
+				job.Branch, job.Head = meta.Ref, meta.Short
+			}
+			job.Unpushed = unpushedCommits(ctx, res, job.Checkout)
+		}
+	}
+	job.Next = briefNextStep(rows, row, job.Unpushed)
+	return job
+}
+
+// briefNextStep is the step the row says comes next, "" when it is the holder's to take
+// or nothing is owed.
+func briefNextStep(rows []types.Job, row types.Job, unpushed *briefUnpushed) string {
+	switch row.State {
+	case types.StateExited:
+		return "collect it: " + hint.JobWait.With(row.ID)
+	case types.StateDeclared:
+		if block, blocked := types.JobBlockedOn(rows, row); blocked {
+			if block.State == "" {
+				return "waits on " + block.On + ", which no job declares"
+			}
+			return "waits on " + block.On + " (" + string(block.State) + ")"
+		}
+		return "take it: " + hint.JobExec.With(row.ID)
+	case types.StatePass:
+		if unpushed != nil && unpushed.Count > 0 {
+			return "gate it in its checkout (" + hint.Affected.With("ci") + "), then push"
+		}
+	case types.StateFail, types.StateNoReturn:
+		return "read why: " + hint.DescribeJob.With(row.ID)
+	}
+	return ""
 }
 
 // lastRunFailures reports the failing targets of the most recent session that ran
@@ -587,6 +757,7 @@ func (b sessionBrief) Text() string {
 	b.writePromptCache(&s)
 	b.writeFailures(&s)
 	b.writeLeases(&s)
+	b.writeJobs(&s)
 	b.writeAttention(&s)
 	b.writeFeedback(&s)
 	b.writeRecent(&s)
@@ -698,6 +869,79 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	if b.OtherLeases > 0 {
 		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
 	}
+}
+
+func (b sessionBrief) writeJobs(s *strings.Builder) {
+	t := b.Jobs
+	switch {
+	case t == nil:
+		return
+	case t.Unread != "":
+		briefLine(s, "jobs: the store could not be read (%s); `%s` reads the same store", t.Unread, hint.LsJobs)
+		return
+	case t.Root != "":
+		briefLine(s, "jobs forked under %s:", t.Root)
+	default:
+		briefLine(s, "jobs forked from this checkout:")
+	}
+	for _, j := range t.Jobs {
+		indent := strings.Repeat("  ", j.Depth+1)
+		briefLine(s, "%s%s (%s) %s", indent, j.ID, orDash(j.State), b.jobPlace(j))
+		if len(j.DependsOn) > 0 {
+			deps := make([]string, len(j.DependsOn))
+			for i, d := range j.DependsOn {
+				switch {
+				case d.State == "":
+					deps[i] = d.ID + " (not declared)"
+				case d.Satisfied:
+					deps[i] = d.ID + " (pass)"
+				default:
+					deps[i] = d.ID + " (" + d.State + ", unsatisfied)"
+				}
+			}
+			briefLine(s, "%s  depends on: %s", indent, strings.Join(deps, ", "))
+		}
+		if j.Risk != "" {
+			briefLine(s, "%s  risk: %s", indent, j.Risk)
+		}
+		if j.Next != "" {
+			briefLine(s, "%s  next: %s", indent, j.Next)
+		}
+	}
+	if t.More > 0 {
+		briefLine(s, "  and %d more: `%s`", t.More, hint.LsJobs)
+	}
+	if len(t.Uncollected) > 0 {
+		briefLine(s, "exited and never collected, so each ends as no_return unless waited on:")
+		for _, id := range t.Uncollected {
+			briefLine(s, "  %s", hint.JobWait.With(id))
+		}
+	}
+}
+
+// jobPlace says where a job's work lives: branch, head, checkout and unpushed count.
+func (b sessionBrief) jobPlace(j briefJob) string {
+	switch {
+	case j.Checkout == "":
+		return "no checkout yet"
+	case j.Gone:
+		return "checkout " + j.Checkout + " is gone"
+	}
+	where := "in " + j.Checkout
+	if filepath.Clean(j.Checkout) == filepath.Clean(b.Workspace) {
+		where = "in this checkout"
+	}
+	if j.Head != "" {
+		where = "on " + cmp.Or(j.Branch, "a detached head") + " at " + j.Head + " " + where
+	}
+	if u := j.Unpushed; u != nil && u.Count > 0 {
+		at := ""
+		if u.AtLeast {
+			at = "at least "
+		}
+		where += fmt.Sprintf(", %s%d commit(s) not on %s", at, u.Count, u.Base)
+	}
+	return where
 }
 
 func (b sessionBrief) writeAttention(s *strings.Builder) {
