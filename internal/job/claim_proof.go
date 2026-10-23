@@ -54,7 +54,7 @@ func ClaimLimit(row types.Job, limits config.Jobs) (claimLimit, error) {
 	if row.MaxClaims > 0 {
 		limit = claimLimit{Max: row.MaxClaims, Source: "max_claims on job " + row.ID}
 	}
-	if limit.Max > limits.MaxClaims {
+	if limits.MaxClaims > 0 && limit.Max > limits.MaxClaims {
 		return limit, fmt.Errorf("%d claims (%s) is past the ceiling of %d (jobs.max_claims in magus.yaml)", limit.Max, limit.Source, limits.MaxClaims)
 	}
 	return limit, nil

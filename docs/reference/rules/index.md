@@ -55,13 +55,13 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [installed-skill](installed-skill.md)                 | a write to an installed skill copy, which re-installing discards                                     |
 | [interpreter-rewrite](interpreter-rewrite.md)         | an inline interpreter rewriting a file this tree already carries                                     |
 | [lease-checkout](lease-checkout.md)                   | a worker holding a checkout running magus outside it                                                 |
+| [lease-claim](lease-claim.md)                         | a leased write outside its write paths that magus proves belongs to the job                          |
 | [lease-gate](lease-gate.md)                           | a leased worker running the gate instead of the check it was assigned                                |
 | [lease-harness](lease-harness.md)                     | a leased worker rewriting the harness skill trees that steer it                                      |
 | [lease-invalid](lease-invalid.md)                     | a call naming a lease this workspace's job store does not declare                                    |
 | [lease-rebind](lease-rebind.md)                       | a leased worker rewriting who it is or what its own job row says                                     |
 | [lease-undeclared](lease-undeclared.md)               | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
 | [lease-vcs](lease-vcs.md)                             | a worker lease mutating version control, or committing outside its own branch and checkout           |
-| [lease-widen](lease-widen.md)                         | a leased write outside its write paths that magus proves belongs to the job                          |
 | [lease-write](lease-write.md)                         | a leased write outside its write paths, or into a path it was denied or another lease owns           |
 | [magus-timeout](magus-timeout.md)                     | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside               |
 | [merge-side-checkout](merge-side-checkout.md)         | a checkout of one merge side over a conflicted file, which discards the merge                        |

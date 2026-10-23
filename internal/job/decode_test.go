@@ -206,7 +206,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 		"holder", "releases", "unattributed", "entries", "write_proof", "validated", "reported_base",
 		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
 		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
-		"waiter_evidence", "model_tier", "rework_rounds", "claims", "claims", "generation", "attempts",
+		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation", "attempts",
 		"prior", "rejection",
 	}, storeStamped)
 }
@@ -398,7 +398,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = []any{"internal/job"}
 		case "read_only":
 			value = true
-		case "max_attempts":
+		case "max_attempts", "max_claims":
 			value = float64(3)
 		case "timeout":
 			value = "30m"

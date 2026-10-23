@@ -329,6 +329,9 @@ func TestClaimLimitSaysWhereItCameFrom(t *testing.T) {
 	named, err := ClaimLimit(types.Job{ID: "a", MaxClaims: 7}, jobs)
 	require.NoError(t, err)
 	assert.Equal(t, claimLimit{Max: 7, Source: "max_claims on job a"}, named)
+
+	_, err = ClaimLimit(types.Job{ID: "a", MaxClaims: 7}, config.Jobs{})
+	assert.NoError(t, err, "a config that names no ceiling enforces none")
 }
 
 // The line the guard serves is the record apply decodes, bounded so a refusal never grows
