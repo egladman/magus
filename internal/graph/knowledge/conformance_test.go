@@ -622,7 +622,6 @@ func TestConformanceCallSequenceRow(t *testing.T) {
 	}, out.Stale, "C is under the value")
 }
 
-
 // boundarySymbols is a command beside a library, an interface, a store writing through
 // internal/file, and a package that exports a path but keeps no state.
 func boundarySymbols() []types.KnowledgeSymbol {
@@ -677,19 +676,26 @@ func boundaryOptions() types.ConformanceOptions {
 func TestConformanceMainLogic(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceMainLogic, types.ConformancePopMain, "")
-	assert.Equal(t, 7, row.N, "every callable of the command is sampled")
-	assert.Equal(t, []types.ConformanceItem{
-		{ID: "cmd/tool/main.go#compute", Source: "cmd/tool/main.go:10", Measure: 150, Home: "internal/lib"},
-	}, row.Violations, "main, a delegate, an args parser, a writer, an interface user and a small helper pass")
+	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
+	assert.Equal(t, types.ConformanceRow{
+		Key: row.Key, N: 7, Value: 119, Anchor: 119, Source: types.ConformanceFromAnchor,
+		Violations: []types.ConformanceItem{
+			{ID: "cmd/tool/main.go#compute", Source: "cmd/tool/main.go:10", Measure: 150, Home: "internal/lib"},
+		},
+	}, row, "every callable of the command is sampled; main, a delegate, an args parser, a writer, an interface user and a small helper pass")
 }
 
 func TestConformanceStorePathExport(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceStorePathExport, types.ConformancePopSource, "")
-	assert.Equal(t, 2, row.N, "LogPath and StoreDir: Open, a typed constant and a predicate are no paths, and QueueDir's package keeps no state")
-	assert.Equal(t, []types.ConformanceItem{
-		{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
-	}, row.Violations, "the test file and the store's own files do not count")
+	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
+	assert.Equal(t, types.ConformanceRow{
+		Key: row.Key, N: 2, Source: types.ConformanceFromAnchor,
+		Violations: []types.ConformanceItem{
+			{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
+		},
+	}, row, "LogPath and StoreDir: Open, a typed constant and a predicate are no paths, and QueueDir's package keeps no state"+
+		"; the test file and the store's own files do not count")
 }
 
 func TestConformanceFileSplit(t *testing.T) {
@@ -705,12 +711,14 @@ func TestConformanceFileSplit(t *testing.T) {
 	}
 
 	row := findConformanceRow(t, g.Conformance(options(1500)), types.ConformanceFileSplit, types.ConformancePopSource, "")
-	assert.Equal(t, 2, row.N, "only the concept siblings: the platform, generated and test siblings are not splits by topic")
-	assert.Equal(t, []types.ConformanceItem{
-		{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
+	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
+	assert.Equal(t, types.ConformanceRow{
+		Key: row.Key, N: 2, Value: 1500, Anchor: 1500, Source: types.ConformanceFromAnchor,
+		Violations: []types.ConformanceItem{
+			{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
 		{ID: "internal/r/r_cache.go", Source: "internal/r/r_cache.go:1", Measure: 900, Home: "internal/r/r.go"},
-	}, row.Violations, "both would fit in r.go")
-	assert.Zero(t, row.Propose, "a floor proposes nothing")
+		},
+	}, row, "only the concept siblings, both of which would fit in r.go; a floor proposes nothing")
 
 	row = findConformanceRow(t, g.Conformance(options(1000)), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	require.Len(t, row.Violations, 1)

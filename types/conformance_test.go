@@ -74,7 +74,7 @@ func TestConformanceValidateAcceptsAConfiguredPolicy(t *testing.T) {
 
 	o = conformanceOptions()
 	o.Ratchet.Known = append(o.Ratchet.Known, ConformanceKnown{Metric: ConformanceFuncLines, Items: []string{"a.go#F"}, Reason: "long", Line: 13})
-	assert.NoError(t, o.Validate(), "one item under two metrics")
+	require.NoError(t, o.Validate(), "one item under two metrics")
 
 	o = conformanceOptions()
 	split := ConformanceKey{Metric: ConformanceFileSplit, Population: ConformancePopSource}

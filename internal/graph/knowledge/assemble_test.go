@@ -803,11 +803,11 @@ func TestSplitEdges(t *testing.T) {
 		return map[string]string{attrSplitSuffix: suffix, attrSplitClass: class, attrSplitCoupled: fmt.Sprint(coupled)}
 	}
 	assert.Equal(t, map[string]map[string]string{
-		"file:internal/r/r_cache.go -> file:internal/r/r.go":           split("cache", splitConcept, true),
-		"file:internal/r/r_tasks.go -> file:internal/r/r.go":           split("tasks", splitConcept, false),
-		"file:internal/r/r_linux.go -> file:internal/r/r.go":           split("linux", splitPlatform, false),
-		"file:internal/r/r_grpc.pb.go -> file:internal/r/r.go":         split("grpc.pb", splitGenerated, false),
-		"file:internal/r/r_test.go -> file:internal/r/r.go":            split("test", splitTest, true),
+		"file:internal/r/r_cache.go -> file:internal/r/r.go":            split("cache", splitConcept, true),
+		"file:internal/r/r_tasks.go -> file:internal/r/r.go":            split("tasks", splitConcept, false),
+		"file:internal/r/r_linux.go -> file:internal/r/r.go":            split("linux", splitPlatform, false),
+		"file:internal/r/r_grpc.pb.go -> file:internal/r/r.go":          split("grpc.pb", splitGenerated, false),
+		"file:internal/r/r_test.go -> file:internal/r/r.go":             split("test", splitTest, true),
 		"file:internal/r/r_cache_test.go -> file:internal/r/r_cache.go": split("test", splitTest, true),
 	}, got)
 }
