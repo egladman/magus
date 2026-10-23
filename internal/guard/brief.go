@@ -420,7 +420,7 @@ func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict,
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") || strings.Contains(r.run.target, "...") {
 			continue
 		}
-		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || v.op || len(v.outside) > 0 {
+		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted && !readsOwnProjects(v.run, judge.row.WritePaths) || v.op || len(v.outside) > 0 {
 			return r, v, true
 		}
 	}

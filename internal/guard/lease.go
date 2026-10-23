@@ -491,10 +491,13 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 					strings.Join(placementArgv(me.ID), " ") + "`. Until then the unit is held to " + commands[0] + ", and a need for the new binary goes in your result's unresolved risks.",
 			}
 		}
+		if readsOwnProjects(r, me.WritePaths) {
+			continue
+		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
 			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, "+integratorIs+", runs every other target serially, in its own tree, after it integrates the units.\n"+
-				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
+				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Any target passes read-only over the projects holding those paths: name it with --no-default-charms and no rw charm. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
 	}
@@ -511,8 +514,20 @@ func vetsWritePaths(r targetRun, writePaths []string, deps Dependencies) bool {
 	if r.rewrites(deps.DefaultCharms) && opHonorsRewrite(deps.spells(), r.target) {
 		return false
 	}
-	// "/" is every project, most of which hold none of the write paths.
-	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+	return holdsWritePaths(r.selection(), writePaths)
+}
+
+// readsOwnProjects reports a `magus run` of any target that writes nothing back,
+// --no-default-charms and no rw charm named, over projects holding the write paths, so a
+// worker whose check is lint still runs the tests it wrote.
+func readsOwnProjects(r targetRun, writePaths []string) bool {
+	return r.verb == "run" && r.noDefaultCharms && !r.rewrites(nil) && holdsWritePaths(r.selection(), writePaths)
+}
+
+// holdsWritePaths reports projects that each hold one of writePaths. "/" is every project,
+// most of which hold none.
+func holdsWritePaths(projects, writePaths []string) bool {
+	return !slices.ContainsFunc(projects, func(p string) bool {
 		p = path.Clean(p)
 		return p != "." && !slices.ContainsFunc(writePaths, func(w string) bool { return strings.HasPrefix(w, p+"/") })
 	})
