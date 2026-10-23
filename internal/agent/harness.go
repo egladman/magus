@@ -735,8 +735,8 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in the host: /plugin install %s --marketplace %s",
-		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)",
+		id, enabled.Path, filepath.Join(claudePluginsRoot(), "installed_plugins.json"), filepath.Join(claudePluginsRoot(), "cache", marketplace, name), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
 		reason += " (marketplace " + marketplace + " is not registered either)"
 	}
@@ -763,10 +763,19 @@ func claudeConfigDir() string {
 	return filepath.Join(home, ".claude")
 }
 
+// claudePluginsRoot is the directory holding the host's plugin store:
+// CLAUDE_CODE_PLUGIN_CACHE_DIR when set, else plugins under the config dir.
+func claudePluginsRoot() string {
+	if dir := os.Getenv("CLAUDE_CODE_PLUGIN_CACHE_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join(claudeConfigDir(), "plugins")
+}
+
 // readClaudePluginStore decodes one JSON file of the host's plugin store. An absent file
 // reads as an empty document: a person who never installed a plugin has none.
 func readClaudePluginStore(name string) (map[string]any, error) {
-	path := filepath.Join(claudeConfigDir(), "plugins", name)
+	path := filepath.Join(claudePluginsRoot(), name)
 	body, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return map[string]any{}, nil
@@ -781,10 +790,9 @@ func readClaudePluginStore(name string) (map[string]any, error) {
 	return doc, nil
 }
 
-// claudePluginInstalled reads installed_plugins.json, which maps "<plugin>@<marketplace>"
-// to its installs (one per scope; a single object in the first file version). An install in
-// any scope counts: a project-scope install made from another checkout of the same
-// repository must not fail a worktree.
+// claudePluginInstalled counts an install in any scope, listed in installed_plugins.json,
+// or a version dir under cache/<marketplace>/<plugin>: the host caches a relative-path
+// marketplace's plugin without recording it.
 func claudePluginInstalled(id string) (bool, error) {
 	doc, err := readClaudePluginStore("installed_plugins.json")
 	if err != nil {
@@ -793,11 +801,23 @@ func claudePluginInstalled(id string) (bool, error) {
 	plugins, _ := doc["plugins"].(map[string]any)
 	switch v := plugins[id].(type) {
 	case []any:
-		return len(v) > 0, nil
+		if len(v) > 0 {
+			return true, nil
+		}
 	case map[string]any:
-		return len(v) > 0, nil
+		if len(v) > 0 {
+			return true, nil
+		}
 	}
-	return false, nil
+	name, marketplace, _ := strings.Cut(id, "@")
+	entries, err := os.ReadDir(filepath.Join(claudePluginsRoot(), "cache", marketplace, name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read plugin cache for %s: %w", id, err)
+	}
+	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.IsDir() }), nil
 }
 
 func claudeMarketplaceKnown(name string) (bool, error) {

@@ -588,10 +588,10 @@ is handed.
 ## The magus mod
 
 The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
-whose source is `claude-code-mod/` beside this page. Install it once per person:
+whose source is `claude-code-mod/` beside this page. Add the marketplace once per person:
 
 ```text
-/plugin install magus --marketplace egladman/magus
+claude plugin marketplace add egladman/magus
 ```
 
 It adds these to a session:
@@ -639,12 +639,16 @@ magus\harness.provider(claudeMod);
 `.claude/settings.json`, `extraKnownMarketplaces.magus` and
 `enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
 reads the marketplace only once the person trusts the folder. The settings do not
-install the mod: each person runs the install line above once, and until they do
-the mod never appears. `magus agent harness verify claude-code-mod` and
-`magus doctor` read what Claude Code recorded in `installed_plugins.json` under
-`CLAUDE_CONFIG_DIR` (`~/.claude` by default). Verify fails naming the install
-line while the workspace enables the mod and the person has not installed it;
-doctor advises on that gap so CI is not red for a personal install. A workspace that does not enable the mod is not checked.
+install the mod: each person runs the line above once, or trusts the folder and
+starts a session, and until then the mod never appears. `magus agent harness verify
+claude-code-mod` and `magus doctor` count the mod as installed when
+`installed_plugins.json` lists it or when `cache/magus/magus/` holds a version
+directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
+by default) or under `CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. Claude Code
+caches a plugin from a relative-path marketplace without recording it, which the
+cache check covers. Verify fails naming the line above while the workspace enables
+the mod and neither is found; doctor advises on that gap so CI is not red for a
+personal install. A workspace that does not enable the mod is not checked.
 
 ## Coverage and limits
 

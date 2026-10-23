@@ -954,7 +954,7 @@ func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
 	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "/plugin install magus --marketplace egladman/magus")
+	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add egladman/magus")
 	assert.Contains(t, result.Plugin.Reason, "magus@magus")
 	assert.Contains(t, result.Plugin.Reason, "not registered")
 }
@@ -978,6 +978,64 @@ func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
 			assert.Empty(t, result.Plugin.Reason)
 		})
 	}
+}
+
+// TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord pins that a plugin Claude Code
+// cached from a relative-path marketplace is present although installed_plugins.json omits it.
+func TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus", "1.0.0"), 0o755))
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
+	assert.Empty(t, result.Plugin.Reason)
+}
+
+// TestVerifyHarnessIgnoresAnEmptyPluginCacheDir pins that a plugin directory holding no
+// version dir is not an install.
+func TestVerifyHarnessIgnoresAnEmptyPluginCacheDir(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus"), 0o755))
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+}
+
+// TestVerifyHarnessHonorsThePluginCacheDirVariable pins that CLAUDE_CODE_PLUGIN_CACHE_DIR
+// moves the plugins root: the install record and the cache are read there, not under the
+// config dir.
+func TestVerifyHarnessHonorsThePluginCacheDirVariable(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	pluginsRoot := t.TempDir()
+	t.Setenv("CLAUDE_CODE_PLUGIN_CACHE_DIR", pluginsRoot)
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, filepath.Join(pluginsRoot, "installed_plugins.json"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(pluginsRoot, "installed_plugins.json"),
+		[]byte(`{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`), 0o644))
+	result, err = VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
+
+	require.NoError(t, os.Remove(filepath.Join(pluginsRoot, "installed_plugins.json")))
+	require.NoError(t, os.MkdirAll(filepath.Join(pluginsRoot, "cache", "magus", "magus", "2.0.0"), 0o755))
+	result, err = VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
 }
 
 // TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable pins the silence: an unmerged
@@ -1029,7 +1087,7 @@ func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
 	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "/plugin install lint --marketplace acme/tools")
+	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add acme/tools")
 	assert.NotContains(t, result.Plugin.Reason, "not registered")
 }
 
