@@ -1984,8 +1984,8 @@ var (
 	// fix a target just wrote into a commit about something else. Measured: one such call
 	// put 69 files (a whole regenerated docs site plus five untouched source files) into a
 	// commit about four collection methods.
-	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `" + hint.VCSAdd.String() + "`."
-	denyStageAllWhy = "`" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
+	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `" + hint.VCSLsFiles.String() + "`."
+	denyStageAllWhy = "`" + hint.VCSLsFiles.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSLsFiles.With("--dry-run") + "` stages nothing.\n" +
 		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
 	// The advisory a chain keeps when a pipe of its stages would change what it does; see
@@ -2241,7 +2241,7 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 			}
 		}
 		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.",
-			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSAdd.Argv(paths...),
+			[]types.NextStep{hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSLsFiles.Argv(paths...),
 				"vcs add stages a source change with the outputs it produced and reports anything undeclared.")}
 	}
 	return "", nil

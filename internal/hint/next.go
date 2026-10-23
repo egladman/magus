@@ -309,7 +309,7 @@ var readCommands = []Command{
 	DescribeJob,
 	NotesLs, NotesGet,
 	Session, SessionShow, SessionAttention,
-	VCSCheckpoint,
+	VCSCheckpoint, VCSLsFiles,
 	ConfigView, ConfigToken, ConfigTokenPrint,
 	ConfigConsoleToken, ConfigMCPConnectorLs,
 	AgentStarter, AgentHarnessVerify,
@@ -381,10 +381,8 @@ func withinWritePaths(writePaths []string, argv []string) bool {
 // writeProjects names the project operands of a write, or nothing when the command
 // takes none. Nothing is the conservative answer: a write that names no project
 // touches whatever the workspace resolves, which is wider than any declared boundary.
-//
-// `vcs add` names paths rather than projects; a write path covers them the same way.
 func writeProjects(argv []string) []string {
-	if len(argv) < 4 || (argv[1] != Run.Head() && !VCSAdd.MatchedBy(argv[1:])) {
+	if len(argv) < 4 || argv[1] != Run.Head() {
 		return nil
 	}
 	var projects []string

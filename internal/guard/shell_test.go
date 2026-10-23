@@ -1478,8 +1478,8 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `"+hint.VCSAdd.String()+"`.")
-	assert.Contains(t, verdict.Why, hint.VCSAdd.With("--dry-run"))
+	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `"+hint.VCSLsFiles.String()+"`.")
+	assert.Contains(t, verdict.Why, hint.VCSLsFiles.With("--dry-run"))
 	assert.Contains(t, verdict.Why, "git add -- <paths>")
 	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
 }

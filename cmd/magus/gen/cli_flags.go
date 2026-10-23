@@ -667,12 +667,24 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
-	// vcs add: --reason
-	FlagVCSAddReason = "reason"
-	// vcs add: --untracked
-	FlagVCSAddUntracked = "untracked"
 	// vcs checkpoint: --preserve
 	FlagVCSCheckpointPreserve = "preserve"
+	// vcs ls-files: --exclude
+	FlagVCSLsFilesExclude = "exclude"
+	// vcs ls-files: --include-generated
+	FlagVCSLsFilesIncludeGenerated = "include-generated"
+	// vcs ls-files: --include-held
+	FlagVCSLsFilesIncludeHeld = "include-held"
+	// vcs ls-files: --include-staged
+	FlagVCSLsFilesIncludeStaged = "include-staged"
+	// vcs ls-files: --include-unclaimed
+	FlagVCSLsFilesIncludeUnclaimed = "include-unclaimed"
+	// vcs ls-files: --include-unexplained
+	FlagVCSLsFilesIncludeUnexplained = "include-unexplained"
+	// vcs ls-files: --include-untracked
+	FlagVCSLsFilesIncludeUntracked = "include-untracked"
+	// vcs ls-files: --project
+	FlagVCSLsFilesProject = "project"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
 	// vcs resolve: --hook
@@ -1247,17 +1259,28 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	return &f
 }
 
-// VCSAddFlags are the flags declared for `magus vcs add`.
-type VCSAddFlags struct {
-	Untracked bool   // --untracked
-	Reason    string // --reason
+// VCSLsFilesFlags are the flags declared for `magus vcs ls-files`.
+//
+// It does NOT carry --exclude, --project: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type VCSLsFilesFlags struct {
+	IncludeUntracked   bool // --include-untracked
+	IncludeGenerated   bool // --include-generated
+	IncludeUnexplained bool // --include-unexplained
+	IncludeUnclaimed   bool // --include-unclaimed
+	IncludeHeld        bool // --include-held
+	IncludeStaged      bool // --include-staged
 }
 
-// BindVCSAdd registers `magus vcs add`'s flags on fs and returns the destination.
-func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
-	var f VCSAddFlags
-	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files; requires --reason")
-	fs.StringVar(&f.Reason, FlagVCSAddReason, "", "Why the undeclared files belong in this change; required with --untracked, kept with the staging verdict")
+// BindVCSLsFiles registers `magus vcs ls-files`'s flags on fs and returns the destination.
+func BindVCSLsFiles(fs *flag.FlagSet) *VCSLsFilesFlags {
+	var f VCSLsFilesFlags
+	fs.BoolVar(&f.IncludeUntracked, FlagVCSLsFilesIncludeUntracked, false, "Also list untracked files; refused on jj, which has none")
+	fs.BoolVar(&f.IncludeGenerated, FlagVCSLsFilesIncludeGenerated, false, "Also list declared outputs a dirty source in this change explains")
+	fs.BoolVar(&f.IncludeUnexplained, FlagVCSLsFilesIncludeUnexplained, false, "Also list declared outputs no source change here explains")
+	fs.BoolVar(&f.IncludeUnclaimed, FlagVCSLsFilesIncludeUnclaimed, false, "Also list paths no target declares, and the ones magus maintains itself")
+	fs.BoolVar(&f.IncludeHeld, FlagVCSLsFilesIncludeHeld, false, "Also list paths another live job in this checkout writes")
+	fs.BoolVar(&f.IncludeStaged, FlagVCSLsFilesIncludeStaged, false, "Also list paths whose whole change is already staged; git only")
 	return &f
 }
 

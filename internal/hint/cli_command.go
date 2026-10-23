@@ -147,7 +147,7 @@ var (
 	SessionDispose      = cmd("session", "dispose")
 	SessionNotify       = cmd("session", "notify")
 	SessionCheckpoint   = cmd("session", "checkpoint")
-	VCSAdd              = cmd("vcs", "add")
+	VCSLsFiles          = cmd("vcs", "ls-files")
 	VCSResolve          = cmd("vcs", "resolve")
 	VCSCheckpoint       = cmd("vcs", "checkpoint")
 	AgentInstall        = cmd("agent", "install")
@@ -206,7 +206,7 @@ var AllCommands = []Command{
 	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, DescribeHarness, Explain, Path, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	JobFork, JobApply, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
-	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
+	VCSLsFiles, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
 	AgentHarnessInstall, AgentHarnessVerify,
 	ConfigView, ConfigSet, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
