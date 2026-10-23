@@ -304,6 +304,12 @@ export function actorNames(nodes: readonly DeclaredNode[]): string[] {
   );
 }
 
+function nameAt(names: readonly string[], i: number): string {
+  const name = names[i];
+  if (name === undefined) throw new Error("actorNames returned no name for node " + i);
+  return name;
+}
+
 // IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
 export const IMPORTS = "imports";
 
@@ -393,7 +399,7 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
   const actors = new Map<string, Actor>();
   decl.nodes.forEach((n, i) =>
     actors.set(n.id, {
-      name: names[i],
+      name: nameAt(names, i),
       sub: "",
       tag: "",
       link: linkTo(meta.anchorHref, n.anchor),
@@ -442,7 +448,7 @@ export function figureForLink(linked: LinkedFigure): Figure {
     linked.nodes.map((n, i) => [
       n.id,
       {
-        name: names[i],
+        name: nameAt(names, i),
         sub: "",
         tag: n.seed ? "edited" : "",
         link: "",
