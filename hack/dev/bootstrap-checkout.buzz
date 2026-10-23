@@ -179,7 +179,8 @@ fun startDaemon(h: Host, dir: str) > str !> any {
 // ./magus built at another commit than the tree fails the gate's symbol index with MGS7003, so
 // it builds one at HEAD when the binary is not, stops the pool parents other builds left, removes
 // the untracked skill installs whose stamp differs from the one the placed ./magus writes (never
-// a tracked file, never a current install), then builds the graph and the symbol digest. Running
+// a tracked file, never a current install), then builds the graph, the symbol digest and the
+// proofread binary the guard's pull-request-text test runs. Running
 // it twice does the build and the removals once. The daemon stops before a build, and with
 // restart it is running again at the end.
 export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
@@ -217,6 +218,8 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     did.append("built the graph");
     must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
     did.append("generated the symbol digest");
+    must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+    did.append("built the proofread binary");
     if (restart) {
         did.append(startDaemon(h, dir: dir));
     }
@@ -380,7 +383,7 @@ test "the stamp is the generated-by line, and a file without one has none" {
     assert\equal(stampLine("body only\n"), want: "", message: "none");
 }
 
-test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph and digest" {
+test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph, digest and proofread binary" {
     final calls = mut [<str>];
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
@@ -402,10 +405,11 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
         "removed the stale untracked skill install .claude/skills/magus-run",
         "built the graph",
         "generated the symbol digest",
+        "built the proofread binary",
     ], message: "did");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("remove")), want: ["remove /c/.claude/skills/magus-run"], message: "one removal");
     assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
-    assert\equal(calls[calls.len() - 1], want: "magus run symbol-digest-generate .", message: "digest last");
+    assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
 }
 
 test "gate-ready keeps a binary at HEAD and says so" {
@@ -460,6 +464,21 @@ test "a failed graph build stops gate-ready, naming the command" {
         why = e;
     }
     assert\equal(why, want: "gate-ready: magus graph build: exit 1: boom", message: why);
+}
+
+test "a failed proofread build stops gate-ready, naming the command" {
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
+        "magus run proofread-build libs/proofread": Ran{ code = 1, stderr = "no compiler" },
+    }, stamps: {}, calls: mut [<str>]);
+    var why = "";
+    try {
+        gateReady(h, dir: "/c", restart: false);
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why, want: "gate-ready: magus run proofread-build libs/proofread: exit 1: no compiler", message: why);
 }
 
 test "the build is the go-run bootstrap, run through env rather than a shell" {
