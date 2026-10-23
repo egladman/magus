@@ -140,6 +140,22 @@ func TestBootstrapExecDecisionOptOut(t *testing.T) {
 	assert.False(t, ok, "MAGUS_NO_BOOTSTRAP_EXEC must disable the whole mechanism")
 }
 
+func TestBootstrapExecDecisionGoRunBuildKeepsOwnBinary(t *testing.T) {
+	unsetBootstrapExecEnv(t)
+	dir := t.TempDir()
+	writeBootstrapFixtureWorkspace(t, dir)
+	t.Chdir(dir)
+	argv := []string{"magus", "run", "go-build"}
+
+	goRunSelf := filepath.Join(t.TempDir(), "go-build123", "b001", "exe", bootstrapFixtureBinaryName())
+	_, ok := bootstrapExecDecision(argv, goRunSelf)
+	assert.False(t, ok, "a go run build must not defer to the placed ./magus")
+
+	installedSelf := filepath.Join(t.TempDir(), "bin", bootstrapFixtureBinaryName())
+	_, ok = bootstrapExecDecision(argv, installedSelf)
+	assert.True(t, ok, "an installed binary still defers to the placed ./magus")
+}
+
 // Test 4: --root picks the named tree rather than $PWD.
 func TestBootstrapExecDecisionHonorsRootOverCwd(t *testing.T) {
 	unsetBootstrapExecEnv(t)

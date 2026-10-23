@@ -71,9 +71,22 @@ func maybeBootstrapExec(argv []string) {
 // guard or side effects (the stderr line, the actual exec), so bootstrap_exec_test.go
 // can drive every branch (the opt-out, the sentinel, --root vs $PWD, no magusfile.buzz
 // anywhere above) directly, without needing a real, non-test process to do it in.
+//
+// A process running from a `go run` build never defers. The bootstrap builds ./magus
+// with `go run`, so that binary is the fresh build of the tree; the placed ./magus is
+// the stale one being replaced, and may be too old to load the workspace config.
 func bootstrapExecDecision(argv []string, self string) (target string, ok bool) {
 	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
 		return "", false
+	}
+	// self is runningBinaryPath's symlink-resolved os.Executable; go run links it at
+	// <tmp>/go-build<N>/b001/exe/<name>.
+	if exeDir := filepath.Dir(self); filepath.Base(exeDir) == "exe" {
+		for dir := filepath.Dir(exeDir); filepath.Dir(dir) != dir; dir = filepath.Dir(dir) {
+			if strings.HasPrefix(filepath.Base(dir), "go-build") {
+				return "", false
+			}
+		}
 	}
 	if os.Getenv(bootstrapExecSentinelVar) != "" {
 		return "", false
