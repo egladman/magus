@@ -102,32 +102,11 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		return nil
 	}
 
-	run := map[string]bool{}
-	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
-			continue
-		}
-		p := lookup(cmp.Or(g.Check.Project, "."))
-		names := []string{g.Check.Target}
-		if _, tail, ok := strings.Cut(g.Check.Target, "::"); ok {
-			names = append(names, tail)
-		}
-		for _, name := range names {
-			_ = types.WalkChain(p, name, lookup, func(v types.ChainVisit) error {
-				run[v.Key()] = true
-				return nil
-			})
-		}
-	}
-
-	type unrun struct {
-		gate  UnrunGate
-		visit types.ChainVisit
-	}
+	run := runTargets(row, lookup)
 	var (
 		written []string
 		walked  bool
-		found   []unrun
+		found   []unrunFound
 	)
 	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
 		if v.Depth == 0 || run[v.Key()] {
@@ -145,13 +124,19 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if !ok {
 			return nil
 		}
-		found = append(found, unrun{
+		found = append(found, unrunFound{
 			gate:  UnrunGate{Target: v.Target, Project: v.Project.Path, Source: source.String()},
 			visit: v,
 		})
 		return nil
 	})
 
+	return offeredGates(found, row, lookup, grade)
+}
+
+// offeredGates drops the found gates another found gate composes, and gives each one left
+// the goal [gradedGoal] allows.
+func offeredGates(found []unrunFound, row types.Job, lookup func(string) *types.Project, grade gradeFunc) []UnrunGate {
 	composed := map[string]bool{}
 	for _, u := range found {
 		_ = types.WalkChain(u.visit.Project, u.visit.Target, lookup, func(m types.ChainVisit) error {
@@ -174,6 +159,34 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		out = append(out, u.gate)
 	}
 	return out
+}
+
+// unrunFound is a gate with the chain visit that found it.
+type unrunFound struct {
+	gate  UnrunGate
+	visit types.ChainVisit
+}
+
+// runTargets is the key of every chain member a check or goal of row runs.
+func runTargets(row types.Job, lookup func(string) *types.Project) map[string]bool {
+	run := map[string]bool{}
+	for _, g := range row.EffectiveGoals() {
+		if g.Kind != types.GoalKindCheck || g.Check.Script != "" || g.Check.Target == "" {
+			continue
+		}
+		p := lookup(cmp.Or(g.Check.Project, "."))
+		names := []string{g.Check.Target}
+		if _, tail, ok := strings.Cut(g.Check.Target, "::"); ok {
+			names = append(names, tail)
+		}
+		for _, name := range names {
+			_ = types.WalkChain(p, name, lookup, func(v types.ChainVisit) error {
+				run[v.Key()] = true
+				return nil
+			})
+		}
+	}
+	return run
 }
 
 var nonIDChars = regexp.MustCompile(`[^a-z0-9]+`)

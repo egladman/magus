@@ -116,16 +116,16 @@ func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
 
 	s, projects := validateWorkspace(t)
 	top := projects[0]
-	top.MagusfileTargets = append(top.MagusfileTargets, "build", "vet")
-	top.TargetInputs["test"] = []types.InputRef{{Glob: "**/*.go"}}
+	top.MagusfileTargets = append(top.MagusfileTargets, "build", "unit", "vet")
+	top.TargetInputs["unit"] = []types.InputRef{{Glob: "**/*.go"}}
 	top.TargetInputs["build"] = []types.InputRef{{Glob: "**/*.go"}}
-	top.TargetChains["ci"] = []types.ChainStep{{Target: "lint"}, {Target: "test"}, {Target: "build"}}
+	top.TargetChains["ci"] = []types.ChainStep{{Target: "lint"}, {Target: "unit"}, {Target: "build"}}
 	s.grader = func(_ context.Context, _ string, row types.Job) CheckVerdict {
 		c := row.Check
 		switch {
 		case c.Target == "build":
 			return CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
-		case c.Target == "test" && !c.NoDefaultCharms:
+		case c.Target == "unit" && !c.NoDefaultCharms:
 			return CheckVerdict{Denied: true, Rule: "lease-gate", Reason: "test needs --no-default-charms"}
 		}
 		return CheckVerdict{}
@@ -140,7 +140,7 @@ func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
 			gates = append(gates, p.Subject)
 		}
 	}
-	assert.Equal(t, []string{"lint .", "test ."}, gates, "the build is the integrator's and asks for no goal or waiver")
+	assert.Equal(t, []string{"unit ."}, gates, "lint is added at fork and the build is the integrator's and asks for no goal or waiver")
 
 	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil, false)
 	require.NoError(t, err)
