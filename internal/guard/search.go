@@ -1342,7 +1342,7 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	full := budgetFullText()
 	// A worker never waits for a seat outside the call that spends it, so its remedy is the
 	// report its check would make.
-	worker := full != "" && deps.lease != ""
+	worker := full != "" && deps.worker
 	switch {
 	case worker:
 		rebuild = "the rebuild has no seat (" + full + "); report that and stop, as a worker's check does"

@@ -46,6 +46,60 @@ export fun logArtifacts(listing: str) > [str] !> any {
     return names;
 }
 
+export final TAIL_LINES = 80;
+
+export object FailedJob {
+    id: int,
+    name: str,
+}
+
+// failedJobs lists the run's jobs that concluded in failure, as `gh run view --json jobs` prints them.
+export fun failedJobs(listing: str) > [FailedJob] !> any {
+    final jobs = mut [<FailedJob>];
+    foreach (j in serialize\jsonDecode(listing).q("jobs").listValue()) {
+        if (j.q("conclusion").stringValue() == "failure") {
+            jobs.append(FailedJob{ id = j.q("databaseId").integerValue(), name = j.q("name").stringValue() });
+        }
+    }
+    return jobs;
+}
+
+// tail keeps the last count lines of text.
+export fun tail(text: str, count: int) > str {
+    final lines = text.trim().split("\n");
+    if (lines.len() <= count) {
+        return lines.join("\n");
+    }
+    return lines.sub(lines.len() - count, len: count).join("\n");
+}
+
+// covered says whether a magus-logs artifact accounts for the job: the ci workflow names a
+// shard job `magus shard <n>: <label>` and its artifact `magus-logs-<n>`. A job matching no
+// artifact that way, or one that cannot be told apart, is uncovered.
+export fun covered(job: str, artifacts: [str]) > bool {
+    foreach (artifact in artifacts) {
+        final shard = artifact.sub(ARTIFACT_PREFIX.len(), len: artifact.len() - ARTIFACT_PREFIX.len());
+        if (job.startsWith("magus shard {shard}:")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// fallbackLogs reads the `gh run view --log-failed` tail of each failed job that no artifact
+// in artifacts accounts for; gh is the call to the gh CLI.
+export fun fallbackLogs(run: str, artifacts: [str], gh: fun (args: [str]) > str !> any) > str !> any {
+    final report = mut [<str>];
+    foreach (job in failedJobs(gh(["run", "view", run, "--json", "jobs"]))) {
+        if (covered(job.name, artifacts: artifacts)) {
+            continue;
+        }
+        final log = gh(["run", "view", "--job", "{job.id}", "--log-failed"]);
+        report.append("== {job.name} (job {job.id}): last {TAIL_LINES} lines of gh run view --job {job.id} --log-failed\n{tail(log, count: TAIL_LINES)}");
+    }
+    return report.join("\n");
+}
+
 fun note(line: str) > void {
     io\stderr.write(line + "\n") catch void;
 }
@@ -78,8 +132,19 @@ export fun main(args: [str]) > void !> any {
         run = "{listed[0].q("databaseId").integerValue()}";
     }
     final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
+    final fallback = fallbackLogs(run, artifacts: names, gh: fun (ghArgs: [str]) > str !> any => capture("gh", args: ghArgs));
+    if (fallback != "") {
+        note("run {run}: failed jobs no {ARTIFACT_PREFIX}* artifact accounts for; fell back to their gh logs");
+        if (names.len() == 0) {
+            io\stdout.write(fallback + "\n") catch void;
+        } else {
+            note(fallback);
+        }
+    }
     if (names.len() == 0) {
-        note("run {run} has no {ARTIFACT_PREFIX}* artifact: no shard failed, or it has not finished");
+        if (fallback == "") {
+            note("run {run} has no {ARTIFACT_PREFIX}* artifact and no failed job: nothing failed, or it has not finished");
+        }
         return;
     }
     final dir = fs\tempDir("show-failures-");
@@ -99,6 +164,48 @@ final LISTING = "\{\"artifacts\": [\{\"name\": \"magus-logs-01\", \"expired\": f
 
 test "only unexpired magus-logs artifacts are downloaded" {
     assert\equal(logArtifacts(LISTING) catch [<str>], want: ["magus-logs-01"], message: "names");
+}
+
+final JOBS = "\{\"jobs\": [\{\"databaseId\": 11, \"name\": \"doctor\", \"conclusion\": \"failure\"}, \{\"databaseId\": 12, \"name\": \"lint\", \"conclusion\": \"success\"}]}";
+
+test "a failed plain job falls back to its gh log tail" {
+    final seen = mut [<str>];
+    final stub = fun (ghArgs: [str]) > str !> any {
+        seen.append(ghArgs.join(" "));
+        if (ghArgs.indexOf("--json") != null) {
+            return JOBS;
+        }
+        return "setup\nerror one\nerror two";
+    };
+    final report = fallbackLogs("99", artifacts: [<str>], gh: stub) catch "";
+    assert\equal(report.indexOf("doctor (job 11)") != null, want: true, message: "names the job");
+    assert\equal(report.indexOf("error two") != null, want: true, message: "carries the log");
+    assert\equal(report.indexOf("lint") == null, want: true, message: "passing job skipped");
+    assert\equal(seen[1], want: "run view --job 11 --log-failed", message: "log call");
+}
+
+final MIXED = "\{\"jobs\": [\{\"databaseId\": 21, \"name\": \"magus shard 3: go\", \"conclusion\": \"failure\"}, \{\"databaseId\": 22, \"name\": \"magus doctor\", \"conclusion\": \"failure\"}]}";
+
+test "a failed plain job beside a failed shard with an artifact is still read" {
+    final seen = mut [<str>];
+    final stub = fun (ghArgs: [str]) > str !> any {
+        seen.append(ghArgs.join(" "));
+        if (ghArgs.indexOf("--json") != null) {
+            return MIXED;
+        }
+        return "doctor says no";
+    };
+    final report = fallbackLogs("99", artifacts: ["magus-logs-3"], gh: stub) catch "";
+    assert\equal(report.indexOf("magus doctor (job 22)") != null, want: true, message: "plain job read");
+    assert\equal(report.indexOf("shard 3") == null, want: true, message: "covered shard skipped");
+    assert\equal(seen.len(), want: 2, message: "one log call for the one uncovered job");
+    assert\equal(covered("magus shard 3: go", artifacts: ["magus-logs-3"]), want: true, message: "shard matches");
+    assert\equal(covered("magus shard 30: go", artifacts: ["magus-logs-3"]), want: false, message: "no prefix collision");
+}
+
+test "tail keeps the last lines" {
+    assert\equal(tail("a\nb\nc\nd", count: 2), want: "c\nd", message: "last two");
+    assert\equal(tail("a\nb", count: 5), want: "a\nb", message: "short log whole");
 }
 
 test "the run id must be a number" {

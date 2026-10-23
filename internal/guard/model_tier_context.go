@@ -31,12 +31,8 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	if tokens <= 0 {
 		return advice{}
 	}
-	rows, err := leaseRows(ctx, at)
-	if err != nil {
-		return advice{}
-	}
-	me, ok := liveLease(liveLeases(rows), lease)
-	if !ok || me.ModelTier == nil {
+	me, ok := leaseRow(ctx, at, lease)
+	if !ok || !me.State.Live() || me.ModelTier == nil {
 		return advice{}
 	}
 	limit := tierContextCap(deps, facts, me)

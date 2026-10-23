@@ -417,7 +417,7 @@ func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 // exactly when its worker would be; v is that verdict.
 func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict, found bool) {
 	for _, r := range runs {
-		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") {
+		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") || strings.Contains(r.run.target, "...") {
 			continue
 		}
 		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted || v.op || len(v.outside) > 0 {

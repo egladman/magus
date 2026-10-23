@@ -272,6 +272,21 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	assert.False(t, found, "a check declaring no write passes under default rw")
 }
 
+// TestBriefMayQuoteTheWaitForm: on 2026-10-22 a brief quoting the wait form the guard itself
+// teaches, `status --wait | magus run ...`, was refused as a run off the row's check.
+func TestBriefMayQuoteTheWaitForm(t *testing.T) {
+	deps := figuresWorkspace(t)
+	deps.Spells = spellCatalog
+	judge := newRowJudge(t.Context(), deps, figuresLease(), location{}, lazyWorkspace(t.Context(), deps, ""))
+	for _, brief := range []string{
+		"A full budget is waited out with `./magus status --wait | ./magus run ...`.",
+		"Wait for a seat: `./magus status --wait | ./magus run diagrams_generate docs`.",
+	} {
+		off, _, found := briefOffCheck(briefRuns(brief), judge)
+		assert.False(t, found, "%q: refused over %q", brief, off.line)
+	}
+}
+
 // TestBriefAndWorkerShareOneVerdict: a brief is refused exactly when its worker's run would
 // be. A slice of the check, an op it composes and an install pass both; a target off the
 // check is refused by both.

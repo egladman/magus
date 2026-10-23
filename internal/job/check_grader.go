@@ -7,13 +7,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
 // CheckVerdict is a [CheckGrader]'s answer. Denied is false for a check the guard lets the
 // holder run, and for one the grader could not judge: a grader that cannot reach a verdict
-// on the check accepts and says why in NotGraded, because a refusal must come from a
-// verdict, not from a failure to reach one.
+// says why in NotGraded, which the fork reports as JobUngraded rather than as a deny, since
+// no verdict on the check was reached, and never as an accept.
 type CheckVerdict struct {
 	Denied bool
 	// Rule names the rule that refused, as the guard prints it.
@@ -73,9 +74,11 @@ const humanOnlyRule = "human-only"
 // deniedCheckProblems is every check of row, its own or a check goal's, the guard would deny
 // its holder, as JobCheckUnrunnable. The holder runs every check under the lease, so a
 // denied one leaves the job unable to verify itself and ends it unverified. Each check is
-// graded as the row with that check, and a check two goals share is graded once. A Store
-// with no grader of its own grades with the one [SetCheckGrader] installed; with neither,
-// and for a job with no check, nothing is found.
+// graded as the row with that check, and a check two goals share is graded once. A check
+// the grader reached no verdict on is one JobUngraded problem, and grading stops there: why
+// no verdict was reached is the workspace's or the binary's, and holds for every check. A
+// Store with no grader of its own grades with the one [SetCheckGrader] installed; with
+// neither, and for a job with no check, nothing is found.
 func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
 	if store == nil {
 		return nil
@@ -99,18 +102,33 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		pending := row
 		pending.Check = &goal.Check
 		verdict := grader(ctx, store.root, pending)
-		if !verdict.Denied {
-			continue
-		}
 		which := "check"
 		if goal.ID != types.PrimaryGoalID {
 			which = "goal " + goal.ID + "'s check"
+		}
+		if verdict.NotGraded != "" {
+			p := ungradedCheckProblem(row.ID, which, goal.Check, verdict.NotGraded)
+			p.Field = goalCheckField(row, goal)
+			return append(ps, p)
+		}
+		if !verdict.Denied {
+			continue
 		}
 		p := deniedCheckProblem(row.ID, which, goal.Check, verdict)
 		p.Field = goalCheckField(row, goal)
 		ps = append(ps, p)
 	}
 	return ps
+}
+
+// ungradedCheckProblem words a check of row id the guard reached no verdict on, quoting why.
+func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) types.JobProblem {
+	return types.JobProblem{
+		Code: types.JobUngraded,
+		Message: fmt.Sprintf("%s's %s `%s` could not be graded against the guard: %s,"+
+			" so nothing says its worker may run it", id, which, check.String(), strings.Join(strings.Fields(why), " ")),
+		Fix: fmt.Sprintf("make the guard load in this checkout (`%s` names what it cannot load), then fork again", hint.Doctor),
+	}
 }
 
 // deniedCheckProblem words the problem with row id's check, which names it in the row. A

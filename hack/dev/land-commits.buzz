@@ -1,8 +1,8 @@
 // Cost: a fetch, the pr-title, pr-description and pr-changelog targets, a push and a pull request.
 //
 // Lands commits as a pull request: a new branch from a fresh origin/main, the commits
-// cherry-picked onto it, CI's three pull request hygiene checks run locally, then the push and
-// `gh pr create`. It refuses a branch name that exists locally or on origin, and stops at the
+// cherry-picked onto it, the checkout made gate-ready (bootstrap-checkout.buzz), CI's three pull
+// request hygiene checks run locally, then the push and `gh pr create`. It refuses a branch name that exists locally or on origin, and stops at the
 // first failed step, leaving the branch where it stood. --dry-run prints the steps and runs none.
 //
 //	magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <sha,...|ref> --title <text> --body-file <file> [--dry-run]
@@ -17,6 +17,7 @@ import "magus";
 import "proc";
 import "std";
 import "vcs";
+import "hack/dev/bootstrap-checkout" as bootstrap;
 
 import "assert";
 
@@ -79,6 +80,7 @@ export fun createArgv(branch: str, title: str, bodyFile: str) > [str] {
 export fun plan(l: Landing) > [str] {
     final steps = mut ["git fetch origin main", "git switch -c {l.branch} origin/main"];
     steps.append("git cherry-pick {l.commits.join(" ")}");
+    steps.append("magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready");
     foreach (argv in checkArgvs(l.title, body: "<{l.bodyFile}>")) {
         steps.append("magus {argv.join(" ")}");
     }
@@ -114,6 +116,9 @@ fun land(l: Landing) > void !> any {
     final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: {"quiet": true, "allow_failure": true});
     if (!picked.ok) {
         throw "land-commits: the cherry-pick of {l.commits.join(" ")} conflicted on {l.branch}: settle it with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, then `git cherry-pick --continue`";
+    }
+    foreach (line in bootstrap\gateReady(bootstrap\liveHost(), dir: vcs\root())) {
+        std\print("gate-ready: {line}");
     }
     foreach (argv in checkArgvs(l.title, body: l.body)) {
         final check = magus\cmd(argv[0], args: argv.sub(1), opts: {"quiet": true, "allow_failure": true});
@@ -187,9 +192,10 @@ test "the checks, push and pull request are built as argv with the title and bod
 
 test "the dry run lists every step in order and never enables auto-merge" {
     final steps = plan(Landing{ branch = "topic", commits = ["abc1234", "def5678"], title = "t", body = "b", bodyFile = "b.md" });
-    assert\equal(steps.len(), want: 8, message: "steps");
+    assert\equal(steps.len(), want: 9, message: "steps");
     assert\equal(steps[0], want: "git fetch origin main", message: "fetch");
     assert\equal(steps[1], want: "git switch -c topic origin/main", message: "switch");
     assert\equal(steps[2], want: "git cherry-pick abc1234 def5678", message: "pick");
-    assert\equal(steps[7].indexOf("--auto") == null, want: true, message: "no auto-merge");
+    assert\equal(steps[3], want: "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready", message: "gate-ready before the checks");
+    assert\equal(steps[8].indexOf("--auto") == null, want: true, message: "no auto-merge");
 }
