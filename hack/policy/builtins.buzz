@@ -1,10 +1,11 @@
 namespace agentpolicy\builtins;
 
 // BUILTINS is this repository's own declaration for the compiled guard rules. Every rule
-// with a remedy denies by default (ADR 0013), so the one setting left is the line limit
-// read-navigation fires at, which the binary ships no number for. The figures below are
-// what justified each deny here, kept where a workspace can reread them rather than in
-// the rule's shipped text.
+// with a remedy denies by default (ADR 0013), so the settings left are the line limit
+// read-navigation fires at, which the binary ships no number for, and the background
+// bounds, stated at the binary's own figures so they are easy to find. The figures below
+// are what justified each deny here, kept where a workspace can reread them rather than
+// in the rule's shipped text.
 export final BUILTINS: {str: any} = {
     // 120 lines is the p90 of a bounded read. 2026-09-26, 66,548 Bash reads: 8,394
     // dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by
@@ -18,6 +19,11 @@ export final BUILTINS: {str: any} = {
     // held 29 (83%), the misses a read right before an edit and a review of the reader's
     // own diff.
     "read-navigation": {"decision": "deny", "lines": 120},
+    // A command bounded at the ceiling ends before background-silent speaks of it.
+    // 2026-10-13: a `python3 -` reading an unfed stdin sat silent for eight hours, and a
+    // transcript search a scout left behind ran for four.
+    "background-unbounded": {"decision": "deny", "ceiling_minutes": 30},
+    "background-silent": {"decision": "deny", "advise_minutes": 30, "deny_minutes": 60},
 };
 
 // Evidence for the rules this repository set to deny before ADR 0013 made deny the
