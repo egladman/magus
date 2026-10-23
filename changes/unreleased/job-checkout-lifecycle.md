@@ -11,3 +11,6 @@
   its worker could not commit on a branch and none could be made there. git checks out a
   new branch, hg an active bookmark shared with the source, and jj names the workspace
   after the job. A name already taken is refused.
+- **A job id is a branch name every driver accepts.** Lowercase letters, digits, `-`, `.`
+  and `/` between segments; no segment starts with `.` or `-`, and `:` and `..` are out.
+  Uppercase and `_` ids that were valid are now refused, and the refusal names the rule.
