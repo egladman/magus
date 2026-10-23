@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/egladman/magus"
@@ -357,6 +359,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// `magus session` would show a repository where only `magus run` ever happened,
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
+	failed := &failedResults{}
+	captureHandlers = append(captureHandlers, failed)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -375,6 +379,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// arrived once the verdict was already decided, and dropping it would throw away a
 	// gate that genuinely ran.
 	gate.record(invCtx, err, invCtx.Err() != nil)
+	if err != nil && opts.Format == outputText {
+		printFailedResults(os.Stderr, failed.list())
+	}
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
@@ -395,6 +402,58 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return emitProjectNames(m, targets)
 	}
 	return nil
+}
+
+// failedResults collects the failed target results the invocation's journal records, in
+// the order they arrive, so a gate that scrolled its failures away can name them again.
+type failedResults struct {
+	mu     sync.Mutex
+	events []journal.Event
+}
+
+func (c *failedResults) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *failedResults) Handle(_ context.Context, r slog.Record) error {
+	e, ok := journal.EventFromRecord(r)
+	if !ok || e.Kind != journal.KindResult || e.Status != journal.StatusFail {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events = append(c.events, e)
+	return nil
+}
+
+func (c *failedResults) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *failedResults) WithGroup(string) slog.Handler      { return c }
+
+func (c *failedResults) list() []journal.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.events)
+}
+
+// printFailedResults closes a failed run with one line per failed target: its output ref,
+// its project and target, and the first line of its cause. The excerpt of each log was
+// printed when the target failed; the ref is what reaches the rest of it. A refusal has no
+// ref, since nothing ran, and names its MGS code instead.
+func printFailedResults(w io.Writer, events []journal.Event) {
+	if len(events) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", countLabel(len(events), "target", "targets"))
+	for _, e := range events {
+		ref := e.Ref
+		if ref == "" {
+			ref = cmp.Or(e.DiagnosticCode, "no-ref")
+		}
+		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
+		_, _ = fmt.Fprintf(w, "  %s %s:%s", ref, e.Project, e.Target)
+		if cause != "" {
+			_, _ = fmt.Fprintf(w, "  %s", cause)
+		}
+		_, _ = fmt.Fprintln(w)
+	}
 }
 
 func affectedMissingTargetUsage() {

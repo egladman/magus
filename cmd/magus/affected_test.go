@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
@@ -16,6 +17,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPrintFailedResultsNamesEachFailureByRefOrCode(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	printFailedResults(&out, []journal.Event{
+		{Project: "libs/x", Target: "test", Ref: "out1a2b3c", Text: "go exited 1\n--- FAIL: TestX"},
+		{Project: ".", Target: "lint", DiagnosticCode: "MGS3009", Text: "not starting . lint"},
+	})
+	assert.Equal(t, "\nfailed: 2 targets; `magus query output <ref>` prints a whole log\n"+
+		"  out1a2b3c libs/x:test  go exited 1\n"+
+		"  MGS3009 .:lint  not starting . lint\n", out.String())
+
+	out.Reset()
+	printFailedResults(&out, nil)
+	assert.Empty(t, out.String(), "a run with no failed result prints nothing")
+}
 
 func TestReadAffectedPlanPaths(t *testing.T) {
 	t.Parallel()

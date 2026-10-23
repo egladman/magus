@@ -1,0 +1,54 @@
+# A failed `magus affected ci` closes by naming each failed target again: its output
+# ref, its project and target, and the first line of its cause. A gate's failures
+# scroll away under every target that ran after them, and the ref is what reaches the
+# whole log without rerunning the gate.
+
+[!exec:git] skip 'the change is measured by a git diff'
+env XDG_STATE_HOME=$WORK/.state
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magus.yaml magusfile.buzz
+exec git commit -m initial
+exec git tag base
+cp README.md.v2 README.md
+exec git add README.md
+
+! exec magus affected ci --base=base --no-redundancy-check
+stderr 'a/x.go:3:1: bad name'
+stderr '^failed: 1 target; `magus query output <ref>` prints a whole log$'
+stderr '^  out[0-9a-f]+ \.:ci  ci failed in root: ctx.needs: lint: proc\\exec sh: exit 1$'
+
+# A pass names nothing.
+cp magusfile.buzz.pass magusfile.buzz
+exec magus affected ci --base=base --no-redundancy-check
+! stderr '^failed:'
+
+-- .gitignore --
+.magus/
+.state/
+*.v2
+-- magus.yaml --
+{}
+-- README.md.v2 --
+# w
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({"name": "root", "sources": ["**/*.md"]});
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo setup one; echo setup two; echo 'a/x.go:3:1: bad name'; echo trailing; exit 1"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
+}
+-- magusfile.buzz.pass --
+import "magus";
+
+magus\project({"name": "root", "sources": ["**/*.md"]});
+
+export fun ci(ctx: magus\Context, args: [str]) > void {}
