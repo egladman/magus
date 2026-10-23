@@ -1045,3 +1045,44 @@ func TestPathWithin(t *testing.T) {
 		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
 	}
 }
+
+func TestParseWideningEvidence(t *testing.T) {
+	t.Parallel()
+
+	for because, want := range map[string]WideningEvidence{
+		"refs:hint.VCSAdd":         {Kind: WideningRefs, Subject: "hint.VCSAdd"},
+		"test:cmd/magus/vcs.go":    {Kind: WideningTest, Subject: "cmd/magus/vcs.go"},
+		"output:.:config-generate": {Kind: WideningOutput, Subject: ".:config-generate"},
+		"released":                 {Kind: WideningReleased},
+	} {
+		got, err := ParseWideningEvidence(because)
+		require.NoError(t, err, because)
+		assert.Equal(t, want, got)
+		assert.Equal(t, because, got.String(), "the evidence spells back as its because")
+	}
+	for because, refused := range map[string]string{
+		"hunch:x":         "names no proof",
+		"refs:":           "names no refs subject",
+		"released:a.go":   "released names nothing after it",
+		"output:generate": "names no target",
+	} {
+		_, err := ParseWideningEvidence(because)
+		require.Error(t, err, because)
+		assert.Contains(t, err.Error(), refused)
+	}
+}
+
+func TestAWideningRecordDeclaresNothingElse(t *testing.T) {
+	t.Parallel()
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Widen: []JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
+	assert.Empty(t, rec.Problems())
+
+	rec.Criteria = "more"
+	rec.Widen = append(rec.Widen, JobWidenRequest{Path: "../x.go", Because: "released"}, JobWidenRequest{Path: "internal/**", Because: "maybe"})
+	var fields []string
+	for _, p := range rec.Problems() {
+		fields = append(fields, p.Field)
+	}
+	assert.Equal(t, []string{"widen", "widen[1].path", "widen[2].path", "widen[2].because"}, fields)
+}

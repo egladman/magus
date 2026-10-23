@@ -1,0 +1,345 @@
+package job
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// widenTree is the shape of the cli-ls-files job that found the gap: it deleted
+// hint.VCSAdd and changed cmd/magus/vcs.go and the registry config-generate reads, and the
+// guard sent it to its orchestrator for each caller, test and output that change reached.
+func widenTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
+	t.Helper()
+	root := t.TempDir()
+	files := map[string]string{
+		"internal/hint/cli_command.go":              "package hint\n\nvar VCSStatus = 1\n\nfunc Render() string {\n\treturn \"x\"\n}\n",
+		"internal/guard/shell.go":                   "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.VCSAdd\n",
+		"internal/guard/status.go":                  "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.VCSStatus\n",
+		"internal/guard/render.go":                  "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.Render()\n",
+		"cmd/magus/vcs.go":                          "package main\n\nconst lsFiles = \"ls-files\"\n\nfunc vcsLsFiles() string { return lsFiles }\n",
+		"cmd/magus/vcs_test.go":                     "package main\n\nimport \"testing\"\n\nfunc TestLs(t *testing.T) { _ = vcsLsFiles() }\n",
+		"cmd/magus/other_test.go":                   "package main\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n",
+		"cmd/magus/testdata/script/guard_git.txtar": "exec magus vcs ls-files\n",
+		"cmd/magus/testdata/script/unrelated.txtar": "exec magus version\n",
+		"internal/commands/registry.go":             "package commands\n\nvar Registry = 1\n",
+		"cmd/magus/gen/flags.go":                    "package gen\n",
+		"internal/guard/shell_test.go":              "package guard\n",
+	}
+	for rel, body := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	row := types.Job{
+		ID:         "cli-ls-files",
+		State:      types.StateRunning,
+		WritePaths: []string{"internal/hint/cli_command.go", "cmd/magus/vcs.go", "internal/commands/registry.go"},
+		DenyPaths:  []string{"internal/guard/shell_test.go"},
+		Registered: 100,
+	}
+	region := func(file string, side types.RegionSide, lines [2]int, decl string) types.RegionChange {
+		return types.RegionChange{File: types.FileChange{Path: file}, Side: side, Lines: lines, Declaration: decl, Driver: "golang"}
+	}
+	seen := Observed{
+		Changed:      []string{"cmd/magus/vcs.go", "internal/commands/registry.go", "internal/hint/cli_command.go"},
+		ChangedKnown: true,
+		Regions: []types.RegionChange{
+			region("internal/hint/cli_command.go", types.RegionOld, [2]int{3, 3}, "var VCSAdd = 0"),
+			region("internal/hint/cli_command.go", types.RegionNew, [2]int{6, 6}, "func Render() string {"),
+			region("cmd/magus/vcs.go", types.RegionNew, [2]int{3, 3}, ""),
+		},
+		RegionsKnown: true,
+	}
+	projects := []*types.Project{{
+		Path:    ".",
+		Sources: types.MustParseGlobs("**/*.go"),
+		TargetInputs: map[string][]types.InputRef{
+			"config-generate": {{Glob: "internal/commands/*.go"}},
+		},
+		TargetOutputs: map[string][]types.OutputRef{
+			"config-generate": {{Glob: "cmd/magus/gen/*.go"}},
+		},
+	}}
+	return root, row, seen, projects
+}
+
+func widenFacts(t *testing.T, asked ...string) (types.Job, wideningFacts) {
+	t.Helper()
+	root, row, seen, projects := widenTree(t)
+	return row, readWideningFacts(root, row, seen, asked, projects)
+}
+
+func TestProveWideningEachKind(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		path, because  string
+		proof, refused string
+	}{
+		"a caller of a symbol the diff deleted": {
+			path: "internal/guard/shell.go", because: "refs:hint.VCSAdd",
+			proof: "internal/guard/shell.go references hint.VCSAdd, which the job's diff removed from package hint",
+		},
+		"a caller of a declaration the diff changed": {
+			path: "internal/guard/render.go", because: "refs:hint.Render",
+			proof: "internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/cli_command.go",
+		},
+		"a caller of a declaration the diff left alone": {
+			path: "internal/guard/status.go", because: "refs:hint.VCSStatus",
+			refused: "no package the job changed inside its write paths",
+		},
+		"a file that does not reference the symbol": {
+			path: "internal/guard/status.go", because: "refs:hint.VCSAdd",
+			refused: "no package the job changed inside its write paths",
+		},
+		"a test script asserting the changed output": {
+			path: "cmd/magus/testdata/script/guard_git.txtar", because: "test:cmd/magus/vcs.go",
+			proof: "cmd/magus/testdata/script/guard_git.txtar tests cmd/magus/vcs.go: it names \"ls-files\"",
+		},
+		"a go test calling what the file defines": {
+			path: "cmd/magus/vcs_test.go", because: "test:cmd/magus/vcs.go",
+			proof: "cmd/magus/vcs_test.go tests cmd/magus/vcs.go: it names vcsLsFiles",
+		},
+		"a test that references nothing the file defines": {
+			path: "cmd/magus/testdata/script/unrelated.txtar", because: "test:cmd/magus/vcs.go",
+			refused: "names nothing cmd/magus/vcs.go defines",
+		},
+		"a test that is not beside the file": {
+			path: "internal/guard/shell_test.go", because: "test:cmd/magus/vcs.go",
+			refused: "is not a test beside cmd/magus/vcs.go",
+		},
+		"a test of a file the job did not change": {
+			path: "cmd/magus/vcs_test.go", because: "test:cmd/magus/main.go",
+			refused: "cmd/magus/main.go is not a file the job changed inside its write paths",
+		},
+		"an output of a target whose sources the job changed": {
+			path: "cmd/magus/gen/flags.go", because: "output:.:config-generate",
+			proof: "cmd/magus/gen/flags.go is an output of .:config-generate, which reads internal/commands/*.go",
+		},
+		"an output of another target": {
+			path: "cmd/magus/gen/flags.go", because: "output:.:man-generate",
+			refused: "is not an output .:man-generate regenerates from what the job changed",
+		},
+		"a path the attempt never released": {
+			path: "internal/guard/shell.go", because: "released",
+			refused: "this attempt's holder never released internal/guard/shell.go",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			row, facts := widenFacts(t, tc.path)
+			e, err := types.ParseWideningEvidence(tc.because)
+			require.NoError(t, err)
+			proof, err := proveWidening(row, tc.path, e, facts)
+			if tc.refused != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.refused)
+				return
+			}
+			require.NoError(t, err)
+			assert.Contains(t, proof, tc.proof)
+		})
+	}
+}
+
+// Nothing proves a refs or test kind on a diff nobody read: absent evidence is no proof.
+func TestProveWideningRefusesAnUnreadDiff(t *testing.T) {
+	t.Parallel()
+
+	root, row, _, projects := widenTree(t)
+	facts := readWideningFacts(root, row, Observed{}, []string{"internal/guard/shell.go"}, projects)
+	_, err := proveWidening(row, "internal/guard/shell.go", types.WideningEvidence{Kind: types.WideningRefs, Subject: "hint.VCSAdd"}, facts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not read what the job changed")
+}
+
+func TestProposeWideningNamesTheFirstProofOrNone(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]string{
+		"internal/guard/shell.go":                   "refs:hint.VCSAdd",
+		"cmd/magus/testdata/script/guard_git.txtar": "test:cmd/magus/vcs.go",
+		"cmd/magus/gen/flags.go":                    "output:.:config-generate",
+		"internal/guard/status.go":                  "",
+		"internal/guard/shell_test.go":              "",
+	} {
+		row, facts := widenFacts(t, path)
+		req, proof, ok := ProposeWidening(row, path, facts, []types.Job{row})
+		if want == "" {
+			assert.False(t, ok, "%s has no proof, or a deny path covers it", path)
+			continue
+		}
+		require.True(t, ok, path)
+		assert.Equal(t, types.JobWidenRequest{Path: path, Because: want}, req)
+		assert.NotEmpty(t, proof)
+	}
+}
+
+func widenStore(t *testing.T, rows ...types.Job) (Location, types.Job, wideningFacts) {
+	t.Helper()
+	root, row, seen, projects := widenTree(t)
+	loc := tempLocation(t, root)
+	s := NewStore(loc)
+	for _, r := range append([]types.Job{row}, rows...) {
+		seed(t, s, r)
+	}
+	asked := []string{"internal/guard/shell.go", "internal/guard/status.go", "internal/guard/shell_test.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go"}
+	return loc, row, readWideningFacts(root, row, seen, asked, projects)
+}
+
+func TestHolderWidensItsOwnJobWithAProof(t *testing.T) {
+	t.Parallel()
+
+	loc, row, facts := widenStore(t)
+	reqs := []types.JobWidenRequest{
+		{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"},
+		{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
+		{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
+	}
+	stored, err := boundStore(loc, row.ID).Widen(t.Context(), row.ID, reqs, facts, DefaultWideningLimit(), false)
+	require.NoError(t, err)
+
+	want := row.Clone()
+	want.WritePaths = append(want.WritePaths, "internal/guard/shell.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go")
+	want.Widenings = 1
+	want.Widened = []types.JobWidening{
+		{Path: "internal/guard/shell.go", Evidence: types.WideningEvidence{Kind: types.WideningRefs, Subject: "hint.VCSAdd"},
+			Proof: "internal/guard/shell.go references hint.VCSAdd, which the job's diff removed from package hint (internal/hint)"},
+		{Path: "cmd/magus/testdata/script/guard_git.txtar", Evidence: types.WideningEvidence{Kind: types.WideningTest, Subject: "cmd/magus/vcs.go"},
+			Proof: `cmd/magus/testdata/script/guard_git.txtar tests cmd/magus/vcs.go: it names "ls-files"`},
+		{Path: "cmd/magus/gen/flags.go", Evidence: types.WideningEvidence{Kind: types.WideningOutput, Subject: ".:config-generate"},
+			Proof: "cmd/magus/gen/flags.go is an output of .:config-generate, which reads internal/commands/*.go, a source the job changed"},
+	}
+	assert.Equal(t, want, widenedView(stored), "a widening adds the proved paths and never moves the job")
+
+	again, err := NewStore(loc).List()
+	require.NoError(t, err)
+	assert.Equal(t, stored.Widened, again[0].Widened, "the proof is on the row")
+}
+
+// widenedView is a stored row less what the store stamps on every write, and each
+// widening less when and by whom, so it compares with the row its fixture seeded.
+func widenedView(stored types.Job) types.Job {
+	v := stored.Clone()
+	v.Schema, v.Created, v.Updated, v.Generation, v.Attempts, v.RegisteredBy = types.Schema{}, 0, 0, 0, 0, types.Origin{}
+	for i := range v.Widened {
+		v.Widened[i].At, v.Widened[i].By = 0, types.Origin{}
+	}
+	return v
+}
+
+// An exited job widens too: its verification may send it back for a path its exit released.
+func TestHolderWidensAPathItsExitReleased(t *testing.T) {
+	t.Parallel()
+
+	loc, row, facts := widenStore(t)
+	held := boundStore(loc, row.ID)
+	_, err := held.Update(t.Context(), row.ID, func(u *types.Job) {
+		u.WritePaths = []string{"cmd/magus/vcs.go", "internal/hint/cli_command.go"}
+		u.State = types.StateExited
+	})
+	require.NoError(t, err)
+
+	stored, err := held.Widen(t.Context(), row.ID, []types.JobWidenRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, DefaultWideningLimit(), false)
+	require.NoError(t, err)
+	assert.Contains(t, stored.WritePaths, "internal/commands/registry.go")
+	assert.Equal(t, types.StateExited, stored.State)
+	assert.Contains(t, stored.Widened[0].Proof, "released it at")
+}
+
+func TestWidenRefusals(t *testing.T) {
+	t.Parallel()
+
+	owner := types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"internal/guard/shell.go"}}
+	for name, tc := range map[string]struct {
+		actor   string
+		reqs    []types.JobWidenRequest
+		limit   wideningLimit
+		refused string
+	}{
+		"a holder widens nothing but its own job": {
+			actor: "other", reqs: []types.JobWidenRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
+			refused: "a holder widens only its own job",
+		},
+		"a path another live job owns": {
+			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}},
+			refused: "MGS3032",
+		},
+		"a deny path": {
+			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/shell_test.go", Because: "test:cmd/magus/vcs.go"}},
+			refused: "a deny path of cli-ls-files",
+		},
+		"a path with no proof": {
+			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/status.go", Because: "refs:hint.VCSStatus"}},
+			refused: "no package the job changed",
+		},
+		"past the cap": {
+			actor: "cli-ls-files", limit: wideningLimit{Max: 1, Source: "jobs.max_proved_widenings in magus.yaml"},
+			reqs: []types.JobWidenRequest{
+				{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
+				{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
+			},
+			refused: "past jobs.max_proved_widenings, 1 (jobs.max_proved_widenings in magus.yaml)",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			loc, row, facts := widenStore(t, owner)
+			limit := tc.limit
+			if limit.Max == 0 {
+				limit = DefaultWideningLimit()
+			}
+			_, err := boundStore(loc, tc.actor).Widen(t.Context(), row.ID, tc.reqs, facts, limit, false)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.refused)
+
+			after, err := NewStore(loc).List()
+			require.NoError(t, err)
+			assert.Equal(t, row.WritePaths, after[0].WritePaths, "a refused widening writes nothing")
+			assert.Empty(t, after[0].Widened)
+		})
+	}
+}
+
+func TestDefaultWideningLimitSaysWhereItCameFrom(t *testing.T) {
+	t.Parallel()
+
+	limit := DefaultWideningLimit()
+	assert.Equal(t, 5, limit.Max)
+	assert.Contains(t, limit.Source, "default")
+}
+
+// The line the guard serves is the record apply decodes, bounded so a refusal never grows
+// a context.
+func TestWideningCommandIsOneApplyLine(t *testing.T) {
+	t.Parallel()
+
+	reqs := []types.JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}
+	line, ok := WideningCommand("cli-ls-files", reqs)
+	require.True(t, ok)
+	assert.NotContains(t, line, "\n")
+	assert.LessOrEqual(t, len(line), maxWideningCommand)
+
+	cmd, record, found := strings.Cut(line, " <<<")
+	require.True(t, found, line)
+	assert.True(t, strings.HasSuffix(cmd, "job apply -f -"), cmd)
+	record = strings.TrimSuffix(strings.TrimPrefix(record, "'"), "'")
+	decoded, err := DecodeDeclarations(bytes.NewBufferString(record))
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "cli-ls-files", Widen: reqs}, decoded[0])
+	assert.Empty(t, decoded[0].Problems())
+
+	long := []types.JobWidenRequest{{Path: strings.Repeat("a/", maxWideningCommand) + "x.go", Because: "released"}}
+	_, ok = WideningCommand("cli-ls-files", long)
+	assert.False(t, ok, "a line past the budget is not served")
+}

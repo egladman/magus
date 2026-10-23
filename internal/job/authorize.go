@@ -115,6 +115,9 @@ const (
 	// claims on the declarations its holder touched: ungraded, since the claims sit inside
 	// what the pattern already covered, and the one write that stamps its own release.
 	asNarrowing
+	// asWidening is [Store.Widen] adding proved write paths: graded by
+	// [authorizeWidening], and the one write that appends to Widened.
+	asWidening
 )
 
 // graded reports whether the acting party's boundary applies to this write.
@@ -184,8 +187,12 @@ func refuse(actor Actor, id, rule string) error {
 // write, pass a row below it. Widening a
 // boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
 // is the asymmetry the whole rule exists for: a worker that can widen its own row has no
-// boundary at all.
+// boundary at all. The one widening a holder makes is an [asWidening] write, each path
+// carrying a proof the store re-proved (see [authorizeWidening]).
 func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, exists bool, rows []types.Job) error {
+	if kind == asWidening {
+		return authorizeWidening(actor, id, prev, next, exists, rows)
+	}
 	if !actor.Bound() {
 		return nil
 	}

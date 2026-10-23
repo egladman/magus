@@ -214,6 +214,12 @@ func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
 func (v ModelTierSource) String() string   { return enum.String(v) }
 
+var wideningKinds = enum.Set[WideningKind]{WideningRefs, WideningTest, WideningOutput, WideningReleased}
+
+func (v WideningKind) Values() []string { return wideningKinds.Strings() }
+func (v WideningKind) Valid() bool      { return wideningKinds.Valid(v) }
+func (v WideningKind) String() string   { return enum.String(v) }
+
 var conformanceMetrics = enum.Set[ConformanceMetric]{
 	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
 	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,

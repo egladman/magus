@@ -727,6 +727,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// The counters are the store's: a whole-row write cannot set them, and only a
 		// write that adds write paths to a row its holder already took counts a widening.
 		row.Widenings = prev.Widenings
+		if kind != asWidening {
+			row.Widened = prev.Widened
+		}
 		if kind != asObservation {
 			row.ReworkRounds = prev.ReworkRounds
 		}
@@ -748,7 +751,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.Attempts++
 			row.Result, row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil, nil
 			row.Integration, row.WaiterEvidence = nil, nil
-			row.ReworkRounds, row.Widenings = 0, 0
+			row.ReworkRounds, row.Widenings, row.Widened = 0, 0, nil
 		}
 		row.Requires = requiredFeatures(row)
 		if kind != asNarrowing {

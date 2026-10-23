@@ -3826,6 +3826,23 @@ func ObjectJobWaiver(v types.JobWaiver) vm.Value {
 	return out
 }
 
+func ObjectWideningEvidence(v types.WideningEvidence, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", enums.Case("WideningKind", string(v.Kind)))
+	out.MapSet("subject", vm.StrValue(v.Subject))
+	return out
+}
+
+func ObjectJobWidening(v types.JobWidening, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("evidence", ObjectWideningEvidence(v.Evidence, enums))
+	out.MapSet("proof", vm.StrValue(v.Proof))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("by", ObjectOrigin(v.By))
+	return out
+}
+
 func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
@@ -3879,6 +3896,11 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("freshReason", vm.StrValue(v.FreshReason))
 	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
+	itemsWidened := make([]vm.Value, len(v.Widened))
+	for indexWidened := range v.Widened {
+		itemsWidened[indexWidened] = ObjectJobWidening(v.Widened[indexWidened], enums)
+	}
+	out.MapSet("widened", vm.ListValue(itemsWidened))
 	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
 	out.MapSet("maxAttempts", vm.IntValue(int64(v.MaxAttempts)))
 	out.MapSet("attempts", vm.IntValue(int64(v.Attempts)))

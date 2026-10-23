@@ -1423,6 +1423,7 @@ github.com/egladman/magus/types.Declaration.Unmet method func(known []string) []
 github.com/egladman/magus/types.Declaration.Validate method func() error
 github.com/egladman/magus/types.Declaration.Validation field string "json:\"validation,omitempty\""
 github.com/egladman/magus/types.Declaration.Waivers field []JobWaiver "json:\"waivers,omitempty\""
+github.com/egladman/magus/types.Declaration.Widen field []JobWidenRequest "json:\"widen,omitempty\""
 github.com/egladman/magus/types.Declaration.WritePaths field []string "json:\"write_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.DeclarationSchema var SchemaLedger
 github.com/egladman/magus/types.DecodeStreamEvent func(line []byte) (StreamEvent, error)
@@ -2532,6 +2533,7 @@ github.com/egladman/magus/types.Job.Validated field int64 "json:\"validated,omit
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.Job.WaiterEvidence field *JobIntegration "json:\"waiter_evidence,omitempty\" yaml:\"waiter_evidence,omitempty\""
 github.com/egladman/magus/types.Job.Waivers field []JobWaiver "json:\"waivers,omitempty\" yaml:\"waivers,omitempty\""
+github.com/egladman/magus/types.Job.Widened field []JobWidening "json:\"widened,omitempty\" yaml:\"widened,omitempty\""
 github.com/egladman/magus/types.Job.Widenings field int "json:\"widenings,omitempty\"     yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.Job.Worktree field *JobWorktree "json:\"worktree,omitempty\" yaml:\"worktree,omitempty\""
 github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_paths,omitempty\" yaml:\"write_paths,omitempty\""
@@ -2784,6 +2786,15 @@ github.com/egladman/magus/types.JobWaiver.Code field DiagnosticCode "json:\"code
 github.com/egladman/magus/types.JobWaiver.Reason field string "json:\"reason\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobWaiver.Subject field string "json:\"subject\""
 github.com/egladman/magus/types.JobWaiver.Waives method func(p JobProblem) bool
+github.com/egladman/magus/types.JobWidenRequest type struct
+github.com/egladman/magus/types.JobWidenRequest.Because field string "json:\"because\" schema:\"nonblank\""
+github.com/egladman/magus/types.JobWidenRequest.Path field string "json:\"path\" schema:\"writepath\""
+github.com/egladman/magus/types.JobWidening type struct
+github.com/egladman/magus/types.JobWidening.At field int64 "json:\"at\"       yaml:\"at\""
+github.com/egladman/magus/types.JobWidening.By field Origin "json:\"by\"       yaml:\"by\""
+github.com/egladman/magus/types.JobWidening.Evidence field WideningEvidence "json:\"evidence\" yaml:\"evidence\""
+github.com/egladman/magus/types.JobWidening.Path field string "json:\"path\"     yaml:\"path\""
+github.com/egladman/magus/types.JobWidening.Proof field string "json:\"proof\"    yaml:\"proof\""
 github.com/egladman/magus/types.JobWork type struct
 github.com/egladman/magus/types.JobWork.Calls field int "json:\"calls\"  yaml:\"calls\""
 github.com/egladman/magus/types.JobWork.ContextTokens field *int64 "json:\"context_tokens,omitempty\" yaml:\"context_tokens,omitempty\""
@@ -3737,6 +3748,7 @@ github.com/egladman/magus/types.ParseStreamEventType func(s string) (StreamEvent
 github.com/egladman/magus/types.ParseTarget func(s string) (Target, error)
 github.com/egladman/magus/types.ParseTimeout func(s string) (time.Duration, error)
 github.com/egladman/magus/types.ParseVersion func(s string) (v SemverVersion, ok bool)
+github.com/egladman/magus/types.ParseWideningEvidence func(because string) (WideningEvidence, error)
 github.com/egladman/magus/types.Path type struct
 github.com/egladman/magus/types.Path.Base field string "json:\"base,omitempty\""
 github.com/egladman/magus/types.Path.BuzzObject method func() BuzzObject
@@ -5155,6 +5167,18 @@ github.com/egladman/magus/types.VolatilityTarget.Volatile field bool "json:\"vol
 github.com/egladman/magus/types.VolatilityTarget.VolatileCount field int "json:\"volatile_count\"      yaml:\"volatile_count\""
 github.com/egladman/magus/types.Waivable func(c DiagnosticCode) bool
 github.com/egladman/magus/types.WalkChain func(p *Project, target string, lookup func(path string) *Project, fn ChainWalkFunc) error
+github.com/egladman/magus/types.WideningEvidence type struct
+github.com/egladman/magus/types.WideningEvidence.Kind field WideningKind "json:\"kind\"              yaml:\"kind\""
+github.com/egladman/magus/types.WideningEvidence.String method func() string
+github.com/egladman/magus/types.WideningEvidence.Subject field string "json:\"subject,omitempty\" yaml:\"subject,omitempty\""
+github.com/egladman/magus/types.WideningKind type string
+github.com/egladman/magus/types.WideningKind.String method func() string
+github.com/egladman/magus/types.WideningKind.Valid method func() bool
+github.com/egladman/magus/types.WideningKind.Values method func() []string
+github.com/egladman/magus/types.WideningOutput const WideningKind = "output"
+github.com/egladman/magus/types.WideningRefs const WideningKind = "refs"
+github.com/egladman/magus/types.WideningReleased const WideningKind = "released"
+github.com/egladman/magus/types.WideningTest const WideningKind = "test"
 github.com/egladman/magus/types.WithActiveDispatch func(ctx context.Context, a *ActiveDispatch) context.Context
 github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path string) context.Context
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context

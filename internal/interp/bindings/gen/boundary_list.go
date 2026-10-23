@@ -161,6 +161,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
 	{Name: "JobWaiver", Zero: types.JobWaiver{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWaiver(v.(types.JobWaiver)) }},
+	{Name: "JobWidening", Zero: types.JobWidening{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWidening(v.(types.JobWidening), enums) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)
@@ -344,6 +345,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
+	{Name: "WideningEvidence", Zero: types.WideningEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectWideningEvidence(v.(types.WideningEvidence), enums)
+	}},
 	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorkspaceEntry(v.(types.WorkspaceEntry)) }},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest), enums) }},
 	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},

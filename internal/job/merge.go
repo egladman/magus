@@ -304,6 +304,9 @@ func unknownParams(params map[string]any) error {
 	if dir, ok := params["checkout"]; ok {
 		return fmt.Errorf("job: a put names checkout %v, which only a fork makes, `%s` makes it", dir, hint.JobFork.With("<job>", "--checkout", fmt.Sprint(dir)))
 	}
+	if _, ok := params["widen"]; ok {
+		return fmt.Errorf("job: a put names widen, which only `%s` proves", hint.JobApply.With("-f", "<record>"))
+	}
 	var unknown []string
 	for key := range params {
 		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {

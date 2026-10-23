@@ -349,6 +349,25 @@
     "enter": {
       "type": "string",
       "description": "Enter turns the record into an entry rather than a declaration: it acknowledges one write into this path, inside the write paths of the live job ID names, by somebody other than its holder. A record carrying it declares nothing else."
+    },
+    "widen": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "because"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          },
+          "because": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "description": "Widen turns the record into a proved widening of the job ID names: each entry adds one write path with the proof the store re-proves before it writes. A record carrying it declares nothing else."
     }
   }
 }
