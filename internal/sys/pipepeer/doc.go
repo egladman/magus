@@ -1,13 +1,3 @@
-// Package pipepeer proves, from the kernel, which processes sit at the other end of a
-// pipe: who holds its write end, what they are executing, and with what arguments.
-//
-// It exists so a magus reading another magus's output can tell a pipeline predecessor
-// from an unrelated process. Every answer is read live from the kernel (/proc on linux,
-// proc_info on darwin) rather than from anything a process says about itself, so a
-// claim cannot be forged by writing a file.
-//
-// Only linux and darwin can answer. Everywhere else every function returns
-// ErrUnsupported, and callers treat that as "no proven peer".
 package pipepeer
 
 import (
