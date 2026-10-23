@@ -1144,7 +1144,7 @@ const (
 // ClaimEvidence is a parsed `because`: the kind and what it names, empty for released.
 type ClaimEvidence struct {
 	Kind    ClaimKind `json:"kind"              yaml:"kind"`
-	Subject string       `json:"subject,omitempty" yaml:"subject,omitempty"`
+	Subject string    `json:"subject,omitempty" yaml:"subject,omitempty"`
 }
 
 // String is the evidence as a `because` spells it.
