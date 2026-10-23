@@ -75,13 +75,28 @@ func TestConformanceValidateAcceptsAConfiguredPolicy(t *testing.T) {
 	o = conformanceOptions()
 	o.Ratchet.Known = append(o.Ratchet.Known, ConformanceKnown{Metric: ConformanceFuncLines, Items: []string{"a.go#F"}, Reason: "long", Line: 13})
 	assert.NoError(t, o.Validate(), "one item under two metrics")
+
+	o = conformanceOptions()
+	split := ConformanceKey{Metric: ConformanceFileSplit, Population: ConformancePopSource}
+	o.Limits[split] = ConformanceLimit{Anchor: 1500}
+	o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{ConformanceKey: split, Value: 1600, Line: 6})
+	assert.NoError(t, o.Validate(), "a floor committed past its anchor is stricter")
+}
+
+func TestConformanceMetricPast(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, ConformanceFileLines.Past(1501, 1500), "a ceiling is passed above its value")
+	assert.False(t, ConformanceFileLines.Past(1500, 1500))
+	assert.True(t, ConformanceFileSplit.Past(1500, 1500), "a floor is passed at or under its value")
+	assert.False(t, ConformanceFileSplit.Past(1501, 1500))
 }
 
 func TestConformanceValidateRefuses(t *testing.T) {
 	t.Parallel()
 
 	metrics := "[file-lines func-lines type-methods file-symbols dep-fanout clone-tokens export-scope " +
-		"call-sequence shared-body shared-reach caller-spread mode-knobs alias-share name-clash main-logic store-path-export]"
+		"call-sequence shared-body shared-reach caller-spread mode-knobs alias-share name-clash main-logic store-path-export file-split]"
 	for name, tc := range map[string]struct {
 		edit func(*ConformanceOptions)
 		want string
@@ -97,6 +112,14 @@ func TestConformanceValidateRefuses(t *testing.T) {
 				})
 			},
 			"hack/policy/conformance.jsonl:5: dep-fanout source cmd/magus: committed 89 is looser than its anchor 62",
+		},
+		"a floor committed under its anchor": {
+			func(o *ConformanceOptions) {
+				split := ConformanceKey{Metric: ConformanceFileSplit, Population: ConformancePopSource}
+				o.Limits[split] = ConformanceLimit{Anchor: 1500}
+				o.Ratchet.Thresholds = append(o.Ratchet.Thresholds, ConformanceThreshold{ConformanceKey: split, Value: 1200, Line: 6})
+			},
+			"hack/policy/conformance.jsonl:6: file-split source: committed 1200 is looser than its anchor 1500",
 		},
 		"no anchor to bound it": {
 			func(o *ConformanceOptions) {

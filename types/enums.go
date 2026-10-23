@@ -218,7 +218,7 @@ var conformanceMetrics = enum.Set[ConformanceMetric]{
 	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
 	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,
 	ConformanceCallerSpread, ConformanceModeKnobs, ConformanceAliasShare, ConformanceNameClash,
-	ConformanceMainLogic, ConformanceStorePathExport,
+	ConformanceMainLogic, ConformanceStorePathExport, ConformanceFileSplit,
 }
 
 func (v ConformanceMetric) Values() []string { return conformanceMetrics.Strings() }

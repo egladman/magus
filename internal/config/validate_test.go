@@ -305,9 +305,10 @@ func TestValidate_Conformance(t *testing.T) {
 			},
 			want: FieldFailure{Field: "knowledge.conformance.checks.export-scope.main.anchor", Tag: "gte", Param: "0", Value: "-1"},
 		},
-		"store-path-export below a zero anchor, beside a percentile-0 main-logic": {
+		"store-path-export below a zero anchor, beside a percentile-0 main-logic and file-split": {
 			edit: func(c *ConformanceConfig) {
 				c.Checks[types.ConformanceMainLogic] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopMain: {Anchor: 119}}
+				c.Checks[types.ConformanceFileSplit] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopSource: {Anchor: 1500}}
 				c.Checks[types.ConformanceStorePathExport] = map[types.ConformancePopulation]ConformanceLimitConfig{types.ConformancePopSource: {Anchor: -1}}
 			},
 			want: FieldFailure{Field: "knowledge.conformance.checks.store-path-export.source.anchor", Tag: "gte", Param: "0", Value: "-1"},

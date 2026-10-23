@@ -22,6 +22,7 @@ import (
 // and judges each row against the value o.Effective enforces: the committed ratchet value,
 // else the configured anchor. A live percentile is reported and may be proposed, never
 // enforced. A key with no configured value is measured only: no violations, no proposal.
+// file-split is a floor: an item at or under its value is past it, and it proposes nothing.
 // The mode-knobs row holds only the functions the coupling rule finds over-shared, so its n
 // is how many there are, zero included. A known item renamed or moved is judged under its
 // new ID when its recorded shape names it unambiguously (carryKnown).
@@ -79,7 +80,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 			}
 		} else {
 			for _, it := range items {
-				if it.Measure <= row.Value {
+				if !key.Metric.Past(it.Measure, row.Value) {
 					continue
 				}
 				if known[key.Metric][it.ID] {
@@ -92,7 +93,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 		slices.SortFunc(row.Violations, func(a, b types.ConformanceItem) int {
 			return cmp.Or(cmp.Compare(b.Measure, a.Measure), cmp.Compare(a.ID, b.ID))
 		})
-		if limited && row.N >= o.MinSample && float64(row.Live) < float64(row.Value)*(1-o.Step) {
+		if limited && key.Metric != types.ConformanceFileSplit && row.N >= o.MinSample && float64(row.Live) < float64(row.Value)*(1-o.Step) {
 			row.Propose = row.Live
 		}
 		out.Rows = append(out.Rows, row)
@@ -147,6 +148,7 @@ func conformanceSamples(g *Graph, o types.ConformanceOptions) map[types.Conforma
 	x.symbolSamples(add)
 	x.mainLogicSamples(add)
 	x.storePathSamples(add)
+	x.fileSplitSamples(add)
 	x.depSamples(add)
 	for _, e := range x.exports() {
 		add(types.ConformanceExportScope, e.pop, "", e.item)
@@ -305,9 +307,11 @@ func (x *conformanceIndex) population(file string) (types.ConformancePopulation,
 // with the generated-code header, under a gen directory, written by a protocol compiler,
 // or a fixture or dependency tree.
 func conformanceGenerated(g *Graph, o types.ConformanceOptions, file string) bool {
-	if o.Generated[file] || g.nodes[fileID(file)].Attrs[attrGenerated] == "true" {
-		return true
-	}
+	return o.Generated[file] || g.nodes[fileID(file)].Attrs[attrGenerated] == "true" || generatedPath(file)
+}
+
+// generatedPath reports whether file's name or directory alone says it is generated output.
+func generatedPath(file string) bool {
 	base := path.Base(file)
 	for _, s := range generatedSuffixes {
 		if strings.HasSuffix(base, s) {
@@ -673,7 +677,7 @@ func pastValue(o types.ConformanceOptions, samples map[types.ConformanceKey][]ty
 			continue
 		}
 		for _, it := range items {
-			if it.Measure > value {
+			if key.Metric.Past(it.Measure, value) {
 				mark(key.Metric, it.ID)
 			}
 		}
@@ -1048,4 +1052,31 @@ func (x *conformanceIndex) stateDirs() map[string]bool {
 		}
 	}
 	return out
+}
+
+// fileSplitSamples measures each concept sibling by the lines it and its root would make as
+// one file. Home is the root; Unshared marks a sibling sharing no symbol with it.
+func (x *conformanceIndex) fileSplitSamples(add conformanceAdd) {
+	for id, f := range x.g.nodes {
+		if f.Kind != types.KindFile {
+			continue
+		}
+		pop, ok := x.population(f.Source)
+		if !ok || pop == types.ConformancePopTest {
+			continue
+		}
+		for _, e := range x.g.out[id] {
+			if e.Relation != types.RelationSplits || e.Attrs[attrSplitClass] != splitConcept {
+				continue
+			}
+			root := x.g.nodes[e.Target]
+			lines, err := strconv.Atoi(f.Attrs[AttrLines])
+			rootLines, rootErr := strconv.Atoi(root.Attrs[AttrLines])
+			if _, measured := x.population(root.Source); err != nil || rootErr != nil || !measured {
+				continue
+			}
+			add(types.ConformanceFileSplit, pop, "", types.ConformanceItem{ID: f.Source, Source: f.Source + ":1",
+				Measure: lines + rootLines, Home: root.Source, Unshared: e.Attrs[attrSplitCoupled] != "true"})
+		}
+	}
 }

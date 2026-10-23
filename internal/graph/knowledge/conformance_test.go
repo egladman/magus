@@ -691,3 +691,28 @@ func TestConformanceStorePathExport(t *testing.T) {
 		{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
 	}, row.Violations, "the test file and the store's own files do not count")
 }
+
+func TestConformanceFileSplit(t *testing.T) {
+	t.Parallel()
+
+	sh := assembleSymbols(".", splitSymbols(), nil)
+	g := assembleLens(splitSymbols())
+	g.Merge(nil, splitEdges(sh.Nodes, sh.Edges))
+	options := func(value int) types.ConformanceOptions {
+		key := types.ConformanceKey{Metric: types.ConformanceFileSplit, Population: types.ConformancePopSource}
+		return types.ConformanceOptions{MinSample: 1, Step: 0.05,
+			Limits: map[types.ConformanceKey]types.ConformanceLimit{key: {Anchor: value}}}
+	}
+
+	row := findConformanceRow(t, g.Conformance(options(1500)), types.ConformanceFileSplit, types.ConformancePopSource, "")
+	assert.Equal(t, 2, row.N, "only the concept siblings: the platform, generated and test siblings are not splits by topic")
+	assert.Equal(t, []types.ConformanceItem{
+		{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
+		{ID: "internal/r/r_cache.go", Source: "internal/r/r_cache.go:1", Measure: 900, Home: "internal/r/r.go"},
+	}, row.Violations, "both would fit in r.go")
+	assert.Zero(t, row.Propose, "a floor proposes nothing")
+
+	row = findConformanceRow(t, g.Conformance(options(1000)), types.ConformanceFileSplit, types.ConformancePopSource, "")
+	require.Len(t, row.Violations, 1)
+	assert.Equal(t, "internal/r/r_cache.go", row.Violations[0].ID, "r.go with r_tasks.go would pass 1000 lines, so that split is owed")
+}

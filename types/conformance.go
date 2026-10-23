@@ -11,8 +11,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-// ConformanceMetric names one measured code distribution. Every metric is a ceiling: a lower
-// value is stricter.
+// ConformanceMetric names one measured code distribution. Every metric but file-split is a
+// ceiling, where a lower value is stricter; file-split is a floor (see [ConformanceMetric.Past]).
 type ConformanceMetric string
 
 const (
@@ -57,7 +57,20 @@ const (
 	// exported path-shaped symbol (a name ending Path, Dir, File, FileName or Ext) of a
 	// package that writes state through internal/file.
 	ConformanceStorePathExport ConformanceMetric = "store-path-export"
+	// ConformanceFileSplit is the lines a concept sibling and its root would make as one file:
+	// R_<suffix>.go beside R.go, split by topic rather than by platform, test or generator. It is
+	// a floor: a split is owed only past the value, so a sibling at or under it belongs in R.go.
+	ConformanceFileSplit ConformanceMetric = "file-split"
 )
+
+// Past reports whether an item measuring measure is past value: above it for a ceiling, at or
+// under it for the file-split floor.
+func (v ConformanceMetric) Past(measure, value int) bool {
+	if v == ConformanceFileSplit {
+		return measure <= value
+	}
+	return measure > value
+}
 
 // ConformancePopulation is the set of files a metric is measured over. Each is measured apart,
 // so moving code into tests cannot shift the source distribution. Generated output belongs
@@ -215,7 +228,7 @@ func (o ConformanceOptions) Validate() error {
 		switch {
 		case !ok:
 			fail("%s: %s: no anchor is configured to bound the committed %d", at, name, t.Value)
-		case t.Value > limit.Anchor:
+		case looser(t.Metric, t.Value, limit.Anchor):
 			fail("%s: %s: committed %d is looser than its anchor %d", at, name, t.Value, limit.Anchor)
 		}
 	}
@@ -251,6 +264,14 @@ func (o ConformanceOptions) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// looser reports whether committing value for m finds fewer items than its anchor would.
+func looser(m ConformanceMetric, value, anchor int) bool {
+	if m == ConformanceFileSplit {
+		return value < anchor
+	}
+	return value > anchor
 }
 
 func (o ConformanceOptions) committed(k ConformanceKey) (ConformanceThreshold, bool) {
@@ -603,11 +624,13 @@ type ConformanceCarry struct {
 }
 
 // ConformanceItem is one file, symbol, package or clone group past its row's value and not
-// known. Source is its path:line. Home is the package directory it belongs in, for a
-// metric that names one.
+// known. Source is its path:line. Home is where it belongs, for a metric that names one: a
+// package directory, or for file-split the root file. Unshared marks a file-split sibling
+// that references nothing its root defines and defines nothing its root references.
 type ConformanceItem struct {
-	ID      string `json:"id"             yaml:"id"`
-	Source  string `json:"source"         yaml:"source"`
-	Measure int    `json:"measure"        yaml:"measure"`
-	Home    string `json:"home,omitempty" yaml:"home,omitempty"`
+	ID       string `json:"id"                 yaml:"id"`
+	Source   string `json:"source"             yaml:"source"`
+	Measure  int    `json:"measure"            yaml:"measure"`
+	Home     string `json:"home,omitempty"     yaml:"home,omitempty"`
+	Unshared bool   `json:"unshared,omitempty" yaml:"unshared,omitempty"`
 }
