@@ -89,9 +89,6 @@ func WithoutSync() AppendOption { return func(o *appendOptions) { o.skipSync = t
 // RewriteLines replaces the file at path with lines through a rename, so a reader sees the
 // old file or the new one. It creates the directory.
 func RewriteLines(path string, lines [][]byte, perm os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	return WriteFileAtomic(path, joinLines(lines), perm)
 }
 
@@ -192,7 +189,13 @@ func (l JSONL[T]) read() ([]T, bool, error) {
 			return nil, false, err
 		}
 	}
-	read, err := ReadLines(l.Path)
+	return readEntries[T](l.Path)
+}
+
+// readEntries decodes each complete line at path as a T and reports whether the file ends in
+// a line no writer finished.
+func readEntries[T any](path string) ([]T, bool, error) {
+	read, err := ReadLines(path)
 	if err != nil {
 		return nil, false, err
 	}
@@ -200,7 +203,7 @@ func (l JSONL[T]) read() ([]T, bool, error) {
 	for _, line := range read.Lines {
 		var v T
 		if err := json.Unmarshal(line.Text, &v); err != nil {
-			return nil, false, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", l.Path, line.N, err)
+			return nil, false, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", path, line.N, err)
 		}
 		all = append(all, v)
 	}
@@ -224,6 +227,10 @@ func (l JSONL[T]) fold(all []T) []T {
 }
 
 func (l JSONL[T]) write(to func(string, [][]byte, os.FileMode) error, entries []T) error {
+	return writeEntries(to, l.Path, l.Perm, entries)
+}
+
+func writeEntries[T any](to func(string, [][]byte, os.FileMode) error, path string, perm os.FileMode, entries []T) error {
 	lines := make([][]byte, 0, len(entries))
 	for _, v := range entries {
 		b, err := json.Marshal(v)
@@ -232,9 +239,8 @@ func (l JSONL[T]) write(to func(string, [][]byte, os.FileMode) error, entries []
 		}
 		lines = append(lines, b)
 	}
-	perm := l.Perm
 	if perm == 0 {
 		perm = 0o644
 	}
-	return to(l.Path, lines, perm)
+	return to(path, lines, perm)
 }
