@@ -9,6 +9,7 @@ import {
   reportHttpStatus,
 } from "../../../lib/server";
 import { errMessage, errName } from "../../../lib/guards";
+import { fail, succeed, type Result } from "../result";
 import { lensQuery, type Lens } from "./lens";
 
 export interface DiagramEntry {
@@ -110,7 +111,7 @@ async function read<T>(
   opts: DiagramClientOptions,
   url: string,
   what: string,
-  parse: (body: unknown) => T,
+  parse: (body: unknown) => Result<T>,
 ): Promise<DiagramRead<T>> {
   const doFetch = opts.fetch ?? fetch;
   let res: Response;
@@ -133,57 +134,91 @@ async function read<T>(
     else reportFailure(SOURCE, failure.detail, "diagrams:" + failure.kind + ":" + url);
     return failure;
   }
+  let body: unknown;
   try {
-    return { kind: "ok", value: parse(await res.json()) };
+    body = await res.json();
   } catch (e) {
-    const detail = "Could not read " + what + ": " + errMessage(e);
-    reportFailure(SOURCE, detail, "diagrams:parse:" + url);
-    return { kind: "unreadable", detail };
+    return unreadableBody(url, "Could not read " + what + ": " + errMessage(e));
   }
+  const parsed = parse(body);
+  if (!parsed.ok)
+    return unreadableBody(url, "Could not read " + what + ": " + parsed.error.message);
+  return { kind: "ok", value: parsed.value };
 }
 
-function record(v: unknown, what: string): Record<string, unknown> {
+function unreadableBody(url: string, detail: string): DiagramFailure {
+  reportFailure(SOURCE, detail, "diagrams:parse:" + url);
+  return { kind: "unreadable", detail };
+}
+
+function record(v: unknown, what: string): Result<Record<string, unknown>> {
   if (typeof v !== "object" || v === null || Array.isArray(v))
-    throw new Error(what + " is not an object");
-  return v as Record<string, unknown>;
+    return fail(what + " is not an object");
+  return succeed(Object.fromEntries(Object.entries(v)));
 }
 
-function str(v: unknown, what: string): string {
-  if (typeof v !== "string") throw new Error(what + " is not a string");
-  return v;
+function str(v: unknown, what: string): Result<string> {
+  if (typeof v !== "string") return fail(what + " is not a string");
+  return succeed(v);
 }
 
-export function parseListing(body: unknown): DiagramEntry[] {
-  const list = record(body, "the listing").diagrams;
-  if (!Array.isArray(list)) throw new Error("the listing has no diagrams array");
-  return list.map((raw, i) => {
+export function parseListing(body: unknown): Result<DiagramEntry[]> {
+  const top = record(body, "the listing");
+  if (!top.ok) return top;
+  const list = top.value.diagrams;
+  if (!Array.isArray(list)) return fail("the listing has no diagrams array");
+  const entries: DiagramEntry[] = [];
+  for (const [i, raw] of list.entries()) {
     const e = record(raw, "diagram " + i);
-    const entry: { -readonly [K in keyof DiagramEntry]: DiagramEntry[K] } = {
-      id: str(e.id, "diagram " + i + " id"),
-      kind: str(e.kind, "diagram " + i + " kind"),
-      title: str(e.title, "diagram " + i + " title"),
-    };
-    if (typeof e.project === "string") entry.project = e.project;
-    if (typeof e.indexed === "boolean") entry.indexed = e.indexed;
-    return entry;
-  });
+    if (!e.ok) return e;
+    const id = str(e.value.id, "diagram " + i + " id");
+    if (!id.ok) return id;
+    const kind = str(e.value.kind, "diagram " + i + " kind");
+    if (!kind.ok) return kind;
+    const title = str(e.value.title, "diagram " + i + " title");
+    if (!title.ok) return title;
+    const project = e.value.project;
+    const indexed = e.value.indexed;
+    entries.push({
+      id: id.value,
+      kind: kind.value,
+      title: title.value,
+      ...(typeof project === "string" ? { project } : {}),
+      ...(typeof indexed === "boolean" ? { indexed } : {}),
+    });
+  }
+  return succeed(entries);
 }
 
-export function parseRendered(body: unknown): RenderedDiagram {
-  const r = record(body, "the figure");
-  const nodes = Array.isArray(r.nodes) ? r.nodes : [];
-  return {
-    id: str(r.id, "the figure id"),
-    title: str(r.title, "the figure title"),
-    svg: str(r.svg, "the figure svg"),
-    nodes: nodes.map((raw, i) => {
-      const n = record(raw, "node " + i);
-      return {
-        id: str(n.id, "node " + i + " id"),
-        anchor: typeof n.anchor === "string" ? n.anchor : "",
-        label: typeof n.label === "string" ? n.label : str(n.id, "node " + i + " id"),
-      };
-    }),
+export function parseRendered(body: unknown): Result<RenderedDiagram> {
+  const top = record(body, "the figure");
+  if (!top.ok) return top;
+  const r = top.value;
+  const id = str(r.id, "the figure id");
+  if (!id.ok) return id;
+  const title = str(r.title, "the figure title");
+  if (!title.ok) return title;
+  const svg = str(r.svg, "the figure svg");
+  if (!svg.ok) return svg;
+  const nodes: DiagramNode[] = [];
+  for (const [i, raw] of (Array.isArray(r.nodes) ? r.nodes : []).entries()) {
+    const n = record(raw, "node " + i);
+    if (!n.ok) return n;
+    const nodeId = str(n.value.id, "node " + i + " id");
+    if (!nodeId.ok) return nodeId;
+    const anchor = n.value.anchor;
+    const label = n.value.label;
+    nodes.push({
+      id: nodeId.value,
+      anchor: typeof anchor === "string" ? anchor : "",
+      label: typeof label === "string" ? label : nodeId.value,
+    });
+  }
+  return succeed({
+    id: id.value,
+    title: title.value,
+    svg: svg.value,
+    nodes,
     sourceUrl: typeof r.source_url === "string" ? r.source_url : "",
-  };
+  });
 }

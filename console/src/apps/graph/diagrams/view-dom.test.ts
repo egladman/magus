@@ -6,7 +6,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, test } from "node:test";
 import { attachFigure, type FigureController } from "./interact";
-import { markListFocus, notice, prepareSvg, renderNodeList, sourceHref } from "./view";
+import {
+  markListFocus,
+  notice,
+  prepareSvg,
+  renderNodeList,
+  sourceHref,
+  type PrepareOptions,
+} from "./view";
 import type { DiagramNode } from "./api";
 
 const FIXTURE_SVG =
@@ -32,6 +39,12 @@ const FIXTURE_NODES: DiagramNode[] = [
 
 const TEMPLATE = "https://github.com/acme/widgets/blob/abc/{path}#L{line}";
 
+function prepared(text: string, opts: PrepareOptions): SVGSVGElement {
+  const result = prepareSvg(text, opts);
+  assert.ok(result.ok);
+  return result.value;
+}
+
 let figure: FigureController | null = null;
 // Scoped to this suite: the dom tests share one process, where a top-level hook would run around
 // every other file's tests too.
@@ -44,7 +57,7 @@ describe("a prepared figure", () => {
 
   function mount(): { frame: HTMLElement; svg: SVGSVGElement } {
     const frame = document.createElement("div");
-    const svg = prepareSvg(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: TEMPLATE });
+    const svg = prepared(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: TEMPLATE });
     frame.append(svg);
     document.body.append(frame);
     figure = attachFigure({ frame, svg, reducedMotion: () => true });
@@ -91,7 +104,7 @@ describe("a prepared figure", () => {
       '<g data-node="a" data-anchor="internal/job">',
       '<a href="https://example.test/code/internal/job" data-node="a" data-anchor="internal/job"><g>',
     ).replace('<text x="112" y="140">job</text></g>', '<text x="112" y="140">job</text></g></a>');
-    const svg = prepareSvg(linked, { nodes: FIXTURE_NODES, sourceUrl: TEMPLATE });
+    const svg = prepared(linked, { nodes: FIXTURE_NODES, sourceUrl: TEMPLATE });
     assert.equal(node(svg, "a").getAttribute("href"), "https://example.test/code/internal/job");
   });
 
@@ -206,7 +219,7 @@ describe("a prepared figure", () => {
     const { frame, svg } = mount();
     figure?.zoom(2);
     const kept = svg.getAttribute("viewBox");
-    const next = prepareSvg(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: "" });
+    const next = prepared(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: "" });
     svg.replaceWith(next);
     figure?.replace(next);
     assert.equal(next.getAttribute("viewBox"), kept);

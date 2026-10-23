@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { runInThisContext } from "node:vm";
+import { succeed } from "../result";
 import {
   buildFigure,
   figureForLink,
@@ -36,7 +37,13 @@ async function relay(): Promise<void> {
   if (stubbed) g.document = { getElementById: () => null };
   try {
     runInThisContext(readFileSync(EXEC, "utf8"), { filename: EXEC });
-    const rt = await startGo(g.Go as GoConstructor, async () => readFileSync(WASM), 60_000);
+    const started = await startGo(
+      g.Go as GoConstructor,
+      async () => succeed(readFileSync(WASM)),
+      60_000,
+    );
+    assert.ok(started.ok, started.ok ? "" : started.error.message);
+    const rt = started.value;
 
     // The runtime resolves magus/figure as a module, not as source handed to it.
     const evalBuzz = (g.buzz as { evalBuzz: (src: string) => { ok: boolean; result: string } })
@@ -45,7 +52,7 @@ async function relay(): Promise<void> {
     assert.deepEqual([imported.ok, imported.result], [true, "served"], JSON.stringify(imported));
 
     const meta = { id: "projects", title: "Projects", claim: "flow", anchorHref: "/code/{path}" };
-    const actors = buildFigure(
+    const built = buildFigure(
       {
         nodes: [
           { id: "external:app", anchor: "app", label: "app" },
@@ -56,6 +63,8 @@ async function relay(): Promise<void> {
       meta,
       "",
     );
+    assert.ok(built.ok, built.ok ? "" : built.error.message);
+    const actors = built.value;
     const drawn = toRelayout(rt.drawFigure(actors, meta.anchorHref));
     assert.equal(drawn.kind, "ok", JSON.stringify(drawn));
     const svg = drawn.kind === "ok" ? drawn.svg : "";
@@ -67,23 +76,20 @@ async function relay(): Promise<void> {
 
     // A shared link's graph: actors only, the edited node accented and tagged, an optional edge
     // dashed and labelled while a plain one stays solid.
-    const linkDrawn = toRelayout(
-      rt.drawFigure(
-        figureForLink({
-          title: "How far this change reaches",
-          nodes: [
-            { id: "libs/lib", label: "lib", seed: true },
-            { id: "app", label: "app", seed: false },
-            { id: "tool", label: "tool", seed: false },
-          ],
-          edges: [
-            { from: "libs/lib", to: "app", stroke: "plain", label: "" },
-            { from: "app", to: "tool", stroke: "optional", label: "after" },
-          ],
-        }),
-        "",
-      ),
-    );
+    const linkFigure = figureForLink({
+      title: "How far this change reaches",
+      nodes: [
+        { id: "libs/lib", label: "lib", seed: true },
+        { id: "app", label: "app", seed: false },
+        { id: "tool", label: "tool", seed: false },
+      ],
+      edges: [
+        { from: "libs/lib", to: "app", stroke: "plain", label: "" },
+        { from: "app", to: "tool", stroke: "optional", label: "after" },
+      ],
+    });
+    assert.ok(linkFigure.ok, linkFigure.ok ? "" : linkFigure.error.message);
+    const linkDrawn = toRelayout(rt.drawFigure(linkFigure.value, ""));
     assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
     const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
     assert.match(linkSvg, />EDITED</);
@@ -105,7 +111,8 @@ async function relay(): Promise<void> {
       importsMeta,
       "",
     );
-    const graphed = toRelayout(rt.drawFigure(imports, ""));
+    assert.ok(imports.ok, imports.ok ? "" : imports.error.message);
+    const graphed = toRelayout(rt.drawFigure(imports.value, ""));
     assert.equal(graphed.kind, "ok", JSON.stringify(graphed));
     assert.match(graphed.kind === "ok" ? graphed.svg : "", /data-edge="internal\/a->internal\/b"/);
 

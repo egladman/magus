@@ -172,7 +172,9 @@ const linked = (seeds: number) => {
 };
 
 test("the record is actors and flows carrying each edge's stroke and label, seeds tagged edited", () => {
-  const f = figureForLink(linked(1));
+  const built = figureForLink(linked(1));
+  assert.ok(built.ok);
+  const f = built.value;
   assert.deepEqual(
     f.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
     [
@@ -196,7 +198,9 @@ test("the record is actors and flows carrying each edge's stroke and label, seed
 });
 
 test("seeds past the figure's accent budget are tagged and left plain", () => {
-  const f = figureForLink(linked(3));
+  const built = figureForLink(linked(3));
+  assert.ok(built.ok);
+  const f = built.value;
   assert.deepEqual(
     f.boxes.map((b) => [b.actor?.tag, b.actor?.look]),
     [
@@ -219,8 +223,10 @@ test("a label two nodes share takes the node's id", () => {
     }),
   );
   assert.ok(read.ok);
+  const built = figureForLink(read.figure);
+  assert.ok(built.ok);
   assert.deepEqual(
-    figureForLink(read.figure).boxes.map((b) => b.actor?.name),
+    built.value.boxes.map((b) => b.actor?.name),
     ["core (libs/core)", "core (app/core)"],
   );
   assert.deepEqual(

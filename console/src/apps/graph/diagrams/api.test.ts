@@ -11,6 +11,7 @@ import {
   readFailure,
   renderDiagram,
 } from "./api";
+import { succeed } from "../result";
 
 const HOST = "127.0.0.1:7391";
 
@@ -84,17 +85,18 @@ test("an envelope body reaches the view as its message, not as JSON", async () =
   assert.deepEqual(read, { kind: "refused", detail: "MGS9021: 10 nodes exceeds the budget of 9" });
 });
 
+// A fetch that fails the way the browser's does: its promise rejects.
+function rejecting(reason: unknown): typeof fetch {
+  return () => new Promise((_, reject) => reject(reason));
+}
+
 test("a network failure is unreadable and an abort is not a failure", async () => {
-  const refused = (async () => {
-    throw new TypeError("Failed to fetch");
-  }) as typeof fetch;
+  const refused = rejecting(new TypeError("Failed to fetch"));
   assert.deepEqual(await listDiagrams({ host: HOST, fetch: refused }), {
     kind: "unreadable",
     detail: "Failed to fetch",
   });
-  const aborted = (async () => {
-    throw new DOMException("The operation was aborted.", "AbortError");
-  }) as typeof fetch;
+  const aborted = rejecting(new DOMException("The operation was aborted.", "AbortError"));
   assert.deepEqual(await listDiagrams({ host: HOST, fetch: aborted }), { kind: "aborted" });
 });
 
@@ -113,13 +115,15 @@ test("the listing decodes its optional fields only when present", () => {
         { id: "imports", kind: "imports", title: "Package imports", indexed: false },
       ],
     }),
-    [
+    succeed([
       { id: "projects", kind: "projects", title: "Workspace projects" },
       { id: "targets:app", kind: "targets", title: "Targets in app", project: "app" },
       { id: "imports", kind: "imports", title: "Package imports", indexed: false },
-    ],
+    ]),
   );
-  assert.throws(() => parseListing({ diagrams: [{ id: 1 }] }), /id is not a string/);
+  const bad = parseListing({ diagrams: [{ id: 1 }] });
+  assert.ok(!bad.ok);
+  assert.match(bad.error.message, /id is not a string/);
 });
 
 test("a rendered figure decodes source_url and tolerates missing node fields", () => {
@@ -131,7 +135,7 @@ test("a rendered figure decodes source_url and tolerates missing node fields", (
       nodes: [{ id: "app", anchor: "app", label: "app" }, { id: "x" }],
       source_url: "https://github.com/acme/widgets/blob/abc/{path}#L{line}",
     }),
-    {
+    succeed({
       id: "projects",
       title: "Workspace projects",
       svg: "<svg/>",
@@ -140,7 +144,9 @@ test("a rendered figure decodes source_url and tolerates missing node fields", (
         { id: "x", anchor: "", label: "x" },
       ],
       sourceUrl: "https://github.com/acme/widgets/blob/abc/{path}#L{line}",
-    },
+    }),
   );
-  assert.throws(() => parseRendered({ id: "p", title: "t", nodes: [] }), /svg is not a string/);
+  const bad = parseRendered({ id: "p", title: "t", nodes: [] });
+  assert.ok(!bad.ok);
+  assert.match(bad.error.message, /svg is not a string/);
 });
