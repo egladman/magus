@@ -2229,22 +2229,24 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 		if c.Name != "git" || len(c.Args) == 0 || c.Args[0] != "add" || !slices.ContainsFunc(c.Args[1:], isStageAllOperand) {
 			continue
 		}
-		var paths []string
-		flags := []string{"--include-generated"}
+		argv := make([]string, 0, len(c.Args)+4)
+		if slices.Contains(c.Args[1:], "-A") || slices.Contains(c.Args[1:], "--all") {
+			argv = append(argv, "--include-untracked")
+		}
+		argv = append(argv, "--include-generated")
 		for _, a := range c.Args[1:] {
 			switch {
 			case a == ".":
 				return "", nil
-			case a == "-A" || a == "--all":
-				flags = []string{"--include-untracked", "--include-generated"}
-			case a == "--" || isStageAllOperand(a):
+			case a == "-A" || a == "--all" || a == "--" || isStageAllOperand(a):
 			case strings.HasPrefix(a, "-"):
 				return "", nil
 			default:
-				paths = append(paths, a)
+				argv = append(argv, a)
 			}
 		}
-		step := hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSLsFiles.Argv(append(append(flags, paths...), "-o", "name")...),
+		argv = append(argv, "-o", "name")
+		step := hint.NextForDenyRemedy(string(denyRuleStageAll), hint.VCSLsFiles.Argv(argv...),
 			"ls-files lists the source changes with the outputs they produced and names what it left out; git stages exactly that list.")
 		step.Run += " | git add --pathspec-from-file=-"
 		return "`git add` of everything sweeps outputs and other work you did not edit into the commit.", []types.NextStep{step}
