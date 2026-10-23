@@ -40,6 +40,15 @@ minimalism the tool cannot carry, and the house dialect with no rule you can
 hold in your head, the one that makes users look things up forever and then
 teaches their agents the same confusion.
 
+The discipline reaches the code too:
+
+- **A main package only wires.** A command parses its flags, builds its
+  dependencies, calls a package and prints the result. Logic that computes
+  belongs in the package that owns its data, where a test and a second caller
+  can reach it. The `main-logic` conformance metric fails a main-package
+  function that computes without calling another workspace package; the
+  ratchet (`hack/policy/conformance.jsonl`) lists the ones that predate it.
+
 ### Capability is not a reason
 
 Building the wrong thing got cheap. Coherent, well-structured, completely
@@ -162,6 +171,12 @@ The conventions:
   names it and says how to move it aside.
 - **Readable with cat, grep and diff.** Text is UTF-8. The one binary
   exception is a blob holding the bytes a tool produced, stored verbatim.
+- **One owner.** Only the package that owns a store knows where it lives.
+  Another package calls the owner's reader or writer and never builds, stats or
+  opens the path itself. The `store-path-export` conformance metric fails an
+  exported path of a state-writing package that code outside it references;
+  the shared root resolvers (`config.CacheDir`, `config.StoreDir`,
+  `vcs.StateDir`) are listed in the ratchet with the reason.
 
 The failure this prevents is state nobody can inspect when it matters. A
 stuck run, a lease that will not release, or a line that reads wrong is
@@ -171,12 +186,13 @@ between you and the evidence of what broke it, and one document holding every
 entry turns one corrupt write into a lost store; a corrupt line costs the
 line.
 
-The mechanism is three helpers and no gate. `file.JSONL` gives a keyed store
+The mechanism is three helpers and one gate. `file.JSONL` gives a keyed store
 its append, its last-line read, its compaction and its lock;
 `file.WriteFileAtomic` gives every rewrite its rename; and `internal/json`
 gives every line its strict decoder. Nothing refuses a new JSON document, so
-the rule holds in review alone. The stores that do not follow it yet, as
-found on 2026-10-14, are debt or exceptions:
+the format holds in review alone; who may know a store's path is gated by
+`store-path-export`. The stores that do not follow the format yet, as found on
+2026-10-14, are debt or exceptions:
 
 - **Runtime records** are a capped log kept as one rewritten JSON array in the
   knowledge graph store. The state cannot be rebuilt, so this is debt owed a

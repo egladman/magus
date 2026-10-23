@@ -10,7 +10,7 @@ import "magus/lint";
 
 // ENFORCED are the conformance metrics this repository fails on. The rest stay advice,
 // printed and never failing: most of what they flag is a size or a shape chosen on purpose.
-export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout"];
+export final ENFORCED = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout", "main-logic", "store-path-export"];
 
 // RATCHET is the committed record knowledge.conformance.ratchet names in magus.yaml.
 final RATCHET = "hack/policy/conformance.jsonl";
@@ -82,9 +82,10 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             final at = position(v["source"] ?? "");
             final id: str = v["id"] ?? "";
             final measure = std\toInt(v["measure"]);
+            final home: str = v["home"] ?? "";
             found.append(Finding{ path = at.path, line = at.line,
                 message = "{label}: {id} measures {measure}, past the {origin} ceiling of {value}" + because(why, metric: metric, items: [id]),
-                fix = "Bring it under {value}, or add it to a known entry in " + RATCHET + " with a reason a reviewer can check." });
+                fix = fixFor(metric, value: value, home: home) });
         }
     }
     final stale: [any] = report["stale"] ?? [<any>];
@@ -98,6 +99,22 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             fix = "Run `magus run format .`: it deletes what no longer violates." });
     }
     return found;
+}
+
+// fixFor is how to clear a violation of metric past value; home is where the lens says the
+// item belongs, "" when it names nowhere.
+export fun fixFor(metric: str, value: int, home: str) > str {
+    final known = "or add it to a known entry in " + RATCHET + " with a reason a reviewer can check.";
+    if (metric == "main-logic") {
+        return "A main package only wires: parse flags, build dependencies, call a package, print the result. "
+            + "This computes and calls no other workspace package; move it into the package that owns its data "
+            + "({home}, which its file references most), " + known;
+    }
+    if (metric == "store-path-export") {
+        return "Only {home} may know where its store lives, and the measure counts the files outside it that do. "
+            + "Call {home}'s reader or writer instead, adding the verb there, then unexport this; " + known;
+    }
+    return "Bring it under {value}, " + known;
 }
 
 // uncarried is why a known item matching no sample was not followed to a new ID, keyed by
@@ -244,6 +261,20 @@ test "a violation of an enforced metric fails at its line and an advice metric d
     assert\equal(got[0].message.indexOf("past the ratchet ceiling of 938") != null, want: true, message: got[0].message);
     final printed = advice(r);
     assert\equal(printed.len(), want: 1, message: "type-methods is printed as advice");
+}
+
+test "a boundary violation names where the item belongs" {
+    final v: {str: any} = {"id": "cmd/magus/session.go#summarize", "source": "cmd/magus/session.go:40",
+        "measure": 150.0, "home": "internal/sessions"};
+    final row: {str: any} = {"key": {"metric": "main-logic", "population": "main"}, "value": 119.0,
+        "source": "anchor", "violations": [v]};
+    final got = judge(report([fresh()], rows: [row], stale: [<any>]));
+    assert\equal(got.len(), want: 1, message: "main-logic is enforced");
+    assert\equal(got[0].fix.indexOf("(internal/sessions, which its file references most)") != null, want: true, message: got[0].fix);
+    final store = fixFor("store-path-export", value: 0, home: "internal/hint");
+    assert\equal(store.indexOf("Only internal/hint may know where its store lives") != null, want: true, message: store);
+    assert\equal(fixFor("file-lines", value: 938, home: "").indexOf("Bring it under 938, or add it") == 0, want: true,
+        message: "other metrics keep the plain fix");
 }
 
 test "a known entry that no longer violates fails at the ratchet" {

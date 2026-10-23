@@ -1,0 +1,3 @@
+### Added
+
+- **The `main-logic` and `store-path-export` conformance metrics.** `main-logic` measures the body tokens of a Go main-package function that computes rather than wires: not `main` or `init`, no `args []string`, `io.Writer` or workspace-interface parameter, and no call into another workspace package. `store-path-export` counts the non-test files outside a state-writing package that reference one of its exported paths (a string constant or a string-returning function named `...Path`, `...Dir`, `...File`, `...FileName` or `...Ext`). A violation carries `home`, the package it belongs in: the one its file references most, or the store's owner. Neither ships a default; a workspace configures them under `knowledge.conformance.checks`.
