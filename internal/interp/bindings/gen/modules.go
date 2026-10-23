@@ -25,6 +25,7 @@ var Modules = ffi.Set{
 	"fs":       {Register: RegisterFs},
 	"hex":      {Register: RegisterHex, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/hex"},
 	"http":     {Register: RegisterHttp},
+	"image":    {Register: RegisterImage},
 	"ini":      {Register: RegisterIni, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/ini"},
 	"json":     {Register: RegisterJson, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/json"},
 	"log":      {Register: RegisterLog, Capabilities: ffi.Capabilities(ffi.WASM)},

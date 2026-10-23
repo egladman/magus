@@ -362,6 +362,15 @@ var boundaryTypes = []boundaryType{
 	{Name: "Prompt", Type: reflect.TypeFor[types.Prompt]()},
 	{Name: "Setting", Type: reflect.TypeFor[types.Setting]()},
 	{Name: "Limits", Type: reflect.TypeFor[types.Limits]()},
+	// The image module's records, leaf first: ImageSpec carries an ImagePlatform and lists of
+	// the file and symlink records, ImageLayout an ImagePlatform. The platform, layout and
+	// published records are RuntimeObject because image functions hand them back to Buzz.
+	{Name: "ImagePlatform", Type: reflect.TypeFor[types.ImagePlatform](), RuntimeObject: true},
+	{Name: "ImageFile", Type: reflect.TypeFor[types.ImageFile]()},
+	{Name: "ImageSymlink", Type: reflect.TypeFor[types.ImageSymlink]()},
+	{Name: "ImageSpec", Type: reflect.TypeFor[types.ImageSpec]()},
+	{Name: "ImageLayout", Type: reflect.TypeFor[types.ImageLayout](), RuntimeObject: true},
+	{Name: "ImagePublished", Type: reflect.TypeFor[types.ImagePublished](), RuntimeObject: true},
 	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
 	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},

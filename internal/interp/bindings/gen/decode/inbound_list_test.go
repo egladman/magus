@@ -84,6 +84,10 @@ var inboundTypes = []inboundType{
 	{Name: "Prompt", Zero: types.Prompt{}, Encode: func(v any) vm.Value { return bindgen.ObjectPrompt(v.(types.Prompt)) }, Decode: func(v vm.Value) (any, error) { return DecodePrompt(v) }},
 	{Name: "Setting", Zero: types.Setting{}, Encode: func(v any) vm.Value { return bindgen.ObjectSetting(v.(types.Setting)) }, Decode: func(v vm.Value) (any, error) { return DecodeSetting(v) }},
 	{Name: "Limits", Zero: types.Limits{}, Encode: func(v any) vm.Value { return bindgen.ObjectLimits(v.(types.Limits)) }, Decode: func(v vm.Value) (any, error) { return DecodeLimits(v) }},
+	{Name: "ImagePlatform", Zero: types.ImagePlatform{}, Encode: func(v any) vm.Value { return bindgen.ObjectImagePlatform(v.(types.ImagePlatform)) }, Decode: func(v vm.Value) (any, error) { return DecodeImagePlatform(v) }},
+	{Name: "ImageFile", Zero: types.ImageFile{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageFile(v.(types.ImageFile)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageFile(v) }},
+	{Name: "ImageSymlink", Zero: types.ImageSymlink{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageSymlink(v.(types.ImageSymlink)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageSymlink(v) }},
+	{Name: "ImageSpec", Zero: types.ImageSpec{}, Encode: func(v any) vm.Value { return bindgen.ObjectImageSpec(v.(types.ImageSpec)) }, Decode: func(v vm.Value) (any, error) { return DecodeImageSpec(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{

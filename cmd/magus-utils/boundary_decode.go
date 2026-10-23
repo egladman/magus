@@ -99,6 +99,11 @@ var inboundTypes = []string{
 	"Prompt",
 	"Setting",
 	"Limits",
+	// The image module's arguments, leaf first: ImageSpec holds the three before it.
+	"ImagePlatform",
+	"ImageFile",
+	"ImageSymlink",
+	"ImageSpec",
 }
 
 // requiredMembers names, per inbound type, the members its decoder refuses an answer
