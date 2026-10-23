@@ -2347,7 +2347,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		inDirty, _ = v.Dirty(ctx, dir, inputs)
 	}
 
-	// Shared with `magus vcs add`, which asks the same question at staging time: see
+	// Shared with `magus vcs ls-files`, which asks the same question when it lists paths: see
 	// types.ClassifyDrift for why the fork lives there rather than here.
 	code, msg := types.ClassifyDrift(inDirty, types.MagusVersionFromContext(ctx))
 	root, err := v.Root(ctx, dir)

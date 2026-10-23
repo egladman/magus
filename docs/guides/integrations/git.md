@@ -515,13 +515,30 @@ worse than it is; it does not stop you fixing it.
 
 ## Staging
 
-`magus vcs add` stages what the workspace declares: sources, and the generated outputs a
-source change in the same commit accounts for. Anything undeclared is reported rather
-than swept in, which is the difference between it and `git add -A`.
+`magus vcs ls-files` lists the dirty paths a commit of the change wants and stages nothing.
+You stage the list:
 
-It also skips generated output that nothing in the change accounts for: output that moved
-with no declared input behind it, which means either a different magus build produced it
-or a generator is not deterministic. Name such a path explicitly to stage it anyway.
+```sh
+magus vcs ls-files -o name | git add --pathspec-from-file=-
+```
+
+By default it lists tracked, modified or deleted declared sources that no other live job
+holds and that are not already staged. Stderr names each group it left out and the flag
+that lists it:
+
+- `--include-untracked`: untracked files (refused on Jujutsu).
+- `--include-generated`: declared outputs a dirty source explains.
+- `--include-unexplained`: declared outputs nothing in the change explains. Output that
+  moved with no declared input behind it means a different magus build produced it or a
+  generator is not deterministic.
+- `--include-unclaimed`: paths no target declares, and the ones magus maintains.
+- `--include-held`: paths another live job in this checkout writes.
+- `--include-staged`: paths whose whole change is staged (git only).
+
+Positional patterns are write-path patterns read from the current directory. They only
+narrow the listing; the `--include-*` flags decide what is eligible. `--exclude <pattern>`
+and `--project <project>` narrow the same way and repeat. A backend that lacks a state
+refuses its flag.
 
 ## Reading a change through git
 

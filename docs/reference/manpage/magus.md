@@ -92,7 +92,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Read the working tree's changes in the order they deserve attention. See [**magus-diff**(1)](magus-diff.md).
 
 **vcs**
-: Staging and conflict resolution that knows what is generated. See [**magus-vcs**(1)](magus-vcs.md).
+: Listing and conflict resolution that knows what is generated. See [**magus-vcs**(1)](magus-vcs.md).
 
 **session**
 : What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See [**magus-session**(1)](magus-session.md).

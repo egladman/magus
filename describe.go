@@ -1297,7 +1297,7 @@ func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*typ
 		// per-target ctx.writesFiles above: baseStep is the project-wide baseline, so a
 		// file a target declares only in its own body was invisible here.
 		//
-		// Not cosmetic: `magus vcs add` asks by PROJECT identity whether a drifted
+		// Not cosmetic: `magus vcs ls-files` asks by PROJECT identity whether a drifted
 		// output has a dirty declared input behind it. A source declared only through
 		// a cross-project read reported source_of=["."] alone, so its regenerated
 		// output was called MGS4005 environmental drift: a staging check telling you
