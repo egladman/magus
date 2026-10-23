@@ -696,10 +696,10 @@ var ruleDocSleepPoll = types.RuleDoc{
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
-		"A worker (a session whose lease is a child row or a subagent's) never waits for the build budget, in a shell call or a watcher: `magus status --wait` or `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more. " +
-		"It commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
+		"A worker (a session whose lease is a child row or a subagent's) waits for the build budget only in the call the wait gates: `magus status --wait` piped into a magus call, which reserves the seat for it (a run, an affected or a `graph build`), or followed by `&&` and the call. A `magus status --wait` that gates no magus call, `--watch`, a status read beside a sleep or inside a watcher, or a magus run after a sleep of ten seconds or more is refused. " +
+		"A worker that cannot wait commits, reports to its orchestrator that its check found no seat, and stops; the orchestrator waits once for every worker, and a spawn or `magus job fork` into a full budget tells it how full the budget is and which run has held it longest. " +
 		"A `magus run` or `magus affected` whose argv matches one this checkout's run log recorded refused with MGS3009 in the last 60 seconds is the same poll with no sleep at all: it is refused with `magus status --wait | <the command>` as the next line, which waits for a seat and then runs, or for a worker with the report-and-stop above. " +
-		"A line that pipes `status --wait` into the run passes, and only run logs written inside the minute are opened. " +
+		"A line whose `status --wait` gates the run passes, and only run logs written inside the minute are opened. " +
 		"It compares argv exactly, so the same run with a flag added, removed or reordered is a different command. " +
 		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.",
 }
