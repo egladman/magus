@@ -28,7 +28,7 @@ import {
 // useful message instead of a TypeError three lines later.
 function at<T>(xs: readonly T[], i: number, what: string): T {
   const v = xs[i];
-  if (v === undefined) throw new Error(`missing ${what} at index ${i}`);
+  assert.ok(v !== undefined, `missing ${what} at index ${i}`);
   return v;
 }
 

@@ -132,6 +132,7 @@ function serve(
         json: () => Promise.resolve({ code: payload.code, message: payload.message }),
       } as unknown as Response);
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }

@@ -105,6 +105,7 @@ test("a refused exchange fails loudly and keeps asking", async () => {
       let called = 0;
       const out = await ensureConsoleToken(async () => {
         called++;
+        // platform double: Connect client
         throw new ConnectError("refused", code);
       });
       assert.equal(out, "failed", Code[code]);
@@ -174,6 +175,7 @@ test("a used or expired code, or a server that is down, stores nothing", async (
     () => new Response("not json", { status: 200 }),
     () => new Response('{"token":""}', { status: 200 }),
     (): Response => {
+      // platform double: fetch
       throw new TypeError("connection refused");
     },
   ]) {

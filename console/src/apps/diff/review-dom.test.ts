@@ -22,6 +22,7 @@ beforeEach(() => {
   sessionStorage.clear();
   document.body.replaceChildren();
   globalThis.fetch = (() => {
+    // platform double: fetch
     throw new Error("demo mode must not reach the network");
   }) as typeof fetch;
 });

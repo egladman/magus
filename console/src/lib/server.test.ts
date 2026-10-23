@@ -222,6 +222,7 @@ test("readRefusal shows a body that is not an envelope as text", async () => {
 
 test("readRefusal answers null for an empty or unreadable body", async () => {
   assert.equal(await readRefusal(new Response("  ")), null);
+  // platform double: Response.text
   const unreadable = { text: () => Promise.reject(new Error("aborted")) } as unknown as Response;
   assert.equal(await readRefusal(unreadable), null);
 });

@@ -179,6 +179,7 @@ test("fetchSessionActivity asks the viewer service for one session and path", as
 
 test("the showcase touch row renders Ran and its Session panel states reasoning is unavailable", async () => {
   globalThis.fetch = (() => {
+    // platform double: fetch
     throw new Error("demo mode must not reach the network");
   }) as typeof fetch;
   location.hash = "#demo";

@@ -78,6 +78,7 @@ test("setReading says the status when a refusal carries no words", async () => {
 
 test("setReading toasts a server that cannot be reached", async () => {
   globalThis.fetch = (() => {
+    // platform double: fetch
     throw new TypeError("fetch failed");
   }) as typeof fetch;
   const { result, toasts } = await withToasts(() =>

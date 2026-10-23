@@ -238,6 +238,7 @@ function serveTokens(revoked: string[]): void {
       revoked.push(String(init?.body ?? ""));
       return json({});
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }

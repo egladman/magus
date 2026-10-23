@@ -87,6 +87,7 @@ test("an envelope body reaches the view as its message, not as JSON", async () =
 
 // A fetch that fails the way the browser's does: its promise rejects.
 function rejecting(reason: unknown): typeof fetch {
+  // platform double: fetch
   return () => new Promise((_, reject) => reject(reason));
 }
 

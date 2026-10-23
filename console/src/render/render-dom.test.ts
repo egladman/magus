@@ -107,6 +107,7 @@ test("a copy that fails is a toast, not a label that flickers", async () => {
   const realClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
+    // platform double: navigator.clipboard.writeText
     value: { writeText: () => new Promise<void>((_, reject) => reject(new Error("denied"))) },
   });
   try {

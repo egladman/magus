@@ -28,6 +28,7 @@ test("a server that does not serve the route is not asked twice", async () => {
   let calls = 0;
   const denied = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new ConnectError("no such method", Code.Unimplemented);
   };
   assert.equal(await fetchPulse(HOST, denied), null);
@@ -41,6 +42,7 @@ test("an outage keeps being retried", async () => {
   let calls = 0;
   const down = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new ConnectError("connection refused", Code.Unavailable);
   };
   await fetchPulse(HOST, down);
@@ -66,6 +68,7 @@ test("an auth failure keeps being retried", async () => {
   let calls = 0;
   const unauthorized = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new ConnectError("no token", Code.Unauthenticated);
   };
   await fetchPulse(HOST, unauthorized);
@@ -90,6 +93,7 @@ test("a permission denial keeps being retried", async () => {
   let calls = 0;
   const denied = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new ConnectError("forbidden", Code.PermissionDenied);
   };
   await fetchPulse(HOST, denied);
@@ -102,6 +106,7 @@ test("a route answered NotFound latches like Unimplemented", async () => {
   let calls = 0;
   const missing = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new ConnectError("no such route", Code.NotFound);
   };
   await fetchPulse(HOST, missing);
@@ -116,6 +121,7 @@ test("a blocked fetch is an outage, not a denial", async () => {
   let calls = 0;
   const blocked = async (): Promise<never> => {
     calls++;
+    // platform double: Connect client
     throw new TypeError("Failed to fetch");
   };
   await fetchPulse(HOST, blocked);
@@ -127,6 +133,7 @@ test("a blocked fetch is an outage, not a denial", async () => {
 // than inheriting the verdict on the one before it.
 test("the latch does not spread to another server", async () => {
   await fetchPulse(HOST, async () => {
+    // platform double: Connect client
     throw new ConnectError("no such method", Code.Unimplemented);
   });
   const other = await fetchPulse("127.0.0.1:9999", async () => ({

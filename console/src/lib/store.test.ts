@@ -10,9 +10,8 @@ test("a throwing subscriber does not stop the ones after it", () => {
   const store = createStore({ n: 0 });
   const seen: string[] = [];
   store.subscribe(() => seen.push("first"));
-  store.subscribe(() => {
-    throw new Error("this tile is broken");
-  });
+  // A tile whose own work fails: here, a body it cannot parse.
+  store.subscribe(() => JSON.parse("{"));
   store.subscribe(() => seen.push("third"));
 
   // Iterating the live set with no guard abandoned the loop here, and "third" - and every

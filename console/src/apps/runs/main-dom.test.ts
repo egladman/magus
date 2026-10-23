@@ -87,6 +87,7 @@ function serve(outputs: unknown[], runs: unknown[]): void {
     if (url.endsWith("/livez")) {
       return Promise.resolve({ ok: true, status: 200 } as unknown as Response);
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
@@ -94,6 +95,7 @@ function serve(outputs: unknown[], runs: unknown[]): void {
 // serveNothing is a configured server address with nothing listening behind it.
 function serveNothing(): void {
   setDefaultHost(HOST);
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
 }
 

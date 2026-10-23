@@ -103,6 +103,7 @@ function serve(projects: unknown[], lifecycleState = "LIFECYCLE_STATE_LIVE"): vo
         }),
       );
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
@@ -299,6 +300,7 @@ test("a refresh that fails over a table on screen says how old the reading is", 
   await mount();
   assert.equal(host.querySelector(".console-tools__stale")?.childElementCount, 0);
 
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
   host.querySelector<HTMLButtonElement>(".console-tools__refresh")?.click();
   await settle();
@@ -316,6 +318,7 @@ test("a refresh that fails over a table on screen says how old the reading is", 
 
 test("a refused connection is the connect prompt with a retry, not an empty table", async () => {
   setDefaultHost(HOST);
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
   await mount();
   assert.equal(host.querySelector<HTMLElement>(".console-tools__table")?.hidden, true);

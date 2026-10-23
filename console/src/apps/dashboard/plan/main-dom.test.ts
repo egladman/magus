@@ -124,6 +124,7 @@ function serve(routes: {
       // tests need the read to SUCCEED, not to carry rows.
       return ok({ outputs: [] });
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
@@ -1273,6 +1274,7 @@ test("a listing that answers after the switch to Targets cannot paint it", async
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("JobService/ListJobs")) return held as Promise<Response>;
     if (url.includes("/api/v1/plan")) return Promise.resolve(okPlan(RUN_BODY)() as Response);
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 

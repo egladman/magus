@@ -1,0 +1,147 @@
+// typescript-never-throws refuses a `throw`, a `Promise.reject` or a `new Promise` whose
+// executor takes a reject, in the hand-written TypeScript of the console and the Claude Code
+// mod. A fallible call there returns a Result (console/src/lib/result.ts), so its caller has
+// to read the failure; an exception unwinds past every caller that forgot to catch it. Code
+// that cannot be reached ends `const exhausted: never = value; return exhausted;`, which the
+// compiler checks and nothing throws.
+//
+// One allowance, in test files only: a double that imitates a platform API, which fails by
+// throwing or rejecting because the real one does. The line above it names the API, from
+// PLATFORM_APIS:
+//
+//	// platform double: fetch
+//	globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
+//
+// The rest of the repository's TypeScript (docs/src, libs/textsearch, the OpenCode plugin)
+// still throws, and joins reads() once it does not.
+//
+// Tier 2, measured shape: the fix returns a Result, a refactor anyone can do. There is no
+// baseline: the change that added this rule left the files it reads with no violation.
+namespace typescriptthrows;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// PLATFORM_APIS are the APIs whose failure a test double may imitate by throwing: each fails
+// that way in the browser or the runtime, so a test of the code that handles it has to.
+export final PLATFORM_APIS = ["fetch", "Response.text", "navigator.clipboard.writeText", "Connect client"];
+
+final MARKER = "// platform double: ";
+
+// THROW matches the statement, not the word: `throw` followed by what it throws. A keyword list
+// in a string ("catch throw true") has no operand after it.
+final THROW = std\pattern(`(^|[;{}(\s])throw\s+(new\b|[A-Za-z_$][\w$.]*\s*([;(]|$)|[(\x60"'])`);
+final REJECT = std\pattern(`\bPromise\.reject\s*\(`);
+final REJECTING = std\pattern(`\bnew\s+Promise\s*(<[^>]*>)?\s*\(\s*(async\s*)?(\(\s*[\w$]+\s*(:[^,)]*)?,|function\s*\(\s*[\w$]+\s*(:[^,)]*)?,)`);
+
+export fun reads() > [str] {
+    return ["console/src/**/*.ts", "docs/guides/integrations/agents/claude-code-mod/**/*.ts",
+            "docs/guides/integrations/agents/claude-code-mod/**/*.tsx"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (f.value.endsWith(".d.ts")) {
+            continue;
+        }
+        judge(f.value, src: support\read(f), found: found);
+    }
+    return found;
+}
+
+fun isTest(path: str) > bool {
+    return path.endsWith(".test.ts") or path.endsWith(".test.tsx");
+}
+
+// code drops a line comment, so prose about throwing is not a throw. A `//` inside a string
+// (a URL) cuts the line short, which can only hide a throw after it on that line.
+fun code(line: str) > str {
+    final t = line.trim();
+    if (t.startsWith("//") or t.startsWith("*") or t.startsWith("/*")) {
+        return "";
+    }
+    final at = line.indexOf("//");
+    if (at -> i) {
+        return line.sub(0, len: i);
+    }
+    return line;
+}
+
+fun kind(line: str) > str? {
+    if (THROW.match(line) != null) {
+        return "a throw";
+    }
+    if (REJECT.match(line) != null) {
+        return "a Promise.reject";
+    }
+    if (REJECTING.match(line) != null) {
+        return "a new Promise that rejects";
+    }
+    return null;
+}
+
+// named answers the platform API a marker line names, or null when the line is no marker or
+// names an API outside PLATFORM_APIS.
+fun named(line: str) > str? {
+    final t = line.trim();
+    if (!t.startsWith(MARKER)) {
+        return null;
+    }
+    final api = t.sub(MARKER.len(), len: t.len() - MARKER.len());
+    return if (PLATFORM_APIS.indexOf(api) != null) api else null;
+}
+
+fun judge(path: str, src: str, found: mut [Finding]) > void {
+    final inTest = isTest(path);
+    final apis = PLATFORM_APIS.join(", ");
+    var prev = "";
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        final what = kind(code(line));
+        if (what -> k) {
+            if (!inTest) {
+                found.append(Finding{ path = path, line = n,
+                    message = "{k} in hand-written TypeScript; a fallible call here returns a Result",
+                    fix = "Return fail(...) or failFrom(...) from lib/result, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
+            } else if (named(prev) == null) {
+                found.append(Finding{ path = path, line = n,
+                    message = "{k} in a test with no platform double named above it",
+                    fix = "Assert instead (node:assert fails the test). A double imitating a platform API that fails this way goes under a `{MARKER}<api>` line naming one of: {apis}." });
+            }
+        }
+        prev = line;
+    }
+}
+
+test "a throw, a reject and a rejecting promise in app code are each reported" {
+    final src = "export function a(): void \{\n  throw new Error(\"no\");\n}\nconst b = () => Promise.reject(new Error(\"no\"));\nconst c = new Promise<void>((resolve, reject) => reject(1));\nconst d = new Promise((resolve) => resolve(1));\n";
+    final got = check(support\fixture({"console/src/lib/a.ts": src}));
+    assert\equal(support\messages(got), want: [
+        "a throw in hand-written TypeScript; a fallible call here returns a Result",
+        "a Promise.reject in hand-written TypeScript; a fallible call here returns a Result",
+        "a new Promise that rejects in hand-written TypeScript; a fallible call here returns a Result",
+    ], message: "three");
+    assert\equal(got[0].line, want: 2, message: "the throw's line");
+}
+
+test "prose and strings about throwing pass" {
+    final src = "// a caller that throws here unwinds\n  * nothing can throw\nconst words = \"set static this throw true try\";\nconst x = 1; // throw new Error(\"x\")\n";
+    assert\equal(check(support\fixture({"console/src/a.ts": src})).len(), want: 0, message: "clean");
+}
+
+test "a test double passes only under a marker naming a platform API" {
+    final src = "// platform double: fetch\nglobalThis.fetch = () => Promise.reject(new TypeError(\"x\"));\n// platform double: localStorage\nconst s = () => \{ throw new Error(\"x\"); };\nconst t = () => \{ throw new Error(\"x\"); };\n";
+    final got = check(support\fixture({"console/src/a.test.ts": src}));
+    assert\equal(got.len(), want: 2, message: "an unlisted API and no marker");
+    assert\equal(got[0].line, want: 4, message: "the unlisted API");
+    assert\equal(got[1].line, want: 5, message: "no marker");
+}
+
+test "a throw in the mod's tsx is read with or without a semicolon" {
+    final got = check(support\fixture({"docs/guides/integrations/agents/claude-code-mod/hooks/a.tsx": "  throw err\n  throw err;\n"}));
+    assert\equal(got.len(), want: 2, message: "with and without a semicolon");
+}
