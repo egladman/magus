@@ -277,6 +277,20 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	assert.Zero(t, brief.OtherLeases)
 }
 
+func TestSessionBriefListsEachProvedClaim(t *testing.T) {
+	t.Parallel()
+
+	claims := claimLines([]types.JobClaim{{
+		Path: "internal/guard/render.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.Render"},
+		Proof: "internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go",
+	}})
+	assert.Equal(t, []string{"internal/guard/render.go (refs:hint.Render): internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go"}, claims)
+	assert.Nil(t, claimLines(nil), "a job with no claims lists none")
+
+	b := sessionBrief{Leases: []briefLease{{ID: "render-change", State: string(types.StateRunning), Exec: hint.JobExec.With("render-change"), Claims: claims}}}
+	assert.Contains(t, b.Text(), "    claimed: internal/guard/render.go (refs:hint.Render): internal/guard/render.go references hint.Render")
+}
+
 // The job store is the repository's, shared by every worktree. A rehydrating session can
 // act only under the leases taken in its checkout or bound to it, so those are named and
 // every other live lease is one count line with the command that lists them.
