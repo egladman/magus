@@ -979,6 +979,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/testlayout-pairing-has-no-exemptions.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/tool-descriptions-follow-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/trusted-jobs-restore-no-actions-cache.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/typescript-never-throws.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/whole-tree-targets-key-on-the-go-tree.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/advisories.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/badges.buzz"}

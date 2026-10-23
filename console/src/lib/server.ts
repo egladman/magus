@@ -248,8 +248,9 @@ export function isReadOnly(): boolean {
 // It records the adoption (ownOrigin) so resolveServerHost returns location.host directly -
 // no fragment synthesis - and consumes the token. A page carrying an explicit #port= is a
 // cross-origin attach to a LOCAL server (the operator reaching past their origin), not
-// own-origin adoption: it just consumes any token and keeps full control. On a page with no
-// token and no #port it does nothing. Call it once, before anything reads the hash. Returns
+// own-origin adoption: it just consumes any token and keeps full control. A tokenless
+// page adopts its origin only on the daemon's own loopback /console/ mount (isDaemonConsolePage);
+// anywhere else with no token and no #port it does nothing. Call it once, before anything reads the hash. Returns
 // whether the console became READ-ONLY.
 export function adoptServerOrigin(): boolean {
   if (typeof location === "undefined") return false;
@@ -260,8 +261,9 @@ export function adoptServerOrigin(): boolean {
     consumeLiveToken(params);
     return false;
   }
-  if (params.token === undefined && params.code === undefined && getLiveToken() === null)
-    return false; // not our flow
+  const carriesToken =
+    params.token !== undefined || params.code !== undefined || getLiveToken() !== null;
+  if (!carriesToken && !isDaemonConsolePage()) return false;
 
   ownOrigin = true;
   // Only a device on a NON-loopback LAN share origin becomes read-only; the
@@ -273,6 +275,16 @@ export function adoptServerOrigin(): boolean {
 
   consumeLiveToken(params); // stash + strip the token
   return readOnly;
+}
+
+// isDaemonConsolePage reports a console served from a loopback http origin under /console/: the
+// daemon's own mount. Such a page adopts its origin without a token, since the daemon answers
+// /livez and /readyz unauthenticated; every data route still needs a token, so the apps show the
+// sign-in state. The hosted console is https and a LAN viewer is not loopback, so neither matches.
+function isDaemonConsolePage(): boolean {
+  const hn = location.hostname;
+  const loopback = hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost";
+  return loopback && location.protocol === "http:" && location.pathname.startsWith("/console/");
 }
 
 // serverAttach resolves the server host for an EXPLICIT attach only, or null. This is the
@@ -847,17 +859,20 @@ export function createServerTransport(
 
 // ---- sign-in ---------------------------------------------------------------
 
-// AUTH_LOST_EVENT fires on document when the server refuses the stored token. Every bundle shares
-// document, so the shell's sign-in gate hears a 401 raised inside any app.
+// AUTH_LOST_EVENT fires on document when the server answers 401. Every bundle shares document, so
+// the shell's sign-in gate hears a 401 raised inside any app. detail.hadToken is false when the
+// page never held a token, so nothing expired and the gate must not say it did.
 export const AUTH_LOST_EVENT = "magus:auth-lost";
 
 // signalAuthLost forgets a token the server refused (expired or revoked) and says so. Keeping it
 // would sign every later request with a credential that can only fail, and each app would read
-// that as an empty page.
+// that as an empty page. A page that held no token gets the gate's sign-in state and no toast.
 export function signalAuthLost(host: string): void {
+  const hadToken = getLiveToken() !== null;
   clearLiveToken();
   if (typeof document !== "undefined")
-    document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host } }));
+    document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host, hadToken } }));
+  if (!hadToken) return;
   reportFailure(
     "Console token",
     "The server at " +

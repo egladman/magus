@@ -318,8 +318,15 @@ function gatedPage<S, Q>(
   };
   const unsubscribeHost = subscribeDefaultHost(() => open());
 
-  const onAuthLost = (): void => {
+  const onAuthLost = (e: Event): void => {
     if (closed || !signInRequired()) return;
+    const detail: unknown = e instanceof CustomEvent ? e.detail : undefined;
+    const hadToken = !(
+      typeof detail === "object" &&
+      detail !== null &&
+      "hadToken" in detail &&
+      detail.hadToken === false
+    );
     if (inner) {
       innerTitleUnsub?.();
       innerTitleUnsub = null;
@@ -327,7 +334,9 @@ function gatedPage<S, Q>(
       inner = null;
       for (const fn of titleListeners) fn(null);
     }
-    showGate("The server refused this page's token: it expired or was revoked.");
+    showGate(
+      hadToken ? "The server refused this page's token: it expired or was revoked." : undefined,
+    );
   };
   document.addEventListener(AUTH_LOST_EVENT, onAuthLost);
 

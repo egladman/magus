@@ -5751,10 +5751,27 @@ export async function activate() {
   // this, and the demo comes in through boot on #demo rather than being swapped in place.
   if (loaded.source === "empty") {
     const empty = el("graph-empty-state");
-    if (empty) empty.hidden = false;
+    if (empty) {
+      empty.hidden = false;
+      const hint = empty.querySelector<HTMLElement>(
+        "[data-empty-way]:last-child [data-empty-hint]",
+      );
+      const why = demoHint(parseHash());
+      if (hint && why) hint.textContent = why;
+    }
   }
 
   bootWireEvents(lifecycle.signal);
+}
+
+// demoHint replaces the empty state's "add #demo" line when that advice cannot work: the page is
+// attached to a server, which never serves the demo graph (it is this repo's own, notes included),
+// or the address already says #demo and the load failed. Null keeps the scaffold's line.
+function demoHint(params: Record<string, string>): string | null {
+  if (!mayLoadBundledDemo(params))
+    return "A server's console does not serve the demo: it is the magus repo's own graph. Open the hosted console with #demo to see it.";
+  if (wantsDemo(params)) return "The demo graph did not load; the notice above says why.";
+  return null;
 }
 
 // bootWireEvents wires all the event listeners that are the same for both the
@@ -6238,6 +6255,14 @@ async function bootLive(lifecycleSignal: AbortSignal) {
   }
   liveToken = getLiveToken();
   if (!liveToken) {
+    // A tokenless page on the daemon's own mount adopted its origin only to say it is connected; with
+    // nothing to read it falls through to the empty state, whose first way mints a signed-in link.
+    if (params.port === undefined) {
+      liveHost = null;
+      liveFlavor = null;
+      graphSource = "empty";
+      return false;
+    }
     setStatus(
       "live mode: no token found. Re-run magus graph export --open --follow to get a fresh link.",
       "danger",
