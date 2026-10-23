@@ -1263,6 +1263,9 @@ func encodeJobs(f jobsFile) ([][]byte, error) {
 // destroys the only account of it, and the caller who wants that says so with force. A
 // live row is the opposite case: nothing has happened yet, so there is nothing to lose.
 //
+// A checkout the row owns is ended first, as `job exit` ends it: removed when it is clean
+// and every commit in it is on a branch, else the row stays with it and the error says why.
+//
 // The dropped row is archived first, as Clear archives, so a delete is recoverable from
 // the sibling file rather than only from whatever the caller remembers. Archives last
 // jobs.retain; see [Store.dropExpiredFiles].
@@ -1288,6 +1291,16 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 			return fmt.Errorf("job: %s is %s, and that row is the record of what happened:"+
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
+		}
+		if dropped.Worktree.Standing() {
+			here, _ := filepath.Abs(s.root)
+			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
+			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {
+				return fmt.Errorf("job: %s owns the checkout %s, which stays, so the row stays with it: %s",
+					id, dropped.Worktree.Root, kept)
+			}
+			dropped = dropped.Clone()
+			dropped.Worktree.Removed = time.Now().Unix()
 		}
 		if err := s.archive(jobsFile{Schema: f.Schema, Jobs: []types.Job{dropped}}); err != nil {
 			return err

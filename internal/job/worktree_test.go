@@ -110,7 +110,7 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
 	built := repo.Head()
-	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	later := repo.Commit("later", map[string]string{"b.go": "package b\n"})
 
 	for name, tc := range map[string]struct {
 		build      types.MagusBuild
@@ -165,6 +165,14 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	require.True(t, made)
 	assert.Equal(t, built, wt.Base)
 	assert.FileExists(t, wt.Binary)
+
+	docsOnly := repo.Commit("notes", map[string]string{"b_test.go": "package b\n", "changes/unreleased/x.md": "x\n"})
+	bin, ctx = forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: later})
+	wt, made, err = s.ForkWorktree(ctx, "w4", filepath.Join(t.TempDir(), "w4"), docsOnly, bin)
+	require.NoError(t, err)
+	require.True(t, made)
+	assert.Equal(t, docsOnly, wt.Base)
+	assert.FileExists(t, wt.Binary, "no file a binary holds differs between the build and the checkout")
 
 	_, made, err = s.ForkWorktree(t.Context(), "w3", filepath.Join(t.TempDir(), "w3"), "", "")
 	require.NoError(t, err, "a forker running magus from PATH places nothing, so nothing is compared")
@@ -266,4 +274,27 @@ func TestEndWorktreesKeepsACheckoutHoldingWorkAndSaysWhy(t *testing.T) {
 	changed, err = s.EndWorktrees(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, changed, "a reason that has not changed is not recorded again")
+}
+
+func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, _, _ := worktreeStore(t)
+	clean := forkInto(t, s, "clean", "")
+	dirty := forkInto(t, s, "dirty", "")
+	require.NoError(t, os.WriteFile(filepath.Join(dirty.Worktree.Root, "b.txt"), []byte("b\n"), 0o644))
+
+	_, err := s.Delete(ctx, "dirty", false)
+	require.ErrorContains(t, err, "b.txt", "a checkout holding work stays, and so does its row")
+	assert.DirExists(t, dirty.Worktree.Root)
+
+	dropped, err := s.Delete(ctx, "clean", false)
+	require.NoError(t, err)
+	assert.NoDirExists(t, clean.Worktree.Root, "a clean checkout goes with its row")
+	assert.NotZero(t, dropped.Worktree.Removed)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "dirty", rows[0].ID)
 }
