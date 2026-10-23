@@ -49,6 +49,14 @@ const (
 	// ConformanceNameClash is the most percent of a package's importers that also import
 	// another package of the same name, measured on the package with fewer importers.
 	ConformanceNameClash ConformanceMetric = "name-clash"
+	// ConformanceMainLogic is the body tokens of a main-package callable that computes rather
+	// than wires: not main or init, no `args []string`, io.Writer or workspace-interface
+	// parameter, and no call into another workspace package. Every other callable measures 0.
+	ConformanceMainLogic ConformanceMetric = "main-logic"
+	// ConformanceStorePathExport is how many non-test files outside its package reference an
+	// exported path-shaped symbol (a name ending Path, Dir, File, FileName or Ext) of a
+	// package that writes state through internal/file.
+	ConformanceStorePathExport ConformanceMetric = "store-path-export"
 )
 
 // ConformancePopulation is the set of files a metric is measured over. Each is measured apart,
@@ -595,9 +603,11 @@ type ConformanceCarry struct {
 }
 
 // ConformanceItem is one file, symbol, package or clone group past its row's value and not
-// known. Source is its path:line.
+// known. Source is its path:line. Home is the package directory it belongs in, for a
+// metric that names one.
 type ConformanceItem struct {
-	ID      string `json:"id"      yaml:"id"`
-	Source  string `json:"source"  yaml:"source"`
-	Measure int    `json:"measure" yaml:"measure"`
+	ID      string `json:"id"             yaml:"id"`
+	Source  string `json:"source"         yaml:"source"`
+	Measure int    `json:"measure"        yaml:"measure"`
+	Home    string `json:"home,omitempty" yaml:"home,omitempty"`
 }
