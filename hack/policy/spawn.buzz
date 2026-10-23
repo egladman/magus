@@ -37,6 +37,9 @@ export object Spawn {
     prompt: str = "",
     // checkout is the checkout the spawn runs in, "" when unread.
     checkout: str = "",
+    // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
+    // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
+    ownBuild: bool = false,
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -74,7 +77,7 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     if (helpers\titleRole(spawn.title) == integrateRole) {
         return row;
     }
-    final building = builds\briefDenial(spawn.prompt);
+    final building = builds\briefDenial(spawn.prompt, ownBuild: spawn.ownBuild);
     if (building != "") {
         return magus\guard.deny(building);
     }
@@ -338,4 +341,11 @@ test "a brief that forbids the build or builds something else passes" {
     }
     final continued = Spawn{ kind = "continue", title = "", isolated = false, prompt = "Run `magus run go-build .`" };
     std\assert(judged(continued, rows: store, unreadable: "").decision == "allow", message: "a continue starts nothing");
+}
+
+test "a spawn whose job builds its own binary may brief the build" {
+    final prompt = "Run `magus run go-build .` first.";
+    final own = Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
+    std\assert(judged(own, rows: store, unreadable: "").decision == "allow", message: "its own build");
+    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "deny", message: "the same brief for any other job");
 }
