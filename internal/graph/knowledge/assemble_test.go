@@ -591,6 +591,9 @@ fun aFigure() > figure\Figure !> any {
 		{Key: "go/pkg-a/gadget", Label: "gadget", Language: "go", SymbolKind: "struct",
 			Source: "pkg/a/build.go:40", Defs: []string{"pkg/a/build.go"},
 			Implements: []string{"go/pkg-a/Builder"}},
+		// splits: build_cache.go beside build.go.
+		{Key: "go/pkg-a/cacheKey", Label: "cacheKey", Language: "go", SymbolKind: "function",
+			Source: "pkg/a/build_cache.go:3", Defs: []string{"pkg/a/build_cache.go"}},
 	}}
 	// depends_on, in its project -> package shape, which no other input produces.
 	in.Packages = map[string][]types.KnowledgePackage{"pkg/a": {
