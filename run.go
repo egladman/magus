@@ -882,9 +882,9 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 // it for the project at projectPath, without executing anything. The step is keyed
 // exactly as a run with these charms would key it (spell claims, tool versions and
 // the env allowlist all included), so the returned key equals the one a real run
-// mints, and PortableRef of it equals the ref that run would print. Only args after
-// `--` are absent (this is not a run, so there are none). It is the live half of the
-// works-on-my-machine diff: `describe target --cache` compares these lines against
+// mints, and PortableRef of it equals the ref that run would print. Args after `--` key
+// it when ctx carries them (project.WithExtraArgs), as they key a run. It is the live
+// half of the works-on-my-machine diff: `describe target --cache` compares these lines against
 // the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
 func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
 	return m.computeTargetKey(ctx, projectPath, target, charms, nil)
@@ -937,6 +937,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	observations := m.probeObservations(ctx, []*types.Project{p},
 		map[string]map[string]bool{p.Path: targetDrivenBins(p, target)})
 	step := m.buildStep(p, target)
+	m.applyArgs(&step, p, target, project.ExtraArgs(ctx))
 	var keyTools []string
 	if keysTools(p, target) {
 		keyTools = toolVersions[p.Path]
@@ -2086,7 +2087,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
-			step.ExtraArgs = opts.ExtraArgs
+			m.applyArgs(&step, p, st.target, opts.ExtraArgs)
 			// The spell::op filter selects which definition runs (an explicit op
 			// bypasses a shadowing magusfile export), so it keys the cache the
 			// same way; without it a compile-only go::go-build recorded a pass

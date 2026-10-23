@@ -649,6 +649,60 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 	}, l.Chain)
 }
 
+// TestChainReadsArgsArms: a ctx.needs in an arm of an args.len() test runs only for
+// invocations that take that arm; one outside any such test, or under a condition the
+// read does not evaluate, runs either way.
+func TestChainReadsArgsArms(t *testing.T) {
+	g := Extract(`import "magus";
+export fun gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun rules(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun vet(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun both(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, paths: [str]) > void {
+    if (paths.len() == 0) {
+        ctx.needs(gen, both);
+    } else {
+        ctx.needs(fmt, both);
+    }
+    if (0 < paths.len()) {
+        ctx.needs(rules);
+    }
+    if (ctx.hasCharm("rw")) {
+        ctx.needs(vet);
+    }
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	without, with := false, true
+	assert.Equal(t, []types.ChainStep{
+		{Target: "gen", WhenArgs: &without},
+		{Target: "both"},
+		{Target: "fmt", CallIndex: 1, WhenArgs: &with},
+		{Target: "rules", CallIndex: 2, WhenArgs: &with},
+		{Target: "vet", CallIndex: 3},
+	}, l.Chain, "both arms name both, so it runs either way")
+}
+
+// TestChainArgsArmReachesAHelper: a helper has no args to test, so the ctx.needs calls it
+// makes take the arm the target called it from.
+func TestChainArgsArmReachesAHelper(t *testing.T) {
+	g := Extract(`import "magus";
+export fun gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+fun prepare(ctx: magus\Context) > void { ctx.needs(gen); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    if (!(args.len() != 0)) {
+        prepare(ctx);
+    }
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	without := false
+	assert.Equal(t, []types.ChainStep{{Target: "gen", WhenArgs: &without}}, l.Chain)
+}
+
 // TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so
 // `magus describe` prints no line rather than an empty one.
 func TestChainEmptyForALeafTarget(t *testing.T) {

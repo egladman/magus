@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
@@ -1097,6 +1098,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 		// declares MAGUS.md), so the described plan disagreed with the plan the
 		// cache actually keys and snapshots.
 		step := m.buildStep(p, et.Name)
+		m.applyArgs(&step, p, et.Name, project.ExtraArgs(ctx))
 
 		spellEntries := make([]types.EvaluatedSpell, 0, len(p.ResolvedSpells))
 		charmSet := map[string]struct{}{}
@@ -1157,7 +1159,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			Dir:       p.Dir,
 			Sources:   types.GlobStrings(step.Sources),
 			Outputs:   types.GlobStrings(step.Outputs),
-			Chain:     p.TargetChains[et.Name],
+			Chain:     invokedChain(p.TargetChains[et.Name], project.ExtraArgs(ctx)),
 			BeforeKey: step.BeforeKey,
 			DependsOn: p.DependsOn,
 			Charms:    charms,
@@ -1170,6 +1172,21 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 	}
 
 	return entries, nil
+}
+
+// applyArgs keys step on the args after `--` and runs before its key only the skip_cache
+// members the body reaches with them. buildStep takes the chain a run without args runs.
+// The members keep their own keys: args never reach a ctx.needs member.
+func (m *Magus) applyArgs(step *cache.Step, p *types.Project, target string, args []string) {
+	step.ExtraArgs = args
+	if len(args) > 0 && !step.NoCache && len(findInstallOps(p, target)) == 0 {
+		step.BeforeKey = types.BeforeKey(p, target, m.Get, args...)
+	}
+}
+
+// invokedChain is the steps of chain a run with args reaches.
+func invokedChain(chain []types.ChainStep, args []string) []types.ChainStep {
+	return slices.DeleteFunc(slices.Clone(chain), func(s types.ChainStep) bool { return !s.Runs(args) })
 }
 
 // EvaluateProjects returns the fully-evaluated project inventory. ctx bounds the
