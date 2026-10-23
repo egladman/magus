@@ -605,7 +605,7 @@ test "a judge that does not run is an error, not a pass" {
 
 test "a skill body, a loaded skill, a guide and any other page each take their own kind" {
     assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md"), want: "skill-template", message: "a body");
-    assert\equal(kindOf(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "agent-brief", message: "a loaded skill");
+    assert\equal(kindOf(".claude/skills/babysit-pull-requests/SKILL.md"), want: "agent-brief", message: "a loaded skill");
     assert\equal(kindOf("internal/agent/agents-section.md"), want: "agent-brief", message: "the AGENTS.md block");
     assert\equal(kindOf("AGENTS.md"), want: "agent-brief", message: "loaded every session");
     assert\equal(kindOf("console/AGENTS.md"), want: "agent-brief", message: "a nested AGENTS.md");
