@@ -1,11 +1,14 @@
 namespace mergejobbranches;
 
+import "env";
 import "flags";
 import "fs";
 import "io";
 import "magus";
+import "proc";
 import "serialize";
 import "std";
+import "uuid";
 import "vcs";
 import "hack/magusfile/branch-stack" as stack;
 
@@ -466,21 +469,53 @@ export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (di
     return git(dir, args: ["rev-parse", "HEAD"]);
 }
 
-// withTree runs body in a temporary detached worktree of root at rev, and removes the
-// worktree however body ends.
+// checkoutsRoot is the directory xdg.ScratchCheckoutDir keeps every scratch checkout
+// under. A copy of its path rules, since no Buzz module reaches that resolver.
+fun checkoutsRoot() > str !> any {
+    var cache = env\get("XDG_CACHE_HOME");
+    if (!cache.startsWith("/")) {
+        cache = fs\join(env\home(), name: ".cache");
+    }
+    return fs\join(cache, a: "magus", b: "checkouts");
+}
+
+// withTree runs body in a detached worktree of root at rev under
+// checkoutsRoot()/merge-job-branches/<id>, and removes the worktree however body ends.
 fun withTree(root: str, rev: str, body: fun (dir: str) > void !> any) > void !> any {
-    final scratch = fs\tempDir("merge-job-branches-");
-    final dir = scratch + "/tree";
+    final checkouts = checkoutsRoot();
+    final purpose = fs\join(checkouts, name: "merge-job-branches");
+    foreach (d in [checkouts, purpose]) {
+        fs\mkdirAll(d, perm: 448);
+        if (fs\stat(d).mode % 64 != 0) {
+            throw "merge-job-branches: {d} is open to other users, remove it and let the script recreate it";
+        }
+    }
+    final dir = fs\join(purpose, name: uuid\v7());
     git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
     try {
+        requireTrusted(dir, checkouts: checkouts);
         body(dir);
     } catch (e) {
         vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});
-        fs\removeAll(scratch);
+        fs\removeAll(dir);
         throw e;
     }
     git(root, args: ["worktree", "remove", "--force", dir]);
-    fs\removeAll(scratch);
+    fs\removeAll(dir);
+}
+
+// requireTrusted fails before a run in dir does: mise refuses an untrusted config, and
+// magus reports that only as a version probe failing (MGS3035).
+fun requireTrusted(dir: str, checkouts: str) > void !> any {
+    try {
+        proc\which("mise");
+    } catch {
+        return;
+    }
+    final shown = proc\exec("mise", args: ["trust", "--show"], dir: dir, opts: {"quiet": true, "allow_failure": true});
+    if ("{shown.stdout}{shown.stderr}".indexOf(": untrusted") != null) {
+        throw "merge-job-branches: mise does not trust {dir}; run `mise settings add trusted_config_paths {checkouts}` once";
+    }
 }
 
 fun refIn(text: str) > str {
