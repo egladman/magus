@@ -36,9 +36,9 @@ export interface ToastSpec {
   // "info" is for a prompt that is neither a success nor a problem (a reload offer).
   kind?: ToastKind | "info";
   // Action buttons, rendered inline-link style after the message.
-  actions?: ToastLink[];
+  actions?: ToastLink[] | undefined;
   // Milliseconds before it dismisses itself; 0 keeps it until the reader closes it.
-  ms?: number;
+  ms?: number | undefined;
   // A toast with this key already on screen is returned instead of a second one.
   key?: string;
   onDismiss?: () => void;

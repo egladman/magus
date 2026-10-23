@@ -14,6 +14,18 @@ import { must } from "./guards";
 // without a DOM, plus encodeToCanvas for the caller. Nothing here touches the
 // network or any global except the <canvas> the caller hands in.
 
+// at reads a[i], throwing when i is out of range. Every index in this module is
+// derived from the QR geometry, so a miss is an encoder bug, not an input error.
+function at<T>(a: ArrayLike<T>, i: number): T {
+  const v = a[i];
+  if (v === undefined) throw new Error(`qr: index ${i} out of range`);
+  return v;
+}
+
+function cellAt<T>(m: ArrayLike<ArrayLike<T>>, r: number, c: number): T {
+  return at(at(m, r), c);
+}
+
 // ---- Galois field GF(256) --------------------------------------------------
 
 // The QR RS code works over GF(256) with primitive polynomial 0x11d. exp/log
@@ -28,12 +40,12 @@ const LOG = new Uint8Array(256);
     x <<= 1;
     if (x & 0x100) x ^= 0x11d;
   }
-  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  for (let i = 255; i < 512; i++) EXP[i] = at(EXP, i - 255);
 })();
 
 function gfMul(a: number, b: number): number {
   if (a === 0 || b === 0) return 0;
-  return EXP[LOG[a] + LOG[b]];
+  return at(EXP, at(LOG, a) + at(LOG, b));
 }
 
 // rsGenerator returns the generator polynomial for `degree` EC codewords.
@@ -42,8 +54,8 @@ function rsGenerator(degree: number): number[] {
   for (let i = 0; i < degree; i++) {
     const next = new Array<number>(poly.length + 1).fill(0);
     for (let j = 0; j < poly.length; j++) {
-      next[j] ^= poly[j];
-      next[j + 1] ^= gfMul(poly[j], EXP[i]);
+      next[j] = at(next, j) ^ at(poly, j);
+      next[j + 1] = at(next, j + 1) ^ gfMul(at(poly, j), at(EXP, i));
     }
     poly = next;
   }
@@ -60,10 +72,10 @@ function rsEncode(data: number[], degree: number): number[] {
 function polyRemainder(data: number[], gen: number[], degree: number): number[] {
   const buf = data.concat(new Array<number>(degree).fill(0));
   for (let i = 0; i < data.length; i++) {
-    const coef = buf[i];
+    const coef = at(buf, i);
     if (coef === 0) continue;
     for (let j = 0; j < gen.length; j++) {
-      buf[i + j] ^= gfMul(gen[j], coef);
+      buf[i + j] = at(buf, i + j) ^ gfMul(at(gen, j), coef);
     }
   }
   return buf.slice(data.length);
@@ -114,8 +126,12 @@ const SPECS: Record<number, VersionSpec> = {
   },
 };
 
+function specFor(version: number): VersionSpec {
+  return must(SPECS[version]);
+}
+
 function dataCapacity(version: number): number {
-  return SPECS[version].groups.reduce((n, g) => n + g.blocks * g.dataPerBlock, 0);
+  return specFor(version).groups.reduce((n, g) => n + g.blocks * g.dataPerBlock, 0);
 }
 
 // chooseVersion picks the smallest version 1-10 whose byte-mode data capacity
@@ -143,7 +159,7 @@ class BitBuffer {
 // encodeData turns bytes into the final, padded, interleaved codeword stream for
 // the chosen version at EC level M.
 function encodeCodewords(bytes: number[], version: number): number[] {
-  const spec = SPECS[version];
+  const spec = specFor(version);
   const capacity = dataCapacity(version);
   const countBits = version <= 9 ? 8 : 16;
 
@@ -161,10 +177,10 @@ function encodeCodewords(bytes: number[], version: number): number[] {
   const dataCodewords: number[] = [];
   for (let i = 0; i < bb.bits.length; i += 8) {
     let byte = 0;
-    for (let j = 0; j < 8; j++) byte = (byte << 1) | bb.bits[i + j];
+    for (let j = 0; j < 8; j++) byte = (byte << 1) | at(bb.bits, i + j);
     dataCodewords.push(byte);
   }
-  while (dataCodewords.length < capacity) dataCodewords.push(pad[p++ % 2]);
+  while (dataCodewords.length < capacity) dataCodewords.push(at(pad, p++ % 2));
 
   // Split into blocks, compute EC per block.
   const dataBlocks: number[][] = [];
@@ -183,11 +199,11 @@ function encodeCodewords(bytes: number[], version: number): number[] {
   const result: number[] = [];
   const maxData = Math.max(...dataBlocks.map((b) => b.length));
   for (let i = 0; i < maxData; i++) {
-    for (const block of dataBlocks) if (i < block.length) result.push(block[i]);
+    for (const block of dataBlocks) if (i < block.length) result.push(at(block, i));
   }
   const maxEc = Math.max(...ecBlocks.map((b) => b.length));
   for (let i = 0; i < maxEc; i++) {
-    for (const block of ecBlocks) if (i < block.length) result.push(block[i]);
+    for (const block of ecBlocks) if (i < block.length) result.push(at(block, i));
   }
   return result;
 }
@@ -213,8 +229,8 @@ function placeFinder(grid: Grid, reserved: boolean[][], r0: number, c0: number):
       const isDark =
         inner &&
         (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
-      grid[rr][cc] = isDark ? 1 : 0;
-      reserved[rr][cc] = true;
+      at(grid, rr)[cc] = isDark ? 1 : 0;
+      at(reserved, rr)[cc] = true;
     }
   }
 }
@@ -237,8 +253,8 @@ function placeAlignment(grid: Grid, reserved: boolean[][], centers: number[]): v
       for (let dr = -2; dr <= 2; dr++) {
         for (let dc = -2; dc <= 2; dc++) {
           const dark = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
-          grid[r + dr][c + dc] = dark ? 1 : 0;
-          reserved[r + dr][c + dc] = true;
+          at(grid, r + dr)[c + dc] = dark ? 1 : 0;
+          at(reserved, r + dr)[c + dc] = true;
         }
       }
     }
@@ -249,13 +265,13 @@ function placeTiming(grid: Grid, reserved: boolean[][]): void {
   const size = grid.length;
   for (let i = 8; i < size - 8; i++) {
     const v = i % 2 === 0 ? 1 : 0;
-    if (!reserved[6][i]) {
-      grid[6][i] = v;
-      reserved[6][i] = true;
+    if (!cellAt(reserved, 6, i)) {
+      at(grid, 6)[i] = v;
+      at(reserved, 6)[i] = true;
     }
-    if (!reserved[i][6]) {
-      grid[i][6] = v;
-      reserved[i][6] = true;
+    if (!cellAt(reserved, i, 6)) {
+      at(grid, i)[6] = v;
+      at(reserved, i)[6] = true;
     }
   }
 }
@@ -264,16 +280,16 @@ function placeTiming(grid: Grid, reserved: boolean[][]): void {
 // version-info cells so data placement skips them. Formats are written later.
 function reserveFormatAreas(reserved: boolean[][], size: number): void {
   for (let i = 0; i < 9; i++) {
-    reserved[8][i] = true;
-    reserved[i][8] = true;
+    at(reserved, 8)[i] = true;
+    at(reserved, i)[8] = true;
   }
   // Second format copy: 8 cells up column 8 (rows size-1..size-8) and 7 cells
   // along row 8 (cols size-7..size-1). Row 8's right run is 7, not 8 - col size-8
   // is a data cell, so reserving it would leave it unfilled.
-  for (let i = 0; i < 8; i++) reserved[size - 1 - i][8] = true;
-  for (let i = 0; i < 7; i++) reserved[8][size - 1 - i] = true;
+  for (let i = 0; i < 8; i++) at(reserved, size - 1 - i)[8] = true;
+  for (let i = 0; i < 7; i++) at(reserved, 8)[size - 1 - i] = true;
   // The dark module.
-  reserved[size - 8][8] = true;
+  at(reserved, size - 8)[8] = true;
 }
 
 // placeData lays the codeword bitstream in the standard upward/downward zigzag,
@@ -290,8 +306,8 @@ function placeData(grid: Grid, reserved: boolean[][], codewords: number[]): void
       const row = upward ? size - 1 - i : i;
       for (let c = 0; c < 2; c++) {
         const cc = col - c;
-        if (reserved[row][cc]) continue;
-        grid[row][cc] = bi < bits.length ? bits[bi] : 0;
+        if (cellAt(reserved, row, cc)) continue;
+        at(grid, row)[cc] = bi < bits.length ? at(bits, bi) : 0;
         bi++;
       }
     }
@@ -342,16 +358,16 @@ function placeFormat(grid: Grid, mask: number): void {
   const fmt = bchFormat(mask); // 15 bits, bit 14 is MSB
   const bit = (i: number): number => (fmt >>> i) & 1;
   // Around the top-left finder.
-  for (let i = 0; i <= 5; i++) grid[8][i] = bit(i);
-  grid[8][7] = bit(6);
-  grid[8][8] = bit(7);
-  grid[7][8] = bit(8);
-  for (let i = 9; i <= 14; i++) grid[14 - i][8] = bit(i);
+  for (let i = 0; i <= 5; i++) at(grid, 8)[i] = bit(i);
+  at(grid, 8)[7] = bit(6);
+  at(grid, 8)[8] = bit(7);
+  at(grid, 7)[8] = bit(8);
+  for (let i = 9; i <= 14; i++) at(grid, 14 - i)[8] = bit(i);
   // Split copy along the right/bottom edges.
-  for (let i = 0; i <= 7; i++) grid[size - 1 - i][8] = bit(i);
-  for (let i = 8; i <= 14; i++) grid[8][size - 15 + i] = bit(i);
+  for (let i = 0; i <= 7; i++) at(grid, size - 1 - i)[8] = bit(i);
+  for (let i = 8; i <= 14; i++) at(grid, 8)[size - 15 + i] = bit(i);
   // Dark module.
-  grid[size - 8][8] = 1;
+  at(grid, size - 8)[8] = 1;
 }
 
 // penalty scores a masked grid by the four ISO/IEC 18004 rules; lower is better.
@@ -364,7 +380,7 @@ function penalty(grid: Grid): number {
       let run = 1;
       let prev = -1;
       for (let i = 0; i < size; i++) {
-        const v = along ? grid[r][i] : grid[i][r];
+        const v = along ? cellAt(grid, r, i) : cellAt(grid, i, r);
         if (v === prev) {
           run++;
           if (run === 5) score += 3;
@@ -379,26 +395,34 @@ function penalty(grid: Grid): number {
   // Rule 2: 2x2 blocks of the same color.
   for (let r = 0; r < size - 1; r++) {
     for (let c = 0; c < size - 1; c++) {
-      const v = grid[r][c];
-      if (v === grid[r][c + 1] && v === grid[r + 1][c] && v === grid[r + 1][c + 1]) score += 3;
+      const v = cellAt(grid, r, c);
+      if (
+        v === cellAt(grid, r, c + 1) &&
+        v === cellAt(grid, r + 1, c) &&
+        v === cellAt(grid, r + 1, c + 1)
+      )
+        score += 3;
     }
   }
   // Rule 3: finder-like 1:1:3:1:1 patterns in rows and columns.
   const pat1 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
   const pat2 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
   const matches = (get: (i: number) => number, start: number, pat: number[]): boolean => {
-    for (let k = 0; k < pat.length; k++) if (get(start + k) !== pat[k]) return false;
+    for (let k = 0; k < pat.length; k++) if (get(start + k) !== at(pat, k)) return false;
     return true;
   };
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size - 10; c++) {
-      if (matches((i) => grid[r][i], c, pat1) || matches((i) => grid[r][i], c, pat2)) score += 40;
-      if (matches((i) => grid[i][r], c, pat1) || matches((i) => grid[i][r], c, pat2)) score += 40;
+      const alongRow = (i: number): number => cellAt(grid, r, i);
+      const alongCol = (i: number): number => cellAt(grid, i, r);
+      if (matches(alongRow, c, pat1) || matches(alongRow, c, pat2)) score += 40;
+      if (matches(alongCol, c, pat1) || matches(alongCol, c, pat2)) score += 40;
     }
   }
   // Rule 4: overall dark/light balance.
   let dark = 0;
-  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (grid[r][c] === 1) dark++;
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++) if (cellAt(grid, r, c) === 1) dark++;
   const percent = (dark * 100) / (size * size);
   const prev5 = Math.floor(percent / 5) * 5;
   const next5 = prev5 + 5;
@@ -423,7 +447,7 @@ export function encodeMatrix(text: string): number[][] {
   placeFinder(base, baseReserved, 0, 0);
   placeFinder(base, baseReserved, 0, size - 7);
   placeFinder(base, baseReserved, size - 7, 0);
-  placeAlignment(base, baseReserved, SPECS[version].align);
+  placeAlignment(base, baseReserved, specFor(version).align);
   placeTiming(base, baseReserved);
   reserveFormatAreas(baseReserved, size);
 
@@ -431,12 +455,15 @@ export function encodeMatrix(text: string): number[][] {
   let bestScore = Infinity;
   for (let mask = 0; mask < 8; mask++) {
     const grid = newGrid(size);
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) grid[r][c] = base[r][c];
+    for (let r = 0; r < size; r++)
+      for (let c = 0; c < size; c++) at(grid, r)[c] = cellAt(base, r, c);
     placeData(grid, baseReserved, codewords);
     // Apply mask to non-reserved (data) cells only.
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        if (!baseReserved[r][c] && maskFn(mask, r, c)) grid[r][c] ^= 1;
+        if (!cellAt(baseReserved, r, c) && maskFn(mask, r, c)) {
+          at(grid, r)[c] = cellAt(grid, r, c) ^ 1;
+        }
       }
     }
     placeFormat(grid, mask);
@@ -448,7 +475,7 @@ export function encodeMatrix(text: string): number[][] {
   }
 
   const out: number[][] = [];
-  for (let r = 0; r < size; r++) out.push(Array.from(must(best)[r]));
+  for (let r = 0; r < size; r++) out.push(Array.from(at(must(best), r)));
   return out;
 }
 
@@ -477,7 +504,7 @@ export function encodeToCanvas(
   ctx.fillStyle = fg;
   for (let r = 0; r < modules; r++) {
     for (let c = 0; c < modules; c++) {
-      if (matrix[r][c] === 1) {
+      if (cellAt(matrix, r, c) === 1) {
         ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
       }
     }

@@ -148,8 +148,7 @@ function tokenize(raw: string): Token[] {
   const fieldStack: (string | null)[] = [];
   let i = 0;
   const n = raw.length;
-  const curField = (): string | null =>
-    fieldStack.length ? fieldStack[fieldStack.length - 1] : null;
+  const curField = (): string | null => fieldStack.at(-1) ?? null;
   const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\n" || c === "\r";
   while (i < n) {
     const c = raw.charAt(i);
@@ -244,7 +243,7 @@ function parse(toks: Token[]): QueryNode | null {
       kids.push(parseAnd());
     }
     const k = kids.filter((x): x is QueryNode => x !== null);
-    return k.length === 1 ? k[0] : k.length ? { op: "or", kids: k } : null;
+    return k.length > 1 ? { op: "or", kids: k } : (k[0] ?? null);
   }
   function parseAnd(): QueryNode | null {
     const kids = [parseNot()];
@@ -258,7 +257,7 @@ function parse(toks: Token[]): QueryNode | null {
       kids.push(parseNot());
     }
     const k = kids.filter((x): x is QueryNode => x !== null);
-    return k.length === 1 ? k[0] : k.length ? { op: "and", kids: k } : null;
+    return k.length > 1 ? { op: "and", kids: k } : (k[0] ?? null);
   }
   // Counted, not recursed. A search box is a paste target, and a run of tens of thousands
   // of "-" characters is one stack frame per token here and another per node in evalNode.
@@ -318,9 +317,8 @@ export function buildQuery(raw: string): Token[] {
 function matchLeaf(leaf: TermNode, e: TextSearchEntry): boolean {
   const L = lc(e);
   if (leaf.field === "tag" || leaf.field === "tags") {
-    for (let i = 0; i < L.tags.length; i++) {
-      if (leaf.wildcard && leaf.re ? leaf.re.test(L.tags[i]) : L.tags[i] === leaf.value)
-        return true;
+    for (const tag of L.tags) {
+      if (leaf.wildcard && leaf.re ? leaf.re.test(tag) : tag === leaf.value) return true;
     }
     return false;
   }
@@ -341,11 +339,11 @@ function evalNode(node: QueryNode | null, e: TextSearchEntry): boolean {
   if (node.op === "term") return matchLeaf(node, e);
   if (node.op === "not") return !evalNode(node.kid, e);
   if (node.op === "and") {
-    for (let i = 0; i < node.kids.length; i++) if (!evalNode(node.kids[i], e)) return false;
+    for (const kid of node.kids) if (!evalNode(kid, e)) return false;
     return true;
   }
   if (node.op === "or") {
-    for (let j = 0; j < node.kids.length; j++) if (evalNode(node.kids[j], e)) return true;
+    for (const kid of node.kids) if (evalNode(kid, e)) return true;
     return false;
   }
   return true;
@@ -382,7 +380,7 @@ function scoreAst(node: QueryNode | null, e: TextSearchEntry, neg: boolean): num
   if (node.op === "not") return scoreAst(node.kid, e, !neg);
   if (node.op === "and" || node.op === "or") {
     let s = 0;
-    for (let i = 0; i < node.kids.length; i++) s += scoreAst(node.kids[i], e, neg);
+    for (const kid of node.kids) s += scoreAst(kid, e, neg);
     return s;
   }
   return 0;
@@ -458,9 +456,8 @@ export function runSearch<E extends TextSearchEntry>(
   getPositiveTerms(raw).forEach((p) => pos.push(p));
   if (!pos.length) return [];
   const out: TextSearchResult<E>[] = [];
-  for (let i = 0; i < index.length; i++) {
-    if (evalNode(ast, index[i]))
-      out.push({ entry: index[i], score: scoreAst(ast, index[i], false) });
+  for (const entry of index) {
+    if (evalNode(ast, entry)) out.push({ entry, score: scoreAst(ast, entry, false) });
   }
   // Typo-tolerant fallback: only when the query is a plain AND of bare words that found
   // nothing (no fields/operators/parens), rescue near-misses via subsequence on titles.
@@ -471,8 +468,8 @@ export function runSearch<E extends TextSearchEntry>(
     index.forEach((e) => {
       let ok = true;
       let sc = 0;
-      for (let k = 0; k < pos.length; k++) {
-        if (subseq(pos[k], lc(e).title)) sc += 2;
+      for (const term of pos) {
+        if (subseq(term, lc(e).title)) sc += 2;
         else {
           ok = false;
           break;
@@ -498,8 +495,8 @@ function buildSnippet(text: string, terms: string[], windowChars = 150): string 
   if (!text) return "";
   const low = text.toLowerCase();
   let pos = -1;
-  for (let i = 0; i < terms.length; i++) {
-    const p = low.indexOf(terms[i]);
+  for (const term of terms) {
+    const p = low.indexOf(term);
     if (p !== -1 && (pos === -1 || p < pos)) pos = p;
   }
   let start = pos === -1 ? 0 : Math.max(0, pos - 50);
