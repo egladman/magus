@@ -1,12 +1,14 @@
 package job
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -39,6 +41,42 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows, "fixing writes nothing")
+}
+
+// --fix moves a checkpoint to HEAD only when the repository holds no such revision. A
+// sibling branch is placeable for a job in its own checkout, and one carrying a digest of
+// the wrong shape still names a real revision, so neither is swapped for HEAD.
+func TestFixForkNeverSwapsHeadInForAPlaceableCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, loadableFiles)
+	repo.Git("switch", "-q", "-c", "elsewhere")
+	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
+	repo.Git("switch", "-q", "main")
+	s := NewStore(tempLocation(t, repo.Root()))
+	own := func(d types.Declaration) func(*types.Job) {
+		return func(u *types.Job) {
+			fixMerge(d)(u)
+			u.Worktree = &types.JobWorktree{Root: d.Checkout}
+		}
+	}
+	record := func(token string) types.Declaration {
+		d := checkpointRecord("w", token)
+		d.Checkout = filepath.Join(t.TempDir(), "own")
+		return d
+	}
+
+	for _, token := range []string{elsewhere, elsewhere + "+not-a-digest"} {
+		fixed, edits, err := FixFork(t.Context(), s, record(token), own, config.Jobs{}, nil, true)
+		require.NoError(t, err)
+		assert.NotContains(t, edits, types.JobEdit{RefreshCheckpoint: repo.Head()}, "%s names a revision the repository holds", token)
+		assert.Equal(t, token, fixed.Checkpoint)
+	}
+
+	fixed, edits, err := FixFork(t.Context(), s, record(madeUpRevision), own, config.Jobs{}, nil, true)
+	require.NoError(t, err)
+	assert.Contains(t, edits, types.JobEdit{RefreshCheckpoint: repo.Head()}, "a revision nobody holds moves to HEAD")
+	assert.Equal(t, repo.Head(), fixed.Checkpoint)
 }
 
 func TestFixApplyFixesEachRecord(t *testing.T) {

@@ -263,12 +263,7 @@ func newCheckGrader() job.CheckGrader {
 		return g.deps
 	}
 	return func(ctx context.Context, root string, row types.Job) job.CheckVerdict {
-		verdict := gradeCheck(ctx, currentRules(ctx, root), root, row)
-		if verdict.NotGraded != "" {
-			slog.WarnContext(ctx, "job "+row.ID+"'s check was not graded against the guard",
-				attr.Notice(""), attr.Why(verdict.NotGraded), attr.Component("magus job"))
-		}
-		return verdict
+		return gradeCheck(ctx, currentRules(ctx, root), root, row)
 	}
 }
 
@@ -307,8 +302,8 @@ func (g gradingRules) unchanged() bool {
 // not whichever binary the PATH holds.
 const ownBinaryPrefix = "./"
 
-// gradeCheck judges row's check as the guard would judge its holder typing it in the
-// checkout at root, with the row standing in for a lease the store does not carry yet.
+// gradeCheck judges row's check as the guard would judge its holder typing it where it is
+// taken ([job.WorkingCheckout]), the row standing in for a lease not stored yet.
 //
 // Only a deny of the check itself refuses. A deny that holds just as well for the
 // compiling check describes the binary or the workspace (a stale hook binary, rules that
@@ -318,13 +313,23 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 	if deps.LoadFailure != nil {
 		return job.CheckVerdict{NotGraded: "the workspace's rules did not load: " + deps.LoadFailure.Error()}
 	}
+	dir := job.WorkingCheckout(root, row)
+	if row.Worktree.Standing() && row.CheckoutRoot == "" {
+		// Until the fork makes the checkout, root, the repository it is made from, stands in.
+		if _, err := os.Stat(dir); err != nil {
+			worktree := *row.Worktree
+			worktree.Root, dir = root, root
+			row.Worktree = &worktree
+		}
+		row.CheckoutRoot = dir
+	}
 	judge := func(pending types.Job) types.GuardJudgment {
 		return guard.Judge(ctx, deps, guard.Request{
 			Input:      ownBinaryPrefix + pending.Check.String(),
 			DryRun:     true,
 			Lease:      pending.ID,
 			PendingRow: &pending,
-			Dir:        root,
+			Dir:        dir,
 		})
 	}
 	declared := judge(row)

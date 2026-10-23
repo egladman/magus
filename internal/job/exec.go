@@ -31,7 +31,8 @@ func (e heldError) Error() string { return e.msg }
 func (heldError) Unwrap() error { return ErrHeldElsewhere }
 
 // Exec takes a job in this store's checkout: it reads the base the checkout is on with
-// [Store.CheckoutToken], moves a declared row to running, and returns the row with the
+// [Store.CheckoutToken], moves a declared row to running, or an exited one taken again in
+// the checkout it was taken in, and returns the row with the
 // divergence verdict computed at that moment. Taking it again from the same checkout
 // records the new base and nothing else. A checkout that reports no revision is refused,
 // since there is no base to record.
@@ -91,7 +92,11 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 		if err := WrongCheckout(*cur, here); err != nil {
 			return err
 		}
-		if resumed {
+		// An exited row taken again where it was taken is its holder sent back to work: it
+		// edits its paths again, so it claims them again. Exited is not terminal, so ADR
+		// 0013 lets the holder's own exec reopen it.
+		reopened := cur.State == types.StateExited && cur.CheckoutRoot != "" && cur.CheckoutRoot == here
+		if resumed || reopened {
 			cur.State = types.StateRunning
 		}
 		// Held means running: an exec moves a declared row there. A declared row may carry a

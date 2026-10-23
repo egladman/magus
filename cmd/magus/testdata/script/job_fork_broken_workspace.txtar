@@ -1,5 +1,6 @@
 # A magusfile that will not load does not stop the job verbs that only touch the store:
-# the fork or apply that declares the fix still writes its row. What needs the workspace
+# the fork or apply that declares the fix still writes its row, but a check needs the
+# guard to grade it and is refused (MGS3039) with the load error quoted. What needs the workspace
 # (the model tier, the notes over the write paths) is skipped, and each skip is named on
 # stderr with the load error, never left to read as a clean result.
 env HOME=$WORK/home
@@ -11,7 +12,13 @@ cp $WORK/broken.buzz magusfile.buzz
 ! exec magus ls
 stderr 'no member "noSuchCall"'
 
-exec magus job fork wave/fix --write-paths a.go --check 'test .'
+! exec magus job fork wave/fix --write-paths a.go --check 'test .'
+stderr '\[MGS3039\] check: wave/fix.s check `magus run test \.` could not be graded against the guard'
+stderr 'no member "noSuchCall"'
+
+# A goal needs no guard to grade, so the fork that declares one still writes its row.
+stdin $WORK/fix.json
+exec magus job fork --stdin
 stdout '^forked wave/fix, declared, with 1 write path\(s\)'
 ! stdout 'model tier'
 stderr 'unchecked: the workspace did not load, so no model tier was assigned and no tier limit was checked'
@@ -45,6 +52,9 @@ import "magus";
 magus\noSuchCall();
 -- code.go --
 package pkg
+-- fix.json --
+{"schema_version": 12, "id": "wave/fix", "write_paths": ["a.go"],
+ "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- applied.json --
 {"schema_version": 12, "id": "wave/applied", "write_paths": ["b.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go"]}]}

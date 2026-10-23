@@ -202,12 +202,8 @@ func leaseCoversWrite(ctx context.Context, actingLease string, location location
 	if !inside {
 		return false
 	}
-	leases, err := leaseRows(ctx, location)
-	if err != nil {
-		return false
-	}
-	me, enrolled := liveLease(liveLeases(leases), actingLease)
-	if !enrolled {
+	me, enrolled := leaseRow(ctx, location, actingLease)
+	if !enrolled || !me.State.Live() {
 		return false
 	}
 	_, mine, err := declarationCovering(me.WritePaths, rel)

@@ -8,16 +8,21 @@ import "./hack/policy/verdict" as verdict;
 
 final failureReader = "magus buzz hack/ci/show-failures.buzz -- --commit <pr-head> | magus query output --stdin";
 final failureRunReader = "magus buzz hack/ci/show-failures.buzz -- --run <run-id> | magus query output --stdin";
+// orchestrator-groundwork leaves the script above to workers, so a root handing out work
+// is served a read it may run itself.
+final rootFailureReader = "gh run view <run-id> --log-failed";
+final rootFailureRead = "A session handing out work reads the failed job's log instead: `{rootFailureReader}`.";
 
 final ciWatchDenial = "read failed targets instead of watching: `{failureReader}`.\n"
     + "Watching buys nothing because GREEN CHANGES NOTHING: "
-    + "the human merges, not you. Fix the failures the records name.\n"
+    + "the human merges, not you. Fix the failures the records name. {rootFailureRead}\n"
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
 
 final ciStatusDenial = "read the failed targets: `{failureReader}`.\n"
     + "CI status summaries and raw job logs do not isolate the failed target output. "
-    + "For a known run: `{failureRunReader}`. Select the pull request's current head, not the checkout's HEAD.";
+    + "For a known run: `{failureRunReader}`. Select the pull request's current head, not the checkout's HEAD. "
+    + rootFailureRead;
 
 final ciLogAdvice = "Prefer failed target records: `{failureRunReader}`. "
     + "Use raw job logs for setup failures, figures, and workflows without target artifacts.";
@@ -305,6 +310,7 @@ test "CI status summaries name the failure artifact reader" {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf(failureReader) != null, message: v.reason);
+        std\assert(v.reason.indexOf(rootFailureReader) != null, message: "names a read a root handing out work may run");
         std\assert(v.reason.indexOf("gh pr list") == null, message: "does not route back to status summaries");
     }
 }
