@@ -522,6 +522,7 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	out.MapSet("source", vm.StrValue(v.Source))
 	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
 	out.MapSet("home", vm.StrValue(v.Home))
+	out.MapSet("unshared", vm.BoolValue(v.Unshared))
 	return out
 }
 
