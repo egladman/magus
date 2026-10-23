@@ -782,6 +782,54 @@ func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got[0].Next.State)
 }
 
+// The fork derives soft paths and integrator waivers, so a record projected without them
+// widens or narrows the row and keeps them; one naming soft_paths for a held path decides.
+func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
+	t.Parallel()
+
+	waiver := types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	derived := func(t *testing.T) *Store {
+		t.Helper()
+		root := loadableRepo(t)
+		rec := spec("a.go", "a_test.go", "b_test.go")
+		rec.SoftPaths, rec.Waivers = []string{"a_test.go", "b_test.go"}, []types.JobWaiver{waiver}
+		s := NewStore(tempLocation(t, root))
+		_, err := s.Update(t.Context(), "w", Declare(rec, 0))
+		require.NoError(t, err)
+		_, err = s.Exec(t.Context(), "w")
+		require.NoError(t, err)
+		_, err = s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateRunning })
+		require.NoError(t, err)
+		return s
+	}
+	apply := func(t *testing.T, s *Store, rec types.Declaration) types.Job {
+		t.Helper()
+		got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, nil, false)
+		require.NoError(t, err)
+		return got[0].Next
+	}
+
+	t.Run("widening", func(t *testing.T) {
+		t.Parallel()
+		got := apply(t, derived(t), spec("a.go", "a_test.go", "b_test.go", "c.go"))
+		assert.Equal(t, []string{"a_test.go", "b_test.go"}, got.SoftPaths)
+		assert.Equal(t, []types.JobWaiver{waiver}, got.Waivers)
+	})
+	t.Run("narrowing", func(t *testing.T) {
+		t.Parallel()
+		got := apply(t, derived(t), spec("a.go", "a_test.go"))
+		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths, "a dropped path is no soft path, and the kept one stays soft")
+	})
+	t.Run("explicit soft paths win", func(t *testing.T) {
+		t.Parallel()
+		rec := spec("a.go", "a_test.go", "b_test.go")
+		rec.SoftPaths = []string{"a_test.go"}
+		got := apply(t, derived(t), rec)
+		assert.Equal(t, []string{"a_test.go"}, got.SoftPaths)
+		assert.Equal(t, []string{"a.go", "b_test.go"}, got.HardPaths())
+	})
+}
+
 // A worker's own row takes only the release: a spec dropping some of its paths, recorded as
 // its own release rather than a revocation. Anything else is refused.
 func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
