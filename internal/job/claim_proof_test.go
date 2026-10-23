@@ -317,20 +317,20 @@ func TestClaimRefusals(t *testing.T) {
 	}
 }
 
-func TestClaimLimitSaysWhereItCameFrom(t *testing.T) {
+func TestClaimCapSaysWhereItCameFrom(t *testing.T) {
 	t.Parallel()
 
 	jobs := config.Defaults().Jobs
-	defaulted, err := ClaimLimit(types.Job{ID: "a"}, jobs)
+	defaulted, err := claimCap(types.Job{ID: "a"}, jobs)
 	require.NoError(t, err)
 	assert.Equal(t, 3, defaulted.Max)
 	assert.Contains(t, defaulted.Source, "default")
 
-	named, err := ClaimLimit(types.Job{ID: "a", MaxClaims: 7}, jobs)
+	named, err := claimCap(types.Job{ID: "a", MaxClaims: 7}, jobs)
 	require.NoError(t, err)
 	assert.Equal(t, claimLimit{Max: 7, Source: "max_claims on job a"}, named)
 
-	_, err = ClaimLimit(types.Job{ID: "a", MaxClaims: 7}, config.Jobs{})
+	_, err = claimCap(types.Job{ID: "a", MaxClaims: 7}, config.Jobs{})
 	assert.NoError(t, err, "a config that names no ceiling enforces none")
 }
 
@@ -376,7 +376,7 @@ func TestForkRefusesAClaimCapPastTheCeiling(t *testing.T) {
 func TestForkAdvisesASmallClaimCap(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: AdvisedMaxClaims}))
+	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: advisedMaxClaims}))
 	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a"}))
 	assert.Contains(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: 8}), "a asks for 8 claims")
 }

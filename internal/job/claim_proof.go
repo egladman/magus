@@ -33,12 +33,12 @@ const maxClaimCommand = 640
 // maxClaimSource is the largest file a proof reads; a larger one proves nothing.
 const maxClaimSource = 1 << 20
 
-// DefaultMaxClaims is how many proved claims one attempt takes when its job names no
+// defaultMaxClaims is how many proved claims one attempt takes when its job names no
 // max_claims.
-const DefaultMaxClaims = 3
+const defaultMaxClaims = 3
 
-// AdvisedMaxClaims is the most a fork asks for before it is told to keep the number small.
-const AdvisedMaxClaims = 5
+// advisedMaxClaims is the most a fork asks for before it is told to keep the number small.
+const advisedMaxClaims = 5
 
 // claimLimit is the cap on an attempt's proved claims and where it came from.
 type claimLimit struct {
@@ -46,11 +46,11 @@ type claimLimit struct {
 	Source string
 }
 
-// ClaimLimit is the cap row's attempt takes: its max_claims, or the default when it
+// claimCap is the cap row's attempt takes: its max_claims, or the default when it
 // names none. A cap above jobs.max_claims is an error naming both values and
 // where each came from.
-func ClaimLimit(row types.Job, limits config.Jobs) (claimLimit, error) {
-	limit := claimLimit{Max: DefaultMaxClaims, Source: fmt.Sprintf("magus's default of %d, since %s sets no max_claims", DefaultMaxClaims, row.ID)}
+func claimCap(row types.Job, limits config.Jobs) (claimLimit, error) {
+	limit := claimLimit{Max: defaultMaxClaims, Source: fmt.Sprintf("magus's default of %d, since %s sets no max_claims", defaultMaxClaims, row.ID)}
 	if row.MaxClaims > 0 {
 		limit = claimLimit{Max: row.MaxClaims, Source: "max_claims on job " + row.ID}
 	}
@@ -498,10 +498,10 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []types.JobClaimReque
 }
 
 // grantClaim proves each of reqs against cur and appends the path and its proof, or
-// refuses the first that is past the cap ClaimLimit gives, outside the checkout, held or denied by cur, or
+// refuses the first that is past the cap claimCap gives, outside the checkout, held or denied by cur, or
 // unproved. Another job's hold is authorizeClaim's, which reads the rows.
 func grantClaim(actor Actor, cur *types.Job, reqs []types.JobClaimRequest, facts claimFacts, limits config.Jobs, now int64, by types.Origin) error {
-	limit, err := ClaimLimit(*cur, limits)
+	limit, err := claimCap(*cur, limits)
 	if err != nil {
 		return claimRefusal(actor, cur.ID, err.Error())
 	}
@@ -582,7 +582,7 @@ func claimRefusal(actor Actor, id, rule string) error {
 }
 
 func claimCeilingProblems(row types.Job, limits config.Jobs) types.JobProblems {
-	if _, err := ClaimLimit(row, limits); err != nil {
+	if _, err := claimCap(row, limits); err != nil {
 		return types.JobProblems{{
 			Code: types.JobForkLimitExceeded, Field: "max_claims", Message: err.Error(),
 			Fix: "name a smaller max_claims, or raise jobs.max_claims in magus.yaml",
@@ -593,8 +593,8 @@ func claimCeilingProblems(row types.Job, limits config.Jobs) types.JobProblems {
 
 // claimLimitAdvice advises and never refuses: a small cap keeps each claim a decision.
 func claimLimitAdvice(row types.Job) string {
-	if row.MaxClaims <= AdvisedMaxClaims {
+	if row.MaxClaims <= advisedMaxClaims {
 		return ""
 	}
-	return fmt.Sprintf("%s asks for %d claims; %d or fewer keeps each one a decision the root can read", row.ID, row.MaxClaims, AdvisedMaxClaims)
+	return fmt.Sprintf("%s asks for %d claims; %d or fewer keeps each one a decision the root can read", row.ID, row.MaxClaims, advisedMaxClaims)
 }
