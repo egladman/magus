@@ -1,4 +1,4 @@
-// This repository's driver for shepherding a batch of pull requests through the magus merge
+// This repository's driver for babysitting a batch of pull requests through the magus merge
 // queue, so an orchestrator spends judgment only where a pull request needs it. It is
 // this repository's glue, not part of magus:
 //
