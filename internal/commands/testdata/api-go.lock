@@ -1245,6 +1245,7 @@ github.com/egladman/magus/types.ConformanceDefinition const untyped string = "Co
 github.com/egladman/magus/types.ConformanceDepFanout const ConformanceMetric = "dep-fanout"
 github.com/egladman/magus/types.ConformanceExportScope const ConformanceMetric = "export-scope"
 github.com/egladman/magus/types.ConformanceFileLines const ConformanceMetric = "file-lines"
+github.com/egladman/magus/types.ConformanceFileSplit const ConformanceMetric = "file-split"
 github.com/egladman/magus/types.ConformanceFileSymbols const ConformanceMetric = "file-symbols"
 github.com/egladman/magus/types.ConformanceFromAnchor const ConformanceSource = "anchor"
 github.com/egladman/magus/types.ConformanceFromRatchet const ConformanceSource = "ratchet"
@@ -1256,9 +1257,11 @@ github.com/egladman/magus/types.ConformanceGates.MinCohort field int
 github.com/egladman/magus/types.ConformanceGates.MinShare field float64
 github.com/egladman/magus/types.ConformanceGates.Override method func(minCohort int, minShare float64) ConformanceGates
 github.com/egladman/magus/types.ConformanceItem type struct
-github.com/egladman/magus/types.ConformanceItem.ID field string "json:\"id\"      yaml:\"id\""
-github.com/egladman/magus/types.ConformanceItem.Measure field int "json:\"measure\" yaml:\"measure\""
-github.com/egladman/magus/types.ConformanceItem.Source field string "json:\"source\"  yaml:\"source\""
+github.com/egladman/magus/types.ConformanceItem.Home field string "json:\"home,omitempty\"     yaml:\"home,omitempty\""
+github.com/egladman/magus/types.ConformanceItem.ID field string "json:\"id\"                 yaml:\"id\""
+github.com/egladman/magus/types.ConformanceItem.Measure field int "json:\"measure\"            yaml:\"measure\""
+github.com/egladman/magus/types.ConformanceItem.Source field string "json:\"source\"             yaml:\"source\""
+github.com/egladman/magus/types.ConformanceItem.Unshared field bool "json:\"unshared,omitempty\" yaml:\"unshared,omitempty\""
 github.com/egladman/magus/types.ConformanceKey type struct
 github.com/egladman/magus/types.ConformanceKey.Metric field ConformanceMetric "json:\"metric\"          yaml:\"metric\""
 github.com/egladman/magus/types.ConformanceKey.Population field ConformancePopulation "json:\"population\"      yaml:\"population\""
@@ -1273,7 +1276,9 @@ github.com/egladman/magus/types.ConformanceLimit type struct
 github.com/egladman/magus/types.ConformanceLimit.Anchor field int
 github.com/egladman/magus/types.ConformanceLimit.MinSubject field int
 github.com/egladman/magus/types.ConformanceLimit.Percentile field float64
+github.com/egladman/magus/types.ConformanceMainLogic const ConformanceMetric = "main-logic"
 github.com/egladman/magus/types.ConformanceMetric type string
+github.com/egladman/magus/types.ConformanceMetric.Past method func(measure int, value int) bool
 github.com/egladman/magus/types.ConformanceMetric.String method func() string
 github.com/egladman/magus/types.ConformanceMetric.Valid method func() bool
 github.com/egladman/magus/types.ConformanceMetric.Values method func() []string
@@ -1334,6 +1339,7 @@ github.com/egladman/magus/types.ConformanceSource type string
 github.com/egladman/magus/types.ConformanceSource.String method func() string
 github.com/egladman/magus/types.ConformanceSource.Valid method func() bool
 github.com/egladman/magus/types.ConformanceSource.Values method func() []string
+github.com/egladman/magus/types.ConformanceStorePathExport const ConformanceMetric = "store-path-export"
 github.com/egladman/magus/types.ConformanceThreshold type struct
 github.com/egladman/magus/types.ConformanceThreshold.ConformanceKey embedded ConformanceKey
 github.com/egladman/magus/types.ConformanceThreshold.Line field int "json:\"-\""
@@ -3099,7 +3105,7 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 23
+github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 24
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""
@@ -4005,6 +4011,7 @@ github.com/egladman/magus/types.RelationOwns const RelationID = "owns"
 github.com/egladman/magus/types.RelationProduces const RelationID = "produces"
 github.com/egladman/magus/types.RelationRationaleFor const RelationID = "rationale_for"
 github.com/egladman/magus/types.RelationReferences const RelationID = "references"
+github.com/egladman/magus/types.RelationSplits const RelationID = "splits"
 github.com/egladman/magus/types.RelationUses const RelationID = "uses"
 github.com/egladman/magus/types.ReleaseStage type struct
 github.com/egladman/magus/types.ReleaseStage.Known method func() bool
