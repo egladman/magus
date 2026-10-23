@@ -978,7 +978,7 @@ const gitTrackedBatch = 256
 // prints "these outputs moved" followed by no diff at all. That is precisely the situation
 // the gate exists for, since it fires in CI where nobody can look at the tree.
 //
-// It is also not a hypothetical ordering: `magus vcs add` stages, and a generate run that
+// It is also not a hypothetical ordering: a person stages, and a generate run that
 // follows a staging step lands exactly here.
 //
 // -U1 keeps a multi-file diff readable in a CI log, where this is mostly read.

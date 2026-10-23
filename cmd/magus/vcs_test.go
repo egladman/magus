@@ -288,8 +288,8 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 }
 
 // TestWorkspaceRelPathsRejectsEmptyRoot pins the guard on a caller bug that read as a user
-// error: vcsAddCmd passed the --root OVERRIDE (empty unless given) instead of the resolved
-// workspace root, so `magus vcs add <path>` answered `is outside the workspace at ` with
+// error: a caller passed the --root OVERRIDE (empty unless given) instead of the resolved
+// workspace root, so a named path answered `is outside the workspace at ` with
 // nothing after "at", blaming the path.
 func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
 	_, err := workspaceRelPaths("", []string{"docs/foo.md"})
@@ -300,7 +300,7 @@ func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
 		"an unresolved root must not be reported as a bad path")
 }
 
-// TestSplitExplainedOutputs proves vcs add can tell a regenerated output apart from one
+// TestSplitExplainedOutputs proves vcs ls-files can tell a regenerated output apart from one
 // nothing in this change accounts for. Classifying by glob alone made those identical.
 //
 // nil for the second argument is the working-tree-only case; the committed half is

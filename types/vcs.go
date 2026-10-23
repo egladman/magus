@@ -1343,7 +1343,7 @@ func (d DriftResult) BuzzObject() BuzzObject {
 
 // ClassifyDrift names the cause of a declared output that moved, and the sentence to
 // show for it: the one place that fork is decided, so the generate gate and
-// `magus vcs add` cannot describe one condition two ways.
+// `magus vcs ls-files` cannot describe one condition two ways.
 //
 // The fork is on WHY, not on how bad it is:
 //
@@ -1388,10 +1388,9 @@ func (e *OutputDriftError) Error() string { return e.Message }
 // SplitExplainedOutputs divides the dirty declared outputs into the ones this change
 // accounts for and the ones it does not.
 //
-// It backs both `magus vcs add` and doctor's generated-drift check. Classifying by
-// declared GLOB alone answers "is this path generated" and nothing else, so `vcs add`
-// staged whatever bytes sat at an output path while claiming to stage "the generated
-// outputs a source change produced", a causal claim it never checked.
+// It backs both `magus vcs ls-files` and doctor's generated-drift check. Classifying by
+// declared GLOB alone answers "is this path generated" and nothing else, which cannot tell
+// an output a source change produced from bytes that merely sit at an output path.
 //
 // An output is EXPLAINED when some project whose output glob claims it also has a dirty
 // declared SOURCE in this change. That is MGS4006's shape. An output with no dirty input
