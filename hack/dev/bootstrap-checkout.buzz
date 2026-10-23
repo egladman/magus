@@ -8,7 +8,7 @@
 //	magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready]
 //
 // --gate-ready makes the checkout ready to gate instead (gateReady): the build only when ./magus
-// is not at HEAD, then pools, stale skill installs, the graph and the symbol digest. run-gate,
+// is not at HEAD, then pools, stale skill installs, the graph and the symbol digest.
 // rebase-branches-onto-base, merge-base-into-branches and land-commits call it before they gate.
 //
 // --here builds in the current checkout, which must be clean. --restart then stops and
