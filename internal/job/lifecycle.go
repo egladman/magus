@@ -32,7 +32,7 @@ type AttemptResolver func(context.Context, string) (types.JobAttempt, error)
 
 // gradedByHolder reports whether row is read-only and declares no check or goal: magus has
 // nothing to grade it by, so the result its holder files is the grade, and [Exit] records
-// pass on it.
+// pass on it unless the result names an unresolved risk.
 func gradedByHolder(row types.Job) bool {
 	return row.ReadOnly && row.Check == nil && len(row.Goals) == 0
 }
@@ -63,7 +63,8 @@ func endedReason(prev types.Job, byHolder bool) string {
 // the output attempt resolved in the worker's checkout, so a verifier in another
 // worktree does not need that checkout's cache to reopen the evidence, and the row's write
 // paths narrow to the entries covering a path the result names. An abandonment keeps them.
-// A result on a row [gradedByHolder] records pass, since no wait could grade it.
+// A result on a row [gradedByHolder] records pass when it names no unresolved risk,
+// since no wait could grade it; one that names a risk leaves the row exited for the root to read.
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
@@ -132,7 +133,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.Attempt = nil
 		}
 		row.State = types.StateExited
-		if gradedByHolder(prev) {
+		if gradedByHolder(prev) && len(result.UnresolvedRisks) == 0 {
 			row.State = types.StatePass
 		}
 	})
