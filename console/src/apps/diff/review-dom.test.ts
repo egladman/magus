@@ -73,7 +73,9 @@ const json = (body: unknown, status = 200): Response =>
 // fakeServer answers the diff routes from the showcase's fixtures. refuse names the routes that
 // fail, by "METHOD path" or "METHOD path#op" for the session route, with the status and reason.
 function fakeServer(refuse: Record<string, [number, string]>): void {
-  const session = { ...demoSession(), as_of: "d1" };
+  const loaded = demoSession();
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.error.message);
+  const session = { ...loaded.value, as_of: "d1" };
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const raw = input instanceof Request ? input.url : String(input);
     const url = new URL(raw);

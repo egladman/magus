@@ -20,9 +20,9 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
+import { fail, succeed, type Result } from "../../lib/result";
 import type {
   DiffGroup,
-  DiffHunkRef,
   DiffOrder,
   DiffReview,
   DiffStepHunk,
@@ -54,28 +54,24 @@ const AGENT = {
   transcript: "~/.claude/projects/acme/7f21.jsonl",
 } as const;
 
-// ref addresses one fixture hunk the way the server's order does. The digest is read from the
-// parsed fixture rather than repeated here, so the order cannot drift from the patch it orders.
-function ref(path: string, index: number): DiffHunkRef {
-  const hunk = DEMO_FILES.find((f) => f.path === path)?.hunks?.find((h) => h.index === index);
-  // A hunk the fixture lacks gets a digest no hunk carries, so the order leaves it unplaced and
-  // demo.test.ts, which checks every hunk is placed once, fails on it.
-  return { path, index, digest: hunk?.digest ?? `fixture lacks ${path} hunk ${index}` };
-}
-
-function placed(
-  path: string,
-  index: number,
-  label: string,
-  why: DiffStepHunk["why"],
-): DiffStepHunk {
-  return { ref: ref(path, index), label, why };
-}
-
 // demoOrder is the reading order the server would send for the acme changeset: the claims
 // contract first, then each thing that follows from it, then the generated output, then the two
 // hunks nothing could place. Every one of the 14 hunks appears once, which is what count says.
-function demoOrder(): DiffOrder {
+function demoOrder(): Result<DiffOrder> {
+  // placed addresses one fixture hunk the way the server's order does. The digest is read from the
+  // parsed fixture rather than repeated here, so the order cannot drift from the patch it orders,
+  // and a hunk the fixture lacks fails the whole order rather than being left unplaced.
+  const missing: string[] = [];
+  const placed = (
+    path: string,
+    index: number,
+    label: string,
+    why: DiffStepHunk["why"],
+  ): DiffStepHunk => {
+    const hunk = DEMO_FILES.find((f) => f.path === path)?.hunks?.find((h) => h.index === index);
+    if (!hunk) missing.push(`${path} hunk ${index}`);
+    return { ref: { path, index, digest: hunk?.digest ?? "" }, label, why };
+  };
   const claims = "Claims";
   const groups: DiffGroup[] = [
     {
@@ -242,7 +238,8 @@ function demoOrder(): DiffOrder {
       ],
     },
   ];
-  return { groups, count: { hunk_count: 14, placed: 14, complete: true } };
+  if (missing.length > 0) return fail("the demo fixture lacks " + missing.join(", "));
+  return succeed({ groups, count: { hunk_count: 14, placed: 14, complete: true } });
 }
 
 // demoSession returns the annotated changeset and the paired-review state.
@@ -251,8 +248,10 @@ function demoOrder(): DiffOrder {
 // contract change first because it is what everything else here is a consequence of, then the
 // two consumers it broke, then the new and deleted files, then the test and the doc. The
 // generated three sort out of the reading order entirely by role.
-export function demoSession(): DiffReview {
-  return {
+export function demoSession(): Result<DiffReview> {
+  const order = demoOrder();
+  if (!order.ok) return order;
+  return succeed({
     id: "rev-3f1c8a2e",
     base: "working",
     cursor: { path: "libs/authkit/claims.go", hunk: 0 },
@@ -277,7 +276,7 @@ export function demoSession(): DiffReview {
         "Churn is measured over the last 214 commits. libs/authkit/audience.go is in none of them, so it has no churn and no hotspot rank.",
         "Coverage was not measured for docs: the project declares no target that produces it.",
       ],
-      order: demoOrder(),
+      order: order.value,
       files: [
         {
           path: "libs/authkit/claims.go",
@@ -543,7 +542,7 @@ export function demoSession(): DiffReview {
         topics: ["who verifies against two audiences", "what the docstring should promise"],
       },
     ],
-  };
+  });
 }
 
 // demoReview is the pull request the acme branch has open, and what has already been said on

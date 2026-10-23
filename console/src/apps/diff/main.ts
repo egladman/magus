@@ -3779,8 +3779,13 @@ export function activate(host: HTMLElement): AppInstance {
     // shows off is the app itself rather than a rendering of it. No fetch is issued at all,
     // which is what makes /console/diff/#demo work with no server, no workspace and offline.
     if (demo) {
+      const loaded = demoSession();
+      if (!loaded.ok) {
+        showEmpty("The demo could not start", loaded.error.message);
+        return;
+      }
       state.collaboration = "live";
-      const sess = demoSession();
+      const sess = loaded.value;
       state.changeset = order(fromWire(DEMO_FILES), sess);
       state.phase = "ready";
       root.dataset.phase = "ready";
