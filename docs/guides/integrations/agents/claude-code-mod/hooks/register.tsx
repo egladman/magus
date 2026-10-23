@@ -244,14 +244,15 @@ async function loadRates($: EngineInterface): Promise<void> {
     await $.state.set(RATES_ERROR, null)
     return
   }
-  try {
-    rates = parseRates(await $.fs.read(settings.ratesFile))
+  const read = await $.fs.read(settings.ratesFile).then(succeed, failFrom)
+  const parsed = read.ok ? parseRates(read.value) : read
+  if (parsed.ok) {
+    rates = parsed.value
     await $.state.set(RATES_ERROR, null)
-  } catch (err) {
-    rates = DEFAULT_RATES
-    const why = err instanceof Error ? err.message : String(err)
-    await $.state.set(RATES_ERROR, `${settings.ratesFile}: ${why}; using the built-in rates`)
+    return
   }
+  rates = DEFAULT_RATES
+  await $.state.set(RATES_ERROR, `${settings.ratesFile}: ${parsed.error.message}; using the built-in rates`)
 }
 
 function resolveTtl(observed: Ttl | null, previous: CacheState | null): Pick<CacheState, 'ttl' | 'ttlSource'> {
@@ -364,25 +365,29 @@ async function discover($: EngineInterface): Promise<string | null> {
 }
 
 // One unary Connect call over the server's socket, as the console's transport makes it.
-// Resolves the response text, or rejects with a line a person can act on.
-async function rpc($: EngineInterface, procedure: string, body: unknown): Promise<string> {
+// Answers the response text, or a failure whose message is a line a person can act on. Any
+// failure forgets the socket, so the next call discovers the server again.
+async function rpc($: EngineInterface, procedure: string, body: unknown): Promise<Result<string>> {
   socket ??= await discover($)
-  if (socket === null) {
-    throw new Error('No magus server is running. Start one with `magus server start`.')
-  }
-  try {
-    const r = await $.http.fetch(`http://magus${procedure}`, {
+  if (socket === null) return fail('No magus server is running. Start one with `magus server start`.')
+  const answered = await $.http
+    .fetch(`http://magus${procedure}`, {
       method: 'POST',
       socketPath: socket,
       headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
       body: JSON.stringify(body),
     })
-    if (!r.ok) throw new Error(connectError(r.status, r.text))
-    return r.text
-  } catch (err) {
+    .then(succeed, failFrom)
+  if (!answered.ok) {
     socket = null
-    throw err
+    return answered
   }
+  const r = answered.value
+  if (!r.ok) {
+    socket = null
+    return fail(connectError(r.status, r.text))
+  }
+  return succeed(r.text)
 }
 
 async function isPaneOpen($: EngineInterface): Promise<boolean> {
@@ -390,34 +395,37 @@ async function isPaneOpen($: EngineInterface): Promise<boolean> {
 }
 
 async function loadJobs($: EngineInterface): Promise<void> {
-  try {
-    const text = await rpc($, LIST_JOBS, {})
-    await $.state.set(LISTING, parseJobs(text, await $.clock.now()))
-    await $.state.set(ERROR, null)
-  } catch (err) {
-    await $.state.set(ERROR, err instanceof Error ? err.message : String(err))
+  const text = await rpc($, LIST_JOBS, {})
+  const listing = text.ok ? parseJobs(text.value, await $.clock.now()) : text
+  if (!listing.ok) {
+    await $.state.set(ERROR, listing.error.message)
+    return
   }
+  await $.state.set(LISTING, listing.value)
+  await $.state.set(ERROR, null)
 }
 
 async function loadRuns($: EngineInterface): Promise<void> {
-  try {
-    const text = await rpc($, LIST_INVOCATIONS, { pageSize: 25 })
-    await $.state.set(RUNS, parseRuns(text))
-    await $.state.set(ERROR, null)
-  } catch (err) {
-    await $.state.set(ERROR, err instanceof Error ? err.message : String(err))
+  const text = await rpc($, LIST_INVOCATIONS, { pageSize: 25 })
+  const runs = text.ok ? parseRuns(text.value) : text
+  if (!runs.ok) {
+    await $.state.set(ERROR, runs.error.message)
+    return
   }
+  await $.state.set(RUNS, runs.value)
+  await $.state.set(ERROR, null)
 }
 
 async function loadWatch($: EngineInterface): Promise<void> {
   const { value: id = null } = await $.state.get(WATCHING)
   if (id === null) return
-  try {
-    const text = await rpc($, LIST_ACTIVITY, { pageSize: 40, filter: { units: [id] } })
-    await $.state.set(WATCH_LINES, parseActivity(text))
-  } catch (err) {
-    await $.state.set(ERROR, err instanceof Error ? err.message : String(err))
+  const text = await rpc($, LIST_ACTIVITY, { pageSize: 40, filter: { units: [id] } })
+  const lines = text.ok ? parseActivity(text.value) : text
+  if (!lines.ok) {
+    await $.state.set(ERROR, lines.error.message)
+    return
   }
+  await $.state.set(WATCH_LINES, lines.value)
 }
 
 async function pollJobs($: EngineInterface): Promise<void> {
