@@ -1,0 +1,43 @@
+# A magus-scout is spawned as a shipped read-only type, which has no skill tool, so the
+# architecture-unbriefed rule stands down for its own calls: it could never load the skill
+# the denial names. The type is recorded whichever way the host names the child. Here a
+# finished background spawn names it in the after-call (no pending spawn is joined later),
+# and the child's structure probe after an architecture question passes. The root's probe
+# in the same session still denies.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env XDG_CACHE_HOME=$WORK/home/cache
+exec git init -q
+
+stdin $WORK/question.txt
+exec magus shell --message --agent-name claude-code --session arch-1
+
+# The root has not loaded the skill, so its probe is refused.
+stdin $WORK/root-probe.json
+! exec magus shell --agent-name claude-code --observes-skill-loads
+stdout 'magus-architecture-review'
+
+# The finished spawn names the child and its type.
+stdin $WORK/spawn-finished.json
+exec magus shell --agent-name claude-code --observes-skill-loads
+
+stdin $WORK/scout-probe.json
+exec magus shell --agent-name claude-code --observes-skill-loads
+! stdout 'deny'
+
+-- magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of a spawn and the call after it matters here",
+});
+magus\guard.builtins({"architecture-unbriefed": "deny"});
+-- question.txt --
+does this respect our current architecture patterns?
+-- root-probe.json --
+{"session_id": "arch-1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- spawn-finished.json --
+{"session_id": "arch-1", "hook_event_name": "PostToolUse", "tool_name": "Agent", "tool_input": {"description": "scout the layout", "prompt": "list the packages", "subagent_type": "magus-scout", "run_in_background": true}, "tool_response": {"agentId": "scout01"}}
+-- scout-probe.json --
+{"session_id": "arch-1", "hook_event_name": "PreToolUse", "agent_id": "scout01", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}

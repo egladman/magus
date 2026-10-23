@@ -411,6 +411,11 @@ type spawnedAgent struct {
 // with an empty parent and no job, the answer a host with no subagent identity gets.
 func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who hookAttribution, env hookRequest, spawner string) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
+	if env.Spawn.AgentType != "" {
+		if body, err := json.Marshal(agentTypeRecord{Type: env.Spawn.AgentType}); err == nil {
+			writeAgentMarker(facts, agentTypeKind(env.SpawnedAgent), body)
+		}
+	}
 	if env.Spawn.Name != "" {
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
 	}
