@@ -667,6 +667,17 @@ func TestParseLeaseCheck(t *testing.T) {
 			in:   "go::go-test . -- -run Ledger",
 			want: LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}},
 		},
+		{
+			name: "the charm flag is read, not refused",
+			in:   "lint . --no-default-charms",
+			want: LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true},
+		},
+		{
+			name: "the charm flag may lead",
+			in:   "--no-default-charms generate .",
+			want: LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true},
+		},
+		{name: "another magus flag stays refused beside the charm flag", in: "lint . --no-default-charms -o json", wants: "carries the flag -o"},
 		{name: "a flag before the separator", in: "-o json test .", wants: "carries the flag -o"},
 		{name: "a third word", in: "test a b", wants: "carries 3 words"},
 		{name: "nothing at all", in: "  ", wants: "names no target"},

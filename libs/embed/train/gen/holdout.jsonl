@@ -425,6 +425,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/status.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_wait.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/status_wait_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stream.go"}
@@ -785,9 +786,11 @@
 {"group":"dir:hack/dev","path":"hack/dev/ls-uncommitted.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-worktrees.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/mark-feedback.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/merge-base-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/merge-job-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/prune-changelog-fragments.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/prune-worktrees.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/rebase-branches-onto-base.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
@@ -800,7 +803,6 @@
 {"group":"dir:hack/dev","path":"hack/dev/split-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-root-cost.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-transcript.buzz"}
-{"group":"dir:hack/dev","path":"hack/dev/update-stack.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/banned-words.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-glue-is-wired-as-plain-argv.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-sources-pass-the-static-check.buzz"}
@@ -950,6 +952,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/lapse.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lapse_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease.go"}
+{"group":"dir:internal/guard","path":"internal/guard/lease_claim.go"}
+{"group":"dir:internal/guard","path":"internal/guard/lease_claim_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore_test.go"}

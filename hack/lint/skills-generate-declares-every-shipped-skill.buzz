@@ -25,7 +25,7 @@ export final CATALOG = "internal/agent/catalog.go";
 // declaration that claims them tells an author the one file they are supposed to edit is
 // generated, and hands it to the regenerating merge driver on a conflict. The runner
 // reports one the tree no longer has.
-export final HAND_AUTHORED = ["magus-skill-authoring", "magus-local-development", "idiomatic-adrs", "shepherd-pull-requests"];
+export final HAND_AUTHORED = ["magus-skill-authoring", "magus-local-development", "idiomatic-adrs", "babysit-pull-requests"];
 
 // DESTINATIONS are the directories an install writes skills into.
 export final DESTINATIONS = [".claude/skills", ".agents/skills", ".opencode/skills"];
@@ -145,6 +145,6 @@ test "an output claiming a hand-authored skill is reported" {
         "declares .claude/skills/magus-skill-authoring/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/magus-local-development/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/idiomatic-adrs/SKILL.md as a generated output, but magus never writes it",
-        "declares .claude/skills/shepherd-pull-requests/SKILL.md as a generated output, but magus never writes it",
+        "declares .claude/skills/babysit-pull-requests/SKILL.md as a generated output, but magus never writes it",
     ], message: "all four");
 }
