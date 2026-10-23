@@ -27,7 +27,7 @@ export function saidNotice(repo: string, count: number): string {
 // MergedReview is the little of a review this needs. Structural, so the Diff app's fuller
 // ReviewInfo satisfies it without lib/ having to know that type exists.
 export interface MergedReview {
-  readonly repo?: string;
+  readonly repo?: string | undefined;
   // state is what the host says became of the review: "open", "merged" or "closed". Absent when the
   // provider does not answer it, which reads as open.
   readonly state?: string;

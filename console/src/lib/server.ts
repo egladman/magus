@@ -441,10 +441,10 @@ export function consumeLinkCode(params: HashParams = parseHash()): string | null
 // app's own directives) so a reload stays where it was.
 function stripFragmentKey(params: HashParams, key: string): void {
   const kept: string[] = [];
-  for (const k of Object.keys(params)) {
+  for (const [k, v] of Object.entries(params)) {
     if (k === key) continue;
     // A bare fragment key (value "") is re-emitted bare so line tokens like "L10-L20" survive.
-    kept.push(params[k] === "" ? k : k + "=" + encodeURIComponent(params[k]));
+    kept.push(v === "" ? k : k + "=" + encodeURIComponent(v));
   }
   const next = kept.length ? "#" + kept.join("&") : "";
   history.replaceState(null, "", location.pathname + location.search + next);

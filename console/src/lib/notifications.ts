@@ -85,8 +85,8 @@ export interface NotifyInput {
   source: string;
   message: string;
   kind?: NotifyKind;
-  link?: NotifyLink | string;
-  key?: string;
+  link?: NotifyLink | string | undefined;
+  key?: string | undefined;
   at?: number;
   // `important` opts an entry into the BELL tier (lights the unseen-dot until the panel is opened),
   // decoupled from `kind` (severity/color). It defaults to `kind === "error"`, so every existing caller
@@ -107,7 +107,7 @@ export interface Notification {
   source: string;
   kind: NotifyKind;
   message: string;
-  link?: NotifyLink;
+  link?: NotifyLink | undefined;
   at: number;
   important: boolean;
   seen: boolean;
