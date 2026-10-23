@@ -76,6 +76,15 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		GuardWiring: []string{".claude/settings.json"},
 		Rules:       []string{"AGENTS.md", "harnesses/example.json"},
 		PromptCache: briefClock(),
+		Attention: &briefAttention{
+			Open:    307,
+			Oldest:  &briefAttentionRow{ID: "att-old", Source: "guard/stall", OpenedMs: time.Now().Add(-9 * 24 * time.Hour).UnixMilli()},
+			SinceMs: time.Now().Add(-3 * time.Hour).UnixMilli(),
+			Since: []briefAttentionRow{
+				{ID: "att-new", Source: "magus/job-release", Outcome: "waiting", OpenedMs: time.Now().Add(-time.Hour).UnixMilli()},
+			},
+			SinceMore: 4,
+		},
 	}
 
 	text := b.Text()
@@ -93,6 +102,10 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		"prompt cache: last tool call here 7m ago",
 		"closed: Anthropic default",
 		"open: Anthropic 1h opt-in",
+		"attention: 307 open",
+		"oldest: att-old guard/stall, raised 9 days ago",
+		"att-new magus/job-release (waiting)",
+		"and 4 more",
 	} {
 		assert.Contains(t, text, want, "the brief dropped a section a rehydrating session reads")
 	}
@@ -116,6 +129,69 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 	unclassified := sessionBrief{Workspace: "/checkout", Tree: briefTree{Reported: true, Dirty: 4}}.Text()
 	assert.Contains(t, unclassified, "tree: 4 changed file(s), unclassified")
 	assertBriefIsContextSafe(t, unclassified)
+}
+
+// A queue the store would not yield is not an empty one, and a checkout with one host
+// session has no earlier one to measure "since" from.
+func TestSessionBriefAttentionNamesWhatItCouldNotRead(t *testing.T) {
+	t.Parallel()
+
+	unread := sessionBrief{Attention: &briefAttention{Unread: "permission denied"}}.Text()
+	assert.Contains(t, unread, "attention: the queue could not be read (permission denied)")
+	assert.NotContains(t, unread, "none open")
+	assertBriefIsContextSafe(t, unread)
+
+	noEarlier := sessionBrief{Attention: &briefAttention{Open: 2, Oldest: &briefAttentionRow{ID: "att-a", OpenedMs: time.Now().UnixMilli()}}}.Text()
+	assert.Contains(t, noEarlier, "no earlier session recorded in this checkout")
+	assert.Contains(t, sessionBrief{Attention: &briefAttention{}}.Text(), "attention: none open")
+	assert.NotContains(t, sessionBrief{}.Text(), "attention:", "an ungathered brief says nothing about the queue")
+}
+
+// The rows a brief marks as new are those raised after the previous host session last
+// acted in this checkout, read out of the store `session ls` counts from.
+func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+	elsewhere := filepath.Join(root, "elsewhere")
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+
+	raise := func(source, message string) {
+		t.Helper()
+		_, opened, err := sessions.OpenRequest(dir, "host-1", sessions.AttentionOpen{Outcome: "waiting", Source: source, Message: message},
+			sessions.InvocationStart{Workspace: elsewhere})
+		require.NoError(t, err)
+		require.True(t, opened)
+	}
+	runIn := func(session, inv string) {
+		t.Helper()
+		start := sessions.InvocationStart{Workspace: root, Command: "run test"}
+		start.Session = session
+		h := sessions.NewFactHandler(root, start)
+		require.NotNil(t, h)
+		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "test", Project: ".", Status: journal.StatusPass})
+	}
+	pause := func() { time.Sleep(3 * time.Millisecond) }
+
+	raise("guard/stall", "before the previous session")
+	pause()
+	runIn("earlier", "invEarlier")
+	pause()
+	runIn("current", "invCurrent")
+	pause()
+	raise("magus/job-release", "after it")
+
+	got := briefAttentionQueue(root)
+
+	require.Empty(t, got.Unread)
+	assert.Equal(t, 2, got.Open)
+	require.NotNil(t, got.Oldest)
+	assert.Equal(t, "guard/stall", got.Oldest.Source)
+	assert.NotZero(t, got.SinceMs)
+	require.Len(t, got.Since, 1, "only the row raised after the previous session's last activity is new")
+	assert.Equal(t, "magus/job-release", got.Since[0].Source)
 }
 
 // The gather, against a checkout on disk. Every section it fills here is read out of
@@ -187,6 +263,8 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 
 	assert.Contains(t, brief.Rules, "AGENTS.md")
 	require.Len(t, brief.Failures, 1)
+	require.NotNil(t, brief.Attention, "an empty queue is reported as none open, not left out")
+	assert.Equal(t, &briefAttention{}, brief.Attention)
 	assert.Equal(t, sessionBrief{
 		Workspace: root,
 		// The checkout's own VCS, console, trail and transcript state is not what this test sets up.
@@ -194,6 +272,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		Revision:    brief.Revision,
 		Unpushed:    brief.Unpushed,
 		Tree:        brief.Tree,
+		Attention:   brief.Attention,
 		Console:     brief.Console,
 		PromptCache: brief.PromptCache,
 		Feedback:    brief.Feedback,

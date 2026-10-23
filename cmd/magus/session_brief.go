@@ -67,6 +67,11 @@ const briefMemoryMB = 512
 // guard, and a checkout every job was once exec'd in can hold dozens of them.
 const briefMaxLeases = 12
 
+// briefMaxAttention bounds the attention rows the brief names, as briefMaxLeases does for
+// leases: the queue has no expiry, so a pile that built up overnight would otherwise
+// spend the window on rows the count already stands for.
+const briefMaxAttention = 5
+
 // sessionBrief is the whole payload, and the -o json shape.
 type sessionBrief struct {
 	Workspace string `json:"workspace"`
@@ -83,6 +88,10 @@ type sessionBrief struct {
 	// spent the window on work this session cannot touch.
 	OtherLeases int            `json:"other_leases,omitempty"`
 	Failures    []briefFailure `json:"failures,omitempty"`
+	// Attention is the open attention queue, the same count `session ls` prints. Nil means
+	// the brief was not gathered, which prints nothing; a store that could not be read is
+	// Unread on a non-nil value, so the two never read as an empty queue.
+	Attention *briefAttention `json:"attention,omitempty"`
 	// GuardWiring is the host hook config paths in this checkout that invoke magus.
 	// Empty means the rules exist here and nothing runs them.
 	GuardWiring []string `json:"guard_wiring,omitempty"`
@@ -157,6 +166,30 @@ type briefLease struct {
 	Exec       string `json:"exec"`
 	Criteria   string `json:"criteria,omitempty"`
 	Validation string `json:"validation,omitempty"`
+}
+
+// briefAttention is the open attention queue reduced to a count, the row that has waited
+// longest, and the rows raised since the checkout's previous host session.
+type briefAttention struct {
+	Open   int                `json:"open"`
+	Oldest *briefAttentionRow `json:"oldest,omitempty"`
+
+	// SinceMs is when the previous host session last acted in this checkout, zero when the
+	// store holds no earlier session here and so no "since" to draw.
+	SinceMs   int64               `json:"since_ms,omitempty"`
+	Since     []briefAttentionRow `json:"since,omitempty"`
+	SinceMore int                 `json:"since_more,omitempty"`
+
+	// Unread says why the store could not be read, empty when it was.
+	Unread string `json:"unread,omitempty"`
+}
+
+// briefAttentionRow is one open request: its id, what raised it and when.
+type briefAttentionRow struct {
+	ID       string `json:"id"`
+	Source   string `json:"source,omitempty"`
+	Outcome  string `json:"outcome,omitempty"`
+	OpenedMs int64  `json:"opened_ms"`
 }
 
 // briefFailure is one target the last recorded run failed, and the command that
@@ -248,6 +281,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
 	brief.Failures = lastRunFailures(root)
+	brief.Attention = briefAttentionQueue(root)
 	if wired, err := workspace.WiredHarnesses(ws); err == nil {
 		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
 		brief.Rules = ruleLocations(ctx, root, wired...)
@@ -445,6 +479,51 @@ func lastRunFailures(root string) []briefFailure {
 	return nil
 }
 
+// briefAttentionQueue reads the store `session ls` reads, through the same
+// [sessions.AttentionQueue]. A queue it cannot read is reported as Unread: silence would
+// read as none open. "Since" is the last activity of the checkout's previous host session.
+func briefAttentionQueue(root string) *briefAttention {
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return &briefAttention{Unread: err.Error()}
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return &briefAttention{Unread: err.Error()}
+	}
+	queue := sessions.AttentionQueue(fold)
+	out := &briefAttention{Open: len(queue)}
+	if len(queue) == 0 {
+		return out
+	}
+	out.Oldest = &briefAttentionRow{ID: queue[0].ID, Source: queue[0].Source, Outcome: queue[0].Outcome, OpenedMs: queue[0].OpenedMs}
+
+	summaries := invocationsInCheckout(sessions.Summarize(fold), root)
+	if len(summaries) > 0 {
+		current := summaries[0].Session
+		for _, s := range summaries {
+			if s.Session != "" && s.Session != current {
+				out.SinceMs = s.LastMs
+				break
+			}
+		}
+	}
+	if out.SinceMs == 0 {
+		return out
+	}
+	for _, req := range queue {
+		if req.OpenedMs <= out.SinceMs {
+			continue
+		}
+		if len(out.Since) == briefMaxAttention {
+			out.SinceMore++
+			continue
+		}
+		out.Since = append(out.Since, briefAttentionRow{ID: req.ID, Source: req.Source, Outcome: req.Outcome, OpenedMs: req.OpenedMs})
+	}
+	return out
+}
+
 // ruleLocations names the instruction files and skill directories that exist in this
 // checkout. What EXISTS, never a recommended list: a path magus prints that is not
 // there teaches a reader to ignore the line. wired are magusfile-selected harness
@@ -508,6 +587,7 @@ func (b sessionBrief) Text() string {
 	b.writePromptCache(&s)
 	b.writeFailures(&s)
 	b.writeLeases(&s)
+	b.writeAttention(&s)
 	b.writeFeedback(&s)
 	b.writeRecent(&s)
 
@@ -618,6 +698,47 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	if b.OtherLeases > 0 {
 		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
 	}
+}
+
+func (b sessionBrief) writeAttention(s *strings.Builder) {
+	a := b.Attention
+	switch {
+	case a == nil:
+		return
+	case a.Unread != "":
+		briefLine(s, "attention: the queue could not be read (%s); `%s` reads the same store", a.Unread, hint.SessionAttention)
+		return
+	case a.Open == 0:
+		briefLine(s, "attention: none open")
+		return
+	}
+	briefLine(s, "attention: %d open; `%s` lists them, `%s` closes one", a.Open, hint.SessionAttention, hint.SessionDispose.With("<id>"))
+	if o := a.Oldest; o != nil {
+		briefLine(s, "  oldest: %s %s, raised %s", o.ID, attentionRule(*o), humanAge(time.UnixMilli(o.OpenedMs)))
+	}
+	if a.SinceMs == 0 {
+		briefLine(s, "  no earlier session recorded in this checkout, so nothing is marked as new")
+		return
+	}
+	if len(a.Since) == 0 {
+		briefLine(s, "  none raised since the previous session here, last active %s", humanAge(time.UnixMilli(a.SinceMs)))
+		return
+	}
+	briefLine(s, "  raised since the previous session here, last active %s:", humanAge(time.UnixMilli(a.SinceMs)))
+	for _, r := range a.Since {
+		briefLine(s, "    %s %s, %s", r.ID, attentionRule(r), humanAge(time.UnixMilli(r.OpenedMs)))
+	}
+	if a.SinceMore > 0 {
+		briefLine(s, "    and %d more", a.SinceMore)
+	}
+}
+
+// attentionRule names what raised a row, a dash when the producer sent no source.
+func attentionRule(r briefAttentionRow) string {
+	if r.Outcome == "" {
+		return orDash(r.Source)
+	}
+	return orDash(r.Source) + " (" + r.Outcome + ")"
 }
 
 func (b sessionBrief) writeFailures(s *strings.Builder) {
