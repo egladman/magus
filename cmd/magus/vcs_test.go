@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -265,14 +266,10 @@ func TestFilterStageableNonGit(t *testing.T) {
 // TestStagePathsSurvivesStalePath proves the end-to-end fix: one nonexistent, untracked
 // path in the batch must not abort the rest. The field failure:
 //
-//	staged 3 undeclared file(s) (--untracked):
-//	  .gitattributes
-//	  libs/diag/go.mod
-//	  libs/diagnostics/
 //	fatal: pathspec 'libs/diag/MAGUS.md' did not match any files
-//	[error] vcs add: git add: exit status 128
+//	[error] vcs resolve: stage: exit status 128
 //
-// where every one of the first three paths was silently left unstaged.
+// where every other path in the batch was silently left unstaged.
 func TestStagePathsSurvivesStalePath(t *testing.T) {
 	repo := testkit.NewRepo(t, nil)
 	dir := repo.Root()
@@ -411,6 +408,22 @@ func TestOtherLeasesPaths(t *testing.T) {
 		"only a live lease writing in this checkout holds a path back from its sibling")
 	assert.Equal(t, map[string]string{"api/a.go": "mine", "web/b.ts": "sibling"}, otherLeasesPaths(rows, root, "", paths),
 		"a caller with no lease stages no lease's work")
+}
+
+// The CLI leaves the context unstamped, so the caller's lease is the one its BAGGAGE claims.
+func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
+	repo, _ := execRepoFixture(t)
+	root := repo.Root()
+	mine := leaseRow("mine", "")
+	mine.CheckoutRoot, mine.WritePaths = root, []string{"api/**"}
+	sibling := leaseRow("sibling", "")
+	sibling.CheckoutRoot, sibling.WritePaths = root, []string{"web/**"}
+	seedJobStore(t, root, mine, sibling)
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=mine")
+
+	held, err := heldForOtherLeases(context.Background(), root, []string{"api/a.go", "web/b.ts"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"web/b.ts": "sibling"}, held)
 }
 
 // TestCheckpointLineCarriesThePreservedHandle covers the promise --preserve makes in its

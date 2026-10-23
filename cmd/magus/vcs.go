@@ -1446,7 +1446,7 @@ func heldForOtherLeases(ctx context.Context, root string, paths []string) (map[s
 	if err != nil {
 		return nil, fmt.Errorf("read the job store for the paths other leases in this checkout write: %w", err)
 	}
-	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
+	lease, _ := job.RunLease(ctx, loc)
 	return otherLeasesPaths(rows, root, lease, paths), nil
 }
 
