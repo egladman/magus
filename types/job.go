@@ -421,6 +421,12 @@ func (s JobState) Editing() bool {
 	return s == StateDeclared || s == StateRunning
 }
 
+// DefaultJobWeight is the weight of a job that names none, and of a run bound to no job.
+const DefaultJobWeight = 0.5
+
+// ValidJobWeight reports whether w is in (0,1]. Out of range is refused, never clamped.
+func ValidJobWeight(w float64) bool { return w > 0 && w <= 1 }
+
 // MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
 // enough that the id stays a correlation key rather than a payload riding every event
 // line.
@@ -759,6 +765,13 @@ type Job struct {
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does; zero is no cap. It
 	// is checked only when the row is forked again: magus never retries a job on its own.
 	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
+	// MachineClaim and polls the budget weight/DefaultJobWeight times as often. In (0,1];
+	// zero reads as DefaultJobWeight.
+	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
+	// Paused is the unix second a person paused the job, zero while it is not. A claim the
+	// holder already has finishes; exec and the guard refuse its next magus run.
+	Paused int64 `json:"paused,omitzero" yaml:"paused,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -1034,6 +1047,9 @@ type Declaration struct {
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
+	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
+	// explicit 0 is out of range. See [Job.Weight].
+	Weight *float64 `json:"weight,omitempty"`
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
@@ -1182,6 +1198,10 @@ func (r Declaration) Problems() JobProblems {
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
 			"use one of "+strings.Join(r.BriefFormat.Values(), ", ")+", or leave it out for magus.yaml's agents.brief_format")
+	}
+	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
+		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
+			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultJobWeight))
 	}
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
@@ -1541,6 +1561,10 @@ func (r Declaration) Apply(u *Job) {
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
 	u.Model = strings.TrimSpace(r.Model)
+	u.Weight = 0
+	if r.Weight != nil {
+		u.Weight = *r.Weight
+	}
 	u.BriefFormat = r.BriefFormat
 	// Validate refused an unparsable check before the row reached a store, so the problems
 	// here cannot arise; the rendered line is written from the record so the two agree.

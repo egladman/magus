@@ -35,4 +35,6 @@ type JobPut struct {
 	// MaxAttempts is how many times the job may be forked, its first fork included; 0
 	// clears the cap.
 	MaxAttempts *int `json:"max_attempts,omitempty"`
+	// Weight is the job's lean on the machine budget, in (0,1]. See [Job.Weight].
+	Weight *float64 `json:"weight,omitempty"`
 }

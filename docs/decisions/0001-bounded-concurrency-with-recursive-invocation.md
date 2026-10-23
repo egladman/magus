@@ -284,3 +284,22 @@ assumed every member of one call peaks at once, which nothing measured; ci claim
 from it. [ADR 0012](0012-memory-claims-follow-a-measured-curve.md) replaces the sum with the
 peak of the members' curves summed over time, never above the summed peak, and falls back to
 the sum when a member has no curve. Leaf weight is unchanged.
+
+### 2026-10-23: a job pauses, and leans by weight
+
+Alternatives said magus has no priorities, which still holds for the slot pool and the
+broker: neither keeps a queue or a priority, and the first ask after a release still wins.
+The new evidence is a person in a bind (Eli, 2026-10-23): one job must get the machine while
+others hold it, and the only controls were stopping a run or ending a job. Two controls now
+sit on the job row, outside the budget:
+
+- `magus job pause <job>...` and `magus job resume <job>...`. While paused, `magus job exec`
+  and the guard's `lease-paused` rule refuse the holder's next magus run. A claim it already
+  holds finishes, so nothing is preempted.
+- An optional `weight` in (0,1] on the job record, 0.5 when omitted; out of range is refused
+  at fork and apply, never clamped. A run bound to the job carries it on its MachineClaim,
+  and its retry interval (100ms per step, 500ms for `status --wait`) is divided by
+  weight/0.5. That is a lean, never a guarantee, and it adds no broker state.
+
+Priority ceiling protocols stay rejected for the reason given: neither control is a static
+map of nested work.

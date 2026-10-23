@@ -1450,6 +1450,7 @@ type roleScopedRule struct {
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
+		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryGateRepeat), denyRepeatGate},

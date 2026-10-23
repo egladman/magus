@@ -89,6 +89,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocHookWiringWrite},
 	{doc: ruleDocLeaseGate},
 	{doc: ruleDocLeaseHarness},
+	{doc: ruleDocLeasePaused},
 	{doc: ruleDocLeaseRebind},
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
@@ -565,6 +566,11 @@ var ruleDocLeaseGate = types.RuleDoc{
 var ruleDocLeaseHarness = types.RuleDoc{
 	Name:    string(denyRuleLeaseHarness),
 	Catches: "a leased worker rewriting the harness skill trees that steer it",
+}
+
+var ruleDocLeasePaused = types.RuleDoc{
+	Name:    string(denyRuleLeasePaused),
+	Catches: "a leased worker starting a magus run while a person has its job paused",
 }
 
 var ruleDocLeaseRebind = types.RuleDoc{

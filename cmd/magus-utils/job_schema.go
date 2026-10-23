@@ -264,6 +264,8 @@ func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, versi
 			return withoutMarker(node{{"type", "integer"}}, marker)
 		case "bool":
 			return withoutMarker(node{{"type", "boolean"}}, marker)
+		case "float64":
+			return withoutMarker(node{{"type", "number"}}, marker)
 		}
 		return namedType(t.Name, omitempty, marker, d, version)
 	}

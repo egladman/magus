@@ -119,6 +119,20 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	} else if ok {
 		put.MaxAttempts = &n
 	}
+	if v, present := params["weight"]; present {
+		switch w := v.(type) {
+		case float64:
+			put.Weight = &w
+		case int:
+			f := float64(w)
+			put.Weight = &f
+		case int64:
+			f := float64(w)
+			put.Weight = &f
+		default:
+			err = errors.Join(err, errors.New("job: weight must be a number"))
+		}
+	}
 	if _, perr := PutMerge(put); perr != nil {
 		err = errors.Join(err, perr)
 	}
@@ -248,6 +262,13 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.MaxAttempts = n })
 		}
 	}
+	if p.Weight != nil {
+		if w := *p.Weight; !types.ValidJobWeight(w) {
+			err = errors.Join(err, fmt.Errorf("job: weight %v is outside (0,1]", w))
+		} else {
+			set = append(set, func(u *types.Job) { u.Weight = w })
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +292,7 @@ func declaredKeys(p types.JobPut) []string {
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
-		{"max_attempts", p.MaxAttempts != nil},
+		{"max_attempts", p.MaxAttempts != nil}, {"weight", p.Weight != nil},
 	} {
 		if f.set {
 			keys = append(keys, f.key)
@@ -285,7 +306,7 @@ func declaredKeys(p types.JobPut) []string {
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "waivers", "state", "read_only",
-	"timeout", "max_attempts", "enter",
+	"timeout", "max_attempts", "weight", "enter",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly

@@ -1233,12 +1233,16 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	if held.machineClaim {
 		return ctx, func() {}, nil
 	}
-	id, release, err := c.machine.claim(ctx, types.MachineClaim{
+	claim := types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
-	})
+	}
+	if c.machine != nil {
+		claim.Weight = LeaseWeight(ctx, c.dir)
+	}
+	id, release, err := c.machine.claim(ctx, claim)
 	if err != nil {
 		return ctx, nil, err
 	}

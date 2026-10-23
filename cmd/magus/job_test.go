@@ -1079,6 +1079,34 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 
 // Exec takes exactly one job: the read form it had printed a binding the CLI no longer
 // holds, and a job that already ended has nothing left to take.
+func TestJobPauseRefusesExecUntilResume(t *testing.T) {
+	row := leaseRow("lease-enforcement/wave4/paused", "")
+	row.State = types.StateDeclared
+	repo, cacheDir := execRepoFixture(t, row)
+	root := repo.Root()
+
+	captureStdout(t, func() {
+		require.NoError(t, jobPause(t.Context(), root, "pause", []string{row.ID}))
+	})
+	err := jobExec(t.Context(), root, []string{row.ID})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), row.ID+" is paused")
+	assert.Contains(t, err.Error(), "job resume "+row.ID)
+	bindCheckout(t, cacheDir, row.ID)
+	err = jobExec(t.Context(), root, []string{"--timeout", "1m", "--", "true"})
+	require.Error(t, err, "a command under the paused lease is refused too")
+	assert.Contains(t, err.Error(), row.ID+" is paused")
+
+	assert.Error(t, jobPause(t.Context(), root, "resume", []string{row.ID}), "the holder does not lift its own pause")
+
+	orchestrator := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, Actor: &job.Actor{}})
+	_, err = orchestrator.Resume(t.Context(), row.ID)
+	require.NoError(t, err)
+	captureStdout(t, func() {
+		require.NoError(t, jobExec(t.Context(), root, []string{row.ID}))
+	})
+}
+
 func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	done := leaseRow("lease-enforcement/wave4/done", "")
 	done.State = types.StatePass

@@ -85,6 +85,10 @@
       "type": "string",
       "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
     },
+    "weight": {
+      "type": "number",
+      "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."
+    },
     "brief_format": {
       "type": "string",
       "enum": ["", "markdown", "buzz"],
