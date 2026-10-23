@@ -215,7 +215,7 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 	assert.Equal(t, map[string]string{
 		"buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
 	}, ops)
-	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), t.TempDir(), ops["go"])))
+	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a

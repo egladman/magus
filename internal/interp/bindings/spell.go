@@ -663,7 +663,23 @@ func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) 
 		}
 		abs = filepath.Join(cwd, abs)
 	}
-	path := symbols.IndexPath(c.Dir(), abs, op)
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return "", fmt.Errorf("a symbol indexer must run in a workspace so its index is keyed by project path")
+	}
+	// Resolved, so a root and a project dir reached through different spellings (macOS
+	// /var and /private/var) still relate.
+	canonical := func(dir string) string {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return resolved
+		}
+		return filepath.Clean(dir)
+	}
+	project, err := filepath.Rel(canonical(ws.Root()), canonical(abs))
+	if err != nil || !filepath.IsLocal(project) {
+		return "", fmt.Errorf("symbol index dir %s is outside the workspace %s", abs, ws.Root())
+	}
+	path := symbols.IndexPath(c.Dir(), project, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("prepare symbol index dir: %w", err)
 	}

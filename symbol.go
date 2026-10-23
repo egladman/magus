@@ -719,7 +719,7 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			}
 			step := m.symbolIndexStep(idx.project, idx.op, toolVersions[path], observations[path])
 			keyed[idx.ref()] = step
-			ok, err := c.IsCached(ctx, step)
+			ok, err := indexReplayed(ctx, c, step)
 			out[idx.ref()] = err == nil && ok
 		}
 		return out

@@ -1854,7 +1854,6 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 		if len(bound) == 0 && p.Spell != "" {
 			bound = []string{p.Spell}
 		}
-		absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
 		for _, name := range bound {
 			if !capable[name] {
 				continue
@@ -1868,7 +1867,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			}
 			byProject[p.Path] = append(byProject[p.Path], resolvedSymbolIndex{
 				project: p.Path, op: op, bin: indexer.Command.Bin,
-				path: symbols.IndexPath(in.cacheDir, absDir, op), language: langBySpell[name],
+				path: symbols.IndexPath(in.cacheDir, p.Path, op), language: langBySpell[name],
 			})
 		}
 	}

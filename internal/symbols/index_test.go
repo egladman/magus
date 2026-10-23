@@ -11,16 +11,32 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The bare scip op's index keeps the file every cached run already stamped, and a second
+// The bare scip op's index keeps the name every cached run already recorded, and a second
 // indexing spell on the same project writes beside it rather than over it.
 func TestIndexPathIsOnePerIndexerOp(t *testing.T) {
-	cacheDir, dir := t.TempDir(), t.TempDir()
-	goIndex := IndexPath(cacheDir, dir, "scip")
-	buzzIndex := IndexPath(cacheDir, dir, "scip-buzz")
+	cacheDir := t.TempDir()
+	goIndex := IndexPath(cacheDir, "libs/a", "scip")
+	buzzIndex := IndexPath(cacheDir, "libs/a", "scip-buzz")
 
 	assert.Equal(t, "index.scip", filepath.Base(goIndex))
 	assert.Equal(t, "scip-buzz.scip", filepath.Base(buzzIndex))
 	assert.Equal(t, filepath.Dir(goIndex), filepath.Dir(buzzIndex), "both live under the project's one cache dir")
+}
+
+// Two checkouts of one workspace place a project's index at the same path under their
+// cache dirs, which is what lets one checkout's cache entry replay it into the other.
+func TestIndexPathNamesNoCheckout(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	rel := func(cacheDir, project string) string {
+		r, err := filepath.Rel(cacheDir, IndexPath(cacheDir, project, "scip"))
+		require.NoError(t, err)
+		return r
+	}
+
+	assert.Equal(t, rel(first, "libs/a"), rel(second, "libs/a"))
+	assert.Equal(t, rel(first, "libs/a"), rel(first, "./libs/a/"), "spellings of one project share its index")
+	assert.NotEqual(t, rel(first, "libs/a"), rel(first, "libs/b"))
+	assert.NotEqual(t, rel(first, "."), rel(first, "libs/a"))
 }
 
 func TestFingerprintBodies(t *testing.T) {
