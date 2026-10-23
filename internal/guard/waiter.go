@@ -392,6 +392,15 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		"` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops."
 }
 
+// holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
+// nothing and declares no check, so it runs no target.
+func holdsNoBuildSeat(row types.Job) bool {
+	if !row.ReadOnly || len(row.WritePaths) > 0 {
+		return false
+	}
+	return !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindCheck })
+}
+
 // adviseBudgetFull is the advisory for an orchestrator spawning into a full build budget,
 // "" when the budget has room or no broker answers.
 func adviseBudgetFull(ctx context.Context, now time.Time) advice {

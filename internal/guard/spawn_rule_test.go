@@ -1694,3 +1694,31 @@ func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
 	assert.Equal(t, "advise", spawn("budget-full", "").Decision, "each spawn into a full budget hears it")
 	assert.Equal(t, "pass", spawn("budget-worker", "a1b2c3").Decision, "a worker reports a full budget rather than waiting on it")
 }
+
+func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T) {
+	check := &types.LeaseCheck{Target: "go-test", Project: "."}
+	full := types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2}
+	for _, tc := range []struct {
+		name   string
+		row    types.Job
+		advise bool
+	}{
+		{"read-only without a check", types.Job{ReadOnly: true}, false},
+		{"read-only with a check", types.Job{ReadOnly: true, Check: check}, true},
+		{"read-only with a check goal", types.Job{ReadOnly: true, Goals: []types.Goal{{Kind: types.GoalKindCheck, Check: *check}}}, true},
+		{"read-only with a paths goal only", types.Job{ReadOnly: true, Goals: []types.Goal{{Kind: types.GoalKindPaths, Paths: []string{"a/**"}}}}, false},
+		{"write paths", types.Job{WritePaths: []string{"a/**"}}, true},
+		{"read-only with write paths", types.Job{ReadOnly: true, WritePaths: []string{"a/**"}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			standBudget(t, full)
+			tc.row.ID, tc.row.State, tc.row.Validated = "scout-job", types.StateDeclared, 1
+			ctx, _ := fleetFixture(t, tc.row)
+			v := Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+				"tool_input": map[string]any{"description": "orchestrator/impl scout-job", "prompt": "Carry it out."},
+			}), Host: "claude-code"})
+			assert.Equal(t, tc.advise, v.Rule == string(denyRuleSleepPoll), v.Context)
+		})
+	}
+}
