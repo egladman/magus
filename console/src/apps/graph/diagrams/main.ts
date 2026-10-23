@@ -27,6 +27,7 @@ import {
   type Declaration,
   type Lens,
 } from "./lens";
+import { succeed, type Result } from "../result";
 import { markListFocus, notice, prepareSvg, renderNodeList, type NoticeTone } from "./view";
 import {
   anchorTemplate,
@@ -375,8 +376,13 @@ export function activate(host: HTMLElement): AppInstance {
   };
 
   // A first figure fits; a re-layout of the same figure swaps in place keeping the reader's zoom.
-  const mount = (rendered: RenderedDiagram, keepView: boolean): void => {
-    const svg = prepareSvg(rendered.svg, { nodes: rendered.nodes, sourceUrl: rendered.sourceUrl });
+  const mount = (rendered: RenderedDiagram, keepView: boolean): Result<void> => {
+    const prepared = prepareSvg(rendered.svg, {
+      nodes: rendered.nodes,
+      sourceUrl: rendered.sourceUrl,
+    });
+    if (!prepared.ok) return prepared;
+    const svg = prepared.value;
     showState(null);
     const old = refs.frame.querySelector("svg");
     if (keepView && controller && old) {
@@ -400,6 +406,7 @@ export function activate(host: HTMLElement): AppInstance {
     });
     onFocusChange(controller?.focused() ?? null);
     syncControls();
+    return succeed(undefined);
   };
 
   const clearFigure = (): void => {
@@ -443,10 +450,9 @@ export function activate(host: HTMLElement): AppInstance {
       ...read.value,
       nodes: drawnNodes(read.value.nodes, claim),
     };
-    try {
-      mount(rendered, sameFigure);
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
+    const mounted = mount(rendered, sameFigure);
+    if (!mounted.ok) {
+      const detail = mounted.error.message;
       reportFailure(SOURCE, "Could not show figure " + id + ": " + detail, "diagrams:mount:" + id);
       showNotice("danger", "Could not show the figure", detail);
       if (controller === null) refusedState();
@@ -503,12 +509,11 @@ export function activate(host: HTMLElement): AppInstance {
       nodes: cutNodes(base, out.svg),
     };
     clearNotices();
-    try {
-      mount(rendered, controller !== null);
-    } catch (e) {
+    const mounted = mount(rendered, controller !== null);
+    if (!mounted.ok) {
       reportFailure(
         SOURCE,
-        "The runtime's figure would not display: " + String(e),
+        "The runtime's figure would not display: " + mounted.error.message,
         "diagrams:relayout-mount:" + id,
       );
       return false;
@@ -608,10 +613,10 @@ export function activate(host: HTMLElement): AppInstance {
     runtimeState = { kind: "loading" };
     syncRuntime();
     void (async () => {
-      try {
-        runtimeState = { kind: "ready", runtime: await ensureBuzz() };
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
+      const loaded = await ensureBuzz();
+      if (loaded.ok) runtimeState = { kind: "ready", runtime: loaded.value };
+      else {
+        const detail = loaded.error.message;
         reportFailure(SOURCE, "The Buzz runtime did not load: " + detail, "diagrams:runtime");
         runtimeState = { kind: "failed", detail };
       }
@@ -654,22 +659,23 @@ export function activate(host: HTMLElement): AppInstance {
     showState(stateView("loading", "Drawing the figure"));
     runtimeState = { kind: "loading" };
     syncRuntime();
-    let runtime: BuzzRuntime | null = null;
-    let loadError = "";
-    try {
-      runtime = await ensureBuzz();
-    } catch (e) {
-      loadError = e instanceof Error ? e.message : String(e);
-    }
+    const loaded = await ensureBuzz();
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
-    runtimeState = runtime ? { kind: "ready", runtime } : { kind: "failed", detail: loadError };
+    runtimeState = loaded.ok
+      ? { kind: "ready", runtime: loaded.value }
+      : { kind: "failed", detail: loaded.error.message };
     syncRuntime();
-    if (!runtime) {
-      refuse("The runtime that draws this figure did not load", loadError);
+    if (!loaded.ok) {
+      refuse("The runtime that draws this figure did not load", loaded.error.message);
       return;
     }
-    const out = toRelayout(runtime.drawFigure(figureForLink(read.figure), ""));
+    const linkFigure = figureForLink(read.figure);
+    if (!linkFigure.ok) {
+      refuse("This figure could not be drawn", linkFigure.error.message);
+      return;
+    }
+    const out = toRelayout(loaded.value.drawFigure(linkFigure.value, ""));
     if (out.kind !== "ok") {
       refuse("This figure could not be drawn", out.detail);
       return;
@@ -681,10 +687,9 @@ export function activate(host: HTMLElement): AppInstance {
       nodes: linkedRows(read.figure),
       sourceUrl: "",
     };
-    try {
-      mount(rendered, false);
-    } catch (e) {
-      refuse("Could not show the figure", e instanceof Error ? e.message : String(e));
+    const mounted = mount(rendered, false);
+    if (!mounted.ok) {
+      refuse("Could not show the figure", mounted.error.message);
       return;
     }
     base = null;

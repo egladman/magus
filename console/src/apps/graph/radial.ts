@@ -92,7 +92,7 @@ export function layoutRadial(
       for (const group of groups.values()) group.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
       const prevRing = rings[d - 1];
-      if (!prevRing) throw new Error("radial ring " + d + " has no ring before it");
+      if (!prevRing) break;
       const prevFirst = prevRing[0];
       let cursor = (prevFirst === undefined ? undefined : angleOf.get(prevFirst)) ?? -Math.PI / 2;
       const total = members.length;

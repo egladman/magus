@@ -166,7 +166,7 @@ describe("the question builder", () => {
   test("a failed copy is said in the panel and sent as a notification", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { writeText: () => Promise.reject(new Error("denied")) },
+      value: { writeText: () => new Promise((_, reject) => reject(new Error("denied"))) },
     });
     const heard: Array<{ message: string; kind?: string; toast?: boolean }> = [];
     const listen = (e: Event) => heard.push((e as CustomEvent).detail);
