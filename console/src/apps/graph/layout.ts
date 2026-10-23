@@ -46,8 +46,7 @@ export const LAYERED_MAX = 500; // scale guard: refuse layered above this count
 // layer - which is also ascending x, since e.s (the dependent) always sits at
 // a strictly higher layer than e.t (the dependency) once cycle-break has run.
 interface DummyChain {
-  ids: string[];
-  layers: number[];
+  slots: { id: string; layer: number }[];
 }
 
 type DepEdge = { s: string; t: string; linkRef: GLink };
@@ -106,15 +105,17 @@ function computeLayers(
     const dfsStack: [string, number][] = [[startId, 0]];
     while (dfsStack.length) {
       const top = dfsStack[dfsStack.length - 1];
+      if (!top) break;
       const [nid, idx] = top;
       if (idx === 0) {
         visited.add(nid);
         inStack.add(nid);
       }
       const children = outSnap.get(nid) || [];
-      if (idx < children.length) {
+      const child = children[idx];
+      if (child !== undefined) {
         top[1]++;
-        const { origTarget, edgeRef } = children[idx];
+        const { origTarget, edgeRef } = child;
         if (inStack.has(origTarget)) {
           // Back-edge: reverse it for layout only. The snapshot key (origTarget)
           // does not change; we only mutate the edge object so predMap is correct.
@@ -173,7 +174,7 @@ function computeLayers(
 // ordering so long edges pull crossings down, and (b) carry the x/y that
 // becomes the edge's route once coordinates are assigned. layer(e.s) is
 // always strictly greater than layer(e.t) once computeLayers has run (e.s is
-// the dependent, e.t the dependency), so `ids`/`layers` come out already
+// the dependent, e.t the dependency), so `slots` come out already
 // ascending by layer - i.e. ascending x, dependency end to dependent end.
 function buildDummyChains(
   depEdges: DepEdge[],
@@ -184,15 +185,13 @@ function buildDummyChains(
     const ls = layerOf.get(e.s) ?? 0;
     const lt = layerOf.get(e.t) ?? 0;
     if (ls - lt <= 1) continue;
-    const ids: string[] = [];
-    const layers: number[] = [];
+    const slots: DummyChain["slots"] = [];
     for (let layer = lt + 1; layer < ls; layer++) {
       // The leading space guarantees no collision with any real node id and
       // sorts dummies before real ids within a layer for stable ordering.
-      ids.push(` dummy:${e.s}->${e.t}:${layer}`);
-      layers.push(layer);
+      slots.push({ id: ` dummy:${e.s}->${e.t}:${layer}`, layer });
     }
-    chains.set(e.linkRef, { ids, layers });
+    chains.set(e.linkRef, { slots });
   }
   return chains;
 }
@@ -203,9 +202,12 @@ function buildDummyChains(
 // hops instead of a long-range edge that would otherwise skip past the
 // intermediate layers uncounted.
 function chainSegments(e: { s: string; t: string }, chain: DummyChain): { s: string; t: string }[] {
-  const seq = [e.s, ...[...chain.ids].reverse(), e.t]; // high layer -> low layer
+  const seq = [e.s, ...chain.slots.map((slot) => slot.id).reverse(), e.t]; // high layer -> low layer
   const segs: { s: string; t: string }[] = [];
-  for (let i = 0; i < seq.length - 1; i++) segs.push({ s: seq[i], t: seq[i + 1] });
+  for (const [i, s] of seq.entries()) {
+    const t = seq[i + 1];
+    if (t !== undefined) segs.push({ s, t });
+  }
   return segs;
 }
 
@@ -220,7 +222,7 @@ function routeEdges(
   for (const e of depEdges) {
     const chain = chains.get(e.linkRef);
     if (chain) {
-      e.linkRef.points = chain.ids.map((id) => dummyCoord.get(id) as { x: number; y: number });
+      e.linkRef.points = chain.slots.flatMap(({ id }) => dummyCoord.get(id) ?? []);
     } else {
       delete e.linkRef.points;
     }
@@ -250,10 +252,9 @@ export function layoutLayered(
   // them, but they are NEVER pushed into the real `nodes` array.
   const chains = buildDummyChains(depEdges, layerOf);
   for (const chain of chains.values()) {
-    for (let i = 0; i < chain.ids.length; i++) {
-      const layer = chain.layers[i];
+    for (const { id, layer } of chain.slots) {
       if (!layerGroups.has(layer)) layerGroups.set(layer, []);
-      layerGroups.get(layer)?.push(chain.ids[i]);
+      layerGroups.get(layer)?.push(id);
     }
   }
   for (const arr of layerGroups.values()) arr.sort();
@@ -273,7 +274,7 @@ export function layoutLayered(
   // Built from the SEGMENTED edge list (long edges expanded through their dummy
   // chain), not the original depEdges, so the sweep sees unit-length hops only.
   const idsAll = new Set<string>(ids);
-  for (const chain of chains.values()) for (const id of chain.ids) idsAll.add(id);
+  for (const chain of chains.values()) for (const { id } of chain.slots) idsAll.add(id);
 
   const succMap = new Map<string, string[]>(); // nodeId -> [nodeId]  (target of depends_on)
   const prevMap = new Map<string, string[]>(); // nodeId -> [nodeId]  (source of depends_on)
@@ -332,8 +333,7 @@ export function layoutLayered(
     if (!arr) continue;
     const layerH = arr.length * rowH;
     const yOffset = (totalH - layerH) / 2 + rowH / 2;
-    for (let i = 0; i < arr.length; i++) {
-      const id = arr[i];
+    for (const [i, id] of arr.entries()) {
       const x = l * colW + colW / 2;
       const y = yOffset + i * rowH;
       const n = byId.get(id);
@@ -398,10 +398,9 @@ export function layoutWaves(
   // simply appended (no barycenter to join - waves use a strict grid).
   const chains = buildDummyChains(depEdges, layerOf);
   for (const chain of chains.values()) {
-    for (let i = 0; i < chain.ids.length; i++) {
-      const layer = chain.layers[i];
+    for (const { id, layer } of chain.slots) {
       if (!waveGroups.has(layer)) waveGroups.set(layer, []);
-      waveGroups.get(layer)?.push(chain.ids[i]);
+      waveGroups.get(layer)?.push(id);
     }
   }
 
@@ -416,8 +415,7 @@ export function layoutWaves(
     if (!arr) continue;
     const layerH = arr.length * rowH;
     const yOffset = (totalH - layerH) / 2 + rowH / 2;
-    for (let i = 0; i < arr.length; i++) {
-      const id = arr[i];
+    for (const [i, id] of arr.entries()) {
       const x = l * colW + colW / 2;
       const y = yOffset + i * rowH;
       const n = byId.get(id);

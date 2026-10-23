@@ -61,38 +61,34 @@ export function samplePolyline(
   pts: readonly { x: number; y: number }[],
   t: number,
 ): { x: number; y: number } {
-  if (pts.length === 0) return { x: 0, y: 0 };
-  if (pts.length === 1) return { x: pts[0].x, y: pts[0].y };
-  if (t <= 0) return { x: pts[0].x, y: pts[0].y };
-  if (t >= 1) {
-    const last = pts[pts.length - 1];
-    return { x: last.x, y: last.y };
-  }
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (first === undefined || last === undefined) return { x: 0, y: 0 };
+  if (pts.length === 1 || t <= 0) return { x: first.x, y: first.y };
+  if (t >= 1) return { x: last.x, y: last.y };
 
-  const segLens: number[] = [];
+  const segs: { a: { x: number; y: number }; b: { x: number; y: number }; len: number }[] = [];
   let total = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const dx = pts[i + 1].x - pts[i].x;
-    const dy = pts[i + 1].y - pts[i].y;
+  let prev = first;
+  for (const b of pts.slice(1)) {
+    const dx = b.x - prev.x;
+    const dy = b.y - prev.y;
     const len = Math.sqrt(dx * dx + dy * dy);
-    segLens.push(len);
+    segs.push({ a: prev, b, len });
     total += len;
+    prev = b;
   }
-  if (total === 0) return { x: pts[0].x, y: pts[0].y };
+  if (total === 0) return { x: first.x, y: first.y };
 
   const target = t * total;
   let covered = 0;
-  for (let i = 0; i < segLens.length; i++) {
-    const segLen = segLens[i];
-    if (target <= covered + segLen || i === segLens.length - 1) {
-      const segT = segLen === 0 ? 0 : (target - covered) / segLen;
-      const a = pts[i];
-      const b = pts[i + 1];
+  for (const [i, { a, b, len }] of segs.entries()) {
+    if (target <= covered + len || i === segs.length - 1) {
+      const segT = len === 0 ? 0 : (target - covered) / len;
       return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
     }
-    covered += segLen;
+    covered += len;
   }
-  const last = pts[pts.length - 1];
   return { x: last.x, y: last.y };
 }
 
@@ -124,8 +120,8 @@ export function tick(
 
   const flowPoints: { x: number; y: number; alpha: number }[] = [];
   if (flowEdges) {
-    for (let edgeIndex = 0; edgeIndex < flowEdges.length; edgeIndex++) {
-      const pts = flowEdges[edgeIndex].pts;
+    for (const [edgeIndex, edge] of flowEdges.entries()) {
+      const pts = edge.pts;
       if (pts.length < 2) continue;
       for (let particleIndex = 0; particleIndex < 2; particleIndex++) {
         const phaseOffset = (edgeIndex * 0.37 + particleIndex * 0.5) % 1;

@@ -110,7 +110,14 @@ export function decodeFigureLink(payload: string): FigureLinkRead {
       raw.some((part) => typeof part !== "string")
     )
       return fail("edge " + i + " is not [from, to, stroke?, label?] strings");
-    const [from, to, stroke = "plain", label = ""] = raw as string[];
+    const [from, to, stroke = "plain", label = ""]: unknown[] = raw;
+    if (
+      typeof from !== "string" ||
+      typeof to !== "string" ||
+      typeof stroke !== "string" ||
+      typeof label !== "string"
+    )
+      return fail("edge " + i + " is not [from, to, stroke?, label?] strings");
     for (const end of [from, to])
       if (!ids.has(end)) return fail("edge " + i + " names " + JSON.stringify(end) + ", no node");
     if (!isStroke(stroke))

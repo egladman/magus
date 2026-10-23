@@ -3,6 +3,7 @@
 
 import { h } from "../../../desktop/view";
 import { inlineAlert } from "../../../ui/alert";
+import { fail, succeed, type Result } from "../result";
 import type { DiagramNode } from "./api";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -38,13 +39,13 @@ export interface PrepareOptions {
 
 // prepareSvg parses the server's SVG into the page's figure: graphics roles, every node labelled,
 // every anchored node a link that works without script, no fixed size. Server links are kept.
-export function prepareSvg(text: string, opts: PrepareOptions): SVGSVGElement {
+export function prepareSvg(text: string, opts: PrepareOptions): Result<SVGSVGElement> {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const parsed = doc.documentElement;
   if (!isSvg(parsed) || doc.querySelector("parsererror"))
-    throw new Error("the figure is not an SVG document");
+    return fail("the figure is not an SVG document");
   const svg = document.importNode(parsed, true);
-  if (!isSvg(svg)) throw new Error("the figure is not an SVG document");
+  if (!isSvg(svg)) return fail("the figure is not an SVG document");
   sanitize(svg);
 
   // role="img" would make every node presentational, and the nodes are the point.
@@ -85,7 +86,7 @@ export function prepareSvg(text: string, opts: PrepareOptions): SVGSVGElement {
     }
     node.setAttribute("tabindex", "-1");
   }
-  return svg;
+  return succeed(svg);
 }
 
 export interface NodeListOptions {
@@ -143,7 +144,7 @@ export function notice(tone: NoticeTone, title: string, body: string | Node): HT
   const el = inlineAlert({
     variant: tone,
     title,
-    body: body === "" ? undefined : body,
+    ...(body === "" ? {} : { body }),
     live: true,
   });
   el.classList.add("console-diagrams__notice");

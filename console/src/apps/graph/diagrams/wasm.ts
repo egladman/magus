@@ -8,6 +8,7 @@
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
 import type { LinkedFigure } from "./figure-link";
+import { fail, failFrom, succeed, type Result } from "../result";
 
 export interface BuzzDiag {
   readonly msg: string;
@@ -206,7 +207,7 @@ export function wasmRoot(moduleUrl: string = import.meta.url): string {
   return new URL("../wasm/", moduleUrl).href;
 }
 
-let loading: Promise<BuzzRuntime> | null = null;
+let loading: Promise<Result<BuzzRuntime>> | null = null;
 
 export interface LoadOptions {
   readonly root?: string;
@@ -216,18 +217,18 @@ export interface LoadOptions {
 
 // ensureBuzz resolves with the runtime, loading it at most once per page. A failed load is
 // forgotten so the next click retries; the caller reports the failure.
-export function ensureBuzz(opts: LoadOptions = {}): Promise<BuzzRuntime> {
+export function ensureBuzz(opts: LoadOptions = {}): Promise<Result<BuzzRuntime>> {
   const ready = runtimeFrom(globalThis);
-  if (ready) return Promise.resolve(ready);
+  if (ready) return Promise.resolve(succeed(ready));
   if (loading) return loading;
   const root = opts.root ?? wasmRoot();
   const readyMs = opts.readyMs ?? 5000;
-  loading = new Promise<BuzzRuntime>((resolve, reject) => {
+  const attempt = new Promise<Result<BuzzRuntime>>((resolve) => {
     const script = document.createElement("script");
     script.src = root + "wasm_exec.js";
     script.onerror = () =>
-      reject(
-        new Error(
+      resolve(
+        fail(
           "could not load " +
             script.src +
             "; the console build ships it only when docs' build_playground ran first",
@@ -236,42 +237,51 @@ export function ensureBuzz(opts: LoadOptions = {}): Promise<BuzzRuntime> {
     script.onload = () => {
       const Go = (globalThis as { Go?: unknown }).Go;
       if (typeof Go !== "function") {
-        reject(new Error("wasm_exec.js loaded but defined no Go runtime"));
+        resolve(fail("wasm_exec.js loaded but defined no Go runtime"));
         return;
       }
       const url = root + "buzz.wasm";
-      const bytes = async (): Promise<ArrayBuffer> => {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("could not load " + url + ": HTTP " + res.status);
-        return res.arrayBuffer();
+      const bytes = async (): Promise<Result<ArrayBuffer>> => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return fail("could not load " + url + ": HTTP " + res.status);
+          return succeed(await res.arrayBuffer());
+        } catch (e) {
+          return failFrom(e);
+        }
       };
-      startGo(Go as GoConstructor, bytes, readyMs).then(resolve, reject);
+      void startGo(Go as GoConstructor, bytes, readyMs).then(resolve);
     };
     document.head.append(script);
   });
-  loading.catch(() => {
-    // reported: by ensureBuzz's caller; forgetting the load lets a retry reload
-    loading = null;
+  loading = attempt;
+  void attempt.then((r) => {
+    if (!r.ok) loading = null;
   });
-  return loading;
+  return attempt;
 }
 
 // startGo instantiates the wasm under Go and waits for main() to install globalThis.buzz,
 // which it does asynchronously after run() returns.
 export async function startGo(
   Go: GoConstructor,
-  bytes: () => Promise<ArrayBuffer | Uint8Array>,
+  bytes: () => Promise<Result<ArrayBuffer | Uint8Array>>,
   readyMs: number,
-): Promise<BuzzRuntime> {
-  const go = new Go();
-  const mod = await WebAssembly.instantiate(await bytes(), go.importObject);
-  void go.run(mod.instance);
+): Promise<Result<BuzzRuntime>> {
+  const wasm = await bytes();
+  if (!wasm.ok) return wasm;
+  try {
+    const go = new Go();
+    const mod = await WebAssembly.instantiate(wasm.value, go.importObject);
+    void go.run(mod.instance);
+  } catch (e) {
+    return failFrom(e);
+  }
   const deadline = Date.now() + readyMs;
   for (;;) {
     const rt = runtimeFrom(globalThis);
-    if (rt) return rt;
-    if (Date.now() > deadline)
-      throw new Error("the Buzz runtime started but never exposed drawFigure");
+    if (rt) return succeed(rt);
+    if (Date.now() > deadline) return fail("the Buzz runtime started but never exposed drawFigure");
     await new Promise((r) => setTimeout(r, 30));
   }
 }
@@ -294,14 +304,17 @@ export function linkTo(anchorHref: string, anchor: string): string {
   return anchorHref.replace(/\{path\}|\{line\}/g, (m) => (m === "{path}" ? anchor : ""));
 }
 
-// actorNames is the handler's: figure keys an actor by name, so a label two nodes share takes
-// the node's anchor. Aligned with nodes by index.
-export function actorNames(nodes: readonly DeclaredNode[]): string[] {
+// nameActors is the handler's actorNames: figure keys an actor by name, so a label two nodes
+// share takes the node's anchor. Each node comes back with its name.
+export function nameActors<T extends DeclaredNode>(
+  nodes: readonly T[],
+): { node: T; name: string }[] {
   const count = new Map<string, number>();
   for (const n of nodes) count.set(n.label, (count.get(n.label) ?? 0) + 1);
-  return nodes.map((n) =>
-    (count.get(n.label) ?? 0) > 1 ? n.label + " (" + n.anchor + ")" : n.label,
-  );
+  return nodes.map((node) => ({
+    node,
+    name: (count.get(node.label) ?? 0) > 1 ? node.label + " (" + node.anchor + ")" : node.label,
+  }));
 }
 
 // IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
@@ -311,8 +324,7 @@ export const IMPORTS = "imports";
 // directory, an actor as external:<name>), which the SVG's data-edge pairs also use.
 export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): DeclaredNode[] {
   if (claim === IMPORTS) return nodes.map((n) => ({ ...n, id: n.anchor }));
-  const names = actorNames(nodes);
-  return nodes.map((n, i) => ({ ...n, id: "external:" + names[i] }));
+  return nameActors(nodes).map(({ node, name }) => ({ ...node, id: "external:" + name }));
 }
 
 export interface FigureMeta {
@@ -356,7 +368,7 @@ const EMPTY_BOX: Box = {
 
 // buildFigure is the handler's buildFigure over decl, whose node ids are drawnNodes ids: the same
 // Figure record, built from the same rows.
-export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): Figure {
+export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): Result<Figure> {
   const base: Figure = {
     ...EMPTY_FIGURE,
     id: figureId(meta.id),
@@ -387,37 +399,36 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
         },
       }),
     );
-    return { ...base, graphEdges: true, boxes };
+    return succeed({ ...base, graphEdges: true, boxes });
   }
-  const names = actorNames(decl.nodes);
   const actors = new Map<string, Actor>();
-  decl.nodes.forEach((n, i) =>
+  for (const { node: n, name } of nameActors(decl.nodes)) {
     actors.set(n.id, {
-      name: names[i],
+      name,
       sub: "",
       tag: "",
       link: linkTo(meta.anchorHref, n.anchor),
       look: "plain",
-    }),
-  );
-  const flows = decl.edges.map(([src, dst]): Flow => {
+    });
+  }
+  const flows: Flow[] = [];
+  for (const [src, dst] of decl.edges) {
     const a = actors.get(src);
     const b = actors.get(dst);
-    if (!a || !b)
-      throw new Error("the declaration has an edge " + src + "->" + dst + " to no node");
-    return {
+    if (!a || !b) return fail("the declaration has an edge " + src + "->" + dst + " to no node");
+    flows.push({
       src: { dir: null, actor: a },
       dst: { dir: null, actor: b },
       label: "",
       stroke: null,
-    };
-  });
-  return {
+    });
+  }
+  return succeed({
     ...base,
     unscopedWhy: "served from the workspace graph: " + desc,
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
     flows,
-  };
+  });
 }
 
 // libs/figure's MaxAccent: a third accent is a finding.
@@ -434,15 +445,13 @@ export function linkedRows(linked: LinkedFigure): DeclaredNode[] {
 // figureForLink builds the Figure record for a shared graph: one actor per node, one flow per
 // edge carrying the edge's stroke and label. A seed is tagged "edited" and takes the accent only
 // while the figure has room for it, so a change that edits many projects is still drawn.
-export function figureForLink(linked: LinkedFigure): Figure {
-  const rows = linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label }));
-  const names = actorNames(rows);
+export function figureForLink(linked: LinkedFigure): Result<Figure> {
   const accent = linked.nodes.filter((n) => n.seed).length <= MAX_ACCENT;
   const actors = new Map<string, Actor>(
-    linked.nodes.map((n, i) => [
+    nameActors(linked.nodes.map((n) => ({ ...n, anchor: n.id }))).map(({ node: n, name }) => [
       n.id,
       {
-        name: names[i],
+        name,
         sub: "",
         tag: n.seed ? "edited" : "",
         link: "",
@@ -450,25 +459,26 @@ export function figureForLink(linked: LinkedFigure): Figure {
       },
     ]),
   );
-  const flows = linked.edges.map((e): Flow => {
+  const flows: Flow[] = [];
+  for (const e of linked.edges) {
     const a = actors.get(e.from);
     const b = actors.get(e.to);
-    if (!a || !b) throw new Error("the link has an edge " + e.from + "->" + e.to + " to no node");
-    return {
+    if (!a || !b) return fail("the link has an edge " + e.from + "->" + e.to + " to no node");
+    flows.push({
       src: { dir: null, actor: a },
       dst: { dir: null, actor: b },
       label: e.label,
       stroke: e.stroke,
-    };
-  });
-  return {
+    });
+  }
+  return succeed({
     ...EMPTY_FIGURE,
     id: figureId("link"),
     title: linked.title,
     unscopedWhy: "drawn from a shared link, which carries the graph and no directories",
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
     flows,
-  };
+  });
 }
 
 export type Relayout =
@@ -499,11 +509,7 @@ export interface RelayoutInput {
 export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (!cut.ok) return { kind: "bad-lens", detail: cut.error };
-  let figure: Figure;
-  try {
-    figure = buildFigure(cut.decl, input.meta, describeLens(input.lens));
-  } catch (e) {
-    return { kind: "failed", detail: e instanceof Error ? e.message : String(e) };
-  }
-  return toRelayout(input.runtime.drawFigure(figure, input.meta.anchorHref));
+  const figure = buildFigure(cut.decl, input.meta, describeLens(input.lens));
+  if (!figure.ok) return { kind: "failed", detail: figure.error.message };
+  return toRelayout(input.runtime.drawFigure(figure.value, input.meta.anchorHref));
 }

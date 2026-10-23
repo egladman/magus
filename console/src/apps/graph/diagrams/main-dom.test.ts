@@ -642,7 +642,7 @@ test("server rows take the ids the figure draws", () => {
 });
 
 test("the actor record carries every value as data, however it is spelled", () => {
-  const f = buildFigure(
+  const built = buildFigure(
     {
       nodes: [
         { id: "external:a", anchor: "x/y", label: 'say "{hi}"' },
@@ -653,6 +653,8 @@ test("the actor record carries every value as data, however it is spelled", () =
     { id: "targets:app", title: "T", claim: "flow", anchorHref: "" },
     "scope x",
   );
+  assert.ok(built.ok);
+  const f = built.value;
   assert.equal(f.id, "targets-app");
   assert.equal(f.desc, "scope x");
   assert.equal(f.boxes[0].actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
@@ -661,15 +663,13 @@ test("the actor record carries every value as data, however it is spelled", () =
     f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
     [['say "{hi}"', "b"]],
   );
-  assert.throws(
-    () =>
-      buildFigure(
-        { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
-        { id: "projects", title: "P", claim: "flow", anchorHref: "" },
-        "",
-      ),
-    /edge external:a->gone to no node/,
+  const dangling = buildFigure(
+    { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
+    { id: "projects", title: "P", claim: "flow", anchorHref: "" },
+    "",
   );
+  assert.ok(!dangling.ok);
+  assert.match(dangling.error.message, /edge external:a->gone to no node/);
 });
 
 test("a draw result is a figure, a refusal or a failure", () => {
@@ -701,7 +701,9 @@ test("the runtime is globalThis.buzz with drawFigure, and the record crosses as 
   });
   assert.ok(rt);
   const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
-  const f = buildFigure({ nodes: [], edges: [] }, meta, "");
+  const built = buildFigure({ nodes: [], edges: [] }, meta, "");
+  assert.ok(built.ok);
+  const f = built.value;
   assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
   assert.deepEqual(JSON.parse(sent), f);
   const odd = runtimeFrom({ buzz: { drawFigure: () => 7 } });
