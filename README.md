@@ -168,29 +168,16 @@ import "magus/spell/go";
 
 magus\project({ "spells": [go] });
 
-// Every exported function is a runnable target. It receives a magus\Context,
-// the handle it uses to declare what it needs and hands to every op it runs.
-// magus caches each target's result and runs it only when a change reaches
-// this project.
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](ctx); }
 export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](ctx); }
 
-// format is read-only by default: go-fmt reports files that need formatting, and
-// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. They take
-// DIFFERENT write charms, because they are not the same risk. gofmt is offline, so
-// the same tree always yields the same bytes: `magus run format:rw` rewrites the
-// code. Tidy resolves against the module proxy, so what it writes depends on what
-// upstream serves today; that is a second, deliberate ask:
-//   magus run format:rw          formatting only; go mod tidy still just reports
-//   magus run format:rw,update   also let go mod tidy amend go.mod and go.sum
+// Read-only unless run as format:rw; go mod tidy also needs format:rw,update.
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }
 
-// 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline
-// by declaring the targets it needs.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build, test, lint, format);
 }
