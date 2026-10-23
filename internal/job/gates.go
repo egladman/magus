@@ -2,6 +2,7 @@ package job
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"io"
 	"regexp"
@@ -20,8 +21,47 @@ type UnrunGate struct {
 	Project string `json:"project" yaml:"project"`
 	// Source is the target's source glob that matched a written file.
 	Source string `json:"source"  yaml:"source"`
-	// Goal is the goal that would add the target to the job, ready to put in its goals.
+	// Goal is the goal that would add the target to the job, ready to put in its goals: a
+	// form the guard lets the job's worker run. Zero when IntegratorGates.
 	Goal types.Goal `json:"goal"    yaml:"goal"`
+	// IntegratorGates marks a target no form of which the guard lets a worker run, such as
+	// the build of magus itself. The integrator runs it, so no goal or waiver is asked for.
+	IntegratorGates bool `json:"integrator_gates,omitempty" yaml:"integrator_gates,omitempty"`
+}
+
+// gradeFunc is the guard's verdict on a check run by the holder of the row being gated.
+// Nil grades nothing, which offers every goal as it is.
+type gradeFunc func(types.LeaseCheck) CheckVerdict
+
+// gradeWith grades a check as the row with that check, the way [deniedCheckProblems]
+// does. A nil grader grades nothing.
+func gradeWith(grader CheckGrader, root string, row types.Job) gradeFunc {
+	if grader == nil {
+		return nil
+	}
+	return func(c types.LeaseCheck) CheckVerdict {
+		pending := row
+		pending.Check = &c
+		return grader(context.Background(), root, pending)
+	}
+}
+
+// gradedGoal is goal in the form the guard lets the holder run: as given, else without
+// default charms. It reports true, with no goal, when neither form may run. A verdict that
+// reached no conclusion (NotGraded) offers the goal as given; [deniedCheckProblems] reports
+// the missing grade once for the whole row.
+func gradedGoal(goal types.Goal, grade gradeFunc) (types.Goal, bool) {
+	if grade == nil {
+		return goal, false
+	}
+	charmless := goal
+	charmless.Check.NoDefaultCharms = true
+	for _, candidate := range []types.Goal{goal, charmless} {
+		if !grade(candidate.Check).Denied {
+			return candidate, false
+		}
+	}
+	return types.Goal{}, true
 }
 
 // unrunGatesLimit is how many gates a text rendering lists before it counts the rest.
@@ -40,8 +80,15 @@ const ciTarget = "ci"
 // target RegeneratedOutside already lists is left out because the root regenerates it. A
 // script check covers nothing: what it runs is not a target.
 //
-// A workspace with no root project, or one whose root has no ci chain, yields nil.
+// Each goal is graded by the installed [CheckGrader] before it is offered: the form a
+// worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
+// project, or one whose root has no ci chain, yields nil.
 func UnrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput) []UnrunGate {
+	return unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+}
+
+// unrunGates is [UnrunGates] graded by grade.
+func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) []UnrunGate {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
 		return nil
 	}
@@ -123,7 +170,7 @@ func UnrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if composed[u.visit.Key()] {
 			continue
 		}
-		u.gate.Goal = unrunGoal(u.gate.Project, u.gate.Target, taken)
+		u.gate.Goal, u.gate.IntegratorGates = gradedGoal(unrunGoal(u.gate.Project, u.gate.Target, taken), grade)
 		out = append(out, u.gate)
 	}
 	return out
@@ -175,11 +222,19 @@ func unrunLines(gates []UnrunGate) []string {
 		goals []types.Goal
 	)
 	for _, g := range shown {
-		lines = append(lines, fmt.Sprintf("%s %s (reads %s)", g.Target, g.Project, g.Source))
+		line := fmt.Sprintf("%s %s (reads %s)", g.Target, g.Project, g.Source)
+		if g.IntegratorGates {
+			lines = append(lines, line+": the integrator gates it; no worker may run it")
+			continue
+		}
+		lines = append(lines, line)
 		goals = append(goals, g.Goal)
 	}
 	if rest := len(gates) - len(shown); rest > 0 {
 		lines = append(lines, fmt.Sprintf("and %d more; -o json lists every one", rest))
+	}
+	if len(goals) == 0 {
+		return lines
 	}
 	if data, err := json.Marshal(goals); err == nil {
 		lines = append(lines, "goals to add: "+string(data))
