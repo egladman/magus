@@ -454,8 +454,29 @@ func TestForkNotes(t *testing.T) {
 		assert.Equal(t, []string{"B and A both write run.go. Claim `run.go#C` on B (its symbol goals name it) and a declaration other than that on A, or add `--depends-on A` to B, or fold B into A"}, got)
 	})
 
-	// One note per peer and file, however many of the row's entries name the file; a
-	// second peer on it gets its own.
+	t.Run("a peer sharing many files gets one line", func(t *testing.T) {
+		t.Parallel()
+		paths := []string{"a.go", "b.go", "c.go", "d.go", "e.go"}
+		rows := []types.Job{{ID: "A", State: types.StateDeclared, WritePaths: paths}}
+		got := ForkNotes(ctx, s, rows, types.Job{ID: "B", WritePaths: paths})
+		assert.Equal(t, []string{"B and A both write 5 files (a.go, b.go, c.go, and 2 more). Claim a declaration of each on both rows, add `--depends-on A` to B, or fold B into A"}, got)
+	})
+
+	t.Run("a peer waiting on a dependency gets one line and no file", func(t *testing.T) {
+		t.Parallel()
+		paths := []string{"a.go", "b.go", "c.go"}
+		rows := []types.Job{
+			{ID: "A", State: types.StateDeclared, WritePaths: paths, DependsOn: []string{"Z"}},
+			{ID: "Z", State: types.StateDeclared},
+		}
+		got := ForkNotes(ctx, s, rows, types.Job{ID: "B", WritePaths: paths})
+		require.Len(t, got, 1, "%q", got)
+		assert.Contains(t, got[0], "B and A share 3 file(s)")
+		assert.NotContains(t, got[0], "a.go")
+	})
+
+	// One note per peer, however many of the row's entries name a file; a second peer on
+	// it gets its own.
 	t.Run("a file two entries and two peers share", func(t *testing.T) {
 		t.Parallel()
 		rows := []types.Job{
