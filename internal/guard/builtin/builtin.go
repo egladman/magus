@@ -230,7 +230,7 @@ var defaults = map[string]Decision{
 	"lease-undeclared":      Deny,
 	"lease-vcs":             Deny,
 	"lease-write":           Deny,
-	"lease-widen":           Deny,
+	"lease-claim":           Deny,
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,

@@ -71,6 +71,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `jobs.default_timeout`    | `MAGUS_JOBS_DEFAULT_TIMEOUT`    | `--jobs-default-timeout`    | duration |
 | `jobs.max_claim_files`    | `MAGUS_JOBS_MAX_CLAIM_FILES`    | `--jobs-max-claim-files`    | int      |
 | `jobs.max_claim_projects` | `MAGUS_JOBS_MAX_CLAIM_PROJECTS` | `--jobs-max-claim-projects` | int      |
+| `jobs.max_claims`         | `MAGUS_JOBS_MAX_CLAIMS`         | `--jobs-max-claims`         | int      |
 | `jobs.max_depth`          | `MAGUS_JOBS_MAX_DEPTH`          | `--jobs-max-depth`          | int      |
 | `jobs.max_live`           | `MAGUS_JOBS_MAX_LIVE`           | `--jobs-max-live`           | int      |
 | `jobs.max_validations`    | `MAGUS_JOBS_MAX_VALIDATIONS`    | `--jobs-max-validations`    | int      |

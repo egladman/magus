@@ -1046,16 +1046,16 @@ func TestPathWithin(t *testing.T) {
 	}
 }
 
-func TestParseWideningEvidence(t *testing.T) {
+func TestParseClaimEvidence(t *testing.T) {
 	t.Parallel()
 
-	for because, want := range map[string]WideningEvidence{
-		"refs:hint.VCSAdd":         {Kind: WideningRefs, Subject: "hint.VCSAdd"},
-		"test:cmd/magus/vcs.go":    {Kind: WideningTest, Subject: "cmd/magus/vcs.go"},
-		"output:.:config-generate": {Kind: WideningOutput, Subject: ".:config-generate"},
-		"released":                 {Kind: WideningReleased},
+	for because, want := range map[string]ClaimEvidence{
+		"refs:hint.VCSAdd":         {Kind: ClaimRefs, Subject: "hint.VCSAdd"},
+		"test:cmd/magus/vcs.go":    {Kind: ClaimTest, Subject: "cmd/magus/vcs.go"},
+		"output:.:config-generate": {Kind: ClaimOutput, Subject: ".:config-generate"},
+		"released":                 {Kind: ClaimReleased},
 	} {
-		got, err := ParseWideningEvidence(because)
+		got, err := ParseClaimEvidence(because)
 		require.NoError(t, err, because)
 		assert.Equal(t, want, got)
 		assert.Equal(t, because, got.String(), "the evidence spells back as its because")
@@ -1066,36 +1066,36 @@ func TestParseWideningEvidence(t *testing.T) {
 		"released:a.go":   "released names nothing after it",
 		"output:generate": "names no target",
 	} {
-		_, err := ParseWideningEvidence(because)
+		_, err := ParseClaimEvidence(because)
 		require.Error(t, err, because)
 		assert.Contains(t, err.Error(), refused)
 	}
 }
 
-func TestAWideningRecordDeclaresNothingElse(t *testing.T) {
+func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 
-	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Widen: []JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
 	assert.Empty(t, rec.Problems())
 
 	rec.Criteria = "more"
-	rec.Widen = append(rec.Widen, JobWidenRequest{Path: "../x.go", Because: "released"}, JobWidenRequest{Path: "internal/**", Because: "maybe"})
+	rec.Claim = append(rec.Claim, JobClaimRequest{Path: "../x.go", Because: "released"}, JobClaimRequest{Path: "internal/**", Because: "maybe"})
 	var fields []string
 	for _, p := range rec.Problems() {
 		fields = append(fields, p.Field)
 	}
-	assert.Equal(t, []string{"widen", "widen[1].path", "widen[2].path", "widen[2].because"}, fields)
+	assert.Equal(t, []string{"claim", "claim[1].path", "claim[2].path", "claim[2].because"}, fields)
 }
 
-func TestDeclarationCarriesMaxWidenings(t *testing.T) {
+func TestDeclarationCarriesMaxClaims(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, Declaration{ID: "worker", MaxWidenings: 4}.Validate())
-	assert.ErrorContains(t, Declaration{ID: "worker", MaxWidenings: -1}.Validate(), "max_widenings is -1")
+	require.NoError(t, Declaration{ID: "worker", MaxClaims: 4}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxClaims: -1}.Validate(), "max_claims is -1")
 
 	var row Job
-	Declaration{ID: "worker", MaxWidenings: 4}.Apply(&row)
-	assert.Equal(t, 4, row.MaxWidenings)
+	Declaration{ID: "worker", MaxClaims: 4}.Apply(&row)
+	assert.Equal(t, 4, row.MaxClaims)
 	Declaration{ID: "worker"}.ApplySpec(&row)
-	assert.Zero(t, row.MaxWidenings)
+	assert.Zero(t, row.MaxClaims)
 }

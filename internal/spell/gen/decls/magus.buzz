@@ -93,7 +93,7 @@ export enum<str> ModelTierSource {
     default = "default",
 }
 
-export enum<str> WideningKind {
+export enum<str> ClaimKind {
     none = "",
     refs = "refs",
     test = "test",
@@ -988,8 +988,8 @@ export object JobModelTier {
     model: str = "",
 }
 
-export object WideningEvidence {
-    kind: WideningKind = WideningKind.none,
+export object ClaimEvidence {
+    kind: ClaimKind = ClaimKind.none,
     subject: str = "",
 }
 
@@ -1016,9 +1016,9 @@ export object Origin {
     credential: Credential = Credential{},
 }
 
-export object JobWidening {
+export object JobClaim {
     path: str = "",
-    evidence: WideningEvidence = WideningEvidence{},
+    evidence: ClaimEvidence = ClaimEvidence{},
     proof: str = "",
     at: int = 0,
     by: Origin = Origin{},
@@ -1211,9 +1211,10 @@ export object Job {
     freshReason: str = "",
     reworkRounds: int = 0,
     widenings: int = 0,
-    widened: [JobWidening] = [],
+    claims: [JobClaim] = [],
     generation: int = 0,
     maxAttempts: int = 0,
+    maxClaims: int = 0,
     attempts: int = 0,
     prior: [PriorAttempt] = [],
     rejection: JobRejection? = null,

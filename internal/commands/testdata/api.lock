@@ -26,6 +26,7 @@ config history_path
 config jobs.default_timeout
 config jobs.max_claim_files
 config jobs.max_claim_projects
+config jobs.max_claims
 config jobs.max_depth
 config jobs.max_live
 config jobs.max_validations

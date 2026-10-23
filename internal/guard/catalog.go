@@ -95,7 +95,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseUndeclared},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
-	{doc: ruleDocLeaseWiden},
+	{doc: ruleDocLeaseClaim},
 	{doc: ruleDocWholeTree},
 	{doc: ruleDocWorkerCheckOnly},
 	{doc: ruleDocWorkerBackgroundRun},
@@ -629,16 +629,16 @@ var ruleDocLeaseWrite = types.RuleDoc{
 		"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to.",
 }
 
-var ruleDocLeaseWiden = types.RuleDoc{
-	Name:    string(denyRuleLeaseWiden),
+var ruleDocLeaseClaim = types.RuleDoc{
+	Name:    string(denyRuleLeaseClaim),
 	Catches: "a leased write outside its write paths that magus proves belongs to the job",
-	Why: "A write outside the write paths is still refused: the boundary is the declaration, and the guard never widens it inside a hook. " +
-		"When magus can prove the path belongs to the job, the refusal names the proof and serves the one `magus job apply` line that widens the job, instead of sending the worker to its orchestrator. " +
+	Why: "A write outside the write paths is still refused: the boundary is the declaration, and the guard never changes it inside a hook. " +
+		"When magus can prove the path belongs to the job, the refusal names the proof and serves the one `magus job apply` line that claims the path for the job, instead of sending the worker to its orchestrator. " +
 		"A proof is one of four: refs:<symbol>, a Go file referencing a declaration the job's diff changed or removed inside its write paths; " +
 		"test:<file>, a test beside a file the job changed (a _test file in its directory, or a file under its testdata) that names what the file defines; " +
 		"output:<project>:<target>, a declared output of a target whose sources the job changed; and released, a path this attempt's holder released. " +
 		"The store proves the record again under its lock when it applies, and refuses a path another live job holds (MGS3032), a deny path, " +
-		"a path outside the checkout, and any past jobs.max_proved_widenings. A write no proof covers stays lease-write. " +
+		"a path outside the checkout, and any claim past the job's max_claims (3 when unset), which jobs.max_claims in magus.yaml (default 10) caps. A write no proof covers stays lease-write. " +
 		"Every message is rendered by magus from the row and the tree; no model is asked.",
 }
 

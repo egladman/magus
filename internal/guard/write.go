@@ -307,8 +307,8 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		enter := func(owner types.Job) (writeGrade, bool) {
 			return gradeEntry(ctx, deps, location, owner, rel)
 		}
-		widen := func(rel string) writeGrade { return gradeProvedWidening(ctx, deps, checkout, me, leases, rel) }
-		g := gradeAgainstOwnLease(me, owners, rel, enter, func() string { return deps.revision(ctx, checkout, "") }, widen)
+		claim := func(rel string) writeGrade { return gradeProvedClaim(ctx, deps, checkout, me, leases, rel) }
+		g := gradeAgainstOwnLease(me, owners, rel, enter, func() string { return deps.revision(ctx, checkout, "") }, claim)
 		if g.Decision == decisionDeny {
 			return g
 		}
@@ -416,9 +416,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // their paths, see owningLeases. enter grades a write into another lease's path against the
 // entries that lease carries, reporting whether one covered it. liveRevision reads the
 // revision the lease's checkout is on now, "" when it cannot; it is read only for a lease
-// whose recorded base diverged. widen grades a write outside the write paths that no
-// other lease owns, and answers the lease-widen refusal when magus can prove it in scope.
-func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), liveRevision func() string, widen func(rel string) writeGrade) writeGrade {
+// whose recorded base diverged. claim grades a write outside the write paths that no
+// other lease owns, and answers the lease-claim refusal when magus can prove it in scope.
+func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), liveRevision func() string, claim func(rel string) writeGrade) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -519,9 +519,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
-	// A path magus can prove in scope is refused with the apply line that widens the job,
+	// A path magus can prove in scope is refused with the apply line that claims the job,
 	// which the store proves again. Anything else names what the job holds and who to ask.
-	if g := widen(rel); g.Decision != "" {
+	if g := claim(rel); g.Decision != "" {
 		return g
 	}
 	revoked := ""
@@ -820,7 +820,7 @@ func adviseMalformedDeclaration(err error) writeGrade {
 
 // leaseCheckout is the checkout the acting lease's paths are relative to: the one its row
 // records it was taken in, whatever its state, or the hook's when it records none. A holder
-// continued after returning its job still writes there, and a widening moves nothing.
+// continued after returning its job still writes there, and a claim moves nothing.
 func leaseCheckout(ctx context.Context, at location, lease string) string {
 	if me, ok := leaseRow(ctx, at, lease); ok && me.CheckoutRoot != "" {
 		return me.CheckoutRoot

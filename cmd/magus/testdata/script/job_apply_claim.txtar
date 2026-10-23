@@ -1,5 +1,5 @@
-# A holder widens its own job through `magus job apply` with a record carrying only id
-# and widen, each path with the proof magus re-proves: here a path it released. The proof
+# A holder claims its own job through `magus job apply` with a record carrying only id
+# and claim, each path with the proof magus re-proves: here a path it released. The proof
 # is printed and stored on the job; a path with no proof, another job's row, and a record
 # beside other records are refused, and a dry run writes nothing.
 [!exec:git] skip 'the job diffs against a git checkpoint'
@@ -21,24 +21,24 @@ env BAGGAGE=magus.lease=wave/w
 exec magus job exec wave/w
 exec magus job apply -f $WORK/narrow.json
 
-exec magus --dry-run job apply -f $WORK/widen.json
-stdout '^would widen wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
+exec magus --dry-run job apply -f $WORK/claim.json
+stdout '^would claim wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
 exec magus describe job wave/w -o template='{{.job.write_paths}}'
 stdout '^\[pricing/total\.sh\]$'
 
-exec magus job apply -f $WORK/widen.json
-stdout '^widened wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
-exec magus describe job wave/w -o template='{{.job.write_paths}} {{range .job.widened}}{{.path}} {{.evidence.kind}}{{end}}'
+exec magus job apply -f $WORK/claim.json
+stdout '^claims wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
+exec magus describe job wave/w -o template='{{.job.write_paths}} {{range .job.claims}}{{.path}} {{.evidence.kind}}{{end}}'
 stdout '^\[pricing/total\.sh pricing/tax\.sh\] pricing/tax\.sh released$'
 
 ! exec magus job apply -f $WORK/unproved.json
 stderr 'this attempt''s holder never released pricing/rates\.sh'
 
 ! exec magus job apply -f $WORK/theirs.json
-stderr 'a holder widens only its own job'
+stderr 'a holder claims only its own job'
 
 ! exec magus job apply -f $WORK/mixed.jsonl
-stderr 'a widening record applies alone'
+stderr 'a claim record applies alone'
 
 -- wave.json --
 {"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh", "pricing/tax.sh"], "check": {"target": "test", "project": "."}}
@@ -46,14 +46,14 @@ stderr 'a widening record applies alone'
 {"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
 -- narrow.json --
 {"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
--- widen.json --
-{"schema_version": 13, "id": "wave/w", "widen": [{"path": "pricing/tax.sh", "because": "released"}]}
+-- claim.json --
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- unproved.json --
-{"schema_version": 13, "id": "wave/w", "widen": [{"path": "pricing/rates.sh", "because": "released"}]}
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
 -- theirs.json --
-{"schema_version": 13, "id": "wave/other", "widen": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"schema_version": 13, "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- mixed.jsonl --
-{"schema_version": 13, "id": "wave/w", "widen": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 {"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/

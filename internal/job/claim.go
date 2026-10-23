@@ -575,6 +575,9 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		return nil
 	}
 	var notes, configs []string
+	if note := claimLimitAdvice(row); note != "" {
+		notes = append(notes, note)
+	}
 	for _, entry := range row.WritePaths {
 		file, ok := literalClaimableFile(store.root, entry)
 		if !ok {

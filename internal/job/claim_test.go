@@ -439,6 +439,13 @@ func TestForkNotes(t *testing.T) {
 		})
 	}
 
+	t.Run("a claim cap past the advised number", func(t *testing.T) {
+		t.Parallel()
+		got := ForkNotes(ctx, s, nil, types.Job{ID: "B", WritePaths: []string{"run.go"}, MaxClaims: 8})
+		assert.Equal(t, []string{claimLimitAdvice(types.Job{ID: "B", MaxClaims: 8})}, got)
+		assert.Empty(t, ForkNotes(ctx, s, nil, types.Job{ID: "B", WritePaths: []string{"run.go"}, MaxClaims: 5}))
+	})
+
 	t.Run("a file shared with a job not yet taken", func(t *testing.T) {
 		t.Parallel()
 		rows := []types.Job{{ID: "A", State: types.StateDeclared, WritePaths: []string{"run.go"}}}

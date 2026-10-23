@@ -757,11 +757,11 @@ type Job struct {
 	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
 	// stored one.
 	ReworkRounds int `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
-	Widenings    int `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
-	// Widened are the write paths this attempt's holder added with a proof the store
-	// re-proved, oldest first. Store-computed like Widenings; a fork of the next attempt
+	Widenings    int `json:"widenings,omitempty"  yaml:"widenings,omitempty"`
+	// Claims are the write paths this attempt's holder added with a proof the store
+	// re-proved, oldest first. Store-computed like ModelTier; a fork of the next attempt
 	// starts it over.
-	Widened []JobWidening `json:"widened,omitempty" yaml:"widened,omitempty"`
+	Claims []JobClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
 	// Generation counts changes to the declared spec, as Kubernetes' metadata.generation
 	// does: 1 when the row is declared, one more on each fork or apply that changes a
 	// declared field. Store-computed, and a store-written field never moves it. Each result,
@@ -771,9 +771,9 @@ type Job struct {
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does; zero is no cap. It
 	// is checked only when the row is forked again: magus never retries a job on its own.
 	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
-	// MaxWidenings caps how many proved widenings one attempt takes, chosen by whoever declares the
-	// job; zero takes the default. A fork raising it past jobs.max_widenings_ceiling is refused.
-	MaxWidenings int `json:"max_widenings,omitempty" yaml:"max_widenings,omitempty"`
+	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
+	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
+	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
 	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
 	// Prior holds the attempts before it, newest last, at most three, as structured
 	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
@@ -992,7 +992,7 @@ type PriorAttempt struct {
 	ReportedBase       string       `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
 	Ended              int64        `json:"ended,omitempty"               yaml:"ended,omitempty"`
 	ReworkRounds       int          `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
-	Widenings          int          `json:"widenings,omitempty"           yaml:"widenings,omitempty"`
+	Widenings          int          `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
 	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	UnresolvedRisks    []string     `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
@@ -1103,80 +1103,80 @@ type Declaration struct {
 	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
 	// is no cap. See [Job.MaxAttempts].
 	MaxAttempts int `json:"max_attempts,omitempty"`
-	// MaxWidenings caps how many proved widenings one attempt takes; zero takes the default. See
-	// [Job.MaxWidenings].
-	MaxWidenings int `json:"max_widenings,omitempty"`
+	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
+	// [Job.MaxClaims].
+	MaxClaims int `json:"max_claims,omitempty"`
 	// Waivers accept waivable problems (see [Waivable]) on the record's own authority.
 	Waivers []JobWaiver `json:"waivers,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
 	// other than its holder. A record carrying it declares nothing else.
 	Enter string `json:"enter,omitempty"`
-	// Widen turns the record into a proved widening of the job ID names: each entry adds
+	// Claim turns the record into a proved claim of the job ID names: each entry adds
 	// one write path with the proof the store re-proves before it writes. A record carrying
 	// it declares nothing else.
-	Widen []JobWidenRequest `json:"widen,omitempty"`
+	Claim []JobClaimRequest `json:"claim,omitempty"`
 }
 
-// JobWidenRequest is one write path a widening record asks for, and Because the proof:
+// JobClaimRequest is one write path a claim record asks for, and Because the proof:
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
-// [ParseWideningEvidence].
-type JobWidenRequest struct {
+// [ParseClaimEvidence].
+type JobClaimRequest struct {
 	Path    string `json:"path" schema:"writepath"`
 	Because string `json:"because" schema:"nonblank"`
 }
 
-// WideningKind is what a proved widening rests on.
-type WideningKind string
+// ClaimKind is what a proved claim rests on.
+type ClaimKind string
 
 const (
-	// WideningRefs is a path that references a declaration the job's diff changed inside
+	// ClaimRefs is a path that references a declaration the job's diff changed inside
 	// its write paths.
-	WideningRefs WideningKind = "refs"
-	// WideningTest is a test beside a file the job changed that references what it defines.
-	WideningTest WideningKind = "test"
-	// WideningOutput is a declared output of a target whose sources the job changed.
-	WideningOutput WideningKind = "output"
-	// WideningReleased is a path the job's own holder released in this attempt.
-	WideningReleased WideningKind = "released"
+	ClaimRefs ClaimKind = "refs"
+	// ClaimTest is a test beside a file the job changed that references what it defines.
+	ClaimTest ClaimKind = "test"
+	// ClaimOutput is a declared output of a target whose sources the job changed.
+	ClaimOutput ClaimKind = "output"
+	// ClaimReleased is a path the job's own holder released in this attempt.
+	ClaimReleased ClaimKind = "released"
 )
 
-// WideningEvidence is a parsed `because`: the kind and what it names, empty for released.
-type WideningEvidence struct {
-	Kind    WideningKind `json:"kind"              yaml:"kind"`
+// ClaimEvidence is a parsed `because`: the kind and what it names, empty for released.
+type ClaimEvidence struct {
+	Kind    ClaimKind `json:"kind"              yaml:"kind"`
 	Subject string       `json:"subject,omitempty" yaml:"subject,omitempty"`
 }
 
 // String is the evidence as a `because` spells it.
-func (e WideningEvidence) String() string {
+func (e ClaimEvidence) String() string {
 	if e.Subject == "" {
 		return string(e.Kind)
 	}
 	return string(e.Kind) + ":" + e.Subject
 }
 
-// ParseWideningEvidence reads a `because`. An output subject is `<project>:<target>`.
-func ParseWideningEvidence(because string) (WideningEvidence, error) {
+// ParseClaimEvidence reads a `because`. An output subject is `<project>:<target>`.
+func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 	kind, subject, _ := strings.Cut(strings.TrimSpace(because), ":")
-	e := WideningEvidence{Kind: WideningKind(kind), Subject: strings.TrimSpace(subject)}
+	e := ClaimEvidence{Kind: ClaimKind(kind), Subject: strings.TrimSpace(subject)}
 	switch {
 	case !e.Kind.Valid():
 		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target> or released", because)
-	case e.Kind == WideningReleased && e.Subject != "":
+	case e.Kind == ClaimReleased && e.Subject != "":
 		return e, fmt.Errorf("%q: released names nothing after it", because)
-	case e.Kind != WideningReleased && e.Subject == "":
+	case e.Kind != ClaimReleased && e.Subject == "":
 		return e, fmt.Errorf("%q names no %s subject", because, e.Kind)
-	case e.Kind == WideningOutput && !strings.Contains(e.Subject, ":"):
+	case e.Kind == ClaimOutput && !strings.Contains(e.Subject, ":"):
 		return e, fmt.Errorf("%q names no target, so spell it output:<project>:<target>", because)
 	}
 	return e, nil
 }
 
-// JobWidening is one write path a holder added with a proof. Proof is the sentence the
+// JobClaim is one write path a holder added with a proof. Proof is the sentence the
 // store found it true by, At unix seconds and By who wrote it.
-type JobWidening struct {
+type JobClaim struct {
 	Path     string           `json:"path"     yaml:"path"`
-	Evidence WideningEvidence `json:"evidence" yaml:"evidence"`
+	Evidence ClaimEvidence `json:"evidence" yaml:"evidence"`
 	Proof    string           `json:"proof"    yaml:"proof"`
 	At       int64            `json:"at"       yaml:"at"`
 	By       Origin           `json:"by"       yaml:"by"`
@@ -1256,8 +1256,8 @@ func (r Declaration) Problems() JobProblems {
 		}
 		return ps
 	}
-	if len(r.Widen) > 0 {
-		return append(ps, r.widenProblems()...)
+	if len(r.Claim) > 0 {
+		return append(ps, r.claimProblems()...)
 	}
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
@@ -1281,8 +1281,8 @@ func (r Declaration) Problems() JobProblems {
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
 	}
-	if r.MaxWidenings < 0 {
-		invalid("max_widenings", fmt.Sprintf("max_widenings is %d, and it is a count of widenings", r.MaxWidenings), "use a positive count, or 0 for the default")
+	if r.MaxClaims < 0 {
+		invalid("max_claims", fmt.Sprintf("max_claims is %d, and it is a count of claims", r.MaxClaims), "use a positive count, or 0 for the default")
 	}
 	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
 		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", r.Checkout),
@@ -1331,21 +1331,21 @@ func (r Declaration) Problems() JobProblems {
 	return append(ps, goalsProblems(r.Goals, declared)...)
 }
 
-// widenProblems is every problem of a widening record: it carries only schema_version, id
-// and widen, and each entry names one literal workspace path and a proof that parses.
-func (r Declaration) widenProblems() JobProblems {
+// claimProblems is every problem of a claim record: it carries only schema_version, id
+// and claim, and each entry names one literal workspace path and a proof that parses.
+func (r Declaration) claimProblems() JobProblems {
 	var ps JobProblems
 	invalid := func(field, message, fix string) {
 		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
 	}
 	rest := r
-	rest.Schema, rest.ID, rest.Widen = Schema{}, "", nil
+	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
 	if !reflect.ValueOf(rest).IsZero() {
-		invalid("widen", "a record carrying widen widens a job and declares nothing, so it carries only schema_version, id and widen",
-			"drop every other field, or drop widen")
+		invalid("claim", "a record carrying claim claims a job and declares nothing, so it carries only schema_version, id and claim",
+			"drop every other field, or drop claim")
 	}
-	for i, w := range r.Widen {
-		at := fmt.Sprintf("widen[%d]", i)
+	for i, w := range r.Claim {
+		at := fmt.Sprintf("claim[%d]", i)
 		switch p := strings.TrimSpace(w.Path); {
 		case p == "":
 			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")
@@ -1354,7 +1354,7 @@ func (r Declaration) widenProblems() JobProblems {
 		case IsGlobMeta(p) || strings.Contains(p, "#"):
 			invalid(at+".path", fmt.Sprintf("%s %q is a pattern or a claim, and a proof covers one file", at, w.Path), "name one file")
 		}
-		if _, err := ParseWideningEvidence(w.Because); err != nil {
+		if _, err := ParseClaimEvidence(w.Because); err != nil {
 			invalid(at+".because", at+": "+err.Error(), "name the proof the path rests on")
 		}
 	}
@@ -1691,7 +1691,7 @@ func (r Declaration) Apply(u *Job) {
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 	u.MaxAttempts = r.MaxAttempts
-	u.MaxWidenings = r.MaxWidenings
+	u.MaxClaims = r.MaxClaims
 	u.Waivers = slices.Clone(r.Waivers)
 }
 
@@ -2438,7 +2438,7 @@ func (u Job) Clone() Job {
 	c.Breaks = slices.Clone(u.Breaks)
 	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)
-	c.Widened = slices.Clone(u.Widened)
+	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
 	c.Waivers = slices.Clone(u.Waivers)

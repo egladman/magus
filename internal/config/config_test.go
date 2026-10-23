@@ -303,7 +303,7 @@ func TestConformanceLoadRefusesAnUnknownMetric(t *testing.T) {
 	assert.ErrorContains(t, err, "file-lines")
 }
 
-func TestJobsWideningsCeiling(t *testing.T) {
+func TestJobsMaxClaims(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -312,9 +312,9 @@ func TestJobsWideningsCeiling(t *testing.T) {
 		wantErr string
 	}{
 		"absent takes the default":   {want: 10},
-		"a written number is taken":  {yaml: "jobs:\n  max_widenings_ceiling: 4\n", want: 4},
-		"a written zero is an error": {yaml: "jobs:\n  max_widenings_ceiling: 0\n", wantErr: "max_widenings_ceiling"},
-		"a negative is an error":     {yaml: "jobs:\n  max_widenings_ceiling: -2\n", wantErr: "max_widenings_ceiling"},
+		"a written number is taken":  {yaml: "jobs:\n  max_claims: 4\n", want: 4},
+		"a written zero is an error": {yaml: "jobs:\n  max_claims: 0\n", wantErr: "max_claims"},
+		"a negative is an error":     {yaml: "jobs:\n  max_claims: -2\n", wantErr: "max_claims"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -329,7 +329,7 @@ func TestJobsWideningsCeiling(t *testing.T) {
 				return
 			}
 			require.NoError(t, Validate(cfg))
-			assert.Equal(t, tc.want, cfg.Jobs.MaxWideningsCeiling)
+			assert.Equal(t, tc.want, cfg.Jobs.MaxClaims)
 		})
 	}
 }

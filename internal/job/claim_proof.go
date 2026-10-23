@@ -26,43 +26,43 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// maxWideningCommand bounds the `job apply` line the guard serves, so a refusal carrying
+// maxClaimCommand bounds the `job apply` line the guard serves, so a refusal carrying
 // it stays under a kilobyte.
-const maxWideningCommand = 640
+const maxClaimCommand = 640
 
-// maxWideningSource is the largest file a proof reads; a larger one proves nothing.
-const maxWideningSource = 1 << 20
+// maxClaimSource is the largest file a proof reads; a larger one proves nothing.
+const maxClaimSource = 1 << 20
 
-// DefaultMaxWidenings is how many proved widenings one attempt takes when its job names no
-// max_widenings.
-const DefaultMaxWidenings = 3
+// DefaultMaxClaims is how many proved claims one attempt takes when its job names no
+// max_claims.
+const DefaultMaxClaims = 3
 
-// AdvisedMaxWidenings is the most a fork asks for before it is told to keep the number small.
-const AdvisedMaxWidenings = 5
+// AdvisedMaxClaims is the most a fork asks for before it is told to keep the number small.
+const AdvisedMaxClaims = 5
 
-// wideningLimit is the cap on an attempt's proved widenings and where it came from.
-type wideningLimit struct {
+// claimLimit is the cap on an attempt's proved claims and where it came from.
+type claimLimit struct {
 	Max    int
 	Source string
 }
 
-// WideningLimit is the cap row's attempt takes: its max_widenings, or the default when it
-// names none. A cap above jobs.max_widenings_ceiling is an error naming both values and
+// ClaimLimit is the cap row's attempt takes: its max_claims, or the default when it
+// names none. A cap above jobs.max_claims is an error naming both values and
 // where each came from.
-func WideningLimit(row types.Job, limits config.Jobs) (wideningLimit, error) {
-	limit := wideningLimit{Max: DefaultMaxWidenings, Source: fmt.Sprintf("magus's default of %d, since %s sets no max_widenings", DefaultMaxWidenings, row.ID)}
-	if row.MaxWidenings > 0 {
-		limit = wideningLimit{Max: row.MaxWidenings, Source: "max_widenings on job " + row.ID}
+func ClaimLimit(row types.Job, limits config.Jobs) (claimLimit, error) {
+	limit := claimLimit{Max: DefaultMaxClaims, Source: fmt.Sprintf("magus's default of %d, since %s sets no max_claims", DefaultMaxClaims, row.ID)}
+	if row.MaxClaims > 0 {
+		limit = claimLimit{Max: row.MaxClaims, Source: "max_claims on job " + row.ID}
 	}
-	if limit.Max > limits.MaxWideningsCeiling {
-		return limit, fmt.Errorf("%d widenings (%s) is past the ceiling of %d (jobs.max_widenings_ceiling in magus.yaml)", limit.Max, limit.Source, limits.MaxWideningsCeiling)
+	if limit.Max > limits.MaxClaims {
+		return limit, fmt.Errorf("%d claims (%s) is past the ceiling of %d (jobs.max_claims in magus.yaml)", limit.Max, limit.Source, limits.MaxClaims)
 	}
 	return limit, nil
 }
 
-// wideningFacts is what the tree says about one job's change, read before the store's lock
-// so the proof under it reads nothing. Build it with [ObserveWidening].
-type wideningFacts struct {
+// claimFacts is what the tree says about one job's change, read before the store's lock
+// so the proof under it reads nothing. Build it with [ObserveClaim].
+type claimFacts struct {
 	seen        Observed
 	files       map[string]sourceFacts
 	packages    map[string]goPackage
@@ -95,18 +95,18 @@ type declSite struct {
 	lines [2]int
 }
 
-// ObserveWidening reads the facts a proof of asked needs: the job's diff since its
+// ObserveClaim reads the facts a proof of asked needs: the job's diff since its
 // checkpoint, the asked files and every file the job changed inside its write paths, the Go
 // packages those sit in, and the outputs projects regenerate from them. Nil projects leaves
 // every output proof unproved. A diff that cannot be read leaves the refs, test and output
 // proofs unproved too.
-func ObserveWidening(ctx context.Context, root string, row types.Job, asked []string, projects []*types.Project) wideningFacts {
+func ObserveClaim(ctx context.Context, root string, row types.Job, asked []string, projects []*types.Project) claimFacts {
 	seen, _ := CheckpointObserver(root, nil)(ctx, row)
-	return readWideningFacts(WorkTree(root, row), row, seen, asked, projects)
+	return readClaimFacts(WorkTree(root, row), row, seen, asked, projects)
 }
 
-func readWideningFacts(tree string, row types.Job, seen Observed, asked []string, projects []*types.Project) wideningFacts {
-	facts := wideningFacts{seen: seen, files: map[string]sourceFacts{}, packages: map[string]goPackage{}}
+func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, projects []*types.Project) claimFacts {
+	facts := claimFacts{seen: seen, files: map[string]sourceFacts{}, packages: map[string]goPackage{}}
 	changed := changedInside(row, seen)
 	for _, rel := range append(slices.Clone(asked), changed...) {
 		rel = path.Clean(rel)
@@ -142,7 +142,7 @@ func changedInside(row types.Job, seen Observed) []string {
 
 func readSource(tree, rel string) sourceFacts {
 	full := filepath.Join(tree, filepath.FromSlash(rel))
-	if info, err := os.Stat(full); err != nil || !info.Mode().IsRegular() || info.Size() > maxWideningSource {
+	if info, err := os.Stat(full); err != nil || !info.Mode().IsRegular() || info.Size() > maxClaimSource {
 		return sourceFacts{}
 	}
 	body, err := os.ReadFile(full)
@@ -234,28 +234,28 @@ func readPackage(tree, dir string) goPackage {
 	return p
 }
 
-// proveWidening is the sentence that proves rel in scope of row by e, or why e does not.
+// proveClaim is the sentence that proves rel in scope of row by e, or why e does not.
 // It reads only facts, so the store calls it under its lock against the row it holds.
-func proveWidening(row types.Job, rel string, e types.WideningEvidence, facts wideningFacts) (string, error) {
+func proveClaim(row types.Job, rel string, e types.ClaimEvidence, facts claimFacts) (string, error) {
 	rel = path.Clean(strings.TrimSpace(rel))
-	if e.Kind != types.WideningReleased && !facts.seen.ChangedKnown {
+	if e.Kind != types.ClaimReleased && !facts.seen.ChangedKnown {
 		return "", fmt.Errorf("magus could not read what the job changed (%s), so nothing it changed proves %s",
 			cmp.Or(facts.seen.RegionsReason, "no diff was read"), rel)
 	}
 	switch e.Kind {
-	case types.WideningRefs:
+	case types.ClaimRefs:
 		return proveRefs(rel, e.Subject, facts)
-	case types.WideningTest:
+	case types.ClaimTest:
 		return proveTest(row, rel, path.Clean(e.Subject), facts)
-	case types.WideningOutput:
+	case types.ClaimOutput:
 		return proveOutput(rel, e.Subject, facts)
-	case types.WideningReleased:
+	case types.ClaimReleased:
 		return proveReleased(row, rel)
 	}
 	return "", fmt.Errorf("%q is not a proof", e.String())
 }
 
-func proveRefs(rel, subject string, facts wideningFacts) (string, error) {
+func proveRefs(rel, subject string, facts claimFacts) (string, error) {
 	asked := facts.files[rel]
 	switch {
 	case !asked.read:
@@ -317,7 +317,7 @@ func declaredName(decl string) string {
 	return m[1]
 }
 
-func proveTest(row types.Job, rel, subject string, facts wideningFacts) (string, error) {
+func proveTest(row types.Job, rel, subject string, facts claimFacts) (string, error) {
 	if types.IsTestPath(subject) || !slices.Contains(changedInside(row, facts.seen), subject) {
 		return "", fmt.Errorf("%s is not a file the job changed inside its write paths, other than a test", subject)
 	}
@@ -372,7 +372,7 @@ func containsWord(text, word string) bool {
 
 func isIdentRune(r rune) bool { return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) }
 
-func proveOutput(rel, target string, facts wideningFacts) (string, error) {
+func proveOutput(rel, target string, facts claimFacts) (string, error) {
 	if !facts.outputsKnown {
 		return "", errors.New("no workspace answered for its targets' outputs, so no output is proved")
 	}
@@ -398,9 +398,9 @@ func proveReleased(row types.Job, rel string) (string, error) {
 	return "", fmt.Errorf("this attempt's holder never released %s", rel)
 }
 
-// checkWideningPath refuses rel to row whatever proves it: a path it holds already, one
+// checkClaimPath refuses rel to row whatever proves it: a path it holds already, one
 // its deny paths cover, and one another live job holds.
-func checkWideningPath(row types.Job, rel string, rows []types.Job) error {
+func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
 	switch {
 	case slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, rel) }):
 		return fmt.Errorf("%s is already a write path of %s", rel, row.ID)
@@ -419,67 +419,67 @@ func checkWideningPath(row types.Job, rel string, rows []types.Job) error {
 	return nil
 }
 
-// ProposeWidening is the first proof of rel for row the facts hold, tried refs, test,
+// ProposeClaim is the first proof of rel for row the facts hold, tried refs, test,
 // output, then released, each kind's subjects in sorted order, and false when rel is no
 // path a proof may add or none proves it.
-func ProposeWidening(row types.Job, rel string, facts wideningFacts, rows []types.Job) (types.JobWidenRequest, string, bool) {
+func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job) (types.JobClaimRequest, string, bool) {
 	rel = path.Clean(rel)
-	if checkWideningPath(row, rel, rows) != nil {
-		return types.JobWidenRequest{}, "", false
+	if checkClaimPath(row, rel, rows) != nil {
+		return types.JobClaimRequest{}, "", false
 	}
-	var tries []types.WideningEvidence
+	var tries []types.ClaimEvidence
 	asked := facts.files[rel]
 	for _, use := range slices.Sorted(maps.Keys(asked.uses)) {
 		if strings.Contains(use, ".") || facts.packages[path.Dir(rel)].decls[use].file != "" {
-			tries = append(tries, types.WideningEvidence{Kind: types.WideningRefs, Subject: use})
+			tries = append(tries, types.ClaimEvidence{Kind: types.ClaimRefs, Subject: use})
 		}
 	}
 	for _, f := range changedInside(row, facts.seen) {
-		tries = append(tries, types.WideningEvidence{Kind: types.WideningTest, Subject: f})
+		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimTest, Subject: f})
 	}
 	for _, o := range facts.regenerated {
-		tries = append(tries, types.WideningEvidence{Kind: types.WideningOutput, Subject: o.Target})
+		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimOutput, Subject: o.Target})
 	}
-	tries = append(tries, types.WideningEvidence{Kind: types.WideningReleased})
+	tries = append(tries, types.ClaimEvidence{Kind: types.ClaimReleased})
 	for _, e := range tries {
-		if proof, err := proveWidening(row, rel, e, facts); err == nil {
-			return types.JobWidenRequest{Path: rel, Because: e.String()}, proof, true
+		if proof, err := proveClaim(row, rel, e, facts); err == nil {
+			return types.JobClaimRequest{Path: rel, Because: e.String()}, proof, true
 		}
 	}
-	return types.JobWidenRequest{}, "", false
+	return types.JobClaimRequest{}, "", false
 }
 
-// WideningCommand is the one `magus job apply` line that widens job id by reqs, and false
-// when it would run past [maxWideningCommand].
-func WideningCommand(id string, reqs []types.JobWidenRequest) (string, bool) {
-	record, err := json.Marshal(types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: id, Widen: reqs})
+// ClaimCommand is the one `magus job apply` line that claims job id by reqs, and false
+// when it would run past [maxClaimCommand].
+func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
+	record, err := json.Marshal(types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: id, Claim: reqs})
 	if err != nil {
 		return "", false
 	}
 	line := hint.JobApply.With("-f", "-") + " <<<" + shellQuote(string(record))
-	return line, len(line) <= maxWideningCommand
+	return line, len(line) <= maxClaimCommand
 }
 
-// Widen adds reqs to job id's write paths, each proved from facts against the row the
+// Claim adds reqs to job id's write paths, each proved from facts against the row the
 // store holds under its lock, and records each proof on the row. Nothing is written
-// unless every path is proved: see [authorizeWidening] for who may widen and what no
+// unless every path is proved: see [authorizeClaim] for who may claim and what no
 // proof adds.
 // dryRun proves and authorizes against the store as read, and writes nothing.
-func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenRequest, facts wideningFacts, limits config.Jobs, dryRun bool) (types.Job, error) {
+func (s *Store) Claim(ctx context.Context, id string, reqs []types.JobClaimRequest, facts claimFacts, limits config.Jobs, dryRun bool) (types.Job, error) {
 	actor := s.Actor()
-	if err := holderWidens(actor, id); err != nil {
+	if err := holderClaims(actor, id); err != nil {
 		return types.Job{}, err
 	}
 	if len(reqs) == 0 {
-		return types.Job{}, widenRefusal(actor, id, "the record widens nothing")
+		return types.Job{}, claimRefusal(actor, id, "the record claims nothing")
 	}
 	by := trail.StampOrigin(ctx, types.Origin{})
 	if !dryRun {
-		return s.mutate(ctx, id, asWidening, func(cur *types.Job, exists bool, now int64) error {
+		return s.mutate(ctx, id, asClaim, func(cur *types.Job, exists bool, now int64) error {
 			if !exists {
-				return widenRefusal(actor, id, "nothing declares that job")
+				return claimRefusal(actor, id, "nothing declares that job")
 			}
-			return grantWidening(actor, cur, reqs, facts, limits, now, by)
+			return grantClaim(actor, cur, reqs, facts, limits, now, by)
 		})
 	}
 	rows, err := s.List()
@@ -488,113 +488,113 @@ func (s *Store) Widen(ctx context.Context, id string, reqs []types.JobWidenReque
 	}
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
 	if i < 0 {
-		return types.Job{}, widenRefusal(actor, id, "nothing declares that job")
+		return types.Job{}, claimRefusal(actor, id, "nothing declares that job")
 	}
 	next := rows[i].Clone()
-	if err := grantWidening(actor, &next, reqs, facts, limits, time.Now().Unix(), by); err != nil {
+	if err := grantClaim(actor, &next, reqs, facts, limits, time.Now().Unix(), by); err != nil {
 		return types.Job{}, err
 	}
-	return next, authorizeRow(actor, id, asWidening, rows[i], next, true, rows)
+	return next, authorizeRow(actor, id, asClaim, rows[i], next, true, rows)
 }
 
-// grantWidening proves each of reqs against cur and appends the path and its proof, or
-// refuses the first that is past the cap WideningLimit gives, outside the checkout, held or denied by cur, or
-// unproved. Another job's hold is authorizeWidening's, which reads the rows.
-func grantWidening(actor Actor, cur *types.Job, reqs []types.JobWidenRequest, facts wideningFacts, limits config.Jobs, now int64, by types.Origin) error {
-	limit, err := WideningLimit(*cur, limits)
+// grantClaim proves each of reqs against cur and appends the path and its proof, or
+// refuses the first that is past the cap ClaimLimit gives, outside the checkout, held or denied by cur, or
+// unproved. Another job's hold is authorizeClaim's, which reads the rows.
+func grantClaim(actor Actor, cur *types.Job, reqs []types.JobClaimRequest, facts claimFacts, limits config.Jobs, now int64, by types.Origin) error {
+	limit, err := ClaimLimit(*cur, limits)
 	if err != nil {
-		return widenRefusal(actor, cur.ID, err.Error())
+		return claimRefusal(actor, cur.ID, err.Error())
 	}
-	if len(cur.Widened)+len(reqs) > limit.Max {
-		return widenRefusal(actor, cur.ID, fmt.Sprintf("%s holds %d proved widening(s) and this adds %d, past max_widenings, %d (%s)",
-			cur.ID, len(cur.Widened), len(reqs), limit.Max, limit.Source))
+	if len(cur.Claims)+len(reqs) > limit.Max {
+		return claimRefusal(actor, cur.ID, fmt.Sprintf("%s holds %d proved claim(s) and this adds %d, past max_claims, %d (%s)",
+			cur.ID, len(cur.Claims), len(reqs), limit.Max, limit.Source))
 	}
 	for _, req := range reqs {
-		e, err := types.ParseWideningEvidence(req.Because)
+		e, err := types.ParseClaimEvidence(req.Because)
 		if err != nil {
-			return widenRefusal(actor, cur.ID, err.Error())
+			return claimRefusal(actor, cur.ID, err.Error())
 		}
 		rel := path.Clean(strings.TrimSpace(req.Path))
 		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, "../") {
-			return widenRefusal(actor, cur.ID, rel+" is outside the job's checkout")
+			return claimRefusal(actor, cur.ID, rel+" is outside the job's checkout")
 		}
-		if err := checkWideningPath(*cur, rel, nil); err != nil {
-			return widenRefusal(actor, cur.ID, err.Error())
+		if err := checkClaimPath(*cur, rel, nil); err != nil {
+			return claimRefusal(actor, cur.ID, err.Error())
 		}
-		proof, err := proveWidening(*cur, rel, e, facts)
+		proof, err := proveClaim(*cur, rel, e, facts)
 		if err != nil {
-			return widenRefusal(actor, cur.ID, err.Error())
+			return claimRefusal(actor, cur.ID, err.Error())
 		}
 		cur.WritePaths = append(cur.WritePaths, rel)
-		cur.Widened = append(cur.Widened, types.JobWidening{Path: rel, Evidence: e, Proof: proof, At: now, By: by})
+		cur.Claims = append(cur.Claims, types.JobClaim{Path: rel, Evidence: e, Proof: proof, At: now, By: by})
 	}
 	return nil
 }
 
-// authorizeWidening grades a proved widening: the holder's own running or exited job, its
+// authorizeClaim grades a proved claim: the holder's own running or exited job, its
 // write paths extended by exactly the paths a proof was recorded for, and none of them a
-// path [checkWideningPath] refuses. An unbound actor is held to the same paths.
-func authorizeWidening(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
-	if err := holderWidens(actor, id); err != nil {
+// path [checkClaimPath] refuses. An unbound actor is held to the same paths.
+func authorizeClaim(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
+	if err := holderClaims(actor, id); err != nil {
 		return err
 	}
 	switch {
 	case !exists:
-		return widenRefusal(actor, id, "nothing declares that job")
+		return claimRefusal(actor, id, "nothing declares that job")
 	case prev.State != types.StateRunning && prev.State != types.StateExited:
-		return widenRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job widens", id, cmp.Or(string(prev.State), "unstated")))
+		return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
 	}
 	if fields := changedFields(prev, next); !slices.Equal(fields, []string{"write_paths"}) {
-		return widenRefusal(actor, id, "a widening adds write paths and changes nothing else, and this one changes "+strings.Join(fields, ", "))
+		return claimRefusal(actor, id, "a claim adds write paths and changes nothing else, and this one changes "+strings.Join(fields, ", "))
 	}
-	n, w := len(prev.WritePaths), len(prev.Widened)
+	n, w := len(prev.WritePaths), len(prev.Claims)
 	if len(next.WritePaths) < n || !slices.Equal(next.WritePaths[:n], prev.WritePaths) ||
-		len(next.Widened) < w || !slices.Equal(next.Widened[:w], prev.Widened) || len(next.Widened)-w != len(next.WritePaths)-n {
-		return widenRefusal(actor, id, "a widening appends one proved write path per proof and drops none")
+		len(next.Claims) < w || !slices.Equal(next.Claims[:w], prev.Claims) || len(next.Claims)-w != len(next.WritePaths)-n {
+		return claimRefusal(actor, id, "a claim appends one proved write path per proof and drops none")
 	}
 	for k, p := range next.WritePaths[n:] {
-		if next.Widened[w+k].Path != p {
-			return widenRefusal(actor, id, p+" carries no proof")
+		if next.Claims[w+k].Path != p {
+			return claimRefusal(actor, id, p+" carries no proof")
 		}
-		if err := checkWideningPath(prev, p, rows); err != nil {
-			return widenRefusal(actor, id, err.Error())
+		if err := checkClaimPath(prev, p, rows); err != nil {
+			return claimRefusal(actor, id, err.Error())
 		}
 	}
 	return nil
 }
 
-// holderWidens refuses a bound actor widening any job but the one it holds.
-func holderWidens(actor Actor, id string) error {
+// holderClaims refuses a bound actor claim any job but the one it holds.
+func holderClaims(actor Actor, id string) error {
 	switch {
 	case actor.Unstamped:
-		return refuse(actor, id, "a caller magus cannot name widens no job")
+		return refuse(actor, id, "a caller magus cannot name claims no job")
 	case actor.Bound() && id != actor.Lease:
-		return refuse(actor, id, "a holder widens only its own job, never a child's, a sibling's or an ancestor's")
+		return refuse(actor, id, "a holder claims only its own job, never a child's, a sibling's or an ancestor's")
 	}
 	return nil
 }
 
-func widenRefusal(actor Actor, id, rule string) error {
+func claimRefusal(actor Actor, id, rule string) error {
 	if actor.Bound() {
-		return &RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: "ask whoever forked the job to widen it"}
+		return &RefusedError{Lease: id, Actor: actor, Rule: rule, Remedy: "ask whoever forked the job to claim it"}
 	}
 	return fmt.Errorf("job: %s: %s", id, rule)
 }
 
-func wideningCeilingProblems(row types.Job, limits config.Jobs) types.JobProblems {
-	if _, err := WideningLimit(row, limits); err != nil {
+func claimCeilingProblems(row types.Job, limits config.Jobs) types.JobProblems {
+	if _, err := ClaimLimit(row, limits); err != nil {
 		return types.JobProblems{{
-			Code: types.JobForkLimitExceeded, Field: "max_widenings", Message: err.Error(),
-			Fix: "name a smaller max_widenings, or raise jobs.max_widenings_ceiling in magus.yaml",
+			Code: types.JobForkLimitExceeded, Field: "max_claims", Message: err.Error(),
+			Fix: "name a smaller max_claims, or raise jobs.max_claims in magus.yaml",
 		}}
 	}
 	return nil
 }
 
-// wideningCapAdvice advises and never refuses: a small cap keeps each widening a decision.
-func wideningCapAdvice(row types.Job) string {
-	if row.MaxWidenings <= AdvisedMaxWidenings {
+// claimLimitAdvice advises and never refuses: a small cap keeps each claim a decision.
+func claimLimitAdvice(row types.Job) string {
+	if row.MaxClaims <= AdvisedMaxClaims {
 		return ""
 	}
-	return fmt.Sprintf("%s asks for %d widenings; %d or fewer keeps each one a decision the root can read", row.ID, row.MaxWidenings, AdvisedMaxWidenings)
+	return fmt.Sprintf("%s asks for %d claims; %d or fewer keeps each one a decision the root can read", row.ID, row.MaxClaims, AdvisedMaxClaims)
 }

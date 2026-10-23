@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// widenTree is the shape of the cli-ls-files job that found the gap: it deleted
+// claimTree is the shape of the cli-ls-files job that found the gap: it deleted
 // hint.VCSAdd and changed cmd/magus/vcs.go and the registry config-generate reads, and the
 // guard sent it to its orchestrator for each caller, test and output that change reached.
-func widenTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
+func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 	t.Helper()
 	root := t.TempDir()
 	files := map[string]string{
@@ -71,13 +71,13 @@ func widenTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 	return root, row, seen, projects
 }
 
-func widenFacts(t *testing.T, asked ...string) (types.Job, wideningFacts) {
+func proofFacts(t *testing.T, asked ...string) (types.Job, claimFacts) {
 	t.Helper()
-	root, row, seen, projects := widenTree(t)
-	return row, readWideningFacts(root, row, seen, asked, projects)
+	root, row, seen, projects := claimTree(t)
+	return row, readClaimFacts(root, row, seen, asked, projects)
 }
 
-func TestProveWideningEachKind(t *testing.T) {
+func TestProveClaimEachKind(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -136,10 +136,10 @@ func TestProveWideningEachKind(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			row, facts := widenFacts(t, tc.path)
-			e, err := types.ParseWideningEvidence(tc.because)
+			row, facts := proofFacts(t, tc.path)
+			e, err := types.ParseClaimEvidence(tc.because)
 			require.NoError(t, err)
-			proof, err := proveWidening(row, tc.path, e, facts)
+			proof, err := proveClaim(row, tc.path, e, facts)
 			if tc.refused != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.refused)
@@ -152,17 +152,17 @@ func TestProveWideningEachKind(t *testing.T) {
 }
 
 // Nothing proves a refs or test kind on a diff nobody read: absent evidence is no proof.
-func TestProveWideningRefusesAnUnreadDiff(t *testing.T) {
+func TestProveClaimRefusesAnUnreadDiff(t *testing.T) {
 	t.Parallel()
 
-	root, row, _, projects := widenTree(t)
-	facts := readWideningFacts(root, row, Observed{}, []string{"internal/guard/shell.go"}, projects)
-	_, err := proveWidening(row, "internal/guard/shell.go", types.WideningEvidence{Kind: types.WideningRefs, Subject: "hint.VCSAdd"}, facts)
+	root, row, _, projects := claimTree(t)
+	facts := readClaimFacts(root, row, Observed{}, []string{"internal/guard/shell.go"}, projects)
+	_, err := proveClaim(row, "internal/guard/shell.go", types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.VCSAdd"}, facts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not read what the job changed")
 }
 
-func TestProposeWideningNamesTheFirstProofOrNone(t *testing.T) {
+func TestProposeClaimNamesTheFirstProofOrNone(t *testing.T) {
 	t.Parallel()
 
 	for path, want := range map[string]string{
@@ -172,76 +172,76 @@ func TestProposeWideningNamesTheFirstProofOrNone(t *testing.T) {
 		"internal/guard/status.go":                  "",
 		"internal/guard/shell_test.go":              "",
 	} {
-		row, facts := widenFacts(t, path)
-		req, proof, ok := ProposeWidening(row, path, facts, []types.Job{row})
+		row, facts := proofFacts(t, path)
+		req, proof, ok := ProposeClaim(row, path, facts, []types.Job{row})
 		if want == "" {
 			assert.False(t, ok, "%s has no proof, or a deny path covers it", path)
 			continue
 		}
 		require.True(t, ok, path)
-		assert.Equal(t, types.JobWidenRequest{Path: path, Because: want}, req)
+		assert.Equal(t, types.JobClaimRequest{Path: path, Because: want}, req)
 		assert.NotEmpty(t, proof)
 	}
 }
 
-func widenStore(t *testing.T, rows ...types.Job) (Location, types.Job, wideningFacts) {
+func claimStore(t *testing.T, rows ...types.Job) (Location, types.Job, claimFacts) {
 	t.Helper()
-	root, row, seen, projects := widenTree(t)
+	root, row, seen, projects := claimTree(t)
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	for _, r := range append([]types.Job{row}, rows...) {
 		seed(t, s, r)
 	}
 	asked := []string{"internal/guard/shell.go", "internal/guard/status.go", "internal/guard/shell_test.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go"}
-	return loc, row, readWideningFacts(root, row, seen, asked, projects)
+	return loc, row, readClaimFacts(root, row, seen, asked, projects)
 }
 
-func TestHolderWidensItsOwnJobWithAProof(t *testing.T) {
+func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 	t.Parallel()
 
-	loc, row, facts := widenStore(t)
-	reqs := []types.JobWidenRequest{
+	loc, row, facts := claimStore(t)
+	reqs := []types.JobClaimRequest{
 		{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"},
 		{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
 		{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
 	}
-	stored, err := boundStore(loc, row.ID).Widen(t.Context(), row.ID, reqs, facts, config.Defaults().Jobs, false)
+	stored, err := boundStore(loc, row.ID).Claim(t.Context(), row.ID, reqs, facts, config.Defaults().Jobs, false)
 	require.NoError(t, err)
 
 	want := row.Clone()
 	want.WritePaths = append(want.WritePaths, "internal/guard/shell.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go")
 	want.Widenings = 1
-	want.Widened = []types.JobWidening{
-		{Path: "internal/guard/shell.go", Evidence: types.WideningEvidence{Kind: types.WideningRefs, Subject: "hint.VCSAdd"},
+	want.Claims = []types.JobClaim{
+		{Path: "internal/guard/shell.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.VCSAdd"},
 			Proof: "internal/guard/shell.go references hint.VCSAdd, which the job's diff removed from package hint (internal/hint)"},
-		{Path: "cmd/magus/testdata/script/guard_git.txtar", Evidence: types.WideningEvidence{Kind: types.WideningTest, Subject: "cmd/magus/vcs.go"},
+		{Path: "cmd/magus/testdata/script/guard_git.txtar", Evidence: types.ClaimEvidence{Kind: types.ClaimTest, Subject: "cmd/magus/vcs.go"},
 			Proof: `cmd/magus/testdata/script/guard_git.txtar tests cmd/magus/vcs.go: it names "ls-files"`},
-		{Path: "cmd/magus/gen/flags.go", Evidence: types.WideningEvidence{Kind: types.WideningOutput, Subject: ".:config-generate"},
+		{Path: "cmd/magus/gen/flags.go", Evidence: types.ClaimEvidence{Kind: types.ClaimOutput, Subject: ".:config-generate"},
 			Proof: "cmd/magus/gen/flags.go is an output of .:config-generate, which reads internal/commands/*.go, a source the job changed"},
 	}
-	assert.Equal(t, want, widenedView(stored), "a widening adds the proved paths and never moves the job")
+	assert.Equal(t, want, claimedView(stored), "a claim adds the proved paths and never moves the job")
 
 	again, err := NewStore(loc).List()
 	require.NoError(t, err)
-	assert.Equal(t, stored.Widened, again[0].Widened, "the proof is on the row")
+	assert.Equal(t, stored.Claims, again[0].Claims, "the proof is on the row")
 }
 
-// widenedView is a stored row less what the store stamps on every write, and each
-// widening less when and by whom, so it compares with the row its fixture seeded.
-func widenedView(stored types.Job) types.Job {
+// claimedView is a stored row less what the store stamps on every write, and each
+// claim less when and by whom, so it compares with the row its fixture seeded.
+func claimedView(stored types.Job) types.Job {
 	v := stored.Clone()
 	v.Schema, v.Created, v.Updated, v.Generation, v.Attempts, v.RegisteredBy = types.Schema{}, 0, 0, 0, 0, types.Origin{}
-	for i := range v.Widened {
-		v.Widened[i].At, v.Widened[i].By = 0, types.Origin{}
+	for i := range v.Claims {
+		v.Claims[i].At, v.Claims[i].By = 0, types.Origin{}
 	}
 	return v
 }
 
-// An exited job widens too: its verification may send it back for a path its exit released.
-func TestHolderWidensAPathItsExitReleased(t *testing.T) {
+// An exited job claims too: its verification may send it back for a path its exit released.
+func TestHolderClaimsAPathItsExitReleased(t *testing.T) {
 	t.Parallel()
 
-	loc, row, facts := widenStore(t)
+	loc, row, facts := claimStore(t)
 	held := boundStore(loc, row.ID)
 	_, err := held.Update(t.Context(), row.ID, func(u *types.Job) {
 		u.WritePaths = []string{"cmd/magus/vcs.go", "internal/hint/cli_command.go"}
@@ -249,98 +249,98 @@ func TestHolderWidensAPathItsExitReleased(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	stored, err := held.Widen(t.Context(), row.ID, []types.JobWidenRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, config.Defaults().Jobs, false)
+	stored, err := held.Claim(t.Context(), row.ID, []types.JobClaimRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, config.Defaults().Jobs, false)
 	require.NoError(t, err)
 	assert.Contains(t, stored.WritePaths, "internal/commands/registry.go")
 	assert.Equal(t, types.StateExited, stored.State)
-	assert.Contains(t, stored.Widened[0].Proof, "released it at")
+	assert.Contains(t, stored.Claims[0].Proof, "released it at")
 }
 
-func TestWidenRefusals(t *testing.T) {
+func TestClaimRefusals(t *testing.T) {
 	t.Parallel()
 
 	owner := types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"internal/guard/shell.go"}}
 	for name, tc := range map[string]struct {
 		actor   string
 		cap     int
-		reqs    []types.JobWidenRequest
+		reqs    []types.JobClaimRequest
 		refused string
 	}{
-		"a holder widens nothing but its own job": {
-			actor: "other", reqs: []types.JobWidenRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
-			refused: "a holder widens only its own job",
+		"a holder claims nothing but its own job": {
+			actor: "other", reqs: []types.JobClaimRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
+			refused: "a holder claims only its own job",
 		},
 		"a path another live job owns": {
-			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}},
+			actor: "cli-ls-files", reqs: []types.JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}},
 			refused: "MGS3032",
 		},
 		"a deny path": {
-			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/shell_test.go", Because: "test:cmd/magus/vcs.go"}},
+			actor: "cli-ls-files", reqs: []types.JobClaimRequest{{Path: "internal/guard/shell_test.go", Because: "test:cmd/magus/vcs.go"}},
 			refused: "a deny path of cli-ls-files",
 		},
 		"a path with no proof": {
-			actor: "cli-ls-files", reqs: []types.JobWidenRequest{{Path: "internal/guard/status.go", Because: "refs:hint.VCSStatus"}},
+			actor: "cli-ls-files", reqs: []types.JobClaimRequest{{Path: "internal/guard/status.go", Because: "refs:hint.VCSStatus"}},
 			refused: "no package the job changed",
 		},
 		"past the cap": {
 			actor: "cli-ls-files", cap: 1,
-			reqs: []types.JobWidenRequest{
+			reqs: []types.JobClaimRequest{
 				{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"},
 				{Path: "cmd/magus/testdata/script/guard_git.txtar", Because: "test:cmd/magus/vcs.go"},
 			},
-			refused: "past max_widenings, 1 (max_widenings on job cli-ls-files)",
+			refused: "past max_claims, 1 (max_claims on job cli-ls-files)",
 		},
 		"a cap past the ceiling": {
 			actor: "cli-ls-files", cap: 11,
-			reqs:    []types.JobWidenRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
-			refused: "11 widenings (max_widenings on job cli-ls-files) is past the ceiling of 10 (jobs.max_widenings_ceiling in magus.yaml)",
+			reqs:    []types.JobClaimRequest{{Path: "cmd/magus/gen/flags.go", Because: "output:.:config-generate"}},
+			refused: "11 claims (max_claims on job cli-ls-files) is past the ceiling of 10 (jobs.max_claims in magus.yaml)",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			loc, row, facts := widenStore(t, owner)
+			loc, row, facts := claimStore(t, owner)
 			if tc.cap > 0 {
-				_, err := NewStore(loc).Update(t.Context(), row.ID, func(u *types.Job) { u.MaxWidenings = tc.cap })
+				_, err := NewStore(loc).Update(t.Context(), row.ID, func(u *types.Job) { u.MaxClaims = tc.cap })
 				require.NoError(t, err)
-				row.MaxWidenings = tc.cap
+				row.MaxClaims = tc.cap
 			}
-			_, err := boundStore(loc, tc.actor).Widen(t.Context(), row.ID, tc.reqs, facts, config.Defaults().Jobs, false)
+			_, err := boundStore(loc, tc.actor).Claim(t.Context(), row.ID, tc.reqs, facts, config.Defaults().Jobs, false)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.refused)
 
 			after, err := NewStore(loc).List()
 			require.NoError(t, err)
-			assert.Equal(t, row.WritePaths, after[0].WritePaths, "a refused widening writes nothing")
-			assert.Empty(t, after[0].Widened)
+			assert.Equal(t, row.WritePaths, after[0].WritePaths, "a refused claim writes nothing")
+			assert.Empty(t, after[0].Claims)
 		})
 	}
 }
 
-func TestWideningLimitSaysWhereItCameFrom(t *testing.T) {
+func TestClaimLimitSaysWhereItCameFrom(t *testing.T) {
 	t.Parallel()
 
 	jobs := config.Defaults().Jobs
-	defaulted, err := WideningLimit(types.Job{ID: "a"}, jobs)
+	defaulted, err := ClaimLimit(types.Job{ID: "a"}, jobs)
 	require.NoError(t, err)
 	assert.Equal(t, 3, defaulted.Max)
 	assert.Contains(t, defaulted.Source, "default")
 
-	named, err := WideningLimit(types.Job{ID: "a", MaxWidenings: 7}, jobs)
+	named, err := ClaimLimit(types.Job{ID: "a", MaxClaims: 7}, jobs)
 	require.NoError(t, err)
-	assert.Equal(t, wideningLimit{Max: 7, Source: "max_widenings on job a"}, named)
+	assert.Equal(t, claimLimit{Max: 7, Source: "max_claims on job a"}, named)
 }
 
 // The line the guard serves is the record apply decodes, bounded so a refusal never grows
 // a context.
-func TestWideningCommandIsOneApplyLine(t *testing.T) {
+func TestClaimCommandIsOneApplyLine(t *testing.T) {
 	t.Parallel()
 
-	reqs := []types.JobWidenRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}
-	line, ok := WideningCommand("cli-ls-files", reqs)
+	reqs := []types.JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}
+	line, ok := ClaimCommand("cli-ls-files", reqs)
 	require.True(t, ok)
 	assert.NotContains(t, line, "\n")
-	assert.LessOrEqual(t, len(line), maxWideningCommand)
+	assert.LessOrEqual(t, len(line), maxClaimCommand)
 
 	cmd, record, found := strings.Cut(line, " <<<")
 	require.True(t, found, line)
@@ -349,31 +349,31 @@ func TestWideningCommandIsOneApplyLine(t *testing.T) {
 	decoded, err := DecodeDeclarations(bytes.NewBufferString(record))
 	require.NoError(t, err)
 	require.Len(t, decoded, 1)
-	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "cli-ls-files", Widen: reqs}, decoded[0])
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "cli-ls-files", Claim: reqs}, decoded[0])
 	assert.Empty(t, decoded[0].Problems())
 
-	long := []types.JobWidenRequest{{Path: strings.Repeat("a/", maxWideningCommand) + "x.go", Because: "released"}}
-	_, ok = WideningCommand("cli-ls-files", long)
+	long := []types.JobClaimRequest{{Path: strings.Repeat("a/", maxClaimCommand) + "x.go", Because: "released"}}
+	_, ok = ClaimCommand("cli-ls-files", long)
 	assert.False(t, ok, "a line past the budget is not served")
 }
 
-func TestForkRefusesAWideningCapPastTheCeiling(t *testing.T) {
+func TestForkRefusesAClaimCapPastTheCeiling(t *testing.T) {
 	t.Parallel()
 
 	jobs := config.Defaults().Jobs
-	assert.Empty(t, wideningCeilingProblems(types.Job{ID: "a", MaxWidenings: 10}, jobs))
-	assert.Empty(t, wideningCeilingProblems(types.Job{ID: "a"}, jobs))
+	assert.Empty(t, claimCeilingProblems(types.Job{ID: "a", MaxClaims: 10}, jobs))
+	assert.Empty(t, claimCeilingProblems(types.Job{ID: "a"}, jobs))
 
-	err := wideningCeilingProblems(types.Job{ID: "a", MaxWidenings: 11}, jobs).Err()
+	err := claimCeilingProblems(types.Job{ID: "a", MaxClaims: 11}, jobs).Err()
 	require.ErrorIs(t, err, types.JobForkLimitExceeded)
-	assert.Contains(t, err.Error(), "11 widenings (max_widenings on job a)")
-	assert.Contains(t, err.Error(), "ceiling of 10 (jobs.max_widenings_ceiling in magus.yaml)")
+	assert.Contains(t, err.Error(), "11 claims (max_claims on job a)")
+	assert.Contains(t, err.Error(), "ceiling of 10 (jobs.max_claims in magus.yaml)")
 }
 
-func TestForkAdvisesASmallWideningCap(t *testing.T) {
+func TestForkAdvisesASmallClaimCap(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, wideningCapAdvice(types.Job{ID: "a", MaxWidenings: AdvisedMaxWidenings}))
-	assert.Empty(t, wideningCapAdvice(types.Job{ID: "a"}))
-	assert.Contains(t, wideningCapAdvice(types.Job{ID: "a", MaxWidenings: 8}), "a asks for 8 widenings")
+	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: AdvisedMaxClaims}))
+	assert.Empty(t, claimLimitAdvice(types.Job{ID: "a"}))
+	assert.Contains(t, claimLimitAdvice(types.Job{ID: "a", MaxClaims: 8}), "a asks for 8 claims")
 }

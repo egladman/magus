@@ -204,7 +204,7 @@ type Diff struct {
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
 // StaleAfter and Retain are the exceptions, because they decide when magus ends a row
 // nobody took and when it drops one that is over. So are MaxClaimFiles, MaxClaimProjects and
-// MaxWideningsCeiling, which are never zero: a claim has to be bounded by something.
+// MaxClaims, which are never zero: a claim has to be bounded by something.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -235,10 +235,10 @@ type Jobs struct {
 	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
 	// Workspace only, like StaleAfter.
 	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
-	// MaxWideningsCeiling is the most proved widenings any job may be given through its
-	// max_widenings; a fork or a widening past it is refused. Default 10; zero or negative is an
+	// MaxClaims is the most proved claims any job may be given through its
+	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
 	// error. Workspace only, like StaleAfter.
-	MaxWideningsCeiling int `json:"max_widenings_ceiling" yaml:"max_widenings_ceiling" validate:"gt=0" merge:"written"`
+	MaxClaims int `json:"max_claims" yaml:"max_claims" validate:"gt=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -1098,7 +1098,7 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxWideningsCeiling: 10},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).

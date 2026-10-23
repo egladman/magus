@@ -1569,9 +1569,9 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	candidates := next
-	// The apply line widens the acting lease itself, so the role filter, which reads every
+	// The apply line claims the acting lease itself, so the role filter, which reads every
 	// job verb as a write outside the lease, would drop the one remedy written for it.
-	if len(next) != 1 || !(placesBinary(next[0], actingLease) || next[0].ID == hint.DenyRemedyPrefix+string(denyRuleLeaseWiden)) {
+	if len(next) != 1 || !(placesBinary(next[0], actingLease) || next[0].ID == hint.DenyRemedyPrefix+string(denyRuleLeaseClaim)) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})

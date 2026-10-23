@@ -324,6 +324,10 @@
       "type": "integer",
       "description": "MaxAttempts caps how many times the job may be forked, its first fork included; zero is no cap. See [Job.MaxAttempts]."
     },
+    "max_claims": {
+      "type": "integer",
+      "description": "MaxClaims caps how many proved claims one attempt takes; zero takes the default. See [Job.MaxClaims]."
+    },
     "waivers": {
       "type": "array",
       "items": {
@@ -350,7 +354,7 @@
       "type": "string",
       "description": "Enter turns the record into an entry rather than a declaration: it acknowledges one write into this path, inside the write paths of the live job ID names, by somebody other than its holder. A record carrying it declares nothing else."
     },
-    "widen": {
+    "claim": {
       "type": "array",
       "items": {
         "type": "object",
@@ -367,7 +371,7 @@
           }
         }
       },
-      "description": "Widen turns the record into a proved widening of the job ID names: each entry adds one write path with the proof the store re-proves before it writes. A record carrying it declares nothing else."
+      "description": "Claim turns the record into a proved claim of the job ID names: each entry adds one write path with the proof the store re-proves before it writes. A record carrying it declares nothing else."
     }
   }
 }

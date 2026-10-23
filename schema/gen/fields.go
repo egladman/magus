@@ -671,6 +671,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter",
 	},
 	{
+		GoPath:   "Jobs.MaxClaims",
+		YamlPath: "jobs.max_claims",
+		EnvVar:   "MAGUS_JOBS_MAX_CLAIMS",
+		Flag:     fieldtype.FlagNames{Long: "jobs-max-claims"},
+		Kind:     fieldtype.KindInt,
+		Usage:    "MAGUS_JOBS_MAX_CLAIMS: MaxClaims is the most proved claims any job may be given through its max_claims; a fork or a claim past it is refused.",
+		Doc:      "The most proved claims any job may be given through its max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an error. Workspace only, like StaleAfter",
+	},
+	{
 		GoPath:   "Concurrency",
 		YamlPath: "concurrency",
 		EnvVar:   "MAGUS_CONCURRENCY",

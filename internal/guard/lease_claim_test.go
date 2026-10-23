@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// widenFixture is a running job that released registry.go, which its verification then
+// leaseClaimFixture is a running job that released registry.go, which its verification then
 // sends it back to.
-func widenFixture(t *testing.T) (context.Context, string, types.Job) {
+func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 	t.Helper()
 	row := types.Job{
 		ID:         "cli-ls-files",
@@ -41,16 +41,16 @@ func widenFixture(t *testing.T) (context.Context, string, types.Job) {
 	return ctx, root, stored
 }
 
-func TestGradeLeasedWriteServesAProvedWidening(t *testing.T) {
-	ctx, root, row := widenFixture(t)
+func TestGradeLeasedWriteServesAProvedClaim(t *testing.T) {
+	ctx, root, row := leaseClaimFixture(t)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "internal/commands/registry.go"))
 	// The reason is checked by substring below, so it is copied across.
-	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseWiden), Next: got.Next}, got)
+	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseClaim), Next: got.Next}, got)
 	require.Len(t, got.Next, 1)
-	assert.Equal(t, "deny-lease-widen", got.Next[0].ID)
+	assert.Equal(t, "deny-lease-claim", got.Next[0].ID)
 	assert.Contains(t, got.Next[0].Run, "job apply -f - <<<")
-	assert.Contains(t, got.Next[0].Run, `"widen":[{"path":"internal/commands/registry.go","because":"released"}]`)
+	assert.Contains(t, got.Next[0].Run, `"claim":[{"path":"internal/commands/registry.go","because":"released"}]`)
 	say, why, _ := strings.Cut(got.Reason, "\n")
 	assert.Contains(t, say, "magus proves it in scope (released)")
 	assert.NotContains(t, say, "job apply", "the line is served as the next, not worded inline")
@@ -64,8 +64,8 @@ func TestGradeLeasedWriteServesAProvedWidening(t *testing.T) {
 }
 
 // The served line is pre-authorized only if the worker's own guard lets it run.
-func TestServedWideningLinePassesTheGuardForTheWorker(t *testing.T) {
-	ctx, root, row := widenFixture(t)
+func TestServedClaimLinePassesTheGuardForTheWorker(t *testing.T) {
+	ctx, root, row := leaseClaimFixture(t)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "internal/commands/registry.go"))
 	require.Len(t, got.Next, 1)
@@ -81,11 +81,11 @@ func TestServedWideningLinePassesTheGuardForTheWorker(t *testing.T) {
 	require.Len(t, write.Next, 1, "the refusal serves the apply line to the worker: %+v", write)
 	assert.Equal(t, line, write.Next[0].Run)
 	write.Next = nil
-	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseWiden)), unworded(write))
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseClaim)), unworded(write))
 }
 
-func TestLeaseWidenIsCatalogued(t *testing.T) {
-	doc, ok := Rule(string(denyRuleLeaseWiden))
+func TestLeaseClaimIsCatalogued(t *testing.T) {
+	doc, ok := Rule(string(denyRuleLeaseClaim))
 	require.True(t, ok)
 	assert.Contains(t, doc.Why, "lease-write")
 }

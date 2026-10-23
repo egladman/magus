@@ -109,6 +109,17 @@ func TestForkLimitProblemsNameTheKey(t *testing.T) {
 	assert.Empty(t, forkLimitProblems(rows, "root/a/deep/deeper", "root/a/deep", config.Jobs{}), "unset is unlimited")
 }
 
+func TestForkLimitRefusesAClaimCapPastJobsMaxClaims(t *testing.T) {
+	t.Parallel()
+
+	limits := config.Jobs{MaxClaims: 4}
+	assert.Empty(t, claimCeilingProblems(types.Job{ID: "w", MaxClaims: 4}, limits))
+	err := claimCeilingProblems(types.Job{ID: "w", MaxClaims: 5}, limits).Err()
+	require.ErrorIs(t, err, types.JobForkLimitExceeded)
+	assert.Contains(t, err.Error(), "5 claims (max_claims on job w)")
+	assert.Contains(t, err.Error(), "ceiling of 4 (jobs.max_claims in magus.yaml)")
+}
+
 func TestAmbiguousSymbolProblemsNameEveryDefinition(t *testing.T) {
 	t.Parallel()
 
@@ -757,7 +768,7 @@ func storeBytes(t *testing.T, s *Store) string {
 
 // Apply upserts the spec and leaves status alone: the holder keeps its job, its state and
 // its registration, where a re-fork hands the job out again as declared.
-func TestApplyWidensALiveJobAndKeepsItsState(t *testing.T) {
+func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 	t.Parallel()
 
 	s, _ := appliedRow(t, "a.go")

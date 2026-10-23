@@ -29,6 +29,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CharmTraceStep", Zero: spells.CharmTraceStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmTraceStep(v.(spells.CharmTraceStep)) }},
 	{Name: "Check", Zero: types.Check{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheck(v.(types.Check), enums) }},
 	{Name: "CheckoutState", Zero: types.CheckoutState{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheckoutState(v.(types.CheckoutState)) }},
+	{Name: "ClaimEvidence", Zero: types.ClaimEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectClaimEvidence(v.(types.ClaimEvidence), enums) }},
 	{Name: "CleanReport", Zero: types.CleanReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCleanReport(v.(types.CleanReport)) }},
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
 	{Name: "Command", Zero: spells.Command{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommand(v.(spells.Command), enums) }},
@@ -138,6 +139,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job), enums) }},
 	{Name: "JobAttempt", Zero: types.JobAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobAttempt(v.(types.JobAttempt)) }},
 	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(types.JobBlock)) }},
+	{Name: "JobClaim", Zero: types.JobClaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobClaim(v.(types.JobClaim), enums) }},
 	{Name: "JobDenial", Zero: types.JobDenial{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDenial(v.(types.JobDenial)) }},
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry)) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
@@ -161,7 +163,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
 	{Name: "JobWaiver", Zero: types.JobWaiver{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWaiver(v.(types.JobWaiver)) }},
-	{Name: "JobWidening", Zero: types.JobWidening{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWidening(v.(types.JobWidening), enums) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)
@@ -345,9 +346,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
-	{Name: "WideningEvidence", Zero: types.WideningEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectWideningEvidence(v.(types.WideningEvidence), enums)
-	}},
 	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorkspaceEntry(v.(types.WorkspaceEntry)) }},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest), enums) }},
 	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},

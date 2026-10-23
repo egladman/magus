@@ -20,7 +20,7 @@ func TestDefaults(t *testing.T) {
 		"stage-all":            Deny,
 		"whole-tree":           Deny,
 		"lease-write":          Deny,
-		"lease-widen":          Deny,
+		"lease-claim":          Deny,
 		"lease-checkout":       Deny,
 		"push-ungated":         Deny,
 		"human-only":           Deny,

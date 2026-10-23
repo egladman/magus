@@ -121,10 +121,10 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	} else if ok {
 		put.MaxAttempts = &n
 	}
-	if n, ok, e := mergeCount(params, "max_widenings"); e != nil {
+	if n, ok, e := mergeCount(params, "max_claims"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		put.MaxWidenings = &n
+		put.MaxClaims = &n
 	}
 	if _, perr := PutMerge(put); perr != nil {
 		err = errors.Join(err, perr)
@@ -263,11 +263,11 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.MaxAttempts = n })
 		}
 	}
-	if p.MaxWidenings != nil {
-		if n := *p.MaxWidenings; n < 0 {
-			err = errors.Join(err, errors.New("job: max_widenings must be a whole number of at least 0"))
+	if p.MaxClaims != nil {
+		if n := *p.MaxClaims; n < 0 {
+			err = errors.Join(err, errors.New("job: max_claims must be a whole number of at least 0"))
 		} else {
-			set = append(set, func(u *types.Job) { u.MaxWidenings = n })
+			set = append(set, func(u *types.Job) { u.MaxClaims = n })
 		}
 	}
 	if err != nil {
@@ -293,7 +293,7 @@ func declaredKeys(p types.JobPut) []string {
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"waivers", p.Waivers != nil}, {"read_only", p.ReadOnly != nil},
-		{"max_attempts", p.MaxAttempts != nil}, {"max_widenings", p.MaxWidenings != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
+		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
 	} {
 		if f.set {
 			keys = append(keys, f.key)
@@ -307,7 +307,7 @@ func declaredKeys(p types.JobPut) []string {
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "waivers", "state", "read_only",
-	"timeout", "max_attempts", "max_widenings", "enter", "follows", "fresh_reason",
+	"timeout", "max_attempts", "max_claims", "enter", "follows", "fresh_reason",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
@@ -316,8 +316,8 @@ func unknownParams(params map[string]any) error {
 	if dir, ok := params["checkout"]; ok {
 		return fmt.Errorf("job: a put names checkout %v, which only a fork makes, `%s` makes it", dir, hint.JobFork.With("<job>", "--checkout", fmt.Sprint(dir)))
 	}
-	if _, ok := params["widen"]; ok {
-		return fmt.Errorf("job: a put names widen, which only `%s` proves", hint.JobApply.With("-f", "<record>"))
+	if _, ok := params["claim"]; ok {
+		return fmt.Errorf("job: a put names claim, which only `%s` proves", hint.JobApply.With("-f", "<record>"))
 	}
 	var unknown []string
 	for key := range params {
