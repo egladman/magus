@@ -46,11 +46,14 @@ func TestGradeLeasedWriteServesAProvedWidening(t *testing.T) {
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "internal/commands/registry.go"))
 	// The reason is checked by substring below, so it is copied across.
-	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseWiden)}, got)
+	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseWiden), Next: got.Next}, got)
+	require.Len(t, got.Next, 1)
+	assert.Equal(t, "deny-lease-widen", got.Next[0].ID)
+	assert.Contains(t, got.Next[0].Run, "job apply -f - <<<")
+	assert.Contains(t, got.Next[0].Run, `"widen":[{"path":"internal/commands/registry.go","because":"released"}]`)
 	say, why, _ := strings.Cut(got.Reason, "\n")
 	assert.Contains(t, say, "magus proves it in scope (released)")
-	assert.Contains(t, say, "job apply -f - <<<")
-	assert.Contains(t, say, `"widen":[{"path":"internal/commands/registry.go","because":"released"}]`)
+	assert.NotContains(t, say, "job apply", "the line is served as the next, not worded inline")
 	assert.NotContains(t, got.Reason, "ask your orchestrator")
 	assert.Contains(t, why, "this attempt's holder released it at")
 	assert.LessOrEqual(t, len(say), 1024, "a refusal never grows a context")
@@ -65,11 +68,8 @@ func TestServedWideningLinePassesTheGuardForTheWorker(t *testing.T) {
 	ctx, root, row := widenFixture(t)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, row.ID, filepath.Join(root, "internal/commands/registry.go"))
-	say, _, _ := strings.Cut(got.Reason, "\n")
-	_, rest, ok := strings.Cut(say, "widen the job with `")
-	require.True(t, ok, say)
-	line, _, ok := strings.Cut(rest, "`, then retry")
-	require.True(t, ok, say)
+	require.Len(t, got.Next, 1)
+	line := got.Next[0].Run
 
 	v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: row.ID, Dir: root})
 	assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
@@ -78,6 +78,9 @@ func TestServedWideningLinePassesTheGuardForTheWorker(t *testing.T) {
 		"session_id": "5d1c", "hook_event_name": "PreToolUse", "tool_name": "Write", "cwd": root,
 		"tool_input": map[string]any{"file_path": filepath.Join(root, "internal/commands/registry.go"), "content": "package x\n"},
 	})})
+	require.Len(t, write.Next, 1, "the refusal serves the apply line to the worker: %+v", write)
+	assert.Equal(t, line, write.Next[0].Run)
+	write.Next = nil
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseWiden)), unworded(write))
 }
 

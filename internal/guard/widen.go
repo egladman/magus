@@ -3,7 +3,9 @@ package guard
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
@@ -34,8 +36,8 @@ func denyLeaseWiden(me types.Job, rel string, req types.JobWidenRequest, proof s
 		return writeGrade{}
 	}
 	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleLeaseWiden), Reason: denial{
-		Say: fmt.Sprintf("magus workspace: %s is outside the write paths of lease %s, and magus proves it in scope (%s); widen the job with `%s`, then retry this write.",
-			rel, me.ID, req.Because, line),
-		Why: proof + ". The store proves it again when the record applies, and refuses it if another live job holds the path, a deny path covers it, or the job is past jobs.max_proved_widenings.",
-	}.full()}
+		Say: fmt.Sprintf("magus workspace: %s is outside the write paths of lease %s, and magus proves it in scope (%s); widen the job with the command served next, then retry this write.",
+			rel, me.ID, req.Because),
+		Why: proof + ". The store proves it again when the record applies, and refuses it if another live job holds the path or a deny path covers it.",
+	}.full(), Next: []types.NextStep{{ID: hint.DenyRemedyPrefix + string(denyRuleLeaseWiden), Run: line, Argv: strings.Fields(hint.JobApply.With("-f", "-")), Why: "the proof is the record this applies; the store proves it again under its lock."}}}
 }

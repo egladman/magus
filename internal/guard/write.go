@@ -212,6 +212,8 @@ type writeGrade struct {
 	// Key is the marker Kind is held under when that is narrower than the kind itself, as
 	// leasedPathKey is; empty holds it under Kind.
 	Key hint.MarkerKind
+	// Next is the remedy a deny serves with its reason.
+	Next []types.NextStep
 	// Rule names the catalogued rule a deny came from, "" for the path-lease denies.
 	Rule string
 }
