@@ -40,6 +40,7 @@ export extern fun readlink(path: str) > str !> any;
 export extern fun remove(path: str) > void !> any;
 export extern fun removeAll(path: str) > void !> any;
 export extern fun rename(src: str, dst: str) > void !> any;
+export extern fun scratchCheckoutDir(purpose: str) > str !> any;
 export extern fun size(path: str) > int !> any;
 export extern fun stat(path: str) > FileInfo !> any;
 export extern fun symlink(target: str, link: str) > void !> any;

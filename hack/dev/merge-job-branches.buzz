@@ -1,6 +1,5 @@
 namespace mergejobbranches;
 
-import "env";
 import "flags";
 import "fs";
 import "io";
@@ -8,7 +7,6 @@ import "magus";
 import "proc";
 import "serialize";
 import "std";
-import "uuid";
 import "vcs";
 import "hack/magusfile/branch-stack" as stack;
 
@@ -469,31 +467,18 @@ export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (di
     return git(dir, args: ["rev-parse", "HEAD"]);
 }
 
-// checkoutsRoot is the directory xdg.ScratchCheckoutDir keeps every scratch checkout
-// under. A copy of its path rules, since no Buzz module reaches that resolver.
-fun checkoutsRoot() > str !> any {
-    var cache = env\get("XDG_CACHE_HOME");
-    if (!cache.startsWith("/")) {
-        cache = fs\join(env\home(), name: ".cache");
-    }
-    return fs\join(cache, a: "magus", b: "checkouts");
-}
-
-// withTree runs body in a detached worktree of root at rev under
-// checkoutsRoot()/merge-job-branches/<id>, and removes the worktree however body ends.
+// withTree runs body in a detached worktree of root at rev in a scratch checkout dir,
+// and removes the worktree however body ends.
 fun withTree(root: str, rev: str, body: fun (dir: str) > void !> any) > void !> any {
-    final checkouts = checkoutsRoot();
-    final purpose = fs\join(checkouts, name: "merge-job-branches");
-    foreach (d in [checkouts, purpose]) {
-        fs\mkdirAll(d, perm: 448);
-        if (fs\stat(d).mode % 64 != 0) {
-            throw "merge-job-branches: {d} is open to other users, remove it and let the script recreate it";
-        }
-    }
-    final dir = fs\join(purpose, name: uuid\v7());
-    git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+    final dir = fs\scratchCheckoutDir("merge-job-branches");
     try {
-        requireTrusted(dir, checkouts: checkouts);
+        git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+    } catch (e) {
+        fs\removeAll(dir);
+        throw e;
+    }
+    try {
+        requireTrusted(dir, checkouts: fs\dirname(fs\dirname(dir)));
         body(dir);
     } catch (e) {
         vcs\cmd(["worktree", "remove", "--force", dir], opts: {"quiet": true, "dir": root, "allow_failure": true});

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -322,7 +323,7 @@ func hgExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, ds
 	if err := checkRef(rev); err != nil {
 		return err
 	}
-	staging, err := os.MkdirTemp("", "magus-"+prog+"-export-")
+	staging, err := xdg.ScratchCheckoutDir(prog + "-export")
 	if err != nil {
 		return fmt.Errorf("%s archive: %w", prog, err)
 	}

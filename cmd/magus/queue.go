@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -560,10 +561,10 @@ func writeQueueFile(file string, write func(io.Writer) error) error {
 	return f.Close()
 }
 
-// queueScratch makes a directory outside the checkout, where candidates are checked
-// out: under the checkout they would be discovered as a second copy of it.
-func queueScratch(prefix string) (string, func(), error) {
-	dir, err := os.MkdirTemp("", prefix)
+// queueScratch makes a scratch checkout directory for purpose, where candidates are
+// checked out: under the checkout they would be discovered as a second copy of it.
+func queueScratch(purpose string) (string, func(), error) {
+	dir, err := xdg.ScratchCheckoutDir(purpose)
 	if err != nil {
 		return "", nil, err
 	}
@@ -632,7 +633,7 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	}
 	hookEnv.Spells = grants
 	defer func() { _ = closeFacts() }()
-	scratch, cleanup, err := queueScratch("mergequeue-")
+	scratch, cleanup, err := queueScratch("merge-queue")
 	if err != nil {
 		return err
 	}
@@ -708,7 +709,7 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return exit.Usagef("magus queue gate: --env: %v", err)
 	}
-	scratch, cleanup, err := queueScratch("mergequeue-")
+	scratch, cleanup, err := queueScratch("merge-queue")
 	if err != nil {
 		return err
 	}
@@ -800,11 +801,11 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		from = &queue.VerdictDir{Path: e.path(src.dir), Follow: !f.Once, Interval: f.Interval}
 	} else {
 		// The unpacked run lives only as long as applying does.
-		tmp, cleanup, err := queueScratch("mergequeue-run-")
+		tmp, err := os.MkdirTemp("", "mergequeue-run-")
 		if err != nil {
 			return err
 		}
-		defer cleanup()
+		defer func() { _ = os.RemoveAll(tmp) }()
 		from = &queue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Branch: f.Base, Definition: f.Workflow,
 			Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
 	}
@@ -823,7 +824,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		events.Emit(queue.Event{Kind: queue.EventNotice, Reason: "run " + src.run + " completed without a plan; nothing to apply"})
 		return nil
 	}
-	scratch, cleanup, err := queueScratch("mergequeue-apply-")
+	scratch, cleanup, err := queueScratch("merge-queue-apply")
 	if err != nil {
 		return err
 	}

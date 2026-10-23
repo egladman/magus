@@ -89,6 +89,12 @@ func TestScratchCheckoutDirNestsEachCopyUnderItsPurpose(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	purposeDir := filepath.Join(cache, "magus", "checkouts", "graph-diff")
+	if parent, err := ScratchCheckoutParent("graph-diff"); err != nil || parent != purposeDir {
+		t.Fatalf("ScratchCheckoutParent = %q, %v; want %q", parent, err, purposeDir)
+	}
+	if _, err := os.Stat(purposeDir); err == nil {
+		t.Fatalf("ScratchCheckoutParent created %s", purposeDir)
+	}
 	first, err := ScratchCheckoutDir("graph-diff")
 	if err != nil {
 		t.Fatal(err)

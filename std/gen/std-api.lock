@@ -73,6 +73,7 @@ fs.readlink
 fs.remove
 fs.removeAll
 fs.rename
+fs.scratchCheckoutDir
 fs.size
 fs.stat
 fs.symlink

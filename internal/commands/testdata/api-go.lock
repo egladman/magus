@@ -440,6 +440,7 @@ github.com/egladman/magus/std.FsReadlink func(ctx context.Context, path string) 
 github.com/egladman/magus/std.FsRemove func(ctx context.Context, path string) error
 github.com/egladman/magus/std.FsRemoveAll func(ctx context.Context, path string) error
 github.com/egladman/magus/std.FsRename func(ctx context.Context, src string, dst string) error
+github.com/egladman/magus/std.FsScratchCheckoutDir func(ctx context.Context, purpose string) (string, error)
 github.com/egladman/magus/std.FsSize func(ctx context.Context, path string) (int, error)
 github.com/egladman/magus/std.FsStat func(ctx context.Context, path string) (github.com/egladman/magus/types.FileInfo, error)
 github.com/egladman/magus/std.FsSymlink func(ctx context.Context, target string, link string) error

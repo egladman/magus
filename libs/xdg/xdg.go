@@ -43,15 +43,11 @@ func DataDir() (string, error) {
 	return homeDir("XDG_DATA_HOME", ".local", "share")
 }
 
-// ScratchCheckoutDir creates and returns a new empty 0700 directory for one disposable
-// copy of a repository: CacheDir()/magus/checkouts/<purpose>/<id>. purpose names the
-// feature making it, such as graph-diff, and must be one path element; filepath.Dir of
-// the result is the directory that feature cleans. The caller removes the copy. The
-// cache, unlike the OS temp dir, lies outside every workspace and under one mise
-// trusted_config_paths entry. It errors when no home directory resolves, purpose is not
-// a plain name, or magus/checkouts or the purpose directory exists but is not a
-// directory closed to other users.
-func ScratchCheckoutDir(purpose string) (string, error) {
+// ScratchCheckoutParent returns CacheDir()/magus/checkouts/<purpose>, the directory
+// ScratchCheckoutDir makes purpose's copies in and that feature cleans, creating nothing.
+// purpose names the feature, such as graph-diff, and must be one path element. It errors
+// when no home directory resolves or purpose is not a plain name.
+func ScratchCheckoutParent(purpose string) (string, error) {
 	if purpose == "" || purpose == "." || purpose == ".." || strings.ContainsAny(purpose, `/\`) {
 		return "", fmt.Errorf("xdg: scratch checkout purpose %q is not a single path element", purpose)
 	}
@@ -59,16 +55,30 @@ func ScratchCheckoutDir(purpose string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(cache, "magus"), 0o700); err != nil {
+	return filepath.Join(cache, "magus", "checkouts", purpose), nil
+}
+
+// ScratchCheckoutDir creates and returns a new empty 0700 directory for one disposable
+// copy of a repository in ScratchCheckoutParent(purpose). The caller removes the copy.
+// The cache, unlike the OS temp dir, lies outside every workspace and under one mise
+// trusted_config_paths entry. It errors as ScratchCheckoutParent does, and when
+// magus/checkouts or the purpose directory exists but is not a directory closed to other
+// users.
+func ScratchCheckoutDir(purpose string) (string, error) {
+	parent, err := ScratchCheckoutParent(purpose)
+	if err != nil {
+		return "", err
+	}
+	checkouts := filepath.Dir(parent)
+	if err := os.MkdirAll(filepath.Dir(checkouts), 0o700); err != nil {
 		return "", fmt.Errorf("xdg: create the scratch checkout root: %w", err)
 	}
-	dir := filepath.Join(cache, "magus", "checkouts")
-	for _, d := range []string{dir, filepath.Join(dir, purpose)} {
+	for _, d := range []string{checkouts, parent} {
 		if err := privateDir(d); err != nil {
 			return "", err
 		}
 	}
-	tree, err := os.MkdirTemp(filepath.Join(dir, purpose), "")
+	tree, err := os.MkdirTemp(parent, "")
 	if err != nil {
 		return "", fmt.Errorf("xdg: create a scratch checkout: %w", err)
 	}
