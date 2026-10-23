@@ -177,7 +177,7 @@ func binaryScopes(ctx context.Context, root string) ([]string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("job: `go list -deps ./cmd/magus` in %s: %w: %s", root, err, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("job: `go list -deps ./cmd/magus` in %s says %q: %w", root, strings.TrimSpace(stderr.String()), err)
 	}
 	return packageScopes(string(out), root), nil
 }
