@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/mod/modfile"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -726,7 +729,11 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			return err
 		}
 		return m.buildSymbolIndex(ctx, idx, keyed[idx.ref()])
-	}, m.cfg.Cache.WriteEnabled())
+	}, m.cfg.Cache.WriteEnabled(), func() string {
+		goMod, _ := os.ReadFile(filepath.Join(m.ws.Root, "go.mod"))
+		_, head, _ := m.CurrentRevision(ctx)
+		return binaryTreeSkew(goMod, types.MagusBuildFromContext(ctx).Commit, head)
+	})
 }
 
 // buildSymbolIndex rebuilds one stale index. A reader inside a target body (the run that
@@ -768,7 +775,7 @@ func installedIndexes(ctx context.Context, idxs []projectIndex) []projectIndex {
 // freshenIndexes is freshenSymbolIndexes' policy: probe, build what is stale, and probe again,
 // because a build the cache could not record is one nothing can vouch for.
 func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[indexRef]bool,
-	build func(projectIndex) error, writable bool,
+	build func(projectIndex) error, writable bool, skew func() string,
 ) error {
 	fresh := probe(touched)
 	var stale []projectIndex
@@ -782,7 +789,7 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	}
 	var problems []string
 	var built []projectIndex
-	writesOff := false
+	writesOff, skewed := false, false
 	for _, idx := range stale {
 		if err := build(idx); err != nil {
 			problems = append(problems, types.InlineDiagnostic(symbolRunError(idx.projectRef(), idx.language, err)))
@@ -800,6 +807,8 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 			if !writable {
 				why = "cache writes are off (cache.write.enabled: false); enable them for this run"
 				writesOff = true
+			} else if s := skew(); s != "" {
+				why, skewed = why+": "+s, true
 			}
 			problems = append(problems, idx.projectRef().Display()+": "+why)
 		}
@@ -816,9 +825,23 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 		why += " With cache writes off the cache records no run to vouch for the index it wrote;" +
 			" enabling them for this run publishes nothing without a signing key."
 	}
+	if skewed {
+		fix = "build ./magus at the checkout's HEAD, stop the pool parents of other builds with `magus server stop --pools`"
+		why += " A magus built at another commit than the tree records the index's run under a key the probe does not read back."
+	}
 	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix).
 		WithWhy(why)
+}
+
+// binaryTreeSkew names a binary built at built running in magus's own checkout (goMod is its
+// go.mod) at head; "" in any other workspace, or when either is unknown or abbreviates the other.
+func binaryTreeSkew(goMod []byte, built, head string) string {
+	if modfile.ModulePath(goMod) != ownModule || built == "" || built == "unknown" || head == "" ||
+		strings.HasPrefix(built, head) || strings.HasPrefix(head, built) {
+		return ""
+	}
+	return fmt.Sprintf("this magus was built at %.12s and the checkout is at %.12s", built, head)
 }
 
 // conformanceSkippedWhy is the rationale every MGS7003 carries.
