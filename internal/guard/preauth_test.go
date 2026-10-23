@@ -399,12 +399,39 @@ type servedFixture struct {
 	setup func(t *testing.T, ctx context.Context, deps Dependencies, role servedRole) (call Request, next []string)
 }
 
+// rootMergeServesBaseScript is the merge-base script line orchestrator-groundwork serves a
+// root's `git merge`, with its placeholder filled.
+func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependencies, role servedRole) (Request, []string) {
+	if role.name != "root with a handed-out row" {
+		return Request{}, nil
+	}
+	workspace := hookLocation(ctx, Dependencies{}).workspace
+	require.NoError(t, os.MkdirAll(filepath.Join(workspace, "hack", "dev"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "hack", "dev", "merge-base-into-branches.buzz"), nil, 0o644))
+	call := servedAs(Request{Input: "git merge origin/main"}, role)
+	call.DryRun = true
+	v := Judge(ctx, deps, call)
+	require.Equal(t, string(denyRuleOrchestratorGroundwork), v.Rule, v.Reason)
+	var next []string
+	for _, m := range backtickRe.FindAllStringSubmatch(v.Reason+v.Context, -1) {
+		if strings.Contains(m[1], "merge-base-into-branches.buzz") {
+			next = append(next, placeholderRe.ReplaceAllString(m[1], "guard-merge-policy"))
+		}
+	}
+	require.NotEmpty(t, next, "the refusal names the merge-base script:\n%s%s", v.Reason, v.Context)
+	return Request{}, next
+}
+
+// seatWaitServesTheRun is MGS3009's remedy: the wait piped into the run that spends the seat.
+func seatWaitServesTheRun(*testing.T, context.Context, Dependencies, servedRole) (Request, []string) {
+	const run = "magus run go::go-test . -- ./internal/ledger/"
+	return Request{Input: run}, []string{hint.Status.With("--wait") + " | " + run}
+}
+
 func servedFixtures() []servedFixture {
 	return []servedFixture{
-		{"MGS3009 waits in the call that spends the seat", func(*testing.T, context.Context, Dependencies, servedRole) (Request, []string) {
-			const run = "magus run go::go-test . -- ./internal/ledger/"
-			return Request{Input: run}, []string{hint.Status.With("--wait") + " | " + run}
-		}},
+		{"a root's merge names the script that brings the base in", rootMergeServesBaseScript},
+		{"MGS3009 waits in the call that spends the seat", seatWaitServesTheRun},
 		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
 			standBudget(t, types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1})
 			root := recordedSearchTree(t)

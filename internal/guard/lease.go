@@ -2547,7 +2547,7 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 	return landDenial(what, r.op, row, role,
 		"magus workspace: `"+r.op+"` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.",
 		"The orchestrator lands the work from there. "+
-			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator.")
+			"A worker reads the repository, stages, switches or creates a branch, fetches, and merges its base into its own branch; every other version-control verb stays with the orchestrator.")
 }
 
 // landDenial is workerVCSDenial for every call but an init: lead, then why, then what a
@@ -2555,7 +2555,7 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 func landDenial(what, op string, row types.Job, role, lead, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
-		"A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
+		"A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
 		leaseActorClause("land it"),
 		lead, what, op, row.ID, role, why, checkout)
 }
@@ -2613,16 +2613,28 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	case unlocated != "":
 		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
 	}
-	return vcsRefusal{op: op, kind: vcsOpLands, why: commitRefusal(ctx, opts, row, inv.Name, site)}
+	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
+	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
+		why = fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
+		if base == "" {
+			why += "this checkout resolves no base branch, so only the revision its job was handed."
+		} else {
+			why += fmt.Sprintf("origin/%s, or the revision its job was handed.", path.Base(base))
+		}
+	}
+	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a
-// git cherry-pick, or a git apply. All three are graded where the commit is, its own
-// branch in its own checkout, because a cherry-pick and `git diff | git apply -3 && git
-// commit -C` land the same change, and a rule that answered them differently taught
-// whichever spelling it let through.
+// git cherry-pick, a git apply, or a merge workerMerge reads. All are graded where the
+// commit is, its own branch in its own checkout, because a cherry-pick and `git diff | git
+// apply -3 && git commit -C` land the same change, and a rule that answered them
+// differently taught whichever spelling it let through.
 func workerLands(inv hint.Invocation) bool {
 	if recordsCommit(inv) {
+		return true
+	}
+	if _, ok := workerMerge(inv); ok {
 		return true
 	}
 	sub, _ := vcsSubcommand(inv)
@@ -2848,34 +2860,35 @@ func inFreshRepo(inv hint.Invocation, site vcsSite, unlocated string, fresh []st
 }
 
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the
-// lease's own checkout, a secondary one, on a named branch other than the base.
-func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) string {
+// lease's own checkout, a secondary one, on a named branch other than the base. base is
+// the base branch that checkout resolves, read only when why is "".
+func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) (why, base string) {
 	if row.CheckoutRoot == "" {
-		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one."
+		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", ""
 	}
 	root, ok := siteCheckout(ctx, opts, backend, site)
 	if !ok {
-		return "Which checkout it commits in cannot be read."
+		return "Which checkout it commits in cannot be read.", ""
 	}
 	if !samePath(root, row.CheckoutRoot) {
-		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot)
+		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot), ""
 	}
 	opts.Name = backend
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil || res.VCS == nil {
-		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read."
+		return "Version control is disabled or unresolvable for " + root + ", so its branch cannot be read.", ""
 	}
 	if !res.VCS.IsSecondaryCheckout(root) {
-		return root + " is the repository's primary checkout, the one the orchestrator integrates in."
+		return root + " is the repository's primary checkout, the one the orchestrator integrates in.", ""
 	}
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
 	case err != nil || ref == "":
-		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID)
+		return root + " has no branch checked out; " + switchToJobBranch(backend, row.ID), ""
 	case isBaseBranch(ref, res.Base):
-		return fmt.Sprintf("%s is on %s, the base branch.", root, ref)
+		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), ""
 	}
-	return ""
+	return "", res.Base
 }
 
 // isBaseBranch reports whether ref names the branch base tracks: base itself, or its last

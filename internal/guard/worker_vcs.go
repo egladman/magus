@@ -57,6 +57,56 @@ func fastForward(c hint.Invocation) bool {
 	return flag == "--ff-only" && commitID(commit)
 }
 
+// workerMergeFlags are the git merge options a worker's merge of its base may carry: none
+// picks a strategy, so neither side of the merge can be dropped.
+var workerMergeFlags = []string{"--no-edit", "--edit", "-e", "--ff", "--no-ff", "--ff-only", "--commit", "--no-commit",
+	"--squash", "--log", "--no-log", "--stat", "-n", "--no-stat", "-q", "--quiet", "-v", "--verbose"}
+
+// workerMerge reads `git merge` as a worker may run it: `--continue` or `--abort`, which
+// finish or drop the merge under way (operand ""), or one revision merged with only
+// workerMergeFlags and a message. ok is false for any other merge: an octopus, a strategy,
+// or an option this list does not name.
+func workerMerge(inv hint.Invocation) (operand string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	if inv.Name != "git" || sub != "merge" {
+		return "", false
+	}
+	if len(rest) == 1 && (rest[0] == "--continue" || rest[0] == "--abort") {
+		return "", true
+	}
+	var operands []string
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch {
+		case a == "-m" || a == "--message":
+			i++
+		case strings.HasPrefix(a, "--message="), slices.Contains(workerMergeFlags, a):
+		case strings.HasPrefix(a, "-"):
+			return "", false
+		default:
+			operands = append(operands, a)
+		}
+	}
+	if len(operands) != 1 {
+		return "", false
+	}
+	return operands[0], true
+}
+
+// mergesBase reports operand naming the base a worker may merge into its own branch: base
+// itself, its origin/ form, or the revision the job was handed or reported, by id.
+func mergesBase(operand, base string, row types.Job) bool {
+	if commitID(operand) {
+		for _, token := range []string{row.Checkpoint, row.ReportedBase} {
+			if rev, _ := types.ParseCheckpointToken(token); rev != "" && strings.HasPrefix(rev, operand) {
+				return true
+			}
+		}
+		return row.Worktree != nil && row.Worktree.Base != "" && strings.HasPrefix(row.Worktree.Base, operand)
+	}
+	return base != "" && (operand == base || operand == "origin/"+path.Base(base))
+}
+
 // commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
 // build's commit.
 func commitID(s string) bool {
