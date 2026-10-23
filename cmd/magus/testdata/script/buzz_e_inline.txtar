@@ -1,0 +1,24 @@
+# -e is the one-off exception: statements and imports run with no `fun main`,
+# while files and stdin stay strict.
+
+exec magus buzz -e 'import "std"; std\print("hi");'
+stdout 'hi'
+
+exec magus buzz -e 'import "std"; import "fs"; std\print(fs\basename("a/b.txt"));'
+stdout 'b.txt'
+
+# a body that declares main still has it called
+exec magus buzz -e 'import "std"; fun main(args: [str]) > void { std\print("from main"); }'
+stdout 'from main'
+
+# an error position points at the user's own line
+! exec magus buzz -e 'import "std"; std\print(nope);'
+stderr 'line 1:25: undefined: nope'
+
+# a file without main and with a top-level statement still fails strict
+! exec magus buzz bare.buzz
+stderr 'not allowed at the top level'
+
+-- bare.buzz --
+import "std";
+if (true) { std\print("bare"); }
