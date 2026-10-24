@@ -196,7 +196,7 @@ func keyPath(path, key string) string {
 	if path == "" {
 		return key
 	}
-	return path + "." + key
+	return fmt.Sprintf("%s.%s", path, key)
 }
 
 func (w Weights) validate() error {
