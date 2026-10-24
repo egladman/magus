@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -393,8 +394,7 @@ func TestEmphasisMarksOnlyThePairedRewrite(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			files := Parse("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n" +
-				strings.Join(tc.lines, "\n") + "\n")
+			files := Parse(fmt.Sprintf("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n%s\n", strings.Join(tc.lines, "\n")))
 			require.Len(t, files, 1)
 			require.Len(t, files[0].Hunks, 1)
 			h := files[0].Hunks[0]
