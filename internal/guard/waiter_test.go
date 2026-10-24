@@ -169,22 +169,37 @@ func TestTimerIsRefusedAndWorkPasses(t *testing.T) {
 func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
 	for _, tt := range []struct {
-		name  string
-		row   types.Job
-		first bool
-		want  bool
+		name      string
+		row       types.Job
+		first     bool
+		stopped   bool
+		continued bool
+		want      bool
 	}{
 		// A row stays running after its worker dies, so running alone says nothing.
-		{"a running row no spawn here took", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, false, false},
-		{"a running row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, true, true},
-		{"a declared row nobody took", types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}, false, false},
-		{"a declared row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}, true, true},
-		{"a finished row", types.Job{ID: "guard-facts", State: types.StatePass, WritePaths: []string{"a/**"}}, true, false},
+		{"a running row no spawn here took", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, false, false, false, false},
+		{"a running row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, true, false, false, true},
+		{"a declared row nobody took", types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}, false, false, false, false},
+		{"a declared row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}, true, false, false, true},
+		{"a finished row", types.Job{ID: "guard-facts", State: types.StatePass, WritePaths: []string{"a/**"}}, true, false, false, false},
+		// Gap 218: the host's stop releases the row, and a continue takes it back.
+		{"a running row whose worker stopped", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, true, true, false, false},
+		{"a running row whose stopped worker was continued", types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"a/**"}}, true, true, true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := fleetFixture(t, tt.row)
 			if tt.first {
 				Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, title, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
+			}
+			if tt.stopped {
+				Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", filepath.Join(t.TempDir(), "agent.jsonl")), Host: "claude-code"})
+			}
+			if tt.continued {
+				time.Sleep(10 * time.Millisecond)
+				Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+					"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
+					"tool_input": map[string]any{"to": "brisk-heron", "message": "Carry on."},
+				}), Host: "claude-code"})
 			}
 			v := Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",

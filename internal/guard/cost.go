@@ -987,7 +987,9 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 	}
 	switch words[0] {
 	case "run", "affected":
-		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) {
+		// The workspace's own install, with no charm, is the gate's precondition: a fresh
+		// checkout runs no gate until its dependencies are there.
+		if r, ok := parseTargetRun(c); ok && !isGateCommand(c.Args) && !r.installs(Dependencies{}) {
 			if integrationTarget(r.target) {
 				return delegableIntegrate
 			}

@@ -783,10 +783,28 @@ func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defa
 		next = v.run.readOnly(defaults)
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: the workspace did not load; run `%s`.", v.run.target, me.ID, next),
+		Say: fmt.Sprintf("magus workspace: `%s` could not be judged against lease %s's write paths: %s; run `%s`.", v.run.target, me.ID, uncheckedCause(v.unchecked), next),
 		Why: fmt.Sprintf("%v.\nWithout the workspace's declarations nothing says which project `%s` selects or what it writes, so it is refused rather than run unchecked. Once the workspace loads, the run is judged as usual.",
 			v.unchecked, v.run.target),
 	}
+}
+
+// uncheckedCause names why the workspace a run is judged against was not read: an open
+// that outlasted its share of the hook's budget is a slow machine, not a broken magusfile,
+// and the two send the worker different ways.
+func uncheckedCause(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget for it", inspectBudget)
+	case errors.Is(err, errNoDependency):
+		return "the guard was handed no way to open the workspace"
+	}
+	// The wraps say what the guard was reading; the innermost error says what failed.
+	for inner := errors.Unwrap(err); inner != nil; inner = errors.Unwrap(err) {
+		err = inner
+	}
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return "the workspace did not load: " + first
 }
 
 // denyWorkerRawTool refuses a bound worker a raw tool a spell op covers, naming the check
