@@ -104,10 +104,10 @@ func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
 	assert.NotZero(t, info.Mode()&0o111, "the placed binary runs")
 }
 
-// A worker whose ./magus was built at another commit than its checkout cannot load the tree,
-// so the fork makes the checkout at any checkpoint and places the binary only at the commit
-// it was built at; elsewhere CheckoutBootstrap builds one.
-func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
+// This repository holds no ./cmd/magus, so whether a build input differs between commits
+// cannot be told: the fork makes the checkout at any checkpoint and places the binary only at
+// the commit it was built at; elsewhere CheckoutBootstrap builds one.
+func TestForkWorktreePlacesABinaryWhoseInputsCannotBeListedOnlyAtItsCommit(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
 	built := repo.Head()
@@ -167,14 +167,6 @@ func TestForkWorktreePlacesTheBinaryOnlyAtTheCommitItWasBuiltAt(t *testing.T) {
 	require.True(t, made)
 	assert.Equal(t, built, wt.Base)
 	assert.FileExists(t, wt.Binary)
-
-	docsOnly := repo.Commit("notes", map[string]string{"b_test.go": "package b\n", "changes/unreleased/x.md": "x\n"})
-	bin, ctx = forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: later})
-	wt, made, err = s.ForkWorktree(ctx, "w4", filepath.Join(t.TempDir(), "w4"), docsOnly, bin)
-	require.NoError(t, err)
-	require.True(t, made)
-	assert.Equal(t, docsOnly, wt.Base)
-	assert.FileExists(t, wt.Binary, "no file a binary holds differs between the build and the checkout")
 
 	_, made, err = s.ForkWorktree(t.Context(), "w3", filepath.Join(t.TempDir(), "w3"), "", "")
 	require.NoError(t, err, "a forker running magus from PATH places nothing, so nothing is compared")
@@ -300,4 +292,107 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "dirty", rows[0].ID)
+}
+
+func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
+	t.Parallel()
+	root := filepath.FromSlash("/w/a")
+	listed := root + "|VERSION|banner.txt\n" +
+		filepath.Join(root, "cmd", "magus") + "\n" +
+		filepath.Join(root, "internal", "job") + "\n" +
+		"\n" +
+		filepath.FromSlash("/usr/local/go/src/fmt") + "\n" +
+		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y") + "\n"
+	scopes := packageScopes(listed, root)
+	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
+
+	for _, tc := range []struct {
+		path  string
+		input bool
+	}{
+		{"internal/job/worktree.go", true},
+		{"cmd/magus/main.go", true},
+		{"main.go", true},
+		{"go.mod", true},
+		{"go.sum", true},
+		{"go.work", true},
+		{"VERSION", true},
+		{"internal/job/gen/job.schema.json", true},
+		{"internal/job/worktree_test.go", false},
+		{"internal/other/x.go", false},
+		{"libs/embed/train/go.mod", false},
+		{"docs/index.md", false},
+		{"MAGUS.md", false},
+		{"console/src/app.ts", false},
+		{"changes/unreleased/x.md", false},
+	} {
+		assert.Equal(t, tc.input, len(buildInputs([]string{tc.path}, scopes)) == 1, tc.path)
+	}
+}
+
+// goModuleRepo is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
+// package nothing links and a docs file.
+func goModuleRepo(t *testing.T) *testkit.Repo {
+	t.Helper()
+	return testkit.NewRepo(t, map[string]string{
+		"go.mod":            "module example.com/m\n\ngo 1.26\n",
+		"cmd/magus/main.go": "package main\n\nimport \"example.com/m/lib\"\n\nfunc main() { lib.Run() }\n",
+		"lib/lib.go":        "package lib\n\nfunc Run() {}\n",
+		"lib/lib_test.go":   "package lib\n",
+		"unlinked/u.go":     "package unlinked\n",
+		"docs/a.md":         "a\n",
+	})
+}
+
+func TestForkWorktreePlacesABinaryWhoseBuildInputsMatchTheBase(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		files  map[string]string
+		placed bool
+	}{
+		"a docs edit":                   {files: map[string]string{"docs/a.md": "b\n"}, placed: true},
+		"a test file":                   {files: map[string]string{"lib/lib_test.go": "package lib\n\n"}, placed: true},
+		"a package nothing links":       {files: map[string]string{"unlinked/u.go": "package unlinked\n\n"}, placed: true},
+		"a linked package's source":     {files: map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"}},
+		"a file a linked package holds": {files: map[string]string{"lib/data.txt": "x\n"}},
+		"the module file":               {files: map[string]string{"go.mod": "module example.com/m\n\ngo 1.26.0\n"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			repo := goModuleRepo(t)
+			s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+			built := repo.Head()
+			later := repo.Commit(name, tc.files)
+			bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+			wt, made, err := s.ForkWorktree(ctx, "past", filepath.Join(t.TempDir(), "w"), later, bin)
+			require.NoError(t, err)
+			require.True(t, made)
+			assert.Equal(t, later, wt.Base)
+			assert.Equal(t, tc.placed, wt.Binary != "", "placed")
+
+			// A binary built past the base is compared the same way.
+			bin, ctx = forkersBinary(t, types.MagusBuild{Version: "v0.5.0-2-gdef", Commit: later})
+			wt, _, err = s.ForkWorktree(ctx, "before", filepath.Join(t.TempDir(), "w"), built, bin)
+			require.NoError(t, err)
+			assert.Equal(t, built, wt.Base)
+			assert.Equal(t, tc.placed, wt.Binary != "", "placed at the older base")
+		})
+	}
+}
+
+func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
+	t.Parallel()
+	repo := execRepo(t)
+	built := repo.Head()
+	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
+	drv, why := resolveDriver(t.Context(), repo.Root())
+	require.NotNil(t, drv, why)
+
+	_, err := changedBuildInputs(t.Context(), drv, s.root, built, later)
+	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
+
+	inputs, err := changedBuildInputs(t.Context(), drv, s.root, later, later)
+	require.NoError(t, err, "equal commits list nothing")
+	assert.Empty(t, inputs)
 }

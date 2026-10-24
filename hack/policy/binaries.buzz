@@ -6,6 +6,7 @@ namespace agentpolicy\binaries;
 import "std";
 import "fs";
 import "path";
+import "proc";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/builds" as builds;
@@ -13,17 +14,19 @@ import "./hack/policy/builds" as builds;
 // Where is where a command runs: the directory the host reported, and the workspace root
 // holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
 // main session or a person; integrator is true when that caller integrates this checkout.
-// owned are the checkouts forks made for jobs the caller may work in.
+// owned are the checkouts forks made for jobs the caller may work in, and writePaths the
+// lease's write paths.
 export object Where {
     dir: str,
     workspace: str,
     lease: str = "",
     integrator: bool = false,
     owned: [str] = [<str>],
+    writePaths: [str] = [<str>],
 }
 
-// Disk answers the three questions the binary rules ask the filesystem, passed in so the
-// tests below can describe a tree without building one.
+// Disk answers the questions the binary rules ask the filesystem and the Go toolchain,
+// passed in so the tests below can describe a tree without building one.
 export object Disk {
     // isCheckout: dir is the root of a checkout of magus.
     isCheckout: fun (dir: str) > bool,
@@ -31,6 +34,9 @@ export object Disk {
     hasBinary: fun (dir: str) > bool,
     // sameFile: a and b name one file, however each is spelled.
     sameFile: fun (a: str, b: str) > bool,
+    // binaryScopes: where a file in root can reach the binary ./cmd/magus compiles, as
+    // builds\buildInputsAmong reads them, null when the packages cannot be listed.
+    binaryScopes: fun (root: str) > [str]?,
 }
 
 // The first line of go.mod in a checkout of magus, and in nothing else.
@@ -51,6 +57,13 @@ export fun onDisk() > Disk {
             if (x == null or y == null) { return false; }
             return x!.size == y!.size and x!.mtime == y!.mtime and x!.mode == y!.mode;
         },
+        binaryScopes = fun (root: str) > [str]? {
+            final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f",
+                `{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus"],
+                dir: root, opts: {"quiet": true, "allow_failure": true}) catch null;
+            if (listed == null or listed!.code != 0) { return null; }
+            return builds\packageScopes(listed!.stdout, root: root);
+        },
     };
 }
 
@@ -59,14 +72,17 @@ export fun onDisk() > Disk {
 // known before the line runs: a path held in a variable, or a relative one with no
 // directory to resolve it against, is unknown and passes. A leased worker's build of magus is
 // refused first, which includes the bootstrap goIntoCheckout lets the main session and a
-// person run into a checkout with no binary: a worker is placed one, never builds it. Both
-// refusals carry the same verdict and command. worker is true for a caller other than the
-// main session, leased or not.
+// person run into a checkout with no binary: a worker is placed one, unless its job owns the
+// checkout and its write paths cover a build input of ./cmd/magus there (see builds\OwnBuild).
+// Both refusals carry the same verdict and command. worker is true for a caller other than
+// the main session, leased or not.
 export fun decideBinaries(programs: [helpers\Program], where: Where, disk: Disk, worker: bool) > str {
     foreach (p in programs) {
-        final building = builds\workerBuildDenial(p, lease: where.lease, integrator: where.integrator);
+        final own = ownBuild(p, where: where, disk: disk);
+        final building = builds\workerBuildDenial(p, lease: where.lease, integrator: where.integrator, own: own);
         if (building != "") { return building; }
-        if (worker and p.name == "go" and bootstrap(helpers\goCall(p.args).args)) {
+        final bootstrapping = p.name == "go" and bootstrap(helpers\goCall(p.args).args);
+        if (worker and bootstrapping and !(where.lease != "" and builds\ownsBuild(own))) {
             return builds\workerPlacement("", lease: "");
         }
         final denial = foreignBinary(p, where: where, disk: disk);
@@ -75,6 +91,31 @@ export fun decideBinaries(programs: [helpers\Program], where: Where, disk: Disk,
         if (goDenial != "") { return goDenial; }
     }
     return "";
+}
+
+// ownBuild is p's build judged as a worker's own: the checkout it builds in and, when that is
+// one the caller's job owns, the write paths that are build inputs there. The packages are
+// listed only for a leased build of magus in an owned checkout; unlisted, the build stays
+// refused and says why.
+fun ownBuild(p: helpers\Program, where: Where, disk: Disk) > builds\OwnBuild {
+    if (where.lease == "" or where.integrator or builds\buildOf(p) == "") { return builds\OwnBuild{}; }
+    var root = where.workspace;
+    if (p.name == "go") {
+        final chdir = helpers\goCall(p.args).chdir;
+        if (chdir != "") { root = absolute(chdir, dir: where.dir); }
+    } else {
+        final flagged = helpers\flagValue(p.args, long: "--root", short: "");
+        if (flagged != null) { root = absolute(flagged!, dir: where.dir); }
+    }
+    final own = builds\OwnBuild{ root = root, owned = where.owned };
+    if (root == "" or where.owned.indexOf(path\clean(root)) == null) { return own; }
+    final binaryScopes = disk.binaryScopes;
+    final scopes = binaryScopes(root);
+    if (scopes == null) {
+        return builds\OwnBuild{ root = root, owned = where.owned,
+            unlisted = "`go list -deps ./cmd/magus` failed in {root}, so whether the job's write paths cover a build input is unknown." };
+    }
+    return builds\OwnBuild{ root = root, owned = where.owned, inputs = builds\buildInputsAmong(where.writePaths, scopes: scopes!) };
 }
 
 // foreignBinary: `<checkout A>/magus` run against checkout B, both checkouts of magus. The
@@ -205,6 +246,7 @@ fun fakeDisk(checkouts: [str], binaries: [str]) > Disk {
         isCheckout = fun (dir: str) > bool { return checkouts.indexOf(dir) != null; },
         hasBinary = fun (dir: str) > bool { return binaries.indexOf(dir) != null; },
         sameFile = fun (a: str, b: str) > bool { return a == b; },
+        binaryScopes = fun (root: str) > [str]? { return ["./", "cmd/magus/", "internal/job/"]; },
     };
 }
 
@@ -253,6 +295,7 @@ test "a binary run against its own checkout, on PATH, unknown, or on a non-magus
         isCheckout = twoCheckouts.isCheckout,
         hasBinary = twoCheckouts.hasBinary,
         sameFile = fun (a: str, b: str) > bool { return true; },
+        binaryScopes = twoCheckouts.binaryScopes,
     };
     std\assert(binaryDenial([["/w/a/magus", "--root", "/w/b", "ls"]], where: inB, disk: aliased) == "", message: "two spellings of one file");
 }
@@ -357,4 +400,54 @@ test "only the main session bootstraps" {
     std\assert(denial.indexOf("a worker does not build magus") == 0, message: denial);
     std\assert(denial.indexOf("--from") != null, message: "names the placement");
     std\assert(decideBinaries(helpers\request(line), where: inB, disk: fresh, worker: false) == "", message: "the main session builds");
+}
+
+test "a worker builds with go-build in a checkout its job owns when its write paths cover a build input" {
+    final fresh = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a"]);
+    final owner = Where{ dir = "/w/b", workspace = "/w/b", lease = "iso", owned = ["/w/b"], writePaths = ["docs/x.md", "internal/job/worktree.go"] };
+    foreach (argv in [
+        ["/w/b/magus", "run", "go-build", "."],
+        ["/w/b/magus", "--root", "/w/b", "run", "go::go-build"],
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+    ]) {
+        std\assert(decideBinaries(helpers\request([argv]), where: owner, disk: fresh, worker: true) == "", message: argv.join(" "));
+    }
+}
+
+test "a worker's own build is refused outside an owned checkout, without a build input, or for any other build" {
+    final disk = fakeDisk(["/w/a", "/w/b", "/w/c"], binaries: ["/w/a", "/w/b", "/w/c"]);
+    final goBuild = ["/w/b/magus", "run", "go-build", "."];
+    final refused = fun (argv: [str], where: Where, d: Disk) > str {
+        final denial = decideBinaries(helpers\request([argv]), where: where, disk: d, worker: true);
+        verdict\assertVerdict(denial, label: argv.join(" "));
+        return denial;
+    };
+    final inputs = ["internal/job/worktree.go"];
+    final notOwned = refused(goBuild, where: Where{ dir = "/w/b", workspace = "/w/b", lease = "iso", owned = ["/w/c"], writePaths = inputs }, d: disk);
+    std\assert(notOwned.indexOf("a worker does not build magus") == 0, message: "a checkout another job owns: " + notOwned);
+    final noInput = refused(goBuild, where: Where{ dir = "/w/b", workspace = "/w/b", lease = "iso", owned = ["/w/b"], writePaths = ["docs/x.md", "internal/job/worktree_test.go"] }, d: disk);
+    std\assert(noInput.indexOf("only when the job's write paths cover a build input of ./cmd/magus") != null, message: "no build input: " + noInput);
+    final owner = Where{ dir = "/w/b", workspace = "/w/b", lease = "iso", owned = ["/w/b"], writePaths = inputs };
+    foreach (argv in [
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+        ["/w/b/magus", "run", "build", "."],
+        ["go", "install", "./cmd/magus"],
+    ]) {
+        std\assert(refused(argv, where: owner, d: disk).indexOf("a worker does not build magus") == 0, message: "not go-build: " + argv.join(" "));
+    }
+    final elsewhere = refused(["/w/b/magus", "--root", "/w/c", "run", "go-build", "."], where: owner, d: disk);
+    std\assert(elsewhere != "", message: "a build into a checkout the job does not own");
+    final foreign = refused(["/w/a/magus", "run", "go-build", "."], where: owner, d: disk);
+    std\assert(foreign.indexOf("a binary from another checkout runs here") == 0, message: "foreign-binary still holds: " + foreign);
+    final unlisted = Disk{
+        isCheckout = disk.isCheckout,
+        hasBinary = disk.hasBinary,
+        sameFile = disk.sameFile,
+        binaryScopes = fun (root: str) > [str]? { return null; },
+    };
+    final unknown = refused(goBuild, where: owner, d: unlisted);
+    std\assert(unknown.indexOf("`go list -deps ./cmd/magus` failed in /w/b") != null, message: "says why it cannot tell: " + unknown);
+    final unleased = refused(["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        where: Where{ dir = "/w/b", workspace = "/w/b", owned = ["/w/b"], writePaths = inputs }, d: fakeDisk(["/w/b"], binaries: []));
+    std\assert(unleased.indexOf("a worker does not build magus") == 0, message: "a worker with no lease never bootstraps: " + unleased);
 }
