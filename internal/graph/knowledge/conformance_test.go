@@ -726,3 +726,55 @@ func TestConformanceFileSplit(t *testing.T) {
 	require.Len(t, row.Violations, 1)
 	assert.Equal(t, "internal/r/r_cache.go", row.Violations[0].ID, "r.go with r_tasks.go would pass 1000 lines, so that split is owed")
 }
+
+// splitNameSymbols is two packages whose job.go is past 1500 lines. internal/a has no
+// job_claim.go; internal/b has one, beside a test, a platform build and a known file that
+// each name two concepts after job.go.
+func splitNameSymbols() []types.KnowledgeSymbol {
+	const (
+		a, b                    = "/internal/a", "/internal/b"
+		aRoot, aCallers         = "internal/a/job.go", "internal/a/job_claim_callers.go"
+		bRoot, bClaim, bCallers = "internal/b/job.go", "internal/b/job_claim.go", "internal/b/job_claim_callers.go"
+		bTest, bLinux, bKnown   = "internal/b/job_lease_cache_test.go", "internal/b/job_lease_linux.go", "internal/b/job_lease_store.go"
+	)
+	return []types.KnowledgeSymbol{
+		conformancePkg(a, []string{aRoot, aCallers}),
+		conformancePkg(b, []string{bRoot, bClaim, bCallers, bTest, bLinux, bKnown}),
+		conformanceSym(a, "Run().", aRoot, 3, 12, 2900, "S1", 90, aCallers),
+		conformanceSym(a, "callers().", aCallers, 3, 12, 100, "S2", 90),
+		conformanceSym(b, "Run().", bRoot, 3, 12, 2900, "S3", 90, bClaim, bKnown),
+		conformanceSym(b, "claim().", bClaim, 3, 12, 200, "S4", 90, bCallers),
+		conformanceSym(b, "callers().", bCallers, 3, 12, 100, "S5", 90),
+		conformanceSym(b, "TestLease().", bTest, 3, 12, 50, "S6", 90),
+		conformanceSym(b, "lease().", bLinux, 3, 12, 40, "S7", 90),
+		conformanceSym(b, "store().", bKnown, 3, 12, 60, "S8", 90),
+	}
+}
+
+func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
+	t.Parallel()
+
+	sh := assembleSymbols(".", splitNameSymbols(), nil)
+	g := assembleLens(splitNameSymbols())
+	g.Merge(nil, splitEdges(sh.Nodes, sh.Edges))
+	key := types.ConformanceKey{Metric: types.ConformanceFileSplit, Population: types.ConformancePopSource}
+	o := types.ConformanceOptions{MinSample: 1, Step: 0.05,
+		Limits: map[types.ConformanceKey]types.ConformanceLimit{key: {Anchor: 1500}},
+		Ratchet: types.ConformanceRatchet{Known: []types.ConformanceKnown{
+			{Metric: types.ConformanceFileSplit, Items: []string{"internal/b/job_lease_store.go"}, Reason: "seeded"},
+		}},
+	}
+
+	out := g.Conformance(o)
+	row := findConformanceRow(t, out, types.ConformanceFileSplit, types.ConformancePopSource, "")
+	assert.Equal(t, []types.ConformanceItem{
+		{ID: "internal/a/job_claim_callers.go", Source: "internal/a/job_claim_callers.go:1", Measure: 3000,
+			Home: "internal/a/job.go", Rename: "internal/a/job_claim.go"},
+		{ID: "internal/b/job_claim_callers.go", Source: "internal/b/job_claim_callers.go:1", Measure: 300,
+			Home: "internal/b/job_claim.go"},
+	}, row.Violations, "a root past 1500 passes a split by size, never a name splitting two concepts off it"+
+		"; beside job_claim.go, job_claim_callers.go splits job_claim.go and would fit in it"+
+		"; the test and the linux build are never findings")
+	assert.Equal(t, 1, row.Known, "job_lease_store.go is known")
+	assert.Empty(t, out.Stale, "a known name finding stays past its row whatever it measures")
+}
