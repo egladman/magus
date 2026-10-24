@@ -3755,6 +3755,12 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 				return out, err
 			}
 			out.HookTimeoutMs = nHookTimeoutMs
+		case "resumesOnBackgroundFrom":
+			sResumesOnBackgroundFrom, err := decodeStr(item, path+".resumesOnBackgroundFrom")
+			if err != nil {
+				return out, err
+			}
+			out.ResumesOnBackgroundFrom = sResumesOnBackgroundFrom
 		default:
 			return out, unknownMember(path, "Limits", key)
 		}
