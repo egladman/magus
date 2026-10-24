@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,8 +53,8 @@ func TestReadLock(t *testing.T) {
 	}{
 		"other version": {body: "version: 2\n", wantErr: "schema version 2, this magus reads version 1"},
 		"empty":         {body: "", wantErr: "schema version 0"},
-		"unknown field": {body: "version: 1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: " + d.String() + "\n    size: 3\n", wantErr: "field size not found"},
-		"workspace key": {body: "version: 1\nspells:\n  spells/lint:\n    tag: v1\n    digest: " + d.String() + "\n", wantErr: `"spells/lint" is not a registry path`},
+		"unknown field": {body: fmt.Sprintf("version: 1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: %s\n    size: 3\n", d.String()), wantErr: "field size not found"},
+		"workspace key": {body: fmt.Sprintf("version: 1\nspells:\n  spells/lint:\n    tag: v1\n    digest: %s\n", d.String()), wantErr: `"spells/lint" is not a registry path`},
 		"bad digest":    {body: "version: 1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: sha256:abc\n", wantErr: "ghcr.io/team/lint"},
 	} {
 		t.Run(name, func(t *testing.T) {

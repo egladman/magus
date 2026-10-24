@@ -3,6 +3,7 @@ package spell
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -247,7 +248,7 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Run(c.spell+"/"+c.op+"/"+c.charm, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/%s/%s", c.spell, c.op, c.charm), func(t *testing.T) {
 			assert.Equal(t, c.want, charm(t, c.spell, c.op, c.charm))
 		})
 	}
@@ -308,7 +309,7 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		// the same bundle the runtime does so the import resolves in this bare session.
 		s.SetModuleDecls(SpellModulePath, SpellModuleSource)
 		require.NoError(t, s.Exec(ctx, CharmModuleSource), "load charm.buzz")
-		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
+		require.NoError(t, s.Exec(ctx, fmt.Sprintf("final __r = %s;", expr)), "eval %s", expr)
 		return ffi.ValueToAny(s.GetGlobal("__r"))
 	}
 	// spells.Charm now, not map[string]any: the host constructors return the typed value

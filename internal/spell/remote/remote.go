@@ -126,7 +126,7 @@ func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	slot := filepath.Join(root, ref.OCI.Digest.Algorithm().String()+"-"+ref.OCI.Digest.Encoded())
+	slot := filepath.Join(root, fmt.Sprintf("%s-%s", ref.OCI.Digest.Algorithm().String(), ref.OCI.Digest.Encoded()))
 	src := filepath.Join(slot, "src")
 	if _, ok := verified.Load(slot); ok {
 		return src, nil
@@ -537,7 +537,7 @@ func SourceURL(remote string) string {
 		if _, host, ok := strings.Cut(hostPart, "@"); ok {
 			hostPart = host
 		}
-		remote = "https://" + hostPart + "/" + strings.TrimPrefix(path, "/")
+		remote = fmt.Sprintf("https://%s/%s", hostPart, strings.TrimPrefix(path, "/"))
 	}
 	u, err := url.Parse(remote)
 	if err != nil || u.Host == "" {
@@ -630,7 +630,7 @@ func Shipped(name, dir string) (oci.Reference, oci.Content, error) {
 	if err != nil {
 		return oci.Reference{}, oci.Content{}, err
 	}
-	ref, err := oci.ParseRepository(ShippedRepository + "/" + name)
+	ref, err := oci.ParseRepository(fmt.Sprintf("%s/%s", ShippedRepository, name))
 	if err != nil {
 		return oci.Reference{}, oci.Content{}, err
 	}
@@ -657,7 +657,7 @@ func Eject(name, dir, dst string) (oci.Reference, error) {
 	layer := content.Layers[0].Payload
 	if err := walkTar(layer, func(file string, body []byte) error {
 		if file == entryFile {
-			body = append([]byte(originPrefix+ref.String()+"\n"), body...)
+			body = append([]byte(fmt.Sprintf("%s%s\n", originPrefix, ref.String())), body...)
 		}
 		target := filepath.Join(dst, filepath.FromSlash(file))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {

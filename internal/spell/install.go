@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/log/attr"
@@ -111,7 +110,7 @@ func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir st
 			continue
 		}
 		removeAbandonedSeeds(ctx, dst)
-		tmp := dst + seedSuffix + strconv.Itoa(os.Getpid())
+		tmp := fmt.Sprintf("%s%s%d", dst, seedSuffix, os.Getpid())
 		lock, err := acquireSeedLock(tmp + seedLockSuffix)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("lock %s: %w", tmp, err))
@@ -174,7 +173,7 @@ func sameLockFirst(root, lock string, others []string) []string {
 // removeAbandonedSeeds deletes clones a killed magus left beside dst. A seed whose lock
 // is still held belongs to a live process and is left alone; see seedLockSuffix.
 func removeAbandonedSeeds(ctx context.Context, dst string) {
-	matches, _ := filepath.Glob(dst + seedSuffix + "*")
+	matches, _ := filepath.Glob(fmt.Sprintf("%s%s*", dst, seedSuffix))
 	for _, m := range matches {
 		if strings.HasSuffix(m, seedLockSuffix) {
 			continue // the lock file itself, not the seed directory
