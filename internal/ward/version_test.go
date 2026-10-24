@@ -136,11 +136,11 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 			require.Error(t, got)
 			assert.Contains(t, src.Error(), tc.want, "the fixture must be the shape it names")
 			// A coded cause reads inline, so the error prints its own see: line alone.
-			assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", types.InlineDiagnostic(src)+"\n"+
+			assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", fmt.Sprintf("%s\n"+
 				"This build does not provide that name; unless it is misspelled, this magus is out of date.\n\n"+
 				"This magus (v0.3.9) is older than the workspace needs (>= 0.4.0).\n"+
 				"Fix it:\n"+
-				"  - released binary: magus self update").Error(), got.Error())
+				"  - released binary: magus self update", types.InlineDiagnostic(src))).Error(), got.Error())
 			assert.ErrorIs(t, got, src, "the original diagnostic stays in the chain")
 		})
 	}
