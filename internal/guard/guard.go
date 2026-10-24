@@ -189,6 +189,9 @@ type Dependencies struct {
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
+	// callerType is the caller's subagent type as its own call named it, "" when it named
+	// none. Judge fills it.
+	callerType string
 	// facts holds the caller's own session facts, its spawn records among them. Judge fills
 	// it, so a remedy graded for this caller reads no other session's; zero reads none.
 	facts hint.Gate
@@ -766,6 +769,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
 	deps.caller = who.caller()
+	deps.callerType = env.CallerType
 	policyDigest := ""
 	if !req.DryRun {
 		rememberSettings(location.cacheDir, deps.Builtins)
@@ -964,12 +968,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// Last of the denies and first thing a Buzz write meets, in that order for a
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
-		if verdict.Decision != decisionDeny {
+		// Neither asks a caller that cannot load a skill, nor briefs a write outside the
+		// workspace, such as a report in a scratchpad.
+		briefable := deps.loadsSkills() && inSource(location.workspace, input)
+		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
@@ -1672,6 +1679,8 @@ type hookEnvelope struct {
 	// AgentID is the subagent making this tool call, on a host that tells a subagent's
 	// calls from its root session's; "" for the root session and for hosts that do not.
 	AgentID string `json:"agent_id"`
+	// AgentType is that subagent's own type, on a host that names it on each of its calls.
+	AgentType string `json:"agent_type"`
 	// AgentTranscriptPath is that subagent's own log, on an event that reports on the
 	// subagent rather than a tool call. Read only for its last usage record.
 	AgentTranscriptPath string `json:"agent_transcript_path"`
@@ -1801,6 +1810,11 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		Event:      env.HookEventName,
 		Agent:      env.AgentID,
 	}}
+	// Only a subagent's: a root session run as a named agent type carries one too, and the
+	// root is the one caller every skill tool is wired for.
+	if env.AgentID != "" {
+		req.CallerType = env.AgentType
+	}
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
@@ -2015,6 +2029,9 @@ type hookRequest struct {
 	Write writeFields
 	// Cwd is where the host says the call runs; "" when the envelope carried none.
 	Cwd string
+	// CallerType is the calling subagent's type as the host named it, "" for a root session
+	// or a host that does not say.
+	CallerType string
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool

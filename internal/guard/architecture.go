@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -109,10 +110,10 @@ var noSkillAgents = sync.OnceValue(func() map[string]bool {
 })
 
 // loadsSkills reports whether the calling agent can load a skill. A root session and an
-// agent of a type magus does not know can; an agent spawned as a shipped read-only type
-// cannot.
+// agent of a type magus does not know can; an agent of a shipped read-only type cannot,
+// whether its own call names the type or its recorded spawn does.
 func (d Dependencies) loadsSkills() bool {
-	return !noSkillAgents()[spawnedAgentType(d.facts, d.caller.Agent)]
+	return !noSkillAgents()[cmp.Or(d.callerType, spawnedAgentType(d.facts, d.caller.Agent))]
 }
 
 // structureProbe reports whether a shell line searches, reads or lists the workspace's own
