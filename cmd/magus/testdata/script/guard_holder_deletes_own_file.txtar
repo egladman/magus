@@ -1,0 +1,57 @@
+# A holder may remove a file it made once a narrowing drops it from its write paths:
+# one it left untracked, and one its own commit added. A file the checkpoint already held
+# stays outside the lease, and so does a directory the holder did not make.
+[windows] skip 'rm and the removal grading are POSIX shell'
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop before the currency work'
+
+exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/scratch.sh,pricing/added.sh --check 'test .'
+exec magus job exec cents
+cp $WORK/scratch.sh pricing/scratch.sh
+cp $WORK/scratch.sh pricing/added.sh
+exec git add pricing/added.sh
+exec git commit -q -m 'add a helper'
+
+stdin $WORK/narrow.json
+exec magus job apply -f -
+
+exec magus shell --lease cents 'rm pricing/scratch.sh'
+exec magus shell --lease cents 'rm pricing/added.sh'
+! exec magus shell --lease cents 'rm pricing/format.sh'
+stdout 'pricing/format.sh is outside the paths lease cents was given'
+! exec magus shell --lease cents 'rm -r pricing'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the shell checks in test/run.sh.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh", "test/*.sh");
+    proc\exec("sh", ["test/run.sh"]);
+}
+-- shop/pricing/total.sh --
+total() { echo $(( $1 + $2 )); }
+-- shop/pricing/format.sh --
+format() { echo "$1.00"; }
+-- shop/test/run.sh --
+. pricing/total.sh
+. pricing/format.sh
+[ "$(total 2 3)" = 5 ] && [ "$(format 5)" = 5.00 ]
+-- scratch.sh --
+scratch() { :; }
+-- narrow.json --
+{"schema_version": 11, "id": "cents",
+ "criteria": "prices are integers of cents",
+ "write_paths": ["pricing/total.sh"],
+ "check": {"target": "test", "project": "."}}

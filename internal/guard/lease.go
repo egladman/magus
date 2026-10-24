@@ -3431,6 +3431,30 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}
+	// A file the holder made since its checkpoint stays its own to remove after a narrowing
+	// drops it from the write paths. Ignored files are excluded: a fresh checkout never made one.
+	madeByHolder := func(rel string) bool {
+		info, err := os.Lstat(filepath.Join(checkout, filepath.FromSlash(rel)))
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+		if _, denied, err := declarationCovering(me.DenyPaths, rel); err != nil || denied {
+			return false
+		}
+		revision, _ := types.ParseCheckpointToken(cmp.Or(me.Checkpoint, me.ReportedBase))
+		res, err := vcs.Resolve(ctx, checkout, "", deps.VCS)
+		if revision == "" || err != nil || res.VCS == nil {
+			return false
+		}
+		if ignored, err := res.VCS.IgnoredFiles(ctx, checkout, []string{rel}); err != nil || len(ignored) > 0 {
+			return false
+		}
+		if _, err := res.VCS.FindCommit(ctx, checkout, revision); err != nil {
+			return false
+		}
+		_, err = res.VCS.ReadFileAt(ctx, checkout, revision, rel)
+		return err != nil
+	}
 	for _, operand := range removedOrMovedOperands(command, 0, dialect, start, home) {
 		target, placed := operand.place(home)
 		if !placed {
@@ -3440,7 +3464,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if !inside {
 			continue
 		}
-		if outside := reachOutside(checkout, me, rel); outside != "" {
+		if outside := reachOutside(checkout, me, rel); outside != "" && (outside != rel || !madeByHolder(rel)) {
 			what := outside + " is"
 			if outside != rel {
 				what = rel + " holds " + outside + ", which is"

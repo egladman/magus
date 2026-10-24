@@ -575,6 +575,26 @@ func widensInPlace(prev, next types.Job) bool {
 	return moved
 }
 
+// keepDerived carries what the fork derived for prev onto a whole-row record that omits it,
+// so a projection never hardens a path no person decided: prev's soft paths row still
+// writes, unless row names soft_paths for a path prev held, and the [IntegratorWaivers].
+func keepDerived(row *types.Job, prev types.Job) {
+	if !slices.ContainsFunc(row.SoftPaths, func(p string) bool { return slices.Contains(prev.WritePaths, p) }) {
+		for _, p := range prev.SoftPaths {
+			if slices.Contains(row.WritePaths, p) && !slices.Contains(row.SoftPaths, p) {
+				row.SoftPaths = append(row.SoftPaths, p)
+			}
+		}
+	}
+	for _, w := range prev.Waivers {
+		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Waivers, func(have types.JobWaiver) bool {
+			return have.Code == w.Code && have.Subject == w.Subject
+		}) {
+			row.Waivers = append(row.Waivers, w)
+		}
+	}
+}
+
 // mutate is the locked read-modify-write [Store.Update], [Store.Exec] and [Wait] share, and
 // the only place a row is written row-wise. kind says what the write is; see
 // [grading].
@@ -672,6 +692,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		}
 		if i < 0 {
 			row.Entries = nil
+		}
+		if kind == asDeclaration && i >= 0 {
+			keepDerived(&row, prev)
 		}
 		// Hardening is one-way: a re-declaration cannot soften a path the holder already
 		// wrote, and a soft path that is no write path claims nothing.
