@@ -76,7 +76,7 @@ const wantFixtureSchema = `{
     },
     "id": {
       "type": "string",
-      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "ID is the lease's identity within the plan."
     },
@@ -151,7 +151,7 @@ func TestRenderLedgerSchemaDerivesEveryRuleFromTheStruct(t *testing.T) {
 func TestLeaseIDPatternMatchesTheValidator(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "^[./0-9:A-Z_a-z-]+$", leaseIDPattern())
+	assert.Equal(t, "^[./0-9a-z-]+$", leaseIDPattern())
 }
 
 func TestWaiverCodeEnumIsExactlyTheWaivableCodes(t *testing.T) {

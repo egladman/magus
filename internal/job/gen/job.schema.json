@@ -23,13 +23,13 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^[0-9a-z]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "ID is the lease's identity within the plan, the key a second register replaces on, and the only required field besides the version."
     },
     "parent": {
       "type": "string",
-      "pattern": "^[0-9a-z]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
@@ -77,7 +77,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[0-9a-z]+$",
+        "pattern": "^[./0-9a-z-]+$",
         "maxLength": 128
       },
       "description": "DependsOn names the lease ids that must land before this one."
@@ -111,7 +111,7 @@
     },
     "follows": {
       "type": "string",
-      "pattern": "^[0-9a-z]+$",
+      "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
       "description": "Follows and FreshReason name the job this one continues and why its worker is not resumed for it. See [Job.Follows]."
     },
@@ -225,7 +225,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[0-9a-z]+$",
+            "pattern": "^[./0-9a-z-]+$",
             "maxLength": 128
           },
           "description": {
@@ -235,7 +235,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[0-9a-z]+$",
+              "pattern": "^[./0-9a-z-]+$",
               "maxLength": 128
             }
           },

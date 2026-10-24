@@ -461,11 +461,12 @@ func goalExpectNames() []string {
 
 // leaseIDPattern derives the id charset by asking types.ValidJobID about every ASCII
 // rune, so the published pattern cannot say something other than what the store enforces.
-// Probing ASCII alone is enough because the validator accepts nothing above it.
+// Probing ASCII alone is enough because the validator accepts nothing above it. Each rune
+// is probed inside a segment, since '-', '.' and '/' are refused only at a segment's edge.
 func leaseIDPattern() string {
 	var accepted []rune
 	for r := rune(0); r < 0x80; r++ {
-		if types.ValidJobID(string(r)) {
+		if types.ValidJobID("a" + string(r) + "a") {
 			accepted = append(accepted, r)
 		}
 	}
