@@ -501,8 +501,25 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		attemptByGate[types.PrimaryGoalID] = att
 	}
 
+	owedByGate := map[string]string{}
+	if rep.Validation.Owed != "" {
+		owedByGate[types.PrimaryGoalID] = rep.Validation.Owed
+	}
+	for _, evidence := range rep.GateEvidence {
+		if evidence.Owed != "" {
+			owedByGate[evidence.GateID] = evidence.Owed
+		}
+	}
+
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
+		if reason, owed := owedByGate[gate.ID]; owed && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
+			statusByGate[gate.ID] = owedGate(row, gate, reason)
+			if len(statusByGate[gate.ID].Violations) == 0 {
+				v.Notes = append(v.Notes, fmt.Sprintf("goal %q is owed (%s): the integration that merges %s runs it", gate.ID, reason, row.ID))
+			}
+			continue
+		}
 		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
 			scopedRun(gate.Check, attemptByGate[gate.ID]) {
@@ -520,7 +537,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			status := statusByGate[gate.ID]
 			for _, dependency := range gate.DependsOn {
 				dependencyStatus, ok := statusByGate[dependency]
-				if ok && dependencyStatus.Verified {
+				if ok && (dependencyStatus.Verified || dependencyStatus.Owed != "" && len(dependencyStatus.Violations) == 0) {
 					continue
 				}
 				violation := fmt.Sprintf("depends_on goal %q has not verified", dependency)
@@ -635,6 +652,23 @@ func prefixedGateViolations(status types.GateStatus) []string {
 		out = append(out, fmt.Sprintf("goal %q: %s", status.ID, violation))
 	}
 	return out
+}
+
+// owedGate is the status of a goal whose result files its run as owed for reason. It holds
+// no violation for a worker's check owed for want of a seat, the one owed run the integration
+// that merges the job takes on; it is never verified either way.
+func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
+	status := types.GateStatus{ID: gate.ID, Owed: reason}
+	switch {
+	case gate.Kind != types.GoalKindCheck:
+		status.Violations = append(status.Violations, fmt.Sprintf("files a %s goal as owed, and only a check has a run to owe", gate.Kind))
+	case row.Integrating():
+		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: it waits for a seat with `%s | <the check>`",
+			hint.Status.With("--wait")))
+	case reason != types.OwedNoSeat:
+		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, types.OwedNoSeat))
+	}
+	return status
 }
 
 func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {

@@ -142,8 +142,9 @@ Before spawning, state the topology: the model per job, and whether isolated wor
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. The root waits for that budget,
-  never a worker; a spawn or `{{cmd "job fork"}}` into a full one says how full it is.
+  triggers, which share the machine's build budget. An integrator waits for that budget,
+  explicitly (`{{cmd "status"}} --wait` piped into its run) and for as long as it decided, never a worker; a spawn
+  or `{{cmd "job fork"}}` into a full one says how full it is.
   Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
@@ -412,7 +413,7 @@ any cap the user set for the tree. Require the worker to:
   set{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget. When a full budget refuses its check, it commits, reports that the check found no seat, and stops; you rerun it once one frees;
+- never wait for the build budget, `{{cmd "status"}} --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
 
 End every brief with the step that files the result, as the worker's LAST act before

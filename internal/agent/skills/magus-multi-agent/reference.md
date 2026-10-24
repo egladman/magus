@@ -85,6 +85,12 @@ magus job exit <job> --stdin <<'EOF'
 EOF
 ```
 
+A check its worker found no seat for is owed, not run: `"validation": {"command":
+"<the check>", "output_ref": "", "owed": "no seat"}`, or the same `owed` on a goal's
+`gate_evidence` entry. `{{cmd "job wait"}}` passes the result with the goal marked
+`[owed]`, and the integration that merges the branch runs it. "no seat" is the only
+reason, and an integration may not owe its own checks.
+
 ## The root's role
 
 The guard judges the root by the live lease, never by the session's history. The root

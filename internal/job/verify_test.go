@@ -1110,6 +1110,38 @@ func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
 }
 
+// A worker never waits for a seat: a check it files as owed for want of one is a normal
+// result, passed with the goal marked owed for the integration. Any other reason, a goal
+// that is not a check, and an integration filing its own checks as owed are refused.
+func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
+	t.Parallel()
+
+	owed := func(reason string) types.JobResult {
+		rep := passingResult()
+		rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Owed: reason}
+		return rep
+	}
+	v := verifyClaim(acceptRow(), owed(types.OwedNoSeat), types.JobAttempt{}, nil)
+	assert.True(t, v.Verified, "%q", v.Violations)
+	assert.Equal(t, []types.GateStatus{{ID: "check", Owed: types.OwedNoSeat}}, v.Gates)
+	assert.Equal(t, []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}, v.Notes)
+	var out strings.Builder
+	RenderGates(&out, v)
+	assert.Contains(t, out.String(), "harness/ledger-accept: 0 of 1 goal(s) met\n  [owed] check (no seat)\n")
+
+	v = verifyClaim(acceptRow(), owed("slow"), types.JobAttempt{}, nil)
+	assert.False(t, v.Verified)
+	assert.Equal(t, []string{"goal \"check\": files its run as owed because \"slow\", and the one reason a run is owed is \"no seat\""}, v.Violations)
+
+	integration := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
+	rep := owed(types.OwedNoSeat)
+	rep.Job = "integrate"
+	v = VerifyGates(integration, rep, types.JobAttempt{}, nil, nil, Observed{})
+	assert.False(t, v.Verified)
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: it waits for a seat with `")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "status --wait | <the check>`")
+}
+
 // A worker that found no build seat files its checks as owed, and the integration that
 // merges its branch runs each one its own full go-test and lint do not already cover.
 func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {

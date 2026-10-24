@@ -648,9 +648,12 @@ func (s JobStatus) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
 // GateStatus reports verification of one goal.
 type GateStatus struct {
-	ID         string   `json:"id" yaml:"id"`
-	Verified   bool     `json:"verified" yaml:"verified"`
-	OutputRef  string   `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	ID        string `json:"id" yaml:"id"`
+	Verified  bool   `json:"verified" yaml:"verified"`
+	OutputRef string `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	// Owed is why the goal's run is owed to the integration rather than cited (see
+	// [OwedNoSeat]), "" for a goal graded on a run.
+	Owed       string   `json:"owed,omitempty" yaml:"owed,omitempty"`
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
 }
 

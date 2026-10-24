@@ -557,7 +557,11 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 		if gate.Verified {
 			mark = "met"
 		}
-		fmt.Fprintf(out, "  [%s] %s\n", mark, gate.ID)
+		detail := ""
+		if gate.Owed != "" && len(gate.Violations) == 0 {
+			mark, detail = "owed", fmt.Sprintf(" (%s)", gate.Owed)
+		}
+		fmt.Fprintf(out, "  [%s] %s%s\n", mark, gate.ID, detail)
 		for _, why := range gate.Violations {
 			fmt.Fprintf(out, "      %s\n", why)
 		}
