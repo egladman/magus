@@ -73,7 +73,7 @@ type waiterCheck struct {
 // the foreground), or a backgrounded command that watches without end. false for any
 // other call.
 func waiterCall(ctx context.Context, deps Dependencies, facts hint.Gate, env hookRequest, background bool, actingLease, agent, command string, d Dialect, now time.Time) (waiterCheck, bool) {
-	if actingLease != "" && slotWaitLine(command, d, env.IsWatch) {
+	if actingLease != "" && slotWaitLine(ctx, command, d, env.IsWatch) {
 		if me, leased := actingLiveLease(ctx, deps, actingLease); leased && workerRole(me, deps.caller) != "" {
 			return waiterCheck{worker: true, slotWait: true}, true
 		}

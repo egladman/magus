@@ -362,7 +362,7 @@ func TestDenyRefusedRetry(t *testing.T) {
 
 	t.Run("a repeat inside the minute", func(t *testing.T) {
 		t.Parallel()
-		d := denyRefusedRetry(at(t, 10*time.Second, true), Dependencies{}, "", retry)
+		d := denyRefusedRetry(at(t, 10*time.Second, true), Dependencies{lease: "figures"}, "", retry)
 		require.True(t, d.refused())
 		assert.Contains(t, d.Say, "refused with MGS3009 10s ago")
 		assert.Contains(t, d.Say, "status --wait | ", "the next line pipes the wait into the run")

@@ -57,9 +57,9 @@ var (
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
 	denySlotWait = "a worker waits for the build budget only in the call that spends the seat: `" + hint.Status.With("--wait") + " | " + hint.Run.String() +
-		" <your check>`. A wait that gates no magus call, a watch, or a sleep before a run waits for nothing."
+		" <your check>`. A wait that gates no magus call, a watch, a sleep before a run, or a wait on another run's pid waits for nothing."
 	denySlotWaitWhy = "`status --wait` piped straight into a magus run reserves the seat it sized for that run until the run claims it, so no other worker can take it in between. " +
-		"A wait that feeds no run holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
+		"A wait that feeds no run, or ends with another run's process, holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
 
 	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none waits in its check's call until one frees, so spawning into a full budget spends a worker's time waiting. " +
 		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
@@ -68,8 +68,9 @@ var (
 // slotWaitLine reports a line that waits for room in the build budget for no call: `magus
 // status --wait` gating no magus call (see seatWaits), `--watch`, a status read beside a
 // sleep or inside a watcher, or a magus run after a sleep of at least sleepPollFloor, which
-// retries a run the budget refused.
-func slotWaitLine(command string, d Dialect, watcher bool) bool {
+// retries a run the budget refused. A process wait on a run holding a seat (see
+// budgetHolderWait) is one too.
+func slotWaitLine(ctx context.Context, command string, d Dialect, watcher bool) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return false
@@ -83,6 +84,9 @@ func slotWaitLine(command string, d Dialect, watcher bool) bool {
 	})
 	paired := seatWaits(f, d)
 	waits := false
+	if budgetHolderWait(ctx, command, d) {
+		return true
+	}
 	eachCall(f, d, func(call *syntax.CallExpr, c hint.Invocation) {
 		if !isMagusInvocation(c) {
 			return
@@ -99,6 +103,51 @@ func slotWaitLine(command string, d Dialect, watcher bool) bool {
 		}
 	})
 	return waits
+}
+
+// budgetHolderWait reports a line that waits on the process of a run holding a seat in the
+// build budget (`caffeinate -w`, `wait`, `lsof -p`, `kill -0`): the wait `magus status
+// --wait` is, spent on another run unjudged. No broker answering reads as no holder.
+func budgetHolderWait(ctx context.Context, command string, d Dialect) bool {
+	pids := waitedPIDs(command, d)
+	if len(pids) == 0 {
+		return false
+	}
+	s, err := budgetSnapshot(ctx)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(s.Holders, func(h types.MachineClaimant) bool {
+		return h.PID > 0 && slices.Contains(pids, strconv.Itoa(h.PID))
+	})
+}
+
+// waitedPIDs is each pid the processes on a line wait on: `caffeinate -w <pid>`, `wait <pid>`,
+// `lsof -p <pid>` and `kill -0 <pid>`.
+func waitedPIDs(command string, d Dialect) []string {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return nil
+	}
+	var pids []string
+	for _, c := range cmds {
+		switch name := path.Base(c.Name); name {
+		case "caffeinate", "lsof":
+			flag := map[string]string{"caffeinate": "w", "lsof": "p"}[name]
+			for i, a := range c.Args {
+				if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.HasSuffix(a, flag) && i+1 < len(c.Args) {
+					pids = append(pids, strings.Split(c.Args[i+1], ",")...)
+				}
+			}
+		case "wait":
+			pids = append(pids, nonFlagArgs(c.Args)...)
+		case "kill":
+			if slices.Contains(c.Args, "-0") {
+				pids = append(pids, nonFlagArgs(c.Args)...)
+			}
+		}
+	}
+	return pids
 }
 
 // statusFlag reports a status argv carrying any of names, in any spelling Go's flag
@@ -208,8 +257,9 @@ type refusedRun struct {
 // so the rerun is the poll again with the caller's turn as its loop. A run a wait gates
 // (`magus status --wait | magus run ...`) passes, as does any line that runs no target.
 // The run log is read only for a line that runs one, and only logs written inside the
-// window are opened. Workers and orchestrators are told the same pipe: the wait holds the
-// seat for the run it feeds.
+// window are opened. A leased caller is told the pipe, whose wait holds the seat for the run it
+// feeds; the unbound root is told to fork a job instead, since orchestrator-groundwork
+// refuses it the run.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	argvs := unwaitedRuns(command)
 	if len(argvs) == 0 {
@@ -221,6 +271,13 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 		return denial{}
 	}
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
+	if deps.lease == "" {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root hands out work and runs no target: fork a job for it (`%s`) and spawn a worker, whose check waits for a seat with `%s | %s`.",
+				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String(), hint.Status.With("--wait"), run),
+			Why: denyRefusedRetryWhy,
+		}
+	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
 			run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.Status.With("--wait"), run),
