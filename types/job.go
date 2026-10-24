@@ -100,6 +100,10 @@ type LeaseCheck struct {
 	// the workspace's default_charms satisfies it: the charmless `generate` that compares
 	// against HEAD, in a workspace whose default is rw.
 	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
+	// Test runs Script's tests with `magus buzz -t` instead of its main: passing tests and
+	// a passing main are different facts, so each is satisfied only by its own run. A
+	// script check alone carries it.
+	Test bool `json:"test,omitzero" yaml:"test,omitempty"`
 }
 
 // PrimaryGoalID names the job's singular check when it is projected into its goals. It
@@ -277,6 +281,9 @@ func (u Job) EffectiveGoals() []Goal {
 func (c LeaseCheck) String() string {
 	if c.Script != "" {
 		line := "magus buzz --record " + c.Script
+		if c.Test {
+			line = "magus buzz -t " + c.Script
+		}
 		if len(c.Args) > 0 {
 			line += " -- " + strings.Join(c.Args, " ")
 		}
@@ -304,7 +311,7 @@ func SameLeaseCheck(a, b *LeaseCheck) bool {
 		return a == b
 	}
 	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
-		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
+		a.NoDefaultCharms == b.NoDefaultCharms && a.Test == b.Test && slices.Equal(a.Args, b.Args)
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
@@ -1164,9 +1171,15 @@ type Declaration struct {
 // JobClaimRequest is one write path a claim record asks for, and Because the proof:
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
 // [ParseClaimEvidence].
+//
+// Callers, given instead of Path and Because, names a symbol: `magus job apply` expands
+// the request into one per declaration holding an occurrence of it, path
+// `<file>#<declaration>` because `refs:<symbol>`, and the store proves each of those as
+// it would one written by hand.
 type JobClaimRequest struct {
-	Path    string `json:"path" schema:"writepath"`
-	Because string `json:"because" schema:"nonblank"`
+	Path    string `json:"path,omitempty" schema:"writepath"`
+	Because string `json:"because,omitempty" schema:"nonblank"`
+	Callers string `json:"callers,omitempty" schema:"nonblank"`
 }
 
 // ClaimKind is what a proved claim rests on.
@@ -1405,6 +1418,13 @@ func (r Declaration) claimProblems() JobProblems {
 	}
 	for i, w := range r.Claim {
 		at := fmt.Sprintf("claim[%d]", i)
+		if strings.TrimSpace(w.Callers) != "" {
+			if w.Path != "" || w.Because != "" {
+				invalid(at+".callers", fmt.Sprintf("%s names callers of %s and also a path or a proof, and callers expands into both", at, w.Callers),
+					"drop path and because, or drop callers")
+			}
+			continue
+		}
 		switch p := strings.TrimSpace(w.Path); {
 		case p == "":
 			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")
@@ -1579,10 +1599,12 @@ func (g Goal) problems(field string) JobProblems {
 	return ps
 }
 
-// validScript refuses a check naming both a script and a target, or a script with a
-// project: a recorded script run belongs to the workspace, not to one project.
+// validScript refuses a check naming both a script and a target, a script with a
+// project, since a recorded script run belongs to the workspace, and test on a target.
 func (c LeaseCheck) validScript() error {
 	switch {
+	case c.Script == "" && c.Test:
+		return fmt.Errorf("check target %q sets test, which runs a script's tests and so belongs to a script check", c.Target)
 	case c.Script == "":
 		return nil
 	case c.Target != "":
@@ -1636,9 +1658,10 @@ func (u Job) StaleAt(observed int) bool {
 
 // JobIdleSince is when row's jobs.stale_after clock started, in unix seconds, reading its
 // dependencies from rows. A declared row nobody took is QUEUED while a job it depends on is
-// live, so waiting is true and it has no clock; once the last one ends, the clock starts at
-// the later of that end and the row's own last update. Every other row's clock is its last
-// update. A dependency no row declares never ends, so it holds nothing back.
+// still editing (declared or running), so waiting is true and it has no clock; once the last
+// one ends or exits, the clock starts at the later of that and the row's own last update, so
+// an exited dependency nobody collects cannot hold its dependent forever. Every other row's
+// clock is its last update. A dependency no row declares holds nothing back.
 func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	since = row.Updated
 	if row.State != StateDeclared || row.Registered != 0 {
@@ -1648,7 +1671,7 @@ func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
 		switch {
 		case i < 0:
-		case rows[i].State.Live():
+		case rows[i].State.Editing():
 			return 0, true
 		default:
 			since = max(since, rows[i].Updated)
@@ -1692,8 +1715,11 @@ func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
 		if err := r.Check.validScript(); err != nil {
 			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
 		}
-		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
+		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args, Test: r.Check.Test}, true, nil
 	case r.Check != nil:
+		if err := r.Check.validScript(); err != nil {
+			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
+		}
 		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
 			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")

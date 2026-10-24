@@ -795,6 +795,48 @@ func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
 	scoped := gate
 	scoped.Check.Project = "cmd/magus"
 	require.ErrorContains(t, scoped.Validate(), "belongs to the workspace")
+
+	tested := gate
+	tested.Check.Test = true
+	require.NoError(t, tested.Validate())
+	assert.Equal(t, "magus buzz -t probes/key.buzz", tested.Check.String())
+}
+
+func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
+	t.Parallel()
+
+	target := Goal{ID: "unit", Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: ".", Test: true}}.Resolve()
+	require.ErrorContains(t, target.Validate(), `check target "test" sets test`)
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "fix-parser", Check: &LeaseCheck{Target: "test", Test: true}}
+	_, _, ps := rec.check()
+	require.Len(t, ps, 1)
+	assert.Equal(t, "check.test", ps[0].Field)
+
+	rec.Check = &LeaseCheck{Script: "probes/key.buzz", Test: true}
+	c, ok, ps := rec.check()
+	require.Empty(t, ps)
+	assert.True(t, ok)
+	assert.True(t, c.Test, "the record's test reaches the row's check")
+}
+
+// An exited dependency is done editing, so nobody collecting it leaves its dependent
+// queued forever: the clock starts at the exit, and only a declared or running one holds it.
+func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
+	t.Parallel()
+
+	row := Job{ID: "next", State: StateDeclared, Updated: 100, DependsOn: []string{"first"}}
+	exited := Job{ID: "first", State: StateExited, Updated: 300}
+	since, waiting := JobIdleSince([]Job{exited, row}, row)
+	assert.False(t, waiting)
+	assert.Equal(t, int64(300), since)
+	assert.True(t, JobStaleAt([]Job{exited, row}, row, 300+3600, time.Hour))
+
+	for _, state := range []JobState{StateRunning, StateDeclared} {
+		dep := Job{ID: "first", State: state, Updated: 300}
+		_, waiting = JobIdleSince([]Job{dep, row}, row)
+		assert.True(t, waiting, "a %s dependency still holds the clock", state)
+	}
 }
 
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {

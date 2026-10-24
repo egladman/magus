@@ -874,8 +874,8 @@ type landing struct {
 //  2. a holder took it with `magus job exec` and that checkout's directory is gone;
 //  3. it is declared, nobody ever took it, it was not updated within jobs.stale_after,
 //     and no live child hangs under it, so a root outlives the children still working;
-//     a row queued on a live dependency is waiting, and its clock starts when the last
-//     one ends (see [types.JobIdleSince]);
+//     a row queued on a declared or running dependency is waiting, and its clock starts
+//     when the last one ends or exits (see [types.JobIdleSince]);
 //  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it;
 //  5. a holder took it and its deadline passed (see [types.Job.Overdue]): the declared

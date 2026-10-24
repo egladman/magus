@@ -638,9 +638,13 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 		return false
 	}
 	if c.Script != "" {
-		// `magus buzz --record` stores its run under `buzz <script>` in the workspace
-		// project, with no charms.
-		script, ran := strings.CutPrefix(a.Target, "buzz ")
+		// `magus buzz --record` stores its run under `buzz <script>` and `magus buzz -t`
+		// under `buzz -t <script>`, in the workspace project, with no charms.
+		prefix := "buzz "
+		if c.Test {
+			prefix = "buzz -t "
+		}
+		script, ran := strings.CutPrefix(a.Target, prefix)
 		return ran && path.Clean(script) == path.Clean(c.Script) && path.Clean(a.Project) == "."
 	}
 	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")

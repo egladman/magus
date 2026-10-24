@@ -580,14 +580,17 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
-			name:       "a declared job waiting on a live dependency is queued, not stale",
+			name:       "a declared job waiting on a running dependency is queued, and an exited one starts its clock",
 			staleAfter: 2 * time.Hour,
 			rows: []types.Job{
 				{ID: "first", State: types.StateRunning, Registered: fresh, Updated: fresh},
 				{ID: "handed-back", State: types.StateExited, Registered: fresh, Updated: old},
+				{ID: "just-handed-back", State: types.StateExited, Registered: fresh, Updated: fresh},
 				{ID: "queued", State: types.StateDeclared, DependsOn: []string{"first"}, Updated: old},
 				{ID: "queued-on-exited", State: types.StateDeclared, DependsOn: []string{"handed-back"}, Updated: old},
+				{ID: "queued-on-just-exited", State: types.StateDeclared, DependsOn: []string{"just-handed-back"}, Updated: old},
 			},
+			ended: map[string]string{"queued-on-exited": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name:       "a waiter's clock starts when its last dependency ended",
