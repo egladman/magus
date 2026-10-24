@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
@@ -193,18 +192,10 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "a job claims gets a line saying it settled or which condition failed. Needs a")
 	fmt.Fprintln(w, "VCS that reports a merge base: git does; Mercurial, Sapling and jj do not.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "With nothing conflicted, it runs what the git settle hooks left: the")
-	fmt.Fprintln(w, "regenerations a merge left owed, and every settle deferred by setting the git")
-	fmt.Fprintln(w, "config key magus.settle to defer. A deferred settle starts no magus; the hook")
-	fmt.Fprintln(w, "records where the first deferred operation started, and this regenerates")
-	fmt.Fprintln(w, "everything changed since then in one run and stages it. To cherry-pick in")
-	fmt.Fprintln(w, "several batches and regenerate once:")
+	fmt.Fprintln(w, "With nothing conflicted, it runs the regenerations a merge left owed. Git")
+	fmt.Fprintln(w, "hooks only submit jobs and never regenerate, so run it after a merge,")
+	fmt.Fprintln(w, "cherry-pick or rebase that touched generator inputs.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick A B C")
-	fmt.Fprintln(w, "  git -c magus.settle=defer cherry-pick D E")
-	fmt.Fprintln(w, "  magus vcs resolve && git commit --amend --no-edit")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "`git config magus.settle defer` defers until `git config --unset magus.settle`.")
 	fmt.Fprintln(w, "A settle another magus's project lock keeps from running waits up to 2m, then")
 	fmt.Fprintln(w, "stages nothing, leaves the regeneration owed and prints this command.")
 	fmt.Fprintln(w, "")
@@ -212,10 +203,6 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
 	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
 	fmt.Fprintln(w, "                   commit; with --dry-run it is backed out again.")
-	fmt.Fprintln(w, "  --hook <name>    run as the git hook <name>: once the merge, rebase,")
-	fmt.Fprintln(w, "                   cherry-pick, revert or am has the whole tree, regenerate")
-	fmt.Fprintln(w, "                   only what it changed and stage the result. The merge")
-	fmt.Fprintln(w, "                   driver's registration wires these; you do not run them.")
 	fmt.Fprintln(w, "  --dry-run        classify and report; touch nothing (global flag)")
 }
 
@@ -232,14 +219,12 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	}
 	// resolve mutates every conflicted path in the workspace. Widening
 	// `magus vcs resolve one/file.go` from one path to all of them would cost a tree.
-	if len(pos) > 0 && rf.Hook == "" {
-		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
-	}
 	if rf.Hook != "" {
-		if rf.Against != "" {
-			return exit.Usagef("vcs resolve: --hook is git's call, and --against is not one it makes")
-		}
-		return vcsResolveHook(ctx, root, rc, rf.Hook, pos)
+		// Exit 2 is what a hook written by an earlier magus lets a commit through on.
+		return exit.Usagef("vcs resolve: --hook was removed: git hooks only submit jobs now; run `%s` after a merge", hint.VCSResolve.String())
+	}
+	if len(pos) > 0 {
+		return exit.Usagef("vcs resolve: takes no paths; it settles every conflicted path in the workspace (got %q)", pos[0])
 	}
 
 	m, err := loadMagus(ctx, root)
@@ -755,83 +740,6 @@ func unresolvedError(plan settle.Plan) error {
 	return fmt.Errorf("%d conflict(s) still need you, resolve them, stage them, and continue", len(plan.Manual))
 }
 
-// vcsResolveHook is `magus vcs resolve --hook <name>`, the settle hooks' half of the
-// merge driver: once git has the whole tree it regenerates what the operation changed
-// (settle.Hook) and stages the result. Which hooks fire when, and what each sees, is
-// vcs.SettleHooks.
-//
-// What happens to the staged output follows the hook. A commit git has not made yet
-// carries it. For a clean merge, whose commit git makes on its own, the hook stops that
-// commit instead: git leaves the merge in progress, prints "use 'git commit' to complete
-// the merge", and the commit the person then makes is the merge commit, regenerated,
-// with no amend and no stale commit ever written. After a rebase, cherry-pick, revert or
-// am the commits already exist, so the output is staged and the line says how to fold
-// it in; magus never amends.
-//
-// Failure is loud and never leaves stale output behind quietly: the exact command to
-// run is printed, a commit not yet made is stopped, and the regeneration stays owed in
-// the git dir, where `magus doctor` reports it. A run another magus keeps from starting
-// is waited on for settleLockWait, then lets the commit through with nothing staged: it
-// never ran, and stopping the last pick of a cherry-pick over someone else's lock leaves
-// the whole sequence stopped.
-func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string, args []string) error {
-	// A hook runs in the repository's top level, where the workspace root is too; the
-	// merge driver relies on the same. Read git's state before loading anything, since
-	// most commits are not merge-shaped and load nothing.
-	wsRoot, err := workspace.FindRoot(root)
-	if err != nil {
-		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
-	}
-	op, ok, err := vcs.GitHookOperation(ctx, wsRoot, vcs.HookEvent{Hook: hook, Args: args, IndexFile: hookIndexFile()})
-	if err != nil {
-		return settleFailed(ctx, hook, op, settle.Outcome{}, err)
-	}
-	if !ok || len(op.Changed) == 0 {
-		return nil
-	}
-	if op.CommitPending {
-		// The pre-merge-commit stop below leads to a `git commit` whose pre-commit hook
-		// lands here again with the very tree that was just settled.
-		if settled, err := vcs.HookTreeSettled(ctx, wsRoot, op); err != nil {
-			return settleFailed(ctx, hook, op, settle.Outcome{}, err)
-		} else if settled {
-			return nil
-		}
-	}
-
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
-	}
-	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), settleRun(root, rc))
-	if settle.Busy(err) {
-		settleOwed(ctx, m, op, err)
-		return nil
-	}
-	if err != nil {
-		return settleFailed(ctx, hook, op, out, err)
-	}
-	if len(out.Ran) == 0 {
-		return nil
-	}
-	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
-	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
-		return exit.Reported(exit.Failure)
-	}
-	return nil
-}
-
-// settleLoadFailure words a settle hook's failed workspace load. A ./magus older than the
-// merged tree cannot rebuild itself, and the hook never rebuilds it, so the message names
-// the one command that does.
-func settleLoadFailure(err error) error {
-	if ward.IsStaleBinary(err) {
-		return fmt.Errorf("the workspace did not load because this magus is older than the merged tree, so nothing regenerated: "+
-			"build a current ./magus with `%s`, alone on its line, then regenerate: %w", ward.BootstrapCommand, err)
-	}
-	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)
-}
-
 // settleLockWait bounds how long a settle waits for another magus to release a
 // project lock, polling every settleLockPoll.
 const (
@@ -845,18 +753,6 @@ func settleRun(root string, rc runConfig) settle.RunFunc {
 	return settle.Waiting(run, settleLockWait, settleLockPoll, func(ctx context.Context, line string) {
 		slog.WarnContext(ctx, line, attr.Notice(""), attr.Component("magus"))
 	})
-}
-
-// settleOwed says that a settle another magus kept from running left nothing staged and
-// its regeneration owed, and the command that finishes it. Hook already recorded the
-// record that command reads.
-func settleOwed(ctx context.Context, m *magus.Magus, op vcs.HookOperation, err error) {
-	finish := hint.VCSResolve.String()
-	if op.CommitPending || settle.FoldCommand(ctx, m) != "" {
-		finish += " && git commit --amend --no-edit"
-	}
-	slog.ErrorContext(ctx, fmt.Sprintf("this %s was not regenerated and nothing was staged; the regeneration stays owed, finish it with `%s`",
-		cmp.Or(op.Kind, "operation"), finish), attr.Notice(""), attr.Component("magus"), attr.Error(err))
 }
 
 // settleOwedByHand is `magus vcs resolve` with nothing conflicted. It settles, in one
@@ -885,41 +781,6 @@ func settleOwedByHand(ctx context.Context, root string, rc runConfig, m *magus.M
 	}
 	fmt.Printf("vcs resolve: ran %s; staged %d regenerated file(s): %s\n", out.Command(), len(out.Staged), driver.ReviewCommand())
 	return nil
-}
-
-// hookIndexFile is the index git exported to this hook, absolute; "" when it exported
-// none. git spells the default one relative to the hook's working directory.
-func hookIndexFile() string {
-	index := os.Getenv("GIT_INDEX_FILE")
-	if index == "" || filepath.IsAbs(index) {
-		return index
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return index
-	}
-	return filepath.Join(wd, index)
-}
-
-// settleFailed prints what did not happen and the command that does it, then fails
-// the hook. A commit git has not made yet is stopped by that failure; one it has made
-// carries stale output, and the line says so.
-func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
-	regenerate := hint.VCSResolve.With("--hook", hook)
-	if len(out.Ran) > 0 {
-		regenerate = out.Command()
-	}
-	slog.ErrorContext(ctx, "could not regenerate after this "+cmp.Or(op.Kind, "operation"),
-		attr.Notice(""), attr.Component("magus"), attr.Error(err))
-	switch {
-	case op.CommitPending:
-		slog.ErrorContext(ctx, fmt.Sprintf("the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)", regenerate),
-			attr.Notice(""), attr.Component("magus"))
-	case op.Kind != "":
-		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
-			attr.Notice(""), attr.Component("magus"))
-	}
-	return exit.Reported(exit.Failure)
 }
 
 // resolveVCS returns the active VCS resolution for the workspace.

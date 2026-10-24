@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -438,19 +437,6 @@ func TestCheckpointLineCarriesThePreservedHandle(t *testing.T) {
 
 	cp.Preserved = "e5e5e5e5"
 	assert.Equal(t, "abc123 main dirty d1d1 preserved e5e5e5e5", checkpointLine(cp))
-}
-
-// A settle hook never rebuilds ./magus, so when the merge outran the binary the failure has
-// to name the command that does; any other load failure keeps the plain wording.
-func TestSettleLoadFailureNamesTheBootstrapForAStaleBinary(t *testing.T) {
-	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, `unknown built-in rule "architecture-unbriefed"`)
-	got := settleLoadFailure(stale)
-	assert.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus, "the cause stays in the chain")
-	assert.Contains(t, got.Error(), "older than the merged tree")
-	assert.Contains(t, got.Error(), "`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`")
-
-	plain := settleLoadFailure(errors.New("magusfile: syntax error"))
-	assert.Equal(t, "the workspace did not load, so nothing regenerated: magusfile: syntax error", plain.Error())
 }
 
 // TestJobsWriting pins who settling by claims asks about a path: every job writing it, a

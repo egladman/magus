@@ -2365,111 +2365,14 @@ func readSectionCommand(path, text string, m managedMarkers, parse func(line str
 	return "", false, nil
 }
 
-// InstallRegenHook implements types.RegenHookInstaller: after it returns, each of
-// SettleHooks runs command with its own name appended, beside the refresh and drift
-// sections and any hand-written body, and post-merge no longer carries the section an
-// earlier magus wrote there. It returns the hooks it changed, none when all were
-// current. Same error and locking contract as InstallRefreshHook.
-//
-// Not fail-open, unlike the other hook sections: the command is the merge driver's
-// second half, and a failure it swallowed would be a commit carrying stale output that
-// nothing reports. In the two hooks git runs before it commits, a regeneration that
-// failed stops the commit. What does stay open is the binary itself: the hooks dir is
-// shared by every worktree of the repository, each with a magus of its own, so a
-// missing one (127) or one that predates the flag (2, usage) prints a line and lets the
-// commit through rather than failing every other worktree's merges.
-func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]string, error) {
-	installed, err := installGitHookSections(ctx, root, SettleHooks, regenMarkers, func(name string) string {
-		return gitSettleHookBody(name, command)
-	})
-	if err != nil {
-		return nil, err
-	}
-	removed, err := removeGitHookSections(ctx, root, []string{"post-merge"}, regenMarkers)
-	return append(installed, removed...), err
-}
-
-// gitSettleHookBody is the shell one settle hook runs. The guard is GitHookOperation's
-// decision, made from the git dir so that no commit but the one that settles starts
-// magus: an ordinary commit, every pick of a sequence before the last, a rebase's picks,
-// an amend and every patch of an am series before the last exit here. Under
-// magus.settle=defer the settle point records where the operation started instead (see
-// DeferredSettle) and starts nothing either. The guard is an `if` block rather than an
-// early exit so a section below this one still runs.
-func gitSettleHookBody(name, command string) string {
-	bin := commandBinary(command)
-	run := command + " " + name
-	if name == HookPostRewrite {
-		run += ` "$@"`
-	}
-	settle := skipTrackedBinary(gitLsFiles, command, "magus vcs resolve", run) + "\n" +
-		"magus_rc=$?\n" +
-		"if [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" +
-		"  echo \"magus: the settle hook did not run: " + bin + " is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run '" + bin + " vcs resolve' once it is\" >&2\n"
-	if name == HookPreMergeCommit || name == HookPreCommit {
-		settle += "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"
-	}
-	settle += "fi\n"
-	record := "magus_base=$(" + gitSettleBase(name) + ") && { [ -e \"$magus_git_dir/" + deferredSettleFile + "\" ] || echo \"$magus_base\" >\"$magus_git_dir/" + deferredSettleFile + "\"; }\n"
-	deferred := record + "echo \"magus: magus.settle is defer, so this operation was not regenerated; '" + bin + " vcs resolve' regenerates everything deferred\" >&2\n"
-	body := "if [ \"$(git config --get magus.settle)\" = defer ]; then\n" + indentShell(deferred)
-	if name == HookPreCommit {
-		// The commit concluding a sequence's stopped last pick: `--continue` compares the
-		// index it read before this commit with the HEAD it made, so staging into it would
-		// stop the sequence half done. GitHookOperation refuses it the same way.
-		sequenced := record + "echo \"magus: this commit concludes the last pick of a sequence, and its --continue stops when a hook changes that commit, so nothing was regenerated; once the sequence finishes, run '" + bin + " vcs resolve && git commit --amend --no-edit'\" >&2\n"
-		body += "elif [ -s \"$magus_git_dir/sequencer/todo\" ]; then\n" + indentShell(sequenced)
-	}
-	body += "else\n" + indentShell(settle) + "fi\n"
-	return "if magus_git_dir=$(git rev-parse --git-dir)" + gitSettleGuard(name) + "; then\n" + indentShell(body) + "fi\n"
-}
-
-// gitSettleGuard is the test, after the git dir is read, that a settle hook settles.
-func gitSettleGuard(name string) string {
-	const (
-		rebasing = " && ! { [ -d \"$magus_git_dir/rebase-merge\" ] || [ -d \"$magus_git_dir/rebase-apply\" ]; }"
-		// sequencerPending's count: the last pick's todo still lists itself.
-		lastPick = " && { magus_picks=$(grep -c -E '^[[:space:]]*(pick|p|revert)([[:space:]]|$)' \"$magus_git_dir/sequencer/todo\" 2>/dev/null); [ \"${magus_picks:-0}\" -le 1 ]; }"
-		picking  = "[ -e \"$magus_git_dir/CHERRY_PICK_HEAD\" ] || [ -e \"$magus_git_dir/REVERT_HEAD\" ]"
-	)
-	switch name {
-	case HookPreCommit:
-		return " && { " + picking + " || [ -e \"$magus_git_dir/MERGE_HEAD\" ]; }" + rebasing + lastPick
-	case HookPostCommit:
-		return " && { " + picking + "; }" + rebasing + lastPick
-	case HookPostRewrite:
-		return " && [ \"$1\" = rebase ]"
-	case HookPostApplypatch:
-		return " && [ ! -e \"$magus_git_dir/rebase-apply/rebasing\" ] && magus_next=$(cat \"$magus_git_dir/rebase-apply/next\" 2>/dev/null) && [ \"$magus_next\" = \"$(cat \"$magus_git_dir/rebase-apply/last\" 2>/dev/null)\" ]"
-	default:
-		return ""
-	}
-}
-
-// gitSettleBase prints the revision the hook's operation started from: operationBase,
-// spelled in shell.
-func gitSettleBase(name string) string {
-	switch name {
-	case HookPreMergeCommit:
-		return "git rev-parse HEAD"
-	case HookPreCommit:
-		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD"
-	case HookPostCommit:
-		return "cat \"$magus_git_dir/sequencer/head\" 2>/dev/null || git rev-parse HEAD~1"
-	case HookPostRewrite:
-		return "cat \"$magus_git_dir/rebase-merge/onto\" 2>/dev/null || cat \"$magus_git_dir/rebase-apply/onto\" 2>/dev/null || git rev-parse ORIG_HEAD"
-	default:
-		return "git rev-parse ORIG_HEAD"
-	}
-}
-
-func indentShell(body string) string {
-	var b strings.Builder
-	for _, line := range strings.SplitAfter(strings.TrimSuffix(body, "\n"), "\n") {
-		b.WriteString("  " + line)
-	}
-	b.WriteString("\n")
-	return b.String()
+// InstallRegenHook implements types.RegenHookInstaller. Git hooks only submit background
+// jobs, because a hook that blocks for more than about a second is not a hook, so it
+// installs nothing: it strips the magus-regenerate section an earlier magus wrote into
+// SettleHooks and post-merge, leaving any other content of those hooks as it is, and
+// returns the hooks it changed, none when all were clean. command is unused; the
+// interface keeps the parameter. Same error and locking contract as InstallRefreshHook.
+func (v gitVCS) InstallRegenHook(ctx context.Context, root, _ string) ([]string, error) {
+	return removeGitHookSections(ctx, root, append([]string{"post-merge"}, SettleHooks...), regenMarkers)
 }
 
 // removeGitHookSections deletes the m section from each named hook of root's repository

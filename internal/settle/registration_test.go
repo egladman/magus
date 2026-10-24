@@ -74,9 +74,9 @@ func TestEnsureDriverRefreshesAnExistingRegistration(t *testing.T) {
 	assert.Contains(t, string(attributes), "gen/**")
 	assert.NotContains(t, string(attributes), "stale/**")
 	assert.Equal(t, before, snapshotTree(t, hooks))
-	missing, err := vcs.SettleHooksMissing(ctx, root)
+	stale, err := vcs.SettleHooksStale(ctx, root)
 	require.NoError(t, err)
-	assert.Equal(t, vcs.SettleHooks, missing)
+	assert.Empty(t, stale)
 }
 
 func resolveGitDriver(t *testing.T, dir string) types.VCSDriver {
