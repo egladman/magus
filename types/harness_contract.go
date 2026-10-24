@@ -220,10 +220,14 @@ type Setting struct {
 // foreground, ForegroundDefaultMs for one that names no timeout and ForegroundMaxMs at
 // most, past which it moves the command to the background; and on one hook, HookTimeoutMs,
 // past which it stops waiting for a verdict. Zero is a limit the host does not declare.
+//
+// ResumesOnBackgroundFrom is the first host version, dotted such as 2.1.299, that resumes a
+// stopped subagent when a background task it left running completes; "" when none does.
 type Limits struct {
-	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
-	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
-	HookTimeoutMs       int64 `json:"hook_timeout_ms,omitempty"`
+	ForegroundDefaultMs     int64  `json:"foreground_default_ms,omitempty"`
+	ForegroundMaxMs         int64  `json:"foreground_max_ms,omitempty"`
+	HookTimeoutMs           int64  `json:"hook_timeout_ms,omitempty"`
+	ResumesOnBackgroundFrom string `json:"resumes_on_background_from,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the

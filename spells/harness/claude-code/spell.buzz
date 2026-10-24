@@ -49,6 +49,10 @@ final FOREGROUND_MAX_MS = 600000;
 // runs the call. Rendered onto every judging entry and returned by mgs_getLimits.
 final HOOK_TIMEOUT_S = 10;
 
+// The first Claude Code release that resumes a stopped subagent when a background task it
+// left running completes. Rendered onto the stop entries and returned by mgs_getLimits.
+final RESUMES_ON_BACKGROUND_FROM = "2.1.299";
+
 // Every tool, so magus judges every call by its tool and the shape of its input, and a tool
 // no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
 // ride it too, which is what lets the judging entries declare --observes-skill-loads.
@@ -83,6 +87,15 @@ fun claude_call_flags() > [str] {
     ];
 }
 
+// The stop entries carry the release that resumes a subagent, so a stop that leaves a
+// background task running stands where the task's completion wakes it.
+fun claude_stop_flags() > [str] {
+    return [
+        "--agent-name", mgs_getName(), OBSERVES_SKILL_LOADS,
+        "--resumes-on-background-from", RESUMES_ON_BACKGROUND_FROM,
+    ];
+}
+
 fun claude_hook(event: str, matcher: str, script: str, flags: [str]) > HookCommand {
     return HookCommand{event = event, matcher = matcher, script = script, flags = flags, timeoutS = HOOK_TIMEOUT_S};
 }
@@ -109,11 +122,11 @@ fun claude_hooks() > [HookCommand] {
         claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]),
         claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>]),
         // The guard reads the session's transcript for background tasks left running.
-        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_guard_flags()),
+        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_stop_flags()),
         claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: named),
         // A subagent's stop carries the path of its own transcript, whose last usage record
         // is the context a later continue to it would resume.
-        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_guard_flags()),
+        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_stop_flags()),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads.
         claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_guard_flags()),
@@ -272,6 +285,7 @@ export fun mgs_getLimits() > Limits {
         foregroundDefaultMs = FOREGROUND_DEFAULT_MS,
         foregroundMaxMs = FOREGROUND_MAX_MS,
         hookTimeoutMs = HOOK_TIMEOUT_S * 1000,
+        resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
     };
 }
 
@@ -510,6 +524,18 @@ test "only the catch-all entry declares the foreground limits, from the constant
         final declares = hook.flags.indexOf("--foreground-max-ms") != null;
         assert\equal(declares, hook.event == "PreToolUse" and hook.matcher == EVERY_TOOL,
             "only the entry a shell command reaches declares the host's limits: {hook.event} {hook.matcher}");
+    }
+}
+
+test "only the stop entries declare the resume version, from the constant mgs_getLimits returns" {
+    assert\equal(mgs_getLimits().resumesOnBackgroundFrom, "2.1.299", "the first release that resumes a subagent");
+    foreach (hook in mgs_listHooks()) {
+        final at = hook.flags.indexOf("--resumes-on-background-from");
+        final stops = hook.script == "magus-command" and (hook.event == "Stop" or hook.event == "SubagentStop");
+        assert\equal(at != null, stops, "only a stop entry declares the resume version: {hook.event} {hook.script}");
+        if (at -> i) {
+            assert\equal(hook.flags[i + 1], RESUMES_ON_BACKGROUND_FROM, "the flag carries the constant");
+        }
     }
 }
 

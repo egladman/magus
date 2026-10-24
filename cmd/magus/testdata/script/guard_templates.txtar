@@ -751,6 +751,12 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz
 ! stdout .
 stderr 'MGS3024'
 
+# The guard's stop entry declares the host version that resumes a subagent, and the glue
+# forwards it on a stop rather than reporting it unsupported.
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --resumes-on-background-from 2.1.299
+! stderr 'unsupported argument'
+
 # It reached magus rather than being silent because it resolved nothing: the checkpoints
 # just recorded are in the session the wrapper named.
 exec magus session
