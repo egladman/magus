@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 29261
-skill_short_bytes: 22214
+skill_full_bytes: 29103
+skill_short_bytes: 22212
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `147` |
 | `knowledge-schema-version` | `24` |
-| `skill-content` | `ef4a59b11aab` |
+| `skill-content` | `64b5e8bccce8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -179,8 +179,7 @@ Assign the check from the pipeline the workspace composed, not from convention.
   where one exists. A go test check naming exactly the packages of the write paths
   (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
 - The integration job owns the full `go-test` and `lint`, and runs every check a merged
-  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the
-  whole composition.
+  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands.
@@ -639,10 +638,7 @@ Assign the check from the pipeline the workspace composed, not from convention.
   where one exists. A go test check naming exactly the packages of the write paths
   (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
 - The integration job owns the full `go-test` and `lint`, and runs every check a merged
-  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the
-  whole composition. A worker hand-sequencing lint, format, and test is re-deriving an
-  order the magusfile already owns, and the step it forgets fails silently by
-  omission.
+  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands, which is what stops seven fanned-out workers from

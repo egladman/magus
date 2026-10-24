@@ -337,8 +337,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/failures.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/failures_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/gate.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/gate_redundancy.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/gate_redundancy_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/gate_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/globals.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/globals_test.go"}
@@ -420,8 +418,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/run.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/run_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/self.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/self_place.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/self_place_test.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/self_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/self_update.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/self_update_stub.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/self_update_test.go"}
