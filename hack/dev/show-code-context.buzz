@@ -1,0 +1,142 @@
+// Cost: two graph queries; --depth 2 and 3 add a file read per opened match, --depth 4
+// adds a neighborhood, a refs and a docs query per opened match and one describe file.
+//
+// Finds the code, files and doc sections a term names, through the search module, and
+// opens the first few matches layer by layer: --depth 1 lists the ranked matches as
+// path:line, 2 adds each one's line in context, 3 the whole declaration or doc section,
+// 4 its callers, callees, tests, references, owning project and docs. Every list is capped
+// and says how many it cut; a stale or missing index says so instead of answering empty.
+//
+//	magus buzz hack/dev/show-code-context.buzz -- --query <terms> [--depth 1-4] [--kind <kind>] [--file <path>] [--grep <text>]
+//	    [--limit <n>] [--expand <n>] [--context <n>] [--block-lines <n>] [--neighbors <n>] [--width <n>] [-o text|json|yaml|jsonl|name]
+namespace showcodecontext;
+
+import "encoding/json";
+import "flags";
+import "encoding/yaml";
+import "std";
+import "strings";
+
+import "../../spells/code/search/spell" as search;
+
+final USAGE = "usage: magus buzz hack/dev/show-code-context.buzz -- --query <terms> [--depth 1-4] [--kind <kind>] [--file <path>] [--grep <text>] [--limit <n>] [--expand <n>] [--context <n>] [--block-lines <n>] [--neighbors <n>] [--width <n>] [-o text|json|yaml|jsonl|name]";
+final HELP = "cost: two graph queries; --depth 2-3 add a file read per opened match, --depth 4 four graph reads per opened match\n{USAGE}";
+
+fun number(values: {str: str}, flag: str, fallback: int) > int !> str {
+    final text = values[flag] ?? "{fallback}";
+    final n = std\parseInt(text);
+    if (n == null or n! < 0) {
+        throw "show-code-context: {flag} takes a number of 0 or more, got {text}\n{USAGE}";
+    }
+    return n!;
+}
+
+// options reads the flags into search\Options; a cap of 0 means no cap.
+export fun options(values: {str: str}) > search\Options !> str {
+    final depth = number(values, flag: "--depth", fallback: 1);
+    if (depth < 1 or depth > 4) {
+        throw "show-code-context: --depth is 1 (matches), 2 (site), 3 (block) or 4 (around)\n{USAGE}";
+    }
+    return search\Options{
+        kind = values["--kind"] ?? "",
+        file = values["--file"] ?? "",
+        grep = values["--grep"] ?? "",
+        limit = number(values, flag: "--limit", fallback: 10),
+        expand = number(values, flag: "--expand", fallback: 3),
+        depth = depth,
+        context = number(values, flag: "--context", fallback: 2),
+        blockLines = number(values, flag: "--block-lines", fallback: 40),
+        neighbors = number(values, flag: "--neighbors", fallback: 5),
+        width = number(values, flag: "--width", fallback: 160),
+    };
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"],
+        valued: ["--query", "--depth", "--kind", "--file", "--grep", "--limit", "--expand", "--context", "--block-lines", "--neighbors", "--width", "-o", "--output"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-code-context: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final terms = parsed.values["--query"] ?? "";
+    if (terms.trim() == "") {
+        throw "show-code-context: --query is required\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? parsed.values["--output"] ?? "text";
+    if (format.startsWith("template")) {
+        throw "show-code-context: -o template is magus's Go template, which a Buzz script has no engine for; -o json and jq pick a field\n{USAGE}";
+    }
+    if (FORMATS.indexOf(format) == null) {
+        throw "show-code-context: -o is {FORMATS.join("|")}, as magus's own -o; got {format}\n{USAGE}";
+    }
+    final opts = options(parsed.values);
+    foreach (line in emit(search\run(terms, opts: opts), format: format, opts: opts)) {
+        std\print(line);
+    }
+}
+
+// FORMATS are the -o values magus's own commands take, less template: a Go template has
+// no engine here.
+final FORMATS = ["text", "json", "yaml", "jsonl", "name"];
+
+// snake renames every key to snake_case, the field names magus's own -o json carries
+// (match_count, schema_version), where a Buzz object stringifies as camelCase.
+export fun snake(v: any) > any {
+    if (v as? {str: any} -> m) {
+        final renamed = mut {<str: any>};
+        foreach (k, value in m) {
+            renamed[strings\snakeCase(k)] = snake(value);
+        }
+        return renamed;
+    }
+    if (v as? [any] -> items) {
+        return items.map(fun (_: int, item: any) > any => snake(item));
+    }
+    return v;
+}
+
+fun record(v: any) > any !> any {
+    return snake(json\parse(json\stringify(v)));
+}
+
+// emit prints r the way `magus query` prints its result for each -o: name is one node id
+// a line, jsonl one match a line.
+export fun emit(r: search\Result, format: str, opts: search\Options) > [str] !> any {
+    if (format == "json") {
+        return [json\stringify(record(r), indent: "  ")];
+    }
+    if (format == "yaml") {
+        return [yaml\stringify(record(r))];
+    }
+    if (format == "jsonl") {
+        final lines = mut [<str>];
+        foreach (h in r.matches) {
+            lines.append(json\stringify(record(h)));
+        }
+        return lines;
+    }
+    if (format == "name") {
+        return r.matches.map(fun (_: int, h: search\Hit) > str => h.id);
+    }
+    return search\render(r, opts: opts);
+}
+
+test "options refuses a depth past the last layer" {
+    final refused = options({"--depth": "5"}) catch null;
+    std\assert(refused == null, message: "depth 5");
+}
+
+test "snake renames nested keys the way magus's -o json spells them" {
+    final v: {str: any} = snake({"schemaVersion": 1, "matches": [{"endLine": 3}]});
+    std\assert(v["schema_version"] == 1, message: "top level");
+    final rows: [any] = v["matches"];
+    std\assert(rows[0]["end_line"] == 3, message: "nested");
+}
+
+test "options keeps 0 as no cap" {
+    final o = options({"--limit": "0", "--depth": "3"});
+    std\assert(o.limit == 0 and o.depth == 3 and o.blockLines == 40, message: "limit 0, depth 3, default block lines");
+}

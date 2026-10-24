@@ -1,0 +1,909 @@
+// The search module: finds the code, files and doc sections a term names, from the
+// knowledge graph rather than a text search, and opens each match one bounded layer at a
+// time, the way an agent reads outward from a hit:
+//
+//   1. matches: ranked, one line each with path:line
+//   2. site: the match's line with a few lines around it
+//   3. block: the whole declaration or doc section holding it, from the symbol index's
+//      recorded extent (def_end_line) or the section's heading level, never a guess
+//   4. around: callers, callees, references, tests, the owning project and related docs
+//
+//   import "spells/code/search" as search;
+//   final opts = search\Options{ depth = 3 };
+//   final lines = search\render(search\run("parse flags", opts: opts), opts: opts);
+//
+// Every list is capped and counts what it cut, and a thin answer says why: a stale or
+// missing symbol index makes the verdict unknown, never an empty found. It reads the graph
+// and the files it names and writes nothing.
+//
+// Shipped as source, never compiled into the binary: it imports fs and magus.
+
+import "fs";
+import "magus";
+import "std";
+
+import "assert";
+
+export fun mgs_getName() > str { return "search"; }
+
+final FOUND = "found";
+final ABSENT = "absent";
+final UNKNOWN = "unknown";
+
+// A domain query answers unknown for this reason because it never reads the symbol shards;
+// run beside the symbol query, that is not a gap.
+final DOMAIN_ONLY = "symbols-not-loaded";
+
+// FETCH_CAP bounds the candidates read when --file or --grep filters them, so a filter
+// costs at most this many file reads.
+final FETCH_CAP = 60;
+
+// RANK_FLOOR is the fewest candidates the exact-name ranking sees: the graph's own top
+// one for IsTestPath can be isTestPath, so --limit 1 alone would miss the exact match.
+final RANK_FLOOR = 20;
+
+// Options picks the layers and bounds each one. depth is the last layer opened (1 matches,
+// 2 site, 3 block, 4 around), and only the first expand matches open past layer 1. kind
+// keeps one node kind (symbol, file, docsection, target, ...); "" asks both the symbol
+// index and the domain graph. file keeps matches under a path or directory. grep keeps
+// matches whose block (or, without an extent, declaration line) holds the text, and
+// centers the site on its first such line. width cuts a long line (a doc paragraph) in
+// the text report. A cap of 0 means no cap.
+export object Options {
+    kind: str = "",
+    file: str = "",
+    grep: str = "",
+    limit: int = 10,
+    expand: int = 3,
+    depth: int = 1,
+    context: int = 2,
+    blockLines: int = 40,
+    neighbors: int = 5,
+    width: int = 160,
+}
+
+export object Line {
+    n: int,
+    text: str,
+}
+
+// Excerpt is a line range of one file. status is verified when the file still holds what
+// the index recorded there; otherwise it says what is missing (stale, no extent,
+// unreadable) and lines is empty. focus is the line it centers on; cut counts the lines
+// past the cap.
+export object Excerpt {
+    path: str,
+    start: int = 0,
+    end: int = 0,
+    focus: int = 0,
+    lines: [Line] = [<Line>],
+    cut: int = 0,
+    status: str = "verified",
+}
+
+// Neighbor is one node beside a match. at is its path:line, or "" when the graph records
+// no position for it.
+export object Neighbor {
+    relation: str,
+    id: str,
+    label: str,
+    at: str = "",
+}
+
+// Section is one list in the around layer. total counts every item before the cap;
+// verdict is absent when the graph holds none and unknown when it could not look.
+export object Section {
+    name: str,
+    total: int = 0,
+    items: [Neighbor] = [<Neighbor>],
+    verdict: str = "found",
+    note: str = "",
+}
+
+export object Around {
+    project: str = "",
+    role: str = "",
+    sections: [Section] = [<Section>],
+}
+
+export object Hit {
+    id: str,
+    kind: str,
+    label: str,
+    path: str = "",
+    line: int = 0,
+    endLine: int = 0,
+    anchor: str = "",
+    level: int = 0,
+    score: int = 0,
+    exact: int = 0,
+    signature: str = "",
+    staleness: str = "",
+    project: str = "",
+    role: str = "",
+    site: Excerpt? = null,
+    block: Excerpt? = null,
+    around: Around? = null,
+}
+
+// Answer is the verdict magus's own knowledge verbs carry: found when matches holds
+// anything; on none, absent means every declared index was searched and unknown means
+// some could not be (reason, and staleIndexes name which).
+export object Answer {
+    verdict: str,
+    reason: str = "",
+    staleIndexes: [str] = [<str>],
+}
+
+// Result is one search, shaped as `magus query -o json` is: matchCount counts what
+// both graphs ranked before filters; dropped counts those --file, --grep or a duplicate
+// removed.
+export object Result {
+    schemaVersion: int = 1,
+    query: str,
+    matchCount: int = 0,
+    dropped: int = 0,
+    matches: [mut Hit] = [<mut Hit>],
+    answer: mut Answer,
+}
+
+// Files caches each file's lines, so a file several layers or matches name is read once.
+export object Files {
+    lines: mut {str: [str]},
+    unreadable: mut {str: bool},
+
+    fun get(path: str) > [str]? {
+        if (this.lines[path] -> cached) {
+            return cached;
+        }
+        if (this.unreadable[path] != null) {
+            return null;
+        }
+        final read: [str]? = fs\readLines(path) catch null;
+        if (read -> got) {
+            this.lines[path] = got;
+            return got;
+        }
+        this.unreadable[path] = true;
+        return null;
+    }
+}
+
+export fun newFiles() > mut Files {
+    return mut Files{ lines = mut {<str: [str]>}, unreadable = mut {<str: bool>} };
+}
+
+fun cap(n: int) > int {
+    return if (n <= 0) 1000000000 else n;
+}
+
+fun least(a: int, b: int) > int {
+    return if (a < b) a else b;
+}
+
+// words are the free-text terms of a query, without field matchers or quotes.
+fun words(terms: str) > [str] {
+    final found = mut [<str>];
+    foreach (w in terms.split(" ")) {
+        final t = w.trim().replace("\"", with: "");
+        if (t != "" and t.indexOf("=") == null) {
+            found.append(t);
+        }
+    }
+    return found;
+}
+
+fun hasKind(terms: str) > bool {
+    foreach (w in terms.split(" ")) {
+        if (w.startsWith("kind=") or w.startsWith("kind!=")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// shortLabel is the name a declaration line spells: a method label may carry its owner
+// (Graph#Duplicates, flags.parse).
+fun shortLabel(label: str) > str {
+    var rest = label;
+    foreach (sep in ["#", ".", "/"]) {
+        final parts = rest.split(sep);
+        if (parts.len() > 1 and parts[parts.len() - 1] != "") {
+            rest = parts[parts.len() - 1];
+        }
+    }
+    return rest.replace("()", with: "");
+}
+
+// place splits a node's source: "path:line", "path#anchor" or a bare path.
+fun place(source: str) > [str] {
+    if (source.indexOf("#") -> h) {
+        return [source.sub(0, len: h), "0", source.sub(h + 1, len: source.len() - h - 1)];
+    }
+    final parts = source.split(":");
+    if (parts.len() > 1) {
+        final last = parts[parts.len() - 1];
+        if (std\parseInt(last) != null) {
+            return [source.sub(0, len: source.len() - last.len() - 1), last, ""];
+        }
+    }
+    return [source, "0", ""];
+}
+
+// isTestPath mirrors types.IsTestPath (types/test_path.go), which Buzz cannot call; keep
+// the two lists equal.
+export fun isTestPath(path: str) > bool {
+    final parts = path.split(":")[0].split("/");
+    final base = parts[parts.len() - 1];
+    foreach (s in ["_test.go", ".test.ts", ".test.tsx", ".test.js", ".spec.ts", ".spec.tsx", ".spec.js", "_test.py"]) {
+        if (base.endsWith(s)) {
+            return true;
+        }
+    }
+    return base.startsWith("test_") and base.endsWith(".py");
+}
+
+fun hitFrom(m: magus\Match, node: magus\KnowledgeNode?, wanted: [str]) > mut Hit {
+    final h = mut Hit{ id = m.id, kind = m.kind, label = m.label, score = m.score, staleness = m.staleness };
+    final short = shortLabel(m.label);
+    if (wanted.indexOf(m.label) != null or wanted.indexOf(short) != null) {
+        h.exact = 2;
+    } else {
+        foreach (w in wanted) {
+            if (w.lower() == m.label.lower() or w.lower() == short.lower()) {
+                h.exact = 1;
+            }
+        }
+    }
+    if (node -> n) {
+        final p = place(n.source);
+        h.path = p[0];
+        h.line = std\parseInt(p[1]) ?? 0;
+        h.anchor = p[2];
+        h.endLine = std\parseInt(n.attrs["def_end_line"] ?? "") ?? 0;
+        h.level = std\parseInt(n.attrs["level"] ?? "") ?? 0;
+        h.signature = n.attrs["signature"] ?? "";
+    }
+    return h;
+}
+
+fun underPath(path: str, scope: str) > bool {
+    final dir = if (scope.endsWith("/")) scope else scope + "/";
+    return path == scope or path.startsWith(dir);
+}
+
+// classify fills each hit's owning project and role (source, output, ...) from one
+// describe.file over every path, so a generated file reads as one before anyone edits it.
+fun classify(hits: [mut Hit]) > void !> any {
+    final paths = mut [<str>];
+    final seen = mut {<str: bool>};
+    foreach (h in hits) {
+        if (h.path != "" and seen[h.path] == null) {
+            seen[h.path] = true;
+            paths.append(h.path);
+        }
+    }
+    if (paths.len() == 0) {
+        return;
+    }
+    final report: magus\FileReport = magus\describe.file(paths);
+    final byPath = mut {<str: magus\FileEntry>};
+    foreach (f in report.files) {
+        byPath[f.path] = f;
+    }
+    foreach (h in hits) {
+        if (byPath[h.path] -> f) {
+            h.project = f.project;
+            h.role = f.role;
+        }
+    }
+}
+
+// Pool is every query's hits, deduplicated, with what the queries reported about their
+// own coverage.
+object Pool {
+    hits: mut [mut Hit],
+    seen: mut {str: int},
+    fetched: int = 0,
+    total: int = 0,
+    duplicates: int = 0,
+    reason: str = "",
+    stale: mut [str],
+}
+
+fun queriesFor(terms: str, opts: Options) > [str] {
+    // A node id holds its file or package path, so id= narrows the ranking to the scope
+    // before the exact path check in matches.
+    final scoped = if (opts.file != "" and opts.file.indexOf(" ") == null) "id={opts.file} {terms}" else terms;
+    if (opts.kind != "") {
+        return ["kind={opts.kind} {scoped}"];
+    }
+    if (hasKind(terms)) {
+        return [scoped];
+    }
+    return ["kind=symbol {scoped}", scoped];
+}
+
+fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any {
+    final res: magus\QueryResult = magus\query(q, opts: {"limit": fetch, "budget": fetch});
+    pool.total = pool.total + res.matchCount;
+    pool.fetched = pool.fetched + res.matches.len();
+    if (res.answer.verdict == UNKNOWN and (alone or res.answer.reason != DOMAIN_ONLY)) {
+        pool.reason = if (res.answer.reason != "") res.answer.reason else "a declared index was not searched";
+        foreach (s in res.answer.staleIndexes) {
+            pool.stale.append(s);
+        }
+        foreach (g in res.answer.gaps) {
+            pool.stale.append("{g.project.path} ({g.language} {g.state.value})");
+        }
+    }
+    final nodes = mut {<str: magus\KnowledgeNode>};
+    foreach (n in res.nodes) {
+        nodes[n.id] = n;
+    }
+    foreach (m in res.matches) {
+        final h = hitFrom(m, node: nodes[m.id], wanted: wanted);
+        // A Buzz function is both a domain node and a symbol; keep the one with an extent.
+        final key = if (h.path != "" and h.line > 0) "{h.path}:{h.line}" else h.id;
+        if (pool.seen[key] -> i) {
+            if (h.endLine > 0 and pool.hits[i].endLine == 0) {
+                pool.hits[i] = h;
+            }
+            pool.duplicates = pool.duplicates + 1;
+            continue;
+        }
+        pool.seen[key] = pool.hits.len();
+        pool.hits.append(h);
+    }
+}
+
+// matches is layer 1: the ranked hits for terms. The name as typed outranks the same name
+// in another case, which outranks a longer name holding it (isTestPath, then
+// TestIsTestPath, after IsTestPath); then the graph's score decides.
+export fun matches(terms: str, opts: Options) > mut Result !> any {
+    final filtered = opts.file != "" or opts.grep != "";
+    final queries = queriesFor(terms, opts: opts);
+    final pool = mut Pool{ hits = mut [<mut Hit>], seen = mut {<str: int>}, stale = mut [<str>] };
+    foreach (q in queries) {
+        gather(pool, q: q, alone: queries.len() == 1, fetch: if (filtered or opts.limit < RANK_FLOOR) FETCH_CAP else cap(opts.limit), wanted: words(terms));
+    }
+    pool.hits.sort(fun (a: Hit, b: Hit) > bool => a.exact > b.exact or (a.exact == b.exact and a.score > b.score));
+    final r = mut Result{ query = terms, matchCount = pool.total, dropped = pool.duplicates,
+        answer = mut Answer{ verdict = ABSENT, staleIndexes = pool.stale } };
+    final files = newFiles();
+    final kept = mut [<mut Hit>];
+    foreach (h in pool.hits) {
+        if (kept.len() >= cap(opts.limit)) {
+            break;
+        }
+        if ((opts.file != "" and !underPath(h.path, scope: opts.file)) or (opts.grep != "" and grepLine(h, opts: opts, files: files) == 0)) {
+            r.dropped = r.dropped + 1;
+            continue;
+        }
+        kept.append(h);
+    }
+    classify(kept);
+    r.matches = kept;
+    r.answer.reason = pool.reason;
+    if (kept.len() == 0 and filtered and pool.fetched < pool.total and pool.reason == "") {
+        r.answer.reason = "--file or --grep kept none of the first {pool.fetched} of {pool.total} ranked matches; narrow --query";
+    }
+    if (kept.len() > 0) {
+        r.answer.verdict = FOUND;
+    } else if (r.answer.reason != "") {
+        r.answer.verdict = UNKNOWN;
+    }
+    return r;
+}
+
+// headingLine finds the line of the Markdown heading whose anchor is anchor, skipping
+// fenced code; 0 when none matches.
+fun headingLine(lines: [str], anchor: str) > int {
+    var fenced = false;
+    foreach (i, l in lines) {
+        if (l.startsWith("```")) {
+            fenced = !fenced;
+            continue;
+        }
+        if (!fenced and headingLevel(l) > 0 and slug(l) == anchor) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+// slug is a heading's anchor: lowercase letters, digits, - and _, spaces as -.
+fun slug(heading: str) > str {
+    var text = heading;
+    while (text.startsWith("#")) {
+        text = text.sub(1, len: text.len() - 1);
+    }
+    text = text.trim().lower();
+    final kept = mut [<str>];
+    for (var i = 0; i < text.len(); i = i + 1) {
+        final b = text.byte(i);
+        if ((b >= 97 and b <= 122) or (b >= 48 and b <= 57) or b == 45 or b == 95) {
+            kept.append(text.sub(i, len: 1));
+        } else if (b == 32) {
+            kept.append("-");
+        }
+    }
+    return kept.join("");
+}
+
+fun headingLevel(l: str) > int {
+    var n = 0;
+    while (n < l.len() and l.byte(n) == 35) {
+        n = n + 1;
+    }
+    return if (n > 0 and n < l.len() and l.byte(n) == 32) n else 0;
+}
+
+// sectionEnd is the last line of the section whose heading is line start: the line before
+// the next heading at its level or above, or the file's last line.
+fun sectionEnd(lines: [str], start: int, level: int) > int {
+    var fenced = false;
+    for (var i = start; i < lines.len(); i = i + 1) {
+        final l = lines[i];
+        if (l.startsWith("```")) {
+            fenced = !fenced;
+            continue;
+        }
+        final lv = if (fenced) 0 else headingLevel(l);
+        if (lv > 0 and lv <= level) {
+            return i;
+        }
+    }
+    return lines.len();
+}
+
+// region is the line range a hit owns, [start, end], or [0, 0] when the index recorded
+// none. A doc section's heading line is found here and filled into the hit.
+fun region(h: mut Hit, files: Files) > [int] {
+    if (h.path == "") {
+        return [0, 0];
+    }
+    final lines = files.get(h.path) ?? [<str>];
+    if (h.kind == "file") {
+        return [1, lines.len()];
+    }
+    if (h.anchor != "") {
+        if (h.line == 0) {
+            h.line = headingLine(lines, anchor: h.anchor);
+        }
+        if (h.line == 0) {
+            return [0, 0];
+        }
+        final level = if (h.level > 0) h.level else headingLevel(lines[h.line - 1]);
+        return [h.line, sectionEnd(lines, start: h.line, level: level)];
+    }
+    if (h.line > 0 and h.endLine >= h.line) {
+        return [h.line, h.endLine];
+    }
+    return [0, 0];
+}
+
+// grepLine is the first line in the hit's region holding opts.grep, or its declaration
+// line when it has no region; 0 when none holds it.
+fun grepLine(h: mut Hit, opts: Options, files: Files) > int {
+    final lines = files.get(h.path) ?? [<str>];
+    final span = region(h, files: files);
+    final start = if (span[0] > 0) span[0] else h.line;
+    final end = if (span[0] > 0) span[1] else h.line;
+    for (var n = if (start < 1) 1 else start; n <= end and n <= lines.len(); n = n + 1) {
+        if (lines[n - 1].indexOf(opts.grep) != null) {
+            return n;
+        }
+    }
+    return 0;
+}
+
+fun excerpt(path: str, lines: [str], start: int, end: int, limit: int) > mut Excerpt {
+    final ex = mut Excerpt{ path = path, start = start, end = end };
+    final shown = mut [<Line>];
+    for (var n = start; n <= end and n <= lines.len(); n = n + 1) {
+        if (shown.len() >= cap(limit)) {
+            ex.cut = end - n + 1;
+            break;
+        }
+        shown.append(Line{ n = n, text = lines[n - 1] });
+    }
+    ex.lines = shown;
+    return ex;
+}
+
+// verified reports whether line n still names the hit, so a stale index is said rather
+// than shown as the wrong lines.
+fun verified(h: Hit, lines: [str], n: int) > bool {
+    if (n < 1 or n > lines.len()) {
+        return false;
+    }
+    if (h.kind == "file" or h.anchor != "") {
+        return true;
+    }
+    return lines[n - 1].indexOf(shortLabel(h.label)) != null;
+}
+
+fun staleNote(h: Hit, n: int) > str {
+    return "stale: line {n} no longer names {shortLabel(h.label)}; ./magus graph build re-indexes it";
+}
+
+// site is layer 2: the hit's line, or with opts.grep the first line holding it, and
+// opts.context lines either side.
+export fun site(h: mut Hit, opts: Options, files: Files) > Excerpt {
+    if (h.path == "") {
+        return Excerpt{ path = "", status = "no position: the graph records no file for {h.id}" };
+    }
+    final read = files.get(h.path);
+    if (read == null) {
+        return Excerpt{ path = h.path, status = "unreadable: {h.path}" };
+    }
+    final lines = read!;
+    region(h, files: files);
+    var center = if (h.line > 0) h.line else 1;
+    if (opts.grep != "") {
+        final g = grepLine(h, opts: opts, files: files);
+        if (g > 0) {
+            center = g;
+        }
+    } else if (h.line > 0 and !verified(h, lines: lines, n: h.line)) {
+        return Excerpt{ path = h.path, start = h.line, end = h.line, status = staleNote(h, n: h.line) };
+    }
+    final start = if (center - opts.context < 1) 1 else center - opts.context;
+    final end = least(center + opts.context, b: lines.len());
+    final ex = excerpt(h.path, lines: lines, start: start, end: end, limit: 0);
+    ex.focus = center;
+    return ex;
+}
+
+// block is layer 3: the declaration from its line to the index's def_end_line, or a doc
+// section to the next heading at its level. A file is never shown whole.
+export fun block(h: mut Hit, opts: Options, files: Files) > Excerpt {
+    if (h.path == "") {
+        return Excerpt{ path = "", status = "no position: the graph records no file for {h.id}" };
+    }
+    final read = files.get(h.path);
+    if (read == null) {
+        return Excerpt{ path = h.path, status = "unreadable: {h.path}" };
+    }
+    final lines = read!;
+    if (h.kind == "file") {
+        return Excerpt{ path = h.path, start = 1, end = lines.len(),
+            status = "a whole file ({lines.len()} lines) is never a block; --file {h.path} scopes matches to it" };
+    }
+    final span = region(h, files: files);
+    if (span[0] == 0) {
+        if (h.anchor != "") {
+            return Excerpt{ path = h.path, status = "no heading in {h.path} has the anchor #{h.anchor}" };
+        }
+        return Excerpt{ path = h.path, start = h.line, status = "no extent: the index recorded no end line for this {h.kind}" };
+    }
+    if (!verified(h, lines: lines, n: span[0])) {
+        return Excerpt{ path = h.path, start = span[0], end = span[1], status = staleNote(h, n: span[0]) };
+    }
+    return excerpt(h.path, lines: lines, start: span[0], end: span[1], limit: opts.blockLines);
+}
+
+fun section(name: str, all: [Neighbor], limit: int) > mut Section {
+    return mut Section{ name = name, total = all.len(), verdict = if (all.len() == 0) ABSENT else FOUND,
+        items = all.sub(0, len: least(all.len(), b: cap(limit))) };
+}
+
+fun position(n: magus\KnowledgeNode?) > str {
+    if (n -> node) {
+        final p = place(node.source);
+        return if (p[1] != "0") "{p[0]}:{p[1]}" else p[0];
+    }
+    return "";
+}
+
+// calls reads one neighborhood: callers and callees from the calls edges, with callers in
+// test files listed apart as tests.
+fun calls(h: Hit, opts: Options) > [mut Section] !> any {
+    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = ["calls"] });
+    final nodes = mut {<str: magus\KnowledgeNode>};
+    foreach (n in hood.nodes) {
+        nodes[n.id] = n;
+    }
+    final callers = mut [<Neighbor>];
+    final callees = mut [<Neighbor>];
+    final tests = mut [<Neighbor>];
+    final listed = mut {<str: bool>};
+    foreach (l in hood.links) {
+        final inbound = l.target == hood.focus;
+        if (l.relation != "calls" or (!inbound and l.source != hood.focus)) {
+            continue;
+        }
+        final otherId = if (inbound) l.source else l.target;
+        final key = "{inbound} {otherId}";
+        if (listed[key] != null) {
+            continue;
+        }
+        listed[key] = true;
+        final other = nodes[otherId];
+        final nb = Neighbor{ relation = if (inbound) "called by" else "calls", id = otherId,
+            label = other?.label ?? otherId, at = position(other) };
+        if (!inbound) {
+            callees.append(nb);
+        } else if (isTestPath(nb.at)) {
+            tests.append(nb);
+        } else {
+            callers.append(nb);
+        }
+    }
+    final sections = mut [
+        section("callers", all: callers, limit: opts.neighbors),
+        section("callees", all: callees, limit: opts.neighbors),
+        section("tests", all: tests, limit: opts.neighbors),
+    ];
+    if (hood.answer.verdict == UNKNOWN) {
+        foreach (s in sections) {
+            s.verdict = UNKNOWN;
+            s.note = "unknown: {hood.answer.reason}";
+        }
+    }
+    return sections;
+}
+
+// references lists every file that uses the symbol with its first lines, and counts the
+// test files among them.
+fun references(h: Hit, opts: Options) > Section !> any {
+    final refs: magus\RefsResult = magus\refs(h.id, opts: {"limit": 200});
+    final files = mut [<Neighbor>];
+    var testFiles = 0;
+    foreach (r in refs.refs) {
+        if (isTestPath(r.file)) {
+            testFiles = testFiles + 1;
+        }
+        final shown = r.lines.sub(0, len: least(r.lines.len(), b: 5)).map(fun (_: int, n: int) > str => "{n}");
+        final more = if (r.lines.len() > 5) ",+{r.lines.len() - 5}" else "";
+        files.append(Neighbor{ relation = "referenced in", id = "file:{r.file}", label = plural(r.count, word: "use"), at = "{r.file}:{shown.join(",")}{more}" });
+    }
+    final s = section("references", all: files, limit: opts.neighbors);
+    s.total = refs.fileCount;
+    s.note = "{plural(refs.refCount, word: "use")} in {plural(refs.fileCount, word: "file")}, {plural(testFiles, word: "test file")}";
+    if (refs.answer.verdict == UNKNOWN) {
+        s.verdict = UNKNOWN;
+        s.note = "unknown: {refs.answer.reason}";
+    }
+    return s;
+}
+
+// nodeAround lists a domain node's edges by relation, the way magus explain does.
+fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
+    final card: magus\ExplainResult? = magus\explain(h.id) catch null;
+    if (card == null) {
+        return [Section{ name = "edges", verdict = UNKNOWN, note = "magus explain could not resolve {h.id}" }];
+    }
+    final byRelation = mut {<str: mut [Neighbor]>};
+    final order = mut [<str>];
+    foreach (inbound, edges in {false: card!.@"out", true: card!.@"in"}) {
+        foreach (e in edges) {
+            final name = if (inbound) "{e.relation} (in)" else e.relation;
+            if (byRelation[name] == null) {
+                byRelation[name] = mut [<Neighbor>];
+                order.append(name);
+            }
+            byRelation[name]!.append(Neighbor{ relation = name, id = e.other, label = "{e.otherKind} {e.otherLabel}" });
+        }
+    }
+    return order.map(fun (_: int, name: str) > Section => section(name, all: byRelation[name]!, limit: opts.neighbors));
+}
+
+// docs are the doc sections a query for the hit's name matches on every word.
+fun docs(h: Hit, opts: Options) > Section !> any {
+    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: {"limit": cap(opts.neighbors)});
+    final all = mut [<Neighbor>];
+    foreach (m in q.matches) {
+        var whole = true;
+        if (m.why -> why) {
+            whole = why.matched == why.of;
+        }
+        if (whole and m.id != h.id) {
+            all.append(Neighbor{ relation = "documented in", id = m.id, label = m.label, at = m.id.replace("docsection:", with: "") });
+        }
+    }
+    return section("docs", all: all, limit: opts.neighbors);
+}
+
+// around is layer 4 for one hit.
+export fun around(h: Hit, opts: Options) > Around !> any {
+    final a = mut Around{ project = h.project, role = h.role };
+    final sections = mut [<Section>];
+    if (h.kind == "symbol") {
+        foreach (s in calls(h, opts: opts)) {
+            sections.append(s);
+        }
+        sections.append(references(h, opts: opts));
+    } else {
+        foreach (s in nodeAround(h, opts: opts)) {
+            sections.append(s);
+        }
+    }
+    if (h.kind != "docsection") {
+        sections.append(docs(h, opts: opts));
+    }
+    a.sections = sections;
+    return a;
+}
+
+// run is every layer opts.depth asks for: matches, then site, block and around for the
+// first opts.expand of them.
+export fun run(terms: str, opts: Options) > Result !> any {
+    final r = matches(terms, opts: opts);
+    if (opts.depth < 2) {
+        return r;
+    }
+    final files = newFiles();
+    final open = least(r.matches.len(), b: cap(opts.expand));
+    for (var i = 0; i < open; i = i + 1) {
+        final h = r.matches[i];
+        h.site = site(h, opts: opts, files: files);
+        if (opts.depth >= 3) {
+            h.block = block(h, opts: opts, files: files);
+        }
+        if (opts.depth >= 4) {
+            h.around = around(h, opts: opts);
+        }
+    }
+    return r;
+}
+
+final LAYERS = ["matches", "site", "block", "around"];
+
+fun where(h: Hit) > str {
+    if (h.path == "") {
+        return h.id;
+    }
+    return if (h.line > 0) "{h.path}:{h.line}" else if (h.anchor != "") "{h.path}#{h.anchor}" else h.path;
+}
+
+fun clip(text: str, width: int) > str {
+    if (text.len() <= cap(width)) {
+        return text;
+    }
+    return "{text.sub(0, len: width)} ...+{text.len() - width} chars";
+}
+
+fun plural(n: int, word: str) > str {
+    return if (n == 1) "{n} {word}" else "{n} {word}s";
+}
+
+fun excerptLines(title: str, ex: Excerpt, flag: str, width: int) > [str] {
+    final lines = mut [<str>];
+    if (ex.lines.len() == 0) {
+        lines.append("   {title}: {ex.status}");
+        return lines;
+    }
+    final span = if (ex.end > ex.start) "{ex.start}-{ex.end}" else "{ex.start}";
+    lines.append("   {title} {span}:");
+    foreach (l in ex.lines) {
+        final pointer = if (l.n == ex.focus) ">" else " ";
+        lines.append("   {pointer}{l.n}  {clip(l.text, width: width)}");
+    }
+    if (ex.cut > 0) {
+        lines.append("    ... {ex.cut} more lines; {flag} 0 shows all");
+    }
+    return lines;
+}
+
+// render is the plain-text report: the first line says what ran, each match is one line,
+// each opened layer is indented under it, and the last line names the next layer.
+export fun render(r: Result, opts: Options) > [str] {
+    final lines = mut [<str>];
+    final depth = if (opts.depth < 1) 1 else if (opts.depth > 4) 4 else opts.depth;
+    final a = r.answer;
+    lines.append("read-only: {r.matches.len()} of {r.matchCount} matches for \"{r.query}\" ({a.verdict}); layers: {LAYERS.sub(0, len: depth).join(", ")}");
+    final partial = if (a.verdict == UNKNOWN) "verdict: unknown, not absent" else "partial";
+    if (a.staleIndexes.len() > 0) {
+        lines.append("{partial}: {a.reason}; not searched: {a.staleIndexes.join(", ")}");
+        lines.append("next: ./magus graph build, then ask again");
+    } else if (a.reason != "") {
+        lines.append("{partial}: {a.reason}");
+    }
+    if (r.answer.verdict == ABSENT and (opts.file != "" or opts.grep != "")) {
+        lines.append("absent: every declared index was searched and no match passes --file or --grep");
+    } else if (r.answer.verdict == ABSENT) {
+        lines.append("absent: every declared index was searched");
+    }
+    if (r.dropped > 0) {
+        lines.append("{r.dropped} matches dropped as duplicates or by --file/--grep");
+    }
+    foreach (i, h in r.matches) {
+        foreach (l in hitLines(h, n: i + 1, opts: opts)) {
+            lines.append(l);
+        }
+    }
+    if (depth < 4 and r.matches.len() > 0) {
+        lines.append("next: --depth {depth + 1} adds the {LAYERS[depth]} of the first {opts.expand}");
+    }
+    return lines;
+}
+
+// hitLines are one match's line and, indented under it, each layer it opened.
+fun hitLines(h: Hit, n: int, opts: Options) > [str] {
+    final lines = mut [<str>];
+    var sig = "";
+        if (h.signature != "") {
+            final flat = h.signature.replace("\n", with: " ");
+            sig = "  {flat.sub(0, len: least(flat.len(), b: 100))}";
+        }
+        final stale = if (h.staleness != "") "  [{h.staleness}]" else "";
+        final role = if (h.role != "" and h.role != "source") "  [{h.role}: regenerate, never edit]" else "";
+        lines.append("{n}. {where(h)}  {h.kind} {h.label}{sig}{stale}{role}");
+        if (h.site -> s) {
+            foreach (l in excerptLines("site", ex: s, flag: "--context", width: opts.width)) {
+                lines.append(l);
+            }
+        }
+        if (h.block -> b) {
+            foreach (l in excerptLines("block", ex: b, flag: "--block-lines", width: opts.width)) {
+                lines.append(l);
+            }
+        }
+        if (h.around -> a) {
+            if (a.project != "") {
+                lines.append("   project {a.project}");
+            }
+            foreach (s in a.sections) {
+                final note = if (s.note != "") "; {s.note}" else "";
+                lines.append("   {s.name}: {s.items.len()} of {s.total} ({s.verdict}{note})");
+                foreach (n in s.items) {
+                    final at = if (n.at != "") "  {n.at}" else "";
+                    lines.append("     {n.label}{at}");
+                }
+            }
+        }
+    return lines;
+}
+
+test "place splits a node source into path, line and anchor" {
+    assert\equal(place("internal/a.go:12"), want: ["internal/a.go", "12", ""], message: "path:line");
+    assert\equal(place("docs/x.md#parse"), want: ["docs/x.md", "0", "parse"], message: "anchor");
+    assert\equal(place("go.mod"), want: ["go.mod", "0", ""], message: "bare path");
+}
+
+test "shortLabel drops a method's owner" {
+    assert\equal(shortLabel("Graph#Duplicates"), want: "Duplicates", message: "hash");
+    assert\equal(shortLabel("flags.parse"), want: "parse", message: "dot");
+    assert\equal(shortLabel("Plan"), want: "Plan", message: "bare");
+}
+
+test "words keeps free text and drops field matchers" {
+    assert\equal(words("kind=symbol Parse \"flags\""), want: ["Parse", "flags"], message: "words");
+}
+
+test "isTestPath follows types.IsTestPath" {
+    assert\equal(isTestPath("internal/a_test.go:12"), want: true, message: "go");
+    assert\equal(isTestPath("web/x.spec.ts"), want: true, message: "ts");
+    assert\equal(isTestPath("lib/test_x.py"), want: true, message: "py prefix");
+    assert\equal(isTestPath("internal/a.go"), want: false, message: "source");
+}
+
+test "a doc section ends before the next heading at its level, skipping fences" {
+    final lines = ["# A", "## B", "text", "```", "# not a heading", "```", "## C", "# D"];
+    assert\equal(headingLine(lines, anchor: "b"), want: 2, message: "heading line");
+    assert\equal(sectionEnd(lines, start: 2, level: 2), want: 6, message: "B ends before C");
+    assert\equal(sectionEnd(lines, start: 1, level: 1), want: 7, message: "A ends before D");
+}
+
+test "an excerpt over the cap counts what it cut" {
+    final ex = excerpt("a", lines: ["1", "2", "3", "4", "5"], start: 2, end: 5, limit: 2);
+    assert\equal(ex.lines.len(), want: 2, message: "shown");
+    assert\equal(ex.cut, want: 2, message: "cut");
+}
+
+test "matches ranks the exact symbol first" {
+    final r = matches("IsTestPath", opts: Options{ limit = 3 });
+    assert\equal(r.answer.verdict, want: FOUND, message: r.answer.reason);
+    assert\equal(r.matches[0].label, want: "IsTestPath", message: r.matches[0].id);
+    assert\equal(r.matches[0].path, want: "types/test_path.go", message: "path");
+}
+
+test "the block layer reads the declaration to its recorded end line" {
+    final r = run("IsTestPath", opts: Options{ limit = 1, expand = 1, depth = 3, blockLines = 0 });
+    final b = r.matches[0].block!;
+    assert\equal(b.status, want: "verified", message: b.status);
+    assert\equal(b.lines[0].text.startsWith("func IsTestPath"), want: true, message: b.lines[0].text);
+    assert\equal(b.lines[b.lines.len() - 1].text, want: "}", message: "ends at the closing brace");
+}

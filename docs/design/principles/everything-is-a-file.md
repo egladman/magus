@@ -31,7 +31,7 @@ between you and the evidence of what broke it, and one document holding every
 entry turns one corrupt write into a lost store; a corrupt line costs the
 line.
 
-### The conventions
+**The conventions.**
 
 - **Layout and naming.** A store lives under the workspace's `.magus/` or a
   user directory resolved by [`libs/xdg`](https://github.com/egladman/magus/tree/main/libs/xdg) (`StateDir`, `CacheDir`), never a
@@ -68,7 +68,7 @@ line.
   Another package calls the owner's reader or writer and never builds, stats or
   opens the path itself.
 
-### Debt and exceptions
+**Debt and exceptions.**
 
 The stores that do not follow the format yet, as found on 2026-10-14:
 

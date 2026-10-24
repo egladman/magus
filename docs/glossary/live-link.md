@@ -1,7 +1,7 @@
 ---
 title: Live link
 order: 6
-description: "The URL that points an app at a running daemon. The daemon serves the console from its own loopback origin, so the link is that origin plus the app path and a bearer token in the fragment (http://127.0.0.1:7391/console/graph/#token=...). The daemon prints it; the console consumes the token, stores it, and strips it from the URL, so the secret never lingers in history or a copied link. The origin must be literal loopback: localhost and hostnames are rejected before any request. Without one, an app reads only what rides in the link itself."
+description: "The URL that points an app at a running daemon. The daemon serves the console from its own loopback origin, so the link is that origin plus the app path and a bearer token in the fragment (`http://127.0.0.1:7391/console/graph/#token=...`). The daemon prints it; the console consumes the token, stores it, and strips it from the URL, so the secret never lingers in history or a copied link. The origin must be literal loopback: localhost and hostnames are rejected before any request. Without one, an app reads only what rides in the link itself."
 tags: [glossary, console]
 ---
 
