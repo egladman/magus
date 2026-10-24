@@ -34,10 +34,10 @@ export fun linkOnce() > void !> any {
 // readLibFiles declares what a lib module's run reads. Restated in full because readsFiles
 // replaces the project baseline.
 export fun readLibFiles(ctx: magus\Context) > void !> any {
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum",
-                   "../../.golangci.yml", "../testlayout/.custom-gcl.yml",
-                   "../testlayout/**/*.go", "../testlayout/go.mod", "../testlayout/go.sum",
-                   "../conventions/**/*.go", "../conventions/go.mod", "../conventions/go.sum");
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum",
+                    "../../.golangci.yml", "../testlayout/.custom-gcl.yml",
+                    "../testlayout/**/*.go", "../testlayout/go.mod", "../testlayout/go.sum",
+                    "../conventions/**/*.go", "../conventions/go.mod", "../conventions/go.sum"]);
 }
 
 // run executes the custom build with the workspace config. dir is workspace-relative.

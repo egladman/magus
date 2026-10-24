@@ -1999,7 +1999,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // 1. Nested modules first: the root's go.mod must require tags that already exist.
     // Declared as modified: release amends go.mod, and two targets declaring one output
     // is MGS1020.
-    ctx.modifiesExistingFiles("go.mod");
+    ctx.writesFiles(["go.mod"], editsExistingSource: true);
     var gomod = fs\readFile("go.mod");
     var rewrote = false;
     foreach (m in modules) {
@@ -2553,7 +2553,7 @@ fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     final md = files.filter(fun (i: int, f: str) > bool => f.endsWith(".md"));
     if (md.len() > 0) {
         tools.append(["markdownlint"] + md);
-        ctx.readsFiles("_typos.toml");
+        ctx.readsFiles(["_typos.toml"]);
         tools.append(["typos", "--format", "brief"] + md);
     }
     final shells = files.filter(fun (i: int, f: str) > bool => f.endsWith(".sh") or f.endsWith(".bash"));

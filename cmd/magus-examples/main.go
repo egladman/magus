@@ -74,7 +74,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 magus\project({});
 
 // Vet the Go sources.
-export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles("*.go"); }
+export fun vet(ctx: magus\Context, args: [str]) > void { ctx.readsFiles(["*.go"]); }
 `,
 }}
 

@@ -100,8 +100,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // glossary-index-generate rewrites the term list in glossary.md from each term page's front matter.
 export fun glossary_index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("glossary.md", "glossary/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz");
-    ctx.modifiesExistingFiles("glossary.md");
+    ctx.readsFiles(["glossary.md", "glossary/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz"]);
+    ctx.writesFiles(["glossary.md"], editsExistingSource: true);
     final pages = mut [<dictionary\TermPage>];
     foreach (p in fs\glob("glossary/*.md")) {
         pages.append(dictionary\termPage(p.value, md: fs\readFile(p.value)));
@@ -121,9 +121,9 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles("**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz",
-        workspace\file("**/*.md"), workspace\file("gen/symbol-index.json"));
-    ctx.modifiesExistingFiles("glossary/*.md");
+    ctx.readsFiles(["**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz",
+        workspace\file("**/*.md"), workspace\file("gen/symbol-index.json")]);
+    ctx.writesFiles(["glossary/*.md"], editsExistingSource: true);
     final stale = mut [<str>];
     foreach (p in fs\glob("glossary/*.md")) {
         final md = fs\readFile(p.value);
@@ -192,8 +192,8 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // design-index-generate rewrites the page list in design.md from each design page's front matter.
 export fun design_index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("design.md", "design/**/*.md", "lib/design.buzz", "lib/adr.buzz");
-    ctx.modifiesExistingFiles("design.md");
+    ctx.readsFiles(["design.md", "design/**/*.md", "lib/design.buzz", "lib/adr.buzz"]);
+    ctx.writesFiles(["design.md"], editsExistingSource: true);
     final pages = mut [<design\DesignPage>];
     foreach (group in ["principles", "judgment"]) {
         foreach (p in fs\glob("design/{group}/*.md")) {

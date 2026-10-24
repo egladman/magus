@@ -38,12 +38,12 @@ concurrency: 2
 import "magus";
 // Renders the API reference from api.txt.
 export fun docs(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("api.txt");
-    ctx.writesFiles("docs/api.md");
+    ctx.readsFiles(["api.txt"]);
+    ctx.writesFiles(["docs/api.md"]);
 }
 // Builds the site from the guide.
 export fun site(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("docs/guide.md");
+    ctx.readsFiles(["docs/guide.md"]);
 }
 -- api.txt --
 GET /health

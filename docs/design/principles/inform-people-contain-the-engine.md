@@ -56,9 +56,9 @@ A real language, contained by what it declares, from [`docs/magusfile.buzz`](htt
 
 ```buzz
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
-                   "../internal/render/md/md.go", "../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
+                    "../internal/render/md/md.go", "../internal/hint/cli_command.go"]);
     index\render("docs");
 }
 ```

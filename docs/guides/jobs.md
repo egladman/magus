@@ -73,7 +73,7 @@ import "proc";
 
 // test runs the shell checks in test/run.sh.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("pricing/*.sh", "checkout/*.sh", "test/*.sh");
+    ctx.readsFiles(["pricing/*.sh", "checkout/*.sh", "test/*.sh"]);
     proc\exec("sh", ["test/run.sh"]);
 }
 ```
@@ -207,7 +207,6 @@ gives it back with no result:
 ```console
 $ magus job exit refactor/tax
 ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
-no result was filed; file one with `magus job exit <id> --stdin < result.json` (`magus job exit --schema` prints its format)
 ```
 
 `no_return` is not a failure. A failed job came back and said so; an abandoned one

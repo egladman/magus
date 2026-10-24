@@ -43,9 +43,9 @@ A generated file this repository owns, declared by the target that writes it:
 
 ```buzz
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
-                   "../internal/render/md/md.go", "../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
+                    "../internal/render/md/md.go", "../internal/hint/cli_command.go"]);
     index\render("docs");
 }
 ```
