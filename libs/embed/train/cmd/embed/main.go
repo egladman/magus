@@ -37,6 +37,7 @@ commands:
   train           distill, train and quantize the table from finished teacher runs
   convert         write potion-code-16M-v2 as a table over the vocabulary, mean of each token's word pieces
   bench           write CodeRankEmbed's runs over a subset the external benchmark exported
+  oov             append each pinned non-Go repo's share of identifier tokens with no vocabulary row to evals.jsonl
 
 run "embed <command> -h" for a command's flags`
 
@@ -63,6 +64,8 @@ func main() {
 		err = runConvert(os.Args[2:])
 	case "bench":
 		err = runBench(os.Args[2:])
+	case "oov":
+		err = runOOV(os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)

@@ -1752,6 +1752,8 @@
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/decontam_test.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/main.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/main_test.go"}
+{"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/oov.go"}
+{"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/oov_test.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/teacher.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/train.go"}
 {"group":"dir:libs/embed/train/cmd/embed","path":"libs/embed/train/cmd/embed/vocab.go"}
