@@ -1842,7 +1842,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus job exit: --stdin files one result onto one job, and %d are named", len(pos))
 	}
 	root = resolveRootOrEmpty(root)
-	store, err := openJobs(ctx, root, jobOpen{})
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
 	if err != nil {
 		return err
 	}
@@ -1884,7 +1884,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 	// A row the result ended (a read-only one nothing else grades) gives its checkout back now.
 	if err == nil && stored.State.Terminal() {
-		err = endWorktrees(ctx, out, store, stored.ID)
+		err = endNamedWorktrees(ctx, out, store, stored.ID)
 	}
 	return err
 }
@@ -1893,22 +1893,23 @@ func jobExit(ctx context.Context, root string, args []string) error {
 // job with the end_reason the store recorded for it. A job that cannot be ended does not
 // stop the rest: each is tried, and the command fails afterwards naming every refusal.
 func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
-	ended, refused := job.Abandon(ctx, store, ids)
+	ended, already, refused := job.Abandon(ctx, store, ids)
 	endedIDs := make([]string, len(ended))
 	for i, stored := range ended {
 		endedIDs[i] = stored.ID
 		fmt.Printf("ended %s, recorded %s: %s\n", stored.ID, stored.State, stored.EndReason)
 	}
-	if len(ended) > 0 {
-		fmt.Println("no result was filed; file one with `magus job exit <id> --stdin < result.json` (`magus job exit --schema` prints its format)")
+	for _, over := range already {
+		fmt.Println(over.Error())
 	}
-	removed := endWorktrees(ctx, os.Stdout, store, endedIDs...)
+	removed := endNamedWorktrees(ctx, os.Stdout, store, endedIDs...)
 	if len(refused) > 0 {
 		reasons := make([]string, len(refused))
 		for i, err := range refused {
 			reasons[i] = err.Error()
 		}
-		return errors.Join(exit.Usagef("magus job exit: %d of %d jobs not ended:\n  %s", len(ids)-len(ended), len(ids), strings.Join(reasons, "\n  ")), removed)
+		return errors.Join(exit.Usagef("magus job exit: %d of %d jobs not ended:\n  %s",
+			len(ids)-len(ended)-len(already), len(ids), strings.Join(reasons, "\n  ")), removed)
 	}
 	return removed
 }
@@ -1918,13 +1919,22 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 // became of each one: removed, or kept and why. What magus wrote includes the tool rows a
 // wired harness's install puts in a checkout, which describe file leaves unclaimed.
 func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
+	return endCheckouts(ctx, out, store, ended, false)
+}
+
+// endNamedWorktrees is [endWorktrees] for the jobs in ended alone, as `job exit` ends them.
+func endNamedWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
+	return endCheckouts(ctx, out, store, ended, true)
+}
+
+func endCheckouts(ctx context.Context, out io.Writer, store *job.Store, ended []string, onlyNamed bool) error {
 	if globalCfg.DryRun {
 		return nil
 	}
 	written := func(ctx context.Context, checkout string, paths []string) ([]string, error) {
 		ws, err := magus.Inspect(ctx, checkout, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 		if err != nil {
-			return nil, err
+			return nil, unloadableMagusfile(err)
 		}
 		files, err := ws.ClassifyFiles(ctx, paths)
 		if err != nil {
@@ -1954,7 +1964,11 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		}
 		return out, nil
 	}
-	changed, err := store.EndCheckouts(ctx, written, ended...)
+	end := store.EndCheckouts
+	if onlyNamed {
+		end = store.EndNamedCheckouts
+	}
+	changed, err := end(ctx, written, ended...)
 	for _, row := range changed {
 		printJobWorktree(out, row, "")
 	}
@@ -1962,6 +1976,16 @@ func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ..
 		return fmt.Errorf("magus job: recording what became of a job's checkout: %w", err)
 	}
 	return nil
+}
+
+// unloadableMagusfile is err, a checkout's failed load, as the one line a kept checkout's
+// reason holds: a load failure renders the whole spell, which would bury the checkout's line.
+func unloadableMagusfile(err error) error {
+	if diag := (*types.DiagnosticError)(nil); errors.As(err, &diag) {
+		return fmt.Errorf("this magus cannot load its magusfile (%s)", string(diag.Code))
+	}
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return errors.New(first)
 }
 
 // printJobWorktree says where the checkout a job owns stands: made for it, removed, or kept
@@ -2916,7 +2940,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{})
+	store, err := openJobs(ctx, resolveRootOrEmpty(root), jobOpen{DryRun: globalCfg.DryRun})
 	if err != nil {
 		return err
 	}

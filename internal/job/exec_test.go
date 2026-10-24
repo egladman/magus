@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -427,11 +428,13 @@ func TestExitSaysAnEndedJobAlreadyEnded(t *testing.T) {
 	_, err = Exit(ctx, s, "u1", nil, nil)
 	require.NoError(t, err)
 
+	ended := storedRows(t, s)["u1"]
 	_, err = Exit(ctx, s, "u1", nil, nil)
-	require.Error(t, err)
-	for _, want := range []string{"u1", "already ended", string(types.StateNoReturn), "ago", "abandoned by its holder"} {
-		assert.Contains(t, err.Error(), want)
-	}
+	var over *alreadyEndedError
+	require.ErrorAs(t, err, &over)
+	assert.Equal(t, ended, over.Row)
+	assert.Equal(t, fmt.Sprintf("u1 already ended no_return %s ago (%s)", updatedAgo(ended), ended.EndReason), err.Error())
+	assert.Equal(t, "abandoned by its holder, which filed no result", ended.EndReason)
 }
 
 // A fork records the forking checkout, but nobody has taken the job yet, so a worker in

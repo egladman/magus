@@ -78,6 +78,9 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 type Store struct {
 	mu sync.Mutex
 	storeConfig
+	// dryEnded are the rows a dry-run [Exit] ended, which [Store.unswept] reads as ended
+	// so a dry run ending a tree ends its descendants before their ancestors, as a real one.
+	dryEnded map[string]types.Job
 }
 
 // storeConfig is everything a Store carries but its mutex, so a view ([Store.As],
@@ -802,7 +805,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		case row.State.Live():
 			row.EndReason = ""
 		case i >= 0 && prev.State.Live() && row.State == types.StateNoReturn:
-			row.EndReason = endedReason(prev, actor.Lease == id || (prev.CheckoutRoot != "" && prev.CheckoutRoot == s.root))
+			row.EndReason = endedReason(prev, s.endsOwnRow(prev))
 		case i >= 0 && prev.State.Live() && row.State == types.StatePass && gradedByHolder(prev):
 			row.EndReason = returnedReason
 		}
@@ -962,11 +965,47 @@ func (s *Store) List() ([]types.Job, error) {
 	if f, err = s.sweep(f); err != nil {
 		return nil, err
 	}
-	out := make([]types.Job, len(f.Jobs))
-	for i, row := range f.Jobs {
+	return cloneRows(f.Jobs), nil
+}
+
+// endsOwnRow reports whether this store's caller holds row, so ending it is its holder's.
+func (s *Store) endsOwnRow(row types.Job) bool {
+	return s.Actor().Lease == row.ID || (row.CheckoutRoot != "" && row.CheckoutRoot == s.root)
+}
+
+// unswept is [Store.List] without the sweep, for a verb scoped to the rows it names: ending
+// one job must not end, or probe the landed work of, every other row in the plan.
+func (s *Store) unswept() ([]types.Job, error) {
+	f, err := s.read()
+	if err != nil {
+		return nil, err
+	}
+	rows := cloneRows(f.Jobs)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, row := range rows {
+		if ended, ok := s.dryEnded[row.ID]; ok {
+			rows[i] = ended.Clone()
+		}
+	}
+	return rows, nil
+}
+
+func (s *Store) endDry(row types.Job) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dryEnded == nil {
+		s.dryEnded = map[string]types.Job{}
+	}
+	s.dryEnded[row.ID] = row.Clone()
+}
+
+func cloneRows(rows []types.Job) []types.Job {
+	out := make([]types.Job, len(rows))
+	for i, row := range rows {
 		out[i] = row.Clone()
 	}
-	return out, nil
+	return out
 }
 
 // Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to a

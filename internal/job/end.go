@@ -166,17 +166,18 @@ func joinDescendants(descs []descendant) string {
 }
 
 // Abandon ends each of ids as no_return, as [Exit] does with no result, every descendant
-// before its ancestors, and returns the rows it ended and one error for each id it did not.
+// before its ancestors, and returns the rows it ended, one `<id> already ended` line for
+// each id that had already ended, and one error for each other id it did not end.
 //
 // A job whose live descendants are not all among ids is refused, naming each: ending it
 // would end them unseen. Restating them in ids ends them too, unless one of them holds
 // uncommitted work in its write paths or a running check. Then the end needs a person, who
 // disposes the attention request the refusal names (the guard denies an agent that), and
 // the same call proceeds afterwards.
-func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []error) {
-	rows, err := store.List()
+func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []error, []error) {
+	rows, err := store.unswept()
 	if err != nil {
-		return nil, []error{err}
+		return nil, nil, []error{err}
 	}
 	var unique []string
 	for _, id := range ids {
@@ -220,15 +221,20 @@ func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []er
 		return cmp.Compare(len(types.JobAncestors(rows, b)), len(types.JobAncestors(rows, a)))
 	})
 	var ended []types.Job
+	var already []error
 	for _, id := range order {
 		stored, err := Exit(ctx, store, id, nil, nil)
+		if over := (*alreadyEndedError)(nil); errors.As(err, &over) {
+			already = append(already, over)
+			continue
+		}
 		if err != nil {
 			refused = append(refused, err)
 			continue
 		}
 		ended = append(ended, stored)
 	}
-	return ended, refused
+	return ended, already, refused
 }
 
 // confirmEnd is nil once a person disposed the attention request asking to end ids, which
@@ -341,14 +347,24 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 // changed are returned. A linked checkout no row records comes back on a copy of its row
 // whose Worktree says what became of it; the store is not written for it.
 func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
-	rows, err := s.List()
+	return s.endCheckouts(ctx, written, ended, false)
+}
+
+// EndNamedCheckouts is [Store.EndCheckouts] for the jobs in ended alone: ending some jobs
+// restores and removes their checkouts and leaves every other ended row's as it stands.
+func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
+	return s.endCheckouts(ctx, written, ended, true)
+}
+
+func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]types.Job, error) {
+	rows, err := s.unswept()
 	if err != nil {
 		return nil, err
 	}
 	here, _ := filepath.Abs(s.root)
 	var changed []types.Job
 	for _, row := range rows {
-		if !row.State.Terminal() {
+		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
 		}
 		if !row.Worktree.Standing() {

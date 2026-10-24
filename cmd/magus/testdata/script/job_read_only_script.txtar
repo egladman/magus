@@ -41,7 +41,10 @@ stdin $WORK/notes.json
 exec magus job exit scout/notes --stdin
 stdout '^exited scout/notes, recorded pass: returned: its holder filed a result'
 ! stdout 'job wait'
-! exec magus job exit scout/notes
+exec magus job exit scout/notes
+stdout '^scout/notes already ended pass \S+ ago \(returned: its holder filed a result'
+stdin $WORK/notes.json
+! exec magus job exit scout/notes --stdin
 stderr 'scout/notes already ended pass'
 
 exec magus job fork scout/prose --read-only --criteria 'summarize the tests'

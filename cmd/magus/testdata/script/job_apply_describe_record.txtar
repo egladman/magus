@@ -1,0 +1,31 @@
+# `magus job apply -f` takes back the whole record `magus describe job -o json` prints: the
+# row under `job`, beside the members magus derived for it, which apply ignores.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+mkdir src/pkg
+cp $WORK/code.go src/pkg/code.go
+cp $WORK/code.go src/pkg/other.go
+
+exec magus job apply -f $WORK/row.json
+stdout '^created wave/a, declared, with 1 write path\(s\)$'
+
+exec magus describe job wave/a -o json
+stdout '"goals"'
+cp stdout $WORK/described.json
+exec magus job apply -f $WORK/described.json
+stdout '^unchanged wave/a'
+
+[!exec:jq] stop 'jq is not installed'
+exec jq -c '.job.write_paths += ["src/pkg/other.go"]' $WORK/described.json
+cp stdout $WORK/widened.json
+exec magus job apply -f $WORK/widened.json
+stdout '^updated wave/a, still declared:$'
+stdout '^  write_paths \+src/pkg/other\.go$'
+exec magus describe job wave/a -o 'template={{toJson .job.write_paths}}'
+stdout '^\["src/pkg/code\.go","src/pkg/other\.go"\]$'
+
+-- code.go --
+package pkg
+-- row.json --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
