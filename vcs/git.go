@@ -3717,6 +3717,20 @@ func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error)
 	return co, nil
 }
 
+// branchAtRev reports whether branch exists and its tip is the commit rev resolves to.
+func branchAtRev(ctx context.Context, root, branch, rev string) (bool, error) {
+	tip, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		// rev-parse --verify --quiet exits 1 with no output for an absent ref.
+		return false, nil
+	}
+	want, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-parse", "--verify", rev+"^{commit}")
+	if err != nil {
+		return false, fmt.Errorf("git rev-parse %s: %w", rev, err)
+	}
+	return tip == want, nil
+}
+
 // CreateCheckout implements types.CheckoutProvisioner with a linked worktree on a new
 // branch, or detached when branch is empty, locked with CheckoutLockReason, and records
 // it for gitExec.
@@ -3747,11 +3761,22 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch strin
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
 	on := []string{"--detach"}
+	target := rev
 	if branch != "" {
 		on = []string{"-b", branch}
+		reused, err := branchAtRev(ctx, root, branch, rev)
+		if err != nil {
+			return err
+		}
+		if reused {
+			// An ended job leaves its branch behind; re-forking the id reuses it while
+			// it holds nothing past the revision.
+			on = nil
+			target = branch
+		}
 	}
 	args := append([]string{"worktree", "add", "--quiet"}, on...)
-	args = append(args, "--lock", "--reason", CheckoutLockReason, "--", dir, rev)
+	args = append(args, "--lock", "--reason", CheckoutLockReason, "--", dir, target)
 	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, args...); err != nil {
 		return fmt.Errorf("git worktree add %s: %w", dir, err)
 	}
