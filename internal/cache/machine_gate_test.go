@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"slices"
 	"strings"
@@ -275,6 +276,82 @@ func (*unansweredHolder) ReleaseHold(context.Context, string) error {
 	return errors.New("connection reset")
 }
 
+// refusingHolder is a broker that refuses every hold and records the claim each named.
+type refusingHolder struct {
+	MachineAdmitter
+	mu     sync.Mutex
+	claims []string
+}
+
+func (h *refusingHolder) HoldGroup(_ context.Context, claim string, _ int, _ string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.claims = append(h.claims, claim)
+	return "", errors.New("no such claim")
+}
+
+func (*refusingHolder) ReleaseHold(context.Context, string) error { return nil }
+
+func spawnChildren(t *testing.T, ctx context.Context, n int) {
+	t.Helper()
+	for range n {
+		_, err := spawn.Exec(ctx, "true", nil, spawn.ExecOptions{Quiet: true})
+		require.NoError(t, err)
+	}
+}
+
+// One refusal line per step, however many children it starts.
+func TestAStepGroupRefusalWarnsOnceForManyChildren(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows starts a step's group unwatched")
+	}
+	logs := captureLogs(t)
+	holder := &refusingHolder{}
+	hold := &machineHold{claim: types.MachineClaim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1"}
+	ctx := withMachineHold(t.Context(), hold)
+	ctx = withStepGroups(ctx, holder, hold.current)
+
+	spawnChildren(t, ctx, 3)
+
+	assert.Equal(t, []string{"claim-1", "claim-1", "claim-1"}, holder.claims, "every child is offered to the broker")
+	warnings := warnMessages(logs)
+	require.Len(t, warnings, 1)
+	assert.Regexp(t, `^child processes of libs/xdg:go-test are not tied to its build claim, so they keep running if magus exits abnormally: the broker refused the hold \(no such claim\)\. First child: pid \d+ \(true\)\.$`, warnings[0])
+}
+
+func warnMessages(h *recordingHandler) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []string
+	for _, r := range h.records {
+		if r.Level >= slog.LevelWarn {
+			out = append(out, r.Message)
+		}
+	}
+	return out
+}
+
+// A claim lent to members reads "" when a child starts: expected, so nothing reaches the
+// broker and nothing is said.
+func TestAStepGroupStartedWhileTheClaimIsLentWarnsOfNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows starts a step's group unwatched")
+	}
+	logs := captureLogs(t)
+	holder := &refusingHolder{}
+	hold := &machineHold{claim: types.MachineClaim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1", release: func() {}}
+	ctx := withMachineHold(t.Context(), hold)
+	ctx = withStepGroups(ctx, holder, hold.current)
+
+	require.NoError(t, LendMachineClaim(ctx, func(ctx context.Context) error {
+		spawnChildren(t, ctx, 3)
+		return nil
+	}))
+
+	assert.Empty(t, holder.claims, "an empty claim id never reaches the broker")
+	assert.Empty(t, warnMessages(logs))
+}
+
 // A failing sibling cancels the run's context, and a hold made on it then could be one
 // the broker records and this process never releases; the hold runs uncancelled but
 // bounded. A release the broker does not answer says the group may still be held.
@@ -284,7 +361,7 @@ func TestHoldStepGroupOutlivesACancelledRunAndWarnsOnAnUnansweredRelease(t *test
 	holder := &unansweredHolder{}
 
 	out := captureLog(t, func() {
-		holdStepGroup(ctx, holder, "claim-1", 4242, "sleep 30")()
+		holdStepGroup(ctx, holder, "claim-1", 4242, "sleep 30", func(int, string, error) {})()
 	})
 	require.NoError(t, holder.holdErr, "the hold ran on a context the cancel did not reach")
 	assert.True(t, holder.holdHasTime, "the hold is bounded")

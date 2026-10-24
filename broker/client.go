@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
@@ -531,11 +532,14 @@ func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string
 	c.mu.Lock()
 	riders := maps.Clone(c.riders)
 	c.mu.Unlock()
+	warned := false
 	for id, r := range riders {
 		c.mu.Lock()
 		hold := r.hold
+		var claim types.MachineClaim
 		if h, ok := c.held[r.claim]; ok {
 			hold.Claim = h.remote
+			claim = h.claim
 		}
 		c.mu.Unlock()
 		if hold.Claim == "" {
@@ -546,8 +550,10 @@ func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string
 		var refused *Error
 		switch {
 		case errors.As(err, &refused):
-			slog.WarnContext(ctx, fmt.Sprintf("process group %d (%s) runs unheld: if this run dies, nothing stops it", hold.PGID, hold.Command),
-				attr.Error(err))
+			if !warned {
+				warned = true
+				slog.WarnContext(ctx, cache.UnheldGroupWarning(claim.Project, claim.Target, hold.PGID, hold.Command, err))
+			}
 			c.mu.Lock()
 			if c.riders[id] == r {
 				delete(c.riders, id)

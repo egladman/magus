@@ -143,8 +143,8 @@ func TestDescriptor_SymbolIndexer(t *testing.T) {
 	require.True(t, ok, "an indexer that declares no op runs under the default, whatever the spell is named")
 	assert.Equal(t, spells.Op{
 		Kind:    spells.OpKindSymbolIndex,
-		Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
-	}, op)
+		Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true},
+	}, op, "a successful index prints nothing and a failure still prints stderr")
 	assert.Len(t, m.Ops, 1)
 }
 
@@ -216,6 +216,24 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 		"buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
 	}, ops)
 	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
+}
+
+// Every shipped indexer (scip-go, scip-python, scip-typescript, rust-analyzer, scip-buzz)
+// reaches the runner through the synthesized op, so each one is quiet on success.
+func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
+	bins := map[string]string{}
+	for name, d := range Builtins() {
+		if d.SymbolIndexer == nil {
+			continue
+		}
+		op := d.Ops[d.SymbolIndexer.OpName()]
+		command := op.Command
+		bins[name] = command.Bin
+		assert.Truef(t, command.Capture && command.Quiet, "%s: its indexer prints nothing on success", name)
+	}
+	assert.Equal(t, map[string]string{
+		"buzz": "scip-buzz", "go": "scip-go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
+	}, bins)
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a

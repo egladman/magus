@@ -124,7 +124,11 @@ func addSymbolIndexOp(m *spells.Descriptor) error {
 	}
 	// Synthesized, so the run, cache and freshness paths reach the indexer as an
 	// ordinary command op; the kind is what the runner matches on.
-	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+	// Quiet: scip-go repaints a progress line with carriage returns, which a
+	// non-terminal log keeps as one long line. A failure still prints stderr.
+	command := indexer.Command
+	command.Capture, command.Quiet = true, true
+	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: command}
 	return nil
 }
 
