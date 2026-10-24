@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/notes"
@@ -34,7 +35,7 @@ type NoteResolver struct {
 	scope string
 }
 
-var _ notes.Resolver = NoteResolver{}
+var _ notes.GapResolver = NoteResolver{}
 
 // NewNoteResolver indexes g once. Bind it to a store with ForScope before checking that
 // store's notes; the zero scope resolves a note-to-note anchor in the shared namespace,
@@ -82,6 +83,29 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 		return "", fmt.Errorf("read %s: %w", a.Target, err)
 	}
 	return notes.Digest(strings.Split(string(src), "\n")), nil
+}
+
+// Declaration finds the symbol named name that file defines and returns it as a symbol
+// anchor, so a `file#Decl` reference is stored by identity and graded by signature like any
+// other symbol. No match and several matches are both errors naming what was looked for:
+// picking one of several would be the guess anchors exist to refuse.
+func (r NoteResolver) Declaration(_ context.Context, file, name string) (notes.Anchor, error) {
+	var ids []string
+	for id, n := range r.node {
+		path, _, _ := strings.Cut(n.Source, ":")
+		if n.Label == name && path == file {
+			ids = append(ids, id)
+		}
+	}
+	switch len(ids) {
+	case 0:
+		return notes.Anchor{}, fmt.Errorf("%s declares no symbol named %q in the graph, `magus explain file:%s` lists what it defines", file, name, file)
+	case 1:
+		return notes.Anchor{Kind: notes.AnchorSymbol, Target: strings.TrimPrefix(ids[0], types.KindSymbol+":")}, nil
+	default:
+		slices.Sort(ids)
+		return notes.Anchor{}, fmt.Errorf("%s declares %d symbols named %q, anchor one by id: %s", file, len(ids), name, strings.Join(ids, ", "))
+	}
 }
 
 // Signature reads a symbol anchor's declaration as its indexer rendered it into the graph.

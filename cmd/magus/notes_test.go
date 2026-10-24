@@ -265,3 +265,33 @@ func TestNotesEditRefusesAnUnreadableNoteInsteadOfScaffoldingADuplicate(t *testi
 	require.NoError(t, err)
 	assert.Empty(t, left, "nothing may be scaffolded into the other store beside the broken note")
 }
+
+func TestNotesLsByTagListsOpenGapsWithTheirFindLines(t *testing.T) {
+	root := t.TempDir()
+	prev := globalCfg
+	globalCfg.Knowledge.Notes.Shared = "notes"
+	globalCfg.Knowledge.Notes.Private = ""
+	t.Cleanup(func() { globalCfg = prev })
+	dir := filepath.Join(root, "notes")
+	require.NoError(t, store.Save(dir, store.Note{
+		Name:    "gap-wait-poll",
+		Title:   "wait poll denied as sleep",
+		Tags:    []string{store.TagGap, store.TagGapOpen},
+		Anchors: []store.Anchor{{Kind: store.AnchorDiagnostic, Target: "MGS3009"}},
+		Find:    []string{"magus query 'kind=diagnostic id=MGS3009'"},
+	}))
+	require.NoError(t, store.Save(dir, store.Note{
+		Name:    "cache-pairing",
+		Title:   "two caches",
+		Anchors: []store.Anchor{{Kind: store.AnchorProject, Target: "."}},
+	}))
+
+	var err error
+	out := captureStdout(t, func() {
+		err = notesList(context.Background(), root, []string{"--tag", store.TagGapOpen})
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out, "gap-wait-poll")
+	assert.NotContains(t, out, "cache-pairing", "a note without the tag is not listed")
+	assert.Contains(t, out, "  find it:\n    magus query 'kind=diagnostic id=MGS3009'\n")
+}
