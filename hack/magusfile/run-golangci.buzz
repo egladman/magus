@@ -4,7 +4,6 @@
 namespace golangci;
 
 import "fs";
-import "os";
 import "proc";
 import "std";
 import "magus";
@@ -45,11 +44,7 @@ export fun readLibFiles(ctx: magus\Context) > void !> any {
 export fun run(dir: str, args: [str]) > void !> any {
     final root = magus\describe.project().workspace;
     final bin = binary();
-    // An in-checkout cache: golangci-lint stores absolute paths, so sibling worktrees
-    // would replay each other's findings.
-    os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, fun () > void !> any {
-        proc\exec(bin, ["run", "--config", root + "/.golangci.yml"] + args, root + "/" + dir);
-    });
+    proc\exec(bin, ["run", "--config", root + "/.golangci.yml"] + args, root + "/" + dir);
 }
 
 // lintLib runs the tree-wide conventions over the lib module at dir; a module is a separate

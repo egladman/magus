@@ -118,7 +118,9 @@ export fun mgs_getSandbox() > Sandbox {
             SandboxAllow{base = "home", path = "go/pkg/sumdb", mode = SandboxAccess.rw},
             SandboxAllow{env = "GOCACHE", base = "userCache", path = "go-build", mode = SandboxAccess.rwx},
             SandboxAllow{env = "GOENV", base = "userConfig", path = "go/env", mode = SandboxAccess.ro},
-            SandboxAllow{env = "GOLANGCI_LINT_CACHE", base = "userCache", path = "golangci-lint", mode = SandboxAccess.rw},
+            // golangci-lint keys findings by absolute path, so a cache shared across checkouts
+            // replays another checkout's. GOCACHE and GOMODCACHE are content-addressed.
+            SandboxAllow{env = "GOLANGCI_LINT_CACHE", base = "workspace", path = ".magus/golangci-lint", mode = SandboxAccess.rw},
         ],
         env = SandboxEnv{passthrough = [
             "GOROOT", "GOPATH", "GOBIN", "GOCACHE", "GOMODCACHE", "GOENV", "GOFLAGS", "GOEXPERIMENT",
@@ -127,7 +129,6 @@ export fun mgs_getSandbox() > Sandbox {
             "GOWORK", "GOTMPDIR", "GODEBUG", "GOFIPS140", "GOCOVERDIR", "GOTELEMETRY", "GOTELEMETRYDIR",
             "GOMAXPROCS", "GOGC", "GOMEMLIMIT", "GOTRACEBACK",
             "CGO_ENABLED", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS",
-            "GOLANGCI_LINT_CACHE",
         ]},
         caches = [
             // go re-dates a build cache entry it uses once the entry is an hour old.
