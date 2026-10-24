@@ -2767,6 +2767,7 @@ github.com/egladman/magus/types.JobStatus.UndeclaredExports field []string "json
 github.com/egladman/magus/types.JobStatus.UnresolvedRisks field []string "json:\"unresolved_risks,omitempty\" yaml:\"unresolved_risks,omitempty\""
 github.com/egladman/magus/types.JobStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
 github.com/egladman/magus/types.JobStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
+github.com/egladman/magus/types.JobStoreWriterOlder const DiagnosticCode = "MGS3051"
 github.com/egladman/magus/types.JobUnattributedWrite type struct
 github.com/egladman/magus/types.JobUnattributedWrite.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobUnattributedWrite.Digest field string "json:\"digest\" yaml:\"digest\""
