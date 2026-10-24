@@ -566,6 +566,12 @@ var allChecks = []checkDef{
 		run:            (*runner).checkToolchainLifecycle,
 	},
 	{
+		Name:     "go-cache-budget",
+		Doc:      "the Go build and lint caches against go.cache_budget_mb, with the command that frees each one that is over",
+		Evidence: types.EvidenceMeasured,
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkGoCacheBudget() },
+	},
+	{
 		Name:           "stale-spell-shadow-acknowledgments",
 		Doc:            "a spells.allow_shadow entry whose shadow no longer exists, so the reason is dead config",
 		Code:           types.SpellShadowed,
