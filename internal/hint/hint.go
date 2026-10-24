@@ -1178,7 +1178,7 @@ func quoted(pat string) string {
 	if shellUnsafeInDoubles(pat) {
 		return singleQuoted(pat)
 	}
-	return fmt.Sprintf(`"%s"`, pat)
+	return fmt.Sprintf("%c%s%c", '"', pat, '"')
 }
 
 // matcherArg quotes a query matcher only when the shell would split or
@@ -1189,7 +1189,7 @@ func matcherArg(m string) string {
 	case shellUnsafeInDoubles(m):
 		return singleQuoted(m)
 	case strings.ContainsAny(m, " |(){}[]<>&;!*?'"):
-		return fmt.Sprintf(`"%s"`, m)
+		return fmt.Sprintf("%c%s%c", '"', m, '"')
 	}
 	return m
 }
