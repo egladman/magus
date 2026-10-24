@@ -330,7 +330,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 				if op.Name == "warn" || op.Name == "error" {
 					cls = "err"
 				}
-				out = append(out, Line{HTML: fmt.Sprintf(`  %s<span class="%s">%s</span>`, tag, cls, esc(op.Detail))})
+				out = append(out, Line{HTML: fmt.Sprintf("  %s<span class=%q>%s</span>", tag, cls, esc(op.Detail))})
 				continue
 			}
 			if op.Kind == "run" {
