@@ -75,7 +75,7 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 	declared := map[string]bool{}
 	for _, row := range held {
 		ids = append(ids, row.ID)
-		for _, p := range row.WritePaths {
+		for _, p := range row.HardPaths() {
 			declared[p] = true
 		}
 	}

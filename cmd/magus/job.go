@@ -885,6 +885,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	leases = job.HardenWritten(ctx, store, leases)
 	i := slices.IndexFunc(leases, func(lease types.Job) bool { return lease.ID == pos[0] })
 	if i < 0 {
 		return fmt.Errorf("magus describe job: there is no job %q (run `%s` to see them)", pos[0], hint.LsJobs)

@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1448,4 +1449,61 @@ func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
 			assert.Equal(t, decisionDeny, outside.Decision, "a path outside the lease's paths, in the checkout its fork made")
 		})
 	}
+}
+
+// ExtendFootprint adds a tested file's tests to the row soft, and a lease that never touches
+// them must not own them against anyone.
+func TestASoftPathOwnsNothingUntilItHardens(t *testing.T) {
+	const rel = "internal/ledger/store_test.go"
+	for _, tc := range []struct {
+		name  string
+		soft  []string
+		owned bool
+	}{
+		{name: "soft", soft: []string{rel}},
+		{name: "hardened", owned: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			leases := fixture.FleetLeases()
+			leases[0].WritePaths = []string{"internal/ledger/store.go", rel}
+			leases[0].SoftPaths = tc.soft
+			ctx, root := fleetFixture(t, leases...)
+
+			got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, rel))
+			unleased := Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: "s1", Host: "test-host"})
+			if tc.owned {
+				assert.Contains(t, got.Reason, "is owned by lease lease-a")
+				assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(unleased))
+				return
+			}
+			assert.NotContains(t, got.Reason, "lease-a")
+			assert.NotEqual(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(unleased))
+			assert.NotContains(t, unleased.Context, "lease-a")
+		})
+	}
+}
+
+// The store keeps a written soft path soft until something reads the holder's diff, so the
+// guard reads it before naming no owner for a write that lands there.
+func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
+	const rel = "run_test.go"
+	files := map[string]string{".gitattributes": "*.go diff=golang\n", rel: "package run\n\nfunc a() {}\n"}
+	_, cacheDir := fixture.SeedLeases(t)
+	holder := testkit.NewRepo(t, files)
+	root := holder.Root()
+	row := types.Job{ID: "holder", State: types.StateRunning, WritePaths: []string{rel}, SoftPaths: []string{rel},
+		Checkpoint: holder.Head(), CheckoutRoot: root, Registered: 1, Validated: 1}
+	_, err := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t), Root: root}).
+		Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
+	write := func(session string) types.GuardJudgment {
+		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
+	}
+
+	assert.NotEqual(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(write("s1")), "an unwritten soft path is nobody's")
+	holder.WriteTree(map[string]string{rel: "package run\n\nfunc a2() {}\n"})
+	got := write("s2")
+	assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(got))
+	assert.Contains(t, got.Context, "lease holder")
 }

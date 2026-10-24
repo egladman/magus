@@ -648,10 +648,12 @@ func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof 
 	return types.WriteProofDisjoint
 }
 
-// hardenWritten is rows with each live holder's soft paths its diff has touched made hard,
-// and the change recorded on the row. A footprint that cannot be read hardens nothing; a
-// record that fails leaves the row soft in the store for the next check to record again.
-func hardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.Job {
+// HardenWritten is rows with each live holder's soft paths its diff has touched made hard,
+// and the change recorded on the row. Read it before asking who owns a path: [Store.List]
+// returns a soft path its holder already wrote as soft. A footprint that cannot be read
+// hardens nothing; a record that fails leaves the row soft in the store for the next
+// reader to record again. A nil store, or one with no root, returns rows unchanged.
+func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.Job {
 	if store == nil || store.root == "" {
 		return rows
 	}

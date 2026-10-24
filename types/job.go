@@ -2351,8 +2351,9 @@ func ValidIntegratedBranch(b string) bool {
 		!strings.ContainsFunc(b, func(r rune) bool { return r <= ' ' || r == 0x7f || strings.ContainsRune(`~^:?*[\`, r) })
 }
 
-// HardPaths is WritePaths without the soft entries: the paths the row claims against other
-// rows. Every overlap check reads this, never WritePaths.
+// HardPaths is WritePaths without the soft entries: the paths the row owns against other
+// rows. A reader asking who owns a path (an overlap, a boundary, a denial naming an owner)
+// reads this; a reader asking what this row may write reads WritePaths.
 func (u Job) HardPaths() []string {
 	if len(u.SoftPaths) == 0 {
 		return u.WritePaths
