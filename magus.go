@@ -255,6 +255,14 @@ type internals struct{ *Magus }
 
 func (m *Magus) internals() internals { return internals{m} }
 
+// Context returns a copy of parent carrying m as the workspace the std doors read
+// (std.MagusQuery, std.MagusRefs, std.MagusExplain and the rest), the same view Run hands
+// a target. Put m there with types.WithWorkspace instead and the graph doors fail as
+// having no knowledge graph. The copy reads m, so it is valid only until m.Close.
+func (m *Magus) Context(parent context.Context) context.Context {
+	return types.WithWorkspace(parent, m.internals())
+}
+
 // KnowledgeGraph returns the workspace knowledge graph req asks for. See
 // Magus.knowledgeGraph.
 func (w internals) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {

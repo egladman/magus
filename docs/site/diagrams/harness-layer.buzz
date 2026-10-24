@@ -1,0 +1,35 @@
+namespace harnessLayer;
+
+import "magus";
+import "magus/figure";
+
+export fun harnessLayerFigure() > figure\Figure !> any {
+    final sdk = magus\dir(".");
+    final cli = magus\dir("cmd/magus");
+    final guard = magus\dir("internal/guard");
+    final jobs = magus\dir("internal/job");
+    final graph = magus\dir("internal/graph/workspacegraph");
+    final host = figure\external("Agent host", sub: "runs the model loop", tag: "client");
+    final person = figure\external("A person", sub: "at a terminal", tag: "client");
+    return figure\of("harness-layer",
+            title: "The harness lives in the task runner, not above it",
+            eyebrow: "design",
+            desc: "magus is one Go module. Its root package, the Go SDK, imports the workspace "
+                + "graph, which holds every target's declared inputs and outputs, and the harness "
+                + "packages: the guard and job leases. The CLI imports the same packages. The "
+                + "agent host runs the model loop and sends every call through the guard; magus "
+                + "never calls a model.")
+        .actor(person)
+        .actor(host)
+        .box(cli, label: "magus CLI")
+        .box(sdk, label: "Go SDK", sub: "import magus")
+        .box(graph, label: "Workspace graph", sub: "inputs, outputs, deps")
+        .group([guard, jobs], label: "Harness", sub: "guard, job leases", focal: true)
+        .edgesFromGraph()
+        .flowIn(person, dst: cli)
+        .flowIn(host, dst: guard, label: "every call")
+        .zone("one Go module", dirs: [sdk, guard, jobs, graph])
+        .legend(figure\Look.focal, label: "the harness")
+        .legend(figure\Look.external, label: "outside magus")
+        .scope([cli, guard, jobs, sdk, graph]);
+}

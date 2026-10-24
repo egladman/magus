@@ -10,7 +10,9 @@ This page is for a Go developer who wants to call magus from their own
 program (`import "github.com/egladman/magus"`) rather than shelling out to
 the `magus` binary. If you have never run `magus` and do not care to, this is
 the page for you; the [CLI reference](cli.md) describes the same domain from
-the other side.
+the other side. For runnable recipes (open a workspace, run a target, ask what a
+change affects, judge a tool call), start with the
+[Go SDK guide](../guides/go-sdk.md).
 
 ## Before you `go get` it
 
@@ -267,7 +269,8 @@ options: `std.MagusPutJob` a `types.JobPut`, whose nil fields leave the row as i
 `std.MagusExitJob` a `types.JobResult`; `std.MagusWaitJob` a `*types.JobResult`, nil
 for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
 `std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
-`types.TrailReadOptions`. Each reads the workspace on `ctx` (`types.WithWorkspace`).
+`types.TrailReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as
+the [guide](../guides/go-sdk.md#query-the-graph) does.
 A knowledge answer carries a verdict that keeps unknown apart from absent: zero matches
 with an `unknown` verdict means part of the workspace had no symbol index.
 
