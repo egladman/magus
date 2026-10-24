@@ -30,17 +30,17 @@ type goCache struct {
 	fix   string
 }
 
-// cacheSize is what a bounded walk learned about a directory.
-type cacheSize struct {
-	bytes int64
-	// stopped is why the walk ended before the tree did: "" when it covered everything.
-	stopped string
+// CacheSize is what a bounded walk learned about a directory.
+type CacheSize struct {
+	Bytes int64
+	// Stopped is why the walk ended before the tree did: "" when it covered everything.
+	Stopped string
 }
 
-// measureCache sums file sizes under dir until the total passes limit or maxEntries entries
+// MeasureCache sums file sizes under dir until the total passes limit or maxEntries entries
 // have been visited. A missing dir measures zero.
-func measureCache(ctx context.Context, dir string, limit int64, maxEntries int) (cacheSize, error) {
-	var out cacheSize
+func MeasureCache(ctx context.Context, dir string, limit int64, maxEntries int) (CacheSize, error) {
+	var out CacheSize
 	entries := 0
 	errStop := errors.New("walk stopped")
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -61,15 +61,15 @@ func measureCache(ctx context.Context, dir string, limit int64, maxEntries int) 
 		if !d.IsDir() {
 			info, ierr := d.Info()
 			if ierr == nil {
-				out.bytes += info.Size()
+				out.Bytes += info.Size()
 			}
 		}
 		switch {
-		case out.bytes > limit:
-			out.stopped = "past the budget"
+		case out.Bytes > limit:
+			out.Stopped = "past the budget"
 			return errStop
 		case entries >= maxEntries:
-			out.stopped = fmt.Sprintf("after %d entries", maxEntries)
+			out.Stopped = fmt.Sprintf("after %d entries", maxEntries)
 			return errStop
 		}
 		return nil
@@ -87,16 +87,16 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	limit := int64(budgetMB) << 20
 	var over, partial, unread []string
 	for _, c := range caches {
-		size, err := measureCache(ctx, c.dir, limit, maxEntries)
+		size, err := MeasureCache(ctx, c.dir, limit, maxEntries)
 		switch {
 		case err != nil:
 			unread = append(unread, fmt.Sprintf("%s %s: cannot measure: %v", c.label, c.dir, err))
-		case size.bytes > limit:
+		case size.Bytes > limit:
 			over = append(over, fmt.Sprintf("%s %s: at least %d MB, past the %d MB budget; free it with `%s`",
-				c.label, c.dir, size.bytes>>20, budgetMB, c.fix))
-		case size.stopped != "":
+				c.label, c.dir, size.Bytes>>20, budgetMB, c.fix))
+		case size.Stopped != "":
 			partial = append(partial, fmt.Sprintf("%s %s: %d MB measured, stopped %s; the rest is unmeasured",
-				c.label, c.dir, size.bytes>>20, size.stopped))
+				c.label, c.dir, size.Bytes>>20, size.Stopped))
 		}
 	}
 	if len(over)+len(partial)+len(unread) == 0 {
@@ -107,7 +107,7 @@ func goCacheBudget(ctx context.Context, caches []goCache, budgetMB, maxEntries i
 	return types.Check{
 		Name:   name,
 		Status: types.CheckAdvice,
-		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing",
+		Message: fmt.Sprintf("%d of %d cache(s) past or unverifiable against the %d MB go.cache_budget_mb; doctor deletes nothing (the daemon trims the Go build cache past the budget)",
 			len(details), len(caches), budgetMB),
 		Details: details,
 	}
@@ -119,11 +119,11 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	const name = "go-cache-budget"
 	budget := r.opts.cfg.Go.CacheBudgetMB
 	if budget <= 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "go.cache_budget_mb is 0: the Go caches are not measured and the daemon trims nothing"}
 	}
 	var caches []goCache
 	var notes []string
-	if dir, err := goEnvCache(r.ctx); err != nil {
+	if dir, err := GoEnvCache(r.ctx); err != nil {
 		notes = append(notes, fmt.Sprintf("go build cache not measured: %v", err))
 	} else {
 		caches = append(caches, goCache{label: "go build cache", dir: dir, fix: goBuildCacheFix})
@@ -144,8 +144,8 @@ func (r *runner) checkGoCacheBudget() types.Check {
 	return res
 }
 
-// goEnvCache asks the Go toolchain where its build cache lives.
-func goEnvCache(ctx context.Context) (string, error) {
+// GoEnvCache asks the Go toolchain where its build cache lives.
+func GoEnvCache(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, "go", "env", "GOCACHE").Output()
 	if err != nil {
 		return "", fmt.Errorf("go env GOCACHE: %w", err)
