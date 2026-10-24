@@ -1,12 +1,14 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -205,41 +207,41 @@ func TestJudgeStopNamesLiveBackgroundTasks(t *testing.T) {
 	off := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleBackgroundLeft): {Decision: builtin.Off}}}
 
 	t.Run("a subagent with a live task is refused, the task named", func(t *testing.T) {
-		v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(4*time.Hour))
+		v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), "", started.Add(4*time.Hour))
 		require.True(t, ok)
 		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft)}, judgedAs(v))
 		assert.Contains(t, v.Reason, "bc0m5o2bg  started 11:37:41Z, 4h0m0s ago: cd ~/.claude/projects; grep -rhoE")
 	})
 	t.Run("set to advise, a subagent is advised", func(t *testing.T) {
-		v, ok := judgeStop(advise, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
+		v, ok := judgeStop(advise, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), "", started.Add(time.Hour))
 		require.True(t, ok)
 		assert.Equal(t, decisionAdvise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("set off, nothing is said", func(t *testing.T) {
-		_, ok := judgeStop(off, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), started.Add(time.Hour))
+		_, ok := judgeStop(off, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, live...)), "", started.Add(time.Hour))
 		assert.False(t, ok)
 	})
 	t.Run("a subagent whose tasks ended stops", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)), started.Add(time.Hour))
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone)), "", started.Add(time.Hour))
 		assert.False(t, ok)
 	})
 	t.Run("a root is advised of an old task, never refused", func(t *testing.T) {
-		v, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge))
+		v, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), "", started.Add(rootBackgroundAge))
 		require.True(t, ok)
 		assert.Equal(t, decisionAdvise, v.Decision)
 		assert.Contains(t, v.Context, "bc0m5o2bg")
 	})
 	t.Run("a root's young task is one it waits on", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), started.Add(rootBackgroundAge-time.Second))
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, rootStop(t, writeTranscript(t, live...)), "", started.Add(rootBackgroundAge-time.Second))
 		assert.False(t, ok)
 	})
 	t.Run("a tool call is not a stop", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, hint.Gate{}, finishedSpawn(t, "scout", "", "", "", "a1b2c3"), started)
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, finishedSpawn(t, "scout", "", "", "", "a1b2c3"), "", started)
 		assert.False(t, ok)
 	})
 	t.Run("a stop with no readable transcript says nothing", func(t *testing.T) {
-		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", "/nonexistent/agent.jsonl"), started)
+		_, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", "/nonexistent/agent.jsonl"), "", started)
 		assert.False(t, ok)
 	})
 }
@@ -249,10 +251,10 @@ func TestJudgeStopAdvisesARootOncePerTask(t *testing.T) {
 	now := searchStarted.Add(4 * time.Hour)
 	said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
 	stop := func(lines ...string) (types.GuardJudgment, bool) {
-		return judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, lines...)), now)
+		return judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, lines...)), "", now)
 	}
 
-	_, ok := judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, bgSearchCall, bgSearchResult)), searchStarted.Add(rootBackgroundAge-time.Second))
+	_, ok := judgeStop(Dependencies{}, said, rootStop(t, writeTranscript(t, bgSearchCall, bgSearchResult)), "", searchStarted.Add(rootBackgroundAge-time.Second))
 	require.False(t, ok, "a young task is not advised")
 
 	v, ok := stop(bgSearchCall, bgSearchResult)
@@ -356,11 +358,11 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	require.NoError(t, store.Bind(worker, "w"))
 	stop := subagentStop(t, worker.Agent, "/x/agent.jsonl")
 
-	ended, err := endStoppedSession(t.Context(), store, worker, stop, types.GuardJudgment{Decision: decisionDeny})
+	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{Decision: decisionDeny})
 	require.NoError(t, err)
 	assert.False(t, ended)
 
-	ended, err = endStoppedSession(t.Context(), store, worker, stop, types.GuardJudgment{})
+	ended, err = endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{})
 	require.NoError(t, err)
 	assert.True(t, ended)
 	rows, err := store.List()
@@ -505,4 +507,132 @@ func TestJudgeSilentDenyLeavesTheOutputReadable(t *testing.T) {
 	got, err := os.ReadFile(output)
 	require.NoError(t, err)
 	assert.Equal(t, "partial result\n", string(got))
+}
+
+// stampVersion gives a transcript line the host version Claude Code writes on each line.
+func stampVersion(line, version string) string {
+	return strings.Replace(line, "{", fmt.Sprintf(`{"version":%q,`, version), 1)
+}
+
+func TestHostResumes(t *testing.T) {
+	cases := []struct {
+		from, version string
+		resumes       bool
+		why           string
+	}{
+		{"2.1.299", "2.1.299", true, "host version 2.1.299 resumes this subagent when each task completes"},
+		{"2.1.299", "2.2.0", true, "host version 2.2.0 resumes this subagent when each task completes"},
+		{"2.1.299", "2.1.299-beta.1", true, "host version 2.1.299-beta.1 resumes this subagent when each task completes"},
+		{"2.1", "2.1.0", true, "host version 2.1.0 resumes this subagent when each task completes"},
+		{"2.1.299", "2.1.298", false, "host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes"},
+		{"2.1.299", "", false, "the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes"},
+		{"2.1.299", "two", false, `the transcript's host version "two" is not a dotted version to compare with 2.1.299`},
+		{"", "9.9.9", false, "the wiring declares no host version that resumes a subagent when its background task completes"},
+		{"latest", "9.9.9", false, `the wiring's resume version "latest" is not a dotted version`},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%s at %s", tc.version, tc.from), func(t *testing.T) {
+			resumes, why := hostResumes(tc.from, tc.version)
+			assert.Equal(t, tc.resumes, resumes)
+			assert.Equal(t, tc.why, why)
+		})
+	}
+}
+
+// At or past the version the wiring declares, a subagent's stop with a live background task
+// stands with advice; below it, or with no version recorded, it is refused and says why.
+func TestJudgeStopLetsAResumedSubagentStop(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	now := started.Add(time.Hour)
+	const from = "2.1.299"
+	cases := []struct {
+		name    string
+		version string
+		from    string
+		want    func(listing string) types.GuardJudgment
+	}{
+		{"at the floor", "2.1.299", from, func(listing string) types.GuardJudgment {
+			return types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft),
+				Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: host version 2.1.299 resumes this subagent when each task completes.\nA shell command you ran in the background is still running:\n%s", listing),
+			}
+		}},
+		{"below the floor", "2.1.298", from, func(listing string) types.GuardJudgment {
+			return types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes.", listing),
+			}
+		}},
+		{"no version recorded", "", from, func(listing string) types.GuardJudgment {
+			return types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes.", listing),
+			}
+		}},
+		{"no floor declared", "2.1.299", "", func(listing string) types.GuardJudgment {
+			return types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				Reason: fmt.Sprintf("magus workspace: a shell command you ran in the background is still running; stop each before you finish:\n%s\nNot let through: the wiring declares no host version that resumes a subagent when its background task completes.", listing),
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := []string{bgSearchCall, bgSearchResult}
+			if tc.version != "" {
+				lines = []string{stampVersion(bgSearchCall, tc.version), stampVersion(bgSearchResult, tc.version)}
+			}
+			transcript := writeTranscript(t, lines...)
+			tasks, err := liveBackgroundTasks(transcript, "", now)
+			require.NoError(t, err)
+
+			v, ok := judgeStop(Dependencies{}, hint.Gate{}, subagentStop(t, "a05d44b006f8f68af", transcript), tc.from, now)
+			require.True(t, ok)
+			assert.Equal(t, tc.want(stoppableTasks(tasks, now)), v)
+		})
+	}
+}
+
+// The host version survives a read resumed from a checkpoint whose later lines name none.
+func TestReadBackgroundTranscriptKeepsTheVersionAcrossACheckpoint(t *testing.T) {
+	started := bgTime(t, "2026-10-13T11:37:41.120Z")
+	cacheDir := t.TempDir()
+	transcript := writeTranscript(t, stampVersion(bgSearchCall, "2.1.299"))
+	_, err := readBackgroundTranscript(transcript, cacheDir, started.Add(time.Minute))
+	require.NoError(t, err)
+	appendTranscript(t, transcript, bgSearchResult)
+	read, err := readBackgroundTranscript(transcript, cacheDir, started.Add(time.Hour))
+	require.NoError(t, err)
+	assert.Equal(t, "2.1.299", read.hostVersion)
+	assert.Len(t, read.tasks, 1)
+}
+
+// A subagent stop its host resumes leaves the job's row as it was; one below the declared
+// version, or with none declared, ends it no_return.
+func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
+	for _, tc := range []struct {
+		version, from string
+		ended         bool
+	}{{"2.1.299", "2.1.299", false}, {"2.1.298", "2.1.299", true}, {"2.1.299", "", true}} {
+		t.Run(fmt.Sprintf("%s at %q", tc.version, tc.from), func(t *testing.T) {
+			root := t.TempDir()
+			commitCheckout(t, root)
+			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+			_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+			require.NoError(t, err)
+			_, err = store.Exec(t.Context(), "w")
+			require.NoError(t, err)
+			worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+			require.NoError(t, store.Bind(worker, "w"))
+			transcript := writeTranscript(t, stampVersion(bgSearchCall, tc.version), stampVersion(bgSearchResult, tc.version))
+
+			ended, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), tc.from, types.GuardJudgment{Decision: decisionAdvise})
+			require.NoError(t, err)
+			assert.Equal(t, tc.ended, ended)
+			rows, err := store.List()
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, tc.ended, rows[0].State == types.StateNoReturn, rows[0].EndReason)
+		})
+	}
 }
