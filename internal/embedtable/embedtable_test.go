@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +56,7 @@ func (r *registry) serve(w http.ResponseWriter, req *http.Request) {
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
 	case p == "/v2/":
-		w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+req.Host+`/token",service="`+req.Host+`"`)
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="https://%s/token",service="%s"`, req.Host, req.Host))
 		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
 		_, _ = w.Write([]byte(`{"token":"issued"}`))
