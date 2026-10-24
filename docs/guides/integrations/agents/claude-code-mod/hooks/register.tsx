@@ -12,7 +12,7 @@ import {
   parseRuns,
   socketFromStatus,
 } from './api'
-import { budgetStatus, capacityText, holderText, isBoard, parseBudget, recentRefusal, refusalText, runsMagus, waiterText } from './budget'
+import { budgetStatus, capacityText, holderText, parseBudget, recentRefusal, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
   cacheNotice,
@@ -617,7 +617,7 @@ export const register: Register = (on, options) => {
     const notice = cacheNotice(cache, now, settings.cacheWarnMs, settings.gateMinTokens, rates)
     const ageDays = rateAgeDays(rates, now)
     const staleRates = notice !== null && ageDays !== null && ageDays > settings.ratesStaleDays
-    const board = budget?.budget != null && isBoard(budget.budget) ? budget.budget : null
+    const board = budget?.budget ?? null
     const refused = recentRefusal(board, now)
     if (issues.length === 0 && notice === null && ratesError === null && refused === null) return next(e)
 
@@ -757,7 +757,7 @@ export const register: Register = (on, options) => {
       const { value: read = null } = await $.state.get(BUDGET)
       const { value: budgetError = null } = await $.state.get(BUDGET_ERROR)
       const b = read?.budget ?? null
-      const board = b !== null && isBoard(b) ? b : null
+
       return (
         <Box flexDirection="column">
           {header}
@@ -770,7 +770,7 @@ export const register: Register = (on, options) => {
             </Text>
           ) : null}
           {b !== null && b.holders.length === 0 ? <Text dimColor>No holders.</Text> : null}
-          {(board?.holders ?? []).map(holder => (
+          {(b?.holders ?? []).map(holder => (
             <Box key={`holder-${holder.pid}-${holder.target}-${holder.since}`} flexDirection="column">
               <Text color="cyan" wrap="truncate-end">
                 ● {holderText(holder, now)}
@@ -781,14 +781,14 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ))}
-          {board?.waiting.length ? <Text bold>Waiting for a seat</Text> : null}
-          {(board?.waiting ?? []).map(w => (
+          {b?.waiting.length ? <Text bold>Waiting for a seat</Text> : null}
+          {(b?.waiting ?? []).map(w => (
             <Text key={`waiting-${w.pid}-${w.target}-${w.reservation}`} color="yellow" wrap="truncate-end">
               … {waiterText(w, now)}
             </Text>
           ))}
-          {board?.refused.length ? <Text bold>Refused on this machine</Text> : null}
-          {(board?.refused ?? []).map(r => (
+          {b?.refused.length ? <Text bold>Refused on this machine</Text> : null}
+          {(b?.refused ?? []).map(r => (
             <Text key={`refused-${r.at}-${r.pid}-${r.target}`} color="red" wrap="truncate-end">
               ✖ {refusalText(r, null, now)}
               {r.holders.length ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}` : ''}

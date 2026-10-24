@@ -396,62 +396,55 @@ test('a response on an unpriced model makes the spend a floor', async ($, on) =>
   expect(seen.statuses.at(-1)).toBe('cache 5m · $0.00+')
 })
 
-const BUDGET_STATUS = JSON.stringify({
-  broker: {
-    pid: 51051,
-    capacity: {
-      budget_mb: 24064,
-      held_mb: 8940,
-      budget_slots: 10,
-      held_slots: 8,
-      holders: [
-        { project: '.', target: 'go-test', pid: 21068, memory_mb: 4470, slots: 4, dir: '/r/magus-integrate', command: './magus run go-test .', since: new Date(T0 - 3 * MIN).toISOString() },
-        { project: '.', target: 'go-test', pid: 23224, memory_mb: 4470, slots: 4, dir: '/r/magus-stop', command: './magus run go-test .', since: new Date(T0 - MIN).toISOString() },
-      ],
-    },
-  },
+const HOLDERS = [
+  { project: '.', target: 'go-test', pid: 21068, memory_mb: 4470, slots: 4, dir: '/r/magus-integrate', command: './magus run go-test .', since: new Date(T0 - 3 * MIN).toISOString(), owner: 'fix-cache' },
+  { project: '.', target: 'go-test', pid: 23224, memory_mb: 4470, slots: 4, dir: '/r/magus-stop', command: './magus run go-test .', since: new Date(T0 - MIN).toISOString(), owner: 'unleased' },
+]
+const budgetStatusOf = (capacity: Record<string, unknown>) =>
+  JSON.stringify({ broker: { pid: 51051, capacity: { budget_mb: 24064, held_mb: 8940, budget_slots: 10, held_slots: 8, holders: HOLDERS, ...capacity } } })
+const BUDGET_STATUS = budgetStatusOf({
+  waiting: [{ pid: 30001, project: '.', target: 'lint', slots: 2, dir: '/r/magus-a', owner: 'job-b', since: new Date(T0).toISOString() }],
+  refused: [
+    { at: new Date(T0).toISOString(), pid: 30100, project: '.', target: 'ci', slots: 4, dir: '/r/magus-b', owner: 'spawned by root', fits: true, holders: [HOLDERS[0]] },
+  ],
 })
-const REFUSED = "[MGS3009] not starting (root) ci: this machine's build budget is full; held by pid 21068 (root) go-test"
-const answerStatus = (argv: readonly string[]) =>
-  argv.join(' ') === `${ROOT}/magus -s status -o json` ? { exitCode: 0, stdout: BUDGET_STATUS } : undefined
+const answerStatusWith = (stdout: string) => (argv: readonly string[]) =>
+  argv.join(' ') === `${ROOT}/magus -s status -o json` ? { exitCode: 0, stdout } : undefined
 
-test('the build budget joins the status line, and a refused magus run raises the band and fills the pane', async ($, on) => {
+test('the build budget joins the status line, and a refusal the broker answered raises the band and fills the pane', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  const seen = engine(on, { workspace: true, serverUp: true, run: answerStatus })
-  on('tool.call', () => ({ result: { stdout: REFUSED, stderr: '' }, text: `building\n${REFUSED}` }) as never)
+  const seen = engine(on, { workspace: true, serverUp: true, run: answerStatusWith(BUDGET_STATUS) })
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await clock.advance(1)
   await clock.settle()
   expect(seen.statuses.at(-1)).toBe('budget 8/10 slots, 8.7/23.5 GiB')
 
   const band = await $.ui.mount(BAND)
-  expect(await band.find({ type: 'Text', text: 'engine' })).toBeDefined()
-
-  await $.tool.call({ tool: 'Bash', command: './magus run ci .' } as never)
-  await clock.advance(1)
-  await clock.settle()
-  expect(await band.find({ type: 'Text', text: /MGS3009 refused `\.\/magus run ci \.` 0s ago: budget 8\/10 slots, 8\.7\/23\.5 GiB/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /held by pid 21068 · go-test · 4 slots · 4\.4 GiB · held 3m · in magus-integrate/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /MGS3009 refused ci for spawned by root, pid 30100, in magus-b 0s ago: budget 8\/10 slots, 8\.7\/23\.5 GiB/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /held by pid 21068 · go-test · fix-cache · 4 slots · 4\.4 GiB · held 3m · in magus-integrate/ })).toBeDefined()
 
   const pane = await $.ui.mount(PANE)
   await pane.press({ key: 'tab-budget' })
   await clock.advance(1)
   await clock.settle()
   expect(await pane.find({ type: 'Text', text: /^8\/10 slots, 8\.7\/23\.5 GiB held/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /pid 23224 · go-test · 4 slots · 4\.4 GiB · held 1m · in magus-stop/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: 'Refused in this session' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /pid 23224 · go-test · unleased · 4 slots · 4\.4 GiB · held 1m · in magus-stop/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'Waiting for a seat' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /pid 30001 · lint · job-b · 2 slots · waiting 0s · in magus-a/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'Refused on this machine' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /held by fix-cache pid 21068/ })).toBeDefined()
 
   await clock.advance(6 * MIN)
   await clock.settle()
   expect(await band.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
 
-test('a magus run without MGS3009 in its output raises no band', async ($, on) => {
+test('MGS3009 in a magus run output raises no band: the broker JSON is the source', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  engine(on, { workspace: true, serverUp: true, run: answerStatus })
-  on('tool.call', () => ({ result: { stdout: 'ok', stderr: '' }, text: 'ok\nsee MGS3009 for the budget' }) as never)
+  engine(on, { workspace: true, serverUp: true, run: answerStatusWith(budgetStatusOf({})) })
+  on('tool.call', () => ({ result: { stdout: 'ok', stderr: '' }, text: '[MGS3009] not starting (root) ci' }) as never)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: './magus run lint .' } as never)
   await clock.advance(1)

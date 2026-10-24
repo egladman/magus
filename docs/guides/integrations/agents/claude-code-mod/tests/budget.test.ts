@@ -3,7 +3,6 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   budgetStatus,
   holderText,
-  isBoard,
   parseBudget,
   recentRefusal,
   REFUSAL_SHOW_MS,
@@ -125,12 +124,6 @@ describe('parseBudget', () => {
       ok: false,
       error: 'magus status -o json has a broker without broker.capacity',
     })
-  })
-
-  test('a budget read back from state is told from one without waiters and refusals', async () => {
-    const p = parseBudget(STATUS)
-    expect(p.ok && p.budget !== null && isBoard(p.budget)).toBe(true)
-    expect(isBoard({ budgetSlots: 1, heldSlots: 0, budgetMb: 0, heldMb: 0, holders: [] })).toBe(false)
   })
 })
 

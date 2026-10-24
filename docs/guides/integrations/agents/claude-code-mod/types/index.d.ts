@@ -114,6 +114,45 @@ export type BudgetHolder = {
   memoryMb: number
   // Unix milliseconds the claim was granted; 0 when the broker did not say.
   since: number
+  // Who answers for it: a job lease, `spawned by <job>`, or unleased; '' when the broker
+  // could not name the holder's pid.
+  owner: string
+}
+
+// A caller blocked on a seat now: an entry of broker.capacity.waiting.
+export type BudgetWaiter = {
+  pid: number
+  project: string
+  target: string
+  dir: string
+  command: string
+  slots: number
+  memoryMb: number
+  owner: string
+  // A `magus status --wait` asking for a seat on pid's behalf.
+  reservation: boolean
+  // The job tree whose validation seat it waits for; '' when it waits on the budget.
+  tree: string
+  // Unix milliseconds of the first ask the broker turned away.
+  since: number
+}
+
+// An MGS3009 refusal the broker answered, for any session on this machine: an entry of
+// broker.capacity.refused, with the holders that kept the claim out at that moment.
+export type BudgetRefusal = {
+  // Unix milliseconds.
+  at: number
+  pid: number
+  project: string
+  target: string
+  dir: string
+  command: string
+  slots: number
+  memoryMb: number
+  owner: string
+  // false when no state of the machine admits the claim, which no wait mends.
+  fits: boolean
+  holders: BudgetHolder[]
 }
 
 // The build budget the broker arbitrates for every magus on this machine.
@@ -123,14 +162,15 @@ export type Budget = {
   budgetMb: number
   heldMb: number
   holders: BudgetHolder[]
+  // Longest waiting first.
+  waiting: BudgetWaiter[]
+  // Newest first.
+  refused: BudgetRefusal[]
 }
 
 // One status read. budget is null when no broker runs, which is a budget nothing holds:
 // the broker exits once it is idle. readAt is unix milliseconds.
 export type BudgetRead = { budget: Budget | null; readAt: number }
-
-// A magus run in this session that MGS3009 refused. at is unix milliseconds.
-export type Refusal = { at: number; command: string; line: string }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -155,8 +195,6 @@ declare module 'claude-code' {
       tick: number
       budget: BudgetRead | null
       budgetError: string | null
-      // Newest first.
-      refusals: Refusal[]
     }
   }
 }
