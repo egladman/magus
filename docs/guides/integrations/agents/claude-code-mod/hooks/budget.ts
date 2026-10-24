@@ -1,20 +1,113 @@
-import type { Budget, BudgetHolder, BudgetRead, Refusal } from '../types'
+import type { Budget, BudgetHolder, BudgetRead } from '../types'
 import { age } from './tree'
 
-export type { Budget, BudgetHolder, BudgetRead, Refusal }
+export type { Budget, BudgetHolder, BudgetRead }
 
-export type Parsed = { ok: true; budget: Budget | null } | { ok: false; error: string }
+// A holder with who answers for it: a job lease, `spawned by <job>`, or unleased. Empty
+// when the broker could not name the holder's pid.
+export type OwnedHolder = BudgetHolder & { owner: string }
+
+// A caller blocked on a seat now: an entry of broker.capacity.waiting.
+export type Waiter = {
+  pid: number
+  project: string
+  target: string
+  dir: string
+  command: string
+  slots: number
+  memoryMb: number
+  owner: string
+  // A `magus status --wait` asking for a seat on pid's behalf.
+  reservation: boolean
+  // The job tree whose validation seat it waits for; '' when it waits on the budget.
+  tree: string
+  // Unix milliseconds of the first ask the broker turned away.
+  since: number
+}
+
+// An MGS3009 refusal the broker answered, for any session on this machine: an entry of
+// broker.capacity.refused, with the holders that kept the claim out at that moment.
+export type BrokerRefusal = {
+  at: number
+  pid: number
+  project: string
+  target: string
+  dir: string
+  command: string
+  slots: number
+  memoryMb: number
+  owner: string
+  // false when no state of the machine admits the claim, which no wait mends.
+  fits: boolean
+  holders: OwnedHolder[]
+}
+
+// The budget as this mod reads it. It is stored under the contract's Budget, so a read
+// back from state is narrowed with isBoard.
+export type Board = Budget & { holders: OwnedHolder[]; waiting: Waiter[]; refused: BrokerRefusal[] }
+
+export type Parsed = { ok: true; budget: Board | null } | { ok: false; error: string }
 
 // How long the band names a refusal after it happened.
 export const REFUSAL_SHOW_MS = 5 * 60_000
 
-const REFUSED = '[MGS3009]'
-
 // jsonv2 leaves zero values out, so an absent count is 0.
 const int = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const bool = (v: unknown): boolean => v === true
 const time = (v: unknown): number => (typeof v === 'string' ? Date.parse(v) || 0 : 0)
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const records = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isRecord) : [])
+
+export function isBoard(b: Budget): b is Board {
+  return 'waiting' in b && 'refused' in b
+}
+
+function holderOf(h: Record<string, unknown>): OwnedHolder {
+  return {
+    pid: int(h.pid),
+    project: str(h.project),
+    target: str(h.target),
+    dir: str(h.dir),
+    command: str(h.command),
+    slots: int(h.slots),
+    memoryMb: int(h.memory_mb),
+    since: time(h.since),
+    owner: str(h.owner),
+  }
+}
+
+function waiterOf(w: Record<string, unknown>): Waiter {
+  return {
+    pid: int(w.pid),
+    project: str(w.project),
+    target: str(w.target),
+    dir: str(w.dir),
+    command: str(w.command),
+    slots: int(w.slots),
+    memoryMb: int(w.memory_mb),
+    owner: str(w.owner),
+    reservation: bool(w.reservation),
+    tree: str(w.tree),
+    since: time(w.since),
+  }
+}
+
+function refusalOf(r: Record<string, unknown>): BrokerRefusal {
+  return {
+    at: time(r.at),
+    pid: int(r.pid),
+    project: str(r.project),
+    target: str(r.target),
+    dir: str(r.dir),
+    command: str(r.command),
+    slots: int(r.slots),
+    memoryMb: int(r.memory_mb),
+    owner: str(r.owner),
+    fits: bool(r.fits),
+    holders: records(r.holders).map(holderOf),
+  }
+}
 
 // The broker's build budget from `magus status -o json`. budget is null when the report
 // has no broker, which is a budget nothing holds.
@@ -31,16 +124,6 @@ export function parseBudget(stdout: string): Parsed {
     return { ok: false, error: 'magus status -o json has a broker without broker.capacity' }
   }
   const c = doc.broker.capacity
-  const holders: BudgetHolder[] = (Array.isArray(c.holders) ? c.holders : []).filter(isRecord).map(h => ({
-    pid: int(h.pid),
-    project: str(h.project),
-    target: str(h.target),
-    dir: str(h.dir),
-    command: str(h.command),
-    slots: int(h.slots),
-    memoryMb: int(h.memory_mb),
-    since: time(h.since),
-  }))
   return {
     ok: true,
     budget: {
@@ -48,7 +131,9 @@ export function parseBudget(stdout: string): Parsed {
       heldSlots: int(c.held_slots),
       budgetMb: int(c.budget_mb),
       heldMb: int(c.held_mb),
-      holders,
+      holders: records(c.holders).map(holderOf),
+      waiting: records(c.waiting).map(waiterOf),
+      refused: records(c.refused).map(refusalOf),
     },
   }
 }
@@ -72,15 +157,33 @@ export function checkout(dir: string): string {
   return dir.replace(/\/+$/, '').split('/').at(-1) ?? dir
 }
 
-export function holderText(h: BudgetHolder, now: number): string {
-  const what = h.project && h.project !== '.' ? `${h.project} ${h.target}` : h.target
+const what = (project: string, target: string): string => (project && project !== '.' ? `${project} ${target}` : target)
+const slotsText = (n: number): string => `${n} slot${n === 1 ? '' : 's'}`
+
+export function holderText(h: OwnedHolder, now: number): string {
   return [
     `pid ${h.pid}`,
-    what,
-    `${h.slots} slot${h.slots === 1 ? '' : 's'}`,
+    what(h.project, h.target),
+    h.owner,
+    slotsText(h.slots),
     `${gib(h.memoryMb)} GiB`,
     h.since ? `held ${age((now - h.since) / 1000)}` : '',
     h.dir ? `in ${checkout(h.dir)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+export function waiterText(w: Waiter, now: number): string {
+  const why = w.reservation ? 'reserving' : w.tree ? `for ${w.tree}'s seat` : ''
+  return [
+    `pid ${w.pid}`,
+    what(w.project, w.target),
+    w.owner,
+    slotsText(Math.max(w.slots, 1)),
+    why,
+    w.since ? `waiting ${age((now - w.since) / 1000)}` : '',
+    w.dir ? `in ${checkout(w.dir)}` : '',
   ]
     .filter(Boolean)
     .join(' · ')
@@ -92,22 +195,16 @@ export function runsMagus(command: string): boolean {
   return /(^|[\s;&|(])(\S*\/)?magus(\s|$)/.test(command)
 }
 
-// The refusal a magus run's output carries, by its diagnostic code; null when it has none.
-export function refusalIn(command: string, output: string, at: number): Refusal | null {
-  const line = output.split('\n').find(l => l.includes(REFUSED))
-  if (line === undefined) return null
-  return { at, command: command.trim().slice(0, 120), line: line.trim().slice(0, 300) }
-}
-
 // The newest refusal still inside the band's window, or null.
-export function recentRefusal(refusals: Refusal[], now: number): Refusal | null {
-  const r = refusals[0]
+export function recentRefusal(b: Board | null, now: number): BrokerRefusal | null {
+  const r = b?.refused[0]
   return r !== undefined && now - r.at <= REFUSAL_SHOW_MS ? r : null
 }
 
 // The band's line for a refusal, with the budget as last read.
-export function refusalText(r: Refusal, read: BudgetRead | null, now: number): string {
-  const when = `${age((now - r.at) / 1000)} ago`
-  const budget = read?.budget ? `: budget ${capacityText(read.budget)}` : ''
-  return `MGS3009 refused \`${r.command}\` ${when}${budget}`
+export function refusalText(r: BrokerRefusal, budget: Budget | null, now: number): string {
+  const who = [r.owner, `pid ${r.pid}`, r.dir ? `in ${checkout(r.dir)}` : ''].filter(Boolean).join(', ')
+  const never = r.fits ? '' : ' (never fits)'
+  const tail = budget ? `: budget ${capacityText(budget)}` : ''
+  return `MGS3009 refused ${what(r.project, r.target)}${never} for ${who} ${age((now - r.at) / 1000)} ago${tail}`
 }
