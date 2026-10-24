@@ -157,7 +157,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		if run.refusals.MarkFired(denyMarker(string(key))) {
 			continue
 		}
-		bound :=(need + time.Minute - time.Nanosecond).Truncate(time.Minute)
+		bound := (need + time.Minute - time.Nanosecond).Truncate(time.Minute)
 		timeout := min(bound, call.foregroundMax)
 		if last > call.foregroundMax || timeout <= limit {
 			return advice{

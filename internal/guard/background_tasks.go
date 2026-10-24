@@ -290,7 +290,9 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 			Why: why,
 		}, advice{}
 	}
-	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return said.MarkFired(backgroundTaskKey(hint.MarkerKind(denyRuleBackgroundSilent), t)) })
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool {
+		return said.MarkFired(backgroundTaskKey(hint.MarkerKind(denyRuleBackgroundSilent), t))
+	})
 	if len(tasks) == 0 {
 		return denial{}, advice{}
 	}

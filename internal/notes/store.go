@@ -120,7 +120,7 @@ type Note struct {
 	// magus wrote the note (see FindLines). Stored rather than re-derived on read so a reader with
 	// no graph loaded still has them; staleness is the anchors' to report, never this field's.
 	Find []string `json:"find,omitempty" yaml:"-"`
-	Body   string  `json:"body,omitempty" yaml:"-"`
+	Body string   `json:"body,omitempty" yaml:"-"`
 	// Modified is the file's modification time, filled in on read. It is observed, not
 	// stored, so it cannot disagree with the file it describes.
 	Modified time.Time `json:"modified" yaml:"-"`

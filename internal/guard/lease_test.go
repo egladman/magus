@@ -704,6 +704,10 @@ func composingWorkspace(t *testing.T) Dependencies {
 	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
 	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
 	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{
+		{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}},
+		{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}},
+	}).Maybe()
 	return Dependencies{
 		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
 		Spells:  spellCatalog,

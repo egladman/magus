@@ -980,6 +980,7 @@ var appendAllowed = map[string]string{
 	"internal/guard/drift.go:scopeDrift.record":             "plain lines of project paths, not JSON Lines",
 	"internal/interp/pry_history.go:history.appendLocked":   "plain lines of REPL input, not JSON Lines",
 	"std/fs.go:FsAppendFile":                                "Buzz's fs.append_file, a user API that appends what the script hands it",
+	"vcs/hg.go:enableHgShareExtension":                      "an hgrc section Mercurial reads, not JSON Lines",
 }
 
 // TestStoresAreJSONLines holds every append to a file to internal/file.

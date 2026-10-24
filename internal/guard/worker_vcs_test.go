@@ -6,8 +6,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestMergesBase(t *testing.T) {
