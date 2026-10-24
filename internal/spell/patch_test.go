@@ -279,7 +279,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// three former ops forked interpreters that know only the Buzz stdlib, so none
 		// could load a magusfile or a spell, which is every Buzz file here.
 		Ops: map[string]spells.Op{
-			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: goldenScipBuzz},
+			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: goldenScipBuzzOp},
 		},
 		Tools: map[string]spells.Tool{
 			"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}},
@@ -403,7 +403,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}, Capture: true},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"},
@@ -491,7 +491,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
@@ -538,7 +538,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
+			"scip":       {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
@@ -611,7 +611,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
 				Command: goldenDevServerCommand,
 			}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
 			Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
@@ -695,7 +695,8 @@ var (
 		},
 	}}
 	// goldenScipBuzz roots the index's paths at magus's own workspace root.
-	goldenScipBuzz = spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"}}
+	goldenScipBuzz   = spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"}}
+	goldenScipBuzzOp = spells.Command{Bin: "scip-buzz", Args: goldenScipBuzz.Args, Capture: true, Quiet: true}
 	// goldenPnpmInstallManifests / goldenNpmCiManifests are the op-scoped manifests
 	// synthesizeInstall builds: pnpm-install and npm-ci each see only their own lock
 	// candidates, not the other's or the lockless yarn/bun ones.
