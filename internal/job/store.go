@@ -76,7 +76,13 @@ var ErrMaxAttempts = errors.New("job: max_attempts reached")
 // a writer in another process would buy nothing and would let a wedged writer stall the
 // console.
 type Store struct {
-	mu   sync.Mutex
+	mu sync.Mutex
+	storeConfig
+}
+
+// storeConfig is everything a Store carries but its mutex, so a view ([Store.As],
+// [Store.InWorkspace], [Store.dry]) copies it whole and sets only what differs.
+type storeConfig struct {
 	path string
 	// err is the failure to work out where this ledger lives, kept so NewStore can stay
 	// a constructor while every operation still reports it. A Store that cannot name its
@@ -210,16 +216,20 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), writer: loc.Writer,
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), writer: loc.Writer,
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
 
+// view is a Store over s's file with every seam s has and a mutex of its own; the file
+// lock still serializes it against s and every other writer.
+func (s *Store) view() *Store {
+	return &Store{storeConfig: s.storeConfig}
+}
+
 // writerBuild is the build s's writes stamp: Location.Writer, or the running build's commit
-// when that is zero. Resolved per write rather than at NewStore because [Store.As] and
-// [Store.InWorkspace] build their views field by field, and a view that dropped a resolved
-// stamp wrote as unstamped, refused with MGS3051 under the very build that last wrote.
+// when that is zero.
 func (s *Store) writerBuild() types.MagusBuild {
 	if s.writer != (types.MagusBuild{}) {
 		return s.writer

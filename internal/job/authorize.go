@@ -83,11 +83,9 @@ func (a Actor) Bound() bool { return a.Lease != "" || a.Unstamped }
 // than this process: the shared server's job tool acts as whoever called it. The view
 // takes its own mutex; the file lock still serializes it against s and every other writer.
 func (s *Store) As(a Actor) *Store {
-	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: &a, cacheDir: s.cacheDir, stateBase: s.stateBase,
-		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, outputs: s.outputs, landed: s.landed,
-		build: s.build,
-	}
+	v := s.view()
+	v.actor = &a
+	return v
 }
 
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether

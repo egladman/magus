@@ -251,13 +251,9 @@ func validateFork(ctx context.Context, store *Store, rows []types.Job, id string
 // check's project and target, the outputs a write path regenerates and the ci targets over
 // it, and its ignore filter. The view takes its own mutex, as [Store.As] does.
 func (s *Store) InWorkspace(ws Workspace) *Store {
-	return &Store{
-		path: s.path, err: s.err, root: s.root, actor: s.actor, cacheDir: s.cacheDir, stateBase: s.stateBase,
-		clock: s.clock, staleAfter: s.staleAfter, notices: s.notices, retain: s.retain, outputs: s.outputs,
-		trailBase: s.trailBase, landed: s.landed, grader: s.grader, dryRun: s.dryRun, build: s.build,
-		modelTiers: s.modelTiers, modelRows: s.modelRows, modelTierMatrix: s.modelTierMatrix, owners: s.owners, priceContext: s.priceContext,
-		workspace: &ws,
-	}
+	v := s.view()
+	v.workspace = &ws
+	return v
 }
 
 // loadedWorkspace is the workspace store validates against, or why it has none.
