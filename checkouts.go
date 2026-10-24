@@ -28,7 +28,7 @@ func (m *Magus) readRef(ctx context.Context, ref string, read func(cacheDir stri
 	}
 	from, err := m.searchOtherCheckouts(ctx, ref, read)
 	if err == nil {
-		slog.InfoContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, from),
+		slog.WarnContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, from),
 			attr.Notice(""), attr.Component("magus"))
 	}
 	return err
