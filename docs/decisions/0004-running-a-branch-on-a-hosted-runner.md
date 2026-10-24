@@ -145,7 +145,7 @@ magus buzz hack/gha-run.buzz -- forget --run <id>
   the `magus-logs` artifact, and output refs to cite with `describe target --cache
   --against`.
 - Runs share the Free plan's 20 concurrent jobs with the merge queue.
-- The refusals ledger (`docs/doctrine.md`, "A record of refusals") gains three rows:
+- The refusals ledger ([A record of refusals](../design/refusals.md)) gains three rows:
   `--platform github`, since a runner can neither mount a checkout nor return a store; a
   default dispatch on push, since a run is a public record you opt into per commit; and a
   private mirror, for the minutes, the duplicated secrets and the second remote.

@@ -26,7 +26,7 @@ declare one with `magus job fork`, take it in the checkout where you edit with
 `magus job wait` check the result against the agreement. `magus ls jobs` is the
 board. Every step is a command you type; magus records and answers, and moves
 nothing on its own. That keeps a
-[human in the loop](../doctrine.md#human-in-the-loop) when the workers are
+[human in the loop](../design/principles/human-in-the-loop.md) when the workers are
 agents: the job is the agreement a person can read before anyone starts and
 check before anyone calls it done.
 

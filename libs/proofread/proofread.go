@@ -96,6 +96,9 @@ const (
 	// KindReference is a hand-written Markdown page a reader looks things up
 	// in.
 	KindReference Kind = "reference"
+	// KindPrinciple is a design-principle page, one rule argued in its
+	// author's voice; it meets the reference rules except tense.
+	KindPrinciple Kind = "principle"
 	// KindChangeDescription is a pull request or merge request: its title on
 	// the first line, its description after it.
 	KindChangeDescription Kind = "change-description"
@@ -178,9 +181,15 @@ var kindAliases = map[string]Kind{
 	"message":                     KindDiagnostic,
 }
 
+// withoutPrinciple drops KindPrinciple from a rule's kinds, for a rule the
+// written kinds share and a principle page's argument is exempt from.
+func withoutPrinciple(kinds []Kind) []Kind {
+	return slices.DeleteFunc(kinds, func(k Kind) bool { return k == KindPrinciple })
+}
+
 // kinds is every kind proofread judges; ParseKind answers from it.
 var kinds = []Kind{
-	KindDocComment, KindReference, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
+	KindDocComment, KindReference, KindPrinciple, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
 	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage,
 	KindCLIHelp, KindIssue, KindReleaseNotes, KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
 }
@@ -216,8 +225,8 @@ const (
 
 var (
 	docOnly = []Kind{KindDocComment}
-	written = []Kind{KindReference, KindGuide, KindChangeDescription, KindAgentBrief}
-	all     = []Kind{KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentBrief}
+	written = []Kind{KindReference, KindPrinciple, KindGuide, KindChangeDescription, KindAgentBrief}
+	all     = []Kind{KindDocComment, KindReference, KindPrinciple, KindGuide, KindChangeDescription, KindAgentBrief}
 	brief   = []Kind{KindAgentBrief}
 	compact = []Kind{KindAgentCompact}
 	guide   = []Kind{KindGuide}
@@ -306,7 +315,7 @@ var (
 		rule: RuleFiller, on: slices.Concat(everywhere, stylesheet), graded: true, judge: filler,
 	}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
-	tenseCheck       = check{rule: RuleTense, on: slices.Concat(proseKinds, compact, stylesheet), house: true, judge: tense}
+	tenseCheck       = check{rule: RuleTense, on: withoutPrinciple(slices.Concat(proseKinds, compact, stylesheet)), house: true, judge: tense}
 )
 
 // comment is a doc comment and a stylesheet's comments, which the comment

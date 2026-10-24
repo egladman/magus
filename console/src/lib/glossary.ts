@@ -3,7 +3,7 @@
 // The dashboard shows a lot of magus vocabulary (pool, slot, latency, remote
 // cache, buzz, sandbox, ...). Each such term links to its definition so an operator
 // can learn the model without leaving the app. The link is SAME-ORIGIN and
-// relative (../glossary/#<slug>, from a depth-1 console app).
+// relative (../glossary/<slug>/, from a depth-1 console app).
 //
 // It NAVIGATES. Nothing intercepts it: this file, card.ts and dashboard.css each used to
 // claim ref-drawer.ts opened the term inline in the reference panel, but ref-drawer.ts has
@@ -14,11 +14,11 @@
 // still unbuilt - if you build it, intercept `.console-render-glosslink` and fix this comment
 // in the same change rather than describing the intent again.
 //
-// The slug is the lowercased-hyphenated term, matching the id the site generates
-// for a "### Term" heading in docs/glossary.md. Link a term ONCE per tile heading
-// (not on every occurrence) - see each tile's Card term option.
+// The slug is the lowercased-hyphenated term, the file name of its term page,
+// docs/glossary/<slug>.md. Link a term ONCE per tile heading (not on every
+// occurrence) - see each tile's Card term option.
 
-const GLOSSARY_BASE = "../glossary/#";
+const GLOSSARY_BASE = "../glossary/";
 
 // slugify mirrors the site's heading-id rule: lowercase, non-alphanumerics to
 // single hyphens, trimmed. "Output reference" -> "output-reference".
@@ -30,7 +30,7 @@ export function slugify(term: string): string {
 }
 
 export function glossaryUrl(term: string, slug?: string): string {
-  return GLOSSARY_BASE + (slug ?? slugify(term));
+  return GLOSSARY_BASE + (slug ?? slugify(term)) + "/";
 }
 
 // glossaryLink returns an <a> for the term's glossary entry. It navigates to the glossary

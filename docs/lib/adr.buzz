@@ -103,7 +103,7 @@ fun isSeparatorRow(t: str) > bool {
     return true;
 }
 
-fun fenceRun(t: str) > str {
+export fun fenceRun(t: str) > str {
     if (t.startsWith("```") == false and t.startsWith("~~~") == false) { return ""; }
     final ch = t.byte(0);
     var n = 0;

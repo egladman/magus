@@ -58,11 +58,11 @@ The agent host gates folder open: Claude Code, Codex and Cursor each decide whet
 project's hooks run, and magus does not second-guess them. The sandbox page lists what
 each host asks.
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A stale
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. A stale
   registration is named by `doctor` instead of being repaired quietly by a read verb.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. The trust
+- [A record of refusals](../design/refusals.md): relied on. The trust
   store and the `magus trust` subcommand are added as refusals with their evidence.
 
 ## Alternatives

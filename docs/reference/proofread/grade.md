@@ -30,6 +30,7 @@ The code is `PRF1100`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `doc-comment`        | deny    |
 | `reference`          | deny    |
+| `principle`          | deny    |
 | `change-description` | deny    |
 | `agent-brief`        | deny    |
 | `agent-compact`      | deny    |

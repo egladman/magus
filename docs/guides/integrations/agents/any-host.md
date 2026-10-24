@@ -11,7 +11,7 @@ rules and the verdict, not integration code per host, so the host-specific part
 is a template or a few lines of config you control, and adding a host is your
 edit rather than a new magus release.
 
-That is a [standing decision](../../../doctrine.md#the-host-wiring-is-yours)
+That is a [standing decision](../../../design/judgment/the-host-wiring-is-yours.md)
 rather than a gap waiting to be filled. A codec per host would cost magus upkeep
 as the products change, and it would cost you more than it costs magus: wiring you
 did not write is wiring you cannot repair on the afternoon your host changes

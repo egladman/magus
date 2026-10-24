@@ -1,16 +1,15 @@
 // lib/glossary.buzz - render-time glossary auto-linker + slug. Links the first
-// linkable occurrence of each glossary term on a page to its glossary anchor, so the
-// domain vocabulary self-cross-links without hand-maintained links. Pure string
-// transforms, golden-gated like the content transforms in lib/html.buzz. The linked
-// anchor carries data-glossary=<anchor> so the client popover (glossary-popover.ts) can
-// show the term's definition and where else it is referenced.
+// linkable occurrence of each glossary term on a page to its term page, so the domain
+// vocabulary self-cross-links without hand-maintained links. Pure string transforms,
+// golden-gated like the content transforms in lib/html.buzz. The link carries the term's
+// definition in data-def so the client popover can show it in place.
 namespace glossary;
 
 import "assert";
 import "lib/text" as _;
 
-// GlossaryTerm is one glossary entry: the display term, its goldmark anchor slug, and
-// the one-line definition (used by the popover index). Terms are matched longest-first
+// GlossaryTerm is one glossary entry: the display term, its slug (the term page's file
+// name), and the one-line definition the popover shows. Terms are matched longest-first
 // so a multi-word term wins over a substring term (e.g. "pool mode" over "pool").
 export object GlossaryTerm {
     term: str = "",
@@ -18,8 +17,7 @@ export object GlossaryTerm {
     def: str = "",
 }
 
-// GlossaryLinkResult carries the linked HTML plus the anchors that were linked on this
-// page, so the caller can record "term X is referenced on page Y" for the popover index.
+// GlossaryLinkResult carries the linked HTML plus the slugs that were linked on this page.
 export object GlossaryLinkResult {
     html: str = "",
     linked: [str] = mut [<str>],
@@ -264,8 +262,8 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
 }
 
 // linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be
-// ordered longest-first so multi-word terms win over their substrings) to
-// relToGlossary + "#" + anchor, and records which anchors were linked. A page carrying
+// ordered longest-first so multi-word terms win over their substrings) to its term page,
+// relToGlossary + anchor + "/", and records which anchors were linked. A page carrying
 // the "<!-- magus-noglossary -->" opt-out marker is returned verbatim (marker stripped)
 // with nothing linked.
 export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: str) > GlossaryLinkResult {
@@ -275,14 +273,14 @@ export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: st
         return GlossaryLinkResult{ html = stripped, linked = mut [<str>] };
     }
     // The definition is baked into each link (data-def) so the client popover/reveal needs no
-    // fetch; the href is the static glossary entry, which carries the "referenced on" backlinks.
+    // fetch; the href is the term's own page.
     final tokens: mut [str] = mut [<str>];
     final opens: mut [str] = mut [<str>];
     final keys: mut [str] = mut [<str>];
     foreach (t in terms) {
         tokens.append(t.term.lower());
-        opens.append("<a class=\"glossary-term\" href=\"" + relToGlossary + "#" + t.anchor
-            + "\" data-def=\"" + escapeAttr(t.def) + "\">");
+        opens.append("<a class=\"glossary-term\" href=\"" + relToGlossary + t.anchor
+            + "/\" data-def=\"" + escapeAttr(t.def) + "\">");
         keys.append(t.anchor);
     }
     return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: true), tokens: tokens, opens: opens, keys: keys);   // prose: mask inline code
@@ -397,87 +395,10 @@ test "parseConfigRow skips header, separator, and bare section keys" {
     assert\equal(parseConfigRow("| `cache` | x | y | z |").ok, false, "non-dotted key skipped");
 }
 
-// injectBacklinks appends each term's "referenced on" fragment (byAnchor[anchor], a
-// caller-built HTML string) at the END of that term's section on the glossary page - just
-// before the next <h3>/<h2> heading, so it sits below the definition. The glossary is
-// rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure
-// string surgery; anchors with no fragment are left untouched.
-export fun injectBacklinks(html: str, byAnchor: {str: str}) > str {
-    final marker = "<h3 id=\"";
-    final parts: mut [str] = mut [<str>];
-    var rest = html;
-    var idx = rest.indexOf(marker);
-    while (idx != null) {
-        parts.append(rest.sub(0, len: idx! + marker.len()));
-        rest = rest.sub(idx! + marker.len());
-        final q = rest.indexOf("\"");
-        if (q == null) {
-            parts.append(rest);
-            return parts.join("");
-        }
-        final anchor = rest.sub(0, len: q!);
-        var cut = rest.len();
-        final nextH3 = rest.indexOf("<h3 id=\"");
-        if (nextH3 != null and nextH3! < cut) { cut = nextH3!; }
-        final nextH2 = rest.indexOf("<h2");
-        if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
-        final frag = byAnchor[anchor];
-        if (frag != null) {
-            parts.append(rest.sub(0, len: cut) + frag!);
-        } else {
-            parts.append(rest.sub(0, len: cut));
-        }
-        rest = rest.sub(cut);
-        idx = rest.indexOf(marker);
-    }
-    parts.append(rest);
-    return parts.join("");
-}
-
-// unwrapLinks turns each markdown "[text](url)" into just "text".
-fun unwrapLinks(s: str) > str {
-    final parts: mut [str] = mut [<str>];
-    var rest = s;
-    var open = rest.indexOf("[");
-    while (open != null) {
-        parts.append(rest.sub(0, len: open!));
-        rest = rest.sub(open! + 1);
-        final bracket = rest.indexOf("](");
-        if (bracket == null) {
-            parts.append("[");
-            break;
-        }
-        final label = rest.sub(0, len: bracket!);
-        rest = rest.sub(bracket! + 2);
-        final paren = rest.indexOf(")");
-        if (paren == null) {
-            parts.append(label);
-            break;
-        }
-        parts.append(label);
-        rest = rest.sub(paren! + 1);
-        open = rest.indexOf("[");
-    }
-    parts.append(rest);
-    return parts.join("");
-}
-
-// cleanDef reduces a glossary definition paragraph to a short plain-text blurb for the
-// popover: cut the trailing "See ..." cross-link, unwrap [text](url) to text, drop
-// backticks.
-fun cleanDef(s: str) > str {
-    var d = s;
-    final seeIdx = d.indexOf(" See [");
-    if (seeIdx != null) { d = d.sub(0, len: seeIdx!); }
-    d = unwrapLinks(d);
-    d = d.split("`").join("");
-    return d.trim();
-}
-
 // sortLongestFirst returns terms ordered by descending term length, so linkGlossaryTerms
 // matches a multi-word term before any of its substring terms. Selection sort; the term
 // set is small (a few dozen).
-fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
+export fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
     var work: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     foreach (t in terms) { work.append(t); }
     final res: mut [GlossaryTerm] = mut [<GlossaryTerm>];
@@ -498,51 +419,6 @@ fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
         work = nw;
     }
     return res;
-}
-
-// parseGlossary reads the glossary Markdown into terms: each "### Term" H3 becomes a
-// GlossaryTerm with its goldmark anchor and a one-line definition (the paragraph under
-// the heading, cross-link and markup stripped). Returned longest-first for matching.
-export fun parseGlossary(md: str) > [GlossaryTerm] {
-    final lines = md.split("\n");
-    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
-    var i = 0;
-    while (i < lines.len()) {
-        if (lines[i].startsWith("### ")) {
-            final term = lines[i].sub(4).trim();
-            var j = i + 1;
-            while (j < lines.len() and lines[j].trim() == "") { j = j + 1; }
-            final defParts: mut [str] = mut [<str>];
-            while (j < lines.len() and lines[j].trim() != "" and lines[j].startsWith("#") == false) {
-                defParts.append(lines[j].trim());
-                j = j + 1;
-            }
-            final def = defParts.join(" ");
-            terms.append(GlossaryTerm{ term = term, anchor = glossarySlug(term), def = cleanDef(def) });
-        }
-        i = i + 1;
-    }
-    return sortLongestFirst(terms);
-}
-
-test "parseGlossary reads H3 terms, anchors, and a cleaned definition" {
-    final md = "# Glossary\n\n## Core\n\n### Workspace\n\nThe root dir; the unit magus operates over. See [workspace.md](concepts/workspace.md).\n\n### Pool mode\n\nA `pool` scheduling policy.\n";
-    final terms = parseGlossary(md);
-    assert\equal(terms.len(), 2, "two terms parsed");
-    // longest-first: "Pool mode" (9) before "Workspace" (9)? equal len -> stable-ish; assert set membership instead
-    var sawWorkspace = false;
-    var sawPool = false;
-    foreach (t in terms) {
-        if (t.anchor == "workspace") {
-            sawWorkspace = true;
-            assert\equal(t.def, "The root dir; the unit magus operates over.", "See-link trimmed");
-        }
-        if (t.anchor == "pool-mode") {
-            sawPool = true;
-            assert\equal(t.def, "A pool scheduling policy.", "backticks dropped");
-        }
-    }
-    assert\equal(sawWorkspace and sawPool, true, "both terms present with anchors");
 }
 
 test "sortLongestFirst orders by descending term length" {
@@ -590,22 +466,6 @@ test "sortEntitiesLongestFirst orders by descending match length" {
     assert\equal(sorted[0].token, "magus affected ci", "longest match first");
 }
 
-test "injectBacklinks appends a fragment at the end of each term section" {
-    final byAnchor = mut {<str: str>};
-    byAnchor["cache"] = "<div>refs-cache</div>";
-    byAnchor["target"] = "<div>refs-target</div>";
-    final html = "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<h3 id=\"target\">Target</h3>\n<p>def b</p>\n";
-    assert\equal(injectBacklinks(html, byAnchor),
-        "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<div>refs-cache</div><h3 id=\"target\">Target</h3>\n<p>def b</p>\n<div>refs-target</div>",
-        message: "each fragment inserted before the next heading / at the end");
-}
-
-test "injectBacklinks leaves a term with no fragment untouched" {
-    final byAnchor = mut {<str: str>};
-    final html = "<h3 id=\"cache\">Cache</h3>\n<p>def</p>\n";
-    assert\equal(injectBacklinks(html, byAnchor), html, "no fragment, unchanged");
-}
-
 test "glossarySlug mirrors goldmark heading ids" {
     assert\equal(glossarySlug("Output reference"), "output-reference", "space to hyphen");
     assert\equal(glossarySlug("MAGUS.md"), "magusmd", "punctuation dropped");
@@ -618,7 +478,7 @@ test "linkGlossaryTerms links the first linkable occurrence and records it" {
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache", def = "Content store." });
     final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms, "../glossary/");
     assert\equal(r.html,
-        "<p>The <a class=\"glossary-term\" href=\"../glossary/#cache\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
+        "<p>The <a class=\"glossary-term\" href=\"../glossary/cache/\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
         message: "first occurrence only, definition baked in");
     assert\equal(r.linked.len(), 1, "one anchor recorded");
     assert\equal(r.linked[0], "cache", "recorded the cache anchor");
@@ -645,7 +505,7 @@ test "linkGlossaryTerms prefers the longer term" {
     terms.append(GlossaryTerm{ term = "pool mode", anchor = "pool-mode" });
     terms.append(GlossaryTerm{ term = "pool", anchor = "pool" });
     assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms, "g/").html,
-        "<p><a class=\"glossary-term\" href=\"g/#pool-mode\" data-def=\"\">pool mode</a> here</p>",
+        "<p><a class=\"glossary-term\" href=\"g/pool-mode/\" data-def=\"\">pool mode</a> here</p>",
         message: "longer term wins");
 }
 

@@ -125,7 +125,7 @@ if (os\env("SECRET_PROVIDER") == "github-actions") {
 ```
 
 The condition is the caller asking, not magus noticing it runs under Actions; see
-[Told, never guessed](../../doctrine.md#told-never-guessed).
+[Told, never guessed](../../design/judgment/told-never-guessed.md).
 
 It exists because an Actions secret is **write-only**. Nothing running inside a job can
 fetch one; interpolating it into a step's `env:` block is the only path there has ever
@@ -240,7 +240,7 @@ if (os\env("SECRET_PROVIDER") == "1password") {
 
 The condition is something the person sets, not a check for whether this is CI:
 magus and its magusfiles never guess where they run
-([Told, never guessed](../../doctrine.md#told-never-guessed)).
+([Told, never guessed](../../design/judgment/told-never-guessed.md)).
 
 ### Keeping one reference across providers
 

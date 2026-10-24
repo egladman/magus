@@ -76,7 +76,7 @@ depth and ignoring map key order.
 `assert\skip(message)` stops the current test and marks it skipped instead of failed
 (Go's `t.Skip`). Use it for a case that needs something the caller has to provide.
 Key the skip on the caller asking, never on detecting CI
-([Told, never guessed](../doctrine.md#told-never-guessed)). The runner reports skipped
+([Told, never guessed](../design/judgment/told-never-guessed.md)). The runner reports skipped
 tests apart from failures:
 
 ```buzz

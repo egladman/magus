@@ -14,7 +14,7 @@ import (
 // Until this existed there was no way to ask the question. A rule announced itself only
 // by firing, so the only route to the set was to trip each one, and a verdict naming
 // `stage-all` gave a reader a string with nowhere to take it. That is the gap
-// docs/doctrine.md calls out under "automation you can interrogate": a verdict magus
+// docs/design/judgment/automation-you-can-interrogate.md calls out: a verdict magus
 // cannot account for is a defect in the same class as a wrong answer.
 //
 // It is a registry of rows rather than a method on each rule because the rules are not

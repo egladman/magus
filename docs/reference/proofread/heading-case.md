@@ -29,6 +29,7 @@ The code is `PRF4013`. The decision depends on the kind of text judged:
 | Kind            | Default |
 | --------------- | ------- |
 | `reference`     | advise  |
+| `principle`     | advise  |
 | `guide`         | advise  |
 | `agent-brief`   | advise  |
 | `issue`         | advise  |

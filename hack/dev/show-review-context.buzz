@@ -705,7 +705,7 @@ export fun vocabularyTerm(term: str) > Term !> any {
         if (m.kind == "symbol" or m.kind == "file" or splitWords(m.label).indexOf(term) == null) {
             continue;
         }
-        final meaning = if (m.id.startsWith("docsection:docs/glossary.md#")) "glossary: {m.label}" else "{m.kind} {m.label}";
+        final meaning = if (m.id.startsWith("docsection:docs/glossary/")) "glossary: {m.label}" else "{m.kind} {m.label}";
         if (meanings.indexOf(meaning) == null) {
             meanings.append(meaning);
         }

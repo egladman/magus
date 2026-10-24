@@ -166,7 +166,7 @@ var (
 // Only "we", "I" or "our" as the actor of a change is reported, in every kind of
 // text. A first-person statement of intent is the author's to make, so a pull
 // request is not held to a stricter rule. A Markdown page may speak as the
-// project ("we believe", "our users"), the voice docs/doctrine.md and the
+// project ("we believe", "our users"), the voice docs/design/ and the
 // decision records argue in.
 func tense(in input) []Finding {
 	var out []Finding

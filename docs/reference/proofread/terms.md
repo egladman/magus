@@ -30,6 +30,7 @@ The code is `PRF5001`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `doc-comment`        | off     |
 | `reference`          | off     |
+| `principle`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |

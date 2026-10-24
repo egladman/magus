@@ -328,7 +328,7 @@ long-lived process without being asked to. Two things keep this inside the
 promise rather than outside it: no capability is lost when the broker cannot
 start (the run proceeds unarbitrated and says so once), and a broker started this
 way exits by itself after ten minutes of nobody needing it. Still nothing extra
-to install; one more thing that runs. The reasoning, and the doctrine it amends,
+to install; one more thing that runs. The reasoning, and the principle it amends,
 are in [the daemon decision](guides/integrations/editor/design.md).
 
 **The upgrade path runs on a server we operate.** `magus self update` fetches
@@ -467,7 +467,7 @@ state, job leases. See <https://openai.github.io/openai-agents-python/guardrails
 Not "harness" either, in the sense where Anthropic and OpenAI both use that word
 for the host's own agent loop, the code that reads a model's tool call and
 decides what runs next. magus is not that loop. It does supply a
-[harness](glossary.md#harness) in the glossary's sense: the guard hooks, skills,
+[harness](glossary/harness.md) in the glossary's sense: the guard hooks, skills,
 MCP tools and job leases around the loop. Martin Bockeler's "outer harness"
 (<https://martinfowler.com/articles/harness-engineering.html>, 2026-04-02) is the
 nearest framing for where magus sits: deterministic guides and sensors placed

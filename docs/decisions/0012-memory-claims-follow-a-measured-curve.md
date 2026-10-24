@@ -79,7 +79,7 @@ peak at the same instant. Nothing measures whether they do: ci's own outcomes re
 - `MachineBudget` is "DECLARED, not observed, so the same command on the same host reaches
   the same verdict" (internal/cache/machine.go:28-29), and sys/mem says the observed half
   only ever warns (internal/sys/mem/watch.go, `LowHeadroomDivisor`).
-- [A record of refusals](../doctrine.md#a-record-of-refusals) refused, on 2026-10-16, "a
+- [A record of refusals](../design/refusals.md) refused, on 2026-10-16, "a
   pressure brake that withholds new claims while observed memory is high". Its reason: the
   verdict would depend on what else is running. The row above it says a claim is "declared or
   measured from recorded runs, never observed live".
@@ -194,18 +194,18 @@ while observed memory is high") stands unchanged.
 The overrunning run's recorded curve already widens the next profile, so no separate outcome
 field is added: the profile learns retrospectively, the same way the peak claim learns today.
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. Every fallback to the
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. Every fallback to the
   peak prints its reason, and the verdict says which mode admitted it.
-- [Built for the expensive era](../doctrine.md#built-for-the-expensive-era): relied on. The
+- [Built for the expensive era](../design/principles/built-for-the-expensive-era.md): relied on. The
   profile is a fixed computation over recorded runs; no model is asked how much memory a run
   uses.
-- [Everything is a file](../doctrine.md#everything-is-a-file): relied on. The curve is a field
+- [Everything is a file](../design/principles/everything-is-a-file.md): relied on. The curve is a field
   on the existing `Outcome` in the existing JSON Lines history, encoded by its own type.
-- [Automation you can interrogate](../doctrine.md#automation-you-can-interrogate): relied on. A
+- [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md): relied on. A
   refusal names the instant the sum exceeds the budget and which claims make it up.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. The packing relies
+- [A record of refusals](../design/refusals.md): relied on. The packing relies
   on the "measured from recorded runs" row, and the self-overrun correction relies on the
   2026-10-16 brake row, which stands: no claim waits on host free memory. It bends only the
   memory-admission row's "never observed live" wording, and only for magus's own claimed
@@ -230,7 +230,7 @@ field is added: the profile learns retrospectively, the same way the peak claim 
 - **Measure only the chain's concurrent peak.** A scalar fixes ci
   but not two unrelated invocations whose peaks are minutes apart. The curve subsumes it.
 - **Host hold.** Hold new claims while `mem.Available` is below the summed prediction. Lost:
-  it is the brake [A record of refusals](../doctrine.md#a-record-of-refusals) refused on
+  it is the brake [A record of refusals](../design/refusals.md) refused on
   2026-10-16, "a pressure brake that withholds new claims while observed memory is high",
   because the verdict would depend on what else is running. The self-overrun correction
   reads only magus's own tree instead. Reopen only if that refusal row is reversed.

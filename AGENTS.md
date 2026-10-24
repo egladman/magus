@@ -91,23 +91,25 @@ saying it, delete it here.
   something you can observe ("no store still serves ed25519 envelopes"), never a
   date. Secondary sites say `compat: see <primary site>`. An approved exported API
   gets `// Deprecated:` instead.
-- Before proposing a design or reversing one, read what was decided: `magus query
-  "kind=docsection id=~decisions/ <terms>"` and the refusal rows in
-  [docs/doctrine.md](docs/doctrine.md#a-record-of-refusals). Reopen one only with
-  new evidence.
+- Before proposing a design, a feature or a reversal, check it against the
+  [design principles](docs/design.md). Query the principles with
+  `magus query "kind=docsection id=~design/ <terms>"` and the ADRs with
+  `id=~decisions/`, and read [docs/design/refusals.md](docs/design/refusals.md). Each page names its
+  enforcement and a good and a bad example. Reopen a decision only with new
+  evidence, and change the page in the same commit.
 - Merge duplicates only when they share semantics, knobs and bugs; otherwise keep
   the copy with one line saying why
-  ([doctrine](docs/doctrine.md#a-copy-can-be-the-right-answer)).
+  ([design](docs/design/principles/a-copy-can-be-the-right-answer.md)).
 - `TODO`, `FIXME` and `BUG` comments stay; never add `godox` or a linter that
   reports them.
 - No silent defaults: a fallback says that it fell back, and an absent capability fails
-  loudly rather than answering empty (`docs/doctrine.md`).
+  loudly rather than answering empty ([No silent defaults](docs/design/judgment/no-silent-defaults.md)).
 - Local state is JSON Lines: one append-only `.jsonl` file per store, one JSON
   object per entry per line. The last line per key wins; compaction is by rename.
   Encoding lives on the entry type (`MarshalJSON`, `UnmarshalJSON`), never in
   a reader that splits lines. Never one rewritten JSON document, TSV or
   `name<TAB>value`
-  ([doctrine](docs/doctrine.md#everything-is-a-file)).
+  ([design](docs/design/principles/everything-is-a-file.md)).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.

@@ -522,7 +522,7 @@ linters:
       # packages nearest that boundary and nearest a "quick fetch" landing in Go by
       # accident; magus's own remote services elsewhere (internal/oci, internal/proc,
       # internal/httpx, internal/server, internal/selfupdate, std/http.go, ...) are not
-      # governed at all, so they carry no entry here. docs/doctrine.md, "provider I/O
+      # governed at all, so they carry no entry here. docs/design/judgment/provider-io-is-buzz.md, "provider I/O
       # is Buzz".
       providerio:
         type: module
@@ -532,7 +532,7 @@ linters:
           module: github.com/egladman/magus
           dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
           hint: >-
-            magus reaches a provider only by a Buzz op it invokes (docs/doctrine.md, "provider
+            magus reaches a provider only by a Buzz op it invokes (docs/design/judgment/provider-io-is-buzz.md, "provider
             I/O is Buzz"); an allow entry below is for magus's own remote services
           # Known CI/VCS provider client SDKs. None is a dependency today (go.mod has
           # none of these); the entry stands so the day one is added, this is what

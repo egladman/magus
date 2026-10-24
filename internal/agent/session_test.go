@@ -150,7 +150,7 @@ var sessionExitArmRe = regexp.MustCompile(`^return 0;$`)
 var sessionNoticeRe = regexp.MustCompile(`\bwarn\(|io\\stderr\.write\(`)
 
 // TestSessionAdapterFailOpenArmsAnnounceThemselves is the session half of the
-// doctrine's enforcement point, and it exists for the same reason its guard
+// design principle's enforcement point, and it exists for the same reason its guard
 // sibling does: an adapter that extracted nothing looks exactly like a host nobody
 // used, and that reading is the one the audit must never invite.
 //

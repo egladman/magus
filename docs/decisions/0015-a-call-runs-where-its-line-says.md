@@ -54,12 +54,12 @@ with no lease, a row with no worktree, the root session, and a line that runs no
 `-C`, `--root` and the nearest `magus.yaml` resolve the workspace as before. Only the
 guard reads the line.
 
-### Doctrine checked
+### Principles checked
 
-- [No silent defaults](../doctrine.md#no-silent-defaults): relied on. A call the line
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. A call the line
   cannot place falls back to the envelope and the rule says nothing, rather than
   guessing a checkout.
-- [A record of refusals](../doctrine.md#a-record-of-refusals): relied on. The
+- [A record of refusals](../design/refusals.md): relied on. The
   lease-implied root is added as a refusal.
 
 ## Alternatives

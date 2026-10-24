@@ -30,6 +30,7 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `doc-comment`        | advise  |
 | `reference`          | advise  |
+| `principle`          | advise  |
 | `guide`              | advise  |
 | `change-description` | advise  |
 | `agent-brief`        | advise  |

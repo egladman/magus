@@ -24,7 +24,7 @@ import (
 // command that closes one). Both subverbs live under sessionCmd.
 //
 // Discovery is automated and disposition is not, which is the whole shape of the
-// feature (docs/doctrine.md, "Manual on purpose"). There is no expiry, no
+// feature (docs/design/judgment/manual-on-purpose.md). There is no expiry, no
 // auto-dispose flag and no severity inference to add later: a request that magus
 // could close by itself would not have needed a person, and the queue exists
 // precisely for the ones that do.
@@ -200,7 +200,7 @@ func attentionDispose(root string, args []string) error {
 		return exit.Usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
 	}
 
-	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
+	// Disposing closes a request that exists to reach a PERSON (docs/design/judgment/manual-on-purpose.md,
 	// "Manual on purpose"): an agent answering its own block, or another agent's,
 	// removes the person the queue exists to reach. The guard denies this outright
 	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap

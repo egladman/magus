@@ -30,6 +30,7 @@ The code is `PRF4020`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `change-description` | advise  |
 | `reference`          | advise  |
+| `principle`          | advise  |
 | `guide`              | advise  |
 | `issue`              | advise  |
 

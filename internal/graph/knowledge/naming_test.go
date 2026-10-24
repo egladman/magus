@@ -250,6 +250,26 @@ func TestConformanceNamesAnEntityOfTheSameNameInTypeScript(t *testing.T) {
 	)}}, got)
 }
 
+func TestConformanceSkipsTheTargetAMagusfileFunctionDeclares(t *testing.T) {
+	ns := "buzz `docs/magusfile.buzz`/"
+	fn := types.KnowledgeSymbol{
+		Key: ns + "design_index_generate().", Label: "design_index_generate", Language: "buzz", Namespace: ns,
+		Signature: "export fun design_index_generate(ctx: magus\\Context, args: [str]) > void",
+		Source:    "docs/magusfile.buzz:1", Defs: []string{"docs/magusfile.buzz"},
+	}
+	g := namingGraph(t, []types.KnowledgeSymbol{fn},
+		types.KnowledgeNode{ID: "project:docs", Kind: types.KindProject, Label: "docs", Source: "docs"},
+		types.KnowledgeNode{ID: "target:docs:design-index-generate", Kind: types.KindTarget, Label: "design-index-generate", Source: "docs"},
+		types.KnowledgeNode{ID: "target:web:design-index-generate", Kind: types.KindTarget, Label: "design-index-generate", Source: "web"})
+
+	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(fn)})
+
+	assert.Equal(t, map[string][]types.Check{symID(fn): {advice(types.CheckNameCollision,
+		"`design_index_generate` is also the name of target `web:design-index-generate` in this workspace",
+		"target `web:design-index-generate`",
+	)}}, got, "the target the function declares is itself; another project's target of that name still collides")
+}
+
 // A word already carrying other senses is a judgment about meaning, which the index cannot
 // prove, so it says nothing.
 func TestConformanceSilentOnAWordCarryingOtherSenses(t *testing.T) {

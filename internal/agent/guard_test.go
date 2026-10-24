@@ -501,7 +501,7 @@ var failOpenSilentByDesign = map[string]string{
 	"magus-path.buzz": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
 }
 
-// TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
+// TestFailOpenArmsAnnounceThemselves is a design principle's enforcement point: a
 // template that cannot judge a call must SAY so.
 //
 // Silence and a clean session are the same observation. Every other gate here

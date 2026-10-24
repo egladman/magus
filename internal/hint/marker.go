@@ -15,7 +15,7 @@ import (
 //
 // An advisory says nothing the second time it arrives, and this page's own standard
 // names the cost: a check that is red by default is a check people learn to ignore,
-// taking the real failures with it (docs/doctrine.md). Measured over one session: the
+// taking the real failures with it (docs/design/judgment/a-refusal-carries-its-reason.md). Measured over one session: the
 // stale-binary notice and the graph-beats-grep hint each fired dozens of times with
 // byte-identical text, and the reader stopped seeing either.
 //

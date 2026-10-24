@@ -32,7 +32,7 @@ decides, plans, or injects itself into the agent's context. Answering is the
 tool's job, deciding is the model's.
 
 Past the model sits the person. magus keeps a
-[human in the loop](../../doctrine.md#human-in-the-loop): agents propose and do
+[human in the loop](../../design/principles/human-in-the-loop.md): agents propose and do
 bounded work, and the guard, the job store and the review put each decision that
 matters in front of someone who can say no.
 
@@ -100,7 +100,7 @@ targets one spell, and `-o json` prints the exact fragments. `magus agent harnes
 reports whether the fragments are still present and runs the wired guard command. A host Magus has never heard of can
 ship its own harness spell without a Magus release, by the same ownership switch
 as adapting a shipped one; a portable adapter remains an option where a native
-event contract is not available. [Doctrine](../../doctrine.md#the-host-wiring-is-yours)
+event contract is not available. [The host wiring is yours](../../design/judgment/the-host-wiring-is-yours.md)
 records that trade and what it costs you.
 
 ### This repository as a worked example

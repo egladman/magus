@@ -480,8 +480,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// checkpoint does not replace.
 		{command: "git rev-parse --abbrev-ref HEAD"},
 		// Reading or searching markdown advises nothing.
-		{command: "cat docs/doctrine.md"},
-		{command: "grep host docs/doctrine.md"},
+		{command: "cat docs/design.md"},
+		{command: "grep host docs/design.md"},
 		{command: "rg wiring notes.md"},
 		{command: "head -50 README.md"},
 		// An unbounded source dump routes to SCIP/refs.
@@ -1764,7 +1764,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 }
 
 // TestGuardDeniesSessionDispose is finding F1's fix: disposing an attention request
-// records that a PERSON answered it (docs/doctrine.md, "Manual on purpose"), and until
+// records that a PERSON answered it (docs/design/judgment/manual-on-purpose.md), and until
 // now nothing stopped an agent from closing any request, including one addressed to a
 // person. It folds into the same rule as TestGuardDeniesReadAck rather than a rule of
 // its own, since both are a person's act to record.

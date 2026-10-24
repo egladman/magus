@@ -5,6 +5,7 @@ import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
 import "../hack/magusfile/ruledocs" as ruledocs;
 import "../hack/magusfile/changelog" as changelog;
+import "lib/dictionary" as dictionary;
 import "fs";
 import "os";
 import "proc";
@@ -19,6 +20,7 @@ import "project/.." as workspace;
 import "project/guides/integrations/agents";
 // Aliased: the same-name `render` target would shadow the import and null its members.
 import "render" as renderer;
+import "lib/design" as design;
 
 import "magus/spell/typescript";
 // Claims **/*.buzz, which sources already lists by directory, and builds the Buzz symbol
@@ -96,9 +98,109 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("docs");
 }
 
+// glossary-index-generate rewrites the term list in glossary.md from each term page's front matter.
+export fun glossary_index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("glossary.md", "glossary/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz");
+    ctx.modifiesExistingFiles("glossary.md");
+    final pages = mut [<dictionary\TermPage>];
+    foreach (p in fs\glob("glossary/*.md")) {
+        pages.append(dictionary\termPage(p.value, md: fs\readFile(p.value)));
+    }
+    final block = dictionary\glossaryIndex(pages);
+    fs\writeFile("glossary.md", content: dictionary\replaceBlock(fs\readFile("glossary.md"),
+        begin: dictionary\INDEX_BEGIN, end: dictionary\INDEX_END, block: block));
+}
+
+// glossary-usage-generate writes each term page's Used in block from the knowledge graph: the
+// docs sections that name the term and the code types that carry its name. A CI stage beside
+// diagrams-generate rather than a generate stage, because the code half reads the symbol
+// index generate's shards never build.
+export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> any {
+    if (args.len() > 0) {
+        throw "glossary-usage-generate: unexpected arguments {args.join(" ")}; it takes none";
+    }
+    // The index lives outside file hashing; the root's digest of it keys this target.
+    ctx.needs(workspace\symbol_digest_generate);
+    ctx.readsFiles("**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz",
+        workspace\file("**/*.md"), workspace\file("gen/symbol-index.json"));
+    ctx.modifiesExistingFiles("glossary/*.md");
+    final stale = mut [<str>];
+    foreach (p in fs\glob("glossary/*.md")) {
+        final md = fs\readFile(p.value);
+        final block = termUsage(dictionary\termPage(p.value, md: md).title);
+        final next = dictionary\replaceBlock(md, begin: dictionary\USAGE_BEGIN, end: dictionary\USAGE_END, block: block);
+        if (next == md) { continue; }
+        if (ctx.hasCharm("rw")) {
+            fs\writeFile(p.value, content: next);
+        } else {
+            stale.append(p.value);
+        }
+    }
+    if (stale.len() > 0) {
+        throw "glossary-usage-generate: the term pages' Used in blocks are stale in " + stale.join(", ")
+            + "; re-run `magus run glossary-usage-generate:rw docs` and commit" + drift\secondCause;
+    }
+}
+
+// termUsage asks the graph where title is used: up to six docs sections, one per page and two
+// per directory, so a family of generated rule pages does not crowd out the concept page; and
+// up to five code types named for it.
+// termUsage takes every section whose heading names the term and sorts by path before
+// capping, so the list depends on the tree alone and never on how a search ranked it.
+fun termUsage(title: str) > str !> any {
+    final candidates = mut [<dictionary\UsageDoc>];
+    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: {"limit": 5000}).matches) {
+        if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
+        if (m.label.lower().indexOf(title.lower()) == null) { continue; }
+        candidates.append(dictionary\docFromID(m.id, label: m.label));
+    }
+    candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
+    final docs = mut [<dictionary\UsageDoc>];
+    final pages = mut {<str: bool>};
+    final dirs = mut {<str: int>};
+    foreach (d in candidates) {
+        if (docs.len() >= 6) { break; }
+        final dir = fs\dirname(d.file);
+        if (pages[d.file] != null or (dirs[dir] ?? 0) >= 2) { continue; }
+        pages[d.file] = true;
+        dirs[dir] = (dirs[dir] ?? 0) + 1;
+        docs.append(d);
+    }
+    final symbols = mut [<dictionary\UsageSymbol>];
+    final names = mut {<str: bool>};
+    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: {"limit": 5000});
+    if (found.answer.verdict == "unknown") {
+        throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+    }
+    final ids = mut [<str>];
+    foreach (m in found.matches) { ids.append(m.id); }
+    ids.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (id in ids) {
+        if (symbols.len() >= 5) { break; }
+        final s = dictionary\symbolFromID(id, term: title);
+        if (s.name == "" or names[s.name] != null) { continue; }
+        names[s.name] = true;
+        symbols.append(s);
+    }
+    return dictionary\usageBlock(docs, symbols: symbols);
+}
+
 // content-generate composes independently cached families with disjoint outputs.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(catalog_docs_generate, api_docs_generate, proofread_docs_generate, benchmark_docs_generate);
+}
+
+// design-index-generate rewrites the page list in design.md from each design page's front matter.
+export fun design_index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("design.md", "design/**/*.md", "lib/design.buzz", "lib/adr.buzz");
+    ctx.modifiesExistingFiles("design.md");
+    final pages = mut [<design\DesignPage>];
+    foreach (group in ["principles", "judgment"]) {
+        foreach (p in fs\glob("design/{group}/*.md")) {
+            pages.append(design\designPage(p.value, md: fs\readFile(p.value)));
+        }
+    }
+    fs\writeFile("design.md", content: design\replaceIndex(fs\readFile("design.md"), block: design\designIndex(pages)));
 }
 
 // Reference, CLI, agent and example pages share the host runtime and generated bindings.
@@ -279,15 +381,17 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     final CONTENT = ["reference/buzz", "reference/config.md", "reference/spell-contract.md", "benchmarks", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
-        "reference/rules", "reference/proofread", "reference/api"];
+        "reference/rules", "reference/proofread", "reference/api", "design.md"];
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
-        "reference/config *.md");
+        "reference/config *.md", "design.md");
     // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
     // diagrams-generate, which needs a symbol index these shards never build.
-    final GENERATED = ["MAGUS.md"] + CONTENT;
+    final GENERATED = ["MAGUS.md", "glossary.md"] + CONTENT;
     // Hashed before and after: a dirty tree or a git worktree must not disarm the gate.
     final before = drift\hashes(GENERATED);
+    // The indexes rewrite pages the content families read, so they finish first.
+    ctx.needs(glossary_index_generate, design_index_generate);
     ctx.needs(content_generate, index_generate);
     if (ctx.hasCharm("rw")) { return; }
     final moved = drift\changedSince(before, GENERATED);
@@ -311,7 +415,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
     // own project.
     ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
-        "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
+        "design/**/*.md", "glossary/*.md", "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
         "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
         "reference/**/*.md");
     markdown["dprint"](ctx);
@@ -319,7 +423,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/crosscheck.buzz",
+    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/design.buzz", "lib/crosscheck.buzz",
         "engine/gates.buzz", workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
         workspace\file(".claude/settings.json"),
@@ -350,6 +454,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // checked alone: a check of render reports only render's own warnings.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
+    // The magusfile, not render, imports lib/dictionary, so render's tests never reach it.
+    magus\cmd("buzz", args: ["-t", "--embedded", "lib/dictionary.buzz"]);
     final modules = mut ["--check", "--embedded"];
     foreach (dir in ["lib", "engine", "site"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
@@ -375,7 +481,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
     // GitHub's gha shards delegate figures to the required docs figures job so the two
     // memory peaks have separate runners. Local CI validates figures after the site.
-    if (!ctx.hasCharm("gha")) { ctx.needs(diagrams_generate); }
+    if (!ctx.hasCharm("gha")) { ctx.needs(diagrams_generate, glossary_usage_generate); }
 }
 
 // build-playground compiles the playground's WebAssembly interpreter with stock Go and

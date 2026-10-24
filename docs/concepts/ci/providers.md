@@ -61,7 +61,7 @@ cache provider; one spell per vendor, two contracts) and `spells/gitlab/ci`.
 Neither magus nor a shipped provider detects which CI system it runs under. A wired
 provider writes its markers wherever it runs, so the same command behaves the same on a
 laptop and in a job, and the only thing that differs is what the caller asked for. See
-[Told, never guessed](../../doctrine.md#told-never-guessed).
+[Told, never guessed](../../design/judgment/told-never-guessed.md).
 
 ## What magus does with it
 

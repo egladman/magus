@@ -29,6 +29,7 @@ The code is `PRF4012`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `reference`          | off     |
+| `principle`          | off     |
 | `change-description` | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |

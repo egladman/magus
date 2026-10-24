@@ -19,7 +19,7 @@ tags:
 
 Work that outlasts one sitting needs a clock, a machine, a credential and a
 transcript. The host owns all four. magus owns none of them and calls no model,
-so it has no scheduler: [the host wiring is yours](../../../doctrine.md#the-host-wiring-is-yours).
+so it has no scheduler: [the host wiring is yours](../../../design/judgment/the-host-wiring-is-yours.md).
 What magus gives a long-running session is the answer to the question each wake
 asks, which is whether the work is done and whether it broke anything.
 
@@ -45,7 +45,7 @@ Three rules keep a wake cheap and safe:
   worker has no one to ask. [Jobs and leases](leases.md) covers the split.
 - Anything that carries a `merge` field, pushes, or spends money is a person's
   act. The wake hands the command over and stops
-  ([human in the loop](../../../doctrine.md#human-in-the-loop)).
+  ([human in the loop](../../../design/principles/human-in-the-loop.md)).
 
 A root-only block, such as a stale `./magus` after a merge, reaches the root as
 one attention row. The wake clears what it can (rebuild `./magus`, rebind a
@@ -92,23 +92,23 @@ Attention rows are what piles up while no one watches. `./magus session ls`
 prints how many are open, and `./magus session attention` lists them, each with
 its exec line. `./magus session --brief` is the first read of a new sitting.
 Disposing of a row stays a person's act
-([manual on purpose](../../../doctrine.md#manual-on-purpose)).
+([manual on purpose](../../../design/judgment/manual-on-purpose.md)).
 
 ## What magus leaves out
 
 Each row is a decision, not a gap. The decision records and the
-[record of refusals](../../../doctrine.md#a-record-of-refusals) hold the
+[record of refusals](../../../design/refusals.md) hold the
 evidence; reopen one only with evidence they did not have.
 
-| Not built                                                                   | Why                                                                                                                                | Where it is decided                                                                                                                                                     |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A `schedule` verb, a cron, or an `--at` flag                                | the host owns the clock, and a scheduler that launches sessions calls a model                                                      | [Capability is not a reason](../../../doctrine.md#capability-is-not-a-reason); [ADR 0005](../../../decisions/0005-deterministic-answers.md) section 7                   |
-| Anything that starts, resumes, prompts or pays for a model session          | magus never calls a model                                                                                                          | Record of refusals: a model adapter; an agent loop in the Go SDK                                                                                                        |
-| A night watcher of any size, or the root as a poller                        | the watcher costs more than the stalls it catches, and polling spends the dearest tokens on the cheapest work                      | Record of refusals: a model that watches workers for stalls; the root as the stall watcher                                                                              |
-| A daemon sweep for idle workers                                             | not built until measured: the host's stop hooks reach `magus session notify` and the job store's stale-after covers the long tail  | Record of refusals; [ADR 0009](../../../decisions/0009-cost-profiles-for-agent-sessions.md)                                                                             |
-| Auto-disposing attention rows, or a stall message that carries the fix      | disposing is a rep worth keeping, and handing over the answer makes a cheap model a typist                                         | [Manual on purpose](../../../doctrine.md#manual-on-purpose); Record of refusals: a stall message that gives the worker the answer                                       |
-| An unattended mode, a relaxed rule set, or sniffing for a cron or cloud run | with no one present a point that needs judgment must deny harder, and magus is told where it runs rather than guessing             | [Told, never guessed](../../../doctrine.md#told-never-guessed); Record of refusals: detecting where magus runs; [ADR 0013](../../../decisions/0013-the-guard-denies.md) |
-| Model escalation, retries on a bigger model, or a budget for long runs      | the tier table is static, and a person changes it                                                                                  | Record of refusals: a model router                                                                                                                                      |
-| A daemon job that reruns, queues or merges on a provider unasked            | it acts on a provider with no one behind it, and reopens whether the maintenance scheduler opens workspaces it was not asked about | [ADR 0014](../../../decisions/0014-running-magus-is-the-consent.md), open questions                                                                                     |
-| Auto-merge, admin merge, or any push a person did not see                   | the `merge` field stays a command handed over                                                                                      | [Human in the loop](../../../doctrine.md#human-in-the-loop)                                                                                                             |
-| A hosted service for scheduling                                             | no capability requires one                                                                                                         | [The standard](../../../doctrine.md#the-standard), criterion 7                                                                                                          |
+| Not built                                                                   | Why                                                                                                                                | Where it is decided                                                                                                                                                            |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A `schedule` verb, a cron, or an `--at` flag                                | the host owns the clock, and a scheduler that launches sessions calls a model                                                      | [Capability is not a reason](../../../design/principles/capability-is-not-a-reason.md); [ADR 0005](../../../decisions/0005-deterministic-answers.md) section 7                 |
+| Anything that starts, resumes, prompts or pays for a model session          | magus never calls a model                                                                                                          | Record of refusals: a model adapter; an agent loop in the Go SDK                                                                                                               |
+| A night watcher of any size, or the root as a poller                        | the watcher costs more than the stalls it catches, and polling spends the dearest tokens on the cheapest work                      | Record of refusals: a model that watches workers for stalls; the root as the stall watcher                                                                                     |
+| A daemon sweep for idle workers                                             | not built until measured: the host's stop hooks reach `magus session notify` and the job store's stale-after covers the long tail  | Record of refusals; [ADR 0009](../../../decisions/0009-cost-profiles-for-agent-sessions.md)                                                                                    |
+| Auto-disposing attention rows, or a stall message that carries the fix      | disposing is a rep worth keeping, and handing over the answer makes a cheap model a typist                                         | [Manual on purpose](../../../design/judgment/manual-on-purpose.md); Record of refusals: a stall message that gives the worker the answer                                       |
+| An unattended mode, a relaxed rule set, or sniffing for a cron or cloud run | with no one present a point that needs judgment must deny harder, and magus is told where it runs rather than guessing             | [Told, never guessed](../../../design/judgment/told-never-guessed.md); Record of refusals: detecting where magus runs; [ADR 0013](../../../decisions/0013-the-guard-denies.md) |
+| Model escalation, retries on a bigger model, or a budget for long runs      | the tier table is static, and a person changes it                                                                                  | Record of refusals: a model router                                                                                                                                             |
+| A daemon job that reruns, queues or merges on a provider unasked            | it acts on a provider with no one behind it, and reopens whether the maintenance scheduler opens workspaces it was not asked about | [ADR 0014](../../../decisions/0014-running-magus-is-the-consent.md), open questions                                                                                            |
+| Auto-merge, admin merge, or any push a person did not see                   | the `merge` field stays a command handed over                                                                                      | [Human in the loop](../../../design/principles/human-in-the-loop.md)                                                                                                           |
+| A hosted service for scheduling                                             | no capability requires one                                                                                                         | [The standard](../../../design/standard.md), criterion 7                                                                                                                       |

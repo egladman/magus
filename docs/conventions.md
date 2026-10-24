@@ -378,6 +378,120 @@ supersedes: <what this replaces, optional>
 `magus run conventions docs` enforces all of it as the `adr-template` rule
 ([`docs/lib/adr.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/adr.buzz)).
 
+## Design pages
+
+Every page in `docs/design/principles/` and `docs/design/judgment/` states one design
+principle or judgment call, and every one follows one template, so a person or an agent
+checking a change against them finds the rule, its enforcement and its examples in the
+same place:
+
+````md
+---
+title: <the principle, sentence case>
+order: <position in its group>
+description: <the rule in one sentence>
+tags: [design, <principle or judgment>, <topics>]
+---
+
+# <the principle, sentence case>
+
+<the argument: why the rule exists and the failure it prevents>
+
+## Enforced by
+
+## Good
+
+```<lang>
+<a real example>
+```
+
+## Bad
+
+```<lang>
+<a real example>
+```
+
+<why it is bad>
+
+## See also
+````
+
+- `order` sorts the page within its group, and `description` is the line the index in
+  `docs/design.md` prints beside the title. `design-index-generate` rewrites that index
+  from the front matter, so a new page appears there on the next `magus run generate docs`.
+- The argument comes before the first H2 and may carry H3s of its own.
+- The H2 sections are exactly Enforced by, Good, Bad and See also, in that order.
+  Enforced by names the test, lint, guard rule or review step that holds the rule; a rule
+  with nothing yet says so and is listed in `docs/design/strained.md`.
+- Good and Bad each hold at least one fenced example, taken from this repository or from
+  the tool the page argues against, and Bad ends with a sentence saying why.
+- An example stays inline and short: the page is the unit a person or an agent
+  loads, and the example is the contract. Name where it came from and link the
+  package or directory that holds the rest
+  (`https://github.com/egladman/magus/tree/main/<dir>`), never a line number that
+  drifts.
+- The pages are opinionated and may speak in the first person.
+
+`magus run conventions docs` enforces the shape as the `design-template` rule
+([`docs/lib/design.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/design.buzz)).
+
+## Glossary term pages
+
+Every term in the [glossary](glossary.md) has its own page, `docs/glossary/<slug>.md`, so a
+diagnostic, a review comment or another page can cite one definition at a stable address.
+Every term page follows one template:
+
+```md
+---
+title: <Term>
+order: <its place in its group, as a number>
+description: "<the definition in one or two sentences, ending with a period>"
+tags: [glossary, <group>]
+---
+
+# <Term>
+
+<what the word means in magus>
+
+## Elsewhere
+
+<what the word means in the wider industry, and how magus's meaning differs>
+
+## Example
+
+<one real command or code block>
+
+## Used in
+
+<!-- BEGIN GLOSSARY USAGE ... -->
+<!-- END GLOSSARY USAGE -->
+
+## See also
+
+- <links>
+```
+
+- The file name is the title's heading slug (`Output reference` is `output-reference.md`,
+  `MAGUS.md` is `magusmd.md`), which is also the anchor the term had when the glossary was
+  one page. The index in `glossary.md` keeps that anchor on each term's heading, so an old
+  `glossary.md#<slug>` link still lands on the term.
+- `tags` open with `glossary`, then one group: `core-model`, `execution-and-caching`,
+  `telemetry-and-health`, `insight-and-knowledge`, `design-and-scope`, `agents`,
+  `sessions-and-leases` or `console`. The index lists each group in `order`.
+- The definition comes first and is magus's own. Elsewhere is there only when the word
+  means something different outside magus: name the source (a tool, a vendor, a spec), say
+  what it means there, and say how magus differs. It clarifies the other meaning and never
+  adopts it.
+- Example holds at least one fenced block that runs today.
+- Used in is generated: `magus run glossary-usage-generate:rw docs` fills it from the
+  knowledge graph with the docs sections and code types that carry the term. Edit the
+  generator, not the block.
+- The description is what the glossary index and every term link's popover show.
+
+`magus run glossary-index-generate:rw docs` rewrites the index from the pages' front matter,
+and `magus run conventions docs` enforces the template as the `glossary-term` rule
+([`docs/lib/dictionary.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/dictionary.buzz)).
+
 ## Writing rules
 
 Hand-written Markdown, every pull request's title and description, review replies, doc
@@ -438,18 +552,19 @@ same guard rule and the same decisions table.
 ### The shape of a description
 
 A change description is read by a reviewer now and by whoever follows the squash commit
-to it later, so it opens with what the change set out to do and why, then what was
-built, then where the work left the plan. It stays short and in the author's own words.
+to it later, a teammate or contributor who was not there, so it opens with what the
+change set out to do and why, then what it changes, then what a reviewer should weigh.
+It stays short and in the author's own words.
 
-| Part              | Required                                   | What it holds                                                                                |
-| ----------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Lead (no heading) | yes                                        | The intent: what the change set out to do and why, in one to three sentences.                |
-| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                   |
-| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                             |
-| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                       |
-| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                              |
-| Where it differs  | when the work left the plan                | A line or heading opening Cut, Changed from plan, Not done or Not verified, with the reason. |
-| Reading guide     | optional                                   | Where to start reading.                                                                      |
+| Part              | Required                            | What it holds                                                                                                 |
+| ----------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Lead (no heading) | yes                                 | The intent: what the change set out to do and why, and how the work came up, in one to three sentences.       |
+| What changes      | yes                                 | One bullet per change in what the code does, in the present tense: the meaning, not a list of files touched.  |
+| Considerations    | when a reviewer needs more to weigh | One bullet each: the alternative set aside, how a claim was checked, where to start reading, unfinished work. |
+
+Unfinished work under Considerations is an unchecked GitHub task that opens with what is
+missing, so a draft's next steps stay legible and cannot read as done:
+`- [ ] Not verified: a cold cache on Windows.`
 
 The lead is at least 12 words and states the intent. A lead that opens on the defect
 names a purpose within two sentences (`lead-context`). A change in a series names the
@@ -468,7 +583,7 @@ A sentence that states a measurement (`410ms to 260ms`, `7 of 50`), a comparison
 behavior carries its evidence in the same sentence or bullet: a code span naming the
 command, test or benchmark, a link, or an output ref (`claim`). A claim covers exactly
 what was measured. A judgment call is labeled as one, with its reason. What is not known
-goes under Not verified, or opens a sentence with `Not measured`, `Not tested` or
+is a Considerations task opening `Not verified:`, or opens a sentence with `Not measured`, `Not tested` or
 `Untested`.
 
 A softener on a claim (`might fix`, `may help`, `probably`, `aims to`) stays refused

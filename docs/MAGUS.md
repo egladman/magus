@@ -26,6 +26,9 @@ Query: `magus query project=docs`
 | `render`                        | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                      |
 | `install`                       | install installs node_modules through the typescript spell's pnpm-install op.                                                                                            |
 | `index-generate`                | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.                                                                                   |
+| `glossary-index-generate`       | glossary-index-generate rewrites the term list in glossary.md from each term page's front matter.                                                                        |
+| `glossary-usage-generate`       | glossary-usage-generate writes each term page's Used in block from the knowledge graph: the docs sections that name the term and the code types that carry its name.     |
+| `design-index-generate`         | design-index-generate rewrites the page list in design.md from each design page's front matter.                                                                          |
 | `catalog-docs-generate`         | Reference, CLI, agent and example pages share the host runtime and generated bindings.                                                                                   |
 | `api-docs-generate`             | API pages consume the descriptor with its comments, not the generated Go client.                                                                                         |
 | `proofread-docs-generate`       | Proofread's separately built catalog includes its own generated model and fixtures.                                                                                      |

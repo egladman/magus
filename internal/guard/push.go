@@ -31,7 +31,7 @@ import (
 // records, per invocation, the argv that started it, the per-target results, and the
 // version string the binary was built from -- which carries the commit. So "no green `ci`
 // has run at this commit" is a fact read off disk, not a suspicion. That is the line the
-// doctrine draws: refuse what magus can prove, advise everything else.
+// design principles draw: refuse what magus can prove, advise everything else.
 
 // gateCoverage is what the run log says about the gate at one commit.
 //

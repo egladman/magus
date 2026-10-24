@@ -17,7 +17,7 @@ that one has no row.
 
 It does not publish an event to the daemon or Console. Use it to bring a
 person back to the host where the agent needs an answer: it is how a
-[human in the loop](../../../doctrine.md#human-in-the-loop) learns they are wanted.
+[human in the loop](../../../design/principles/human-in-the-loop.md) learns they are wanted.
 
 ```sh
 printf '%s\n' "needs your approval" | magus session notify --outcome Notification --desktop
