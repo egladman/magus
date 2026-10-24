@@ -118,8 +118,6 @@ type storeConfig struct {
 	dryRun bool
 	// build is Location.Build.
 	build string
-	// writer is Location.Writer.
-	writer types.MagusBuild
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *types.ModelTierSet
 	modelRows       func() []types.ModelPricing
@@ -182,9 +180,6 @@ type Location struct {
 	// binary under a long-lived daemon never reads the old code's results as its own.
 	// Empty is the running build ([buildinfo.Build]); a test names another.
 	Build string
-	// Writer is the build every write stamps as the file's writer (see [newestWriter]).
-	// Zero is the running build ([buildinfo.Commit]); a test names another.
-	Writer types.MagusBuild
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
@@ -219,7 +214,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()), writer: loc.Writer,
+	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
 		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}}
 	s.path, s.err = jobsPath(loc)
 	return s
@@ -229,25 +224,6 @@ func NewStore(loc Location) *Store {
 // lock still serializes it against s and every other writer.
 func (s *Store) view() *Store {
 	return &Store{storeConfig: s.storeConfig}
-}
-
-// writerBuild is the build s's writes stamp: Location.Writer, or the running build's commit
-// when that is zero.
-func (s *Store) writerBuild() types.MagusBuild {
-	if s.writer != (types.MagusBuild{}) {
-		return s.writer
-	}
-	return runningBuild()
-}
-
-// runningBuild is this binary's commit and commit time, zero for a build from a modified
-// tree. A var so a test binary, which carries no stamp, can stand in for a stamped one.
-var runningBuild = func() types.MagusBuild {
-	var b types.MagusBuild
-	if !buildinfo.Modified() {
-		b.Commit, b.Date = buildinfo.Commit()
-	}
-	return b
 }
 
 // Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it
@@ -324,55 +300,10 @@ type jobsFile struct {
 	types.Schema
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
 	Retained int64 `json:"retained,omitempty"`
-	// Writer is the newest build that wrote the file; see [newestWriter].
-	Writer *writerStamp `json:"writer,omitempty"`
-	Jobs   []types.Job  `json:"-"`
+	Jobs []types.Job `json:"-"`
 }
 
-// writerStamp names a build by its commit and that commit's time. It rides in the
-// header, never in a row, so the rows keep the shape types.Job declares.
-type writerStamp struct {
-	Commit string    `json:"commit"`
-	Time   time.Time `json:"time"`
-}
-
-// buildStamp is b's stamp, or nil when b names no commit or commit time, as for a test
-// binary, `go run`, or a build from a modified tree.
-func buildStamp(b types.MagusBuild) *writerStamp {
-	if b.Commit == "" || b.Commit == buildinfo.Unknown || strings.HasSuffix(b.Version, "-dirty") {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, b.Date)
-	if err != nil {
-		return nil
-	}
-	return &writerStamp{Commit: b.Commit, Time: t.UTC()}
-}
-
-// newestWriter is the header's stamp once build writes the file at path, or a refusal:
-// a build older than newest, or unstamped once a stamped one wrote, would write rows by
-// rules the newer build no longer applies. A build no older takes the stamp over, so the
-// header changes, and the file is rewritten, only when the build does.
-func newestWriter(path string, newest *writerStamp, b types.MagusBuild) (*writerStamp, error) {
-	self := buildStamp(b)
-	switch {
-	case newest == nil:
-		return self, nil
-	case self == nil:
-		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
-			"this magus has no commit stamp, and %s (committed %s) last wrote %s: run that ./magus, or rebuild ./magus from a clean tree at the current base",
-			newest.Commit, newest.Time.Format(time.RFC3339), path)
-	case !self.Time.Before(newest.Time):
-		return self, nil
-	case self.Commit != newest.Commit:
-		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
-			"this magus, %s (committed %s), is older than %s (committed %s), which last wrote %s: run the newer ./magus, or rebuild ./magus at the current base",
-			self.Commit, self.Time.Format(time.RFC3339), newest.Commit, newest.Time.Format(time.RFC3339), path)
-	}
-	return newest, nil
-}
-
-// noteLeftLive reports a sweep newestWriter refused. The read goes on: failing it would
+// noteLeftLive reports a sweep the store's schema refused. The read goes on: failing it would
 // lock a fresh checkout's unstamped bootstrap out of every list, so the rows stay live
 // until a build that may write ends them, and every read says so.
 func noteLeftLive(out io.Writer, dead []ending, err error) {
@@ -1252,8 +1183,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // write records f against log, the file it was read from: the lines of the rows that
 // changed are appended, and the file is rewritten to one line per row instead when a row
 // was dropped, the header changed, the file ended in a line no writer finished, or the
-// appended lines would make it [file.CompactDue]. A write that changes nothing skips
-// [newestWriter], so an older build still reads and sweeps.
+// appended lines would make it [file.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
 	lines, err := encodeJobs(f)
@@ -1275,17 +1205,6 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 	dropped := kept < len(log.rows)
 	if len(changed) == 0 && !dropped && bytes.Equal(header, log.header) && !log.partial {
 		return nil
-	}
-	writer, err := newestWriter(s.path, f.Writer, s.writerBuild())
-	if err != nil {
-		return err
-	}
-	if writer != f.Writer {
-		f.Writer = writer
-		if header, err = json.Marshal(f); err != nil {
-			return err
-		}
-		lines[0] = header
 	}
 	sameHeader := bytes.Equal(header, log.header)
 	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
@@ -1383,7 +1302,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 			if err := json.Unmarshal(line.Text, &header); err != nil {
 				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
 			}
-			f.Schema, f.Retained, f.Writer, log.header = header.Schema, header.Retained, header.Writer, line.Text
+			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.Text
 			continue
 		}
 		log.rows[row.ID] = line.Text
@@ -1395,7 +1314,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 		f.Jobs = append(f.Jobs, row)
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, update magus",
+		return jobsFile{}, jobsLog{}, types.DiagnosticErrorf(types.JobStoreWriterOlder, "job: %s requires %s, which this magus (schema %d) lacks, update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	return f, log, nil

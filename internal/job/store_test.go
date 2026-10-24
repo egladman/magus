@@ -709,8 +709,12 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"]}`)
 
 	_, err := s.List()
-	assert.Equal(t, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
-		path, types.JobSchemaVersion), err.Error())
+	require.ErrorIs(t, err, types.JobStoreWriterOlder)
+	assert.ErrorContains(t, err, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
+		path, types.JobSchemaVersion))
+
+	_, err = s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
+	require.ErrorIs(t, err, types.JobStoreWriterOlder, "a write refuses the same file")
 }
 
 // The file's own envelope survives a rewrite and a clear, like a row's.
@@ -1388,67 +1392,17 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 	}
 }
 
-func TestStoreRefusesAWriterOlderThanTheStamp(t *testing.T) {
-	newer := types.MagusBuild{Version: "v0.5.0", Commit: "8a9d", Date: "2026-10-22T18:40:11Z"}
-	older := types.MagusBuild{Version: "v0.4.9", Commit: "1f3c", Date: "2026-10-20T09:12:00-04:00"}
-	loc := tempLocation(t, t.TempDir())
-	loc.Writer = newer
-	_, err := NewStore(loc).Update(t.Context(), "A", func(cur *types.Job) { *cur = lease("A") })
+// A store another commit stamped is this build's to write, however much newer that
+// commit is: only a schema this magus cannot act on refuses (see
+// TestStoreRefusesAFileItCannotActOn).
+func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
+	s := tempStore(t, t.TempDir())
+	plantRaw(t, s, fmt.Sprintf(`{"schema_version":%d,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobSchemaVersion))
+
+	_, err := s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
 	require.NoError(t, err)
-
-	loc.Writer = older
-	old := NewStore(loc)
-	_, err = old.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
-	require.ErrorIs(t, err, types.JobStoreWriterOlder)
-	assert.ErrorContains(t, err, "this magus, 1f3c (committed 2026-10-20T13:12:00Z), is older than 8a9d (committed 2026-10-22T18:40:11Z)")
-	rows, err := old.List()
-	require.NoError(t, err, "a read by an older build still works")
-	assert.Len(t, rows, 1)
-
-	loc.Writer = types.MagusBuild{Version: "v0.4.9-dirty", Commit: "8a9d", Date: "2026-10-22T18:40:11Z"}
-	_, err = NewStore(loc).Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
-	require.ErrorIs(t, err, types.JobStoreWriterOlder)
-	assert.ErrorContains(t, err, "this magus has no commit stamp")
-}
-
-// The fork door writes through InWorkspace and the daemon's job tool through As; each
-// builds its view field by field, and one that carried the stamp resolved at NewStore lost
-// it, refusing every write under the build that last wrote the file.
-func TestStoreViewsWriteAsTheRunningBuild(t *testing.T) {
-	stamped := types.MagusBuild{Commit: "5ad8", Date: "2026-10-23T23:09:10-04:00"}
-	was := runningBuild
-	runningBuild = func() types.MagusBuild { return stamped }
-	t.Cleanup(func() { runningBuild = was })
-
-	loc := tempLocation(t, t.TempDir())
-	s := NewStore(loc)
-	_, err := s.Update(t.Context(), "A", func(cur *types.Job) { *cur = lease("A") })
+	rows, err := s.List()
 	require.NoError(t, err)
-
-	for name, view := range map[string]*Store{"InWorkspace": s.InWorkspace(Workspace{}), "As": s.As(Actor{})} {
-		_, err := view.Update(t.Context(), name, func(cur *types.Job) { *cur = lease(name) })
-		require.NoError(t, err, name)
-	}
-	f, err := s.read()
-	require.NoError(t, err)
-	require.NotNil(t, f.Writer)
-	assert.Equal(t, "5ad8", f.Writer.Commit)
-	assert.Len(t, f.Jobs, 3)
-}
-
-func TestStoreHandsTheStampToANewerWriter(t *testing.T) {
-	loc := tempLocation(t, t.TempDir())
-	for _, b := range []types.MagusBuild{
-		{Commit: "1f3c", Date: "2026-10-20T09:12:00Z"},
-		{Commit: "8a9d", Date: "2026-10-22T18:40:11Z"},
-		{Commit: "8a9d", Date: "2026-10-22T18:40:11Z"},
-	} {
-		loc.Writer = b
-		_, err := NewStore(loc).Update(t.Context(), b.Commit, func(cur *types.Job) { *cur = lease(b.Commit) })
-		require.NoError(t, err)
-	}
-	f, err := NewStore(loc).read()
-	require.NoError(t, err)
-	require.NotNil(t, f.Writer)
-	assert.Equal(t, "8a9d", f.Writer.Commit)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "B", rows[0].ID)
 }
