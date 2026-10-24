@@ -371,6 +371,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "PriorAttempt", Type: reflect.TypeFor[types.PriorAttempt](), RuntimeObject: true},
 	{Name: "JobRejection", Type: reflect.TypeFor[types.JobRejection](), RuntimeObject: true},
 	{Name: "JobWaiver", Type: reflect.TypeFor[types.JobWaiver](), RuntimeObject: true},
+	{Name: "ClaimEvidence", Type: reflect.TypeFor[types.ClaimEvidence](), RuntimeObject: true},
+	{Name: "JobClaim", Type: reflect.TypeFor[types.JobClaim](), RuntimeObject: true},
+	{Name: "JobClaimRequest", Type: reflect.TypeFor[types.JobClaimRequest]()},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
@@ -620,6 +623,12 @@ var boundaryEnums = []boundaryEnum{
 		Type: reflect.TypeFor[types.BriefRefKind](),
 		Cases: []enumCase{{"output", "output"}, {"verdict", "verdict"}, {"invocation", "invocation"},
 			{"file", "file"}, {"plan", "plan"}, {"commit", "commit"}},
+	},
+	{
+		Name: "ClaimKind",
+		Type: reflect.TypeFor[types.ClaimKind](),
+		Cases: []enumCase{{"none", ""}, {"refs", "refs"}, {"test", "test"}, {"output", "output"},
+			{"released", "released"}},
 	},
 	{
 		Name:  "GroupingVerdict",

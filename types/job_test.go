@@ -1093,3 +1093,57 @@ func TestPathWithin(t *testing.T) {
 		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
 	}
 }
+
+func TestParseClaimEvidence(t *testing.T) {
+	t.Parallel()
+
+	for because, want := range map[string]ClaimEvidence{
+		"refs:hint.VCSAdd":         {Kind: ClaimRefs, Subject: "hint.VCSAdd"},
+		"test:cmd/magus/vcs.go":    {Kind: ClaimTest, Subject: "cmd/magus/vcs.go"},
+		"output:.:config-generate": {Kind: ClaimOutput, Subject: ".:config-generate"},
+		"released":                 {Kind: ClaimReleased},
+	} {
+		got, err := ParseClaimEvidence(because)
+		require.NoError(t, err, because)
+		assert.Equal(t, want, got)
+		assert.Equal(t, because, got.String(), "the evidence spells back as its because")
+	}
+	for because, refused := range map[string]string{
+		"hunch:x":         "names no proof",
+		"refs:":           "names no refs subject",
+		"released:a.go":   "released names nothing after it",
+		"output:generate": "names no target",
+	} {
+		_, err := ParseClaimEvidence(because)
+		require.Error(t, err, because)
+		assert.Contains(t, err.Error(), refused)
+	}
+}
+
+func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
+	t.Parallel()
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
+	assert.Empty(t, rec.Problems())
+
+	rec.Criteria = "more"
+	rec.Claim = append(rec.Claim, JobClaimRequest{Path: "../x.go", Because: "released"}, JobClaimRequest{Path: "internal/**", Because: "maybe"})
+	var fields []string
+	for _, p := range rec.Problems() {
+		fields = append(fields, p.Field)
+	}
+	assert.Equal(t, []string{"claim", "claim[1].path", "claim[2].path", "claim[2].because"}, fields)
+}
+
+func TestDeclarationCarriesMaxClaims(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, Declaration{ID: "worker", MaxClaims: 4}.Validate())
+	assert.ErrorContains(t, Declaration{ID: "worker", MaxClaims: -1}.Validate(), "max_claims is -1")
+
+	var row Job
+	Declaration{ID: "worker", MaxClaims: 4}.Apply(&row)
+	assert.Equal(t, 4, row.MaxClaims)
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	assert.Zero(t, row.MaxClaims)
+}

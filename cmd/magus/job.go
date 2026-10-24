@@ -2448,6 +2448,12 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "that removes some of its own write paths, which releases them. Ending a job is")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The one claim a holder applies is proved: a record carrying only id and")
+			fmt.Fprintln(os.Stderr, "claim, [{\"path\": ..., \"because\": ...}], where because is refs:<symbol>,")
+			fmt.Fprintln(os.Stderr, "test:<file>, output:<project>:<target> or released. magus proves each path")
+			fmt.Fprintln(os.Stderr, "against the job's diff and records the proof on the job; the guard serves the")
+			fmt.Fprintln(os.Stderr, "record when it refuses a write it can prove. It applies alone.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)
 		}
@@ -2477,6 +2483,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
 	}
 	root = resolveRootOrEmpty(root)
+	if slices.ContainsFunc(records, func(r types.Declaration) bool { return len(r.Claim) > 0 }) {
+		return applyClaim(ctx, root, records)
+	}
 	// A dry run assigns no tier, so it runs no matrix.
 	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun, ModelTiers: !globalCfg.DryRun})
 	if err != nil {
@@ -2544,6 +2553,59 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
+}
+
+// applyClaim applies the one claim record records holds: each path proved against
+// the job's diff before the store's lock and again under it, and the proofs printed.
+func applyClaim(ctx context.Context, root string, records []types.Declaration) error {
+	if len(records) != 1 {
+		return exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
+	}
+	rec := records[0]
+	if err := rec.Validate(); err != nil {
+		return exit.Usagef("magus job apply: %s", err)
+	}
+	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun})
+	if err != nil {
+		return err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+	if i < 0 {
+		return exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
+	}
+	asked := make([]string, len(rec.Claim))
+	for k, w := range rec.Claim {
+		asked[k] = w.Path
+	}
+	ws := jobWorkspace(ctx, root)
+	facts := job.ObserveClaim(ctx, root, rows[i], asked, ws.Projects)
+	stored, err := store.Claim(ctx, rec.ID, rec.Claim, facts, globalCfg.Jobs, globalCfg.DryRun)
+	if err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames(os.Stdout, []string{stored.ID})
+	case outputText:
+		verb := "claims"
+		if globalCfg.DryRun {
+			verb = "would claim"
+		}
+		for _, w := range stored.Claims[len(stored.Claims)-len(rec.Claim):] {
+			fmt.Printf("%s %s: + %s (%s): %s\n", verb, stored.ID, w.Path, w.Evidence, w.Proof)
+		}
+		return nil
+	default:
+		return emitFormatted(opts, stored)
+	}
 }
 
 // applyClaimNotes is job.ForkNotes for each applied row, keyed by job id, against the plan

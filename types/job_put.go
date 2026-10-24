@@ -38,4 +38,6 @@ type JobPut struct {
 	// MaxAttempts is how many times the job may be forked, its first fork included; 0
 	// clears the cap.
 	MaxAttempts *int `json:"max_attempts,omitempty"`
+	// MaxClaims is how many proved claims one attempt takes; 0 clears it to the default.
+	MaxClaims *int `json:"max_claims,omitempty"`
 }

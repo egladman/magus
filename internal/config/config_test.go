@@ -302,3 +302,34 @@ func TestConformanceLoadRefusesAnUnknownMetric(t *testing.T) {
 	require.ErrorContains(t, err, "knowledge.conformance.checks.file-line")
 	assert.ErrorContains(t, err, "file-lines")
 }
+
+func TestJobsMaxClaims(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml    string
+		want    int
+		wantErr string
+	}{
+		"absent takes the default":   {want: 10},
+		"a written number is taken":  {yaml: "jobs:\n  max_claims: 4\n", want: 4},
+		"a written zero is an error": {yaml: "jobs:\n  max_claims: 0\n", wantErr: "max_claims"},
+		"a negative is an error":     {yaml: "jobs:\n  max_claims: -2\n", wantErr: "max_claims"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			}
+			cfg, err := LoadWorkspaceOnly(root)
+			require.NoError(t, err)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, Validate(cfg), tc.wantErr)
+				return
+			}
+			require.NoError(t, Validate(cfg))
+			assert.Equal(t, tc.want, cfg.Jobs.MaxClaims)
+		})
+	}
+}

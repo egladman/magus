@@ -115,6 +115,9 @@ const (
 	// claims on the declarations its holder touched: ungraded, since the claims sit inside
 	// what the pattern already covered, and the one write that stamps its own release.
 	asNarrowing
+	// asClaim is [Store.Claim] adding proved write paths: graded by
+	// [authorizeClaim], and the one write that appends to Claims.
+	asClaim
 )
 
 // graded reports whether the acting party's boundary applies to this write.
@@ -184,8 +187,12 @@ func refuse(actor Actor, id, rule string) error {
 // write, pass a row below it. Widening a
 // boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
 // is the asymmetry the whole rule exists for: a worker that can widen its own row has no
-// boundary at all.
+// boundary at all. The one claim a holder makes is an [asClaim] write, each path
+// carrying a proof the store re-proved (see [authorizeClaim]).
 func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, exists bool, rows []types.Job) error {
+	if kind == asClaim {
+		return authorizeClaim(actor, id, prev, next, exists, rows)
+	}
 	if !actor.Bound() {
 		return nil
 	}
@@ -373,6 +380,7 @@ func changedFields(prev, next types.Job) []string {
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("max_attempts", prev.MaxAttempts != next.MaxAttempts)
+	add("max_claims", prev.MaxClaims != next.MaxClaims)
 	add("reported_base", prev.ReportedBase != next.ReportedBase)
 	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
 	// that extends its own bound has none.

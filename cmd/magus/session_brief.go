@@ -171,6 +171,9 @@ type briefLease struct {
 	Exec       string `json:"exec"`
 	Criteria   string `json:"criteria,omitempty"`
 	Validation string `json:"validation,omitempty"`
+	// Claims are the write paths the job added with a proof, by `magus job apply` or by the
+	// guard on a write, each as path, evidence and proof.
+	Claims []string `json:"claims,omitempty"`
 }
 
 // briefFailure is one target the last recorded run failed, and the command that
@@ -425,6 +428,7 @@ func briefLeases(ctx context.Context, root string) (leases []briefLease, others 
 			Exec:       hint.JobExec.With(row.ID),
 			Criteria:   criteria,
 			Validation: row.Validation,
+			Claims:     claimLines(row.Claims),
 		}
 		if row.State.Editing() {
 			editing = append(editing, item)
@@ -644,6 +648,9 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)
 		}
+		for _, c := range l.Claims {
+			briefLine(s, "    claimed: %s", c)
+		}
 	}
 	if b.OtherLeases > 0 {
 		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
@@ -724,4 +731,15 @@ func briefTime(ms int64) string {
 		return ""
 	}
 	return time.UnixMilli(ms).Format("2006-01-02 15:04:05")
+}
+
+func claimLines(claims []types.JobClaim) []string {
+	if len(claims) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(claims))
+	for _, c := range claims {
+		lines = append(lines, fmt.Sprintf("%s (%s): %s", c.Path, c.Evidence, c.Proof))
+	}
+	return lines
 }

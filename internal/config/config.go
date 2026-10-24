@@ -203,8 +203,8 @@ type Diff struct {
 // Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
 // StaleAfter and Retain are the exceptions, because they decide when magus ends a row
-// nobody took and when it drops one that is over. So are MaxClaimFiles and MaxClaimProjects,
-// which are never zero: a claim has to be bounded by something.
+// nobody took and when it drops one that is over. So are MaxClaimFiles, MaxClaimProjects and
+// MaxClaims, which are never zero: a claim has to be bounded by something.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -241,6 +241,10 @@ type Jobs struct {
 	// IntegrateRefuseAt is the count past which such a fork is refused until an integration
 	// job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only.
 	IntegrateRefuseAt int `json:"integrate_refuse_at" yaml:"integrate_refuse_at" validate:"gtfield=IntegrateAdviseAt" merge:"written"`
+	// MaxClaims is the most proved claims any job may be given through its
+	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
+	// error. Workspace only, like StaleAfter.
+	MaxClaims int `json:"max_claims" yaml:"max_claims" validate:"gt=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -1100,7 +1104,7 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).

@@ -50,6 +50,9 @@ type denial struct {
 	Say string
 	// Why is the rationale, kept only in the stored full verdict.
 	Why string
+	// Next is the command that clears the refusal, served beside it when it passes the guard
+	// for the acting lease.
+	Next []types.NextStep
 }
 
 // refused reports whether the rule refused at all.

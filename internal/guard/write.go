@@ -212,6 +212,8 @@ type writeGrade struct {
 	// Key is the marker Kind is held under when that is narrower than the kind itself, as
 	// leasedPathKey is; empty holds it under Kind.
 	Key hint.MarkerKind
+	// Next is the remedy a deny serves with its reason.
+	Next []types.NextStep
 	// Rule names the catalogued rule a deny came from, "" for the path-lease denies.
 	Rule string
 }
@@ -316,7 +318,10 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		enter := func(owner types.Job) (writeGrade, bool) {
 			return gradeEntry(ctx, deps, location, owner, rel)
 		}
-		g := gradeAgainstOwnLease(me, owners, rel, enter, func() string { return deps.revision(ctx, checkout, "") })
+		claim := func(rel string) (writeGrade, string) {
+			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, rel)
+		}
+		g := gradeAgainstOwnLease(me, owners, rel, enter, func() string { return deps.revision(ctx, checkout, "") }, claim)
 		if g.Decision == decisionDeny {
 			return g
 		}
@@ -424,8 +429,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // their paths, see owningLeases. enter grades a write into another lease's path against the
 // entries that lease carries, reporting whether one covered it. liveRevision reads the
 // revision the lease's checkout is on now, "" when it cannot; it is read only for a lease
-// whose recorded base diverged.
-func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), liveRevision func() string) writeGrade {
+// whose recorded base diverged. claim grades a write outside the write paths that no
+// other lease owns (see gradeClaimOutside), and says what kept magus from claiming it.
+func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool), liveRevision func() string, claim func(rel string) (writeGrade, string)) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -526,16 +532,18 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
-	// It names what the job holds and who to ask, and no command that widens it: a
-	// refusal is read as the next thing to run, so a served widening is an escalation.
+	g, stop := claim(rel)
+	if g.Decision != "" {
+		return g
+	}
 	revoked := ""
 	if r, ok := revokedCovering(me, rel); ok {
 		revoked = fmt.Sprintf("The orchestrator revoked %q from lease %s at %s; it is no longer yours to write. ",
 			r.Path, me.ID, time.Unix(r.ReleasedAt, 0).UTC().Format(time.RFC3339))
 	}
 	return writeGrade{Decision: decisionDeny, Reason: denial{
-		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
-			rel, me.ID, strings.Join(me.WritePaths, ", ")),
+		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and magus did not claim it on its own: %s; "+leaseActorClause("widen these write paths"),
+			rel, me.ID, strings.Join(me.WritePaths, ", "), stop),
 		Why: fmt.Sprintf("%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
@@ -824,7 +832,7 @@ func adviseMalformedDeclaration(err error) writeGrade {
 
 // leaseCheckout is the checkout the acting lease's paths are relative to: the one its row
 // records it was taken in, whatever its state, or the hook's when it records none. A holder
-// continued after returning its job still writes there, and a widening moves nothing.
+// continued after returning its job still writes there, and a claim moves nothing.
 func leaseCheckout(ctx context.Context, at location, lease string) string {
 	if me, ok := leaseRow(ctx, at, lease); ok && me.CheckoutRoot != "" {
 		return me.CheckoutRoot

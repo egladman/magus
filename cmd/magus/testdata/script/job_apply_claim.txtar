@@ -1,0 +1,80 @@
+# A holder claims its own job through `magus job apply` with a record carrying only id
+# and claim, each path with the proof magus re-proves: here a path it released. The proof
+# is printed and stored on the job; a path with no proof, another job's row, and a record
+# beside other records are refused, and a dry run writes nothing.
+[!exec:git] skip 'the job diffs against a git checkpoint'
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'pricing'
+
+stdin wave.json
+exec magus job fork --stdin
+stdin other.json
+exec magus job fork --stdin
+env BAGGAGE=magus.lease=wave/w
+exec magus job exec wave/w
+exec magus job apply -f $WORK/narrow.json
+
+exec magus --dry-run job apply -f $WORK/claim.json
+stdout '^would claim wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
+exec magus describe job wave/w -o template='{{.job.write_paths}}'
+stdout '^\[pricing/total\.sh\]$'
+
+exec magus job apply -f $WORK/claim.json
+stdout '^claims wave/w: \+ pricing/tax\.sh \(released\): this attempt''s holder released it at '
+exec magus describe job wave/w -o template='{{.job.write_paths}} {{range .job.claims}}{{.path}} {{.evidence.kind}}{{end}}'
+stdout '^\[pricing/total\.sh pricing/tax\.sh\] pricing/tax\.sh released$'
+
+! exec magus job apply -f $WORK/unproved.json
+stderr 'this attempt''s holder never released pricing/rates\.sh'
+
+! exec magus job apply -f $WORK/theirs.json
+stderr 'a holder claims only its own job'
+
+! exec magus job apply -f $WORK/mixed.jsonl
+stderr 'a claim record applies alone'
+
+-- wave.json --
+{"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh", "pricing/tax.sh"], "check": {"target": "test", "project": "."}}
+-- other.json --
+{"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
+-- narrow.json --
+{"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+-- claim.json --
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+-- unproved.json --
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
+-- theirs.json --
+{"schema_version": 13, "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+-- mixed.jsonl --
+{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
+-- .gitignore --
+.magus/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the pricing scripts.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test);
+}
+-- pricing/total.sh --
+echo 0
+-- pricing/tax.sh --
+echo 0
+-- pricing/rates.sh --
+echo 0

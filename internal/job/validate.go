@@ -100,6 +100,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
+		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
 		ps = append(ps, directoryWritePathProblems(store, merged)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
@@ -463,7 +464,7 @@ func rowDeclaration(row types.Job) types.Declaration {
 		ID: row.ID, Parent: row.Parent, Criteria: row.Criteria, Checkpoint: row.Checkpoint,
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
-		MaxAttempts: row.MaxAttempts, Waivers: row.Waivers,
+		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Waivers: row.Waivers,
 	}
 	// A stored row renders its check into Validation too, and a record carries one spelling.
 	if row.Check != nil {

@@ -842,6 +842,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
 			verdict.Decision, verdict.Reason, verdict.Context = decisionDeny, v.Deny, ""
 			verdict.Rule = string(rule)
+			verdict.Next = d.Next
 			whys[v.Deny] = v.Why
 		}
 	}
@@ -914,7 +915,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
-				refuse(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), g.Reason)
+				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Next: g.Next})
 			case decisionAdvise:
 				// Held by its own key when it has one; lease-state only names the rest.
 				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
@@ -1568,7 +1569,9 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	candidates := next
-	if len(next) != 1 || !placesBinary(next[0], actingLease) {
+	// The apply line claims the acting lease itself, so the role filter, which reads every
+	// job verb as a write outside the lease, would drop the one remedy written for it.
+	if len(next) != 1 || !placesBinary(next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})

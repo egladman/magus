@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 119)
+	assert.Len(t, got, 120)
 	assert.NotContains(t, got, "stdin-closed")
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]Decision{
@@ -20,6 +20,7 @@ func TestDefaults(t *testing.T) {
 		"stage-all":            Deny,
 		"whole-tree":           Deny,
 		"lease-write":          Deny,
+		"lease-claim":          Deny,
 		"lease-checkout":       Deny,
 		"push-ungated":         Deny,
 		"human-only":           Deny,
