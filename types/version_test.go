@@ -61,3 +61,29 @@ func TestParseVersionFillsEveryField(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, SemverVersion{Major: 1, Minor: 2, Patch: 3, Prerelease: "rc.1", Metadata: "build-9", Original: "v1.2.3-rc.1+build-9"}, v)
 }
+
+func TestMagusBuildAcceptsOnlyANewerStampedReplacement(t *testing.T) {
+	running := MagusBuild{Version: "v1", Commit: "aaa", Date: "2026-10-01T00:00:00Z"}
+	for _, tt := range []struct {
+		name    string
+		running MagusBuild
+		repl    BuildStamp
+		want    string
+	}{
+		{"newer stamped build", running, BuildStamp{Commit: "bbb", BuildDate: "2026-10-02T00:00:00Z"}, ""},
+		{"unstamped running build takes any stamped one", MagusBuild{Version: "unknown"}, BuildStamp{Commit: "bbb", BuildDate: "2026-10-02T00:00:00Z"}, ""},
+		{"older build", running, BuildStamp{Commit: "bbb", BuildDate: "2026-09-01T00:00:00Z"},
+			"bbb (built 2026-09-01T00:00:00Z) is not newer than the running aaa (built 2026-10-01T00:00:00Z)"},
+		{"same commit", running, BuildStamp{Commit: "aaa", BuildDate: "2026-10-01T00:00:00Z"},
+			"aaa (built 2026-10-01T00:00:00Z) is not newer than the running aaa (built 2026-10-01T00:00:00Z)"},
+		{"dirty build", running, BuildStamp{Commit: "bbb", Dirty: true, BuildDate: "2026-10-02T00:00:00Z"},
+			"the replacement was built from a modified tree, so it carries no stamp"},
+		{"no commit", running, BuildStamp{}, "the replacement reports no commit or build date, so it carries no stamp"},
+	} {
+		got := ""
+		if err := tt.running.AcceptsReplacement(tt.repl); err != nil {
+			got = err.Error()
+		}
+		assert.Equal(t, tt.want, got, tt.name)
+	}
+}

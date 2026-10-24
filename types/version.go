@@ -2,7 +2,10 @@ package types
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	semver "github.com/Masterminds/semver/v3"
 )
@@ -79,4 +82,28 @@ func WithMagusBuild(ctx context.Context, b MagusBuild) context.Context {
 func MagusBuildFromContext(ctx context.Context) MagusBuild {
 	b, _ := ctx.Value(magusBuildKey{}).(MagusBuild)
 	return b
+}
+
+// BuildStamp is the part of `magus version -o json` that names a build.
+type BuildStamp struct {
+	Commit    string `json:"commit"`
+	Dirty     bool   `json:"dirty"`
+	BuildDate string `json:"build_date"`
+}
+
+// AcceptsReplacement refuses a replacement for b that is unstamped or not strictly
+// newer than b. An unstamped b takes any stamped replacement.
+func (b MagusBuild) AcceptsReplacement(repl BuildStamp) error {
+	built, err := time.Parse(time.RFC3339, repl.BuildDate)
+	switch {
+	case repl.Dirty:
+		return errors.New("the replacement was built from a modified tree, so it carries no stamp")
+	case repl.Commit == "" || err != nil:
+		return errors.New("the replacement reports no commit or build date, so it carries no stamp")
+	}
+	current, err := time.Parse(time.RFC3339, b.Date)
+	if b.Commit == "" || err != nil || built.After(current) {
+		return nil
+	}
+	return fmt.Errorf("%s (built %s) is not newer than the running %s (built %s)", repl.Commit, repl.BuildDate, b.Commit, b.Date)
 }
