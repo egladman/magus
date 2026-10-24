@@ -6,23 +6,30 @@
 // declaration people get wrong most often, because there are two places to put a glob and
 // the difference is not obvious from the names.
 //
-//   magus\project({"sources": [...]})   what makes the PROJECT affected, and seeds the
-//                                        cache key of every target that declares nothing
-//   ctx.readsFiles([...])                  THIS target's exact inputs; magus then hashes
-//                                        only these instead of the project baseline
-//   ctx.writesFiles([...])                 THIS target's outputs; snapshotted, replayed on
-//                                        a hit, and removable by `magus clean`
-//   ctx.writesFiles([...], editsExistingSource: true)       files that already exist and are edited in PART -
-//                                        hashed, but never snapshotted or removed
+//   magus\project({"sources": [...]})
+//       what makes the PROJECT affected, and seeds the cache key of every target that
+//       declares nothing
+//   ctx.readsFiles([...])
+//       THIS target's exact inputs; magus then hashes only these instead of the project
+//       baseline
+//   ctx.writesFiles([...])
+//       THIS target's outputs; snapshotted, replayed on a hit, and removable by
+//       `magus clean`
+//   ctx.writesFiles([...], editsExistingSource: true)
+//       files that already exist and are edited in PART - hashed, but never snapshotted
+//       or removed, and refused before the run when none exists
 //
 // The rule: does the glob affect EVERY target, or ONE? A shared schema is project
 // `sources`, declared once. A target's own `dist/` is `ctx.writesFiles` in its body.
 // Outputs are almost always target-specific, so a project-wide `outputs` is usually the
 // wrong tool - it makes every target snapshot it.
 //
-// The third one is not a synonym for the second. `writesFiles` says "I own this file and
-// create it whole"; `editsExistingSource` says "this file is someone else's and I edit a
-// region of it". Get that backwards and `magus clean` deletes a hand-written page.
+// The flag is not a detail. A plain `writesFiles` says "I own this file and create it
+// whole"; `editsExistingSource: true` says "this file is someone else's and I edit a
+// region of it". Get that backwards and `magus clean` deletes a hand-written page. Calls
+// accumulate, so one target can produce some files and edit others, but never one path
+// both ways (MGS1053); concepts/cache.md#files-a-target-edits-rather-than-produces has
+// the details.
 //
 // This magusfile contains two deliberate contradictions. `doctor` refuses the first before
 // anything runs; the second only shows up once a target has executed, because it is about
@@ -78,8 +85,8 @@ export fun inject(ctx: magus\Context, args: [str]) > void !> any {
 // later - and it still reported success.
 //
 // `magus run tidy` fails it with MGS4007 and names the file. The fix is the line above in
-// `inject`: say `ctx.writesFiles(["data/**"], editsExistingSource: true)` and the edit becomes declared
-// rather than accidental.
+// `inject`: say `ctx.writesFiles(["data/**"], editsExistingSource: true)` and the edit
+// becomes declared rather than accidental.
 //
 // Watch for this most where a charm supplies the write. A charm patches ARGUMENTS, so it
 // cannot tell magus the tool now writes - swap a --check for a --write and a target named

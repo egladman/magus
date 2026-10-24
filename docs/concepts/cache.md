@@ -73,21 +73,21 @@ can't feed back into its own key.
 ### Per-target inputs and outputs
 
 A spell contributes its globs to _every_ target on the project. To attach a glob
-to _one_ target, declare it in that target's body with `ctx.readsFiles(...)` /
-`ctx.writesFiles(...)`:
+to _one_ target, declare it in that target's body with `ctx.readsFiles([...])` /
+`ctx.writesFiles([...])`:
 
 ```buzz
 import "magus";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("schema/**", "codegen.config.json");
-    ctx.writesFiles("dist/**");
+    ctx.readsFiles(["schema/**", "codegen.config.json"]);
+    ctx.writesFiles(["dist/**"]);
     go["go-build"](ctx);
 }
 ```
 
-An explicit `ctx.readsFiles(...)` declaration defines that target's source footprint;
-an explicit `ctx.writesFiles(...)` declaration defines its snapshot/replay footprint.
+An explicit `ctx.readsFiles([...])` declaration defines that target's source footprint;
+an explicit `ctx.writesFiles([...])` declaration defines its snapshot/replay footprint.
 Magus retains the
 magusfiles and any spell sources specific to that target, but it does not inherit
 the broad project baseline. This is what lets one target be precise without making
@@ -97,18 +97,18 @@ its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-
 
 ### Excluding files from a glob
 
-A `!` argument excludes. It narrows every glob of the same call, wherever it sits in
-the call, and never a glob declared by another call:
+A `!` entry excludes. It narrows every glob of the same call, wherever it sits in
+the list, and never a glob declared by another call:
 
 ```buzz
 import "magus";
 
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/*_test.go"); // every generated file, not the tests
+    ctx.writesFiles(["gen/*.go", "!gen/*_test.go"]); // every generated file, not the tests
 }
 ```
 
-The same holds in `ctx.readsFiles`, `ctx.modifiesExistingFiles`, and a project's
+The same holds in `ctx.readsFiles`, in `ctx.writesFiles` with `editsExistingSource: true`, and a project's
 `sources` and `outputs`, and it is the meaning `!` has in
 [`ctx.glob`](dependencies.md). A call of nothing but exclusions is refused at load, since
 it declares nothing; write a literal leading `!` as `\!`. A glob naming a directory
@@ -123,13 +123,13 @@ get the same carve-out, first in `[merge-patterns]`.
 
 ### Files a target edits rather than produces
 
-The declaration names encode ownership, not merely direction:
+A declaration encodes ownership, not merely direction:
 
-| Declaration                      | File relationship                                                    | Cache and clean behavior                                                                                                |
-| -------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `ctx.readsFiles(...)`            | the target reads the named files                                     | hashes their current bytes into the cache key                                                                           |
-| `ctx.writesFiles(...)`           | the target creates or replaces complete generated files              | snapshots and replays them; `magus clean` may remove them                                                               |
-| `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them; caches only a run that leaves them unchanged |
+| Declaration                                         | File relationship                                                    | Cache and clean behavior                                                                                                |
+| --------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `ctx.readsFiles([...])`                             | the target reads the named files                                     | hashes their current bytes into the cache key                                                                           |
+| `ctx.writesFiles([...])`                            | the target creates or replaces complete generated files              | snapshots and replays them; `magus clean` may remove them                                                               |
+| `ctx.writesFiles([...], editsExistingSource: true)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them; caches only a run that leaves them unchanged |
 
 That last case is for a hand-written page with a generated region between markers,
 or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.
@@ -138,12 +138,12 @@ or a manifest a tool rewrites in place. It is deliberately not an output Magus o
 import "magus";
 
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("reference/buzz/*.md");          // created and fully owned
-    ctx.modifiesExistingFiles("concepts/spells.md"); // existing page; only the table changes
+    ctx.writesFiles(["reference/buzz/*.md"]); // created and fully owned
+    ctx.writesFiles(["concepts/spells.md"], editsExistingSource: true); // existing page; only the table changes
 }
 ```
 
-`ctx.modifiesExistingFiles` is **never deleted** by `magus clean` and **never replayed** from a
+An edited source is **never deleted** by `magus clean` and **never replayed** from a
 snapshot, because the bytes magus produced are only part of the file. It still folds
 into the target's cache key exactly as an input does, so editing the prose _around_
 a generated region invalidates the target that maintains that region, which declaring
@@ -155,18 +155,64 @@ cached: a hit under the earlier bytes would skip the body and leave the file as 
 A formatter therefore caches from its first run that changes nothing, and a target
 that rewrites its file on every run never caches.
 
-Unlike reads and writes, a modification infers no ordering edge in either direction:
+Unlike reads and writes, an edit infers no ordering edge in either direction:
 "I edit one region of a file someone else authored" says nothing about build order.
 Declare `ctx.needs` if you need it.
+
+#### Mixing the two modes in one target
+
+Calls accumulate: a target can call `ctx.readsFiles` and `ctx.writesFiles` as many
+times as it likes, and magus reads every call, in both arms of any branch. That is
+how one target produces some files and edits others. This repository's `format`
+target rewrites authored sources in place, and `agent_bench_report` edits a
+hand-kept report while it produces the per-run pages beside it:
+
+```buzz
+import "magus";
+
+export fun agent_bench_report(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["benchmarks/agent/report.md"], editsExistingSource: true);
+    ctx.writesFiles(["benchmarks/agent/reports/**/*.md"]);
+}
+```
+
+A path has one mode. Declaring it both produced and edited in one target, by the same
+glob or by two globs that can match one file, is refused at load as
+[MGS1053](../reference/codes/magusfile/MGS1053.md), since magus cannot both replay
+the file and keep it out of the replay set:
+
+```buzz
+import "magus";
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/**"]);
+    ctx.writesFiles(["gen/version.go"], editsExistingSource: true); // MGS1053: gen/** produces it
+}
+```
+
+An edited source must exist before the target runs. Just before it runs, magus checks
+that each `editsExistingSource` path or glob matches at least one file, and refuses
+the target when one matches nothing:
+
+```text
+ctx.writesFiles in target generate lists "gen/version.go" with editsExistingSource: true,
+but no file matches it in project .: an edited source must already exist. Create it, or
+drop editsExistingSource so the target produces it.
+```
+
+The check runs at the target, not at load, so a target that runs earlier in the same
+invocation can still create the file. A produced glob that matches nothing is not an
+error: producing it is the target's job.
 
 The globs are read **statically**, before the target runs: a cache hit skips the
 body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
-**string-literal** globs. Two disciplines follow, both enforced:
+**literal** lists of string globs and the literal `editsExistingSource` flag. Two
+disciplines follow, both enforced:
 
-- A **non-literal argument** (`ctx.readsFiles(someVar)`) is a magusfile load error:
-  a computed glob is invisible to the static read, and silently dropping it would
-  risk a stale hit.
+- A **non-literal list, entry or flag** (`ctx.readsFiles(paths)`,
+  `ctx.readsFiles([someVar])`) is a magusfile load error: a computed glob is invisible
+  to the static read, and silently dropping it would risk a stale hit.
 - A call the walk **can't reach** (in an unreferenced helper, or the identifier
   used as a value) never enters a key; `magus doctor` flags it as
   [MGS1004](../reference/codes/magusfile/MGS1004.md).
@@ -201,7 +247,7 @@ the `Step`. magus writes these lines, in this order, into one hash:
   charm changes behavior. Empty charms add nothing, so charm-less runs are
   unaffected. A write grant (`rw`, `update`) keys only a step that can read it:
   something in its `ctx.needs` closure branches on it by name
-  (`ctx.hasCharm("rw")`), declares in-place edits (`ctx.modifiesExistingFiles`), or
+  (`ctx.hasCharm("rw")`), declares in-place edits (`editsExistingSource: true`), or
   drives an op that patches its argv on it. Every other step, a test run say, hashes
   as it would without the grant, so a local run under `default_charms: [rw]` and the
   read-only `ci` gate share one entry. The walk is static, so a body that names the
@@ -603,10 +649,10 @@ sources (its own globs plus every bound spell's `needs`) and the magusfile. That
 conservative default keeps an undeclared target safe, but it can make unrelated
 work invalidate together.
 
-An explicit [`ctx.readsFiles(...)`](#per-target-inputs-and-outputs) call changes that
+An explicit [`ctx.readsFiles([...])`](#per-target-inputs-and-outputs) call changes that
 contract. It is the target's exact source footprint: magus keeps the magusfiles
 and that target's spell inputs, then hashes only the declared inputs. A
-`ctx.readsFiles("src/**")` build therefore does not re-run for a sibling Dockerfile.
+`ctx.readsFiles(["src/**"])` build therefore does not re-run for a sibling Dockerfile.
 Use it when a target has a genuinely narrower domain, and name every source that
 domain reads.
 
@@ -614,12 +660,12 @@ That gives a clean rule for **where to declare a glob**:
 
 - **affects every target** (a shared schema, a project-wide config) -> project-wide
   `magus\project({sources = [...]})`, declared once;
-- **affects one target** -> `ctx.readsFiles(...)`, `ctx.writesFiles(...)`, or
-  `ctx.modifiesExistingFiles(...)` in that target's body, according to the file relationship above.
+- **affects one target** -> `ctx.readsFiles([...])`, `ctx.writesFiles([...])`, or
+  `ctx.writesFiles([...], editsExistingSource: true)` in that target's body, according to the file relationship above.
 
 Outputs are almost always target-specific (`build` -> `dist/`, `test` ->
 `coverage/`), so a project-wide `outputs` (which makes every target snapshot
-it) is usually the wrong tool; prefer `ctx.writesFiles(...)`.
+it) is usually the wrong tool; prefer `ctx.writesFiles([...])`.
 
 ## Replay: a hit restores outputs, not execution
 
@@ -718,7 +764,7 @@ where two projects claim one glob under the same target, is
 write, which is why formatters are excluded by configuration as well as caught
 by a diagnostic. When a target genuinely needs to amend part of a file it does
 not own, that is
-[`ctx.modifiesExistingFiles`](#files-a-target-edits-rather-than-produces), not a
+[`ctx.writesFiles([...], editsExistingSource: true)`](#files-a-target-edits-rather-than-produces), not a
 second output declaration.
 
 ## The two roles of an output (maintainer note)
