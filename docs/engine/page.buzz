@@ -614,13 +614,10 @@ export fun renderRoot(site: Site) > void !> any {
     final pageDir = README_URL.sub(0, README_URL.len() - 1);
     html = renderContentHTML(html, pageDir, pageDir);
 
-    // Same cross-linking every other docs page gets (glossary.md is exempt there since it
-    // defines the terms; the README doesn't, so it always gets linked): auto-link the first
-    // occurrence of each glossary term, link inline-code domain references, and hint rendered
-    // convention markers back to their conventions section.
-    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath(pageDir, "glossary/"));
-    html = linkRes.html;
-    site.addTermRefs(linkRes.linked, README_URL);
+    // Same cross-linking every other docs page gets: auto-link the first occurrence of each
+    // glossary term, link inline-code domain references, and hint rendered convention
+    // markers back to their conventions section.
+    html = linkGlossaryTerms(html, site.glossaryTerms, relativePath(pageDir, "glossary/")).html;
     html = linkCodeEntities(html, site.codeEntities, pageDir);
     html = injectConventionHints(html, site.conventions, relativePath(pageDir, "conventions/"));
     // The README ships <picture> so GitHub renders the committed pair; inlining swaps it
@@ -709,17 +706,13 @@ export fun renderFile(rel: str, site: Site) > void !> any {
 
     final url = cleanURL(rel, site.blog);
 
-    // Auto-link the first occurrence of each glossary term to its glossary entry, baking the
-    // definition into the link, and record the cross-references. The glossary page itself is
-    // not auto-linked (it defines the terms); instead it gets each term's "referenced on"
-    // backlinks injected under its definition (rendered last, so the set is complete).
-    if (rel == "glossary.md") {
-        html = injectBacklinks(html, site.glossaryBacklinkFragments());
-    } else {
-        final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath(newCleanDirectory(rel, site), "glossary/"));
-        html = linkRes.html;
-        site.addTermRefs(linkRes.linked, url);
+    // Auto-link the first occurrence of each glossary term to its term page, baking the
+    // definition into the link. A term page does not link its own term to itself.
+    final terms = mut [<GlossaryTerm>];
+    foreach (t in site.glossaryTerms) {
+        if (rel != "glossary/" + t.anchor + ".md") { terms.append(t); }
     }
+    html = linkGlossaryTerms(html, terms, relativePath(newCleanDirectory(rel, site), "glossary/")).html;
     // Link inline-code domain references (diagnostic codes, ...) to their reference pages on
     // every page, glossary included.
     html = linkCodeEntities(html, site.codeEntities, newCleanDirectory(rel, site));
@@ -772,7 +765,6 @@ test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest r
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -795,7 +787,6 @@ test "substituteVersionTokens is a no-op before any release has shipped" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],

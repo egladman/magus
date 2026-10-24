@@ -611,6 +611,9 @@
 {"group":"dir:console/src/ui","path":"console/src/ui/workspace-picker.ts"}
 {"group":"dir:docs/concepts/secrets","path":"docs/concepts/secrets/providers.md"}
 {"group":"dir:docs/concepts/targets","path":"docs/concepts/targets/ci.md"}
+{"group":"dir:docs/design","path":"docs/design/refusals.md"}
+{"group":"dir:docs/design","path":"docs/design/standard.md"}
+{"group":"dir:docs/design","path":"docs/design/strained.md"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/embed.buzz"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/hook.buzz"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/session.buzz"}
@@ -625,9 +628,12 @@
 {"group":"dir:docs/guides/setup","path":"docs/guides/setup/windows.md"}
 {"group":"dir:docs/lib","path":"docs/lib/adr.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/conventions.buzz"}
+{"group":"dir:docs/lib","path":"docs/lib/conventions.buzz"}
+{"group":"dir:docs/lib","path":"docs/lib/conventions.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/crosscheck.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/csp.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/date.buzz"}
+{"group":"dir:docs/lib","path":"docs/lib/design.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/dom.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/feed.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/glossary.buzz"}

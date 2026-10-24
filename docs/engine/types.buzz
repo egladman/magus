@@ -231,12 +231,9 @@ export object Site {
     // pick its Related neighbors.
     docPages: mut [DocPage],
 
-    // Glossary vocabulary, parsed pre-walk from glossary.md (longest term first). Each
-    // rendered docs page auto-links the first occurrence of each term; glossaryRefs
-    // accumulates which page URLs linked each anchor, emitted as glossary-index.json for
-    // the term popover ("referenced on ...").
+    // Glossary vocabulary, read pre-walk from the glossary/ term pages (longest term first).
+    // Each rendered docs page auto-links the first occurrence of each term to its page.
     glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
-    glossaryRefs: mut {str: mut [str]},
 
     // Documentation conventions, parsed pre-walk from conventions.md. Each rendered page gets
     // a subtle "?" hint next to a convention marker (an admonition title, a code caption)
@@ -244,11 +241,9 @@ export object Site {
     conventions: [Convention] = mut [<Convention>],
 
     // Per-page glossary vocabulary: each docs page's clean URL mapped to the "||"-joined,
-    // sorted set of glossary anchors it auto-links (the same set glossaryRefs holds inverted).
-    // Built pre-walk by collectPageTerms so renderRelated can rank a page's neighbors by
-    // shared vocabulary - the "graph" signal - before the first page renders. glossaryRefs
-    // fills DURING the walk and is only complete afterward, so it cannot drive an in-walk
-    // Related block; this forward-built map can. Joined with "||" (never in an anchor slug)
+    // sorted set of glossary anchors it mentions. Built pre-walk by collectPageTerms so
+    // renderRelated can rank a page's neighbors by shared vocabulary - the "graph" signal -
+    // before the first page renders. Joined with "||" (never in an anchor slug)
     // so sharedTagCount counts the overlap without a second helper.
     pageTerms: mut {str: str},
 
@@ -715,14 +710,18 @@ export object Site {
 `, {"root": root, "picks": picks});
     }
 
-    // collectGlossaryTerms parses glossary.md into the term set, pre-walk (like
-    // collectDocPages), so every page's render can auto-link the vocabulary.
-    fun collectGlossaryTerms() > void {
-        final path = this.root + "/" + this.docs + "/glossary.md";
-        final f = io\File.open(path, io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        this.glossaryTerms = parseGlossary(md);
+    // collectGlossaryTerms reads each glossary/<slug>.md page's title and description into
+    // the term set, pre-walk (like collectDocPages), so every page's render can auto-link the
+    // vocabulary to the term's own page.
+    fun collectGlossaryTerms() > void !> any {
+        final terms = mut [<GlossaryTerm>];
+        foreach (p in fs\glob(this.root + "/" + this.docs + "/glossary/*.md")) {
+            final fm = serialize\jsonDecode(markdown\frontmatter(fs\readFile(p.value)));
+            final base = fs\basename(p.value);
+            terms.append(GlossaryTerm{ term = fm.q("title").stringValue(),
+                anchor = base.sub(0, len: base.len() - 3), def = fm.q("description").stringValue() });
+        }
+        this.glossaryTerms = sortLongestFirst(terms);
     }
 
     // collectConventions parses conventions.md into the convention set, pre-walk (like
@@ -735,13 +734,12 @@ export object Site {
         this.conventions = parseConventions(md);
     }
 
-    // collectPageTerms records, per docs page, the glossary anchors that page auto-links,
-    // so renderRelated can score neighbors by shared vocabulary. Runs pre-walk (after
-    // collectDocPages + collectGlossaryTerms) over docPages, applying the same
-    // linkGlossaryTerms pass the walk uses - the map is therefore complete before any
-    // page's Related block renders, which glossaryRefs (built during the walk) is not. The
-    // glossary page defines the terms and is not auto-linked during the walk, so it is
-    // skipped here too. Anchors are sorted and "||"-joined so sharedTagCount counts overlap.
+    // collectPageTerms records, per docs page, the glossary anchors that page mentions, so
+    // renderRelated can score neighbors by shared vocabulary. Runs pre-walk (after
+    // collectDocPages + collectGlossaryTerms) over docPages, so the map is complete before
+    // any page's Related block renders. The glossary index names every term, so it would
+    // relate to everything and is skipped. Anchors are sorted and "||"-joined so
+    // sharedTagCount counts overlap.
     fun collectPageTerms() > void {
         foreach (p in this.docPages) {
             if (p.srcRel == this.docs + "/glossary.md") { continue; }
@@ -888,88 +886,6 @@ export object Site {
         this.codeEntities = sortEntitiesLongestFirst(ents);
     }
 
-    // addTermRefs records that every anchor in `anchors` was linked on the page at `url`,
-    // building the "referenced on ..." lists for glossary-index.json.
-    fun addTermRefs(anchors: [str], url: str) > void {
-        foreach (anchor in anchors) {
-            if (this.glossaryRefs[anchor] == null) { this.glossaryRefs[anchor] = mut [<str>]; }
-            this.glossaryRefs[anchor]!.append(url);
-        }
-    }
-
-    // glossaryBacklinkFragments builds, per glossary anchor, the "referenced on" HTML that
-    // injectBacklinks appends under the term on the glossary page: the pages that use the
-    // term, linked relative to /glossary/. Called after the walk, when glossaryRefs holds
-    // the complete cross-reference set. This is why the backlinks live on the glossary page
-    // (one place, no duplication) rather than inline on every page: a term's reference set
-    // is a whole-site aggregate, unknown until the walk ends.
-    //
-    // Shape, in order of what it fixes. A <details>, NOT a <nav>: classless Pico styles
-    // every <nav> as a space-between flexbox and pads every <nav> <li> by the nav element
-    // spacing, so the heading was pinned to its own narrow column and each chip row carried
-    // ~34px of dead vertical space. Collapsed by default: the site links these terms 927
-    // times, and expanding all forty sets inline buried every one-line definition on the
-    // page under its own metadata. The count goes in the summary because it is the part a
-    // reader wants without opening anything - how central the term is. Grouped by docs
-    // section because the busiest term is referenced on 85 pages, and a reader scanning
-    // that many is asking "concept page or CLI page", not hunting one title in a flat run.
-    fun glossaryBacklinkFragments() > {str: str} {
-        final byAnchor = mut {<str: str>};
-        foreach (anchor in this.glossaryRefs.keys()) {
-            final urls = this.glossaryRefs[anchor];
-            if (urls == null) { continue; }
-            // A URL with no docs page behind it cannot be rendered as a link a reader
-            // can act on. The home page reaches here under two spellings - "" from the
-            // walk and "index.html" from the root render - and only one of them is a
-            // docPages URL, so the other used to emit <a href="../index.html"></a>:
-            // an anchor with no text, unclickable and silent to a screen reader.
-            // Dropping the untitled spelling both fixes that and de-duplicates the
-            // home page, which would otherwise be listed twice under one term.
-            var seen: mut {str: bool} = mut {};
-            final bySection = mut {<str: mut [{str: str}]>};
-            var count = 0;
-            foreach (u in urls!) {
-                final title = this.lookupTitle(u);
-                if (title == "") { continue; }
-                if (seen[u] != null) { continue; }
-                seen[u] = true;
-                // The group label is the capitalized first URL segment, so "concepts/cache/"
-                // files under "Concepts". Deliberately the segment and not the section
-                // landing page's title: the label has to stay short enough to sit beside a
-                // wrapping row of chips ("Documentation", not "magus Documentation"), and
-                // every docs URL has a first segment while not every section has a landing.
-                final section = capitalizeFirst(firstPathSegment(u));
-                if (bySection[section] == null) { bySection[section] = mut [<{str: str}>]; }
-                bySection[section]!.append(mut {"title": title, "href": relativePath("glossary", u)});
-                count = count + 1;
-            }
-            if (count == 0) { continue; }
-
-            // Sections alphabetically, pages by title within a section: the order has to be
-            // stable across builds (the walk order is not) and predictable to a reader.
-            // keys() hands back an immutable list and sort mutates in place, so copy first.
-            final sections = mut [<str>];
-            foreach (s in bySection.keys()) { sections.append(s); }
-            final groups = mut [<str>];
-            foreach (section in sections.sort(fun (a: str, b: str) > bool { return strLess(a, b); })) {
-                final pages = bySection[section]!.sort(fun (a: {str: str}, b: {str: str}) > bool {
-                    return strLess(a["title"], b["title"]);
-                });
-                final items = mut [<str>];
-                foreach (p in pages) {
-                    items.append("<li><a href=\"" + p["href"] + "\">" + p["title"] + "</a></li>");
-                }
-                groups.append("<div><b>" + section + "</b><ul>" + items.join("") + "</ul></div>");
-            }
-            var noun = " pages";
-            if (count == 1) { noun = " page"; }
-            byAnchor[anchor] = "<details class=\"glossary-backlinks\">"
-                + "<summary>Referenced on {count}" + noun + "</summary>"
-                + groups.join("") + "</details>\n";
-        }
-        return byAnchor;
-    }
-
     // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
     // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
     // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
@@ -998,7 +914,6 @@ test "Site.collectAlias trims slashes and records every alias" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1020,7 +935,6 @@ test "Site.addRecord marks the URL written and appends one search record" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1042,7 +956,6 @@ test "Site.latestStable passes over a newer release candidate" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1073,7 +986,6 @@ test "renderSectionNav lists an overview's direct children and marks the current
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1104,7 +1016,6 @@ test "renderSectionNav returns empty for a childless page with no overview ances
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1126,7 +1037,6 @@ test "renderSectionNav lists a non-overview parent's own direct children" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1153,7 +1063,6 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1188,7 +1097,6 @@ test "renderSubtree lists the whole branch, nested by depth" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1218,7 +1126,6 @@ test "renderSubtree stays quiet when it would repeat the section list" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -1242,7 +1149,6 @@ test "renderSubtree refuses to become a wall of links" {
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],

@@ -121,9 +121,6 @@ fun walk(rel: str, site: Site) > void !> any {
             walk(childRel, site);
         } else {
             if (name.endsWith(".md") and isGeneratorFile(name, site.config.generatorFiles) == false) {
-                // glossary.md renders AFTER the walk (in site_render), once glossaryRefs is
-                // complete, so its per-term "referenced on" backlinks are the full set.
-                if (childRel == "glossary.md") { continue; }
                 renderFile(childRel, site);
             }
         }
@@ -153,7 +150,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         writtenPaths = mut {},
         blogPosts = mut [<BlogPost>],
         docPages = mut [<DocPage>],
-        glossaryRefs = mut {},
         pageTerms = mut {},
         demoBySlug = mut {},
         releases = mut [<Release>],
@@ -172,7 +168,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     site.writtenPaths = mut {};
     site.docPages = mut [<DocPage>];
     site.glossaryTerms = mut [<GlossaryTerm>];
-    site.glossaryRefs = mut {};
     site.pageTerms = mut {};
     site.codeEntities = mut [<Entity>];
     site.demoBySlug = mut {};
@@ -294,14 +289,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     findReleasePost(site);
 
     // The front door, then the README as the /development/ landing. renderLanding writes
-    // gen/index.html; renderRoot writes gen/development/index.html. Both stay ahead of the
-    // glossary render below, which aggregates the term references every page contributes.
+    // gen/index.html; renderRoot writes gen/development/index.html.
     renderLanding(site);
     renderRoot(site);
     walk("", site);
-    // glossary.md last: it aggregates the cross-references collected across the whole walk
-    // into per-term backlinks (renderFile injects them for this page).
-    renderFile("glossary.md", site);
     walkBlog(site);
 
     // Build /development/ before writeAliases so its pages are in site.pageUrls for the

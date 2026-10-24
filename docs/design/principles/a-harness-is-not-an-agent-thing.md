@@ -32,7 +32,7 @@ would want too.
   that `magus affected ci` runs for a person.
 - [Human-first is the AI integration](human-first-is-the-ai-integration.md): no
   check exists for an agent alone, with the job store as the named exception.
-- The [glossary entry for harness](../../glossary.md#harness) defines it by what
+- The [glossary entry for harness](../../glossary/harness.md) defines it by what
   is deterministic, not by who drives it.
 
 ## Good
@@ -57,4 +57,4 @@ agent reads it and skips it, and nothing checks either of them.
 
 - [Determinism at chosen points](../judgment/determinism-at-chosen-points.md)
 - [Friction that carries meaning](friction-that-carries-meaning.md)
-- [Glossary: harness](../../glossary.md#harness)
+- [Glossary: harness](../../glossary/harness.md)

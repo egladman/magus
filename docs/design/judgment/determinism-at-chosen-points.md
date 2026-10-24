@@ -7,7 +7,7 @@ tags: [design, judgment, agents, harness]
 
 # Determinism at chosen points
 
-A [harness](../../glossary.md#harness) is the deterministic part of the work on
+A [harness](../../glossary/harness.md) is the deterministic part of the work on
 a change, for a person or an agent
 ([A harness is not an agent thing](../principles/a-harness-is-not-an-agent-thing.md)).
 Around a model's agent loop it is the checks, permission gates, typed
@@ -82,4 +82,4 @@ it has to be rewritten for the next model and the next host.
 
 - [The outer harness stays outside](the-outer-harness-stays-outside.md)
 - [Built for the expensive era](../principles/built-for-the-expensive-era.md)
-- [Glossary: harness](../../glossary.md#harness)
+- [Glossary: harness](../../glossary/harness.md)

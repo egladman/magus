@@ -265,9 +265,26 @@ export fun refDocHtml(rel: str, site: Site) > str {
     final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
     final md = f.readAll();
     f.close();
-    var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    final cleanDir = newCleanDirectory(rel, site);
+    var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), cleanDir);
     html = html.split("=\"../").join("=\"%%ROOT%%");
-    return html;
+    // A link below the page's own directory (glossary.md's "workspace/" for its term page)
+    // has no ../ to template, and embedded in another page it would resolve against that
+    // page, so it is rooted at the source page's directory too.
+    final pieces = html.split("href=\"");
+    final rooted = mut [pieces[0]];
+    foreach (i, p in pieces) {
+        if (i == 0) { continue; }
+        final colon = p.indexOf(":");
+        final quote = p.indexOf("\"");
+        final scheme = colon != null and quote != null and colon! < quote!;
+        if (scheme or p.startsWith("%%ROOT%%") or p.startsWith("#") or p.startsWith("/")) {
+            rooted.append(p);
+        } else {
+            rooted.append("%%ROOT%%" + cleanDir + "/" + p);
+        }
+    }
+    return rooted.join("href=\"");
 }
 
 export fun loadReferenceContent(site: Site) > void {
@@ -278,8 +295,8 @@ export fun loadReferenceContent(site: Site) > void {
 }
 
 // keepGlossarySections keeps only the <h3 id="..."> term blocks whose anchor is in keep,
-// in document order, and drops everything else. Same scan injectBacklinks uses: a term
-// block runs from its own <h3 id="> to the next <h3 id="> or <h2>.
+// in document order, and drops everything else. A term block in the glossary index runs
+// from its own <h3 id="> to the next <h3 id="> or <h2>.
 fun keepGlossarySections(html: str, keep: {str: bool}) > str {
     final marker = "<h3 id=\"";
     final kept = mut [<str>];

@@ -12,6 +12,7 @@ import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
 import "lib/html" as _;       // resolvePath, to resolve a relative link against its file's dir
 import "lib/adr" as _;        // adrProblems, the ADR template
 import "lib/design" as _;     // designProblems, the design page template
+import "lib/dictionary" as dictionary;   // termProblems, the glossary term page template
 
 // Convention is one section of conventions.md: the heading, its goldmark anchor, and the
 // lead paragraph as a one-line description for the popover. The conventions page is prose
@@ -292,6 +293,11 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
     }
     foreach (p in designProblems(file, md: md)) {
         found.append(ConventionFinding{ file = file, line = p.line, rule = "design-template", message = p.message });
+    }
+    final terms = dictionary\termProblems(file, md: md)
+        catch [dictionary\TermProblem{ line = 1, message = "front matter does not parse; it must be YAML between `---` lines" }];
+    foreach (p in terms) {
+        found.append(ConventionFinding{ file = file, line = p.line, rule = "glossary-term", message = p.message });
     }
     if (isAuthoredPage(file)) {
         pageFindings(file, md: md, found: found);

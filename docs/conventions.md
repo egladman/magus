@@ -434,6 +434,62 @@ tags: [design, <principle or judgment>, <topics>]
 
 `magus run conventions docs` enforces the shape as the `design-template` rule
 ([`docs/lib/design.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/design.buzz)).
+## Glossary term pages
+
+Every term in the [glossary](glossary.md) has its own page, `docs/glossary/<slug>.md`, so a
+diagnostic, a review comment or another page can cite one definition at a stable address.
+Every term page follows one template:
+
+```md
+---
+title: <Term>
+order: <its place in its group, as a number>
+description: "<the definition in one or two sentences, ending with a period>"
+tags: [glossary, <group>]
+---
+
+# <Term>
+
+<what the word means in magus>
+
+## Elsewhere
+
+<what the word means in the wider industry, and how magus's meaning differs>
+
+## Example
+
+<one real command or code block>
+
+## Used in
+
+<!-- BEGIN GLOSSARY USAGE ... -->
+<!-- END GLOSSARY USAGE -->
+
+## See also
+
+- <links>
+```
+
+- The file name is the title's heading slug (`Output reference` is `output-reference.md`,
+  `MAGUS.md` is `magusmd.md`), which is also the anchor the term had when the glossary was
+  one page. The index in `glossary.md` keeps that anchor on each term's heading, so an old
+  `glossary.md#<slug>` link still lands on the term.
+- `tags` open with `glossary`, then one group: `core-model`, `execution-and-caching`,
+  `telemetry-and-health`, `insight-and-knowledge`, `design-and-scope`, `agents`,
+  `sessions-and-leases` or `console`. The index lists each group in `order`.
+- The definition comes first and is magus's own. Elsewhere is there only when the word
+  means something different outside magus: name the source (a tool, a vendor, a spec), say
+  what it means there, and say how magus differs. It clarifies the other meaning and never
+  adopts it.
+- Example holds at least one fenced block that runs today.
+- Used in is generated: `magus run glossary-usage-generate:rw docs` fills it from the
+  knowledge graph with the docs sections and code types that carry the term. Edit the
+  generator, not the block.
+- The description is what the glossary index and every term link's popover show.
+
+`magus run glossary-index-generate:rw docs` rewrites the index from the pages' front matter,
+and `magus run conventions docs` enforces the template as the `glossary-term` rule
+([`docs/lib/dictionary.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/dictionary.buzz)).
 
 ## Writing rules
 
