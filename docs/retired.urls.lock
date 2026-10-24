@@ -403,3 +403,8 @@ tags/preflight/
 
 # The stdin-closed guard rule was deleted with the stdin rewrite.
 reference/rules/stdin-closed/
+
+# scripted-rewrite was split into interpreter-rewrite and interpreter-script when the rule
+# started judging what an interpreter does, not the substitute-and-write shape. A rule page
+# is generated per shipped rule, so the old page retires rather than aliases.
+reference/rules/scripted-rewrite/
