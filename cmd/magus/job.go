@@ -2004,6 +2004,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	store = store.InWorkspace(jobWorkspace(ctx, root))
 	rows, err := store.List()
 	if err != nil {
 		return err
