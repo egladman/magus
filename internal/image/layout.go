@@ -52,13 +52,10 @@ func checkSHA256(d digest.Digest) bool {
 	return d.Validate() == nil && d.Algorithm() == digest.SHA256
 }
 
-// writeLayout lays out blobs plus an index.json naming root at dest (R21, R22).
-// root's blob must be among blobs. Nothing is visible at dest until every blob
-// is written and verified, and on any error dest is left as it was. The sandbox
-// check on dest and on its parent, where staging lives, belongs to the caller.
-func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blobs []blob) (err error) {
+// layoutIndex checks root against blobs and returns the encoded index.json.
+func layoutIndex(root ocispec.Descriptor, blobs []blob) ([]byte, error) {
 	if !checkSHA256(root.Digest) {
-		return fmt.Errorf("image.write: layout: root digest %q is not a sha256 digest", root.Digest)
+		return nil, fmt.Errorf("image.write: layout: root digest %q is not a sha256 digest", root.Digest)
 	}
 	rootHeld := false
 	for _, b := range blobs {
@@ -67,14 +64,40 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 		}
 	}
 	if !rootHeld {
-		return fmt.Errorf("image.write: layout: root %s is not among the blobs", root.Digest)
+		return nil, fmt.Errorf("image.write: layout: root %s is not among the blobs", root.Digest)
 	}
 	index, err := json.Marshal(ocispec.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		Manifests: []ocispec.Descriptor{root},
 	})
 	if err != nil {
-		return fmt.Errorf("image.write: layout: index.json: %w", err)
+		return nil, fmt.Errorf("image.write: layout: index.json: %w", err)
+	}
+	return index, nil
+}
+
+// makeLayoutDirs creates staging, its blobs directory and blobDir. MkdirTemp
+// makes 0700 and MkdirAll honors the umask, so chmod spells the mode (R31).
+func makeLayoutDirs(staging, blobDir string) error {
+	for _, dir := range []string{staging, filepath.Join(staging, "blobs"), blobDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("image.write: layout: %w", err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			return fmt.Errorf("image.write: layout: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeLayout lays out blobs plus an index.json naming root at dest (R21, R22).
+// root's blob must be among blobs. Nothing is visible at dest until every blob
+// is written and verified, and on any error dest is left as it was. The sandbox
+// check on dest and on its parent, where staging lives, belongs to the caller.
+func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blobs []blob) (err error) {
+	index, err := layoutIndex(root, blobs)
+	if err != nil {
+		return err
 	}
 
 	dest = filepath.Clean(dest)
@@ -89,14 +112,8 @@ func writeLayout(ctx context.Context, dest string, root ocispec.Descriptor, blob
 	}()
 
 	blobDir := filepath.Join(staging, "blobs", digest.SHA256.String())
-	// MkdirTemp makes 0700 and MkdirAll honors the umask, so chmod spells the mode (R31).
-	for _, dir := range []string{staging, filepath.Join(staging, "blobs"), blobDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("image.write: layout: %w", err)
-		}
-		if err := os.Chmod(dir, 0o755); err != nil {
-			return fmt.Errorf("image.write: layout: %w", err)
-		}
+	if err := makeLayoutDirs(staging, blobDir); err != nil {
+		return err
 	}
 	if err := file.WriteFileAtomic(filepath.Join(staging, "oci-layout"), []byte(layoutMarker), 0o644); err != nil {
 		return fmt.Errorf("image.write: layout: oci-layout: %w", err)
