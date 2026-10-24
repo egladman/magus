@@ -9,8 +9,8 @@
 //
 // --gate-ready makes the checkout ready to gate instead (gateReady): the build only when ./magus
 // is not at HEAD, then pools, untracked skill installs the placed ./magus would write differently,
-// the graph and the symbol digest. run-gate, rebase-branches-onto-base, merge-base-into-branches
-// and land-commits call it before they gate.
+// the graph and the symbol digest. rebase-branches-onto-base, merge-base-into-branches and
+// land-commits call it before they gate.
 //
 // The daemon stops before a build, so a project lock it holds cannot fail the build with exit 75.
 // --here builds in the current checkout, which must be clean. --restart ends with the daemon

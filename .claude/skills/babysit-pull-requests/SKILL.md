@@ -76,8 +76,9 @@ fix the pure function that produced it and its test, then run it again.
         sits on the one before. Both scripts take local branches origin lacks.
       - When either stops at a source conflict, it names the files and the
         checkout; hand those to an agent of the record's model as below.
-   4. `./magus buzz hack/dev/run-gate.buzz` gates the result once and prints each
-      failed member's ref and first failing lines; fix from those, never rerun.
+   4. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready`, then
+      `./magus status --wait | ./magus affected ci` gates the result once; on failure it
+      closes with each failed target's ref and cause. Fix from those, never rerun.
    5. `./magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <ref>
       --title <text> --body-file <file>` opens a pull request for commits that have
       none, after CI's hygiene checks pass locally.

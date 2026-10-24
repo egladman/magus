@@ -149,15 +149,11 @@ fun within(root: str, dir: str) > bool {
     return dir != "" and (dir == root or dir.startsWith(root + "/"));
 }
 
-// runsGate: `magus affected ci`, `magus run ci` or the `magus buzz hack/dev/run-gate.buzz` script
-// that runs it, with or without a charm, and not the --plan form, which runs nothing.
+// runsGate: `magus affected ci`, or `magus run ci`, with or without a charm, piped from `magus status --wait` or not, and not the --plan form, which runs nothing.
 fun runsGate(programs: [helpers\Program]) > bool {
     foreach (p in programs) {
         if (p.name == "magus") {
             final ops = helpers\magusOperands(withoutDirFlag(p.args));
-            if (ops.len() > 1 and ops[0] == "buzz" and ops[1].endsWith("hack/dev/run-gate.buzz")) {
-                return true;
-            }
             if (ops.len() > 1 and (ops[0] == "affected" or ops[0] == "run")
                 and (ops[1] == "ci" or ops[1].startsWith("ci:"))
                 and !helpers\hasFlag(p.args, long: "--plan")) {
@@ -252,18 +248,18 @@ test "a worker whose role is not integrate may not run the gate" {
     }
 }
 
-test "the gate script is judged as the gate" {
+test "the gate behind a status wait is judged as the gate" {
     final worker = Caller{ role = "worker", title = "orchestrator/review guard-command" };
     foreach (argv in [
-        ["magus", "buzz", "hack/dev/run-gate.buzz"],
-        ["magus", "buzz", "hack/dev/run-gate.buzz", "--", "--timeout", "30m"],
+        ["magus", "affected", "ci"],
+        ["magus", "-j", "4", "affected", "ci"],
     ]) {
-        final v = judged(helpers\request([argv]), caller: worker, checkout: null);
+        final v = judged(helpers\request([["magus", "status", "--wait"], argv]), caller: worker, checkout: null);
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
     }
     final person = Caller{ role = "person", title = "" };
-    std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/run-gate.buzz"]]), caller: person, checkout: null).decision != "deny", message: "a person may run it");
+    std\assert(judged(helpers\request([["magus", "status", "--wait"], ["magus", "affected", "ci"]]), caller: person, checkout: null).decision != "deny", message: "a person may run it");
     std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/ls-test-failures.buzz"]]), caller: worker, checkout: null).decision != "deny", message: "other scripts are not the gate");
 }
 
