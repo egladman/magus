@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,9 +15,9 @@ import (
 func TestRenderNamesEveryField(t *testing.T) {
 	page := render()
 	for _, f := range schema.Fields {
-		assert.Contains(t, page, "`"+f.YamlPath+"`")
+		assert.Contains(t, page, fmt.Sprintf("`%s`", f.YamlPath))
 		if f.EnvVar != "" {
-			assert.Contains(t, page, "`"+f.EnvVar+"`")
+			assert.Contains(t, page, fmt.Sprintf("`%s`", f.EnvVar))
 		}
 	}
 }
