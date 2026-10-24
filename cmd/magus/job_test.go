@@ -36,6 +36,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// A checkout whose magusfile this magus cannot load keeps one line naming the code, never
+// the spell dump a load failure renders.
+func TestUnloadableMagusfileIsOneLine(t *testing.T) {
+	t.Parallel()
+	coded := fmt.Errorf("loading magusfile: %w", types.DiagnosticErrorf(types.NoCITarget, "no ci target\n  at magusfile.buzz:1\n  spell dump"))
+	assert.EqualError(t, unloadableMagusfile(coded), fmt.Sprintf("this magus cannot load its magusfile (%s)", types.NoCITarget))
+	assert.EqualError(t, unloadableMagusfile(errors.New("parse failed\n  spell dump")), "parse failed")
+}
+
 func leaseRow(id, parent string) types.Job {
 	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
 }

@@ -197,6 +197,39 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 	return json.Marshal(members)
 }
 
+// unwrapDescribed is the row inside a `describe job -o json` record: an object with an
+// object `job` and no `id`. The derived members beside `job` are dropped and any other is
+// refused, since a typo there would vanish unread. A row naming no schema_version takes
+// this magus's, as [DecodeStdinDeclaration] does; any other record comes back as it was.
+func unwrapDescribed(raw []byte) ([]byte, error) {
+	members, isObject := objectMembers(raw)
+	if !isObject {
+		return raw, nil
+	}
+	if _, hasID := members["id"]; hasID {
+		return raw, nil
+	}
+	row, isObject := objectMembers(members["job"])
+	if !isObject || row == nil {
+		return raw, nil
+	}
+	derived := append(jsonMembers(reflect.TypeFor[Terms]()), "goals")
+	var unknown []string
+	for _, name := range slices.Sorted(maps.Keys(members)) {
+		if !slices.Contains(derived, name) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, recordInvalid(unknown[0], fmt.Errorf("%s beside `job` is not a member `describe job -o json` prints",
+			quoteAll(unknown))).Err()
+	}
+	if _, named := row["schema_version"]; !named {
+		row["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
+	}
+	return json.Marshal(row)
+}
+
 // objectMembers is raw's top-level members, false for a record that is not a JSON object.
 func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
 	var members map[string]json.RawMessage
@@ -237,7 +270,11 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	rows := make([]types.Declaration, 0, len(parts))
 	seen := map[string]int{}
 	for i, part := range parts {
-		declared, err := dropStoreStamped(part)
+		unwrapped, err := unwrapDescribed(part)
+		if err != nil {
+			return nil, fmt.Errorf("record %d: %w", i+1, err)
+		}
+		declared, err := dropStoreStamped(unwrapped)
 		if err != nil {
 			return nil, fmt.Errorf("record %d: %w", i+1, err)
 		}

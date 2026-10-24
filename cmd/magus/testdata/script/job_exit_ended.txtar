@@ -1,0 +1,41 @@
+# `magus job exit --dry-run` says what it would end and writes no row. Ending a job that
+# already ended exits 0 with one line naming the row; --stdin still refuses it.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork scout-a --read-only --criteria 'read the pricing code'
+exec magus job fork scout-b --read-only --criteria 'read the tax code'
+
+exec magus job exit scout-a --dry-run
+stdout '^ended scout-a, recorded no_return: ended with no result filed, before any holder ran'
+exec magus describe job scout-a -o 'template={{.job.state}}'
+stdout '^declared$'
+
+exec magus job exit scout-a
+stdout '^ended scout-a, recorded no_return'
+exec magus job exit scout-a scout-b
+stdout '^ended scout-b, recorded no_return'
+stdout '^scout-a already ended no_return \S+ ago \(ended with no result filed'
+! stderr 'not ended'
+
+stdin $WORK/result.json
+! exec magus job exit scout-a --stdin
+stderr 'scout-a already ended no_return'
+
+-- result.json --
+{"schema_version": 2, "job": "scout-a", "changed_paths": [], "validation": {"command": "magus run test .", "output_ref": "out000000000000"}, "unresolved_risks": []}
+-- shop/.gitignore --
+.magus/
+-- shop/magusfile.buzz --
+import "magus";
+
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

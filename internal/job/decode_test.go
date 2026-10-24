@@ -235,6 +235,27 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
 }
 
+// `describe job -o json` nests the row under `job` beside what magus derived for it, and
+// apply reads that record back as the row alone.
+func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
+	t.Parallel()
+
+	plain, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
+		`{"schema_version":%d,"id":"a","write_paths":["internal/job"]}`, types.JobSchemaVersion)))
+	require.NoError(t, err)
+
+	described := `{"job":{"id":"a","write_paths":["internal/job"],"state":"declared","created":1},` +
+		`"projects":["."],"graph_cold":true,"goals":{"id":"a"}}`
+	rows, err := DecodeDeclarations(strings.NewReader(described))
+	require.NoError(t, err)
+	assert.Equal(t, plain, rows)
+
+	typo := strings.Replace(described, `"projects"`, `"projectz"`, 1)
+	_, err = DecodeDeclarations(strings.NewReader(typo))
+	require.EqualError(t, err, fmt.Sprintf("record 1: %v", recordInvalid("projectz",
+		errors.New("\"projectz\" beside `job` is not a member `describe job -o json` prints")).Err()))
+}
+
 // A stored row prints its check twice, as the record and as the rendered line, and a
 // declaration naming both is refused; the line is the store's rendering, so it goes.
 func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {

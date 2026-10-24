@@ -19,7 +19,11 @@ exec magus job fork scout-c --read-only --criteria 'read the tests'
 exec magus job exit scout-a scout-b
 stdout '^ended scout-a, recorded no_return: ended with no result filed, before any holder ran'
 stdout '^ended scout-b, recorded no_return: ended with no result filed, before any holder ran'
-stdout '^no result was filed; file one with `magus job exit <id> --stdin < result\.json`'
+! stdout 'no result was filed'
+
+# Ending a job again changes nothing and is no failure: the line names the row and how it ended.
+exec magus job exit scout-a
+stdout '^scout-a already ended no_return \S+ ago \(ended with no result filed, before any holder ran `magus job exec scout-a` on it\)$'
 
 ! exec magus job exit scout-c nobody
 stdout '^ended scout-c, recorded no_return: ended with no result filed, before any holder ran'

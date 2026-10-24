@@ -68,11 +68,12 @@ func endedReason(prev types.Job, byHolder bool) string {
 //
 // An abandonment is refused while any live job is below id, since ending id ends them;
 // [Abandon] ends a tree whose every member is named. A result is refused while a job
-// below id is still working.
+// below id is still working. A row that already ended fails as `<id> already ended <state>
+// <ago>`. A dry-run store returns the row as it would end and writes nothing.
 func Exit(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver) (types.Job, error) {
 	// Update declares a row it does not find, so an exit naming a mistyped or never-forked
 	// id would mint a job only to end it. Nobody declared it, so there is nothing to end.
-	rows, err := store.List()
+	rows, err := store.unswept()
 	if err != nil {
 		return types.Job{}, err
 	}
@@ -81,19 +82,26 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
 	}
 	// An ended row is not ended again: a second end would rewrite how the first one ended.
-	if ended := rows[i]; ended.State.Terminal() {
-		reason := ""
-		if ended.EndReason != "" {
-			reason = " (" + ended.EndReason + ")"
-		}
-		return types.Job{}, fmt.Errorf("job: %s already ended %s %s ago%s, so there is nothing to end, `%s` lists it",
-			id, ended.State, updatedAgo(ended), reason, hint.LsJobs.With("--all"))
+	if rows[i].State.Terminal() {
+		return types.Job{}, &alreadyEndedError{Row: rows[i]}
 	}
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
 		return types.Job{}, err
 	}
+	update := func(apply func(*types.Job)) (types.Job, error) {
+		if store.dryRun {
+			row := rows[i].Clone()
+			apply(&row)
+			if row.State == types.StateNoReturn {
+				row.EndReason = endedReason(rows[i], store.endsOwnRow(rows[i]))
+			}
+			store.endDry(row)
+			return row, nil
+		}
+		return store.Update(ctx, id, apply)
+	}
 	if result == nil {
-		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })
+		return update(func(row *types.Job) { row.State = types.StateNoReturn })
 	}
 	if resolve == nil {
 		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
@@ -103,7 +111,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
-	return store.Update(ctx, id, func(row *types.Job) {
+	return update(func(row *types.Job) {
 		prev := row.Clone()
 		// A row awaiting `magus job wait` keeps only the entries covering a path the result
 		// names (a claim `F#d` covers F), so it stops holding files it never touched; Update
@@ -137,6 +145,21 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.State = types.StatePass
 		}
 	})
+}
+
+// alreadyEndedError is [Exit]'s failure for a row that ended before: a second end would
+// rewrite how the first one ended. It asked for what is already true, so [Abandon]
+// reports it beside the rows it ended rather than as a refusal.
+type alreadyEndedError struct {
+	Row types.Job
+}
+
+func (e *alreadyEndedError) Error() string {
+	reason := ""
+	if e.Row.EndReason != "" {
+		reason = fmt.Sprintf(" (%s)", e.Row.EndReason)
+	}
+	return fmt.Sprintf("%s already ended %s %s ago%s", e.Row.ID, e.Row.State, updatedAgo(e.Row), reason)
 }
 
 // Wait verifies a returned result against the current job terms and records pass under
