@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -250,7 +251,7 @@ func mergedKey(g *Graph, man *manifest) string {
 	if g.base == "" || man == nil || !readCache.enabled() {
 		return ""
 	}
-	key := g.base + "\x00" + symbolShardsKey(man)
+	key := fmt.Sprintf("%s\x00%s", g.base, symbolShardsKey(man))
 	for _, name := range []string{coverageShardName, sessionShardName} {
 		meta, _ := man.shard(name)
 		key += "\x00" + meta.Fingerprint

@@ -17,7 +17,7 @@ func (orderCheck) name() string { return types.CheckParamOrder }
 func (orderCheck) run(x *namingIndex) []finding {
 	byScope := map[string][]*namingDecl{}
 	for _, d := range x.callables {
-		key := d.language + "\x00" + d.scope
+		key := fmt.Sprintf("%s\x00%s", d.language, d.scope)
 		byScope[key] = append(byScope[key], d)
 	}
 	var out []finding
@@ -26,7 +26,7 @@ func (orderCheck) run(x *namingIndex) []finding {
 		if !subj.callable() || len(names) < 2 {
 			continue
 		}
-		peers := x.peers(byScope[subj.language+"\x00"+subj.scope], subj)
+		peers := x.peers(byScope[fmt.Sprintf("%s\x00%s", subj.language, subj.scope)], subj)
 		peerNames := make([][]string, len(peers))
 		for i, p := range peers {
 			peerNames[i] = paramNames(p)
@@ -44,9 +44,9 @@ func (orderCheck) run(x *namingIndex) []finding {
 					continue
 				}
 				bestFor = len(reversed)
-				details := []string{"`" + b + "` first: " + strings.Join(labels(reversed), ", ")}
+				details := []string{fmt.Sprintf("`%s` first: %s", b, strings.Join(labels(reversed), ", "))}
 				if len(same) > 0 {
-					details = append(details, "`"+a+"` first: "+strings.Join(labels(same), ", "))
+					details = append(details, fmt.Sprintf("`%s` first: %s", a, strings.Join(labels(same), ", ")))
 				}
 				best = &finding{
 					subject: subj.id,

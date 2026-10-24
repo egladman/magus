@@ -127,9 +127,9 @@ func listed(xs []string) string {
 func knobPhrase(knobs []modeKnob) string {
 	parts := make([]string, len(knobs))
 	for i, k := range knobs {
-		parts[i] = "`" + k.Name + "` is set only by " + k.Setter
+		parts[i] = fmt.Sprintf("`%s` is set only by %s", k.Name, k.Setter)
 		if k.Kind == knobBranch {
-			parts[i] = "it branches on `" + k.Name + "`"
+			parts[i] = fmt.Sprintf("it branches on `%s`", k.Name)
 		}
 	}
 	return strings.Join(parts, ", ")
@@ -138,9 +138,9 @@ func knobPhrase(knobs []modeKnob) string {
 func bentPhrase(knobs []modeKnob) string {
 	parts := make([]string, len(knobs))
 	for i, k := range knobs {
-		parts[i] = "offers `" + k.Name + "`, which only " + k.Setter + " uses"
+		parts[i] = fmt.Sprintf("offers `%s`, which only %s uses", k.Name, k.Setter)
 		if k.Kind == knobBranch {
-			parts[i] = "branches on `" + k.Name + "`"
+			parts[i] = fmt.Sprintf("branches on `%s`", k.Name)
 		}
 	}
 	return strings.Join(parts, " and ")

@@ -18,9 +18,9 @@ func (f *precedentFixture) fn(dir, lang, name, sig string) types.Case {
 	ns, file := precedentNamespace(dir, "go"), dir+"/f0.go"
 	if lang == "buzz" {
 		file = dir + "/f0.buzz"
-		ns = "symbol:scip-buzz buzz `" + file + "`/"
+		ns = fmt.Sprintf("symbol:scip-buzz buzz `%s`/", file)
 	}
-	id := ns + name + "()."
+	id := fmt.Sprintf("%s%s().", ns, name)
 	source := fmt.Sprintf("%s:%d", file, f.line)
 	f.g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: source,
 		Attrs: map[string]string{attrNamespace: ns, attrLanguage: lang, attrSymbolKind: "Function", AttrSignature: sig}})

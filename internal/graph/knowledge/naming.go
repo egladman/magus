@@ -144,7 +144,7 @@ func (d *namingDecl) group() string {
 	if key == "" {
 		key = d.shape.Kind
 	}
-	return d.language + "\x00" + scope + "\x00" + d.shape.Kind + "\x00" + key
+	return fmt.Sprintf("%s\x00%s\x00%s\x00%s", d.language, scope, d.shape.Kind, key)
 }
 
 func (d *namingDecl) callable() bool {
@@ -308,8 +308,8 @@ func (d *namingDecl) runs() []affix {
 	if d.affixes == nil && len(d.folded) >= 2 {
 		n := len(d.folded)
 		d.affixes = []affix{
-			{words: d.folded[0] + " " + d.folded[1]},
-			{words: d.folded[n-2] + " " + d.folded[n-1], trailing: true},
+			{words: fmt.Sprintf("%s %s", d.folded[0], d.folded[1])},
+			{words: fmt.Sprintf("%s %s", d.folded[n-2], d.folded[n-1]), trailing: true},
 		}
 	}
 	return d.affixes
@@ -392,7 +392,7 @@ func (affixCheck) run(x *namingIndex) []finding {
 				continue
 			}
 			pattern, said := affixPattern(carriers[0], len(want), a.trailing)
-			details := []string{"named " + pattern + ": " + strings.Join(labels(carriers), ", ")}
+			details := []string{fmt.Sprintf("named %s: %s", pattern, strings.Join(labels(carriers), ", "))}
 			if len(outliers) > 0 {
 				details = append(details, "not: "+strings.Join(labels(outliers), ", "))
 			}
@@ -497,9 +497,9 @@ func (collisionCheck) run(x *namingIndex) []finding {
 			if !slices.Equal(foldedWords(nameWords(n.Label)), mine) {
 				continue
 			}
-			hit := n.Kind + " `" + n.Label + "`"
+			hit := fmt.Sprintf("%s `%s`", n.Kind, n.Label)
 			if n.Kind == types.KindTarget {
-				hit = n.Kind + " `" + strings.TrimPrefix(n.ID, types.KindTarget+":") + "`"
+				hit = fmt.Sprintf("%s `%s`", n.Kind, strings.TrimPrefix(n.ID, types.KindTarget+":"))
 			}
 			if !slices.Contains(hits, hit) {
 				hits = append(hits, hit)

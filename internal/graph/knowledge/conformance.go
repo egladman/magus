@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"maps"
 	"math"
 	"path"
@@ -427,7 +428,7 @@ func symbolItemID(file string, local []descriptor) string {
 	for i, d := range local {
 		names[i] = d.Name
 	}
-	return file + "#" + strings.Join(names, ".")
+	return fmt.Sprintf("%s#%s", file, strings.Join(names, "."))
 }
 
 // itemFile is the file a symbol item ID names.
@@ -1016,7 +1017,7 @@ func storePath(n types.KnowledgeNode, name string) bool {
 	sig := n.Attrs[AttrSignature]
 	switch n.Attrs[attrSymbolKind] {
 	case "Constant", "Variable":
-		_, typ, _ := strings.Cut(sig, " "+name+" ")
+		_, typ, _ := strings.Cut(sig, fmt.Sprintf(" %s ", name))
 		return strings.HasPrefix(strings.TrimPrefix(typ, "untyped "), "string")
 	case "Function":
 		_, results, ok := goFuncParts(sig)

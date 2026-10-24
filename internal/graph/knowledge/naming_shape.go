@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -163,7 +164,7 @@ func (buzzShapes) read(s symbolFacts) declShape {
 			shape.Params = append(shape.Params, namingParam{Name: strings.TrimSpace(name), Type: typ})
 			classes = append(classes, buzzTypeClass(typ))
 		}
-		shape.Key = "fun(" + strings.Join(classes, ", ") + ") " + buzzResultClass(strings.TrimSpace(rest[end+1:]))
+		shape.Key = fmt.Sprintf("fun(%s) %s", strings.Join(classes, ", "), buzzResultClass(strings.TrimSpace(rest[end+1:])))
 		shape.Meaning = "func"
 	case declStruct:
 		shape.Key, shape.Meaning = "object", "struct"
@@ -180,7 +181,7 @@ func (buzzShapes) read(s symbolFacts) declShape {
 		}
 		_, typ, _ := strings.Cut(rest, ":")
 		shape.Meaning = buzzTypeClass(typ)
-		shape.Key = strings.TrimSpace(word + " " + shape.Meaning)
+		shape.Key = strings.TrimSpace(fmt.Sprintf("%s %s", word, shape.Meaning))
 	}
 	return shape
 }
@@ -360,7 +361,7 @@ func (goShapes) read(s symbolFacts) declShape {
 			types[i] = goTypeClass(p.Type)
 		}
 		shape.Results = goResultClasses(results)
-		shape.Key = "func(" + strings.Join(types, ", ") + ") " + goResultClass(shape.Results)
+		shape.Key = fmt.Sprintf("func(%s) %s", strings.Join(types, ", "), goResultClass(shape.Results))
 		shape.Meaning = "func"
 	case declInterface:
 		shape.Key, shape.Meaning = "interface", "interface"
@@ -390,7 +391,7 @@ func (goShapes) read(s symbolFacts) declShape {
 			typ = ""
 		}
 		shape.Meaning = goTypeClass(typ)
-		shape.Key = strings.TrimSpace(word + " " + shape.Meaning)
+		shape.Key = strings.TrimSpace(fmt.Sprintf("%s %s", word, shape.Meaning))
 	case declField:
 		rest, ok := strings.CutPrefix(sig, "struct field ")
 		if !ok {

@@ -182,13 +182,13 @@ func operationUnderway(ctx context.Context, v types.VCSDriver, root string) stri
 func (c GuardCheckout) StaleAt(now GuardCheckout) string {
 	switch {
 	case now.Operation != "":
-		return "a " + now.Operation + " is in progress"
+		return fmt.Sprintf("a %s is in progress", now.Operation)
 	case c.Operation != "":
 		return "the index was built during a " + c.Operation
 	case c.Revision == now.Revision, now.Revision != "" && strings.HasPrefix(c.Revision, now.Revision):
 		return ""
 	}
-	return "the index was built at " + shortRevision(c.Revision) + " and the checkout is at " + shortRevision(now.Revision)
+	return fmt.Sprintf("the index was built at %s and the checkout is at %s", shortRevision(c.Revision), shortRevision(now.Revision))
 }
 
 func shortRevision(id string) string {
@@ -302,7 +302,7 @@ func writeGuardRefs(dst string, g *Graph, symbols map[string]types.KnowledgeNode
 			continue
 		}
 		var b strings.Builder
-		b.WriteString(sym.Label + "\t" + file + "\t" + strconv.Itoa(count) + "\t")
+		b.WriteString(fmt.Sprintf("%s\t%s\t%s\t", sym.Label, file, strconv.Itoa(count)))
 		for i, l := range at {
 			if i > 0 {
 				b.WriteByte(',')

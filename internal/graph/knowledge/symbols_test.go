@@ -477,7 +477,7 @@ func TestAssembleSymbolShardsStoresTheFold(t *testing.T) {
 		var out []string
 		for _, e := range sh.Edges {
 			if e.Relation == types.RelationImports {
-				out = append(out, e.Source+" -> "+e.Target)
+				out = append(out, fmt.Sprintf("%s -> %s", e.Source, e.Target))
 			}
 		}
 		return out

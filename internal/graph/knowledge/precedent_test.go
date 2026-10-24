@@ -28,9 +28,9 @@ func precedentNamespace(dir, lang string) string {
 		pkg += "/" + dir
 	}
 	if lang != "go" {
-		return "symbol:npm m 1.0 `" + dir + "`/"
+		return fmt.Sprintf("symbol:npm m 1.0 `%s`/", dir)
 	}
-	return "symbol:gomod example.com/m `" + pkg + "`/"
+	return fmt.Sprintf("symbol:gomod example.com/m `%s`/", pkg)
 }
 
 func (f *precedentFixture) edge(from, to string, rel types.RelationID) {
@@ -54,7 +54,7 @@ func (f *precedentFixture) pkg(dir string, n int) {
 }
 
 func (f *precedentFixture) imports(from, to string) {
-	f.edge("file:"+from+"/f0.go", precedentNamespace(to, "go"), types.RelationReferences)
+	f.edge(fmt.Sprintf("file:%s/f0.go", from), precedentNamespace(to, "go"), types.RelationReferences)
 }
 
 // value declares `var name = newName()` of type typ in dir's first file. scip-go renders it
@@ -62,7 +62,7 @@ func (f *precedentFixture) imports(from, to string) {
 func (f *precedentFixture) value(dir, name, typ string) string {
 	id := f.state(dir, name, typ)
 	f.g.AddEdge(types.KnowledgeEdge{
-		Source: "file:" + dir + "/f0.go", Target: precedentNamespace(dir, "go") + "new" + name + "().",
+		Source: fmt.Sprintf("file:%s/f0.go", dir), Target: fmt.Sprintf("%snew%s().", precedentNamespace(dir, "go"), name),
 		Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1,
 		Provenance: refProvenance(types.KnowledgeSymbolRef{Count: 1, Lines: []int{f.line}}),
 	})
@@ -74,9 +74,9 @@ func (f *precedentFixture) value(dir, name, typ string) string {
 func (f *precedentFixture) state(dir, name, typ string) string {
 	f.line++
 	ns := precedentNamespace(dir, "go")
-	id := ns + name + "."
+	id := fmt.Sprintf("%s%s.", ns, name)
 	f.g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: fmt.Sprintf("%s/f0.go:%d", dir, f.line),
-		Attrs: map[string]string{attrNamespace: ns, attrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: "var " + name + " " + typ}})
+		Attrs: map[string]string{attrNamespace: ns, attrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: fmt.Sprintf("var %s %s", name, typ)}})
 	return id
 }
 
@@ -147,7 +147,7 @@ func TestPrecedentsPinThisTreesMeasuredShape(t *testing.T) {
 	f.pkg("libs/gopherbuzz/std", 1)
 	f.imports("libs/gopherbuzz/std", "libs/gopherbuzz")
 	for _, name := range []string{"conformance", "example", "fiber", "marshal_fuzz", "marshal", "parity", "parser", "session"} {
-		file := "libs/gopherbuzz/" + name + "_test.go"
+		file := fmt.Sprintf("libs/gopherbuzz/%s_test.go", name)
 		f.file(file, precedentNamespace("libs/gopherbuzz_test", "go"), "buzz_test", "go")
 		f.edge("file:"+file, precedentNamespace("libs/gopherbuzz", "go"), types.RelationReferences)
 		f.edge("file:"+file, precedentNamespace("libs/gopherbuzz/std", "go"), types.RelationReferences)
@@ -405,7 +405,7 @@ func TestPrecedentsJudgeTestPackagesOnlyWhereALanguagePackagesByDirectory(t *tes
 	f := newPrecedentFixture()
 	for _, dir := range []string{"web/a", "web/b", "web/c"} {
 		for _, name := range []string{"x.ts", "y.ts", "x.test.ts"} {
-			file := dir + "/" + name
+			file := fmt.Sprintf("%s/%s", dir, name)
 			f.file(file, precedentNamespace(file, "typescript"), name, "typescript")
 		}
 	}

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -95,7 +96,7 @@ func TestFiguresFromBuzz(t *testing.T) {
 	var depicts []string
 	for _, e := range out.Links {
 		if e.Relation == types.RelationDepicts {
-			depicts = append(depicts, e.Source+" -> "+e.Target)
+			depicts = append(depicts, fmt.Sprintf("%s -> %s", e.Source, e.Target))
 		}
 	}
 	assert.Equal(t, []string{
@@ -124,7 +125,7 @@ func TestLiteralString(t *testing.T) {
 		{`"a" + name`, "", false},
 		{`"a" - "b"`, "", false},
 	} {
-		prog, err := buzz.ParseEmbedded("final x = " + tc.src + ";")
+		prog, err := buzz.ParseEmbedded(fmt.Sprintf("final x = %s;", tc.src))
 		require.NoError(t, err, tc.src)
 		decl, isDecl := prog.Stmts[0].(*ast.DeclStmt)
 		require.True(t, isDecl, tc.src)

@@ -1201,7 +1201,7 @@ func shardSlug(name string) string {
 		safe = safe[:40]
 	}
 	sum := sha256.Sum256([]byte(name))
-	return safe + "-" + hex.EncodeToString(sum[:])[:8]
+	return fmt.Sprintf("%s-%s", safe, hex.EncodeToString(sum[:])[:8])
 }
 
 // shard looks up one shard's persisted meta; the nil receiver (no manifest yet)
@@ -1477,4 +1477,6 @@ func RecordRuntimeEvents(cacheDir string, fresh []types.DiagnosticEvent) error {
 	return file.WriteFileAtomic(RuntimeRecordsPath(cacheDir), b, 0o644)
 }
 
-func runtimeKey(e types.DiagnosticEvent) string { return e.Unit + "\x00" + string(e.Code) }
+func runtimeKey(e types.DiagnosticEvent) string {
+	return fmt.Sprintf("%s\x00%s", e.Unit, string(e.Code))
+}

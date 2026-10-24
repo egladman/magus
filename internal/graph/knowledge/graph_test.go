@@ -102,15 +102,15 @@ func buildConcurrencyFixture() *Graph {
 	const filesPerProject = 20
 	for i := 0; i < projects; i++ {
 		proj := fmt.Sprintf("proj%d", i)
-		g.AddNode(types.KnowledgeNode{ID: types.KindProject + ":" + proj, Kind: types.KindProject, Label: proj})
+		g.AddNode(types.KnowledgeNode{ID: fmt.Sprintf("%s:%s", types.KindProject, proj), Kind: types.KindProject, Label: proj})
 
 		var prev string
 		for j := 0; j < filesPerProject; j++ {
 			src := fmt.Sprintf("%s/file%d.go", proj, j)
-			id := types.KindFile + ":" + src
+			id := fmt.Sprintf("%s:%s", types.KindFile, src)
 			g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindFile, Label: src, Source: src})
 			g.AddEdge(types.KnowledgeEdge{
-				Source: types.KindProject + ":" + proj, Target: id, Relation: types.RelationContains,
+				Source: fmt.Sprintf("%s:%s", types.KindProject, proj), Target: id, Relation: types.RelationContains,
 				Confidence: types.ConfidenceExtracted,
 			})
 			if prev != "" {
@@ -128,7 +128,7 @@ func buildConcurrencyFixture() *Graph {
 		src0 := fmt.Sprintf("%s/file0.go", proj)
 		g.AddNode(types.KnowledgeNode{ID: sym, Kind: types.KindSymbol, Label: "Func", Source: src0 + ":1"})
 		g.AddEdge(types.KnowledgeEdge{
-			Source: types.KindFile + ":" + src0, Target: sym, Relation: types.RelationDefines,
+			Source: fmt.Sprintf("%s:%s", types.KindFile, src0), Target: sym, Relation: types.RelationDefines,
 			Confidence: types.ConfidenceExtracted,
 		})
 	}
@@ -158,8 +158,8 @@ func TestConcurrentQueriesDoNotRaceOnLazyIndices(t *testing.T) {
 			sym := fmt.Sprintf("symbol:%s.Func", proj)
 
 			// Neighborhood and Explain both call ensureAdj (out/in).
-			_ = g.Neighborhood([]string{types.KindProject + ":" + proj}, 50, nil)
-			_, _ = g.Explain(types.KindProject + ":" + proj)
+			_ = g.Neighborhood([]string{fmt.Sprintf("%s:%s", types.KindProject, proj)}, 50, nil)
+			_, _ = g.Explain(fmt.Sprintf("%s:%s", types.KindProject, proj))
 
 			// Refs resolves a symbol then calls ensureAdj.
 			_, _ = g.Refs(sym)
@@ -173,7 +173,7 @@ func TestConcurrentQueriesDoNotRaceOnLazyIndices(t *testing.T) {
 			_ = g.Query("relation:contains", 50)
 
 			// Path drives shortestPath, another ensureAdj caller.
-			_, _ = g.Path(types.KindProject+":"+proj, sym)
+			_, _ = g.Path(fmt.Sprintf("%s:%s", types.KindProject, proj), sym)
 		}()
 	}
 	wg.Wait()

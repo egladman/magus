@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"math"
 	"path"
@@ -184,7 +185,7 @@ func paramOptions(g *Graph, sym types.KnowledgeNode, typ string, callers map[str
 		typ = typ[:i]
 	}
 	ns, name := typeNamespace(g, sym, typ)
-	typeID := ns + name + "#"
+	typeID := fmt.Sprintf("%s%s#", ns, name)
 	if t, ok := g.nodes[typeID]; ns == "" || !ok || t.Kind != types.KindSymbol {
 		return nil
 	}

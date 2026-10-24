@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
@@ -102,7 +103,7 @@ func TestAssembleOwnersReachesPackageDirs(t *testing.T) {
 	var owns []string
 	for _, e := range g.Edges() {
 		if e.Relation == types.RelationOwns {
-			owns = append(owns, e.Source+" -> "+e.Target)
+			owns = append(owns, fmt.Sprintf("%s -> %s", e.Source, e.Target))
 		}
 	}
 	assert.Equal(t, []string{

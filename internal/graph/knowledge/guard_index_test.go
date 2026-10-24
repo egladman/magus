@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -191,7 +192,7 @@ func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
 	git("commit", "-q", "--amend", "-m", "one, reworded")
 	x, err = ReadGuardIndex(cacheDir, root)
 	require.NoError(t, err)
-	assert.Equal(t, "the index was built at "+at.Revision[:12]+" and the checkout is at "+git("rev-parse", "HEAD")[:12], x.Stale())
+	assert.Equal(t, fmt.Sprintf("the index was built at %s and the checkout is at %s", at.Revision[:12], git("rev-parse", "HEAD")[:12]), x.Stale())
 	for _, kind := range guardKinds {
 		assert.False(t, x.Fresh(kind), kind)
 	}
