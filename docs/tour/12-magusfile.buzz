@@ -54,24 +54,7 @@ fun ldflags(version: str) > str {
     return "-s -w -X main.version=" + version;
 }
 
-// Each exported function is a runnable target. Its name is normalized to
-// kebab-case, so casing and separators do not matter: image_build, imageBuild,
-// and IMAGE_BUILD all define (and run) the target image-build. `magus run
-// imageBuild` and `magus run image-build` are the same command; try `run
-// mockGenerate` in the console below. Dependencies are declared with
-// ctx.needs(name): needs takes the target FUNCTION itself, passed by reference
-// (an exported target of this same file - a forward reference to one declared
-// later is fine, since bodies run after the whole file loads). Because it is a
-// plain identifier, a typo is an undefined variable caught at load, and magus can
-// recover the whole DAG statically, without running the bodies. For a family of
-// targets by name pattern, ctx.glob resolves the pattern to the matching
-// handles that ctx.needs depends on (below). magus runs the dependencies
-// first, deduplicated, and in parallel wherever the graph allows.
-//
-// A spell's ops are its contributed targets, keyed by the kebab-case CLI name
-// (go-build, buf-lint). Call one by indexing the handle with that name - the
-// same name `magus run go-build` and the cache use - and pass the target's ctx
-// as the first argument, ahead of any options.
+// Target names normalize to kebab-case: image_build and imageBuild both run as image-build.
 
 // Codegen is one `*-generate` target per generator. Each is ordinary cached
 // codegen: magus keys it on its inputs and its gen/** outputs, so it reruns only

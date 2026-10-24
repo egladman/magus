@@ -2,12 +2,7 @@
 // desc: The canonical names are conventions, not a closed set; export a release or deploy target and drive one from another.
 // doc: concepts/targets|Targets
 //
-// Custom targets: name your own phases. The names magus knows - build, test,
-// lint, format, generate, ci, clean - are conventions, not a closed set. Every
-// exported function is a runnable target, so name one for whatever your project
-// actually does: `release`, `deploy`, `smoke`. Nothing marks them as "custom";
-// the machinery is identical. Try `ls` to see them all, then `run deploy` to
-// watch one target drive another.
+// Try `ls` to see every target, then `run deploy` to watch one drive another.
 
 import "magus";
 import "magus/spell/go";
