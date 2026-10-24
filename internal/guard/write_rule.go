@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -113,7 +114,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
 	if spared {
-		note = lapseSparedNote(*asked.lapse) + "\n\n" + note
+		note = fmt.Sprintf("%s\n\n%s", lapseSparedNote(*asked.lapse), note)
 	}
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
@@ -177,8 +178,8 @@ var policyShapingFiles = []string{config.Filename, remotespell.LockFile}
 // lapseSparedNote is the advice for a write to a file the guard loads when its judgment ran
 // out of time while the approved policy stood, which every other write is denied for.
 func lapseSparedNote(l ruleLapse) string {
-	return "magus ran out of time judging this write (" + l.what() + ") and lets it through, because the guard loads this file itself: " +
-		"refusing it would leave a slow or looping rule with no way to be fixed. Check the rule answers quickly before relying on it."
+	return fmt.Sprintf("magus ran out of time judging this write (%s) and lets it through, because the guard loads this file itself: "+
+		"refusing it would leave a slow or looping rule with no way to be fixed. Check the rule answers quickly before relying on it.", l.what())
 }
 
 // writeWorkspace is the root of the workspace holding path, which is the checkout the write

@@ -155,7 +155,7 @@ func (h headPolicy) keepPending(scope []string, preID, files string, pending []s
 	h.writePending(scope, pendingKey(id, files), pending)
 }
 
-func pendingKey(id, files string) string { return id + " " + files }
+func pendingKey(id, files string) string { return fmt.Sprintf("%s %s", id, files) }
 
 // checkoutID reads the id from the checkout dir sits in, which may be an
 // ancestor: a workspace nested in a repository has no marker of its own.
@@ -215,7 +215,7 @@ func (h headPolicy) writePending(scope []string, fp string, pending []string) {
 	if !ok {
 		return
 	}
-	body := fp + "\n" + strings.Join(pending, "\n")
+	body := fmt.Sprintf("%s\n%s", fp, strings.Join(pending, "\n"))
 	if len(pending) > 0 {
 		body += "\n"
 	}
@@ -345,7 +345,7 @@ func (h headPolicy) pendingCacheFile(scope []string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	sum := sha256.Sum256([]byte(h.workspace + "\x00" + strings.Join(scope, "\x00")))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", h.workspace, strings.Join(scope, "\x00"))))
 	return filepath.Join(dir, "policy-pending", hex.EncodeToString(sum[:])), true
 }
 

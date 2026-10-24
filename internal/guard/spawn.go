@@ -284,7 +284,7 @@ func hostSpawnTitle(transcript, child string) (title string, ok bool) {
 	if transcript == "" || child == "" || child != filepath.Base(child) || child == "." || child == ".." {
 		return "", false
 	}
-	name := "agent-" + child + ".meta.json"
+	name := fmt.Sprintf("agent-%s.meta.json", child)
 	dirs := []string{filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")}
 	if filepath.Base(filepath.Dir(transcript)) == "subagents" {
 		// A nested child's calls may name its parent's transcript, which sits in the same folder.

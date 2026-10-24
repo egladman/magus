@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -245,7 +246,7 @@ const askUnrendered = "This hook predates approval prompts, so it cannot ask the
 // and its host reads nothing as allow, so the call is refused instead of run unasked.
 // subject names the call as the ask would have, such as "pushing abc1234 ungated".
 func askUnrenderedDeny(subject string) string {
-	return "this hook predates approval prompts and cannot ask about " + subject + "; merge what `magus describe harness` prints."
+	return fmt.Sprintf("this hook predates approval prompts and cannot ask about %s; merge what `magus describe harness` prints.", subject)
 }
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
@@ -267,13 +268,14 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	case gateIncomplete:
 		state = "the `" + string(types.TargetCI) + "` run at this commit never finished"
 	}
-	head := "pushing " + commit + ", which no passing gate covers: " + state + ".\n"
+	head := fmt.Sprintf("pushing %s, which no passing gate covers: %s.\n", commit, state)
 	if cover == gateIncomplete {
 		head += "That run is still going or it was killed.\n"
 	}
-	gate := "Run `" + hint.Status.With("--wait") + "`, then `" + hint.Affected.With(string(types.TargetCI)) + "`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer."
+	gate := fmt.Sprintf("Run `%s`, then `%s`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
+		hint.Status.With("--wait"), hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
-		return decisionDeny, head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
+		return decisionDeny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
 	}
 	return decisionDeny, head + gate
 }

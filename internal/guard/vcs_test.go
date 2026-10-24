@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -236,15 +237,15 @@ func TestGitGuardFollowsDashCIntoAnotherCheckout(t *testing.T) {
 	t.Chdir(main)
 
 	for command, want := range map[string]denyRule{
-		"git -C " + wt + " reset --hard":                {Name: denyRuleWholeTree, Arg: "git reset --hard"},
-		"git -C " + wt + " checkout -- .":               {Name: denyRuleWholeTree, Arg: "git checkout ."},
-		"git -C .. -C wt-feature stash":                 {Name: denyRuleWholeTree, Arg: "git stash"},
-		"git -C " + wt + " checkout MERGE_HEAD -- a.go": {Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"},
-		"git --work-tree=" + wt + " clean -fd":          {Name: denyRuleWholeTree, Arg: "git clean"},
+		fmt.Sprintf("git -C %s reset --hard", wt):                {Name: denyRuleWholeTree, Arg: "git reset --hard"},
+		fmt.Sprintf("git -C %s checkout -- .", wt):               {Name: denyRuleWholeTree, Arg: "git checkout ."},
+		"git -C .. -C wt-feature stash":                          {Name: denyRuleWholeTree, Arg: "git stash"},
+		fmt.Sprintf("git -C %s checkout MERGE_HEAD -- a.go", wt): {Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"},
+		fmt.Sprintf("git --work-tree=%s clean -fd", wt):          {Name: denyRuleWholeTree, Arg: "git clean"},
 	} {
 		assert.Equal(t, want, Evaluate(strict(testDependencies()), command).Rule, "%q", command)
 	}
-	for _, command := range []string{"git -C " + wt + " status", "git -C .. -C wt-feature log -1"} {
+	for _, command := range []string{fmt.Sprintf("git -C %s status", wt), "git -C .. -C wt-feature log -1"} {
 		v := Evaluate(strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, "%q", command)
 		assert.Empty(t, v.Context, "%q", command)

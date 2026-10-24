@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +52,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 		{"sh -x retry.sh", denyRuleBusyWait},
 		{"timeout 600 bash retry.sh", denyRuleBusyWait},
 		{"bash -c 'bash retry.sh'", denyRuleBusyWait},
-		{"S=" + dir + `; bash "$S/retry.sh"`, denyRuleBusyWait},
+		{fmt.Sprintf(`S=%s; bash "$S/retry.sh"`, dir), denyRuleBusyWait},
 		{dir + "/wait", denyRuleBusyWait},
 		{"bash run.sh", denyRuleOutputRedirect},
 		{"bash in.sh", denyRuleOutputRedirect},
@@ -150,7 +151,7 @@ func TestGuardJudgesTheBuzzScriptUnderItsWorkDir(t *testing.T) {
 	deps := strict(Dependencies{scope: workspaceScope{root: dir}})
 	for _, command := range []string{
 		"magus buzz -C .. rewrite.buzz",
-		"magus buzz -C " + dir + " -s rewrite.buzz",
+		fmt.Sprintf("magus buzz -C %s -s rewrite.buzz", dir),
 		"magus buzz -s -C=.. rewrite.buzz",
 	} {
 		v := denyScriptContent(deps, filepath.Join(dir, "sub"), command, DialectBash)
@@ -200,7 +201,7 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 		}
 		assert.Equal(t, tt.rule, v.Rule.Name, tt.name)
 		assert.Contains(t, v.Why, "Judged from what this write leaves in", tt.name)
-		assert.True(t, strings.HasPrefix(v.Deny, "`"+tt.file+"`: "), "%s: the verdict names the script", tt.name)
+		assert.True(t, strings.HasPrefix(v.Deny, fmt.Sprintf("`%s`: ", tt.file)), "%s: the verdict names the script", tt.name)
 	}
 
 	// A .buzz file is as often a magusfile or spell that writes its outputs by name, so it
@@ -216,7 +217,7 @@ func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
 	testkit.Isolate(t)
 	dir := scriptDir(t)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: dir})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + dir + `","tool_input":{"command":"bash retry.sh"}}`
+	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"%s","tool_input":{"command":"bash retry.sh"}}`, dir)
 
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 

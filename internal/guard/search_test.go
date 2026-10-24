@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -245,8 +246,8 @@ func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {
 	deps := strict(testDependencies())
 	deps.SymbolDefined = func(name string) (bool, bool) { return name == "HandleRequest" || name == "serve", true }
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + filepath.Join(root, "internal", "api") +
-		`","tool_input":{"command":"grep -n '^func ' handler.go"}}`
+	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"%s","tool_input":{"command":"grep -n '^func ' handler.go"}}`,
+		filepath.Join(root, "internal", "api"))
 
 	v := Judge(ctx, deps, Request{Input: envelope})
 

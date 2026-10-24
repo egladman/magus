@@ -52,7 +52,7 @@ func gradeStall(deps Dependencies, verdict types.GuardJudgment, lease string, at
 		return verdict
 	}
 	line, rest, more := strings.Cut(verdict.Reason, "\n")
-	verdict.Reason = line + " Only the root can clear this: exit with `" + hint.JobExit.With(lease, "--stdin") + "`, naming it in unresolved_risks."
+	verdict.Reason = fmt.Sprintf("%s Only the root can clear this: exit with `%s`, naming it in unresolved_risks.", line, hint.JobExit.With(lease, "--stdin"))
 	if more {
 		verdict.Reason += "\n" + rest
 	}

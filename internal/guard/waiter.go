@@ -47,8 +47,8 @@ const advisorySpawnNestedWaiter hint.MarkerKind = "spawn-nested-waiter"
 const sleepPollFloor = 10 * time.Second
 
 var (
-	denySleepPoll = "a sleep before a status read is a poll spread over calls; wait on the event: `" +
-		hint.Status.With("--watch=15s") + "` for the project lock, `gh run watch` for CI, or your backgrounded command's completion notice."
+	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; wait on the event: `%s` for the project lock, `gh run watch` for CI, or your backgrounded command's completion notice.",
+		hint.Status.With("--watch=15s"))
 	denySleepPollWhy = "Each call spends a turn and the sleep's tool slot to look once, and the next call looks again. " +
 		"A watch reads continuously and ends with its subject; a backgrounded command is announced when it ends. Both answer when the state changes, where a sleep answers on its own schedule."
 
@@ -56,8 +56,8 @@ var (
 	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
-	denySlotWait = "a worker waits for the build budget only in the call that spends the seat: `" + hint.Status.With("--wait") + " | " + hint.Run.String() +
-		" <your check>`. A wait that gates no magus call, a watch, a sleep before a run, or a wait on another run's pid waits for nothing."
+	denySlotWait = fmt.Sprintf("a worker waits for the build budget only in the call that spends the seat: `%s | %s <your check>`. A wait that gates no magus call, a watch, a sleep before a run, or a wait on another run's pid waits for nothing.",
+		hint.Status.With("--wait"), hint.Run.String())
 	denySlotWaitWhy = "`status --wait` piped straight into a magus run reserves the seat it sized for that run until the run claims it, so no other worker can take it in between. " +
 		"A wait that feeds no run, or ends with another run's process, holds nothing, so the run after it can still be refused with MGS3009, and a worker looping on reads and refusals spends turns no one who can free a seat sees."
 
@@ -432,18 +432,18 @@ var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
 func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 	var held []string
 	if s.BudgetSlots > 0 && s.HeldSlots >= s.BudgetSlots {
-		held = append(held, "slots "+strconv.Itoa(s.HeldSlots)+"/"+strconv.Itoa(s.BudgetSlots))
+		held = append(held, fmt.Sprintf("slots %d/%d", s.HeldSlots, s.BudgetSlots))
 	}
 	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
-		held = append(held, "mem "+cache.FormatMB(s.HeldMB)+"/"+cache.FormatMB(s.BudgetMB))
+		held = append(held, fmt.Sprintf("mem %s/%s", cache.FormatMB(s.HeldMB), cache.FormatMB(s.BudgetMB)))
 	}
 	if len(held) == 0 {
 		return ""
 	}
-	text := "the build budget is full (" + strings.Join(held, ", ") + ")"
+	text := fmt.Sprintf("the build budget is full (%s)", strings.Join(held, ", "))
 	if len(s.Holders) > 0 {
 		h := s.Holders[0]
-		text += ", held by " + strconv.Itoa(len(s.Holders)) + " run(s); the oldest, " + h.Target + " " + cmp.Or(h.Project, ".")
+		text += fmt.Sprintf(", held by %d run(s); the oldest, %s %s", len(s.Holders), h.Target, cmp.Or(h.Project, "."))
 		if h.Dir != "" {
 			text += " in " + h.Dir
 		}
@@ -451,8 +451,8 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 			text += ", has held its seat " + now.Sub(h.Since).Round(time.Second).String()
 		}
 	}
-	return text + ". A seat frees as each run ends: wait for one (`" + hint.Status.With("--watch=15s") +
-		"` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops."
+	return fmt.Sprintf("%s. A seat frees as each run ends: wait for one (`%s` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops.",
+		text, hint.Status.With("--watch=15s"))
 }
 
 // holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
@@ -598,7 +598,7 @@ var spawnNestedWordRe = regexp.MustCompile(`(?i)\b(?:wait|poll|monitor|watch|bab
 
 func denySpawnWaiter() denial {
 	return denial{
-		Say: "this child only waits, and the host tells a parent when each child ends: to wait on a job, run `" + hint.JobWait.With("<job>") + "`.",
+		Say: fmt.Sprintf("this child only waits, and the host tells a parent when each child ends: to wait on a job, run `%s`.", hint.JobWait.With("<job>")),
 		Why: "A waiter spends a context and a turn per look on work that announces itself, and when the work fails early it waits on until it times out. " +
 			"A child sent to watch another child duplicates the notice the parent already gets.",
 	}
@@ -622,7 +622,7 @@ func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, ti
 
 func denySpawnDuplicate(row types.Job) denial {
 	return denial{
-		Say: "job " + row.ID + " already has a worker (" + string(row.State) + "); continue that worker with a message, or stop it before spawning another: `" + hint.DescribeJob.With(row.ID) + "` names it.",
+		Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
 		Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +
 			"A row stays running after its worker dies until something reaps it, so a stuck row is ended first, never worked around with a second worker.",
 	}
@@ -631,7 +631,7 @@ func denySpawnDuplicate(row types.Job) denial {
 func adviseSpawnNestedWaiter() advice {
 	return advice{
 		Say: "magus workspace: a worker spawning a helper to wait or watch: return to your parent, which is told when each worker ends.",
-		Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a root waits on a job with `" + hint.JobWait.With("<job>") + "`. " +
-			"A helper spawned only to wait stacks a third context on the notice the first two already get.",
+		Why: fmt.Sprintf("Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a root waits on a job with `%s`. "+
+			"A helper spawned only to wait stacks a third context on the notice the first two already get.", hint.JobWait.With("<job>")),
 	}
 }

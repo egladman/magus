@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,7 +21,7 @@ func pagedFile(t *testing.T, root string) string {
 	var b strings.Builder
 	b.WriteString("package paged\n")
 	for i := range 6 {
-		b.WriteString("\nfunc F" + strconv.Itoa(i) + "() {\n")
+		fmt.Fprintf(&b, "\nfunc F%d() {\n", i)
 		for range 17 {
 			b.WriteString("\t_ = 0\n")
 		}
@@ -68,8 +69,8 @@ func TestReadPagingSuggestedSpanIsNotAWindow(t *testing.T) {
 	first, _ := strconv.Atoi(span[1])
 	last, _ := strconv.Atoi(span[2])
 
-	assert.NotEqual(t, "deny", read("sed -n "+span[1]+","+span[2]+"p paged.go").Decision, "the span it names reads")
-	assert.NotEqual(t, "deny", read("sed -n "+strconv.Itoa(first-1)+","+strconv.Itoa(last+1)+"p paged.go").Decision,
+	assert.NotEqual(t, "deny", read(fmt.Sprintf("sed -n %s,%sp paged.go", span[1], span[2])).Decision, "the span it names reads")
+	assert.NotEqual(t, "deny", read(fmt.Sprintf("sed -n %d,%dp paged.go", first-1, last+1)).Decision,
 		"so does the span the Read tool maps it onto, one line wider at each end")
 }
 

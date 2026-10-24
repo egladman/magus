@@ -1,5 +1,7 @@
 package guard
 
+import "fmt"
+
 // The phrasing every lease-scoped verdict shares. One file, because a denial's closing
 // sentence is read far more often than the rule that produced it, and a second wording of
 // it is a second thing the reader has to reconcile.
@@ -12,7 +14,7 @@ package guard
 // rewrote their own rows, which is the re-roling the job store exists to make visible. A
 // command spelled here is a command this reader would run.
 func leaseActorClause(what string) string {
-	return "ask your orchestrator to " + what + "."
+	return fmt.Sprintf("ask your orchestrator to %s.", what)
 }
 
 // leaseActorWhy closes the rationale of every denial leaseActorClause words, in the stored

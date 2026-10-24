@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,9 +16,9 @@ func TestDenyPausedLeaseRefusesARunUntilResume(t *testing.T) {
 	for _, command := range []string{"magus run go::go-test .", "./magus affected lint"} {
 		reason := denyPausedLease(ctx, Dependencies{}, paused.ID, command)
 		require.True(t, reason.refused(), "%q", command)
-		assert.Equal(t, "magus workspace: job "+paused.ID+" is paused, so its holder starts no magus run until `magus job resume "+paused.ID+"`.", reason.Say)
+		assert.Equal(t, fmt.Sprintf("magus workspace: job %[1]s is paused, so its holder starts no magus run until `magus job resume %[1]s`.", paused.ID), reason.Say)
 	}
-	for _, command := range []string{"magus describe job " + paused.ID, "magus job exit " + paused.ID + " --stdin", "go version"} {
+	for _, command := range []string{"magus describe job " + paused.ID, fmt.Sprintf("magus job exit %s --stdin", paused.ID), "go version"} {
 		assert.False(t, denyPausedLease(ctx, Dependencies{}, paused.ID, command).refused(), "%q is not a run", command)
 	}
 

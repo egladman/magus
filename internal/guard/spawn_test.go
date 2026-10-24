@@ -249,7 +249,7 @@ func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
 		"to":            {`{"to":"brisk-heron","message":"Carry on."}`, "Carry on."},
 	} {
 		t.Run(name, func(t *testing.T) {
-			req, ok := decodeTestEnvelope(t, `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":`+tc.toolInput+`}`)
+			req, ok := decodeTestEnvelope(t, fmt.Sprintf(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":%s}`, tc.toolInput))
 			require.True(t, ok)
 			assert.True(t, req.IsContinue)
 			assert.False(t, req.IsSpawn)
@@ -274,7 +274,7 @@ func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
 	const skillPath = "/Users/dev/repo/.cursor/skills/magus-multi-agent/SKILL.md"
 	decode := func(t *testing.T, toolInput string) hookRequest {
 		t.Helper()
-		req, ok := decodeTestEnvelope(t, `{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":`+toolInput+`}`)
+		req, ok := decodeTestEnvelope(t, fmt.Sprintf(`{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":%s}`, toolInput))
 		require.True(t, ok)
 		return req
 	}
@@ -366,7 +366,7 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 	codex(map[string]any{"hook_event_name": "SubagentStart", "agent_id": "019e-child"})
 
 	write := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "agent_id": "019e-child",
-		"tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + target + "\n@@\n-package guard\n+package guard // x\n*** End Patch\n"}})
+		"tool_input": map[string]any{"command": fmt.Sprintf("*** Begin Patch\n*** Update File: %s\n@@\n-package guard\n+package guard // x\n*** End Patch\n", target)}})
 	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
 }
 
@@ -416,7 +416,7 @@ func TestAForegroundChildThatCannotBePlacedIsAdvisedNotRefused(t *testing.T) {
 			if tc.claim == "" {
 				t.Setenv(trail.EnvBaggage, "")
 			} else {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
 			}
 			// A read-only command, which no lease or path rule has an opinion on.
 			list := f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "agent-x",
@@ -440,8 +440,8 @@ func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
 	file := func(agentID, title string) {
 		dir := filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents")
 		require.NoError(t, os.MkdirAll(dir, 0o755))
-		body := `{"agentType":"general-purpose","description":"` + title + `","toolUseId":"toolu_1"}`
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-"+agentID+".meta.json"), []byte(body), 0o644))
+		body := fmt.Sprintf(`{"agentType":"general-purpose","description":"%s","toolUseId":"toolu_1"}`, title)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("agent-%s.meta.json", agentID)), []byte(body), 0o644))
 	}
 	write := func(agentID, job string) types.GuardJudgment {
 		return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID,
@@ -495,7 +495,7 @@ func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
 	t.Helper()
 	rows := make([]types.Job, len(jobs))
 	for i, id := range jobs {
-		rows[i] = types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{"internal/" + id + "/**"}}
+		rows[i] = types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}}
 	}
 	ctx, root := fleetFixture(t, rows...)
 	f := foregroundFleet{ctx: ctx, root: root}

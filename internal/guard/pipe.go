@@ -50,7 +50,7 @@ func parsePipeRecord(args []string) (rec pipeRecord, ok bool) {
 		return pipeRecords["describe targets"], true
 	}
 	if len(words) > 1 {
-		if rec, ok = pipeRecords[words[0]+" "+words[1]]; ok {
+		if rec, ok = pipeRecords[fmt.Sprintf("%s %s", words[0], words[1])]; ok {
 			return rec, true
 		}
 		if registryCommand(words[:2]) {
@@ -105,19 +105,19 @@ func pipeRewrite(p pipedMagus) (string, bool) {
 			return "", false
 		}
 		if rec.count != "" {
-			return "`-o template='{{." + rec.count + "}}'` is the count the record already carries.", true
+			return fmt.Sprintf("`-o template='{{.%s}}'` is the count the record already carries.", rec.count), true
 		}
-		return "`-o template='{{len ." + rec.list + "}}'` counts the " + rec.list + ".", true
+		return fmt.Sprintf("`-o template='{{len .%[1]s}}'` counts the %[1]s.", rec.list), true
 	case "tr":
 		if sep, joins := trJoiner(p.filterArgs); joins && known {
-			return "`-o template='{{range ." + rec.list + "}}{{." + rec.id + "}}" + sep + "{{end}}'` joins the " + rec.id + "s on one line.", true
+			return fmt.Sprintf("`-o template='{{range .%s}}{{.%s}}%s{{end}}'` joins the %ss on one line.", rec.list, rec.id, sep, rec.id), true
 		}
 		if trTrims(p.filterArgs) {
 			return "A `$(...)` substitution already drops the trailing newline, and `-o template` prints none.", true
 		}
 	case "grep", "egrep", "fgrep", "rg", "ag", "sort", "uniq", "cut", "awk", "sed", "column":
 		if known {
-			return "`-o name` prints each " + rec.id + "; `-o template='{{range ." + rec.list + "}}{{." + rec.id + "}}{{\"\\n\"}}{{end}}'` picks fields, and a bare `-o template` lists them.", true
+			return fmt.Sprintf("`-o name` prints each %s; `-o template='{{range .%s}}{{.%s}}{{\"\\n\"}}{{end}}'` picks fields, and a bare `-o template` lists them.", rec.id, rec.list, rec.id), true
 		}
 	}
 	return "", false

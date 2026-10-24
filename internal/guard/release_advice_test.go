@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,7 +26,7 @@ func fileReleaseRequest(t *testing.T, ctx context.Context, holder string) string
 		Where:   "internal/ledger/store.go",
 		Lease:   "lease-b",
 		Files:   []types.FileRef{{Value: "internal/ledger/store.go"}},
-		Message: "job " + holder + " holds internal/ledger/store.go. " + holder + " has changed nothing under internal/ledger/**",
+		Message: fmt.Sprintf("job %[1]s holds internal/ledger/store.go. %[1]s has changed nothing under internal/ledger/**", holder),
 	}, sessions.InvocationStart{})
 	require.NoError(t, err)
 	return id
@@ -40,7 +41,7 @@ func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
 		ctx, _ := fleetFixture(t, fixture.FleetLeases()...)
 		id := fileReleaseRequest(t, ctx, "lease-a")
 		v := call(ctx, "holder", "lease-a")
-		assert.Contains(t, v.Context, "a fork under lease lease-b was refused for internal/ledger/store.go (request "+id+")")
+		assert.Contains(t, v.Context, fmt.Sprintf("a fork under lease lease-b was refused for internal/ledger/store.go (request %s)", id))
 		assert.Contains(t, v.Context, "lease-a has changed nothing under internal/ledger/**")
 		assert.Contains(t, v.Context, "magus job apply -f <record>")
 		require.Equal(t, types.GuardJudgment{

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -333,7 +334,7 @@ func TestDeclarationCovering(t *testing.T) {
 		{".", "internal/ledger/store.go", false},
 		{"/", "internal/ledger/store.go", false},
 	} {
-		t.Run(tt.decl+" vs "+tt.rel, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s vs %s", tt.decl, tt.rel), func(t *testing.T) {
 			_, got, err := declarationCovering([]string{tt.decl}, tt.rel)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
@@ -888,7 +889,7 @@ func TestGradeLeasedWriteServesNoWidening(t *testing.T) {
 	}
 
 	outside := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
-	assert.Contains(t, outside.Reason, "`"+hint.DescribeJob.With("lease-b")+"`")
+	assert.Contains(t, outside.Reason, fmt.Sprintf("`%s`", hint.DescribeJob.With("lease-b")))
 	assert.Contains(t, outside.Reason, "ask the job's owner")
 }
 

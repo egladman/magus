@@ -263,7 +263,7 @@ func targetIdentity(raw string) (string, bool) {
 		return t.Name, true
 	}
 	charms := sortedCopy(t.Charms)
-	return t.Name + ":" + strings.Join(charms, ","), true
+	return fmt.Sprintf("%s:%s", t.Name, strings.Join(charms, ",")), true
 }
 
 // readLastRun reads the fact file at path, and how long ago it was written (the file's
