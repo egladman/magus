@@ -44,7 +44,7 @@ func TestBenchExportDigest(t *testing.T) {
 
 func TestBenchWriteTextsLeavesAnEqualFileAlone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "queries-prompted.jsonl")
-	texts := []teacher.Text{{ID: "q1", Text: benchQueryPrompt + "a <b> & c"}}
+	texts := []teacher.Text{{ID: "q1", Text: benchPrompts["CodeRankEmbed"].query + "a <b> & c"}}
 	require.NoError(t, writeTexts(path, texts))
 	back, err := teacher.ReadTexts(path)
 	require.NoError(t, err)
@@ -61,4 +61,24 @@ func TestBenchRefusesAnotherModel(t *testing.T) {
 	err := runBench([]string{"-subset", t.TempDir(), "-model", "potion-code-16M-v2"})
 	assert.ErrorContains(t, err, "is not CodeRankEmbed")
 	assert.ErrorContains(t, runBench([]string{"-model", "CodeRankEmbed"}), "-subset is required")
+}
+
+func TestBenchPromptsFollowTheModelCards(t *testing.T) {
+	assert.Equal(t, benchPrompt{query: "Represent this query for searching relevant code: "}, benchPrompts["CodeRankEmbed"])
+	assert.Equal(t, benchPrompt{query: "search_query: ", doc: "search_document: "}, benchPrompts["nomic-embed-text-v1.5"])
+	for model := range benchPrompts {
+		_, ok := docPrefix[model]
+		assert.True(t, ok, "%s is not a teacher load knows", model)
+	}
+}
+
+func TestBenchPrefixedAndTags(t *testing.T) {
+	in := []teacher.Text{{ID: "a", Text: "x"}}
+	got := prefixed(in, "search_query: ")
+	assert.Equal(t, []teacher.Text{{ID: "a", Text: "search_query: x"}}, got)
+	assert.Equal(t, "x", in[0].Text)
+	assert.Equal(t, in, prefixed(in, ""))
+	p, s := benchTags("nomic-embed-text-v1.5")
+	assert.Equal(t, "nomic-embed-text-v1.5-query-prompt", p)
+	assert.Equal(t, "nomic-embed-text-v1.5-symmetric", s)
 }

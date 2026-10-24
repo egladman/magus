@@ -20,8 +20,32 @@ import (
 	"github.com/egladman/magus/libs/embed/train/teacher"
 )
 
-// benchQueryPrompt is the query instruction CodeRankEmbed's model card requires.
-const benchQueryPrompt = "Represent this query for searching relevant code: "
+// benchPrompt is one teacher's query and document prompts. bench puts them in the texts
+// it encodes, so the encoder itself runs with no prefix and the texts digest keys them.
+type benchPrompt struct{ query, doc string }
+
+// benchPrompts are from each model card: CodeRankEmbed prompts only queries, with
+// "Represent this query for searching relevant code: "; nomic-embed-text-v1.5's card
+// (huggingface.co/nomic-ai/nomic-embed-text-v1.5, "Task instruction prefixes") prefixes
+// queries with "search_query: " and documents with "search_document: ".
+var benchPrompts = map[string]benchPrompt{
+	"CodeRankEmbed":         {query: "Represent this query for searching relevant code: "},
+	"nomic-embed-text-v1.5": {query: "search_query: ", doc: "search_document: "},
+}
+
+// benchTags are the two runs bench writes for model: queries with their prompt, and
+// queries as documents are, the symmetric arm the student is distilled toward.
+func benchTags(model string) (prompted, symmetric string) {
+	return model + "-query-prompt", model + "-symmetric"
+}
+
+func prefixed(texts []teacher.Text, prefix string) []teacher.Text {
+	out := make([]teacher.Text, len(texts))
+	for i, t := range texts {
+		out[i] = teacher.Text{ID: t.ID, Text: prefix + t.Text}
+	}
+	return out
+}
 
 // benchDepth is how many docs a run keeps per query, the external harness's depth.
 const benchDepth = 100
@@ -44,8 +68,9 @@ func runBench(args []string) error {
 	if *subset == "" {
 		return errors.New("-subset is required")
 	}
-	if c.model != "CodeRankEmbed" {
-		return fmt.Errorf("-model %q is not CodeRankEmbed: the harness runs potion itself, and nomic-embed-text-v1.5 waits on its reference parity", c.model)
+	prompt, ok := benchPrompts[c.model]
+	if !ok {
+		return fmt.Errorf("-model %q is not CodeRankEmbed or nomic-embed-text-v1.5: the harness runs potion itself", c.model)
 	}
 	digest, err := exportDigest(*subset)
 	if err != nil {
@@ -59,12 +84,19 @@ func runBench(args []string) error {
 	if err != nil {
 		return err
 	}
-	prompted := make([]teacher.Text, len(queries))
-	for i, q := range queries {
-		prompted[i] = teacher.Text{ID: q.ID, Text: benchQueryPrompt + q.Text}
+	// The prompts sit in the texts, so the encoder takes no prefix of its own; docPrefix
+	// holds nomic's document prefix, which would otherwise land on the queries too.
+	defer func(old string) { docPrefix[c.model] = old }(docPrefix[c.model])
+	docPrefix[c.model] = ""
+	files := map[string][]teacher.Text{
+		"queries-prompted.jsonl":  prefixed(queries, prompt.query),
+		"queries-symmetric.jsonl": prefixed(queries, prompt.doc),
+		"corpus-prompted.jsonl":   prefixed(docs, prompt.doc),
 	}
-	if err := writeTexts(filepath.Join(*subset, "queries-prompted.jsonl"), prompted); err != nil {
-		return err
+	for name, texts := range files {
+		if err := writeTexts(filepath.Join(*subset, c.model+"-"+name), texts); err != nil {
+			return err
+		}
 	}
 	l, err := c.load()
 	if err != nil {
@@ -72,17 +104,18 @@ func runBench(args []string) error {
 	}
 	defer l.enc.Close()
 	vecs := map[string][][]float32{}
-	for _, name := range []string{"queries.jsonl", "queries-prompted.jsonl", "corpus.jsonl"} {
-		if vecs[name], err = teacherVectors(l, filepath.Join(*subset, name), filepath.Join(*subset, "teacher"), *shardSize); err != nil {
+	for _, name := range []string{"queries-prompted.jsonl", "queries-symmetric.jsonl", "corpus-prompted.jsonl"} {
+		if vecs[name], err = teacherVectors(l, filepath.Join(*subset, c.model+"-"+name), filepath.Join(*subset, "teacher"), *shardSize); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
 	runs := filepath.Join(*subset, "runs", digest)
+	prompted, symmetric := benchTags(c.model)
 	for _, arm := range []struct{ tag, queries string }{
-		{"CodeRankEmbed-query-prompt", "queries-prompted.jsonl"},
-		{"CodeRankEmbed-symmetric", "queries.jsonl"},
+		{prompted, "queries-prompted.jsonl"},
+		{symmetric, "queries-symmetric.jsonl"},
 	} {
-		if err := writeRun(runs, denseRun(arm.tag, queries, vecs[arm.queries], docs, vecs["corpus.jsonl"])); err != nil {
+		if err := writeRun(runs, denseRun(arm.tag, queries, vecs[arm.queries], docs, vecs["corpus-prompted.jsonl"])); err != nil {
 			return err
 		}
 	}

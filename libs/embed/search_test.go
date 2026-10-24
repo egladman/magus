@@ -459,10 +459,10 @@ func BenchmarkReadIndex(b *testing.B) {
 // deduplicated before indexing; its column is never compared with cosqa's.
 var externalSubsets = []string{"cosqa", "cosqa-dedup", "stackoverflow-qa", "csn-python", "csn-go", "ccr-go"}
 
-// teacherSystems are the runs `embed bench -model CodeRankEmbed` writes; the harness
-// runs the lexical arms and potion itself. nomic-embed-text-v1.5 stays out until its
-// port matches the reference model and its SO-QA gap is reconciled.
-var teacherSystems = []string{"CodeRankEmbed-query-prompt", "CodeRankEmbed-symmetric"}
+// teacherSystems are the runs `embed bench` writes for CodeRankEmbed and nomic-embed-text-v1.5;
+// the harness runs the lexical arms and potion itself. nomic-embed-text-v1.5 runs through
+// the Go port, whose SO-QA gap against the reference model is not reconciled.
+var teacherSystems = []string{"CodeRankEmbed-query-prompt", "CodeRankEmbed-symmetric", "nomic-embed-text-v1.5-query-prompt", "nomic-embed-text-v1.5-symmetric"}
 
 const (
 	externalDepth = 100
@@ -862,7 +862,7 @@ func externalReport(bench string, results []externalResult) string {
 	b.WriteString("- Fusion: reciprocal rank, k = 60, over the top 100 of each list.\n")
 	b.WriteString("- cosqa-dedup deduplicates cosqa's corpus by exact text before indexing. Read its column apart from cosqa's, never against it.\n")
 	b.WriteString("- csn-go queries lose the declared name they start with. csn-python and csn-go run text to code; ccr-go keeps CoIR's code-to-code direction over the test partition.\n")
-	b.WriteString("- nomic-embed-text-v1.5 is left out until its port matches the reference model and its SO-QA gap is reconciled.\n")
+	b.WriteString("- nomic-embed-text-v1.5 runs through the Go port with its model-card prefixes; its SO-QA gap against the reference model is not reconciled.\n")
 	b.WriteString("- Intervals are 95%: Student t for nDCG@10 and recall@100, Wilson for success@100 (recall@100 where every query has one relevant doc).\n\n")
 
 	systems := map[string]bool{}
@@ -928,7 +928,7 @@ func externalReport(bench string, results []externalResult) string {
 	var missing []string
 	for _, r := range results {
 		if len(r.missing) > 0 {
-			missing = append(missing, fmt.Sprintf("- %s %s: `embed bench -subset %s -model CodeRankEmbed`",
+			missing = append(missing, fmt.Sprintf("- %s %s: `embed bench -subset %s -model <teacher>`",
 				r.subset.name, strings.Join(r.missing, ", "), filepath.Join(bench, r.subset.name)))
 		}
 	}
