@@ -353,7 +353,7 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 func TestSelfManagesOnlyTheBinary(t *testing.T) {
 	got := registryChildren(t, "self")
 	slices.Sort(got)
-	if want := []string{"install-shorthand", "update"}; !slices.Equal(got, want) {
+	if want := []string{"install-shorthand", "place", "update"}; !slices.Equal(got, want) {
 		t.Errorf("self Children = %v, want %v", got, want)
 	}
 }

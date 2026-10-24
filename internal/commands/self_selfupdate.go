@@ -50,6 +50,7 @@ updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 			},
 		},
 		selfInstallShorthandCommand,
+			selfPlaceCommand,
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Update the running binary", Command: "magus self update"},
