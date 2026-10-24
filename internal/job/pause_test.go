@@ -22,9 +22,10 @@ func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 	assert.NotZero(t, first.Paused)
 	assert.NotEmpty(t, first.PausedBy.User, "the pause names the account that wrote it")
 	got := first
-	got.Paused, got.PausedBy, got.Updated = 0, types.Origin{}, 0
-	assert.Equal(t, types.Job{ID: "w", State: types.StateRunning, Registered: 1,
-		PauseReason: "release build needs the machine", PausedUntil: until}, got)
+	// Who and when are the store's and the clock's own; the pause fields are the subject.
+	got.Paused, got.PausedBy, got.Updated, got.Created, got.RegisteredBy = 0, types.Origin{}, 0, 0, types.Origin{}
+	assert.Equal(t, types.Job{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "w", State: types.StateRunning,
+		Registered: 1, Generation: 1, Attempts: 1, PauseReason: "release build needs the machine", PausedUntil: until}, got)
 
 	rows, err = s.Pause(t.Context(), "still building", 0, "w")
 	require.NoError(t, err)
