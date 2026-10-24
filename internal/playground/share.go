@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -87,7 +88,7 @@ func ShareFragment(src string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "#" + shareKey + "=" + enc, nil
+	return fmt.Sprintf("#%s=%s", shareKey, enc), nil
 }
 
 // downloadFallback is the name a save takes when the file bar's label cannot be one.
