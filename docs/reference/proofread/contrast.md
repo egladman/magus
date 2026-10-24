@@ -29,6 +29,7 @@ The code is `PRF4010`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `reference`          | off     |
+| `principle`          | off     |
 | `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |

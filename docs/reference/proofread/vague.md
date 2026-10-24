@@ -29,6 +29,7 @@ The code is `PRF4008`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `reference`          | deny    |
+| `principle`          | deny    |
 | `guide`              | deny    |
 | `change-description` | deny    |
 | `agent-brief`        | deny    |

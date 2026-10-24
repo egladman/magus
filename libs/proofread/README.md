@@ -8,6 +8,7 @@ to see how a rule earns its default through calibration, read
 | -------------------- | ------------------------------------------------------------------------------------- |
 | `doc-comment`        | one symbol from a SCIP index: its doc comment, and the name of a function or method   |
 | `reference`          | a hand-written Markdown page a reader looks things up in                              |
+| `principle`          | a design-principle page, one rule argued in its author's voice; tense does not apply  |
 | `guide`              | a procedural page, held to the guide rules as well                                    |
 | `agent-brief`        | Markdown an agent loads as written, such as AGENTS.md                                 |
 | `agent-compact`      | grammar-free text only an agent reads, such as a skill's short form                   |

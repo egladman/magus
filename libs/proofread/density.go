@@ -20,7 +20,7 @@ const (
 
 // densityKinds are the kinds written as running prose long enough for a rate
 // over the whole text to mean something.
-var densityKinds = []Kind{KindChangeDescription, KindReference, KindGuide, KindIssue}
+var densityKinds = []Kind{KindChangeDescription, KindReference, KindPrinciple, KindGuide, KindIssue}
 
 var densityChecks = []check{
 	{rule: RuleParticiples, on: densityKinds, graded: true, judge: participles},
