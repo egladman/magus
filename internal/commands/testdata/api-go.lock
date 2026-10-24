@@ -2598,8 +2598,9 @@ github.com/egladman/magus/types.JobClaim.Evidence field ClaimEvidence "json:\"ev
 github.com/egladman/magus/types.JobClaim.Path field string "json:\"path\"     yaml:\"path\""
 github.com/egladman/magus/types.JobClaim.Proof field string "json:\"proof\"    yaml:\"proof\""
 github.com/egladman/magus/types.JobClaimRequest type struct
-github.com/egladman/magus/types.JobClaimRequest.Because field string "json:\"because\" schema:\"nonblank\""
-github.com/egladman/magus/types.JobClaimRequest.Path field string "json:\"path\" schema:\"writepath\""
+github.com/egladman/magus/types.JobClaimRequest.Because field string "json:\"because,omitempty\" schema:\"nonblank\""
+github.com/egladman/magus/types.JobClaimRequest.Callers field string "json:\"callers,omitempty\" schema:\"nonblank\""
+github.com/egladman/magus/types.JobClaimRequest.Path field string "json:\"path,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.JobDenial type struct
 github.com/egladman/magus/types.JobDenial.Action field string "json:\"action,omitempty\"      yaml:\"action,omitempty\""
 github.com/egladman/magus/types.JobDenial.Reason field string "json:\"reason,omitempty\"      yaml:\"reason,omitempty\""
@@ -2624,6 +2625,16 @@ github.com/egladman/magus/types.JobGateAttempt type struct
 github.com/egladman/magus/types.JobGateAttempt.Attempt field JobAttempt "json:\"attempt\" yaml:\"attempt\""
 github.com/egladman/magus/types.JobGateAttempt.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
 github.com/egladman/magus/types.JobGoalInvalid const DiagnosticCode = "MGS3038"
+github.com/egladman/magus/types.JobGrant type struct
+github.com/egladman/magus/types.JobGrant.At field int64 "json:\"at\" yaml:\"at\""
+github.com/egladman/magus/types.JobGrant.Attempt field int "json:\"attempt,omitzero\" yaml:\"attempt,omitempty\""
+github.com/egladman/magus/types.JobGrant.By field Origin "json:\"by\" yaml:\"by\""
+github.com/egladman/magus/types.JobGrant.Job field string "json:\"job\" yaml:\"job\""
+github.com/egladman/magus/types.JobGrant.Key method func() string
+github.com/egladman/magus/types.JobGrant.LiveFor method func(row Job, now int64) bool
+github.com/egladman/magus/types.JobGrant.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
+github.com/egladman/magus/types.JobGrant.Rule field string "json:\"rule\" yaml:\"rule\""
+github.com/egladman/magus/types.JobGrant.Until field int64 "json:\"until,omitzero\" yaml:\"until,omitempty\""
 github.com/egladman/magus/types.JobHolder type string
 github.com/egladman/magus/types.JobHolder.OrSession method func() JobHolder
 github.com/egladman/magus/types.JobIDRule func(id string) string
@@ -3268,6 +3279,7 @@ github.com/egladman/magus/types.LeaseCheck.Project field string "json:\"project,
 github.com/egladman/magus/types.LeaseCheck.Script field string "json:\"script,omitempty\"   yaml:\"script,omitempty\""
 github.com/egladman/magus/types.LeaseCheck.String method func() string
 github.com/egladman/magus/types.LeaseCheck.Target field string "json:\"target\"             yaml:\"target\" schema:\"target\""
+github.com/egladman/magus/types.LeaseCheck.Test field bool "json:\"test,omitzero\" yaml:\"test,omitempty\""
 github.com/egladman/magus/types.LeaseSource type string
 github.com/egladman/magus/types.LeaseSourceAgent const LeaseSource = "agent"
 github.com/egladman/magus/types.LeaseSourceContested const LeaseSource = "contested"

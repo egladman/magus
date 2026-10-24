@@ -46,6 +46,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [focus-read](focus-read.md)                           | a read outside the paths a focus lease was given                                                     |
 | [gate-repeat](gate-repeat.md)                         | the gate run a third time over a tree its last green verdict already covers                          |
 | [generated-write](generated-write.md)                 | a hand edit to a declared output, which the next run overwrites                                      |
+| [grant-is-a-persons](grant-is-a-persons.md)           | an agent running `magus job grant`, in any spelling and any role                                     |
 | [graph-pipe](graph-pipe.md)                           | a read-only graph verb piped into a text filter, when magus projects the record itself               |
 | [grep-reader](grep-reader.md)                         | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body     |
 | [heredoc-write](heredoc-write.md)                     | a here-document written to a file, judged as the file write it is                                    |
@@ -63,6 +64,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [lease-invalid](lease-invalid.md)                     | a call naming a lease this workspace's job store does not declare                                    |
 | [lease-paused](lease-paused.md)                       | a leased worker starting a magus run while a person has its job paused                               |
 | [lease-rebind](lease-rebind.md)                       | a leased worker rewriting who it is or what its own job row says                                     |
+| [lease-row-unknown](lease-row-unknown.md)             | a leased call judged by a magus older than the job row it reads                                      |
 | [lease-undeclared](lease-undeclared.md)               | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
 | [lease-vcs](lease-vcs.md)                             | a worker lease mutating version control, or committing outside its own branch and checkout           |
 | [lease-write](lease-write.md)                         | a leased write outside its write paths, or into a path it was denied or another lease owns           |

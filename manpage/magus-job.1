@@ -180,6 +180,15 @@ Remove a row that already ended, destroying the record of what happened
 \fB\-\-all\fR
 Also end a job a holder took and nobody touched within jobs.stale_after
 .RE
+.SS job grant options
+.RS
+.TP
+\fB\-\-for\fR \fIduration\fR
+End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+.TP
+\fB\-\-revoke\fR
+End the job's grant of the rule
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -215,6 +224,9 @@ Hold jobs' holders off the machine budget until resumed
 .TP
 \fBresume\fR
 Lift the pause on jobs
+.TP
+\fBgrant\fR
+Lower one guard rule to advice for one job, typed by a person
 .RE
 .SH EXAMPLES
 \fIDeclare a job\fR

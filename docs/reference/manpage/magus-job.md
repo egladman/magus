@@ -184,6 +184,14 @@ them and magus describe job prints one job's terms.
 **--all**
 : Also end a job a holder took and nobody touched within jobs.stale_after
 
+### job grant options
+
+**--for** *duration*
+: End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+
+**--revoke**
+: End the job's grant of the rule
+
 ## Subcommands
 
 **fork**
@@ -218,6 +226,9 @@ them and magus describe job prints one job's terms.
 
 **resume**
 : Lift the pause on jobs
+
+**grant**
+: Lower one guard rule to advice for one job, typed by a person
 
 ## Examples
 

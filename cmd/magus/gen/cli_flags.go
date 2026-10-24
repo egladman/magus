@@ -329,6 +329,10 @@ const (
 	FlagJobForkTimeout = "timeout"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
+	// job grant: --for
+	FlagJobGrantFor = "for"
+	// job grant: --revoke
+	FlagJobGrantRevoke = "revoke"
 	// job prune: --all
 	FlagJobPruneAll = "all"
 	// job rm: --force
@@ -1511,6 +1515,20 @@ type JobPruneFlags struct {
 func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
 	var f JobPruneFlags
 	fs.BoolVar(&f.All, FlagJobPruneAll, false, "Also end a job a holder took and nobody touched within jobs.stale_after")
+	return &f
+}
+
+// JobGrantFlags are the flags declared for `magus job grant`.
+type JobGrantFlags struct {
+	For    time.Duration // --for
+	Revoke bool          // --revoke
+}
+
+// BindJobGrant registers `magus job grant`'s flags on fs and returns the destination.
+func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
+	var f JobGrantFlags
+	fs.DurationVar(&f.For, FlagJobGrantFor, 0, "End the grant after this long (e.g. 2h); unset, it lasts until the job ends")
+	fs.BoolVar(&f.Revoke, FlagJobGrantRevoke, false, "End the job's grant of the rule")
 	return &f
 }
 
