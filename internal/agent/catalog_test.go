@@ -810,10 +810,10 @@ func TestGradeDestNamesALeftoverDirectoryAndItsFix(t *testing.T) {
 	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: types.SkillFormBoth})
 
 	assert.Equal(t, Status{
-		Location:  dest,
-		Installed: true,
-		Stale:     true,
-		Detail: fmt.Sprintf("magus-empty: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir %s; magus-locked: cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", filepath.Join(dest, "magus-empty"), readErr, filepath.Join(dest, "magus-locked")),
+		Location:      dest,
+		Installed:     true,
+		Stale:         true,
+		Detail:        fmt.Sprintf("magus-empty: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir %s; magus-locked: cannot read its SKILL.md (%v), so magus cannot tell it wrote it and a reinstall leaves it; after a look, remove it: rm -r %s", filepath.Join(dest, "magus-empty"), readErr, filepath.Join(dest, "magus-locked")),
 		Leftovers:     []string{filepath.Join(dest, "magus-empty"), filepath.Join(dest, "magus-locked")},
 		OnlyLeftovers: true,
 	}, got)
