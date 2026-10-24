@@ -193,7 +193,7 @@ func TestInitGlobalWritesNoDefaultKeys(t *testing.T) {
 // the process and panics when a later call names a different one, so the assertion
 // passes alone and panics in a full run. Each script case is its own subprocess.
 
-func TestInstallInitHooksWritesSettleRefreshAndDriftHooks(t *testing.T) {
+func TestInstallInitHooksWritesRefreshAndDriftHooksOnly(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
 	installer, ok := vcs.Installer("git")
@@ -203,15 +203,18 @@ func TestInstallInitHooksWritesSettleRefreshAndDriftHooks(t *testing.T) {
 
 	hooks := filepath.Join(dir, ".git", "hooks")
 	for file, sections := range map[string][]string{
-		"pre-merge-commit": {"# BEGIN magus-regenerate"},
-		"post-checkout":    {"# BEGIN magus-refresh"},
-		"post-commit":      {"# BEGIN magus-regenerate", "# BEGIN magus-drift-notice"},
-		"pre-push":         {"# BEGIN magus-drift-notice"},
+		"post-checkout": {"# BEGIN magus-refresh"},
+		"post-commit":   {"# BEGIN magus-drift-notice"},
+		"pre-push":      {"# BEGIN magus-drift-notice"},
 	} {
 		data, err := os.ReadFile(filepath.Join(hooks, file))
 		require.NoError(t, err, file)
 		for _, want := range sections {
 			assert.Contains(t, string(data), want, file)
 		}
+		assert.NotContains(t, string(data), "magus-regenerate", file)
+	}
+	for _, file := range []string{"pre-merge-commit", "pre-commit", "post-applypatch"} {
+		assert.NoFileExists(t, filepath.Join(hooks, file), "no hook blocks a commit on a regeneration")
 	}
 }

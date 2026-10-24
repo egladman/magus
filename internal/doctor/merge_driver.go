@@ -123,35 +123,31 @@ func driverExecutable(registered string) string {
 	return exe
 }
 
-// checkSettleHooks reports a registered git merge driver whose settle hooks are not all
-// installed. The driver keeps one side of a generated file on the promise that the hooks
-// regenerate it once the merge has the whole tree; without them every merge that touches
-// a generator's input commits stale output. Only `magus init --vcs git` installs the
-// hooks, so this is where the gap shows.
+// checkSettleHooks reports git hooks that still carry the magus-regenerate section an
+// earlier magus wrote. That section ran a regeneration inside the hook and blocked the
+// commit for seconds; hooks now only submit background jobs, so the leftover is stale.
+// `magus init --vcs git` strips it.
 func (r *runner) checkSettleHooks() types.Check {
 	const name = "settle-hooks"
 	ctx := r.runCtx()
 	res, err := vcs.Resolve(ctx, r.ws.Root(), "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil || res.Name != "git" {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "only git has settle hooks; the merge driver logs the regeneration to run"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "only git has hooks; the merge driver logs the regeneration to run"}
 	}
-	if r.registeredMergeDriver() == "" {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no merge driver is registered, so no hook is owed"}
-	}
-	missing, err := vcs.SettleHooksMissing(ctx, r.ws.Root())
+	stale, err := vcs.SettleHooksStale(ctx, r.ws.Root())
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
-	if len(missing) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "every settle hook carries its magus-regenerate section"}
+	if len(stale) == 0 {
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no git hook carries a blocking magus-regenerate section"}
 	}
 	return types.Check{
 		Name:    name,
 		Status:  types.CheckFail,
-		Message: fmt.Sprintf("the merge driver is registered but %d settle hook(s) are not, so a merge that changes generator inputs commits stale output", len(missing)),
+		Message: fmt.Sprintf("%d git hook(s) still run a regeneration that blocks the commit; hooks only submit jobs now", len(stale)),
 		Details: []string{
-			"missing: " + strings.Join(missing, ", "),
-			"install them with `" + hint.Init.With("--vcs", "git") + "`",
+			"stale: " + strings.Join(stale, ", "),
+			"strip them with `" + hint.Init.With("--vcs", "git") + "`",
 		},
 	}
 }

@@ -1,7 +1,9 @@
 package doctor
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -97,34 +99,36 @@ func TestInstallRemedyNamesNoGuessedBackend(t *testing.T) {
 	assert.NotContains(t, got, "--vcs")
 }
 
-// A registered driver without its settle hooks fails naming each missing hook and the
-// command that writes them; installed, the same registration passes.
-func TestCheckSettleHooksReportsTheMissingOnes(t *testing.T) {
+// A git hook that still carries the blocking magus-regenerate section fails naming each
+// one and the command that strips them; once stripped, the same repository passes.
+func TestCheckSettleHooksReportsTheStaleOnes(t *testing.T) {
 	repo := testkit.NewRepo(t, nil)
 	root := repo.Root()
 	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
-	assert.Equal(t, types.Check{Name: "settle-hooks", Status: types.CheckOK,
-		Message: "no merge driver is registered, so no hook is owed"}, r.checkSettleHooks())
+	ok := types.Check{Name: "settle-hooks", Status: types.CheckOK,
+		Message: "no git hook carries a blocking magus-regenerate section"}
+	assert.Equal(t, ok, r.checkSettleHooks())
 
-	repo.Git("config", "merge.magus.driver", "true vcs merge-driver %O %A %B %L %P")
+	hook := filepath.Join(root, ".git", "hooks", "pre-commit")
+	require.NoError(t, os.MkdirAll(filepath.Dir(hook), 0o755))
+	require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\n# BEGIN magus-regenerate\nmagus vcs resolve --hook pre-commit\n# END magus-regenerate\n"), 0o755))
 	assert.Equal(t, types.Check{
 		Name:    "settle-hooks",
 		Status:  types.CheckFail,
-		Message: "the merge driver is registered but 5 settle hook(s) are not, so a merge that changes generator inputs commits stale output",
+		Message: "1 git hook(s) still run a regeneration that blocks the commit; hooks only submit jobs now",
 		Details: []string{
-			"missing: pre-merge-commit, pre-commit, post-commit, post-rewrite, post-applypatch",
-			"install them with `" + hint.Init.With("--vcs", "git") + "`",
+			"stale: pre-commit",
+			"strip them with `" + hint.Init.With("--vcs", "git") + "`",
 		},
 	}, r.checkSettleHooks())
 
-	installer, ok := vcs.Installer("git")
-	require.True(t, ok)
-	hooks, ok := installer.(types.RegenHookInstaller)
-	require.True(t, ok)
-	_, err := hooks.InstallRegenHook(t.Context(), root, "magus vcs resolve --hook")
+	installer, found := vcs.Installer("git")
+	require.True(t, found)
+	hooks, found := installer.(types.RegenHookInstaller)
+	require.True(t, found)
+	_, err := hooks.InstallRegenHook(t.Context(), root, "")
 	require.NoError(t, err)
-	assert.Equal(t, types.Check{Name: "settle-hooks", Status: types.CheckOK,
-		Message: "every settle hook carries its magus-regenerate section"}, r.checkSettleHooks())
+	assert.Equal(t, ok, r.checkSettleHooks())
 }
 
 // The registration is a command line, not a path, and vcs/git.go quotes the executable

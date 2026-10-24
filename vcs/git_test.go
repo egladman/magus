@@ -1349,7 +1349,7 @@ func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
 	oldCommit := gitRun2(t, repo, "rev-parse", "HEAD")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a\n"), 0o644))
 	gitRun(t, repo, "add", "a.txt")
-	gitRun(t, repo, "commit", "-q", "-m", "the settle hooks")
+	gitRun(t, repo, "commit", "-q", "-m", "the refresh hooks")
 	newCommit := gitRun2(t, repo, "rev-parse", "HEAD")
 
 	build := func(version, commit, date string) context.Context {
@@ -1360,12 +1360,12 @@ func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
 	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 
 	require.NoError(t, gitVCS{}.InstallMergeDriver(newer, repo, globs))
-	_, err := gitVCS{}.InstallRegenHook(newer, repo, "magus vcs resolve --hook")
+	_, err := gitVCS{}.InstallRefreshHook(newer, repo, "magus job run sync-graph")
 	require.NoError(t, err)
 	assert.Equal(t, stamp.Self(newer).String(), gitConfigValue(t, repo, gitWriterKey))
 
 	attrs := filepath.Join(repo, ".gitattributes")
-	preCommit := filepath.Join(repo, ".git", "hooks", "pre-merge-commit")
+	preCommit := filepath.Join(repo, ".git", "hooks", "post-checkout")
 	snapshot := func() []string {
 		a, err := os.ReadFile(attrs)
 		require.NoError(t, err)
@@ -1378,7 +1378,7 @@ func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
 	assert.Contains(t, before[1], "written by magus v0.4.3-164-g")
 
 	var down *stamp.DowngradeError
-	_, err = gitVCS{}.InstallRegenHook(older, repo, "magus vcs resolve")
+	_, err = gitVCS{}.InstallRefreshHook(older, repo, "magus job run sync-graph --again")
 	require.ErrorAs(t, err, &down)
 	assert.Equal(t, preCommit, down.File)
 	err = gitVCS{}.InstallMergeDriver(older, repo, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
@@ -4159,8 +4159,6 @@ func TestSkipTrackedBinaryGuardsOnlyARelativeBinary(t *testing.T) {
 	assert.Equal(t, "/usr/bin/magus job run x >/dev/null 2>&1 || true\n", gitHookBody("post-merge", "/usr/bin/magus job run x"))
 	assert.Equal(t, "if git ls-files --error-unmatch -- ./magus >/dev/null 2>&1; then echo \"magus: this branch commits ./magus, so the hook will not run it; run 'magus job run x' with your own build\" >&2; else ./magus job run x >/dev/null 2>&1 || true; fi\n",
 		gitHookBody("post-merge", "./magus job run x"))
-	assert.Contains(t, gitSettleHookBody(HookPostCommit, "./magus vcs resolve --hook"),
-		"if git ls-files --error-unmatch -- ./magus >/dev/null 2>&1; then echo \"magus: this branch commits ./magus, so the hook will not run it; run 'magus vcs resolve' with your own build\" >&2; else ./magus vcs resolve --hook post-commit; fi\n")
 }
 
 // A core.hooksPath outside the repository would run magus in every repository sharing it.
