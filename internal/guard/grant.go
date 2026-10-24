@@ -1,15 +1,20 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -77,6 +82,100 @@ func denyAgentGrant(command string, d Dialect) denial {
 			return denial{
 				Say: "magus workspace: only a person runs `" + hint.BinaryName() + " job grant`; ask the person to type it.",
 				Why: "A grant lowers a guard rule for one job on a person's say-so. The guard judges only agents' calls, so a grant reaching it was not a person's, and the job store refuses one from a process carrying a lease as well.",
+			}
+		}
+	}
+	return denial{}
+}
+
+// denyRuleWaiverIsAPersons refuses `magus gate waive` to an agent, as grant-is-a-persons
+// refuses `magus job grant`.
+const denyRuleWaiverIsAPersons denyRuleName = "waiver-is-a-persons"
+
+// gateWaiversFileName sits beside the job store, so every checkout of the repository reads
+// one set of waivers.
+const gateWaiversFileName = "gate-waivers.jsonl"
+
+func gateWaivers(store *job.Store) (file.JSONL[types.GateWaiver], error) {
+	jobs, err := store.Path()
+	if err != nil {
+		return file.JSONL[types.GateWaiver]{}, err
+	}
+	return file.JSONL[types.GateWaiver]{
+		Path: filepath.Join(filepath.Dir(jobs), gateWaiversFileName),
+		Key:  types.GateWaiver.Key,
+	}, nil
+}
+
+// WaiveGate records a person's waiver of the push gate for commit, a full revision id: a
+// push or `gh pr create` publishing that commit passes push-ungated, and no other commit
+// does. A later waiver of the same commit replaces it. It refuses an empty reason and a
+// process carrying a lease.
+func WaiveGate(ctx context.Context, store *job.Store, commit, reason string) (types.GateWaiver, error) {
+	if strings.TrimSpace(reason) == "" {
+		return types.GateWaiver{}, fmt.Errorf("guard: a waiver says why the gate was skipped: pass --reason")
+	}
+	return appendGateWaiver(ctx, store, types.GateWaiver{Commit: commit, Reason: reason})
+}
+
+// RevokeGateWaiver ends commit's waiver, recording who ended it. Revoking a waiver that is
+// not there still writes the line.
+func RevokeGateWaiver(ctx context.Context, store *job.Store, commit string) (types.GateWaiver, error) {
+	return appendGateWaiver(ctx, store, types.GateWaiver{Commit: commit, Revoked: true})
+}
+
+func appendGateWaiver(ctx context.Context, store *job.Store, w types.GateWaiver) (types.GateWaiver, error) {
+	if actor := store.Actor(); actor.Bound() {
+		return types.GateWaiver{}, fmt.Errorf("guard: a waiver is a person's keystroke, and this process acts under lease %q: a person types `%s gate waive` at their own terminal", actor.Lease, hint.BinaryName())
+	}
+	log, err := gateWaivers(store)
+	if err != nil {
+		return types.GateWaiver{}, err
+	}
+	w.By, w.At = trail.StampOrigin(ctx, types.Origin{}), time.Now().Unix()
+	return w, log.Update(ctx, func([]types.GateWaiver) []types.GateWaiver { return []types.GateWaiver{w} })
+}
+
+// gateWaiverAt is the waiver covering commit in the workspace at, if one does. A waivers
+// file that cannot be read covers nothing, so the push gate keeps refusing.
+func gateWaiverAt(at location, commit string) (types.GateWaiver, bool) {
+	log, err := gateWaivers(job.NewStore(at.jobs()))
+	if err != nil {
+		return types.GateWaiver{}, false
+	}
+	waivers, err := log.Load()
+	if err != nil {
+		return types.GateWaiver{}, false
+	}
+	i := slices.IndexFunc(waivers, func(w types.GateWaiver) bool { return w.Covers(commit) })
+	if i < 0 {
+		return types.GateWaiver{}, false
+	}
+	return waivers[i], true
+}
+
+// waiverNote names the waiver that let a push of commit through: who typed it, when, and why.
+func waiverNote(commit string, w types.GateWaiver) string {
+	return fmt.Sprintf("magus workspace: %s goes out ungated under the waiver %s typed at %s: %s",
+		commit, w.By.Label(), time.Unix(w.At, 0).UTC().Format(time.RFC3339), w.Reason)
+}
+
+// denyAgentWaive refuses `magus gate waive` in any spelling, for the reason denyAgentGrant
+// refuses a grant: a waiver is a person's approval, and every call the hook judges is an
+// agent's.
+func denyAgentWaive(command string, d Dialect) denial {
+	cmds, ok := ParseCommandsDialect(command, d)
+	if !ok {
+		return denial{}
+	}
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" {
+			continue
+		}
+		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == "gate" && words[1] == "waive" {
+			return denial{
+				Say: fmt.Sprintf("magus workspace: only a person runs `%s gate waive`; ask the person to type it.", hint.BinaryName()),
+				Why: "A waiver lets one commit out past push-ungated on a person's say-so. The guard judges only agents' calls, so a waiver reaching it was not a person's, and the waivers store refuses one from a process carrying a lease as well.",
 			}
 		}
 	}
