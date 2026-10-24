@@ -822,9 +822,18 @@ func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 
 	t.Run("widening", func(t *testing.T) {
 		t.Parallel()
-		got := apply(t, derived(t), spec("a.go", "a_test.go", "b_test.go", "c.go"))
-		assert.Equal(t, []string{"a_test.go", "b_test.go"}, got.SoftPaths)
-		assert.Equal(t, []types.JobWaiver{waiver}, got.Waivers)
+		s := derived(t)
+		before, err := s.List()
+		require.NoError(t, err)
+		got := apply(t, s, spec("a.go", "a_test.go", "b_test.go", "c.go"))
+
+		want := before[0].Clone()
+		want.WritePaths = []string{"a.go", "a_test.go", "b_test.go", "c.go"}
+		want.Updated = got.Updated
+		want.Widenings = 1
+		want.WriteProof = types.WriteProofAlone
+		want.Validated = got.Validated
+		assert.Equal(t, want, got, "the soft paths and the waiver stay")
 	})
 	t.Run("narrowing", func(t *testing.T) {
 		t.Parallel()

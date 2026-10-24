@@ -77,20 +77,26 @@ func TestGapNoteDerivesFindLines(t *testing.T) {
 	n, err := validGap().Note(context.Background(), "", liveGapResolver())
 	require.NoError(t, err)
 
-	assert.Equal(t, []Anchor{
-		{Kind: AnchorSymbol, Target: gapSymbol},
-		{Kind: AnchorDiagnostic, Target: "MGS3009"},
-		{Kind: AnchorFile, Target: "internal/guard/shell.go"},
-	}, n.Anchors, "file#decl is stored as the symbol it names")
-	assert.Equal(t, []string{
-		"magus refs 'symbol:gomod example `example/guard`/Judge().'",
-		"magus query 'kind=diagnostic id=MGS3009'",
-		"magus explain file:internal/guard/shell.go",
-	}, n.Find)
-	assert.Equal(t, []string{TagGap, TagGapOpen}, n.Tags)
-	assert.Equal(t, SourceHarnessGap, n.Source.Kind)
-	assert.Equal(t, "grd6392b52c2ea13c5a", n.Source.Ref)
 	assert.Regexp(t, `^gap-[0-9a-f]{12}$`, n.Name)
+	// The name is a digest and the body rendered prose; both are normalized before comparing.
+	assert.Equal(t, Note{
+		Name:  n.Name,
+		ID:    n.Name,
+		Title: "wait poll denied as sleep",
+		Tags:  []string{TagGap, TagGapOpen},
+		Anchors: []Anchor{
+			{Kind: AnchorSymbol, Target: gapSymbol},
+			{Kind: AnchorDiagnostic, Target: "MGS3009"},
+			{Kind: AnchorFile, Target: "internal/guard/shell.go"},
+		},
+		Source: &Source{Kind: SourceHarnessGap, Ref: "grd6392b52c2ea13c5a", AsOf: "5943ea176", Captured: capturedAt()},
+		Find: []string{
+			"magus refs 'symbol:gomod example `example/guard`/Judge().'",
+			"magus query 'kind=diagnostic id=MGS3009'",
+			"magus explain file:internal/guard/shell.go",
+		},
+		Body: n.Body,
+	}, n, "file#decl is stored as the symbol it names")
 }
 
 func TestGapNoteRefusesADispositionAtCapture(t *testing.T) {

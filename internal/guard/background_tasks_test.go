@@ -318,7 +318,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 			}
 			require.True(t, d.refused())
 			assert.Contains(t, d.Say, "`"+tc.want+"` runs in the background")
-			assert.Contains(t, d.Say, "`timeout 30m <command>` or `magus job exec --timeout 30m -- <command>`")
+			assert.Contains(t, d.Say, "bound it at the ceiling: `magus job exec --timeout 30m -- <command>`")
 			assert.Contains(t, d.Why, "`timeout N` or `gtimeout N`", "the other remedy is behind the ref")
 		})
 	}
@@ -331,7 +331,7 @@ func TestJudgeOffersTheWorkspaceCeiling(t *testing.T) {
 	deps := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleBackgroundUnbounded): {Decision: builtin.Deny, CeilingMinutes: 45}}}
 	v := Judge(ctx, deps, Request{Input: "rsync -a src/ dst/", Session: "bg", Host: "claude-code", CallBackground: true})
 	assert.Equal(t, string(denyRuleBackgroundUnbounded), v.Rule)
-	assert.Contains(t, v.Reason, "`timeout 45m <command>` or `magus job exec --timeout 45m -- <command>`")
+	assert.Contains(t, v.Reason, "bound it at the ceiling: `magus job exec --timeout 45m -- <command>`")
 }
 
 func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
@@ -387,7 +387,7 @@ func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
 func TestJudgeBackgroundSilent(t *testing.T) {
 	started := bgTime(t, "2026-10-13T11:37:41.120Z")
 	live := writeTranscript(t, bgSearchCall, bgSearchResult)
-	limits := backgroundLimitsOf(Dependencies{})
+	limits := configuredBackgroundLimits(Dependencies{})
 
 	t.Run("a task silent past the advisory threshold is advised once", func(t *testing.T) {
 		said := hint.NewGate(t.TempDir(), "claude-code/8f2c6a1e")
@@ -417,7 +417,7 @@ func TestJudgeBackgroundSilent(t *testing.T) {
 		}
 	})
 	t.Run("the workspace's minutes move both thresholds", func(t *testing.T) {
-		tuned := backgroundLimitsOf(Dependencies{Builtins: map[string]builtin.Setting{
+		tuned := configuredBackgroundLimits(Dependencies{Builtins: map[string]builtin.Setting{
 			string(denyRuleBackgroundSilent):    {Decision: builtin.Deny, AdviseMinutes: 10, DenyMinutes: 20},
 			string(denyRuleBackgroundUnbounded): {Decision: builtin.Deny, CeilingMinutes: 15},
 		}})

@@ -116,7 +116,7 @@ func resolveGapAnchor(ctx context.Context, res GapResolver, raw string) (Anchor,
 		return Anchor{}, err
 	}
 	if !res.Resolves(ctx, a) {
-		return Anchor{}, fmt.Errorf("notes: gap anchor %q resolves to nothing in the graph, so the gap could not be found again; `magus graph build` refreshes the graph when the code is new", raw)
+		return Anchor{}, fmt.Errorf("notes: gap anchor %q resolves to nothing in the graph, so the gap could not be found again: `magus graph build` refreshes the graph when the code is new", raw)
 	}
 	return a, nil
 }
@@ -199,7 +199,7 @@ func FindBlock(ctx context.Context, res Resolver, n Note) []string {
 // SCIP key with spaces and backticks pastes into a shell as one argument.
 func shellQuote(s string) string {
 	if s != "" && strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@", r))
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && !strings.ContainsRune("-_./:=@", r)
 	}) < 0 {
 		return s
 	}

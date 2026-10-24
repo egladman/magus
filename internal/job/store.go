@@ -329,13 +329,13 @@ func newestWriter(path string, newest *writerStamp, b types.MagusBuild) (*writer
 		return self, nil
 	case self == nil:
 		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
-			"job: this magus has no commit stamp, and %s (committed %s) last wrote %s: run that ./magus, or rebuild ./magus from a clean tree at the current base",
+			"this magus has no commit stamp, and %s (committed %s) last wrote %s: run that ./magus, or rebuild ./magus from a clean tree at the current base",
 			newest.Commit, newest.Time.Format(time.RFC3339), path)
 	case !self.Time.Before(newest.Time):
 		return self, nil
 	case self.Commit != newest.Commit:
 		return nil, types.DiagnosticErrorf(types.JobStoreWriterOlder,
-			"job: this magus, %s (committed %s), is older than %s (committed %s), which last wrote %s: run the newer ./magus, or rebuild ./magus at the current base",
+			"this magus, %s (committed %s), is older than %s (committed %s), which last wrote %s: run the newer ./magus, or rebuild ./magus at the current base",
 			self.Commit, self.Time.Format(time.RFC3339), newest.Commit, newest.Time.Format(time.RFC3339), path)
 	}
 	return newest, nil

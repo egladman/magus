@@ -45,7 +45,7 @@ type backgroundLimits struct {
 	deny    time.Duration
 }
 
-func backgroundLimitsOf(deps Dependencies) backgroundLimits {
+func configuredBackgroundLimits(deps Dependencies) backgroundLimits {
 	unbounded, _ := deps.setting(string(denyRuleBackgroundUnbounded))
 	silent, _ := deps.setting(string(denyRuleBackgroundSilent))
 	return backgroundLimits{ceiling: unbounded.Ceiling(), advise: silent.SilentAdvise(), deny: silent.SilentDeny()}
@@ -467,7 +467,7 @@ func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgrou
 
 // pendingCallWindow is how long a shell call stays in a checkpoint waiting for a result
 // that moves it to the background. A host moves a foreground call there at its timeout,
-// at most 10 minutes in Claude Code, so twice that keeps every call that can still move
+// at most 10 minutes in the hosts measured, so twice that keeps every call that can still move
 // while a checkpoint of a long session stays small.
 const pendingCallWindow = 20 * time.Minute
 
@@ -828,7 +828,7 @@ func denyUnboundedBackground(command string, background bool, d Dialect, ceiling
 	}
 	bound := fmt.Sprintf("%dm", int(ceiling.Minutes()))
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the ceiling: `timeout %s <command>` or `magus job exec --timeout %s -- <command>`.", program, bound, bound),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the ceiling: `magus job exec --timeout %s -- <command>`.", program, bound),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
 			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +

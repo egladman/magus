@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -272,4 +273,29 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 	got, ref = shapeAdvice(t.Context(), hint.Gate{}, string(advisoryPushGate), "run the gate.", whys, false)
 	assert.Equal(t, "run the gate.\nit reaches every project."+see, got, "with nowhere to store it, the advisory speaks in full")
 	assert.Empty(t, ref)
+}
+
+// A verdict a hook stores from a linked worktree is stored in the primary checkout too,
+// which `magus query output` searches from every checkout of the repository.
+func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
+	r := newWorktreeRepo(t)
+	session := r.add("session")
+	cacheDir := filepath.Join(session, ".magus")
+
+	primary, ok := primaryCacheDir(cacheDir)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(realPath(r.main), ".magus"), primary)
+
+	ref := storeVerdict(t.Context(), cacheDir, "denied: a verdict")
+	require.NotEmpty(t, ref)
+	for _, dir := range []string{cacheDir, primary} {
+		got, err := trail.ReadBlob(dir, ref)
+		require.NoError(t, err, dir)
+		assert.Equal(t, "denied: a verdict", string(got))
+	}
+
+	_, ok = primaryCacheDir(filepath.Join(r.main, ".magus"))
+	assert.False(t, ok, "the primary checkout is its own")
+	_, ok = primaryCacheDir(t.TempDir())
+	assert.False(t, ok, "a cache dir in no checkout")
 }

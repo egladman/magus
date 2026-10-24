@@ -389,7 +389,7 @@ func anchorKind(k store.AnchorKind) (notesv1.AnchorKind, error) {
 	case store.AnchorNote:
 		return notesv1.AnchorKind_ANCHOR_KIND_NOTE, nil
 	case store.AnchorDiagnostic:
-		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, fmt.Errorf("notes: anchor kind %s is %w", k, errAnchorKindOffAPI)
+		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, fmt.Errorf("notes: anchor kind %s: %w", k, errAnchorKindOffAPI)
 	default:
 		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, nil
 	}

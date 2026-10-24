@@ -161,10 +161,10 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		timeout := min(bound, call.foregroundMax)
 		if last > call.foregroundMax || timeout <= limit {
 			return advice{
-				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded: `%s`. Run that in the background and end your turn: its completion notice is the wait.",
+				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded in the background: `%s`.",
 					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax, execBounded(r, bound)),
 				Why: why + "\n" +
-					"`magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. " +
+					"Run it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. " +
 					"A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.",
 				Key: key,
 			}

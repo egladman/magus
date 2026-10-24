@@ -448,7 +448,7 @@ func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
 		assert.ErrorContains(t, Declaration{ID: "worker", Weight: &w}.Validate(), "outside (0,1]", "weight %v", w)
 	}
 	for _, w := range []float64{0.1, 0.5, 1} {
-		assert.NoError(t, Declaration{ID: "worker", Weight: &w}.Validate(), "weight %v", w)
+		require.NoError(t, Declaration{ID: "worker", Weight: &w}.Validate(), "weight %v", w)
 	}
 
 	var row Job

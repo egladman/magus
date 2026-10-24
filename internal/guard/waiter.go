@@ -273,8 +273,8 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
 	if deps.lease == "" {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root hands out work and runs no target: fork a job for it (`%s`) and spawn a worker, whose check waits for a seat with `%s | %s`.",
-				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String(), hint.Status.With("--wait"), run),
+			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root runs no target: fork a job for it: `%s`.",
+				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String()),
 			Why: denyRefusedRetryWhy,
 		}
 	}

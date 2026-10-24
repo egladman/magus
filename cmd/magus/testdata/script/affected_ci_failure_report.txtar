@@ -17,13 +17,13 @@ exec git add README.md
 
 ! exec magus affected ci --base=base --no-redundancy-check
 stderr 'a/x.go:3:1: bad name'
-stderr '^failed: 1 target; `magus query output <ref>` prints a whole log$'
-stderr '^  out[0-9a-f]+ \.:ci  ci failed in root: ctx.needs: lint: proc\\exec sh: exit 1$'
+stdout '^failed: 1 target; `magus query output <ref>` prints a whole log$'
+stdout '^  out[0-9a-f]+ \.:ci  ci failed in root: ctx.needs: lint: proc\\exec sh: exit 1$'
 
 # A pass names nothing.
 cp magusfile.buzz.pass magusfile.buzz
 exec magus affected ci --base=base --no-redundancy-check
-! stderr '^failed:'
+! stdout '^failed:'
 
 -- .gitignore --
 .magus/

@@ -380,7 +380,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// gate that genuinely ran.
 	gate.record(invCtx, err, invCtx.Err() != nil)
 	if err != nil && opts.Format == outputText {
-		printFailedResults(os.Stderr, failed.list())
+		printFailedResults(os.Stdout, failed.list())
 	}
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)

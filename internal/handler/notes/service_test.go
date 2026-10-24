@@ -246,5 +246,5 @@ func TestAnchorStatusIsTheNotesGrade(t *testing.T) {
 func TestADiagnosticAnchorIsRefusedNotRenderedAsAnotherKind(t *testing.T) {
 	_, err := anchorToProto(store.Anchor{Kind: store.AnchorDiagnostic, Target: "MGS3009"}, "", nil)
 	require.ErrorIs(t, err, errAnchorKindOffAPI)
-	assert.Contains(t, err.Error(), "anchor kind diagnostic is not on the notes API yet")
+	assert.Contains(t, err.Error(), "anchor kind diagnostic: not on the notes API yet")
 }
