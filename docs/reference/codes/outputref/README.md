@@ -20,3 +20,5 @@ be resolved to stored output.
   output, so the lookup is ambiguous.
 - [MGS8003](MGS8003.md): `magus query output` was given an argument that is not a
   well-formed `ref<hex>` id, so it cannot name a stored output.
+- MGS8005: a replayed log names paths outside the checkout that replays it. The notice
+  form names paths under the producing checkout; the error form reports without failing the run.

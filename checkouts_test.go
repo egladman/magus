@@ -92,7 +92,14 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 
 	var notices bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	ctx := t.Context()
@@ -100,11 +107,14 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 	require.NoError(t, err)
 	m := opened.(*Magus)
 
+	notices.Reset()
 	data, desc, err := m.OutputByRef(ctx, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "lint log\n", string(data))
 	assert.Equal(t, "lint", desc.Target)
-	assert.Contains(t, notices.String(), orchestrator, "stderr says which checkout was read")
+	assert.Equal(t,
+		fmt.Sprintf("level=WARN msg=\"read %s from the output store of %s, another checkout of this repository\" notice=\"\" component=magus\n", ref, orchestrator),
+		notices.String(), "stderr says which checkout was read, at the level a quiet display keeps")
 
 	data, _, err = m.OutputByRefRemote(ctx, ref[:8])
 	require.NoError(t, err, "a unique prefix resolves in the other checkout as it does locally")

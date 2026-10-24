@@ -135,6 +135,7 @@ Two layers run together:
 - [MGS2010](MGS2010.md): a nested or forwarded run asked for a weaker sandbox mode.
 - [MGS2012](MGS2012.md): the sandbox is required and the kernel cannot confine the run's children.
 - [MGS2013](MGS2013.md): sandboxed code read a variable that is set, and the sandbox withheld it.
+- MGS2014: a direct `custom-gcl` run with an unscoped cache, which the guard denies; `magus doctor` reports the same condition.
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred.
 - [MGS3011](MGS3011.md): target exceeded its declared timeout.
