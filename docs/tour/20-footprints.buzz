@@ -8,11 +8,11 @@
 //
 //   magus\project({"sources": [...]})   what makes the PROJECT affected, and seeds the
 //                                        cache key of every target that declares nothing
-//   ctx.readsFiles(...)                  THIS target's exact inputs; magus then hashes
+//   ctx.readsFiles([...])                  THIS target's exact inputs; magus then hashes
 //                                        only these instead of the project baseline
-//   ctx.writesFiles(...)                 THIS target's outputs; snapshotted, replayed on
+//   ctx.writesFiles([...])                 THIS target's outputs; snapshotted, replayed on
 //                                        a hit, and removable by `magus clean`
-//   ctx.modifiesExistingFiles(...)       files that already exist and are edited in PART -
+//   ctx.writesFiles([...], editsExistingSource: true)       files that already exist and are edited in PART -
 //                                        hashed, but never snapshotted or removed
 //
 // The rule: does the glob affect EVERY target, or ONE? A shared schema is project
@@ -21,7 +21,7 @@
 // wrong tool - it makes every target snapshot it.
 //
 // The third one is not a synonym for the second. `writesFiles` says "I own this file and
-// create it whole"; `modifiesExistingFiles` says "this file is someone else's and I edit a
+// create it whole"; `editsExistingSource` says "this file is someone else's and I edit a
 // region of it". Get that backwards and `magus clean` deletes a hand-written page.
 //
 // This magusfile contains two deliberate contradictions. `doctor` refuses the first before
@@ -42,8 +42,8 @@ magus\project({
 // something outside data/ does not re-run it. Name every input the target reads:
 // a glob you forget is a file whose change magus cannot see, and a stale hit is the result.
 export fun report(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("data/**");
-    ctx.writesFiles("gen/report.txt");
+    ctx.readsFiles(["data/**"]);
+    ctx.writesFiles(["gen/report.txt"]);
     fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "report");
     magus\log.info("wrote gen/report.txt");
@@ -57,17 +57,17 @@ export fun report(ctx: magus\Context, args: [str]) > void !> any {
 // one owner. If two targets both need to contribute, they write separate files
 // and a third target combines them.
 export fun stamp(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/report.txt");
+    ctx.writesFiles(["gen/report.txt"]);
     fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "stamp");
 }
 
 // Editing rather than producing. This page is hand-written and only a region of it is
 // generated, so it is NOT an output magus owns - declaring it with writesFiles would let
-// `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.
+// `magus clean` delete somebody's prose. editsExistingSource hashes it without claiming it.
 export fun inject(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("data/**");
-    ctx.modifiesExistingFiles("README.md");
+    ctx.readsFiles(["data/**"]);
+    ctx.writesFiles(["README.md"], editsExistingSource: true);
     magus\log.info("would rewrite the generated block in README.md, leaving the rest alone");
 }
 
@@ -78,7 +78,7 @@ export fun inject(ctx: magus\Context, args: [str]) > void !> any {
 // later - and it still reported success.
 //
 // `magus run tidy` fails it with MGS4007 and names the file. The fix is the line above in
-// `inject`: say `ctx.modifiesExistingFiles("data/**")` and the edit becomes declared
+// `inject`: say `ctx.writesFiles(["data/**"], editsExistingSource: true)` and the edit becomes declared
 // rather than accidental.
 //
 // Watch for this most where a charm supplies the write. A charm patches ARGUMENTS, so it
@@ -87,6 +87,6 @@ export fun inject(ctx: magus\Context, args: [str]) > void !> any {
 // (magus.yaml default_charms), because the local run carries it and CI strips it: the same
 // target has opposite behavior on the two machines and neither run can reveal the other.
 export fun tidy(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("data/**");
+    ctx.readsFiles(["data/**"]);
     fs\writeFile("data/notes.txt", "rewritten in place");
 }

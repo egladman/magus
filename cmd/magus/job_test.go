@@ -171,7 +171,7 @@ func TestGeneratedBoundaryNamesWhatAnOutputCarvesOut(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile(`import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `)
 	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))

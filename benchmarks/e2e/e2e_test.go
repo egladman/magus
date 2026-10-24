@@ -292,7 +292,7 @@ fun record(name: str) > void !> any {
     proc\exec(c.bin, c.args, "", {});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("cache-order");
+    ctx.writesFiles(["cache-order"]);
     record("build");
 }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
@@ -328,11 +328,11 @@ fun record(name: str) > void !> any {
     proc\exec(c.bin, c.args, "", {});
 }
 export fun a(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("a-runs");
+    ctx.writesFiles(["a-runs"]);
     record("a");
 }
 export fun b(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("b-runs");
+    ctx.writesFiles(["b-runs"]);
     record("b");
 }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(a, b); }
@@ -380,7 +380,7 @@ fun record(name: str) > void !> any {
     proc\exec(c.bin, c.args, "", {});
 }
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("generated");
+    ctx.writesFiles(["generated"]);
     final c = proc\shell("printf generated > generated");
     proc\exec(c.bin, c.args, "", {});
     record("generate");

@@ -51,7 +51,7 @@ import "proc";
 
 // lint fails on an empty page.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("docs/**/*.md");
+    ctx.readsFiles(["docs/**/*.md"]);
     proc\exec("sh", ["-c", "for f in docs/*/*.md; do test -s \"$f\" || exit 1; done"]);
 }
 -- site/docs/en/install.md --

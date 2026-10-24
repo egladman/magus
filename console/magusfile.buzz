@@ -53,9 +53,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md, this project's target catalog.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
-                   "../internal/render/md/md.go", "../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
+                    "../internal/render/md/md.go", "../internal/hint/cli_command.go"]);
     index\render("console");
 }
 
@@ -66,7 +66,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install, textsearch\test);
     // Declared so a cache hit restores coverage.txt for the root's coverage-render.
-    ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
+    ctx.writesFiles(["coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt"]);
     fs\removeAll(".testcache");
     fs\remove("coverage.plain.lcov");
     fs\remove("coverage.dom.lcov");
@@ -113,7 +113,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // Renders the Diff showcase's changeset from its .patch with the Go reader; the showcase
 // has no server to parse it. It lives here because the root writing into a descendant is MGS3001.
 export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("src/apps/diff/gen/*.ts");
+    ctx.writesFiles(["src/apps/diff/gen/*.ts"]);
     proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
                      "-patch", "src/apps/diff/demo.patch",
                      "-out", "src/apps/diff/gen/demo.ts"], ".", {});
@@ -151,14 +151,14 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(root\graph_generate);
     // The Graph's Figures runtime control loads gen/wasm/.
     ctx.needs(docs\build_playground);
-    ctx.writesFiles(
+    ctx.writesFiles([
         "gen/console.js", "gen/theme.js",
         "gen/patternfly.css", "gen/console.css",
         "gen/*/*.js", "gen/*/*.css", "gen/*/scaffold.html",
         "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
         "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",
         "gen/wasm/buzz.wasm", "gen/wasm/wasm_exec.js",
-        "gen/*/index.html");
+        "gen/*/index.html"]);
     // Copied before the bundles: stamp-build.mjs hashes every precached file.
     copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
              dir: fs\join("gen", "graph"));
@@ -205,11 +205,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(proofread\proofread_build);
     // proofread's digest and the decisions table key this target, so a change to a rule reruns
     // the lint. A declaration replaces the project baseline, hence the sources restated.
-    ctx.readsFiles("*.buzz", "src/**/*.ts", "src/**/*.css", "src/**/*.html", "index.html",
-                   "manifest.webmanifest", "sw.js", "scripts/**/*.mjs", "package.json",
-                   "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs",
-                   "src/assets/**", "src/apps/diff/demo.patch",
-                   "../libs/proofread/gen/proofread.inputs", "../hack/policy/gen/proofread-decisions.json");
+    ctx.readsFiles(["*.buzz", "src/**/*.ts", "src/**/*.css", "src/**/*.html", "index.html",
+                    "manifest.webmanifest", "sw.js", "scripts/**/*.mjs", "package.json",
+                    "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs",
+                    "src/assets/**", "src/apps/diff/demo.patch",
+                    "../libs/proofread/gen/proofread.inputs", "../hack/policy/gen/proofread-decisions.json"]);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
@@ -248,10 +248,10 @@ fun judgeCssComments() > void !> any {
 // `format:rw` maintains declared source inputs.
 export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    ctx.modifiesExistingFiles(
+    ctx.writesFiles([
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
-        "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs");
+        "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs"], editsExistingSource: true);
     typescript["biome-format"](ctx);
 }
 

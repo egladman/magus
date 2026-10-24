@@ -22,7 +22,7 @@ exec git status --porcelain
 -- magusfile.buzz --
 import "magus";
 export fun types_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go");
+    ctx.writesFiles(["gen/*.go"]);
 }
 -- gen/fs.go --
 package gen

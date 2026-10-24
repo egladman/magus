@@ -54,7 +54,7 @@ magus\project({"name": "forward", "spells": [acme], "targets": {
 }});
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen.txt");
+    ctx.writesFiles(["gen.txt"]);
     acme["child"](ctx);
 }
 

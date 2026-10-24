@@ -747,7 +747,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 }
 
 // TestCrossFileInputs is the end-to-end payoff of the unified per-target inputs: a target
-// declaring ctx.readsFiles(<sibling>.file("go.mod"), "app/**") stores BOTH a cross-project
+// declaring ctx.readsFiles([<sibling>.file("go.mod"), "app/**"]) stores BOTH a cross-project
 // and a same-project input in ONE TargetInputs list, each carrying its owning project.
 // The cross input folds into the cache key WORKSPACE-relative (lib/go.mod, NOT
 // consumer/lib/go.mod) and unions its owning project into DependsOn; the same-project
@@ -769,7 +769,7 @@ func TestCrossFileInputs(t *testing.T) {
 	write("consumer/magusfile.buzz", `import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"), "app/**");
+    ctx.readsFiles([lib.file("go.mod"), "app/**"]);
 }
 `)
 

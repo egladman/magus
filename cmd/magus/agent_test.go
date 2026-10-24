@@ -263,7 +263,7 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 // root project that writes MAGUS.md earns it, and a directory that is no workspace root
 // never does.
 func TestDeclaresRoutingIndex(t *testing.T) {
-	const writer = "import \"magus\";\nexport fun index_generate(ctx: magus\\Context, args: [str]) > void !> any {\n    ctx.writesFiles(\"MAGUS.md\");\n}\n"
+	const writer = "import \"magus\";\nexport fun index_generate(ctx: magus\\Context, args: [str]) > void !> any {\n    ctx.writesFiles([\"MAGUS.md\"]);\n}\n"
 	const silent = "import \"magus\";\nexport fun noop(ctx: magus\\Context, args: [str]) > void !> any {\n}\n"
 
 	for name, tc := range map[string]struct {

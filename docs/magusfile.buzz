@@ -90,9 +90,9 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 
 // index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("MAGUS.md");
-    ctx.readsFiles("magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
-                   "../internal/render/md/md.go", "../internal/hint/cli_command.go");
+    ctx.writesFiles(["MAGUS.md"]);
+    ctx.readsFiles(["magusfile.buzz", "../magus.yaml", "../internal/render/target_graph.go",
+                    "../internal/render/md/md.go", "../internal/hint/cli_command.go"]);
     index\render("docs");
 }
 
@@ -105,7 +105,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Keep them together: examples build the CLI and spells also update their landing page.
 // Project dependencies order the root and proto producers before this consumer.
 export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace\file("*.go"), workspace\file("internal/**/*.go"),
+    ctx.readsFiles([workspace\file("*.go"), workspace\file("internal/**/*.go"),
         workspace\file("types/**/*.go"), workspace\file("std/**/*.go"),
         workspace\file("host/**/*.go"), workspace\file("schema/**/*.go"),
         workspace\file("libs/**/*.go"), workspace\file("libs/**/go.mod"), workspace\file("libs/**/go.sum"),
@@ -127,11 +127,11 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("hack/magusfile/ruledocs.buzz"),
         "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
-        "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go");
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md",
-        "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md");
+        "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go"]);
+    ctx.writesFiles(["reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md",
+        "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md"]);
     // These pages contain authored text. A clean must never delete them.
-    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md", "reference/config *.md");
+    ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md", "reference/config *.md"], editsExistingSource: true);
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-utils", "contract", "-src", "../internal/spell/contract.go",
@@ -149,10 +149,10 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
 
 // API pages consume the descriptor with its comments, not the generated Go client.
 export fun api_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace\file("cmd/magus-protodocs/**/*.go"), workspace\file("internal/docs/**/*.go"),
+    ctx.readsFiles([workspace\file("cmd/magus-protodocs/**/*.go"), workspace\file("internal/docs/**/*.go"),
         workspace\file("internal/render/md/**/*.go"), workspace\file("go.mod"), workspace\file("go.sum"),
-        workspace\file("go.work"), workspace\file("go.work.sum"), workspace\file("proto/gen/descriptor.binpb"));
-    ctx.writesFiles("reference/api/**/*.md");
+        workspace\file("go.work"), workspace\file("go.work.sum"), workspace\file("proto/gen/descriptor.binpb")]);
+    ctx.writesFiles(["reference/api/**/*.md"]);
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 }
 
@@ -160,10 +160,10 @@ export fun api_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(proofreadmod\proofread_build);
     // Key the source too: a fresh checkout may not have the built binary yet.
-    ctx.readsFiles(proofreadmod\file("**/*.go"), proofreadmod\file("go.mod"), proofreadmod\file("go.sum"),
+    ctx.readsFiles([proofreadmod\file("**/*.go"), proofreadmod\file("go.mod"), proofreadmod\file("go.sum"),
         proofreadmod\file("proofread.buzz"), proofreadmod\file("internal/wordclass/gen/model.gz"),
-        proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz"));
-    ctx.writesFiles("reference/proofread/*.md");
+        proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz")]);
+    ctx.writesFiles(["reference/proofread/*.md"]);
     ruledocs\writeProofread("reference/proofread",
         raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".", {}).stdout);
     pruneGeneratedPageCopies("reference/proofread/*.md");
@@ -171,8 +171,8 @@ export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> an
 
 // Published measurements do not depend on the Go generators or their toolchain.
 export fun benchmark_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    ctx.writesFiles("benchmarks/**/*.md");
+    ctx.readsFiles([workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md")]);
+    ctx.writesFiles(["benchmarks/**/*.md"]);
     fs\mkdirAll("benchmarks");
     final contentPages: mut [str] = mut ["benchmarks/build-tools.md"];
     foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
@@ -243,10 +243,10 @@ fun isDecimalCopySuffix(suffix: str) > bool {
 // changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.
 // Uncommitted: a committed page would conflict in every pull request.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("templates/changelog.mustache", workspace\file("releases/*.yaml"),
+    ctx.readsFiles(["templates/changelog.mustache", workspace\file("releases/*.yaml"),
         workspace\file("changes/unreleased/*.md"), workspace\file("hack/magusfile/changelog.buzz"),
-        workspace\file("hack/magusfile/commits.buzz"));
-    ctx.writesFiles("changelog.md");
+        workspace\file("hack/magusfile/commits.buzz")]);
+    ctx.writesFiles(["changelog.md"]);
     // Entry links resolve from the repo root for GitHub; this page sits inside docs/.
     final page = changelog\render(fs\readFile("templates/changelog.mustache"),
         fragments: changelog\read("../" + changelog\FRAGMENT_DIR),
@@ -260,13 +260,13 @@ export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
 export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The render hashes gen/ into the precache manifest, so the bundles must exist first.
     ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
-    ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
+    ctx.readsFiles(["render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
         "assets/gen/diagram-*-page.svg", workspace\file("libs/figure/figure.buzz"),
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
-        workspace\file("assets/**"), workspace\file("releases/*.yaml"));
-    ctx.writesFiles("gen/**", "active.urls.lock");
+        workspace\file("assets/**"), workspace\file("releases/*.yaml")]);
+    ctx.writesFiles(["gen/**", "active.urls.lock"]);
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\describe.graph(), magus\projectGraph(),
         ctx.hasCharm("rw"));
@@ -281,8 +281,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
         "reference/rules", "reference/proofread", "reference/api"];
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
-    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
-        "reference/config *.md");
+    ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
+        "reference/config *.md"], editsExistingSource: true);
     // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
     // diagrams-generate, which needs a symbol index these shards never build.
     final GENERATED = ["MAGUS.md"] + CONTENT;
@@ -310,21 +310,21 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
     // Keep in step with the files dprint.json resolves; guides/integrations/agents is its
     // own project.
-    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
+    ctx.writesFiles(["*.md", "benchmarks/**/*.md", "concepts/**/*.md", "decisions/**/*.md",
         "guides/*.md", "guides/integrations/*.md", "guides/integrations/editor/**/*.md",
         "guides/jobs/**/*.md", "guides/migrating/**/*.md", "guides/setup/**/*.md",
-        "reference/**/*.md");
+        "reference/**/*.md"], editsExistingSource: true);
     markdown["dprint"](ctx);
 }
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/crosscheck.buzz",
+    ctx.readsFiles(["**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/crosscheck.buzz",
         "engine/gates.buzz", workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
         workspace\file(".claude/settings.json"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
-        agents\file("opencode-plugin.ts"));
+        agents\file("opencode-plugin.ts")]);
     renderer\site_conventions(ROOT, DOCS);
 }
 // lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.
@@ -384,7 +384,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(gopherbuzz\build);
-    ctx.writesFiles("gen/playground/buzz.wasm", "gen/playground/wasm_exec.js");
+    ctx.writesFiles(["gen/playground/buzz.wasm", "gen/playground/wasm_exec.js"]);
     fs\mkdirAll("gen/playground");
     // From the module root so go finds go.mod; -trimpath keeps the output reproducible.
     os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
@@ -406,9 +406,9 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
-    ctx.readsFiles("site/diagrams/*.buzz", "gen/figure-engine.sha256",
-        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"));
-    ctx.writesFiles("assets/gen/diagram-*.svg", "assets/gen/diagram-*.json");
+    ctx.readsFiles(["site/diagrams/*.buzz", "gen/figure-engine.sha256",
+        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz")]);
+    ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
     final before = drift\hashes(GENERATED);
     final findings = renderer\site_figures("assets/gen");
@@ -429,7 +429,7 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
 // libs/figure/figure.buzz, so diagrams-generate keys on this file: an edit to figure.buzz
 // reaches the SVGs only once a rebuilt binary carries it.
 export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/figure-engine.sha256");
+    ctx.writesFiles(["gen/figure-engine.sha256"]);
     final body = magus\cmd("version",
         args: ["--client", "-o", "template=\{\{.embedded.figure_sha256}}"],
         opts: {"quiet": true}).stdout.trim() + "\n";
@@ -442,7 +442,7 @@ export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void
 // build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    ctx.writesFiles("gen/assets/hljs.js");
+    ctx.writesFiles(["gen/assets/hljs.js"]);
     typescript["esbuild"](ctx, {"args": ["src/vendor/hljs.ts", "--bundle", "--minify", "--format=esm",
                                          "--outfile=gen/assets/hljs.js"]});
     magus\log.info("rebuilt gen/assets/hljs.js");
@@ -452,7 +452,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
 // gen/playground/editor.js.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
-    ctx.writesFiles("gen/playground/editor.js");
+    ctx.writesFiles(["gen/playground/editor.js"]);
     typescript["esbuild"](ctx, {"args": ["src/playground/editor.js", "--bundle", "--minify", "--format=esm",
                                          "--outfile=gen/playground/editor.js"]});
 }

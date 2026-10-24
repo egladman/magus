@@ -38,7 +38,7 @@ final cgo = {"CGO_ENABLED": "1", "GOEXPERIMENT": "jsonv2"};
 export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
-    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    ctx.writesFiles(["**/*.go", "go.mod", "go.sum"], editsExistingSource: true);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }
@@ -67,11 +67,11 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // tree and the knowledge graph. symbol-index.json keys the cache on the symbol index.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles("sources.buzz", "holdout.buzz", "pairs.buzz",
+    ctx.readsFiles(["sources.buzz", "holdout.buzz", "pairs.buzz",
         workspace\file("gen/symbol-index.json"), workspace\file("**/*.go"), workspace\file("**/*.buzz"),
         workspace\file("**/*.md"), workspace\file("**/*.ts"), workspace\file("**/*.tsx"),
-        workspace\file("docs/assets/gen/diagram-*-light.svg"));
-    ctx.writesFiles("gen/sources.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl");
+        workspace\file("docs/assets/gen/diagram-*-light.svg")]);
+    ctx.writesFiles(["gen/sources.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl"]);
     fs\mkdirAll("gen");
     final c = sources\load();
     final paths: mut [str] = mut [];
@@ -100,7 +100,7 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 // appended to runs.jsonl. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
 // Manual, never part of ci: rewriting gen/vocab.jsonl moves the table's pin.
 export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/vocab.jsonl");
+    ctx.writesFiles(["gen/vocab.jsonl"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final dir = fs\join(cache, name: "training");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
@@ -163,7 +163,7 @@ export fun convert(ctx: magus\Context, args: [str]) > void !> any {
 // importing this project closes a cycle through the root. Manual, never part of ci.
 export fun table(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(convert);
-    ctx.writesFiles("../gen/table.digest");
+    ctx.writesFiles(["../gen/table.digest"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final digest = crypto\sha256File(fs\join(cache, name: "potion-code-16M-v2.table"));
     fs\mkdirAll(fs\join("..", name: "gen"));

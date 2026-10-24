@@ -105,7 +105,7 @@ func TestCleanOutputsKeepsAnExcludedFile(t *testing.T) {
 	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `
 	w.Magusfile(mf)
@@ -266,7 +266,7 @@ func TestFindOutputProducerReturnsWriterNotOwner(t *testing.T) {
 }
 
 // writeCrossOutputWorkspace builds the canonical cross-project-output workspace: a
-// `producer` project whose build target declares ctx.writesFiles(site.file(...)) and writes
+// `producer` project whose build target declares ctx.writesFiles([site.file(...)]) and writes
 // into a SIBLING project's tree. It returns the opened workspace and the absolute path of
 // the file producer generates inside site.
 //
@@ -285,7 +285,7 @@ import "fs";
 import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(site.file("generated.txt"));
+    ctx.writesFiles([site.file("generated.txt")]);
     fs\writeFile("../site/generated.txt", "hello");
 }
 `)
@@ -400,10 +400,10 @@ func TestCarvedOutputsNamesTrackedHandFilesAmongOutputs(t *testing.T) {
 	repo.Write(".gitignore", ".magus/\n")
 	repo.Magusfile(`import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go", "!gen/claimed.go", "!gen/scratch.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go", "!gen/claimed.go", "!gen/scratch.go"]);
 }
 export fun other(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/claimed.go");
+    ctx.writesFiles(["gen/claimed.go"]);
 }
 `)
 	for _, rel := range []string{"gen/fs.go", "gen/runtime.go", "gen/claimed.go"} {
@@ -453,8 +453,8 @@ func TestCrossOutputMutualRefIsRejectedAtLoad(t *testing.T) {
 import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(site.file("src.md"));
-    ctx.writesFiles(site.file("out.html"));
+    ctx.readsFiles([site.file("src.md")]);
+    ctx.writesFiles([site.file("out.html")]);
 }
 `)
 
@@ -480,7 +480,7 @@ func crossWriter(dir, glob string) string {
 import "project/../` + dir + `" as owner;
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(owner.file("` + glob + `"));
+    ctx.writesFiles([owner.file("` + glob + `")]);
 }
 `
 }
@@ -516,7 +516,7 @@ func TestWriterClaimingOwnersOwnOutputIsRejected(t *testing.T) {
 		"magusfile.buzz": "",
 		"site/magusfile.buzz": `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("shared.txt");
+    ctx.writesFiles(["shared.txt"]);
 }
 `,
 		"p1/magusfile.buzz": crossWriter("site", "shared.txt"),
@@ -596,8 +596,8 @@ func TestCrossOutputDiagnosticsCarryCodes(t *testing.T) {
 import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(site.file("src.md"));
-    ctx.writesFiles(site.file("out.html"));
+    ctx.readsFiles([site.file("src.md")]);
+    ctx.writesFiles([site.file("out.html")]);
 }
 `,
 			},
@@ -627,7 +627,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestCleanSkipsUpdates is the regression for the incident that motivated
-// ctx.modifiesExistingFiles: `magus clean docs` deleted docs/concepts/spells.md, 355 lines of
+// editsExistingSource: `magus clean docs` deleted docs/concepts/spells.md, 355 lines of
 // hand-written prose carrying a 13-line generated table between markers, because the
 // whole file was declared in ctx.writesFiles. A file magus only EDITS is not magus's to
 // delete: regeneration rewrites the marked region, not the prose around it.
@@ -662,11 +662,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	assert.True(t, os.IsNotExist(statErr), "a declared output should still be deleted")
 
 	got, readErr := os.ReadFile(edited)
-	require.NoError(t, readErr, "ctx.modifiesExistingFiles file must survive clean")
-	assert.Equal(t, prose, string(got), "ctx.modifiesExistingFiles file must survive clean byte for byte")
+	require.NoError(t, readErr, "editsExistingSource file must survive clean")
+	assert.Equal(t, prose, string(got), "editsExistingSource file must survive clean byte for byte")
 }
 
-// TestUpdatesFoldIntoSourcesNotOutputs pins the asymmetry that makes ctx.modifiesExistingFiles
+// TestUpdatesFoldIntoSourcesNotOutputs pins the asymmetry that makes editsExistingSource
 // worth having over ctx.writesFiles: the file lands in the cache key (so editing the
 // authored prose invalidates the target that maintains the generated region) and
 // stays out of the output set (so it is never snapshotted, replayed, or cleaned).
@@ -686,7 +686,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 	p := m.All()[0]
 	require.Equal(t, []types.UpdateRef{{Project: ".", Glob: "concepts/spells.md"}},
-		p.TargetUpdates["generate"], "ctx.modifiesExistingFiles should resolve to the declaring project")
+		p.TargetUpdates["generate"], "editsExistingSource should resolve to the declaring project")
 	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
 		"an update must never reach AllOutputs - that is the set clean deletes and the cache snapshots")
 }

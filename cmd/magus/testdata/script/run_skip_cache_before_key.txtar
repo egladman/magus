@@ -62,8 +62,8 @@ magus\project({"name": "root", "spells": [acme], "targets": {
 }});
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("IN.txt");
-    ctx.writesFiles("gen.txt");
+    ctx.readsFiles(["IN.txt"]);
+    ctx.writesFiles(["gen.txt"]);
     acme["gen"](ctx);
 }
 

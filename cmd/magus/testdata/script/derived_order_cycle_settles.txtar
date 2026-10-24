@@ -56,8 +56,8 @@ magus\project({
     },
 });
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("INDEX.md");
-    ctx.readsFiles("../**/INDEX.md");
+    ctx.writesFiles(["INDEX.md"]);
+    ctx.readsFiles(["../**/INDEX.md"]);
     proc\exec("sh", ["-c", "echo a >> ../runs.log; sed 's/^/a: /' ../b/INDEX.md > INDEX.md"]);
 }
 export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
@@ -78,8 +78,8 @@ magus\project({
     },
 });
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("INDEX.md");
-    ctx.readsFiles("../**/INDEX.md");
+    ctx.writesFiles(["INDEX.md"]);
+    ctx.readsFiles(["../**/INDEX.md"]);
     proc\exec("sh", ["-c", "cp seed.txt INDEX.md"]);
 }
 export fun assemble(ctx: magus\Context, args: [str]) > void !> any {

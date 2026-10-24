@@ -91,7 +91,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestCtxFormCharms(t *testing.T) {
 	g := Extract(`import "magus";
 export fun release(ctx: magus\Context, args: [str]) > void {
-    if (ctx.hasCharm("cd")) { ctx.writesFiles("dist/pkg.tar.gz"); }
+    if (ctx.hasCharm("cd")) { ctx.writesFiles(["dist/pkg.tar.gz"]); }
 }
 `)
 	release, _ := nodeByName(g, "release")
@@ -146,12 +146,12 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {}
 func TestInputsOutputs(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**", "tsconfig.json");
-    ctx.writesFiles("dist/**");
-    // ctx.readsFiles("ignored") in a comment must not count
+    ctx.readsFiles(["src/**", "tsconfig.json"]);
+    ctx.writesFiles(["dist/**"]);
+    // ctx.readsFiles(["ignored"]) in a comment must not count
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**");
+    ctx.readsFiles(["src/**"]);
 }
 export fun plain(ctx: magus\Context, args: [str]) > void { }
 `)
@@ -241,7 +241,7 @@ func TestFootprintRefusesTheRemovedForms(t *testing.T) {
 // is refused at load like any computed footprint argument.
 func TestFootprintComputedListOrFlagIsDynamic(t *testing.T) {
 	for _, body := range []string{
-		`final paths = ["gen/**"]; ctx.writesFiles(paths);`,
+		`final paths = ["gen/**"]; ctx.writesFiles([paths]);`,
 		`final extra = "gen/**"; ctx.writesFiles(["dist/**", extra]);`,
 		`final edits = true; ctx.writesFiles(["go.mod"], editsExistingSource: edits);`,
 	} {
@@ -405,11 +405,11 @@ export fun scan(ctx: magus\Context, args: [str]) > void {
 func TestUnreachedIO(t *testing.T) {
 	orphans := UnreachedIO(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("src/**");
+    ctx.readsFiles(["src/**"]);
     helper();
 }
-fun helper() > void { ctx.writesFiles("dist/**"); }
-fun orphan() > void { ctx.readsFiles("gen/**"); }
+fun helper() > void { ctx.writesFiles(["dist/**"]); }
+fun orphan() > void { ctx.readsFiles(["gen/**"]); }
 export fun test(ctx: magus\Context, args: [str]) > void {
     final f = ctx.readsFiles;
     f("late/**");
@@ -732,7 +732,7 @@ func TestChainEmptyForALeafTarget(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"));
+    ctx.readsFiles([lib.file("go.mod")]);
     go["go-build"]();
 }
 `)
@@ -784,7 +784,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
-// TestCrossFileInputs: ctx.readsFiles(<alias>.file("lit")) and a sibling bare string
+// TestCrossFileInputs: ctx.readsFiles([<alias>.file("lit")]) and a sibling bare string
 // literal land on the SAME Inputs list in one shape: the literal a same-project input
 // (empty Project), the alias.file a cross-project input (raw dep path + rel); the
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
@@ -793,7 +793,7 @@ func TestCrossFileInputs(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
+    ctx.readsFiles([lib.file("go.mod"), "src/**/*.go"]);
     go["go-build"]();
 }
 `)
@@ -813,7 +813,7 @@ func TestCrossFileInputsDynamic(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(lib.file(args[0]));
+    ctx.readsFiles([lib.file(args[0])]);
     go["go-build"]();
 }
 `)

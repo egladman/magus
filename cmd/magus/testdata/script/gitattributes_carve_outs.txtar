@@ -38,10 +38,10 @@ exec git status --porcelain --untracked-files=no
 -- magusfile.buzz --
 import "magus";
 export fun types_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/boundary_list.go");
+    ctx.writesFiles(["gen/boundary_list.go"]);
 }
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/*_test.go", "!gen/runtime.go", "!gen/boundary_*.go");
+    ctx.writesFiles(["gen/*.go", "!gen/*_test.go", "!gen/runtime.go", "!gen/boundary_*.go"]);
 }
 -- gen/fs.go --
 package gen

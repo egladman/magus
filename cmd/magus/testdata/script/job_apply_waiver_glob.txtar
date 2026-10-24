@@ -43,15 +43,15 @@ import "proc";
 
 // man_generate writes the API lock from the flag registry.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("cli/**/*.go");
-    ctx.writesFiles("cli/testdata/api.lock");
+    ctx.readsFiles(["cli/**/*.go"]);
+    ctx.writesFiles(["cli/testdata/api.lock"]);
     proc\exec("sh", ["-c", "cat cli/*.go > cli/testdata/api.lock"]);
 }
 
 // test writes coverage git never sees.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("cli/**/*.go");
-    ctx.writesFiles("coverage/*.out");
+    ctx.readsFiles(["cli/**/*.go"]);
+    ctx.writesFiles(["coverage/*.out"]);
     proc\exec("sh", ["-c", "mkdir -p coverage && touch coverage/cli.out"]);
 }
 -- cli/registry.go --
@@ -65,8 +65,8 @@ import "project/.." as ws;
 
 // content_generate renders the manpage and the rules pages from the flag registry.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(ws\file("cli/registry.go"));
-    ctx.writesFiles("manpage/*.md", "rules/*.md");
+    ctx.readsFiles([ws\file("cli/registry.go")]);
+    ctx.writesFiles(["manpage/*.md", "rules/*.md"]);
     proc\exec("sh", ["-c", "true"]);
 }
 -- docs/manpage/magus-shell.md --

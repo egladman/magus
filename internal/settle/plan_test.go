@@ -55,7 +55,7 @@ func TestPlanConflictsLeavesAnExcludedHandFileToAPerson(t *testing.T) {
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("gen/*.go", "!gen/runtime.go");
+    ctx.writesFiles(["gen/*.go", "!gen/runtime.go"]);
 }
 `)
 	m, err := magus.Open(t.Context(), ws.Root(), magus.WithSpawnRule(magus.TierCeiling))

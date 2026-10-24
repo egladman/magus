@@ -22,7 +22,7 @@ fun body(targets: [str]) > str {
         + "\nA target with no declared outputs never replays from cache - magus has "
         + "nothing to snapshot, so it re-runs every time, and `magus clean` cannot "
         + "remove what it wrote. If it produces a file, declare it:\n\n"
-        + "```buzz\nctx.writesFiles(\"gen/**\");\n```\n\n"
+        + "```buzz\nctx.writesFiles([\"gen/**\"]);\n```\n\n"
         + "If it only checks something and writes nothing, this is correct as written - "
         + "gates have no outputs. See [Cache model](https://eli.gladman.cc/magus/concepts/cache/).\n";
 }

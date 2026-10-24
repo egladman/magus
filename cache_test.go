@@ -94,7 +94,7 @@ func TestWorktreesOfOneRepositoryShareTheCache(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("in.txt");
+    ctx.readsFiles(["in.txt"]);
 }
 `
 	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": mf, "in.txt": "one"})

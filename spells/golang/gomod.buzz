@@ -109,11 +109,11 @@ fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
 // Without rw it verifies and raises MGS1016; with rw the edit lands. `project` names the
 // magus project in that remediation, which the context cannot supply.
 //
-// modifiesExistingFiles, not writesFiles: as an output go.mod would be snapshotted and
+// editsExistingSource, not a produced file: as an output go.mod would be snapshotted and
 // replayable, so a cache hit could restore a pre-release go.mod over the version bump
 // `release` had just written - the two-owner hazard MGS1020 reports.
 export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any {
-    ctx.modifiesExistingFiles("go.mod");
+    ctx.writesFiles(["go.mod"], editsExistingSource: true);
     final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});
