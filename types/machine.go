@@ -66,6 +66,49 @@ type MachineClaimant struct {
 	Dir     string        `json:"dir,omitempty" yaml:"dir,omitempty"`
 	Command string        `json:"command,omitempty" yaml:"command,omitempty"`
 	Since   time.Time     `json:"since,omitempty" yaml:"since,omitempty"`
+	// Owner is who answers for the holder: its job lease, else `spawned by <job>`, else
+	// "unleased". Empty when no connection to the broker names the holder's pid.
+	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
+}
+
+// MachineWaiter is a caller blocked on a seat now: a run its own run's steps or its job
+// tree's validation seat keep out, or a `magus status --wait` asking for a reservation.
+// The broker keeps no queue, so it is the last ask each one made, kept while it keeps
+// asking.
+type MachineWaiter struct {
+	// PID is the waiting process; for a reservation, the run the seat is asked for.
+	PID      int    `json:"pid" yaml:"pid"`
+	Project  string `json:"project" yaml:"project"`
+	Target   string `json:"target" yaml:"target"`
+	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int    `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string `json:"command,omitempty" yaml:"command,omitempty"`
+	Owner    string `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Reservation is a `magus status --wait` asking for a seat on PID's behalf.
+	Reservation bool `json:"reservation,omitzero" yaml:"reservation,omitempty"`
+	// Tree is the job tree whose validation seat it waits for, "" when it waits on the
+	// budget.
+	Tree string `json:"tree,omitempty" yaml:"tree,omitempty"`
+	// Since is the first ask the broker turned away.
+	Since time.Time `json:"since" yaml:"since"`
+}
+
+// MachineRefusal is one MGS3009 refusal the broker answered: the claim it turned away
+// and the holders keeping it out at that moment.
+type MachineRefusal struct {
+	At       time.Time `json:"at" yaml:"at"`
+	PID      int       `json:"pid" yaml:"pid"`
+	Project  string    `json:"project" yaml:"project"`
+	Target   string    `json:"target" yaml:"target"`
+	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Owner    string    `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Fits is false when no state of the machine admits the claim, which no wait mends.
+	Fits    bool              `json:"fits" yaml:"fits"`
+	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
 }
 
 // MachineVerdict is the budget's answer to one admission request.
@@ -99,4 +142,8 @@ type MachineSnapshot struct {
 	HeldSlots   int `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
 	// Holders are the steps running against the budget, oldest first.
 	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+	// Waiting is every caller blocked on a seat now, longest waiting first.
+	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
+	// Refused is the last MGS3009 refusals the broker answered, newest first.
+	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
 }

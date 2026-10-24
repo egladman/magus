@@ -12,7 +12,7 @@ import {
   parseRuns,
   socketFromStatus,
 } from './api'
-import { budgetStatus, capacityText, holderText, parseBudget, recentRefusal, refusalIn, refusalText, runsMagus } from './budget'
+import { budgetStatus, capacityText, holderText, parseBudget, recentRefusal, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
   cacheNotice,
@@ -52,7 +52,6 @@ const TICK_MS = 30_000
 const BUDGET_POLL_MS = 15_000
 // A magus run claims its budget after it starts, so a read this long in shows its claim.
 const BUDGET_AFTER_START_MS = 3_000
-const MAX_REFUSALS = 10
 const MAX_LINES = 300
 
 const REPORT = { plugin: 'magus', key: 'report' } as const
@@ -74,7 +73,6 @@ const RATES_ERROR = { plugin: 'magus', key: 'ratesError' } as const
 const TICK = { plugin: 'magus', key: 'tick' } as const
 const BUDGET = { plugin: 'magus', key: 'budget' } as const
 const BUDGET_ERROR = { plugin: 'magus', key: 'budgetError' } as const
-const REFUSALS = { plugin: 'magus', key: 'refusals' } as const
 
 // Module state, rebuilt by register on every load.
 let settings: Settings = readSettings({})
@@ -496,11 +494,6 @@ export const register: Register = (on, options) => {
     if (!runsMagus(e.command)) return next(e)
     scheduleBudget($, BUDGET_AFTER_START_MS)
     const ran = await next(e)
-    const refused = ran.deny === undefined ? refusalIn(e.command, ran.text ?? '', await $.clock.now()) : null
-    if (refused !== null) {
-      const { value: refusals = [] } = await $.state.get(REFUSALS)
-      await $.state.set(REFUSALS, [refused, ...refusals].slice(0, MAX_REFUSALS))
-    }
     scheduleBudget($)
     return ran
   })
@@ -618,26 +611,26 @@ export const register: Register = (on, options) => {
     const { value: ratesError = null } = await $.state.get(RATES_ERROR)
     // Read so each budget poll redraws the band, which is what ends a refusal's window.
     const { value: budget = null } = await $.state.get(BUDGET)
-    const { value: refusals = [] } = await $.state.get(REFUSALS)
     const now = await $.clock.now()
 
     const issues = report && report.issues.length && hidden !== signature(report.issues) ? report.issues : []
     const notice = cacheNotice(cache, now, settings.cacheWarnMs, settings.gateMinTokens, rates)
     const ageDays = rateAgeDays(rates, now)
     const staleRates = notice !== null && ageDays !== null && ageDays > settings.ratesStaleDays
-    const refused = recentRefusal(refusals, now)
+    const board = budget?.budget ?? null
+    const refused = recentRefusal(board, now)
     if (issues.length === 0 && notice === null && ratesError === null && refused === null) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const room = Math.max(1, e.props.maxRows - 1)
     const shown = issues.slice(0, room)
-    const holders = refused !== null ? (budget?.budget?.holders ?? []).slice(0, 3) : []
+    const holders = refused !== null ? refused.holders.slice(0, 3) : []
 
     return (
       <Box flexDirection="column">
         {refused !== null ? (
           <Text key="refused" color="red" wrap="truncate-end">
-            ✖ {refusalText(refused, budget, now)}
+            ✖ {refusalText(refused, board, now)}
           </Text>
         ) : null}
         {holders.map(holder => (
@@ -763,8 +756,8 @@ export const register: Register = (on, options) => {
     if (tab === 'budget') {
       const { value: read = null } = await $.state.get(BUDGET)
       const { value: budgetError = null } = await $.state.get(BUDGET_ERROR)
-      const { value: refusals = [] } = await $.state.get(REFUSALS)
       const b = read?.budget ?? null
+
       return (
         <Box flexDirection="column">
           {header}
@@ -788,10 +781,17 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ))}
-          {refusals.length ? <Text bold>Refused in this session</Text> : null}
-          {refusals.map(r => (
-            <Text key={`refused-${r.at}`} color="red" wrap="truncate-end">
-              ✖ {age((now - r.at) / 1000)} ago · {r.line}
+          {b?.waiting.length ? <Text bold>Waiting for a seat</Text> : null}
+          {(b?.waiting ?? []).map(w => (
+            <Text key={`waiting-${w.pid}-${w.target}-${w.reservation}`} color="yellow" wrap="truncate-end">
+              … {waiterText(w, now)}
+            </Text>
+          ))}
+          {b?.refused.length ? <Text bold>Refused on this machine</Text> : null}
+          {(b?.refused ?? []).map(r => (
+            <Text key={`refused-${r.at}-${r.pid}-${r.target}`} color="red" wrap="truncate-end">
+              ✖ {refusalText(r, null, now)}
+              {r.holders.length ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}` : ''}
             </Text>
           ))}
         </Box>

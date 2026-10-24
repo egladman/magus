@@ -584,7 +584,27 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			fmt.Sprintf("slots %d", max(h.Slots, 1)),
 			holderMemText(h),
 			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
-			h.Dir, h.Command, sinceText(h.Since)), "  "))
+			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
+	}
+	for _, q := range c.Waiting {
+		why := "budget"
+		switch {
+		case q.Reservation:
+			why = "reservation"
+		case q.Tree != "":
+			why = fmt.Sprintf("seat in %s", q.Tree)
+		}
+		fmt.Fprintf(tw, "waiting\t%d\t%s\n", q.PID, strings.Join(nonEmpty(
+			fmt.Sprintf("slots %d", max(q.Slots, 1)), mbText("mem ", q.MemoryMB),
+			fmt.Sprintf("%s %s", holderProject(q.Project), q.Target),
+			why, q.Owner, q.Dir, q.Command, sinceText(q.Since)), "  "))
+	}
+	for _, r := range c.Refused {
+		fmt.Fprintf(tw, "refused\t%d\t%s\n", r.PID, strings.Join(nonEmpty(
+			fmt.Sprintf("%s ago", cmp.Or(formatDur(now.Sub(r.At).Round(time.Second)), "0s")),
+			fmt.Sprintf("slots %d", max(r.Slots, 1)), mbText("mem ", r.MemoryMB),
+			fmt.Sprintf("%s %s", holderProject(r.Project), r.Target),
+			r.Owner, r.Dir, r.Command, refusedHoldersText(r.Holders)), "  "))
 	}
 	for _, s := range st.Services {
 		label := s.Label
@@ -718,6 +738,18 @@ func holderMemText(h types.MachineClaimant) string {
 		text += " " + h.Sizing.String()
 	}
 	return text
+}
+
+// refusedHoldersText names the holders that kept a refused claim out, by pid and owner.
+func refusedHoldersText(holders []types.MachineClaimant) string {
+	if len(holders) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(holders))
+	for _, h := range holders {
+		names = append(names, fmt.Sprintf("pid %d %s", h.PID, cmp.Or(h.Owner, "owner unknown")))
+	}
+	return fmt.Sprintf("held by %s", strings.Join(names, ", "))
 }
 
 // holderProject names the workspace root the way a refusal does.

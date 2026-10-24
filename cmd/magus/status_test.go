@@ -417,6 +417,39 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
 }
 
+// Each holder names its owner, and the callers waiting on a seat and the refusals the
+// broker answered get rows of their own, so a person sees whose run keeps theirs out.
+func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
+	now := time.Now()
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 48213,
+		Capacity: types.MachineSnapshot{
+			BudgetSlots: 8, HeldSlots: 8,
+			Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
+			Waiting: []types.MachineWaiter{
+				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
+				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
+				{PID: 41302, Target: "ci", Owner: "job-c", Reservation: true, Since: now},
+			},
+			Refused: []types.MachineRefusal{{
+				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
+				Owner: "spawned by root", Fits: true,
+				Holders: []types.MachineClaimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},
+			}},
+		},
+	}, types.BrokerRequired, now)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 7)
+	assert.Contains(t, lines[2], "(root) test  fix-cache  /tree/polish")
+	assert.True(t, strings.HasPrefix(lines[3], "waiting   41300"), lines[3])
+	assert.Contains(t, lines[3], "slots 2  (root) lint  budget  unleased  /tree/a")
+	assert.Contains(t, lines[4], "docs ci  seat in root-job  job-b")
+	assert.Contains(t, lines[5], "(root) ci  reservation  job-c")
+	assert.True(t, strings.HasPrefix(lines[6], "refused   41400"), lines[6])
+	assert.Contains(t, lines[6], "2m0s ago  slots 4  (root) ci  spawned by root  /tree/b  held by pid 41221 fix-cache, pid 41222 owner unknown")
+}
+
 // A claim says where its figure came from, since a measured one sits below what the
 // magusfile declares and a reader comparing the two would otherwise see a mismatch.
 func TestHolderMemTextNamesTheSizing(t *testing.T) {
