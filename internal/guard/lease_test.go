@@ -2237,20 +2237,20 @@ func TestATombstonedBindingAllowsTheFixItNames(t *testing.T) {
 			"hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}})
 	}
 	for name, input := range map[string]string{
-		"exec":                bashCall(t, who.Session, who.Agent, "./magus job exec held-job"),
-		"exec under --root":   bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus --root %s job exec held-job", root)),
-		"exec after cd":       bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus --root %s job exec held-job", root, root)),
-		"exec silenced":       bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus -s --root %s job exec held-job", root)),
-		"the stored verdict":  bashCall(t, who.Session, who.Agent, "./magus query output grd94c475825232117d"),
-		"the job's terms":     bashCall(t, who.Session, who.Agent, "./magus describe job held-job"),
-		"client exec":         client(`magus\cmd("job", args: ["exec", "held-job"]);`),
-		"exec by path":        bashCall(t, who.Session, who.Agent, fmt.Sprintf("%s/magus --root %s job exec held-job", root, root)),
-		"exec under baggage":  bashCall(t, who.Session, who.Agent, "BAGGAGE=magus.lease=held-job ./magus job exec held-job"),
-		"exec running work":   bashCall(t, who.Session, who.Agent, "./magus job exec held-job -- ./magus describe job held-job"),
-		"exec with stdin":     bashCall(t, who.Session, who.Agent, "./magus job exec held-job --stdin <<'EOF'\n{}\nEOF"),
-		"exec then describe":  bashCall(t, who.Session, who.Agent, "./magus job exec held-job && ./magus describe job held-job"),
-		"exec through bash":   bashCall(t, who.Session, who.Agent, `bash -c "./magus job exec held-job"`),
-		"verdict after cd":    bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus query output grd94c475825232117d", root)),
+		"exec":               bashCall(t, who.Session, who.Agent, "./magus job exec held-job"),
+		"exec under --root":  bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus --root %s job exec held-job", root)),
+		"exec after cd":      bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus --root %s job exec held-job", root, root)),
+		"exec silenced":      bashCall(t, who.Session, who.Agent, fmt.Sprintf("./magus -s --root %s job exec held-job", root)),
+		"the stored verdict": bashCall(t, who.Session, who.Agent, "./magus query output grd94c475825232117d"),
+		"the job's terms":    bashCall(t, who.Session, who.Agent, "./magus describe job held-job"),
+		"client exec":        client(`magus\cmd("job", args: ["exec", "held-job"]);`),
+		"exec by path":       bashCall(t, who.Session, who.Agent, fmt.Sprintf("%s/magus --root %s job exec held-job", root, root)),
+		"exec under baggage": bashCall(t, who.Session, who.Agent, "BAGGAGE=magus.lease=held-job ./magus job exec held-job"),
+		"exec running work":  bashCall(t, who.Session, who.Agent, "./magus job exec held-job -- ./magus describe job held-job"),
+		"exec with stdin":    bashCall(t, who.Session, who.Agent, "./magus job exec held-job --stdin <<'EOF'\n{}\nEOF"),
+		"exec then describe": bashCall(t, who.Session, who.Agent, "./magus job exec held-job && ./magus describe job held-job"),
+		"exec through bash":  bashCall(t, who.Session, who.Agent, `bash -c "./magus job exec held-job"`),
+		"verdict after cd":   bashCall(t, who.Session, who.Agent, fmt.Sprintf("cd %s && ./magus query output grd94c475825232117d", root)),
 	} {
 		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: who.Host})
 		assert.NotEqual(t, string(denyRuleLeaseUndeclared), v.Rule, "%s: %s", name, v.Reason)

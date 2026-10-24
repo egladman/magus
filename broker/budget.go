@@ -31,11 +31,11 @@ const (
 // parked is a request the broker holds until the budget can answer it, on the connection
 // that asked. A closed connection drops it.
 type parked struct {
-	sess   *session
-	w      *frameWriter
-	id     uint64
-	kind   string
-	since  time.Time
+	sess  *session
+	w     *frameWriter
+	id    uint64
+	kind  string
+	since time.Time
 	// claim is what it waits to seat, for status and for the seat it is judged to hold
 	// once starved.
 	claim types.MachineClaim

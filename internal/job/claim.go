@@ -490,7 +490,6 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 	return decls, true
 }
 
-
 // namedDeclarations are the entries of all that claim names. PlaceDerivedClaims (plan.go) reads it too.
 func namedDeclarations(claim string, all []string) []string {
 	return types.NamedDeclarations(claim, all)

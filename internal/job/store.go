@@ -299,8 +299,8 @@ func (s *Store) Path() (string, error) { return s.path, s.err }
 type jobsFile struct {
 	types.Schema
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
-	Retained int64 `json:"retained,omitempty"`
-	Jobs []types.Job `json:"-"`
+	Retained int64       `json:"retained,omitempty"`
+	Jobs     []types.Job `json:"-"`
 }
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.

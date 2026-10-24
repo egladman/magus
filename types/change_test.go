@@ -75,10 +75,10 @@ func TestNamedDeclarationsKeyPaths(t *testing.T) {
 
 	keys := []string{"project.name", "project.targets", "project.targets.release", "project.targets.release-build", "project.targets.test"}
 	for _, tc := range []struct {
-		name    string
-		claimed string
-		want    []string
-		claimsMap    bool
+		name      string
+		claimed   string
+		want      []string
+		claimsMap bool
 	}{
 		{"an exact key wins over a sibling sharing its prefix", "project.targets.release", []string{"project.targets.release"}, true},
 		{"a map key names every entry under it", "project.targets",
