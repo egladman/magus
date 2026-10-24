@@ -22,7 +22,9 @@ pays for the reasoning.
 
 ## Enforced by
 
-- The model-tier lens: the economy tier's pass rate should rise over time.
+- The model-tier lens: the economy tier's pass rate should rise over time, read
+  beside the null-control rows in [Benchmarks](../../benchmarks.md), which are the
+  false-pass check: a control that changes nothing must fail.
 - The static tier table in [ADR 0009](../../decisions/0009-cost-profiles-for-agent-sessions.md):
   a person picks the model for a tier, and nothing routes per call.
 

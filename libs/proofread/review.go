@@ -48,8 +48,8 @@ var reviewTexts = map[Rule]ruleText{
 		why: "Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific " +
 			"and inconsiderate, and over half of their respondents had received it in the past year; Bosu " +
 			"et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over " +
-			"the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 " +
-			"written by bots. It judges top-level comments only: an inline comment (review-inline) sits " +
+			"the AIDev review comments, it fires on 2.92% of 39,639 replies written by people and 0.15% of " +
+			"42,076 written by bots (firing rates, not precision). It judges top-level comments only: an inline comment (review-inline) sits " +
 			"on the line it judges, which is its referent. The anchor gives the place, not the reason, so " +
 			"an inline bare verdict still lacks the suggestion Gunawardena et al. count, and the rule " +
 			"leaves it alone. Measured " +
@@ -76,8 +76,8 @@ var reviewTexts = map[Rule]ruleText{
 		why: "Danescu-Niculescu-Mizil et al. (ACL 2013) found a direct question opening with \"why\" among " +
 			"the strongest cues of an impolite request: it asks the author to defend themselves. Asking " +
 			"what the code needs (\"Does this need the lock?\") asks the same. Measured 2026-10-10 over " +
-			"the AIDev review comments: 0.16 percent of 39639 written by people and none of 42076 written " +
-			"by bots. It advises: the author may want the reason on record.",
+			"the AIDev review comments, it fires on 0.16% of 39,639 replies written by people and none of " +
+			"42,076 written by bots (firing rates, not precision). It advises: the author may want the reason on record.",
 	},
 	RuleBareImperative: {
 		code:      "PRF8012",
@@ -87,7 +87,8 @@ var reviewTexts = map[Rule]ruleText{
 			"with \"Please\", read as less polite than one that gives its reason or asks. A command of " +
 			"five words or fewer counts, unless the reply gives a reason anywhere or the command names " +
 			"code or its target (\"change this to appsettings\"). Measured 2026-10-10 over the AIDev review " +
-			"comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. " +
+			"comments, it fires on 4.56% of 39,639 replies written by people and 0.07% of 42,076 written " +
+			"by bots (firing rates, not precision). " +
 			"It advises: between people who share the context, a short command can be read as " +
 			"intended. Measured 2026-10-11 over the adjudicated labeling round: 37.2% precision (16 of " +
 			"43) before, 100% (16 of 16) after. Most firings followed a sentence stating the problem " +
@@ -100,8 +101,8 @@ var reviewTexts = map[Rule]ruleText{
 		catches:   "words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")",
 		why: "Capitals read as shouting. An acronym is left alone: the rule reports a run of capital words " +
 			"only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the " +
-			"AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 " +
-			"written by bots, which capitalize ALL and ANY in technical prose too, so the rule does not " +
+			"AIDev review comments, it fires on 0.41% of 39,639 replies written by people and 0.37% of " +
+			"42,076 written by bots (firing rates, not precision), which capitalize ALL and ANY in technical prose too, so the rule does not " +
 			"tell the two apart and only advises. Measured 2026-10-11 over the adjudicated labeling round: " +
 			"65.9% precision (27 of 41) before, 90.0% (27 of 30, lower bound 0.74) after, so it ships " +
 			"advise. AND or OR joining a condition is an operator, and capitals in single quotes, " +
@@ -112,8 +113,8 @@ var reviewTexts = map[Rule]ruleText{
 		dimension: DimensionStance,
 		catches:   "a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")",
 		why: "Repeated marks read as exasperation where one mark asks the same question. Measured " +
-			"2026-10-10 over the AIDev review comments: 0.17 percent of 39639 written by people and 0.05 " +
-			"percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes. " +
+			"2026-10-10 over the AIDev review comments, it fires on 0.17% of 39,639 replies written by people and 0.05% of " +
+			"42,076 written by bots (firing rates, not precision). Code spans are masked, so an operator such as ?? passes. " +
 			"Measured 2026-10-11 over the adjudicated labeling round: 46.5% precision (20 of 43) before, " +
 			"100% (20 of 20) after: every false positive was an operator or placeholder outside a code " +
 			"span, so a run set between spaces or brackets, or touching a word it opens (\"!!hit\", " +
