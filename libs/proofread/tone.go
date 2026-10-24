@@ -655,7 +655,7 @@ var (
 // issue or pull request, a commit or a magus output ref. A sentence that
 // states a limit ("Not measured on Linux") is exempt.
 //
-// It advises: over the last 200 merged pull requests it fired in 21, and
+// It advises: it fires on 21 of the last 200 merged pull requests (a 10.5% firing rate), and
 // about half of those state a setting ("a 300s bound") rather than measure.
 func claim(in input) []Finding {
 	const message = "Put the evidence for '%s' in the same sentence or bullet: the test or command in backticks, " +

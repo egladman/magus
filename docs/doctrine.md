@@ -331,7 +331,9 @@ graph, declared outputs, what a change can break, which conventions hold) into
 deterministic, checked answers. A smaller model can then do work that today
 takes a frontier one. A feature that only works with a frontier model is not
 finished. The measure is the model-tier lens: the economy tier's pass rate
-should rise over time. This prevents a tool that looks capable only while
+should rise over time, read beside the null-control rows in
+[Benchmarks](benchmarks.md), which are the false-pass check: a control that
+changes nothing must fail. This prevents a tool that looks capable only while
 someone else pays for the reasoning.
 
 ### The orchestrator plans; workers do the work
