@@ -182,6 +182,8 @@ const (
 	denyRuleFocusRead       denyRuleName = "focus-read"
 	// A row carrying members this build does not declare; see internal/guard/row_unknown.go.
 	denyRuleLeaseRowUnknown denyRuleName = "lease-row-unknown"
+	// `magus job grant` reaching the hook; see internal/guard/grant.go.
+	denyRuleGrantIsAPersons denyRuleName = "grant-is-a-persons"
 	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
 	denyRuleHookWiringWrite denyRuleName = "hook-wiring-write"
 )

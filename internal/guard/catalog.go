@@ -63,6 +63,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocArchitectureUnbriefed},
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
+	{doc: ruleDocGrantIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
@@ -617,6 +618,14 @@ var ruleDocLeasePaused = types.RuleDoc{
 var ruleDocLeaseRebind = types.RuleDoc{
 	Name:    string(denyRuleLeaseRebind),
 	Catches: "a leased worker rewriting who it is or what its own job row says",
+}
+
+var ruleDocGrantIsAPersons = types.RuleDoc{
+	Name:    string(denyRuleGrantIsAPersons),
+	Catches: "an agent running `magus job grant`, in any spelling and any role",
+	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
+		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
+		"Only hooks-off is grantable; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when.",
 }
 
 var ruleDocLeaseRowUnknown = types.RuleDoc{
