@@ -1,12 +1,16 @@
 package job
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"path"
+	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,4 +95,95 @@ func hubStop(rel string, src sourceFacts, fanIn fanInFunc) string {
 		return fmt.Sprintf("%s is a hub: %d files use what it declares, at or past %d", rel, n, hubFanIn)
 	}
 	return ""
+}
+
+// CallerClaims is one request per declaration holding a non-definition occurrence, in file
+// then line order. pkg and dir are the defining file's package name and directory: a
+// caller outside dir uses `<pkg>.<ident>`, so that is what its proof names. declarations
+// places every line of a file, as RegionsBetween does against an empty file. An error
+// names what the caller fixes: a stale symbol index, or an occurrence no declaration
+// claim covers.
+func CallerClaims(ident, pkg, dir string, files []types.SymbolOccurrenceFile, declarations func(file string) ([]types.RegionChange, error)) ([]types.JobClaimRequest, error) {
+	var out []types.JobClaimRequest
+	for _, f := range slices.SortedFunc(slices.Values(files), func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) }) {
+		if f.Stale {
+			return nil, staleCallers(f.File)
+		}
+		var regions []types.RegionChange
+		for _, occ := range f.Occurrences {
+			if occ.Definition {
+				continue
+			}
+			if occ.Status != types.SymbolOccurrenceVerified {
+				return nil, staleCallers(fmt.Sprintf("%s:%d", f.File, occ.Line))
+			}
+			if regions == nil {
+				placed, err := declarations(f.File)
+				if err != nil {
+					return nil, fmt.Errorf("placing the declarations of %s: %w", f.File, err)
+				}
+				regions = placed
+			}
+			word, err := enclosingDeclaration(f.File, occ.Line, regions)
+			if err != nil {
+				return nil, err
+			}
+			because := "refs:" + ident
+			if path.Dir(f.File) != dir && pkg != "" {
+				because = "refs:" + pkg + "." + ident
+			}
+			req := types.JobClaimRequest{Path: strings.ReplaceAll(f.File, "#", `\#`) + "#" + word, Because: because}
+			if !slices.Contains(out, req) {
+				out = append(out, req)
+			}
+		}
+	}
+	return out, nil
+}
+
+func staleCallers(where string) error {
+	return fmt.Errorf("the symbol index is behind the tree at %s: rebuild it with `%s` to place its callers", where, hint.GraphBuild)
+}
+
+// enclosingDeclaration is the claim word for the declaration holding line of file: the
+// shortest of the declared name, a method's `Recv) name` and the whole declaration line
+// that names that declaration alone among the file's.
+func enclosingDeclaration(file string, line int, regions []types.RegionChange) (string, error) {
+	var decl string
+	var all []string
+	for _, r := range regions {
+		loc := r.Location()
+		if loc.Declaration != "" && loc.Declaration != types.Preamble && !slices.Contains(all, loc.Declaration) {
+			all = append(all, loc.Declaration)
+		}
+		if r.Side == types.RegionNew && r.Lines[0] <= line && line <= r.Lines[1] {
+			decl = loc.Declaration
+		}
+	}
+	if decl == "" || decl == types.Preamble {
+		return "", fmt.Errorf("no declaration holds the occurrence at %s:%d, so claim %s in write_paths instead", file, line, file)
+	}
+	for _, word := range declarationWords(decl) {
+		if word == "" {
+			continue
+		}
+		if n := len(slices.DeleteFunc(slices.Clone(all), func(d string) bool { return !types.NamesDeclaration(word, d) })); n == 1 {
+			return word, nil
+		}
+	}
+	return "", fmt.Errorf("the declaration holding %s:%d is not named alone by any claim of %s, so claim %s in write_paths instead", file, line, file, file)
+}
+
+var methodLine = regexp.MustCompile(`^func\s*\([^)]*?([A-Za-z_][A-Za-z0-9_]*)(?:\[[^\]]*\])?\)\s*([A-Za-z_][A-Za-z0-9_]*)`)
+
+func declarationWords(decl string) []string {
+	decl = strings.TrimSpace(decl)
+	var words []string
+	if m := declaredNamePattern.FindStringSubmatch(decl); m != nil {
+		words = append(words, m[1])
+	}
+	if m := methodLine.FindStringSubmatch(decl); m != nil {
+		words = append(words, m[1]+") "+m[2])
+	}
+	return append(words, decl)
 }
