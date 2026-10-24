@@ -64,9 +64,9 @@ export fun shimScript(body: str) > str? {
 // include "" for the top level itself; both resolve at run time, so the shim names no
 // checkout and a hooks directory shared by linked worktrees serves each one.
 //
-// It exits 0 when the script or magus is missing. A branch that predates the script has
-// nothing to run, and a hook that blocks every commit because a tool is absent costs more
-// than the check it skips; the missing magus is reported so the skip is not silent.
+// It exits 0 when the script or magus is missing: a hook that blocks every commit because
+// a tool is absent costs more than the check it skips. Both skips say so on stderr, so a
+// shim pointing at a moved script is not a hook that silently never runs.
 export fun shim(hook: str, script: str, include: str) > str {
     var root = "$top";
     if (include != "") { root = "$top/{include}"; }
@@ -75,7 +75,10 @@ export fun shim(hook: str, script: str, include: str) > str {
         + "# Edit {script}, not this file; spells/git/hooks.buzz rewrites and removes it.\n"
         + "top=$(git rev-parse --show-toplevel) || exit 0\n"
         + "script=\"$top/{script}\"\n"
-        + "[ -f \"$script\" ] || exit 0\n"
+        + "if [ ! -f \"$script\" ]; then\n"
+        + "\techo \"{hook}: $script is missing, so the hook did not run; rerun the git hooks install\" >&2\n"
+        + "\texit 0\n"
+        + "fi\n"
         + "if ! command -v magus >/dev/null 2>&1; then\n"
         + "\techo \"{hook}: magus is not on PATH, so $script did not run\" >&2\n"
         + "\texit 0\n"
@@ -130,7 +133,8 @@ fun installSteps(at: Layout, dir: str) > [Step] !> any {
     var include = at.prefix;
     if (include.endsWith("/")) { include = include.sub(0, len: include.len() - 1); }
     var steps = mut [<Step>];
-    foreach (hook in hooksIn(dir)) {
+    final declared = hooksIn(dir);
+    foreach (hook in declared) {
         final script = "{base}/{hook}.buzz";
         final path = "{at.hooksDir}/{hook}";
         final want = shim(hook, script: script, include: include);
@@ -146,7 +150,17 @@ fun installSteps(at: Layout, dir: str) > [Step] !> any {
             steps.append(Step{hook = hook, path = path, body = want, change = Change.replace});
         }
     }
+    foreach (step in undeclared(removeSteps(at, dir: dir), declared: declared)) {
+        steps.append(step);
+    }
     return steps;
+}
+
+// undeclared keeps the removals for shims whose <hook>.buzz is gone from the dir, so
+// install deletes a hook that was dropped from the directory instead of leaving it to
+// run a missing script.
+fun undeclared(removals: [Step], declared: [str]) > [Step] {
+    return removals.filter(fun (index: int, step: Step) > bool => declared.indexOf(step.hook) == null);
 }
 
 // removeSteps finds shims by their marker rather than by listing dir, so a shim whose
@@ -214,6 +228,8 @@ fun reportedDryRun(at: Layout, dir: str) > bool !> any {
 // into the directory git runs hooks from: core.hooksPath when set, else the common
 // directory's hooks/, which linked worktrees share. It raises before writing anything
 // when dir names no git hook or a hook exists that install did not write.
+// It also removes shims it wrote for a script under dir that no longer has a <hook>.buzz,
+// and the log lists each removal.
 export fun install(ctx: magus\Context, dir: str) > void !> any {
     final at = layout();
     if (reportedDryRun(at, dir: dir)) { return; }
@@ -240,7 +256,10 @@ test "the shim runs the checkout's copy with the project as the include path" {
         + "# Edit sub/hooks/pre-push.buzz, not this file; spells/git/hooks.buzz rewrites and removes it.\n"
         + "top=$(git rev-parse --show-toplevel) || exit 0\n"
         + "script=\"$top/sub/hooks/pre-push.buzz\"\n"
-        + "[ -f \"$script\" ] || exit 0\n"
+        + "if [ ! -f \"$script\" ]; then\n"
+        + "\techo \"pre-push: $script is missing, so the hook did not run; rerun the git hooks install\" >&2\n"
+        + "\texit 0\n"
+        + "fi\n"
         + "if ! command -v magus >/dev/null 2>&1; then\n"
         + "\techo \"pre-push: magus is not on PATH, so $script did not run\" >&2\n"
         + "\texit 0\n"
@@ -256,4 +275,24 @@ test "a dir must stay inside the project" {
         final got = scriptDir(at, dir: bad) catch "refused";
         std\assert(got == "refused", message: "refuses `{bad}`");
     }
+}
+
+test "the shim says so when its script is missing" {
+    final body = shim("commit-msg", script: "hack/git-hooks/commit-msg.buzz", include: "");
+    std\assert(body.indexOf("commit-msg: $script is missing, so the hook did not run") != null, message: "names the hook and the script");
+    std\assert(body.indexOf("[ -f \"$script\" ] || exit 0") == null, message: "no silent skip");
+}
+
+test "install removes only shims whose script left the directory" {
+    final hooksDir = fs\tempDir("hooks");
+    final at = Layout{hooksDir = hooksDir, prefix = ""};
+    fs\writeFile("{hooksDir}/commit-msg", content: shim("commit-msg", script: "hack/git-hooks/commit-msg.buzz", include: ""));
+    fs\writeFile("{hooksDir}/pre-commit", content: shim("pre-commit", script: "hack/git-hooks/pre-commit.buzz", include: ""));
+    fs\writeFile("{hooksDir}/post-merge", content: "#!/bin/sh\necho mine\n");
+    fs\writeFile("{hooksDir}/pre-push", content: shim("pre-push", script: "elsewhere/pre-push.buzz", include: ""));
+    final gone = undeclared(removeSteps(at, dir: "hack/git-hooks"), declared: ["commit-msg"]);
+    std\assert(gone.len() == 1, message: "one removal, got {gone.len()}");
+    std\assert(gone[0].hook == "pre-commit", message: "the dropped hook");
+    std\assert(gone[0].change == Change.remove, message: "as a removal");
+    fs\removeAll(hooksDir);
 }
