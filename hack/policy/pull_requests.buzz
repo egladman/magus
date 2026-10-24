@@ -11,7 +11,7 @@
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
 // This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
 // shape past the lead, the areas the diff touches, an unfinished-work checklist and the
-// title. A Not verified section makes its outstanding work GitHub task-list items, so a
+// title. Unfinished work a Considerations section names is a GitHub task-list item, so a
 // draft's next steps are legible and cannot look finished. When the text cannot be read,
 // the whole line is judged for credit and typography instead.
 //
@@ -79,16 +79,18 @@ final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "    - The key sorts its inputs before hashing them.\n"
     + "    - `TestKeyStable` pins one key across 50 runs.\n"
     + "\n"
-    + "    Not verified: a cold cache on Windows.";
+    + "    ## Considerations\n"
+    + "\n"
+    + "    - [ ] Not verified: a cold cache on Windows.";
 final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
-    + "what you set out to do and why; one present-tense bullet per change; then where the work "
-    + "differs from the plan, on a line that opens Cut:, Changed from plan:, Not done: or Not "
-    + "verified:. Keep it short and in your own words, within the budget the change earns, in plain "
+    + "what you set out to do and why; one present-tense bullet per change; then a Considerations "
+    + "section for what a reviewer should weigh: the alternative set aside, where to start reading, "
+    + "and each unfinished item as a task opening Not verified: or Not done:. Keep it short and in your own words, within the budget the change earns, in plain "
     + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
     + example;
 final shapeLine = "The shape: what you set out to do and why in one to three sentences, one bullet per "
-    + "change, then where it differs from the plan (Cut:, Changed from plan:, Not done:, Not "
-    + "verified:). Short, in your own words. This is said once per pull request. For example:\n" + example;
+    + "change, then a Considerations section with what a reviewer should weigh and each unfinished "
+    + "item as a task. Short, in your own words. This is said once per pull request. For example:\n" + example;
 final replyLine = "Rewrite the reply: say whether you made the change, and if not, why, in a sentence or "
     + "two. For example: \"Done, the retry is in the client now.\" or \"Kept it here, since the client "
     + "never sees the backoff state. Happy to move it if you see a cleaner seam.\"";
@@ -113,7 +115,7 @@ final releaseLine = "Rewrite the notes for the person upgrading: one entry per c
 // wordsPerChange is the 60-word changelog fragment cap (changelogEntryWordCap in
 // cmd/magus-utils/release.go) less its bold headline; linesPerChange is Google's "100
 // lines is usually a reasonable size" for one change (eng-practices, small CLs).
-// baseWords is blockWords, room for a section such as Not verified beside the bullets.
+// baseWords is blockWords, room for a Considerations section beside the bullets.
 final baseWords = 60;
 final wordsPerChange = 50;
 final linesPerChange = 100;
@@ -134,7 +136,9 @@ final heading = $"^ {0,3}#{1,6}(\s|$)";
 final bullet = $"^\s*([-*+]|[0-9]+[.)])\s";
 final codeSpan = $"`[^`]*`";
 final sentenceEnd = $"[.!?]+(\s|$)";
-final notVerifiedHeading = $"^#{1,6}\s+not verified\s*$";
+final considerationsHeading = $"^#{1,6}\s+considerations\s*$";
+// unfinishedOpener is a Considerations item that names work not done or not checked.
+final unfinishedOpener = $"^(\[ \]\s+)?(not verified|not tested|not done|not measured|untested)\b";
 final uncheckedTask = $"^\[ \]\s+\S";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
@@ -1093,39 +1097,25 @@ fun listItems(list: Block) > [str] {
     return items;
 }
 
-// unfinishedChecklistProblems makes a Not verified section an explicit list of work that
-// remains. GitHub renders an unchecked Markdown task as both a visible status and a task a
-// reviewer can follow; prose or ordinary bullets look too much like finished work.
+// unfinishedChecklistProblems makes the unfinished work a Considerations section names an
+// explicit list. GitHub renders an unchecked Markdown task as both a visible status and a task
+// a reviewer can follow; an ordinary bullet looks too much like finished work.
 fun unfinishedChecklistProblems(body: str) > [str] {
     final problems = mut [<str>];
-    var notVerified = false;
-    var hasEntry = false;
+    var considerations = false;
     foreach (b in splitBlocks(body)) {
         if (b.kind == "heading") {
-            if (notVerified and !hasEntry) {
-                problems.append("the Not verified section is empty: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
-            }
-            notVerified = notVerifiedHeading.match(b.lines[0].trim().lower()) != null;
-            hasEntry = false;
+            considerations = considerationsHeading.match(b.lines[0].trim().lower()) != null;
             continue;
         }
-        if (!notVerified or b.kind == "code") {
-            continue;
-        }
-        if (b.kind != "list") {
-            problems.append("the Not verified section uses prose: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
-            notVerified = false;
+        if (!considerations or b.kind != "list") {
             continue;
         }
         foreach (item in listItems(b)) {
-            hasEntry = true;
-            if (uncheckedTask.match(item) == null) {
-                problems.append("a Not verified entry is not an unchecked GitHub task: write `- [ ] {item}`");
+            if (unfinishedOpener.match(item.lower()) != null and uncheckedTask.match(item) == null) {
+                problems.append("an unfinished item under Considerations is not an unchecked GitHub task: write `- [ ] {item}`");
             }
         }
-    }
-    if (notVerified and !hasEntry) {
-        problems.append("the Not verified section is empty: list each remaining item as an unchecked GitHub task (`- [ ] …`)");
     }
     return problems;
 }
@@ -1194,7 +1184,7 @@ export fun judgeShape(body: str) > Findings {
     }
     if (walls > 0) {
         advice.append("prose between the lead and the first heading outside the bullets ({plural(walls, noun: "paragraph")}): "
-            + "make each change a bullet, and put the rest under a heading such as Why this approach or Not verified");
+            + "make each change a bullet, and put the rest under a Considerations heading");
     }
     return Findings{ denies = denies, advice = advice };
 }
@@ -2502,8 +2492,8 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
         lead + "\n\n- Pins it to the source digest.\n- Drops the old key.",
         lead + "\n\nInside the key:\n- The digest.\n- The platform.\n\nA test pins both.",
         lead + "\n\n- Pins it.\n\n```\nmagus run build\n```",
-        lead + "\n\n- Pins it.\n\n## Why this approach\n\nA per-process cache suited one worker. It stops holding at eight.\n\n"
-            + "## Not verified\n\n- [ ] Linux, which CI runs.",
+        lead + "\n\n- Pins it.\n\n## Considerations\n\n- A per-process cache suited one worker. It stops holding at eight.\n"
+            + "- [ ] Not verified: Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: readable());
         std\assert(v.decision == "allow", message: "{body}: {v.reason}");
@@ -2595,13 +2585,13 @@ test "no message sends the reader to a skill" {
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
 }
 
-test "a Not verified section uses unchecked GitHub tasks" {
+test "unfinished work under Considerations is an unchecked GitHub task" {
     final plain = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Not verified\n- The full CI gate still needs to pass." },
+        body = "The fix is ready for review.\n\n## Considerations\n- Start with the cache key.\n- Not verified: the full CI gate." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(plain.denies.len() == 1 and plain.denies[0].indexOf("unchecked GitHub task") != null, message: "{plain.denies}");
     final tasks = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Not verified\n- [ ] The full CI gate still needs to pass." },
+        body = "The fix is ready for review.\n\n## Considerations\n- Start with the cache key.\n- [ ] Not verified: the full CI gate." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(tasks.denies.len() == 0, message: "{tasks.denies}");
 }

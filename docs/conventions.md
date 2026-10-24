@@ -495,18 +495,19 @@ same guard rule and the same decisions table.
 ### The shape of a description
 
 A change description is read by a reviewer now and by whoever follows the squash commit
-to it later, so it opens with what the change set out to do and why, then what was
-built, then where the work left the plan. It stays short and in the author's own words.
+to it later, a teammate or contributor who was not there, so it opens with what the
+change set out to do and why, then what it changes, then what a reviewer should weigh.
+It stays short and in the author's own words.
 
-| Part              | Required                                   | What it holds                                                                                |
-| ----------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Lead (no heading) | yes                                        | The intent: what the change set out to do and why, in one to three sentences.                |
-| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                   |
-| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                             |
-| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                       |
-| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                              |
-| Where it differs  | when the work left the plan                | A line or heading opening Cut, Changed from plan, Not done or Not verified, with the reason. |
-| Reading guide     | optional                                   | Where to start reading.                                                                      |
+| Part              | Required                              | What it holds                                                                                                  |
+| ----------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Lead (no heading) | yes                                   | The intent: what the change set out to do and why, and how the work came up, in one to three sentences.        |
+| What changes      | yes                                   | One bullet per change in what the code does, in the present tense: the meaning, not a list of files touched.   |
+| Considerations    | when a reviewer needs more to weigh   | One bullet each: the alternative set aside, how a claim was checked, where to start reading, unfinished work.  |
+
+Unfinished work under Considerations is an unchecked GitHub task that opens with what is
+missing, so a draft's next steps stay legible and cannot read as done:
+`- [ ] Not verified: a cold cache on Windows.`
 
 The lead is at least 12 words and states the intent. A lead that opens on the defect
 names a purpose within two sentences (`lead-context`). A change in a series names the
@@ -525,7 +526,7 @@ A sentence that states a measurement (`410ms to 260ms`, `7 of 50`), a comparison
 behavior carries its evidence in the same sentence or bullet: a code span naming the
 command, test or benchmark, a link, or an output ref (`claim`). A claim covers exactly
 what was measured. A judgment call is labeled as one, with its reason. What is not known
-goes under Not verified, or opens a sentence with `Not measured`, `Not tested` or
+is a Considerations task opening `Not verified:`, or opens a sentence with `Not measured`, `Not tested` or
 `Untested`.
 
 A softener on a claim (`might fix`, `may help`, `probably`, `aims to`) stays refused
