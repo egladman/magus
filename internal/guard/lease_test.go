@@ -1368,17 +1368,36 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 }
 
 // A worker making a checkout by hand, in any backend's own verb, is pointed at the fork
-// that makes one.
+// that makes one, unless the checkout is a temp copy under $XDG_CACHE_HOME/magus/tmp.
 func TestDenyLeaseScopedVCSPointsACheckoutAddAtTheFork(t *testing.T) {
 	worker := narrowLease()
 	worker.Parent = "harness"
 	ctx, _ := fleetFixture(t, worker)
-	for _, command := range []string{"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x"} {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	scratch := filepath.Join(cache, "magus", "tmp")
+	for _, command := range []string{
+		"git worktree add ../x", "git -C . worktree add -b y ../y", "hg share . ../x", "jj workspace add ../x",
+		"git worktree add " + scratch,
+		"git worktree add " + filepath.Join(scratch, "..", "x"),
+		"git worktree add $XDG_CACHE_HOME/magus/tmp/x",
+		"hg share " + filepath.Join(scratch, "x"),
+		"git worktree add " + filepath.Join(scratch, "x") + " && git worktree add ../y",
+	} {
 		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		assert.Contains(t, reason, "--checkout <dir>", "%q", command)
 		assert.Contains(t, reason, "harness", "%q", command)
 	}
 	assert.NotContains(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, "git worktree remove ../x"), "--checkout")
+
+	for _, command := range []string{
+		"git worktree add " + filepath.Join(scratch, "x"),
+		"git -C . worktree add -b y " + filepath.Join(scratch, "y") + " HEAD",
+		"hg share . " + filepath.Join(scratch, "x"),
+		"jj workspace add --name x " + filepath.Join(scratch, "x"),
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
+	}
 }
 
 // The holder of a job removes the checkout its fork made, and only that one; the
@@ -2839,6 +2858,23 @@ func TestDenyWriteOutsideLeaseLeavesScratchOutsideTheCheckout(t *testing.T) {
 		"a relative path that resolves outside the checkout")
 	assert.Empty(t, denyWriteOutsideLease(ctx, from(scratch), "lease-b", "rm -r notes"), "a call run outside the checkout")
 	assert.NotEmpty(t, denyWriteOutsideLease(ctx, from(root), "lease-b", "rm notes.txt"), "the same word inside it")
+}
+
+// A file no lease declares is still outside the acting lease's write paths, so a shell write
+// to it is refused in the words the editor-tool write gets.
+func TestDenyWriteOutsideLeaseGradesAnUndeclaredFile(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "notes.md"), []byte("a\n"), 0o644))
+	onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "docs", "notes.md"))
+	require.Equal(t, decisionDeny, onPath.Decision)
+
+	for _, command := range []string{"sed -i 's/a/b/' docs/notes.md", "echo x > docs/notes.md"} {
+		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command)), "%q", command)
+	}
+	for _, command := range []string{"echo hi", "echo x > " + filepath.Join(t.TempDir(), "notes.md"), "sed 's/a/b/' docs/notes.md"} {
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
+	}
 }
 
 // A worker leased in its own worktree, whose hook resolves the session's checkout, had its

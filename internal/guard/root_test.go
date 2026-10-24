@@ -511,6 +511,24 @@ func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
 	assert.Zero(t, asked, "a row with no tier never opens the declaration")
 }
 
+// The main session starting a desktop session passes every spawn rule, built-in and
+// workspace alike; a leased caller starting one is still judged.
+func TestRootStartSessionPassesTheSpawnRules(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}}
+	deps := strict(Dependencies{SpawnRule: probe.rule()})
+	judge := func(lease string) types.GuardJudgment {
+		return Judge(ctx, deps, Request{Host: "claude-code", Lease: lease, ObservesSkillLoads: true, Input: hookJSON(t, map[string]any{
+			"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": startSessionTool,
+			"tool_input": map[string]any{"title": "orchestrator/scout scout", "name": "scout", "prompt": "Read internal/job and report."},
+		})})
+	}
+
+	assert.Equal(t, decisionPass, judge("").Decision)
+	assert.Empty(t, probe.asked)
+	assert.Equal(t, decisionDeny, judge("scout").Decision)
+}
+
 // At strict a spawn runs at the model tier its row was forked at, compared by rank through
 // the host's aliases, and the refusal names the row's whole assignment.
 func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {

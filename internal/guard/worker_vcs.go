@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -184,6 +185,86 @@ func removesOwnCheckout(command, cwd string, row types.Job) bool {
 		}
 	}
 	return true
+}
+
+// addsScratchCheckout reports whether each checkout add on command makes its checkout
+// under $XDG_CACHE_HOME/magus/tmp, a temp copy outside every workspace that moves nothing
+// the orchestrator reads. A target the line does not spell as a literal path fails, and so
+// does a relative one after a global option, which may move where it resolves from.
+func addsScratchCheckout(command, cwd string) bool {
+	cache, err := xdg.CacheDir()
+	if err != nil {
+		return false
+	}
+	scratch := filepath.Join(cache, "magus", "tmp")
+	calls, ok := locateCalls(command, DialectBash, cwd, addsCheckout, false)
+	if !ok || len(calls) == 0 {
+		return false
+	}
+	for _, c := range calls {
+		if c.unfollowed || c.args == nil {
+			return false
+		}
+		sub, rest := vcsSubcommand(c.inv)
+		target := checkoutAddTarget(c.inv.Name, rest)
+		if target == "" || strings.ContainsAny(target, "$`~") {
+			return false
+		}
+		if !filepath.IsAbs(target) {
+			if !c.at.known || c.at.dir == "" || len(c.inv.Args) == 0 || c.inv.Args[0] != sub {
+				return false
+			}
+			target = filepath.Join(c.at.dir, target)
+		}
+		target = filepath.Clean(target)
+		if samePath(target, scratch) || !within(target, scratch) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkoutAddTarget is the directory a checkout add names, "" when its words do not name
+// exactly one. rest is the words after the subcommand.
+func checkoutAddTarget(tool string, rest []string) string {
+	var valued []string
+	switch tool {
+	case "git":
+		if !firstWordIs(rest, "add") {
+			return ""
+		}
+		rest, valued = rest[1:], []string{"-b", "-B", "--reason"}
+	case "jj":
+		if !firstWordIs(rest, "add") {
+			return ""
+		}
+		rest, valued = rest[1:], []string{"--name", "-r", "--revision", "--sparse-patterns", "-m", "--message"}
+	case "hg":
+	default:
+		return ""
+	}
+	var positional []string
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch {
+		case a == "--":
+			positional = append(positional, rest[i+1:]...)
+			i = len(rest)
+		case slices.Contains(valued, a):
+			i++
+		case strings.HasPrefix(a, "-"):
+		default:
+			positional = append(positional, a)
+		}
+	}
+	switch {
+	case tool == "hg" && len(positional) == 2:
+		// hg share SOURCE DEST; DEST defaults to SOURCE's name here, so it must be spelled.
+		return positional[1]
+	case tool != "hg" && len(positional) >= 1:
+		return positional[0]
+	}
+	return ""
 }
 
 // checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the

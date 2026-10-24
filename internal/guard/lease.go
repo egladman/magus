@@ -2441,10 +2441,14 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if !creates {
 		for _, c := range cmds {
 			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) {
-				if cwd, _ := deps.workingDir(); isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
+				cwd, _ := deps.workingDir()
+				if isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
 					continue
 				}
 				if addsCheckout(c) {
+					if addsScratchCheckout(command, cwd) {
+						continue
+					}
 					return checkoutAddDenial("`"+command+"`", me, role)
 				}
 				return workerVCSDenial("`"+command+"`", vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
@@ -3363,10 +3367,11 @@ func vcsMutation(c hint.Invocation) string {
 // cannot drift about who owns a path or how the refusal reads, and the extraction that
 // finds the written words is the cache-dir rule's, shared for the same reason.
 //
-// Only a candidate the acting lease or an editing one DECLARED is graded. The extraction
-// offers every word a non-reader command was pointed at, which is the safe direction for a
-// boundary as specific as the cache dir but not for one as ordinary as a path: grading every word
-// would refuse `echo hi` for writing outside the boundary.
+// A candidate the acting lease or an editing one DECLARED is graded, and so is an
+// undeclared one inside the checkout that reads as a file. The extraction offers every word
+// a non-reader command was pointed at, which is the safe direction for a boundary as
+// specific as the cache dir but not for one as ordinary as a path: grading every word would
+// refuse `echo hi` for writing outside the boundary.
 func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
@@ -3394,6 +3399,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	// command run from a subdirectory is not the checkout's root, and the line's cds move it.
 	checkout := leaseCheckout(ctx, location, actingLease)
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
+	removed := removedOrMovedOperands(command, 0, dialect, start, home)
 	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
@@ -3415,13 +3421,24 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}
 			continue
 		}
+		redirected := slices.Contains(redirects, candidate.word)
 		declared, byCatchAll := declaredPath(declaring, rel)
-		if !declared {
-			continue
-		}
-		// A catch-all covers every word, `print(1)` included, so under one only a
-		// redirect target or a word shaped like a file stands in for a path.
-		if byCatchAll && !slices.Contains(redirects, candidate.word) && !pathShaped(checkout, rel) {
+		switch {
+		case !declared:
+			// No lease declares it, so the acting lease's own write paths decide, as for the
+			// editor tool. Only a redirect target or an existing file counts: sed's `s/a/b`
+			// is spelled like a path. A remove or move is graded below, holder-made files kept.
+			if !enrolled || len(me.WritePaths) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
+				t, ok := o.place(home)
+				return ok && t == target
+			}) {
+				continue
+			}
+			if info, err := os.Lstat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
+				continue
+			}
+		case byCatchAll && !redirected && !pathShaped(checkout, rel):
+			// A catch-all covers every word, `print(1)` included.
 			continue
 		}
 		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
@@ -3455,7 +3472,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		_, err = res.VCS.ReadFileAt(ctx, checkout, revision, rel)
 		return err != nil
 	}
-	for _, operand := range removedOrMovedOperands(command, 0, dialect, start, home) {
+	for _, operand := range removed {
 		target, placed := operand.place(home)
 		if !placed {
 			continue

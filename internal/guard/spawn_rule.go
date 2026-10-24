@@ -68,6 +68,9 @@ func spawnedAgentID(response any) string {
 	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"), envelopeString(m, "task_name"))
 }
 
+// startSessionTool is the desktop host's tool that starts a new top-level session.
+const startSessionTool = "mcp__ccd_session__start_session"
+
 // judgeAgentEvent answers a spawn or a continuation of a subagent.
 //
 // Nothing here judges the prompt: it is prose, and a prompt that merely mentions a denied
@@ -86,6 +89,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	}
+	// The main session starting a session of its own is never hindered: it carries no job
+	// row, so no spawn rule has anything to bind it to. A leased caller is judged as usual.
+	if env.IsSpawn && env.Tool == startSessionTool {
+		if lease, _ := resolveActingLease(who, at, req.Lease); lease == "" {
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
