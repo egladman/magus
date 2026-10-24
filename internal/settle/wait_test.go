@@ -22,10 +22,10 @@ func (contended) Error() string {
 func (contended) ExitCode() int { return 75 }
 
 func TestSettleBusyIsTheTempFailStatus(t *testing.T) {
-	assert.True(t, Busy(contended{}))
-	assert.True(t, Busy(fmt.Errorf("magus run generate:rw .: %w", contended{})), "through the wrapping Hook adds")
-	assert.False(t, Busy(errors.New("generate failed")))
-	assert.False(t, Busy(nil))
+	assert.True(t, busy(contended{}))
+	assert.True(t, busy(fmt.Errorf("magus run generate:rw .: %w", contended{})), "through the wrapping Hook adds")
+	assert.False(t, busy(errors.New("generate failed")))
+	assert.False(t, busy(nil))
 }
 
 // TestSettleWaitingRetriesUntilTheLockFrees: a run refused as busy is retried, the
@@ -47,7 +47,7 @@ func TestSettleWaitingRetriesUntilTheLockFrees(t *testing.T) {
 	assert.Equal(t, []string{"magus: project . is locked by another magus process (held by pid 41221 magus run test); waiting up to 1m0s for it"}, said)
 }
 
-// TestSettleWaitingGivesUpAtTheBound: past the bound the refusal comes back, still Busy
+// TestSettleWaitingGivesUpAtTheBound: past the bound the refusal comes back, still busy
 // so the caller can tell a held lock from a failed generator; any other failure comes
 // back at once.
 func TestSettleWaitingGivesUpAtTheBound(t *testing.T) {
@@ -57,7 +57,7 @@ func TestSettleWaitingGivesUpAtTheBound(t *testing.T) {
 		return contended{}
 	}, 20*time.Millisecond, 5*time.Millisecond, func(context.Context, string) {})
 	err := run(t.Context(), []string{"generate:rw", "."})
-	assert.True(t, Busy(err))
+	assert.True(t, busy(err))
 	assert.ErrorContains(t, err, "waited 20ms: magus: project . is locked")
 	assert.Greater(t, attempts, 1)
 

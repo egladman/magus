@@ -12,17 +12,17 @@ import (
 // because another magus holds a project lock or the machine could not seat it.
 const exitTempFail = 75
 
-// Busy reports whether err is a run that never started for one of those reasons, so
+// busy reports whether err is a run that never started for one of those reasons, so
 // the same invocation succeeds once the holder finishes.
-func Busy(err error) bool {
+func busy(err error) bool {
 	var coded interface{ ExitCode() int }
 	return errors.As(err, &coded) && coded.ExitCode() == exitTempFail
 }
 
-// Waiting wraps run so an invocation refused as Busy is retried every poll until bound
+// Waiting wraps run so an invocation refused as busy is retried every poll until bound
 // has passed, with say told once what it waits on. A settle that failed at once would
 // leave its regeneration owed over a lock that is often released seconds later. Once
-// the bound passes the last refusal is returned, still Busy; a cancelled ctx returns
+// the bound passes the last refusal is returned, still busy; a cancelled ctx returns
 // ctx's error.
 func Waiting(run RunFunc, bound, poll time.Duration, say func(ctx context.Context, line string)) RunFunc {
 	return func(ctx context.Context, inv []string) error {
@@ -30,7 +30,7 @@ func Waiting(run RunFunc, bound, poll time.Duration, say func(ctx context.Contex
 		told := false
 		for {
 			err := run(ctx, inv)
-			if !Busy(err) {
+			if !busy(err) {
 				return err
 			}
 			if !time.Now().Add(poll).Before(deadline) {

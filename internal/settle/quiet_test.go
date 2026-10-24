@@ -112,7 +112,7 @@ func TestSettleQuietlyKeepsABusyRunsHeaderOff(t *testing.T) {
 	}, observe)
 	var err error
 	seen := terminal(t, func() { err = run(context.Background(), []string{"generate:rw", "."}) })
-	assert.True(t, Busy(err))
+	assert.True(t, busy(err))
 	assert.Empty(t, seen)
 }
 
