@@ -430,7 +430,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 		types.EmitDiagnostic(ctx, types.DiagnosticEvent{
 			Code:    types.DescendantBoundaryCrossed,
 			Message: message,
-			Unit:    project + ":" + target,
+			Unit:    fmt.Sprintf("%s:%s", project, target),
 		})
 		errs = append(errs, types.DiagnosticErrorf(types.DescendantBoundaryCrossed, "%s", message))
 	}
@@ -446,7 +446,7 @@ func outputClaim(p *types.Project, desc string, b *changeBucket) (target, glob s
 	var changed []string
 	for _, rels := range [][]string{b.added, b.modified, b.removed} {
 		for _, rel := range rels {
-			changed = append(changed, desc+"/"+filepath.ToSlash(rel))
+			changed = append(changed, fmt.Sprintf("%s/%s", desc, filepath.ToSlash(rel)))
 		}
 	}
 	names := make([]string, 0, len(p.TargetOutputs))
