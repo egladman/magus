@@ -2,6 +2,7 @@ package spawn
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -169,7 +170,7 @@ func TestChildEnvUnderAPolicyNeverInheritsTheHost(t *testing.T) {
 func TestChildEnvPutsTheRunningBinaryFirstOnPath(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin"+string(os.PathListSeparator)+"/bin")
 	env, _ := childEnv(t.Context(), nil, nil)
-	assert.Equal(t, []string{"PATH=" + filepath.Dir(magusExe()) + string(os.PathListSeparator) + "/usr/bin" + string(os.PathListSeparator) + "/bin"},
+	assert.Equal(t, []string{fmt.Sprintf("PATH=%s%c/usr/bin%c/bin", filepath.Dir(magusExe()), os.PathListSeparator, os.PathListSeparator)},
 		envValues(env, "PATH"), "one PATH, the running binary's directory first")
 
 	env, _ = childEnv(t.Context(), nil, []string{"PATH=/opt/target/bin"})
@@ -186,7 +187,7 @@ func TestWithSelfFirstOnPathResolvesAChildMagusToIt(t *testing.T) {
 	for _, bin := range []string{self, stale} {
 		require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
 	}
-	env := withSelfFirstOnPath([]string{"PATH=" + filepath.Dir(stale) + ":/usr/bin:/bin"}, self)
+	env := withSelfFirstOnPath([]string{fmt.Sprintf("PATH=%s:/usr/bin:/bin", filepath.Dir(stale))}, self)
 	out, err := (&exec.Cmd{Path: "/bin/sh", Args: []string{"sh", "-c", "command -v magus"}, Env: env}).Output()
 	require.NoError(t, err)
 	assert.Equal(t, self, strings.TrimSpace(string(out)), "the spawning binary, not the one the inherited PATH held")
@@ -382,7 +383,7 @@ func TestExecResolvesAgainstTheRunsPATH(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, tool), []byte("#!/bin/sh\necho found $MAGUS_ENVIRON_VAR\n"), 0o755))
 
 	ctx := environ.With(t.Context())
-	environ.From(ctx).Set("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	environ.From(ctx).Set("PATH", fmt.Sprintf("%s%c%s", dir, os.PathListSeparator, os.Getenv("PATH")))
 	environ.From(ctx).Set("MAGUS_ENVIRON_VAR", "x")
 
 	res, err := Exec(ctx, tool, nil, ExecOptions{Dir: dir, Capture: true, Quiet: true})

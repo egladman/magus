@@ -5,6 +5,7 @@ package environ
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -88,7 +89,7 @@ func (o *Overlay) Apply(env []string) []string {
 	}
 	for _, name := range names {
 		if v := o.vars[name]; v != nil {
-			out = append(out, name+"="+*v)
+			out = append(out, fmt.Sprintf("%s=%s", name, *v))
 		}
 	}
 	return out

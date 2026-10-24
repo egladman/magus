@@ -447,10 +447,10 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	env = append(env, overrides...)
 	if policy != nil {
 		// Last, after the caller's overrides, so a target cannot hand a child a weaker value.
-		env = append(withoutEnvVars(env, []string{SandboxEnvVar}), SandboxEnvVar+"="+policy.Mode.String())
+		env = append(withoutEnvVars(env, []string{SandboxEnvVar}), fmt.Sprintf("%s=%s", SandboxEnvVar, policy.Mode.String()))
 		for _, name := range nestedMagusVars {
 			if v, ok := environ.Lookup(ctx, name); ok && !hasEnvVar(env, name) {
-				env = append(env, name+"="+v)
+				env = append(env, fmt.Sprintf("%s=%s", name, v))
 			}
 		}
 	}
@@ -549,7 +549,7 @@ func withSelfFirstOnPath(env []string, exe string) []string {
 			return env
 		}
 		out := slices.Clone(env)
-		out[i] = "PATH=" + dir + string(os.PathListSeparator) + value
+		out[i] = fmt.Sprintf("PATH=%s%c%s", dir, os.PathListSeparator, value)
 		return out
 	}
 	return env
@@ -583,7 +583,7 @@ func SelfVars(ctx context.Context) []string {
 	}
 	out = append(out, "MAGUS_LEVEL="+strconv.Itoa(CurrentLevel()+1))
 	if refs := types.InvocationAncestorsFromContext(ctx); len(refs) > 0 {
-		out = append(out, AncestorsEnvVar+"="+strings.Join(refs, ","))
+		out = append(out, fmt.Sprintf("%s=%s", AncestorsEnvVar, strings.Join(refs, ",")))
 	}
 	return out
 }

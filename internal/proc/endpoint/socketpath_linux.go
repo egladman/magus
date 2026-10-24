@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
-	"strconv"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -34,7 +33,7 @@ func unixName(path string) (string, func(), error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("endpoint: open %s to reach the %d-byte socket path %s: %w", dir, len(path), path, err)
 	}
-	name := "/proc/self/fd/" + strconv.Itoa(fd) + "/" + base
+	name := fmt.Sprintf("/proc/self/fd/%d/%s", fd, base)
 	if len(name) >= maxSocketPath {
 		_ = unix.Close(fd)
 		return "", nil, fmt.Errorf("endpoint: unix socket name %q is %d bytes, and linux holds at most %d", base, len(base), maxSocketPath-1)
