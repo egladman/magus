@@ -354,8 +354,14 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
 	}
 
-	declaredGates := make(map[string]types.Goal, len(row.Goals))
-	for _, gate := range row.Goals {
+	// ONE list, from EffectiveGoals, so the primary check is graded by the same loop as
+	// every other goal and lands in Gates like one. Grading it separately meant a job
+	// declaring only `--check` reported no goals at all to anything that read Gates,
+	// which is how `describe job` came to show an empty goal list on a job with a check.
+	// The check is a goal here too, so gate_evidence may name it by its id.
+	gates := row.EffectiveGoals()
+	declaredGates := make(map[string]types.Goal, len(gates))
+	for _, gate := range gates {
 		declaredGates[gate.ID] = gate
 	}
 
@@ -384,17 +390,26 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		evidenceByGate[evidence.GateID] = evidence.OutputRef
 	}
 
-	// ONE list, from EffectiveGoals, so the primary check is graded by the same loop as
-	// every other goal and lands in Gates like one. Grading it separately meant a job
-	// declaring only `--check` reported no goals at all to anything that read Gates,
-	// which is how `describe job` came to show an empty goal list on a job with a check.
-	gates := row.EffectiveGoals()
-	evidenceByGate[types.PrimaryGoalID] = rep.Validation.OutputRef
-	attemptByGate[types.PrimaryGoalID] = att
+	// validation.output_ref is the check's evidence unless the result filed it only under
+	// gate_evidence; two different refs for the one check leave no single run to grade.
+	if filed, ok := evidenceByGate[types.PrimaryGoalID]; !ok || rep.Validation.OutputRef != "" {
+		if ok && filed != rep.Validation.OutputRef {
+			v.Violations = append(v.Violations, fmt.Sprintf("the result names output ref %q for goal %q in validation and %q in gate_evidence; name one run",
+				rep.Validation.OutputRef, types.PrimaryGoalID, filed))
+		}
+		evidenceByGate[types.PrimaryGoalID] = rep.Validation.OutputRef
+		attemptByGate[types.PrimaryGoalID] = att
+	}
 
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
 		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
+		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
+			scopedRun(gate.Check, attemptByGate[gate.ID]) {
+			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run scoped with `-- %s`:"+
+				" -run and -skip select tests inside the packages `%s` runs, so it ran every package the check does",
+				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), gate.Check))
+		}
 	}
 	// A dependency may appear after its consumer in the declaration. Re-evaluate until
 	// no status changes so a failed prerequisite propagates through the whole typed
@@ -585,12 +600,12 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 // run` resolves it, defaults stacked under its own charms, before the sets are compared:
 // otherwise `magus run test .` records `test:rw` and can never satisfy its own check.
 //
-// The args past `--` are compared when the attempt records them, so a run narrowed with
-// `-- -run TestOne` does not stand in for the whole check. Nil args are not compared: the
-// run forwarded none, or its record predates the field, and either way it narrowed nothing
-// it can show.
+// The args past `--` are compared when the attempt records them, save the -run and -skip
+// of a [scopedRun], which VerifyGates notes beside the grade. Nil args are not compared:
+// the run forwarded none, or its record predates the field, and either way it narrowed
+// nothing it can show.
 func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
-	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) {
+	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && !scopedRun(c, a) {
 		return false
 	}
 	if c.Script != "" {
@@ -607,6 +622,37 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 		return false
 	}
 	return spell == "" || a.Spell == "" || spell == a.Spell
+}
+
+// scopedRun reports whether a ran c's go test with other -run or -skip patterns and the
+// same args otherwise. Those flags select tests inside the packages go-test runs and leave
+// the package set alone (a package argument does not scope go-test either), so the run
+// covered every package the check covers. Target and project are ranCheck's to compare.
+func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
+	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && runsGoTest(c) &&
+		slices.Equal(withoutTestSelection(a.ExtraArgs), withoutTestSelection(c.Args))
+}
+
+// withoutTestSelection is args with every -run and -skip flag and its value dropped, read
+// in the spellings [goTestFlag] reads.
+func withoutTestSelection(args []string) []string {
+	out := []string{}
+	for i := 0; i < len(args); i++ {
+		flag := strings.TrimLeft(args[i], "-")
+		if len(flag) == len(args[i]) || len(args[i])-len(flag) > 2 {
+			out = append(out, args[i])
+			continue
+		}
+		name, _, inline := strings.Cut(strings.TrimPrefix(flag, "test."), "=")
+		if name != "run" && name != "skip" {
+			out = append(out, args[i])
+			continue
+		}
+		if !inline {
+			i++
+		}
+	}
+	return out
 }
 
 // resolveCheck is c with the charm set `magus run` would execute it under: defaults first
