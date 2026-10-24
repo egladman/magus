@@ -104,9 +104,6 @@ func TestImageLayerEntryHeaders(t *testing.T) {
 		if len(g.PAXRecords) == 0 {
 			g.PAXRecords = nil
 		}
-		if len(g.Xattrs) == 0 {
-			g.Xattrs = nil
-		}
 		if !reflect.DeepEqual(g, w) {
 			t.Errorf("entry %d: got %+v, want %+v", i, g, w)
 		}
