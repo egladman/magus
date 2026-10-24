@@ -7,7 +7,7 @@ status: proposed
 date: 2026-10-23
 ---
 
-# ADR 0016: magus assembles OCI images from built files
+# ADR 0016: magus assembles `OCI` images from built files
 
 ## Context
 
