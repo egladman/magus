@@ -231,6 +231,9 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 				At:                 now,
 				ObservedGeneration: generation,
 			}
+			if note := reclaimForRework(row, jobs); note != "" {
+				status.Notes = append(status.Notes, note)
+			}
 			return nil
 		}
 		row.State = types.StatePass
@@ -244,6 +247,25 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.JobStatus{}, err
 	}
 	return status, nil
+}
+
+// reclaimForRework sends a rejected exited row back to running, re-claiming each write path
+// under the rule a claim meets ([checkClaimPath]). Filing released them, so another job may
+// have taken one meanwhile: then the row stays exited and the note names that job. A row in
+// any other state gets no note.
+func reclaimForRework(row *types.Job, rows []types.Job) string {
+	if row.State != types.StateExited {
+		return ""
+	}
+	for _, entry := range row.WritePaths {
+		file, _ := types.SplitClaim(entry)
+		if err := checkClaimPath(types.Job{ID: row.ID}, file, rows); err != nil {
+			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
+				row.ID, err)
+		}
+	}
+	row.State = types.StateRunning
+	return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
 }
 
 // Verifies reports whether this actor may verify row id: an unbound actor verifies any

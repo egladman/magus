@@ -368,9 +368,51 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	assert.Contains(t, status.Violations[i], "go-test", "the violation names the check to run again")
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, rows[0].State)
+	assert.Equal(t, types.StateRunning, rows[0].State, "the rejection sends it back to rework")
 	require.NotNil(t, rows[0].Rejection)
 	assert.Equal(t, 2, rows[0].Rejection.ObservedGeneration)
+}
+
+// A rejecting wait sends an exited row back to rework, holding its write paths again under
+// the rule a claim meets; a path another job took meanwhile refuses the re-claim, naming
+// that job, and the row stays exited holding nothing.
+func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
+	t.Parallel()
+
+	result := passingResult()
+	attempt := passingRun
+	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+	resolve := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	empty := result
+	empty.ChangedPaths = nil
+	exited := func(t *testing.T, others ...types.Job) Location {
+		t.Helper()
+		loc := declared(t, append([]types.Job{acceptRow()}, others...)...)
+		_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolve)
+		require.NoError(t, err)
+		return loc
+	}
+	state := func(t *testing.T, loc Location) types.JobState {
+		t.Helper()
+		rows, err := NewStore(loc).List()
+		require.NoError(t, err)
+		return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == result.Job })].State
+	}
+
+	loc := exited(t)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateRunning, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
+
+	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
+	loc = exited(t, taker)
+	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
+	require.NoError(t, err)
+	require.False(t, status.Verified)
+	assert.Equal(t, types.StateExited, state(t, loc))
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }
 
 // lineageRow is acceptRow renamed into a tree under parent.
@@ -1366,8 +1408,20 @@ func (j waiterEvidenceJob) stored(t *testing.T) types.Job {
 // evidence beside it.
 func (j waiterEvidenceJob) requireUnmoved(t *testing.T) {
 	t.Helper()
+	j.requireState(t, types.StateExited)
+}
+
+// requireReworked asserts the wait rejected the job back to rework, with no waiter evidence
+// beside it.
+func (j waiterEvidenceJob) requireReworked(t *testing.T) {
+	t.Helper()
+	j.requireState(t, types.StateRunning)
+}
+
+func (j waiterEvidenceJob) requireState(t *testing.T, state types.JobState) {
+	t.Helper()
 	row := j.stored(t)
-	assert.Equal(t, types.StateExited, row.State)
+	assert.Equal(t, state, row.State)
 	assert.Nil(t, row.WaiterEvidence)
 }
 
@@ -1449,7 +1503,7 @@ func TestWaitEvidenceStillHasToVerify(t *testing.T) {
 			status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": run}, map[string]string{types.PrimaryGoalID: "here"})
 			require.NoError(t, err)
 			assert.False(t, status.Verified)
-			j.requireUnmoved(t)
+			j.requireReworked(t)
 		})
 	}
 }
@@ -1605,7 +1659,7 @@ func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
 	require.Len(t, status.Gates[0].Violations, 1, status.Gates[0].Violations)
 	assert.Contains(t, status.Gates[0].Violations[0], "predates the job's last write")
 	assert.Contains(t, status.Gates[0].Violations[0], changed)
-	j.requireUnmoved(t)
+	j.requireReworked(t)
 }
 
 func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
