@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -268,4 +269,36 @@ func TestRecordedRefMatchesOnlyRefShapedPrefixes(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, recordedRefMatches(c.recorded, c.ref), "recorded %q, ref %q", c.recorded, c.ref)
 	}
+}
+
+// A guard hook stores its verdict in the checkout it judged in, which may be a sibling linked
+// worktree no fact records: the ref still resolves from the worker, and a miss names every
+// sibling store it read. An output ref's runs are recorded, so its miss reads no sibling.
+func TestOutputLookupsReadASiblingWorktree(t *testing.T) {
+	testkit.Isolate(t)
+	_, trees := linkedWorktrees(t, "worker", "judge", "idle")
+	worker, judge, idle := trees[0], trees[1], trees[2]
+	ref := persistedRunRef(t, idle)
+	judgeCache, err := ResolveCacheDir(judge)
+	require.NoError(t, err)
+	idleCache, err := ResolveCacheDir(idle)
+	require.NoError(t, err)
+	verdict, _ := trail.WriteBlob(t.Context(), judgeCache, "grd", []byte("the full verdict"))
+	require.NotEmpty(t, verdict)
+
+	opened, err := Inspect(t.Context(), worker, WithSpawnRule(TierCeiling))
+	require.NoError(t, err)
+	m := opened.(*Magus)
+
+	got, err := m.PayloadByRef(t.Context(), verdict)
+	require.NoError(t, err)
+	assert.Equal(t, "the full verdict", string(got))
+
+	_, err = m.PayloadByRef(t.Context(), "grd"+strings.Repeat("0", 16))
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	assert.Contains(t, err.Error(), judgeCache)
+	assert.Contains(t, err.Error(), idleCache)
+
+	_, _, err = m.OutputByRef(t.Context(), ref)
+	require.ErrorIs(t, err, fs.ErrNotExist, "no fact recorded idle as running it")
 }
