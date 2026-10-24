@@ -565,8 +565,8 @@ func pullSpell(ctx context.Context, client *oci.Client, ref oci.Reference, cache
 	}
 	pinned.Tag = ""
 	dir, err := remotespell.Resolve(ctx, remotespell.Ref{Import: pinned.String(), OCI: pinned}, remotespell.Options{
-		CacheRoot: cacheRoot,
-		Client:    client.HTTP,
+		CacheRoot:   cacheRoot,
+		Client:      client.HTTP,
 		Credentials: client.Credentials,
 	})
 	if err != nil {

@@ -104,7 +104,7 @@ func (c *Client) challenge(ctx context.Context, host string) (challenge, error) 
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return challenge{}, fmt.Errorf("oci: reach %s: %w", host, err)
+		return challenge{}, fmt.Errorf("reach %s: %w", host, err)
 	}
 	defer resp.Body.Close()
 	var ch challenge
