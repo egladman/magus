@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sync"
@@ -72,7 +73,7 @@ func (h *recordingHandler) lines() []string {
 		line := r.Message
 		r.Attrs(func(a slog.Attr) bool {
 			if a.Key != attr.ElapsedKey {
-				line += " " + a.Key + "=" + a.Value.String()
+				line += fmt.Sprintf(" %s=%s", a.Key, a.Value.String())
 			}
 			return true
 		})

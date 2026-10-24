@@ -3,6 +3,7 @@ package cache
 import (
 	"bufio"
 	"cmp"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,7 +109,7 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 		// invent a stalled target by dropping its "cached" records.
 		partial := map[string]*tally{}
 		if err := scanJournal(path, only, func(rec journalRecord) {
-			id := rec.project + "\x00" + rec.target
+			id := fmt.Sprintf("%s\x00%s", rec.project, rec.target)
 			t := partial[id]
 			if t == nil {
 				t = &tally{
@@ -226,7 +227,7 @@ func scanJournal(path string, only map[string]bool, fn func(journalRecord)) erro
 		if rec.Kind != "result" && rec.Kind != "exec" {
 			continue
 		}
-		if len(only) > 0 && !only[rec.Project+"\x00"+rec.Target] {
+		if len(only) > 0 && !only[fmt.Sprintf("%s\x00%s", rec.Project, rec.Target)] {
 			continue
 		}
 		fn(journalRecord{
@@ -266,7 +267,7 @@ func SlowExecutions(journalPath string, minMs int64) map[string]bool {
 			return
 		}
 		if (rec.status == "pass" || rec.status == "fail") && rec.durationMs >= minMs {
-			out[rec.project+"\x00"+rec.target] = true
+			out[fmt.Sprintf("%s\x00%s", rec.project, rec.target)] = true
 		}
 	}); err != nil {
 		// Same discard-on-error rule as StalledTargets: a journal that could not be

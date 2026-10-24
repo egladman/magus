@@ -3,6 +3,7 @@
 package remotetest
 
 import (
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -153,7 +154,7 @@ func (e *GHA) createEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok": true,
-		e.urlField("signed_upload_url", "signedUploadUrl"): "http://" + r.Host + "/upload/" + body.Key,
+		e.urlField("signed_upload_url", "signedUploadUrl"): fmt.Sprintf("http://%s/upload/%s", r.Host, body.Key),
 	})
 }
 
@@ -215,7 +216,7 @@ func (e *GHA) downloadURL(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok": true,
-		e.urlField("signed_download_url", "signedDownloadUrl"): "http://" + r.Host + "/blob/" + body.Key,
+		e.urlField("signed_download_url", "signedDownloadUrl"): fmt.Sprintf("http://%s/blob/%s", r.Host, body.Key),
 		e.urlField("matched_key", "matchedKey"):                body.Key,
 	})
 }

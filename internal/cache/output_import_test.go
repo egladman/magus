@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestOutputImportEnforcesLimits(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int{1, 3, 4}, lines, "blank lines are skipped but still counted")
 
-	_, err = read("a\n" + strings.Repeat("x", 17) + "\n")
+	_, err = read(fmt.Sprintf("a\n%s\n", strings.Repeat("x", 17)))
 	assert.EqualError(t, err, "line 2: longer than 16 bytes")
 
 	_, err = read(strings.Repeat("123456789012345\n", 3))

@@ -119,7 +119,7 @@ func newInflight(dir string) *inflight {
 	pid := os.Getpid()
 	return &inflight{
 		dir:     dir,
-		path:    filepath.Join(dir, inflightPrefix+strconv.Itoa(pid)+".json"),
+		path:    filepath.Join(dir, fmt.Sprintf("%s%s.json", inflightPrefix, strconv.Itoa(pid))),
 		running: map[uint64]inflightTarget{},
 	}
 }

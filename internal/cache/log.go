@@ -746,7 +746,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
 		from := ""
 		if tier := recordStr(r, "remote"); tier != "" {
-			from = " from " + tier + ", " + FormatBytes(recordInt(r, "bytes"))
+			from = fmt.Sprintf(" from %s, %s", tier, FormatBytes(recordInt(r, "bytes")))
 		}
 		h.printf("%s %s (cached%s, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, from, FormatDuration(dur), remote)
 		h.printRepro(project, recordStr(r, "target"))
@@ -910,7 +910,7 @@ const (
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
 func Glyph(colorize bool, label string, color tty.SGR) string {
-	s := "[" + label + "]"
+	s := fmt.Sprintf("[%s]", label)
 	if !colorize {
 		return s
 	}
@@ -953,7 +953,7 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	}
 	msg := r.Message
 	if component != "" {
-		msg = component + ": " + msg
+		msg = fmt.Sprintf("%s: %s", component, msg)
 	}
 	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
 	// Under the message, past the glyph and its space.
@@ -973,7 +973,7 @@ func noticeText(label, msg, err string) string {
 	if msg == "" {
 		return err
 	}
-	return msg + ": " + err
+	return fmt.Sprintf("%s: %s", msg, err)
 }
 
 // printNotice puts the label before the message, colored above info, with no glyph: a
@@ -1248,7 +1248,7 @@ func (h *PrettyHandler) printBlocked(colorize bool) {
 		if len(g.blocked) == 0 {
 			continue
 		}
-		line := "blocked by " + g.root + ": " + strings.Join(g.blocked, ", ")
+		line := fmt.Sprintf("blocked by %s: %s", g.root, strings.Join(g.blocked, ", "))
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
@@ -1288,7 +1288,7 @@ func (h *PrettyHandler) foldRepeatedCode(heading, project, target, cause string)
 	}
 	name := heading
 	if project != "" && target != "" {
-		name = project + ":" + target
+		name = fmt.Sprintf("%s:%s", project, target)
 	}
 	h.repeated[i].steps = append(h.repeated[i].steps, name)
 	return true
@@ -1449,7 +1449,7 @@ func hopChain(cause string) string {
 	if len(hops) < 2 || message == "" {
 		return strings.ReplaceAll(cause, hopMarker+": ", "")
 	}
-	return strings.Join(hops, " -> ") + ": " + message
+	return fmt.Sprintf("%s: %s", strings.Join(hops, " -> "), message)
 }
 
 // hopMarker is the plumbing prefix every ctx.needs hop wraps a cause in.
@@ -1669,7 +1669,7 @@ func remoteSuffix(remote, total time.Duration) string {
 	if remote < minRemote || total <= 0 || remote*4 < total {
 		return ""
 	}
-	return ", " + FormatDuration(remote) + " remote"
+	return fmt.Sprintf(", %s remote", FormatDuration(remote))
 }
 
 // Failure is one failed target, as the pinned band holds it.

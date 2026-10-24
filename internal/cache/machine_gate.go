@@ -717,7 +717,7 @@ func describeMachineDeclaration(c types.MachineClaim) string {
 		slots += "s"
 	}
 	if how := c.Sizing.Slots.String(); how != "" {
-		slots += " (" + how + ")"
+		slots += fmt.Sprintf(" (%s)", how)
 	}
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots
@@ -754,7 +754,7 @@ func describeMachineHolders(holders []types.MachineClaimant) string {
 	for _, h := range holders[:min(len(holders), show)] {
 		desc := fmt.Sprintf("pid %d %s %s", h.PID, displayProject(h.Project), h.Target)
 		if h.MemoryMB > 0 {
-			desc += " (" + FormatMB(h.MemoryMB) + ")"
+			desc += fmt.Sprintf(" (%s)", FormatMB(h.MemoryMB))
 		}
 		if h.Dir != "" {
 			desc += ", in " + h.Dir

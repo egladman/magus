@@ -124,7 +124,7 @@ func DisplayRef(ref types.TargetRef) string {
 	if ref.Target == "" {
 		return ref.Project
 	}
-	return ref.Project + " " + ref.Target
+	return fmt.Sprintf("%s %s", ref.Project, ref.Target)
 }
 
 // displayNodeLabel spells a step the way stepLabel does.
@@ -132,7 +132,7 @@ func displayNodeLabel(ref types.TargetRef) string {
 	if ref.Target == "" {
 		return displayProject(ref.Project)
 	}
-	return displayProject(ref.Project) + " " + ref.Target
+	return fmt.Sprintf("%s %s", displayProject(ref.Project), ref.Target)
 }
 
 // upstreamWaitHeartbeat matches the keyed lock's cadence, so waits that hold nothing log
