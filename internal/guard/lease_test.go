@@ -1527,6 +1527,53 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 		"It commits in "+r.main+", and the lease was taken in "+wt+".")
 }
 
+// A worker whose shell reset to another checkout of its repository may not switch, stage or
+// branch there: the refusal names its own checkout and serves the same call pointed at it.
+// The same calls pass in its own checkout, and a read passes anywhere.
+func TestDenyLeaseScopedVCSKeepsARefMoveInItsCheckout(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	worker.Worktree = &types.JobWorktree{Root: wt}
+	ctx, _ := fleetFixture(t, worker)
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{worker}})
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+	for command, remedy := range map[string]string{
+		"git switch -c topic":                  "git -C " + wt + " switch -c topic",
+		"git checkout -b topic":                "git -C " + wt + " checkout -b topic",
+		"git branch topic":                     "git -C " + wt + " branch topic",
+		"git add a.txt":                        "git -C " + wt + " add a.txt",
+		"git restore --staged a.txt":           "git -C " + wt + " restore --staged a.txt",
+		"cd " + r.main + " && git switch main": "git -C " + wt + " switch main",
+	} {
+		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, "outside "+wt, "%q", command)
+		assert.Contains(t, reason, "`"+remedy+"`", "%q", command)
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, strings.Replace(command, r.main, wt, 1)), "own checkout: %q", command)
+	}
+	for _, command := range []string{"git status --short", "git log --oneline -3", "git branch --list", "git diff"} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "a read: %q", command)
+	}
+}
+
+// A refused merge names every branch the worker would merge: its base, the revision it
+// was handed, and each depends_on job's branch.
+func TestDenyLeaseScopedVCSNamesTheDependencyBranchesARefusedMergeAccepts(t *testing.T) {
+	r := newWorktreeRepo(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	worker.DependsOn = []string{"schema-first", "api-second"}
+	ctx, _ := fleetFixture(t, worker)
+	deps := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/main"}}
+	reason := denyLeaseScopedVCS(ctx, deps, worker.ID, "git merge other-job")
+	assert.Contains(t, reason, "origin/main, the revision its job was handed, or a depends_on branch: schema-first, api-second.")
+}
+
 // A cherry-pick and a diff applied and committed land the same change, so lease-vcs gives
 // them one answer: both pass on the worker's own branch, both are refused anywhere else.
 func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
