@@ -308,7 +308,7 @@ func magusAPINames(t *testing.T) []string {
 			continue
 		}
 		for _, sub := range v.MapKeys() {
-			out = append(out, k+"."+sub)
+			out = append(out, fmt.Sprintf("%s.%s", k, sub))
 		}
 	}
 	sort.Strings(out)
@@ -387,7 +387,7 @@ func TestMagusAPIIsDeclared(t *testing.T) {
 		// A nested member is declared under its namespace: magus\review.provider is
 		// the shape that went missing when only the namespace names were compared.
 		for _, m := range namespace.Methods {
-			declared[namespace.Name+"."+std.BuzzMethodName(m)] = true
+			declared[fmt.Sprintf("%s.%s", namespace.Name, std.BuzzMethodName(m))] = true
 		}
 	}
 	// The magus.Context builder and the target registry are not members of this

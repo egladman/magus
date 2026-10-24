@@ -312,7 +312,7 @@ func humanOnlyReasons(ctx context.Context) map[string]string {
 				continue
 			}
 			if prior, ok := out[name]; ok {
-				out[name] = prior + "; " + pol.HumanOnlyReason
+				out[name] = fmt.Sprintf("%s; %s", prior, pol.HumanOnlyReason)
 				continue
 			}
 			out[name] = pol.HumanOnlyReason

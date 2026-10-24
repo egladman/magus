@@ -398,10 +398,10 @@ func TestRemovedMagusfileAPIRejected(t *testing.T) {
 	for name, tc := range removed {
 		t.Run(name+" rejected with MGS1025", func(t *testing.T) {
 			dir := t.TempDir()
-			writeMagusfile(t, dir, `import "magus";
+			writeMagusfile(t, dir, fmt.Sprintf(`import "magus";
 export fun format(ctx: magus\Context, args: [str]) > void {}
-export fun build(ctx: magus\Context, args: [str]) > void { `+tc.body+` }
-`)
+export fun build(ctx: magus\Context, args: [str]) > void { %s }
+`, tc.body))
 			err := runTargetIn(t, dir, "build")
 			require.Error(t, err, "a removed magusfile API must be rejected at load")
 			require.ErrorIs(t, err, types.MagusfileAPIRemoved, "carries the MGS1025 code")
@@ -1662,7 +1662,7 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
-	require.NoError(t, s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{};`),
+	require.NoError(t, s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{};`, testBoundaryTypesPath, object)),
 		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
 	require.NotNil(t, s.GetGlobal("__r"), "%s{} produced nothing", object)
 }
@@ -1710,7 +1710,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
-	err := s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{}.`+field+`;`)
+	err := s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{}.%s;`, testBoundaryTypesPath, object, field))
 	require.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
 }
 
@@ -1759,8 +1759,7 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 	wrongReturn := func(t *testing.T, body string) error {
 		t.Helper()
 		dir := t.TempDir()
-		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\nimport \"proc\";\n"+body+
-			"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+		writeMagusfile(t, dir, fmt.Sprintf("import \"magus\";\nimport \"os\";\nimport \"proc\";\n%s\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n", body))
 		return runTargetIn(t, dir, "build")
 	}
 
@@ -1791,8 +1790,7 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeMagusfile(t, dir, "import \"magus\";\n"+tc.decl+
-				"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+			writeMagusfile(t, dir, fmt.Sprintf("import \"magus\";\n%s\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n", tc.decl))
 			require.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
 		})
 	}

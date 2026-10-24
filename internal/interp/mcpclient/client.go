@@ -127,7 +127,7 @@ func InstallCallerLease() {
 		_ = os.Unsetenv(trail.EnvBaggage)
 		return
 	}
-	_ = os.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+lease)
+	_ = os.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, lease))
 }
 
 // Run evaluates one program. The workspace, when one is open, is already on ctx.
@@ -233,7 +233,7 @@ func renameEntry(src string) string {
 			if !ok || !strings.HasPrefix(src[off:], "main") {
 				return src
 			}
-			return src[:off] + entryName + src[off+len("main"):] + "\nfinal main = " + entryName + ";\n"
+			return fmt.Sprintf("%s%s%s\nfinal main = %s;\n", src[:off], entryName, src[off+len("main"):], entryName)
 		}
 	}
 	return src

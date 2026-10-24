@@ -17,10 +17,10 @@ import (
 // returns its name. body sees the op's target and req.
 func withLifecycleSpell(t *testing.T, body string) string {
 	t.Helper()
-	return register.Spell(t, "fake-lifecycle", spells.WithFuncSource(`import "magus/spell";
+	return register.Spell(t, "fake-lifecycle", spells.WithFuncSource(fmt.Sprintf(`import "magus/spell";
 export fun list_lifecycles(target: Target, req: LifecycleQuery) > any !> any {
-`+body+`
-}`))
+%s
+}`, body)))
 }
 
 // goRecord is the go product's answer as a Buzz map, with fields replaced by over, each a
@@ -38,17 +38,17 @@ func goRecord(over map[string]string) string {
 	return fmt.Sprintf(`{"key": %s, "source": %s, "asOf": %s, "cycles": %s}`,
 		field("key", `"go"`), field("source", `"https://endoflife.date/api/v1/products/go"`),
 		field("asOf", `"2026-09-24T07:44:41+00:00"`),
-		field("cycles", "["+cycle0+`, {"cycle": "1.27", "released": "2026-08-19", "eol": "", "lts": false, "latest": "1.27.1"}]`))
+		field("cycles", fmt.Sprintf(`[%s, {"cycle": "1.27", "released": "2026-08-19", "eol": "", "lts": false, "latest": "1.27.1"}]`, cycle0)))
 }
 
 func TestRunLifecycleProviderDecodesTheAnswer(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "")
 	// One batch call carrying every key, at the workspace root.
-	name := withLifecycleSpell(t, `
+	name := withLifecycleSpell(t, fmt.Sprintf(`
     if (req.keys.join(",") != "go,nodejs" or target.projectPath != "/ws") {
         throw "asked {req.keys} at {target.projectPath}";
     }
-    return [`+goRecord(nil)+`];`)
+    return [%s];`, goRecord(nil)))
 
 	got, err := runLifecycleProvider(t.Context(), name, "/ws", []string{"go", "nodejs"})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestRunLifecycleProviderReadsAThrowAsUnreached(t *testing.T) {
 // A malformed record is an error naming the spell, the key and the field.
 func TestRunLifecycleProviderRejectsAMalformedRecord(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "")
-	with := func(over map[string]string) string { return "return [" + goRecord(over) + "];" }
+	with := func(over map[string]string) string { return fmt.Sprintf("return [%s];", goRecord(over)) }
 	for _, tc := range []struct {
 		name string
 		body string
@@ -101,7 +101,7 @@ func TestRunLifecycleProviderRejectsAMalformedRecord(t *testing.T) {
 		{"lts that is not a bool", with(map[string]string{"cycles[0].lts": `"yes"`}), []string{"cycles[0].lts", "want bool"}},
 		{"cycles that are not a list", with(map[string]string{"cycles": `"1.25"`}), []string{"cycles: want [ReleaseCycle]"}},
 		{"a member Lifecycle does not declare", with(map[string]string{"cycles": `[], "eolFrom": "x"`}), []string{`no member "eolFrom"`}},
-		{"the same key twice", "return [" + goRecord(nil) + ", " + goRecord(nil) + "];", []string{`key "go" twice`}},
+		{"the same key twice", fmt.Sprintf("return [%s, %s];", goRecord(nil), goRecord(nil)), []string{`key "go" twice`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			name := withLifecycleSpell(t, tc.body)

@@ -338,7 +338,7 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 		return nil
 	}
 	probe := t.Ready
-	key := op.Bin + "\x00" + dir
+	key := fmt.Sprintf("%s\x00%s", op.Bin, dir)
 	if cached, hit := readinessMemo.Load(key); hit {
 		if cached == nil {
 			return nil
@@ -524,7 +524,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	}
 	// Each run writes its own index beside the merged one, so a failed run never leaves
 	// a half-merged index where ingestion reads.
-	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), "."+filepath.Base(indexPath)+"-envs-")
+	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), fmt.Sprintf(".%s-envs-", filepath.Base(indexPath)))
 	if err != nil {
 		return nil, fmt.Errorf("prepare symbol index dir: %w", err)
 	}
@@ -589,7 +589,7 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 func formatEnv(env map[string]string) string {
 	pairs := make([]string, 0, len(env))
 	for _, k := range slices.Sorted(maps.Keys(env)) {
-		pairs = append(pairs, k+"="+env[k])
+		pairs = append(pairs, fmt.Sprintf("%s=%s", k, env[k]))
 	}
 	return strings.Join(pairs, " ")
 }

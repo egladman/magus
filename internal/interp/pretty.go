@@ -115,7 +115,7 @@ func (p *prettyPrinter) printTable(t engine.Table, depth int) {
 			p.write(p.colorize(s, color.FgCyan))
 			p.write(" = ")
 		} else if n, ok := e.k.AsNumber(); ok {
-			p.write(p.colorize("["+formatNumber(n)+"]", color.FgCyan))
+			p.write(p.colorize(fmt.Sprintf("[%s]", formatNumber(n)), color.FgCyan))
 			p.write(" = ")
 		} else if s, ok := e.k.AsString(); ok {
 			p.write(p.colorize(fmt.Sprintf("[%q]", s), color.FgCyan))

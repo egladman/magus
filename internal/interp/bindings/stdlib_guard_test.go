@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,7 +59,7 @@ func (f guardFixture) call(t *testing.T, ctx context.Context, module, name strin
 	mod, ok := f.sess.NativeModule(module)
 	require.True(t, ok, module)
 	fn, ok := mod.MapGet(name)
-	require.True(t, ok, module+"."+name)
+	require.True(t, ok, fmt.Sprintf("%s.%s", module, name))
 	// Through the trampoline the guard compiled: CallValue on a native function drops its
 	// result.
 	tramp := f.sess.GetGlobal(upstreamTrampolineNames[len(args)])
@@ -118,7 +119,7 @@ func TestUpstreamFileOpenIsChecked(t *testing.T) {
 
 	for _, module := range []string{"io", "iocore"} {
 		for _, mode := range []string{"read", "write", "update"} {
-			src := "import \"" + module + "\";\nfinal f = " + module + "\\File.open(\"" + secret + "\", " + module + "\\FileMode." + mode + ");\n"
+			src := fmt.Sprintf("import \"%[1]s\";\nfinal f = %[1]s\\File.open(\"%[2]s\", %[1]s\\FileMode.%[3]s);\n", module, secret, mode)
 			err := f.sess.Exec(f.confined, src)
 			require.Error(t, err, "%s File.open %s", module, mode)
 			assert.Contains(t, err.Error(), "denied", "%s File.open %s", module, mode)

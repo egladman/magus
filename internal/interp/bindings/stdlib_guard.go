@@ -66,8 +66,8 @@ func guardUpstreamStdlib(sess *buzz.Session) {
 			continue
 		}
 		for name, check := range fns {
-			caller.wrap(mod, module+"."+name, name, func(ctx context.Context, args []vm.Value, orig func() (vm.Value, error)) (vm.Value, error) {
-				if err := checkUpstreamPaths(ctx, module+"."+name, check, args); err != nil {
+			caller.wrap(mod, fmt.Sprintf("%s.%s", module, name), name, func(ctx context.Context, args []vm.Value, orig func() (vm.Value, error)) (vm.Value, error) {
+				if err := checkUpstreamPaths(ctx, fmt.Sprintf("%s.%s", module, name), check, args); err != nil {
 					return vm.Null, err
 				}
 				return orig()

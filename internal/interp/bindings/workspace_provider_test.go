@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,7 +104,7 @@ func TestListProjectsRefusesAMalformedRecord(t *testing.T) {
 		"a member Project does not have": {`return [{"path": "libs/foo", "owner": "x"}];`, `has no member "owner"`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			drv := buzzProvider(t, "export fun list_projects(target: Target, req: ProjectQuery) > any {\n"+tc.body+"\n}")
+			drv := buzzProvider(t, fmt.Sprintf("export fun list_projects(target: Target, req: ProjectQuery) > any {\n%s\n}", tc.body))
 			_, exported, err := CallOp(context.Background(), drv, providerops.ListProjects, types.Target{}, types.ProjectQuery{})
 			require.Error(t, err)
 			assert.True(t, exported)
