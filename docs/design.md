@@ -1,6 +1,6 @@
 ---
 title: Design principles
-description: How magus is built and why: the principles, the judgment calls it leaves to you, the standard it is measured against, and what it refused to build.
+description: "How magus is built and why: the principles, the judgment calls it leaves to you, the standard it is measured against, and what it refused to build."
 tags: [design, principles, judgment, philosophy]
 aliases: [doctrine]
 ---
