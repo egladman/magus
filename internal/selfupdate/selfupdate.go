@@ -350,7 +350,7 @@ func FindAssets(rel *IndexRelease, assetName string) (Assets, error) {
 		ReleaseOwner, ReleaseRepo, rel.Version,
 	)
 	urlFor := func(name string) string {
-		return ghBase + "/" + name
+		return fmt.Sprintf("%s/%s", ghBase, name)
 	}
 
 	var a Assets
