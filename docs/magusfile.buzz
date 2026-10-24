@@ -124,18 +124,20 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
     ctx.readsFiles("**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz",
         workspace\file("**/*.md"), workspace\file("gen/symbol-index.json"));
     ctx.modifiesExistingFiles("glossary/*.md");
-    final GENERATED = ["glossary"];
-    final before = drift\hashes(GENERATED);
+    final stale = mut [<str>];
     foreach (p in fs\glob("glossary/*.md")) {
         final md = fs\readFile(p.value);
         final block = termUsage(dictionary\termPage(p.value, md: md).title);
         final next = dictionary\replaceBlock(md, begin: dictionary\USAGE_BEGIN, end: dictionary\USAGE_END, block: block);
-        if (next != md) { fs\writeFile(p.value, content: next); }
+        if (next == md) { continue; }
+        if (ctx.hasCharm("rw")) {
+            fs\writeFile(p.value, content: next);
+        } else {
+            stale.append(p.value);
+        }
     }
-    if (ctx.hasCharm("rw")) { return; }
-    final moved = drift\changedSince(before, GENERATED);
-    if (moved.len() > 0) {
-        throw "glossary-usage-generate: the term pages' Used in blocks changed " + moved.join(", ")
+    if (stale.len() > 0) {
+        throw "glossary-usage-generate: the term pages' Used in blocks are stale in " + stale.join(", ")
             + "; re-run `magus run glossary-usage-generate:rw docs` and commit" + drift\secondCause;
     }
 }
