@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,7 +106,7 @@ func TestCaptureBodyGroupsBySubjectAndAttributes(t *testing.T) {
 	// of a view that prints the body as text. Asserted by deriving the rule from the
 	// heading: a hand-counted row of dashes tests the count, which is not the invariant and
 	// goes red for a one-character rename.
-	setext := func(head string) string { return head + "\n" + strings.Repeat("-", len(head)) + "\n" }
+	setext := func(head string) string { return fmt.Sprintf("%s\n%s\n", head, strings.Repeat("-", len(head))) }
 	assert.Contains(t, n.Body, setext("internal/cache/key.go hunk 3"))
 	assert.Contains(t, n.Body, setext("internal/cache/store.go"))
 	assert.Contains(t, n.Body, "\nEli:\n")
