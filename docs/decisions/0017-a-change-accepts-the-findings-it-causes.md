@@ -436,14 +436,10 @@ writing a ledger line would move the bar with the byline. The person decides at 
 
 ## Open questions
 
-- **The record's name.** "Finding" is the most used today, but it also names proofread's,
-  conformance's and the advisories' records; "diagnostic" is taken by magus's own MGS
-  errors; "feedback" by the guard's trail marks; "problem" by jobs. Prior art says
-  "result" (SARIF), "issue" (Code Climate) and "violation" (Checkstyle). Each is a
-  rename across 38 Buzz files and the `magus/lint` module.
-- **The waiver's name, and the result's.** `waiver` already exists in the job schema
-  and the MGS3043 and MGS3044 pages; `accepted` was this draft's word, which would make
-  two words for one act. The run result could read `waived`.
+- **The waiver's name, and the result's.** `deviation` pairs with `violation` as MISRA C
+  pairs them: a deviation record sanctions a violation with a rationale. `waiver` already
+  exists in the job schema and the MGS3043 and MGS3044 pages, and keeping it avoids a
+  second word for one act. The run result would read `deviated` or `waived` to match.
 - **Whether `JobProblem` folds in too.** Its place is a record field, not a file path;
   folding it would make `Path` mean two things. Kept apart in the proposal.
 - **Whether `JobWaiver`'s globs carry over.** Two job codes accept a glob subject. A gate
@@ -474,3 +470,13 @@ draft's `AcceptedFinding` and `AcceptedEntry` repeated `types.Finding` and
 lifetime, the measured buf exit status and fingerprint, the inventory of existing
 records and the names already taken; Decision gained Reuse before adding; the status
 went back to proposed and every State row to proposed until Eli redesigns it.
+
+### 2026-10-24: the record is named violation
+
+Eli picked `violation` for what a check reports about a place, the name Checkstyle, PMD,
+OPA and Kubernetes admission use. It replaces "finding" for the shared record that
+`types.Finding`, `spells.Diagnostic` and the advisories' `Finding` fold into, and the
+rename covers the `magus/lint` module and its 38 Buzz callers. "Finding" in the text
+above is the draft's word. The candidates weighed were violation, deviation,
+nonconformance, discrepancy, anomaly, defect, alert, issue, offense, hazard and result,
+counted against this tree's use of each.
