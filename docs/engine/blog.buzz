@@ -18,6 +18,7 @@ import "lib/html" as _;
 import "engine/meta" as _;
 import "engine/types" as _;
 import "engine/page" as _;
+import "site/diagrams/all" as diagrams;
 
 // isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that
 // is not the index, not an _underscored fixture, not marked `draft: true` in its
@@ -118,7 +119,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
     // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
     // cross-references (../../documentation/) resolve at the post's real depth.
-    final html = renderContentHTML(markdown\toHtml(md), site.blog, site.blog + "/" + urlPath);
+    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.blog, site.blog + "/" + urlPath));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
