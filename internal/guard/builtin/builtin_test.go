@@ -228,15 +228,26 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 func TestFixedRulesAreCompiledRules(t *testing.T) {
 	for name := range fixed {
 		assert.Contains(t, defaults, name)
-		assert.Equal(t, Advise, defaults[name], name)
 		assert.True(t, Fixed(name))
+		assert.Equal(t, []types.GuardDecision{types.GuardDecision(defaults[name])}, Verdicts(name), name)
 	}
 	assert.False(t, Fixed("stage-all"))
+	assert.Equal(t, Deny, defaults["grant-is-a-persons"])
 
 	got, err := Resolve(nil)
 	require.NoError(t, err)
 	for name := range fixed {
-		assert.Equal(t, Setting{Decision: Advise}, got[name], "an undeclared fixed rule resolves to its default")
+		assert.Equal(t, Setting{Decision: defaults[name]}, got[name], "an undeclared fixed rule resolves to its default")
+	}
+}
+
+func TestResolveRefusesSettingTheGrantRule(t *testing.T) {
+	for _, d := range []Decision{Off, Advise, Deny} {
+		_, err := Resolve(map[string]Setting{"grant-is-a-persons": {Decision: d}})
+		var de *types.DiagnosticError
+		require.ErrorAs(t, err, &de, string(d))
+		assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+		assert.Equal(t, "a grant is a person's approval, so no workspace setting may let an agent issue one", types.DiagnosticRationale(err))
 	}
 }
 

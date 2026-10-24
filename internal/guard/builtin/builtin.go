@@ -279,6 +279,8 @@ var defaults = map[string]Decision{
 	"lease-vcs":             Deny,
 	"lease-write":           Deny,
 	"lease-claim":           Deny,
+	"lease-row-unknown":     Deny,
+	"grant-is-a-persons":    Deny,
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
@@ -369,14 +371,15 @@ var defaultMarkers = map[string][]string{
 	compatMarker: {"compat(until:", "Deprecated:"},
 }
 
-// fixed maps each rule a workspace may not set, with any value, to why. Its entries are
-// notices that report on the workspace's own rules, so a setting would let a workspace
-// silence the report or promote it to a refusal. Every name is also in defaults.
+// fixed maps each rule a workspace may not set, with any value, to why. Most are notices
+// that report on the workspace's own rules, so a setting would let a workspace silence the
+// report or promote it to a refusal. Every name is also in defaults.
 var fixed = map[string]string{
-	"guard-unfinished":         "a guard check",
-	"workspace-command-failed": "a command rule",
-	"workspace-spawn-failed":   "a spawn rule",
-	"workspace-write-failed":   "a write rule",
+	"guard-unfinished":         "it is how a workspace learns that a guard check of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-command-failed": "it is how a workspace learns that a command rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-spawn-failed":   "it is how a workspace learns that a spawn rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"workspace-write-failed":   "it is how a workspace learns that a write rule of its own judged nothing, so it can be neither silenced nor promoted",
+	"grant-is-a-persons":       "a grant is a person's approval, so no workspace setting may let an agent issue one",
 }
 
 // removal is why a rule the guard no longer has under its name is gone, and the name it
@@ -409,11 +412,14 @@ func Fixed(name string) bool {
 }
 
 // Verdicts returns the verdicts rule name can give under any setting a workspace may
-// declare, least refusing first: advise alone for a notice or a rule a workspace may not
-// set, advise and deny for any other.
+// declare, least refusing first: advise alone for a notice, the default alone for a rule a
+// workspace may not set, advise and deny for any other.
 func Verdicts(name string) []types.GuardDecision {
-	if _, notice := notices[name]; notice || Fixed(name) {
+	if _, notice := notices[name]; notice {
 		return []types.GuardDecision{types.GuardAdvise}
+	}
+	if Fixed(name) {
+		return []types.GuardDecision{types.GuardDecision(defaults[name])}
 	}
 	return []types.GuardDecision{types.GuardAdvise, types.GuardDeny}
 }
@@ -470,10 +476,10 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"unknown built-in rule %q; `magus describe rules` lists every name", name)
 	}
-	if what, ok := fixed[name]; ok {
+	if why, ok := fixed[name]; ok {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q cannot be set; remove it from the declaration", name).
-			WithWhy("it is how a workspace learns that " + what + " of its own judged nothing, so it can be neither silenced nor promoted")
+			WithWhy(why)
 	}
 	if rank(s.Decision) < 0 {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
