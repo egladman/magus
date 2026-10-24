@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestTokenServerRoutesAdmitOnlyThePageToken(t *testing.T) {
 	t.Cleanup(ts.Close)
 	client := &http.Client{Timeout: 5 * time.Second}
 	call := func(path, header string) int {
-		req, err := http.NewRequest(http.MethodGet, "http://"+ts.Addr()+path, nil)
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", ts.Addr(), path), nil)
 		require.NoError(t, err)
 		if header != "" {
 			req.Header.Set("Authorization", "Bearer "+header)
@@ -35,6 +36,6 @@ func TestTokenServerRoutesAdmitOnlyThePageToken(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, call(path, "mgo_"+ts.Token()), path)
 		assert.Equal(t, http.StatusUnauthorized, call(path, ts.Token()+"x"), path)
 		assert.Equal(t, http.StatusOK, call(path, ts.Token()), path)
-		assert.Equal(t, http.StatusOK, call(path+"?token="+ts.Token(), ""), path)
+		assert.Equal(t, http.StatusOK, call(fmt.Sprintf("%s?token=%s", path, ts.Token()), ""), path)
 	}
 }

@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -69,7 +70,7 @@ func (b *BlobServer) Token() string { return b.ts.Token() }
 // a plain fetch() authenticate without a preflight-triggering Authorization header, and it
 // survives being tucked into the explorer's `#src=` fragment.
 func (b *BlobServer) SourceURL() string {
-	return "http://" + b.Addr() + b.path + "?token=" + url.QueryEscape(b.Token())
+	return fmt.Sprintf("http://%s%s?token=%s", b.Addr(), b.path, url.QueryEscape(b.Token()))
 }
 
 // WaitServed blocks until the page fetches the blob (then a short grace for a reload), or

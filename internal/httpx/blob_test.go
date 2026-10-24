@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -61,7 +62,7 @@ func TestStartBlobRequiresToken(t *testing.T) {
 
 	assert.Contains(t, bs.SourceURL(), "token="+bs.Token())
 
-	resp, err := http.Get("http://" + bs.Addr() + "/graph.json")
+	resp, err := http.Get(fmt.Sprintf("http://%s/graph.json", bs.Addr()))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
