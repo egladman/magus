@@ -60,7 +60,7 @@ to write. Go callers inside magus use `internal/image` with typed structs, throu
 exported `std.Image*` functions. The module is not added to the public Go SDK; that needs
 its own decision.
 
-### This is not Dockerfile support
+### This is not `Dockerfile` support
 
 Nothing here parses, accepts, translates or emulates a Dockerfile or a Containerfile. There
 is no instruction mapping, no build context, no `RUN`, no `withExec`, no container
@@ -79,7 +79,7 @@ runs no container, adds no container API to Buzz, and neither reads nor detects 
 
 ### What this API cannot express
 
-This list stays current with the module. Each item is an image magus will not produce, and
+This list stays current with the module. Each item is an image magus does not produce, and
 a user needing one keeps the container engine:
 
 - An image that needs a command run at build time: compiling inside the image,
@@ -137,13 +137,13 @@ that time into the target key through its input.
 
 ## Alternatives
 
-### A. Keep Docker and buildx for the release image
+### A. Keep `docker` and `buildx` for the release image
 
 Lost: it keeps a second build of the binary inside the image, keeps a mutable base tag, and
 needs a daemon magus neither caches nor reproduces. Reopen if assembly cannot meet the
 cannot-express list for the images the project must publish.
 
-### B. Parse and execute Dockerfiles
+### B. Parse and execute `Dockerfile` files
 
 Lost, and refused as a direction, not only for cost. It needs a parser, an instruction
 mapping and container execution for `RUN`, which ADR 0003 refused to expose, and it makes
@@ -167,7 +167,7 @@ files and settings while Go owns the bytes.
 - The release image stops depending on a Docker daemon and on a second compile of the
   binary, once the release path moves to the layout publish step. Until then the
   Dockerfiles stay.
-- The `image` module adds a documented Buzz surface and generated files under
+- The `image` module adds a documented Buzz API and generated files under
   `internal/interp/bindings/gen/`, `std/gen/std-api.lock` and the reference docs, which are
   regenerated, not hand-edited.
 - Images that need build-time commands or packages remain outside magus, and the list
