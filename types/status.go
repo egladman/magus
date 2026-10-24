@@ -250,7 +250,8 @@ type StatusBroker struct {
 	// ./magus keeps running after that worktree is gone, and this is where to look.
 	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
 	StartTime  time.Time `json:"start_time" yaml:"start_time"`
-	// Capacity is the whole budget, what is held, and every claim holding it.
+	// Capacity is the whole budget, what is held, every claim holding it, and every
+	// request it holds until the budget can answer it.
 	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
 	// Services are the shared services it hosts right now.
 	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`

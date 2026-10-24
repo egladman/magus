@@ -428,9 +428,9 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 			BudgetSlots: 8, HeldSlots: 8,
 			Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
 			Waiting: []types.MachineWaiter{
-				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
-				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
-				{PID: 41302, Target: "ci", Owner: "job-c", Reservation: true, Since: now},
+				{Kind: "claim", PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
+				{Kind: "claim", PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
+				{Kind: "reserve", PID: 41302, Target: "ci", Owner: "job-c", Since: now},
 			},
 			Refused: []types.MachineRefusal{{
 				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
@@ -443,11 +443,25 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 	require.Len(t, lines, 7)
 	assert.Contains(t, lines[2], "(root) test  fix-cache  /tree/polish")
 	assert.True(t, strings.HasPrefix(lines[3], "waiting   41300"), lines[3])
-	assert.Contains(t, lines[3], "slots 2  (root) lint  budget  unleased  /tree/a")
+	assert.Contains(t, lines[3], "slots 2  (root) lint  claim  unleased  /tree/a")
 	assert.Contains(t, lines[4], "docs ci  seat in root-job  job-b")
-	assert.Contains(t, lines[5], "(root) ci  reservation  job-c")
+	assert.Contains(t, lines[5], "(root) ci  reserve  job-c")
 	assert.True(t, strings.HasPrefix(lines[6], "refused   41400"), lines[6])
 	assert.Contains(t, lines[6], "2m0s ago  slots 4  (root) ci  spawned by root  /tree/b  held by pid 41221 fix-cache, pid 41222 owner unknown")
+}
+
+// A request the broker holds parked shows as its own row, after the claims keeping it out.
+func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 48213,
+		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []types.MachineWaiter{
+			{Kind: "claim", Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
+		}},
+	}, types.BrokerRequired, time.Now())
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, "waiting   41300  slots 2  mem 2.0 GiB  docs lint  claim  /tree/polish  magus run lint docs", lines[2])
 }
 
 // A claim says where its figure came from, since a measured one sits below what the

@@ -155,9 +155,8 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 900, Invocation: "101:a"})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
-	v, err = waiter.Request(t.Context(), types.MachineClaim{Project: ".", Target: "lint", Invocation: "102:b"})
-	require.NoError(t, err)
-	require.False(t, v.Granted, "the tree's one validation seat is taken")
+	parked := claimAsync(t, t.Context(), addr, waiter, types.MachineClaim{Project: ".", Target: "lint", Invocation: "102:b"})
+	requirePending(t, parked)
 	v, err = stranger.Request(t.Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900})
 	require.NoError(t, err)
 	require.False(t, v.Granted)
@@ -170,7 +169,8 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	assert.Equal(t, "plan/a", c.Holders[0].Owner)
 	require.Len(t, c.Waiting, 1)
 	w := c.Waiting[0]
-	assert.Equal(t, types.MachineWaiter{PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command, Owner: "plan/b", Tree: "plan", Since: w.Since}, w)
+	assert.Equal(t, types.MachineWaiter{Kind: "claim", PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
+		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMS: w.WaitedMS}, w)
 	require.Len(t, c.Refused, 1)
 	r := c.Refused[0]
 	assert.Equal(t, 103, r.PID)
@@ -182,7 +182,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 
 	b, err := json.Marshal(st)
 	require.NoError(t, err)
-	assert.Contains(t, string(b), `"waiting":[{"pid":102`)
+	assert.Contains(t, string(b), `"waiting":[{"kind":"claim","project":".","target":"lint","pid":102`)
 	assert.Contains(t, string(b), `"refused":[{"at":`)
 
 	require.NoError(t, waiter.Close())
@@ -271,7 +271,7 @@ func TestAReservationOutlivesItsAskerAndGoesToItsReader(t *testing.T) {
 	reader := startReader(t)
 
 	asker := dial(t, addr)
-	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid)
+	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	require.NoError(t, asker.Close())
@@ -297,7 +297,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 	serve(t, addr, WithCapacity(0, 4))
 	reader := startReader(t)
 	c := dial(t, addr)
-	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid)
+	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -312,7 +312,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 func TestAReservationNamesItsReader(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 4))
-	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0)
+	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0, nil)
 	var refused *Error
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, CodeMalformed, refused.Code)

@@ -71,27 +71,27 @@ type MachineClaimant struct {
 	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
 }
 
-// MachineWaiter is a caller blocked on a seat now: a run its own run's steps or its job
-// tree's validation seat keep out, or a `magus status --wait` asking for a reservation.
-// The broker keeps no queue, so it is the last ask each one made, kept while it keeps
-// asking.
+// MachineWaiter is a request the broker holds until the budget can answer it: a claim kept
+// out by its own run or its job tree's validation seat, or a `status --wait`.
 type MachineWaiter struct {
+	// Kind is claim, reserve (a seat held for a piped reader) or await (takes nothing).
+	Kind    string `json:"kind" yaml:"kind"`
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
 	// PID is the waiting process; for a reservation, the run the seat is asked for.
-	PID      int    `json:"pid" yaml:"pid"`
-	Project  string `json:"project" yaml:"project"`
-	Target   string `json:"target" yaml:"target"`
+	PID int `json:"pid,omitzero" yaml:"pid,omitempty"`
+	// MemoryMB and Slots are the claim it waits to seat.
 	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
 	Slots    int    `json:"slots,omitzero" yaml:"slots,omitempty"`
 	Dir      string `json:"dir,omitempty" yaml:"dir,omitempty"`
 	Command  string `json:"command,omitempty" yaml:"command,omitempty"`
 	Owner    string `json:"owner,omitempty" yaml:"owner,omitempty"`
-	// Reservation is a `magus status --wait` asking for a seat on PID's behalf.
-	Reservation bool `json:"reservation,omitzero" yaml:"reservation,omitempty"`
 	// Tree is the job tree whose validation seat it waits for, "" when it waits on the
 	// budget.
-	Tree string `json:"tree,omitempty" yaml:"tree,omitempty"`
-	// Since is the first ask the broker turned away.
+	Tree  string    `json:"tree,omitempty" yaml:"tree,omitempty"`
 	Since time.Time `json:"since" yaml:"since"`
+	// WaitedMS is how long it had waited when the status was read.
+	WaitedMS int64 `json:"waited_ms" yaml:"waited_ms"`
 }
 
 // MachineRefusal is one MGS3009 refusal the broker answered: the claim it turned away

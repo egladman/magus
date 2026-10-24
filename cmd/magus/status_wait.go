@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/workspace"
@@ -45,10 +44,7 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 		claims[i].Weight = weight
 	}
 	err := withinDeadline(ctx, 0, queryCapacity, func(ctx context.Context) error {
-		if reader == 0 {
-			return cache.AwaitMachine(ctx, queryCapacity, claims, waiting)
-		}
-		return reserveSeat(ctx, reader, argv, claims, waiting)
+		return awaitSeat(ctx, reader, argv, claims, waiting)
 	})
 	if err == nil && waited {
 		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
@@ -84,44 +80,36 @@ func withinDeadline(ctx context.Context, deadline time.Duration, snapshot func(c
 	return fmt.Errorf("the build budget had no seat within %s; it is held by %s", deadline, strings.Join(holders, ", "))
 }
 
-// reserveSeat waits until the broker can seat claims and has it hold the seat for the
-// magus reader, whose command argv is. With no broker, or one shutting down, nothing
-// holds a seat and the run admits itself; that is said rather than assumed.
-func reserveSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
+// awaitSeat is one request the broker holds until the budget can seat claims: for a magus
+// reader, whose command argv is, a seat held for it; for any other reader (0), only the
+// word that the budget has room. The deadline is ctx's. With no broker, or one shutting
+// down, nothing is held and the run admits itself; that is said rather than assumed.
+func awaitSeat(ctx context.Context, reader int, argv []string, claims []types.MachineClaim, waiting func(string)) error {
 	client := broker.NewClient(broker.DefaultAddr())
 	defer func() { _ = client.Close() }()
-	command := strings.Join(argv, " ")
-	reserve := func(ctx context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
-		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel()
-		c.Command = command
-		return client.Reserve(ctx, c, reader)
+	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		return client.Await(ctx, claims, parked)
 	}
-	err := cache.ReserveMachine(ctx, reserve, claims, reader, waiting)
+	if reader != 0 {
+		seat := cache.WidestSeat(claims)
+		seat.Command = strings.Join(argv, " ")
+		wait = func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+			v, err := client.Reserve(ctx, seat, reader, func(v types.MachineVerdict) { parked(seat, v) })
+			return seat, v, err
+		}
+	}
+	err := cache.AwaitMachine(ctx, wait, waiting)
 	var refused *broker.Error
-	switch {
-	case errors.Is(err, broker.ErrUnavailable), errors.As(err, &refused) && refused.Code == broker.CodeDraining:
-		slog.InfoContext(ctx, fmt.Sprintf("no seat is reserved for pid %d; it asks the budget itself when it starts", reader),
+	if errors.Is(err, broker.ErrUnavailable) || errors.As(err, &refused) && refused.Code == broker.CodeDraining {
+		held := "nothing holds a seat for this run"
+		if reader != 0 {
+			held = fmt.Sprintf("no seat is reserved for pid %d", reader)
+		}
+		slog.InfoContext(ctx, fmt.Sprintf("%s; it asks the budget itself when it starts", held),
 			attr.Error(err), attr.Notice(""), attr.Component("magus"))
 		return nil
-	case errors.As(err, &refused) && refused.Code == broker.CodeUnknownType:
-		return fmt.Errorf("%w: the running broker predates seat reservations, so `%s` stops it and the next run starts a current one", err, hint.BinaryName()+" broker stop")
 	}
 	return err
-}
-
-// jobWeightAt is the weight of the job this caller acts under in the workspace at
-// rootOverride, 0 when it acts under none.
-func jobWeightAt(ctx context.Context, rootOverride string) float64 {
-	root, err := workspace.FindRoot(rootOverride)
-	if err != nil {
-		return 0
-	}
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return 0
-	}
-	return cache.LeaseWeight(ctx, cacheDir)
 }
 
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {

@@ -324,16 +324,12 @@ func (b *MachineBudget) breach(c types.MachineClaim, skip func(id string, c type
 	}
 	instants := []time.Time{now}
 	for _, e := range counted {
-		if !curved(e, now) {
-			continue
-		}
-		for _, ms := range []int64{e.claim.Profile.D10Ms, e.claim.Profile.D90Ms} {
-			d := int64(time.Duration(ms) * time.Millisecond)
-			for k := range int64(types.MemoryCurveBuckets + 1) {
-				if t := e.started.Add(time.Duration((k*d + types.MemoryCurveBuckets - 1) / types.MemoryCurveBuckets)); t.After(now) {
+		if curved(e, now) {
+			breakpoints(e, func(t time.Time) {
+				if t.After(now) {
 					instants = append(instants, t)
 				}
-			}
+			})
 		}
 	}
 	var first time.Time
@@ -348,6 +344,40 @@ func (b *MachineBudget) breach(c types.MachineClaim, skip func(id string, c type
 		}
 	}
 	return first, breached
+}
+
+// breakpoints calls yield with each instant e's curve can step at, s + k*D10/K and
+// s + k*D90/K, rounded up.
+func breakpoints(e machineEntry, yield func(time.Time)) {
+	for _, ms := range []int64{e.claim.Profile.D10Ms, e.claim.Profile.D90Ms} {
+		d := int64(time.Duration(ms) * time.Millisecond)
+		for k := range int64(types.MemoryCurveBuckets + 1) {
+			yield(e.started.Add(time.Duration((k*d + types.MemoryCurveBuckets - 1) / types.MemoryCurveBuckets)))
+		}
+	}
+}
+
+// NextChange is the next instant the budget changes with no claim released: a
+// reservation reaching its bound, or a curved claim crossing a breakpoint. ok is false
+// when nothing will. A broker sets its wake timer to it for the requests it holds.
+func (b *MachineBudget) NextChange() (at time.Time, ok bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.clock()
+	consider := func(t time.Time) {
+		if t.After(now) && (!ok || t.Before(at)) {
+			at, ok = t, true
+		}
+	}
+	for _, e := range b.claims {
+		if e.reader != 0 {
+			consider(e.started.Add(reservationBound))
+		}
+		if curved(*e, now) {
+			breakpoints(*e, consider)
+		}
+	}
+	return at, ok
 }
 
 // curved reports whether e is charged by its curve at now: it has a profile with a
