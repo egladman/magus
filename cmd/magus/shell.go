@@ -90,8 +90,8 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "on purpose. Unreadable input is 2, so a host that blocks on 2 fails closed")
 	fmt.Fprintln(w, "when bytes were lost on the way in.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, fmt.Sprintf("A verdict names the rule that produced it, in brackets. `%s`", hint.DescribeRules.String()))
-	fmt.Fprintln(w, fmt.Sprintf("lists every rule this workspace enforces; `%s` details one.", hint.DescribeRule.With("<name>")))
+	fmt.Fprintf(w, "A verdict names the rule that produced it, in brackets. `%s`\n", hint.DescribeRules.String())
+	fmt.Fprintf(w, "lists every rule this workspace enforces; `%s` details one.\n", hint.DescribeRule.With("<name>"))
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
@@ -693,11 +693,11 @@ func writeGuardVerdict(out io.Writer, opts output.Options, verdict types.GuardJu
 	case outputText:
 		switch verdict.Decision {
 		case "deny":
-			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("deny", verdict.Rule), verdict.Reason))
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("deny", verdict.Rule), verdict.Reason)
 		case "ask":
-			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("ask", verdict.Rule), verdict.Reason))
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("ask", verdict.Rule), verdict.Reason)
 		case "advise":
-			fmt.Fprintln(out, fmt.Sprintf("%s %s", decisionLabel("advise", verdict.Rule), verdict.Context))
+			fmt.Fprintf(out, "%s %s\n", decisionLabel("advise", verdict.Rule), verdict.Context)
 		default:
 			fmt.Fprintln(out, "pass")
 		}

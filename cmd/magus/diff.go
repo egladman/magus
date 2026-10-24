@@ -1570,7 +1570,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 	if !rev.Ranked() && len(primary) > 1 {
 		fmt.Println("UNRANKED: no symbol index, so there is no consequence to rank by.")
 		fmt.Println("What follows is path order, not a ranking. Build the index with")
-		fmt.Println(fmt.Sprintf("`%s` to order these by what they can break.", hint.GraphBuild.String()))
+		fmt.Printf("`%s` to order these by what they can break.\n", hint.GraphBuild.String())
 		fmt.Println()
 	}
 
@@ -1589,11 +1589,11 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 			for _, f := range generated {
 				printDiffFile(f, link)
 			}
-			fmt.Println(fmt.Sprintf("      why is one of these folded? `%s` names the project that declares it", hint.DescribeFile.With("<path>")))
+			fmt.Printf("      why is one of these folded? `%s` names the project that declares it\n", hint.DescribeFile.With("<path>"))
 		} else {
 			fmt.Printf("%d generated files folded. They are declared target outputs: reading one is\n", len(generated))
 			fmt.Println("reading a machine's restatement of a change made elsewhere. Show them with --generated,")
-			fmt.Println(fmt.Sprintf("or ask why one is folded with `%s`.", hint.DescribeFile.With("<path>")))
+			fmt.Printf("or ask why one is folded with `%s`.\n", hint.DescribeFile.With("<path>"))
 		}
 	}
 

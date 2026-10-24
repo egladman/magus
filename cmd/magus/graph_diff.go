@@ -43,7 +43,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDiffDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The positional argument is a whole-graph export produced earlier with")
-			fmt.Fprintln(os.Stderr, fmt.Sprintf("`%s`; the current working-tree graph is diffed against it.", hint.GraphExport.With("-o", "json")))
+			fmt.Fprintf(os.Stderr, "`%s`; the current working-tree graph is diffed against it.\n", hint.GraphExport.With("-o", "json"))
 			fmt.Fprintln(os.Stderr, "Symbol shards in the baseline are matched automatically; pass --global if it was global.")
 			fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
 			fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")

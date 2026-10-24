@@ -813,7 +813,7 @@ func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, mer
 	// A build tool that answers no auto_resolve settles nothing: the file stays the
 	// author's conflict, as it was before the query existed.
 	if err := f.ask(ctx, "auto_resolve", "auto_resolve", string(in), &ans); err != nil {
-		return fmt.Sprintf("%s: the facts command answered no auto_resolve (%s)", path, err.Error()), false, nil //nolint:nilerr // settles nothing, the safe side
+		return fmt.Sprintf("%s: the facts command answered no auto_resolve (%s)", path, err.Error()), false, nil
 	}
 	if ans.Verdict == "" {
 		ans.Verdict = path + ": the auto_resolve hook gave no verdict"
@@ -841,7 +841,7 @@ func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []
 	// Code is the safe side: the path keeps an approval from carrying.
 	if err := f.ask(ctx, "classify_edit", "classify_edit", string(in), &ans); err != nil {
 		code.Why = fmt.Sprintf("the facts command answered no classify_edit (%s)", err.Error())
-		return code, nil //nolint:nilerr // classified as code, the safe side
+		return code, nil
 	}
 	switch ans.Tier {
 	case types.CarryGenerated, types.CarryProse, types.CarryCommentOnly, types.CarryCode:

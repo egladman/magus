@@ -1645,7 +1645,7 @@ func ExampleMagus_ExpandAffected() {
 	}
 	fmt.Println("fell back to every project:", fellBack)
 	for _, t := range targets {
-		fmt.Println(fmt.Sprintf("%s:%s", t.Path, t.Name))
+		fmt.Printf("%s:%s\n", t.Path, t.Name)
 	}
 	// Output:
 	// fell back to every project: true

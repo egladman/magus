@@ -55,7 +55,7 @@ func (s *Service) resolveInvocation(name string) (string, error) {
 	if d.Inv == "" {
 		// A run stored before journalling: the output survives, the invocation around it does
 		// not. Saying so beats returning an empty journal that reads as "this run did nothing".
-		return "", connect.NewError(connect.CodeNotFound, errors.New(fmt.Sprintf("viewer: %s predates run journalling", name)))
+		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("viewer: %s predates run journalling", name))
 	}
 	return d.Inv, nil
 }

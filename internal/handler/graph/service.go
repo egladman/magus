@@ -118,7 +118,7 @@ func (s *Service) ExplainNode(
 	}
 	out, ok := g.Explain(name)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New(fmt.Sprintf("graph: no node matches %s, try `magus query %s` for a wider search", name, name)))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("graph: no node matches %s, try `magus query %s` for a wider search", name, name))
 	}
 	resp := &graphv1.NodeContext{
 		Node:        nodeToProto(out.Node),
@@ -145,7 +145,7 @@ func (s *Service) FindPath(
 	// collapsing the two would report "no path" for a typo.
 	out, ok := g.Path(from, to)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New(fmt.Sprintf("no node matches %s or %s", from, to)))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no node matches %s or %s", from, to))
 	}
 	resp := &graphv1.Path{
 		From:  out.From,
@@ -178,7 +178,7 @@ func (s *Service) FindDependents(
 	// unknown id returns nil, which would report "nothing rebuilds" for a typo.
 	matches := g.Resolve(name, 1)
 	if len(matches) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New(fmt.Sprintf("graph: no node matches %s, try `magus query %s` for a wider search", name, name)))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("graph: no node matches %s, try `magus query %s` for a wider search", name, name))
 	}
 	id := matches[0].ID
 	return connect.NewResponse(&graphv1.Dependents{Node: id, Ids: g.Dependents(id)}), nil

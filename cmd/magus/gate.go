@@ -328,13 +328,13 @@ func renderSizing(target string, rep types.RiskReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
 	for _, line := range rep.Lines() {
-		b.WriteString(fmt.Sprintf("  %s\n", line))
+		fmt.Fprintf(&b, "  %s\n", line)
 	}
 	gate := "none"
 	if cmds := rep.Commands(); len(cmds) > 0 {
 		gate = strings.Join(cmds, " && ")
 	}
-	b.WriteString(fmt.Sprintf("  gate: %s\n", gate))
+	fmt.Fprintf(&b, "  gate: %s\n", gate)
 	for _, s := range rep.Gate {
 		if s.Op != "" {
 			fmt.Fprintf(&b, "  narrowed: %s in %s %s runs %d package(s): %s\n",
@@ -360,7 +360,7 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
 	}
 	if f.identical {
-		b.WriteString(fmt.Sprintf("\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp)))
+		fmt.Fprintf(&b, "\n  delta since that gate: none; this run's input fingerprint %s matches it exactly", shortFingerprint(g.fp))
 		return b.String()
 	}
 	if len(f.delta) == 0 {

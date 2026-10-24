@@ -302,7 +302,7 @@ func writeGuardRefs(dst string, g *Graph, symbols map[string]types.KnowledgeNode
 			continue
 		}
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("%s\t%s\t%s\t", sym.Label, file, strconv.Itoa(count)))
+		fmt.Fprintf(&b, "%s\t%s\t%s\t", sym.Label, file, strconv.Itoa(count))
 		for i, l := range at {
 			if i > 0 {
 				b.WriteByte(',')

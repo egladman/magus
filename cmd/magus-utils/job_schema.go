@@ -532,7 +532,7 @@ func charClass(accepted []rune) string {
 			end++
 		}
 		if end-i >= 2 {
-			b.WriteString(fmt.Sprintf("%s-%s", string(r), string(accepted[end])))
+			fmt.Fprintf(&b, "%s-%s", string(r), string(accepted[end]))
 			i = end
 			continue
 		}

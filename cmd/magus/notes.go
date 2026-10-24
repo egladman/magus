@@ -346,7 +346,7 @@ func notesList(ctx context.Context, root string, args []string) error {
 		return notesIssuesError(issues, false)
 	}
 	if len(found) == 0 {
-		fmt.Println(fmt.Sprintf("No notes yet. Write the first one with `%s`.", hint.NotesEdit.With("<name>")))
+		fmt.Printf("No notes yet. Write the first one with `%s`.\n", hint.NotesEdit.With("<name>"))
 	} else {
 		finder := &notesFinder{root: root}
 		for _, n := range found {

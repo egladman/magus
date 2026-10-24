@@ -36,8 +36,8 @@ func configMCPCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Connector tokens are named, hashed-at-rest, and expiring; mint one per external")
 		fmt.Fprintln(os.Stderr, "MCP client (a hosted connector, an IDE). They reach /mcp and nothing else.")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, fmt.Sprintf("The operator token is `%s`; console tokens are", hint.ConfigToken.String()))
-		fmt.Fprintln(os.Stderr, fmt.Sprintf("`%s`.", hint.ConfigConsoleToken.String()))
+		fmt.Fprintf(os.Stderr, "The operator token is `%s`; console tokens are\n", hint.ConfigToken.String())
+		fmt.Fprintf(os.Stderr, "`%s`.\n", hint.ConfigConsoleToken.String())
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}

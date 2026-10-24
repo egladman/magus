@@ -127,7 +127,7 @@ func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale, and for a push, count")
 			fmt.Fprintln(os.Stderr, "the unread hunks of each pushed range. This is the worker for")
-			fmt.Fprintln(os.Stderr, fmt.Sprintf("`%s`; prefer that form.", hint.JobRun.With(job.NameCheckDrift)))
+			fmt.Fprintf(os.Stderr, "`%s`; prefer that form.\n", hint.JobRun.With(job.NameCheckDrift))
 		}
 	})
 	return h, err

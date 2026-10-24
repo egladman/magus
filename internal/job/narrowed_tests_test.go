@@ -63,7 +63,7 @@ func refuseNarrowedIn(root string, row types.Job) error {
 		if p.Code != types.JobCheckUnrunnable {
 			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
 		}
-		errs = append(errs, errors.New(fmt.Sprintf("%s: %s", p.Message, p.Fix)))
+		errs = append(errs, fmt.Errorf("%s: %s", p.Message, p.Fix))
 	}
 	return errors.Join(errs...)
 }

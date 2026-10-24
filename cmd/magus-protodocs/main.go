@@ -713,7 +713,7 @@ func escapeAndLinkify(s string) string {
 		for end < len(s) && !isURLBoundary(s[end]) {
 			end++
 		}
-		b.WriteString(fmt.Sprintf("<%s>", s[start:end]))
+		fmt.Fprintf(&b, "<%s>", s[start:end])
 		s = s[end:]
 	}
 	return b.String()
@@ -1036,7 +1036,7 @@ func renderIndex(a api) string {
 		}
 		b.WriteString(". Streaming methods:\n\n")
 		for _, n := range names {
-			b.WriteString(fmt.Sprintf("- %s\n", n))
+			fmt.Fprintf(&b, "- %s\n", n)
 		}
 		b.WriteString("\n")
 	}

@@ -119,7 +119,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 		// An empty queue is the good state, so this says how a request would get here
 		// rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no open attention requests in %s\n", dir)
-		fmt.Fprintln(os.Stdout, fmt.Sprintf("requests arrive through `%s`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `%s`", hint.SessionNotify.String(), hint.SessionDispose.With("<id>")))
+		fmt.Fprintf(os.Stdout, "requests arrive through `%s`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `%s`\n", hint.SessionNotify.String(), hint.SessionDispose.With("<id>"))
 		return nil
 	}
 

@@ -99,7 +99,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, fmt.Sprintf("Run target %s for every project affected by VCS changes.", target))
+			fmt.Fprintf(os.Stderr, "Run target %s for every project affected by VCS changes.\n", target)
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -457,7 +457,7 @@ func printFailedResults(w io.Writer, events []journal.Event) {
 }
 
 func affectedMissingTargetUsage() {
-	fmt.Fprintln(os.Stderr, fmt.Sprintf("magus affected: a target is required (e.g. `%s`)", hint.Affected.With("ci")))
+	fmt.Fprintf(os.Stderr, "magus affected: a target is required (e.g. `%s`)\n", hint.Affected.With("ci"))
 	fmt.Fprintln(os.Stderr, "")
 	affectedUsage()
 }
@@ -610,16 +610,16 @@ func newPlanRisk(rep types.RiskReport) *planRisk {
 
 func planRiskSummaryMarkdown(r *planRisk) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(`### Gate sized %s
+	fmt.Fprintf(&b, `### Gate sized %s
 
-`, string(r.Tier)))
-	b.WriteString(fmt.Sprintf("No shard runs: the change against `%s` tiers %s, so no step of the gate can observe it.\n\n", shortCommit(r.Base), string(r.Tier)))
+`, string(r.Tier))
+	fmt.Fprintf(&b, "No shard runs: the change against `%s` tiers %s, so no step of the gate can observe it.\n\n", shortCommit(r.Base), string(r.Tier))
 	if len(r.Paths) == 0 {
 		b.WriteString("No paths changed.\n")
 	} else {
 		b.WriteString("| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n")
 		for _, e := range r.Paths {
-			b.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", e.Path, string(e.Tier), e.Class, e.Why))
+			fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", e.Path, string(e.Tier), e.Class, e.Why)
 		}
 	}
 	b.WriteString("\nTo run the full gate anyway, run `magus affected ci --no-redundancy-check`.\n")
