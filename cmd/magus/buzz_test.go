@@ -1170,8 +1170,7 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 
 			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, []string{"-t"})))
 			require.NoError(t, err)
-			assert.Equal(t, "buzz -t "+script, d.Target)
-			assert.Equal(t, tc.failed, d.Failed)
+			assert.Equal(t, cache.OutputDescriptor{Target: "buzz -t " + script, Failed: tc.failed}, cache.OutputDescriptor{Target: d.Target, Failed: d.Failed})
 			for _, line := range tc.lines {
 				assert.Contains(t, string(out), line)
 			}

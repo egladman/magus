@@ -34,7 +34,7 @@ func grantedRules(deps Dependencies, at location, standing leaseStanding) (Depen
 	now := time.Now().Unix()
 	var granted map[string]types.JobGrant
 	for _, g := range grants {
-		if !slices.Contains(GrantableRules(), g.Rule) || !g.LiveFor(standing.row, now) {
+		if !slices.Contains(GrantableRules(), g.Rule) || !g.Lowers(standing.row, now) {
 			continue
 		}
 		if granted == nil {
@@ -75,7 +75,7 @@ func denyAgentGrant(command string, d Dialect) denial {
 		}
 		if words := magusSubcommandWords(c.Args); len(words) >= 2 && words[0] == "job" && words[1] == "grant" {
 			return denial{
-				Say: "magus workspace: `" + hint.BinaryName() + " job grant` is a person's keystroke, so no agent runs it; ask the person to type it.",
+				Say: "magus workspace: only a person runs `" + hint.BinaryName() + " job grant`; ask the person to type it.",
 				Why: "A grant lowers a guard rule for one job on a person's say-so. The guard judges only agents' calls, so a grant reaching it was not a person's, and the job store refuses one from a process carrying a lease as well.",
 			}
 		}

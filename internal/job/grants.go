@@ -53,7 +53,7 @@ func (s *Store) Revoke(ctx context.Context, id, rule string) (types.JobGrant, er
 
 func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(types.Job, *types.JobGrant) error) (types.JobGrant, error) {
 	if actor := s.Actor(); actor.Bound() {
-		return types.JobGrant{}, fmt.Errorf("job: a grant is a person's keystroke, and this process acts under lease %q; a person types `%s job grant` at their own terminal", actor.Lease, hint.BinaryName())
+		return types.JobGrant{}, fmt.Errorf("job: a grant is a person's keystroke, and this process acts under lease %q: a person types `%s job grant` at their own terminal", actor.Lease, hint.BinaryName())
 	}
 	rows, err := s.List()
 	if err != nil {
@@ -85,14 +85,14 @@ func (s *Store) Grants() ([]types.JobGrant, error) {
 }
 
 // LiveGrant is row's grant of rule while it still lowers the rule at now (see
-// [types.JobGrant.LiveFor]).
+// [types.JobGrant.Lowers]).
 func (s *Store) LiveGrant(row types.Job, rule string, now int64) (types.JobGrant, bool, error) {
 	grants, err := s.Grants()
 	if err != nil {
 		return types.JobGrant{}, false, err
 	}
 	for _, g := range grants {
-		if g.Rule == rule && g.LiveFor(row, now) {
+		if g.Rule == rule && g.Lowers(row, now) {
 			return g, true, nil
 		}
 	}

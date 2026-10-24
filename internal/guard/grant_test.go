@@ -29,20 +29,17 @@ func TestGrantedHooksOffAdvisesForThatLeaseAlone(t *testing.T) {
 
 	line := bashCall(t, "s1", "", "git commit --no-verify -m x")
 	v := Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: granted.ID})
-	require.Equal(t, decisionAdvise, v.Decision, "the grant lowers hooks-off: %s", v.Reason)
-	assert.Equal(t, string(denyRuleHooksOff), v.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleHooksOff)}, judgedAs(v), "the grant lowers hooks-off: %s", v.Reason)
 	assert.Contains(t, v.Context, "grant")
 	assert.Contains(t, v.Context, "until the job ends")
 
 	v = Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: other.ID})
-	assert.Equal(t, decisionDeny, v.Decision, "another lease's call is still refused")
-	assert.Equal(t, string(denyRuleHooksOff), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "another lease's call is still refused")
 
 	_, err = store.Revoke(t.Context(), granted.ID, string(denyRuleHooksOff))
 	require.NoError(t, err)
 	v = Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: granted.ID})
-	assert.Equal(t, decisionDeny, v.Decision, "a revoked grant lowers nothing")
-	assert.Equal(t, string(denyRuleHooksOff), v.Rule)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "a revoked grant lowers nothing")
 }
 
 func TestAgentGrantIsRefused(t *testing.T) {
@@ -59,8 +56,7 @@ func TestAgentGrantIsRefused(t *testing.T) {
 	} {
 		for _, lease := range []string{"", granted.ID} {
 			v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: lease})
-			assert.Equal(t, decisionDeny, v.Decision, "%q under %q", line, lease)
-			assert.Equal(t, string(denyRuleGrantIsAPersons), v.Rule, "%q under %q", line, lease)
+			assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
 		}
 	}
 	for _, line := range []string{"magus job ls", "echo magus job grant", "magus describe rules"} {

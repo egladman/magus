@@ -2631,7 +2631,7 @@ github.com/egladman/magus/types.JobGrant.Attempt field int "json:\"attempt,omitz
 github.com/egladman/magus/types.JobGrant.By field Origin "json:\"by\" yaml:\"by\""
 github.com/egladman/magus/types.JobGrant.Job field string "json:\"job\" yaml:\"job\""
 github.com/egladman/magus/types.JobGrant.Key method func() string
-github.com/egladman/magus/types.JobGrant.LiveFor method func(row Job, now int64) bool
+github.com/egladman/magus/types.JobGrant.Lowers method func(row Job, now int64) bool
 github.com/egladman/magus/types.JobGrant.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.JobGrant.Rule field string "json:\"rule\" yaml:\"rule\""
 github.com/egladman/magus/types.JobGrant.Until field int64 "json:\"until,omitzero\" yaml:\"until,omitempty\""

@@ -55,8 +55,7 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	assert.Contains(t, got.Why, "server stop")
 
 	write := gradeLeasedEdit(ctx, deps, row.ID, filepath.Join(root, "cmd/magus/agent.go"), writeFields{})
-	require.Equal(t, decisionDeny, write.Decision)
-	assert.Equal(t, string(denyRuleLeaseRowUnknown), write.Rule)
+	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, types.GuardJudgment{Decision: write.Decision, Rule: write.Rule})
 	assert.Contains(t, write.Reason, "widens_paths")
 
 	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")

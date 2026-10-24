@@ -22,8 +22,8 @@ type JobGrant struct {
 // Key names the grant a line writes: a job and a rule.
 func (g JobGrant) Key() string { return g.Job + "\x00" + g.Rule }
 
-// LiveFor reports whether g still lowers its rule for row at now: unrevoked, unexpired,
+// Lowers reports whether g still lowers its rule for row at now: unrevoked, unexpired,
 // and given in row's current attempt while row is still running.
-func (g JobGrant) LiveFor(row Job, now int64) bool {
+func (g JobGrant) Lowers(row Job, now int64) bool {
 	return !g.Revoked && g.Job == row.ID && row.State.Live() && g.Attempt == row.Attempts && (g.Until == 0 || now < g.Until)
 }
