@@ -3,7 +3,7 @@ title: "ADR 0017: a change accepts the findings it causes"
 order: 17
 description: A deliberate protobuf rename fails buf-breaking and has no sanctioned way through the gate. This record proposes a per-project ledger of accepted findings, read by the target runner, in which an entry counts only while the change that adds it is not yet in the base. It names one target, one op and each finding it accepts, carries a reason, passes the gate green with the acceptance printed, and needs no cleanup after merge.
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
-status: accepted (not built)
+status: proposed (reopened 2026-10-24 to reuse what exists)
 date: 2026-10-24
 ---
 
@@ -64,11 +64,92 @@ the version on this machine, offers `--error-format` values `text`, `json`, `msv
 record, which carries a rule (`check_name`), a path and a description, and is also
 emitted by golangci-lint, ESLint and RuboCop formatters.
 
+Measured on 2026-10-24 by running `buf-breaking` through a magus target on the cantrip
+tree: buf exits 100 on findings, as distinct from 1 on a tool failure, and its Code
+Climate `fingerprint` hashes the position. A one-line edit above `tool.proto`'s fields
+changed every fingerprint and no description, so the description, not the fingerprint, is
+the stable part of a finding. Each field rename yields two findings,
+`FIELD_SAME_NAME` and `FIELD_SAME_JSON_NAME`.
+
+### Security scans want the same thing, with a different lifetime
+
+`hack/magusfile/advisories.buzz` judges `pnpm audit` and `govulncheck` itself. A
+finding with no installable patch, or one younger than the ten-day `minimumReleaseAge`, is
+deferred automatically: printed, never fatal, and blocking on its own the day the patch
+matures. A finding the base already carried is let through on a change and fails main.
+No person decides either case, and the file says why: "no allowlist to rot". What it
+lacks is the case this record is about: a blocking finding a person decides not to take
+yet, with a reason.
+
+A security finding outlives the merge, unlike a comparison finding. A line that stops
+counting at merge would let the change through and fail main's next scheduled run. So a
+scan's acceptance has to last while the finding is still reported, and fail as unused
+once it is not.
+
+### What already exists
+
+This record's first draft added a finding record and a waiver record beside ones the tree
+already has. The inventory, from `magus query "kind=symbol ..."` and `magus refs` on
+2026-10-24:
+
+| record                                        | fields                                                                                                        | who uses it                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `types.Finding` (`magus/lint` in Buzz)        | Path, Line, Col, Rule, Message, Fix, URL                                                                      | 38 Buzz files: every `hack/lint` rule, docs conventions                |
+| `spells.Diagnostic`                           | File, Line, Col, Severity, Code, Message                                                                      | nothing outside its tests; `ParseDiagnostics` has no production caller |
+| `Finding` in `hack/magusfile/advisories.buzz` | id, installed, summary, fix, actionable, deferral                                                             | the two security gates                                                 |
+| `types.JobProblem`                            | Code, Field, Subject, Message, Fix, Edit                                                                      | job record validation                                                  |
+| `types.JobWaiver`                             | Code, Subject, Reason; `Waives` matches code and subject, a glob for two codes; `Waivable` limits which codes | job records (MGS3043, MGS3044, gate not run)                           |
+| proofread `Finding` and suppressions          | rule, span, reason required; unused is PRF1090                                                                | `libs/proofread`, a library that never imports magus                   |
+| target `advisory` and `advisory_reason`       | a whole target excused from a composite, with prose                                                           | magusfiles                                                             |
+| the conformance ratchet                       | a committed record of known violations, pruned by `format`                                                    | `hack/lint/code-stays-within-the-conformance-ratchet.buzz`             |
+
+The first four are one idea under four names: something a check says about a place, with
+a rule and a message. `types.JobWaiver` is the waiver this record needs, already with a
+required reason, a code-and-subject match, and a list of what may be waived. Claims
+([ADR 0010](0010-jobs-share-a-file-by-declaration-claims.md)) decide who may write a file
+and are not a waiver. proofread keeps its copy: it is a library with no magus dependency
+([A copy can be the right answer](../design/principles/a-copy-can-be-the-right-answer.md)).
+
+### Names already taken
+
+| word       | already means in this tree                                                        |
+| ---------- | --------------------------------------------------------------------------------- |
+| diagnostic | magus's own coded errors: `DiagnosticCode`, `DiagnosticError`, the MGS pages      |
+| finding    | a lint rule's report, a proofread report, a conformance item, a security advisory |
+| problem    | a job record that fails validation                                                |
+| advisory   | a target excused from a composite, a guard rule that advises, a security advisory |
+| verdict    | a gate's result, in 244 docs pages                                                |
+| feedback   | the guard's feedback marks in the activity trail (`internal/trail`)               |
+| waiver     | a job record's accepted problem                                                   |
+
 ## Decision
 
-Accepted by Eli on 2026-10-24; nothing is built yet. A project may keep a ledger of accepted findings. The target
-runner reads it, and a gate whose every finding is accepted passes, says so, and names
-the lines that accepted it.
+Reopened on 2026-10-24, after Eli accepted the first draft and before anything was
+built: the draft below adds records the tree already has. The direction it keeps is the
+ledger, the two-way check, and liveness read from the base. What changes is that it is
+built from the existing finding and waiver records, under names Eli picks. The questions
+are under Open questions; the draft stays below so the redesign starts from it.
+
+### Reuse before adding (proposed)
+
+1. **One record for what a check says about a place.** `types.Finding` is the one 38
+   scripts already return. It gains `Severity`. `spells.Diagnostic` is deleted, and
+   `ParseDiagnostics` returns `[]types.Finding` from beside its first caller, since
+   `types` imports `spells` and not the reverse. `advisories.buzz` returns `lint.Finding`.
+   `types.JobProblem` stays separate for now, because its place is a JSON field of a
+   record, not a file.
+2. **One waiver record.** `types.JobWaiver` becomes the shared waiver, keeping
+   `Waives`. Jobs carry it in the record, and the ledger carries it per line, scoped to a
+   target and an op. A finding's subject for matching is its path and message, without
+   the line. Matching stays one method, so a waiver means the same thing on a job and a
+   gate.
+3. **The lifetime belongs to what produced the finding, not to the waiver.** A
+   comparison op (`External: compares-base`) counts only the lines this change adds. A
+   scan counts every line while the finding is reported, and fails an unused line only
+   when this change added it.
+4. **Policy is not a waiver.** The scans' automatic deferrals stay in the gate's own
+   code, and report through the same result as a waived finding, naming their condition
+   instead of a ledger line.
 
 ### The ledger is a file the change adds lines to
 
@@ -113,15 +194,15 @@ The ledger's history is the record of every break shipped on purpose and why, wh
 
 ### The gate checks both directions
 
-| check                                              | result                                                                        | State   |
-| -------------------------------------------------- | ----------------------------------------------------------------------------- | ------- |
-| a finding no live entry accepts                    | the gate fails as today, printing the line to add                             | planned |
-| a live entry that matches no finding               | the gate fails with a new code: the acceptance is unused                      | planned |
-| every finding accepted, at least one               | the target passes as `accepted`, never as `pass`                              | planned |
-| an op that exits non-zero and prints no findings   | the failure stands; a crash is never accepted                                 | planned |
-| a malformed line, an empty reason, an unknown op   | a load error ([No silent defaults](../design/judgment/no-silent-defaults.md)) | planned |
-| a ledger entry for an op not declared a comparison | a load error                                                                  | planned |
-| no base resolves (shallow clone, no VCS)           | an error naming the base, never "all live" or "none live"                     | planned |
+| check                                              | result                                                                        | State    |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- | -------- |
+| a finding no live entry accepts                    | the gate fails as today, printing the line to add                             | proposed |
+| a live entry that matches no finding               | the gate fails with a new code: the acceptance is unused                      | proposed |
+| every finding accepted, at least one               | the target passes as `accepted`, never as `pass`                              | proposed |
+| an op that exits non-zero and prints no findings   | the failure stands; a crash is never accepted                                 | proposed |
+| a malformed line, an empty reason, an unknown op   | a load error ([No silent defaults](../design/judgment/no-silent-defaults.md)) | proposed |
+| a ledger entry for an op not declared a comparison | a load error                                                                  | proposed |
+| no base resolves (shallow clone, no VCS)           | an error naming the base, never "all live" or "none live"                     | proposed |
 
 The unused check is what keeps a line honest: it cannot be added "in case", and it fails
 the moment the change it accepted is reworked away. It charges only the change that adds
@@ -143,8 +224,8 @@ tree outlives the merge and its line would charge the next change.
 The op names a findings format with a rule id. The first is the Code Climate record
 (`DiagnosticFormat.codeClimate`), which magus parses once for every tool that emits it;
 `bufBreaking` passes `--error-format=gitlab-code-quality`. It records into
-`spells.Diagnostic`, whose `Code` field already holds a rule id; `spells.ParseDiagnostics`
-has no caller outside its tests today, so this is its first.
+`types.Finding` (see Reuse before adding), and `ParseDiagnostics`, which has no caller
+outside its tests today, gets its first.
 
 `bufBreaking`'s `gha` charm swaps buf's reporter to GitHub annotations, which would leave
 magus no findings to match. It goes: magus annotates from the parsed findings through
@@ -167,30 +248,30 @@ the CI provider spell, accepted or not.
 
 Per [Where a rule lives](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#where-a-rule-lives):
 
-| rule                                        | home                                                                          | State   |
-| ------------------------------------------- | ----------------------------------------------------------------------------- | ------- |
-| an op compares against a base; its format   | a spell declaration, checked at load                                          | planned |
-| a finding is unaccepted, an entry is unused | a coded error from the target runner, naming the line to add or delete        | planned |
-| the ledger's shape and its required reason  | a load error (misconfiguration)                                               | planned |
-| who may write the ledger                    | nothing new: a leased worker writes it only if its write paths name it        | planned |
-| who approves a line                         | the pull request review, the existing point where a person decides what lands | planned |
-| why it is built this way                    | this record; refusal rows for the charm, the trailer and the label            | planned |
+| rule                                        | home                                                                          | State    |
+| ------------------------------------------- | ----------------------------------------------------------------------------- | -------- |
+| an op compares against a base; its format   | a spell declaration, checked at load                                          | proposed |
+| a finding is unaccepted, an entry is unused | a coded error from the target runner, naming the line to add or delete        | proposed |
+| the ledger's shape and its required reason  | a load error (misconfiguration)                                               | proposed |
+| who may write the ledger                    | nothing new: a leased worker writes it only if its write paths name it        | proposed |
+| who approves a line                         | the pull request review, the existing point where a person decides what lands | proposed |
+| why it is built this way                    | this record; refusal rows for the charm, the trailer and the label            | proposed |
 
 ### Build order
 
 One pull request, on this record's branch, one commit per step.
 
-| step                                                                                                                           | State   |
-| ------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| 0. capture buf's Code Climate output and exit status for the cantrip rename through a magus target; keep it as the fixture     | planned |
-| 1. `spells.External` gains `compares-base`; a declaring op receives the run's base; MGS1033 counts it uncacheable              | planned |
-| 2. `DiagnosticFormat` gains the Code Climate record, parsed by `ParseDiagnostics` into rule, path, line and message            | planned |
-| 3. the ledger entry type in `types/`, its JSON on the type, the per-project loader and its load errors                         | planned |
-| 4. liveness: the ledger's added lines from the run's base, through the VCS driver, on every backend; no base is an error       | planned |
-| 5. the target runner matches findings, fails unaccepted and unused, and reports `accepted`                                     | planned |
-| 6. `accepted` reaches the run line, `-o json`, the `affected ci` summary, the CI provider's `annotate` op and the console      | planned |
-| 7. `bufBreaking` declares `compares-base` and the format, drops `gha`; `proto/magusfile.buzz` drops its hand-built `--against` | planned |
-| 8. docs, diagnostic code pages, refusal rows and a changelog fragment                                                          | planned |
+| step                                                                                                                           | State    |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 0. capture buf's Code Climate output and exit status for the cantrip rename through a magus target; keep it as the fixture     | proposed |
+| 1. `spells.External` gains `compares-base`; a declaring op receives the run's base; MGS1033 counts it uncacheable              | proposed |
+| 2. `DiagnosticFormat` gains the Code Climate record, parsed by `ParseDiagnostics` into rule, path, line and message            | proposed |
+| 3. the ledger entry type in `types/`, its JSON on the type, the per-project loader and its load errors                         | proposed |
+| 4. liveness: the ledger's added lines from the run's base, through the VCS driver, on every backend; no base is an error       | proposed |
+| 5. the target runner matches findings, fails unaccepted and unused, and reports `accepted`                                     | proposed |
+| 6. `accepted` reaches the run line, `-o json`, the `affected ci` summary, the CI provider's `annotate` op and the console      | proposed |
+| 7. `bufBreaking` declares `compares-base` and the format, drops `gha`; `proto/magusfile.buzz` drops its hand-built `--against` | proposed |
+| 8. docs, diagnostic code pages, refusal rows and a changelog fragment                                                          | proposed |
 
 The cantrip pull request lands after this one and adds `proto/accepted.jsonl`.
 
@@ -355,14 +436,23 @@ writing a ledger line would move the bar with the byline. The person decides at 
 
 ## Open questions
 
-- The file name and the declaration's name (`accepted.jsonl`, "comparison op"). Eli
-  picks names.
-- Whether buf's Code Climate `fingerprint` is stable across line moves. If it is, it
-  could replace the message in the match; if it hashes the line, it cannot.
-- Whether buf's exit status separates findings from a tool failure (exit 100 versus 1 is
-  believed but not verified here); if so, only the findings status is acceptable.
-- Whether one line per decision with a list of findings, or one line per finding, reads
-  better in review. The proposal takes one per decision so the reason is written once.
+- **The record's name.** "Finding" is the most used today, but it also names proofread's,
+  conformance's and the advisories' records; "diagnostic" is taken by magus's own MGS
+  errors; "feedback" by the guard's trail marks; "problem" by jobs. Prior art says
+  "result" (SARIF), "issue" (Code Climate) and "violation" (Checkstyle). Each is a
+  rename across 38 Buzz files and the `magus/lint` module.
+- **The waiver's name, and the result's.** `waiver` already exists in the job schema
+  and the MGS3043 and MGS3044 pages; `accepted` was this draft's word, which would make
+  two words for one act. The run result could read `waived`.
+- **Whether `JobProblem` folds in too.** Its place is a record field, not a file path;
+  folding it would make `Path` mean two things. Kept apart in the proposal.
+- **Whether `JobWaiver`'s globs carry over.** Two job codes accept a glob subject. A gate
+  waiver with a glob would accept findings nobody read, so the proposal keeps gate
+  subjects exact, which makes `Waives` branch on the waiver's use.
+- **The ledger's file name**, and the name of the comparison declaration
+  (`compares-base`).
+- **One line per decision or per finding.** One waiver per line, as `JobWaiver` is shaped,
+  repeats the reason for each of the 20 findings the cantrip rename makes.
 - Whether the number holds at merge: check the base branch for the next free ADR number.
 
 ## Amendments
@@ -374,3 +464,13 @@ Eli accepted the ledger design. The comparison declaration became a third
 whose answer moves while the tree holds still. That settles the open question of who
 owns the base: magus does, for every op declaring `compares-base`. The `gha` charm on
 `bufBreaking` is dropped, and a build order was added under Decision.
+
+### 2026-10-24: reopened to reuse the finding and waiver records
+
+Before any code landed, Eli asked that the security scans in
+`hack/magusfile/advisories.buzz` use the same mechanism, and then stopped the build: the
+draft's `AcceptedFinding` and `AcceptedEntry` repeated `types.Finding` and
+`types.JobWaiver`. The draft code was deleted unmerged. Context gained the scans'
+lifetime, the measured buf exit status and fingerprint, the inventory of existing
+records and the names already taken; Decision gained Reuse before adding; the status
+went back to proposed and every State row to proposed until Eli redesigns it.
