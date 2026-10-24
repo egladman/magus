@@ -241,7 +241,7 @@ fun startDaemon(h: Host, dir: str) > str !> any {
 // ./magus built at another commit than the tree fails the gate's symbol index with MGS7003, so
 // it builds one at HEAD when the binary is not, stops the pool parents other builds left, removes
 // the untracked skill installs whose stamp differs from the one the placed ./magus writes (never
-// a tracked file, never a current install), then builds the graph, the symbol digest and the
+// a tracked file, never a current install), then installs every project's dependencies, builds the graph, the symbol digest and the
 // proofread binary the guard's pull-request-text test runs. Running
 // it twice does the build and the removals once. The daemon stops before a build, and with
 // restart it is running again at the end.
@@ -276,6 +276,8 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
             did.append("removed the stale untracked skill install {skill}");
         }
     }
+    must(h.magus(dir, args: ["run", "install", "/"]), what: "magus run install /");
+    did.append("installed the dependencies");
     must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
     did.append("built the graph");
     must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
@@ -574,12 +576,14 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
         "placed /c/magus",
         "stopped the pool parents of other builds",
         "removed the stale untracked skill install .claude/skills/magus-run",
+        "installed the dependencies",
         "built the graph",
         "generated the symbol digest",
         "built the proofread binary",
     ], message: "did");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("remove")), want: ["remove /c/.claude/skills/magus-run"], message: "one removal");
     assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
+    assert\equal(calls.indexOf("magus run install /")! < calls.indexOf("magus graph build")!, want: true, message: "install before the graph build");
     assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
 }
 

@@ -658,7 +658,7 @@ func TestClassifyFiles_Classification(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	for _, rel := range []string{"magusfile.buzz", "web/magusfile.buzz"} {
+	for _, rel := range []string{"magusfile.buzz", "web/magusfile.buzz", "docs/guide.md", "web/app.ts"} {
 		w.Write(rel, "")
 	}
 	reg := NewWorkspaceRegistry()
@@ -750,10 +750,11 @@ func TestClassifyFiles_Exists(t *testing.T) {
 	require.NoError(t, err, "ClassifyFiles")
 
 	const hint = "declared source: edits invalidate the owning project's cache keys and pull it into the affected set"
+	const absentHint = "absent: this path is not on disk and only wildcard globs match it, no declaration names it, so it is no source; check the spelling and the directory (a real file of that name may sit elsewhere), or declare it exactly"
 	claims := []types.FileClaim{{Project: ".", Role: "source", Glob: "**/*.go"}}
 	assert.Equal(t, []types.FileEntry{
 		{Path: "cmd/present.go", Project: ".", Role: "source", SourceOf: []string{"."}, Claims: claims, Hint: hint, Exists: true},
-		{Path: "cmd/absent.go", Project: ".", Role: "source", SourceOf: []string{"."}, Claims: claims, Hint: hint, Exists: false},
+		{Path: "cmd/absent.go", Project: ".", Role: "unclaimed", Claims: claims, Hint: absentHint, Exists: false},
 	}, out)
 }
 
@@ -1113,6 +1114,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("gen/*.go");
 }
 `,
+		"gen/runtime.go": "package gen\n",
 	})
 	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")

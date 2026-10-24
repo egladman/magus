@@ -1315,6 +1315,16 @@ func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*typ
 		}
 	}
 
+	// A path that is not on disk and is claimed as a source only by wildcard globs is a guess at
+	// a name, not a declared file: calling it a source sent a worker to edit the real file one
+	// directory over (a lease on docs/site/x.lock matched only **/*.lock). An exact declaration
+	// names the path, so it stays a source whether or not it exists yet.
+	absentByGlob := !entry.Exists && len(entry.SourceOf) > 0 && len(entry.OutputOf) == 0 &&
+		!slices.ContainsFunc(entry.Claims, func(c types.FileClaim) bool { return !strings.ContainsAny(c.Glob, "*?[{") })
+	if absentByGlob {
+		entry.SourceOf = nil
+	}
+
 	// Only the path magus writes pays for a VCS read, and any failure to compare (no VCS,
 	// not tracked yet, a torn section) leaves the declared answer standing.
 	magusSectionOnly := false
@@ -1338,6 +1348,8 @@ func (m *Magus) describeFile(ctx context.Context, raw string, all, owners []*typ
 	case len(entry.OutputOf) > 0:
 		entry.Role = "output"
 		entry.Hint = "generated: never hand-edit or read its diff; change the source of truth, regenerate (magus run generate), and commit it with the source change"
+	case absentByGlob:
+		entry.Hint = "absent: this path is not on disk and only wildcard globs match it, no declaration names it, so it is no source; check the spelling and the directory (a real file of that name may sit elsewhere), or declare it exactly"
 	case len(entry.SourceOf) > 0:
 		entry.Role = "source"
 		entry.Hint = "declared source: edits invalidate the owning project's cache keys and pull it into the affected set"
