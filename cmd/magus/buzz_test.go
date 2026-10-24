@@ -899,7 +899,7 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 			if !hosts[a.host] {
 				continue
 			}
-			t.Run(name+"/"+a.label, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", name, a.label), func(t *testing.T) {
 				body, rendersAsk := runGlue(t, name, a)
 				require.NotEmpty(t, body, "%s (%s) handed magus no template", name, a.label)
 				// The claim is what lets magus return an ask at all, so it must track exactly

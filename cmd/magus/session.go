@@ -210,7 +210,7 @@ func renderInvocationsText(ctx context.Context, root string, summaries []session
 		// An empty store is the normal state before any run, so this says how facts
 		// get there rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no invocations recorded yet in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "magus records one as soon as a `"+hint.Run.String()+"` finishes a target in any checkout of this repository")
+		fmt.Fprintln(os.Stdout, fmt.Sprintf("magus records one as soon as a `%s` finishes a target in any checkout of this repository", hint.Run.String()))
 		return nil
 	}
 
@@ -567,7 +567,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
 		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
-		fmt.Fprintln(os.Stderr, "Every line needs host, session, kind and ref; kind is one of "+strings.Join(sessions.EventKinds, ", ")+".")
+		fmt.Fprintln(os.Stderr, fmt.Sprintf("Every line needs host, session, kind and ref; kind is one of %s.", strings.Join(sessions.EventKinds, ", ")))
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
 		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
@@ -933,7 +933,7 @@ func sessionShow(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return exit.Usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
+		return exit.Usagef("magus session show: needs exactly one session id (got %d); run `%s` to list them", len(rest), hint.Session.String())
 	}
 	root = resolveRootOrEmpty(root)
 	if root == "" {

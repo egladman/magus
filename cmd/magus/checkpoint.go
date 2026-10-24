@@ -186,7 +186,7 @@ func checkpointRecordedLine(c sessions.Checkpoint, recorded bool) string {
 	if !recorded {
 		verb = "unchanged since the last checkpoint at"
 	}
-	line := verb + " " + checkpointWhere(c)
+	line := fmt.Sprintf("%s %s", verb, checkpointWhere(c))
 	if c.Note != "" {
 		line += ": " + c.Note
 	}

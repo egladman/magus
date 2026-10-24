@@ -24,7 +24,7 @@ type ignoreFlag struct {
 func (f *ignoreFlag) String() string {
 	parts := make([]string, len(f.patterns))
 	for i, p := range f.patterns {
-		parts[i] = string(p.Type) + "=" + p.Pattern
+		parts[i] = fmt.Sprintf("%s=%s", string(p.Type), p.Pattern)
 	}
 	return strings.Join(parts, ",")
 }

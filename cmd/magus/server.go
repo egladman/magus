@@ -144,7 +144,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		// was asked: stdout carries the report, and a caller redirecting it wants an empty
 		// file rather than a sentence about why there is nothing in it.
 		slog.ErrorContext(ctx, "no server is running", attr.Notice(""),
-			attr.Why(strings.TrimSpace(report.PoolError+"\n"+fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status))),
+			attr.Why(strings.TrimSpace(fmt.Sprintf("%s\n%s", report.PoolError, fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status)))),
 			attr.Next(hint.ServerStart.String()))
 		return exit.Reported(exit.Failure)
 	}
@@ -188,10 +188,10 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "prints its pid, and returns 0. Starting when a server is already running is a")
 			fmt.Fprintln(os.Stderr, "no-op that also returns 0.")
 			fmt.Fprintln(os.Stderr, "\nWith --foreground the server runs in this process and blocks until stopped")
-			fmt.Fprintln(os.Stderr, "(SIGINT / SIGTERM or `"+hint.ServerStop.String()+"`), logging to stderr. Use it")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("(SIGINT / SIGTERM or `%s`), logging to stderr. Use it", hint.ServerStop.String()))
 			fmt.Fprintln(os.Stderr, "under a process supervisor (systemd --user) or when debugging.")
 			fmt.Fprintln(os.Stderr, "\nSocket address: --server-address flag > MAGUS_SERVER_ADDRESS env >")
-			fmt.Fprintln(os.Stderr, "server.address in magus.yaml > default ("+proc.ServerDefaultAddr()+")")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("server.address in magus.yaml > default (%s)", proc.ServerDefaultAddr()))
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
 			printOwnDefaults(fs)
 		}
@@ -611,7 +611,7 @@ func serverStop(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
 			fmt.Fprintln(os.Stderr, "\nSend a graceful shutdown request to the running server. In-flight RPCs")
 			fmt.Fprintln(os.Stderr, "complete before the server exits. The broker is a separate process; the")
-			fmt.Fprintln(os.Stderr, "services it hosts are stopped with `"+hint.BrokerStop.With("--services")+"`.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("services it hosts are stopped with `%s`.", hint.BrokerStop.With("--services")))
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
 			printOwnDefaults(fs)
 		}
@@ -854,7 +854,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-activities")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the activity trail to its cap and drop orphaned payload blobs. This is")
-			fmt.Fprintln(os.Stderr, "the worker for `"+hint.JobRun.With("rotate-activities")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("the worker for `%s`; prefer that form.", hint.JobRun.With("rotate-activities")))
 		}
 	}); err != nil {
 		return err
@@ -878,7 +878,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-logs")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the invocation run-log journals to their cap, keeping the most recent.")
-			fmt.Fprintln(os.Stderr, "This is the worker for `"+hint.JobRun.With("rotate-logs")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("This is the worker for `%s`; prefer that form.", hint.JobRun.With("rotate-logs")))
 		}
 	}); err != nil {
 		return err
@@ -910,7 +910,7 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 			fmt.Fprintln(os.Stderr, "Drop the working-copy captures `magus vcs checkpoint --preserve` minted")
 			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling captures survive this pass;")
 			fmt.Fprintln(os.Stderr, "Jujutsu mints none. This is the worker for")
-			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NamePrunePreserved)+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("`%s`; prefer that form.", hint.JobRun.With(job.NamePrunePreserved)))
 		}
 	}); err != nil {
 		return err
@@ -1097,7 +1097,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
-			fmt.Fprintln(os.Stderr, "for `"+hint.JobRun.With("check-review")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("for `%s`; prefer that form.", hint.JobRun.With("check-review")))
 		}
 	}); err != nil {
 		return err

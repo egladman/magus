@@ -380,7 +380,7 @@ func leaseGraphEvidence(ctx context.Context, graph *jobGraph, paths []string) (e
 // for "cmd/magus" it answered target:.:release-sign, and a brief that hands a worker the
 // blast radius of an unrelated node is worse than one that stays quiet.
 func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool) {
-	for _, ref := range []string{types.KindDir + ":" + declared, types.KindFile + ":" + declared, declared} {
+	for _, ref := range []string{fmt.Sprintf("%s:%s", types.KindDir, declared), fmt.Sprintf("%s:%s", types.KindFile, declared), declared} {
 		out, ok := g.Explain(ref)
 		if !ok || out.Node.ID != ref {
 			continue

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -248,7 +249,7 @@ func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 	out, err := f.run(t, "", "--help")
 	require.NoError(t, err)
 	for _, verb := range []string{"describe", "ls", "plan", "validate", "apply", "reviews"} {
-		assert.Contains(t, string(out), "  "+verb+" ")
+		assert.Contains(t, string(out), fmt.Sprintf("  %s ", verb))
 	}
 	var stderr bytes.Buffer
 	err = runQueue(t.Context(), f.root, []string{"apply", "-h"}, strings.NewReader(""), &bytes.Buffer{}, &stderr)
@@ -259,7 +260,7 @@ func TestQueueHelpNamesItsVerbsAndEachVerbsOwnFlags(t *testing.T) {
 }
 
 func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
-	change := `[{"id": "1", "repo": req.remoteURL, "head": "` + queueHead("1") + `", "base": "main", "method": "squash", "fork": false}]`
+	change := fmt.Sprintf("[{\"id\": \"1\", \"repo\": req.remoteURL, \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"))
 	f := newQueueFixture(t, change, "")
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
 	out, err := f.run(t, "", "ls", "--provider", "local.buzz", "--base", "main")
@@ -378,12 +379,10 @@ func TestQueueDescribeRendersTheRerunARefusalAsksFor(t *testing.T) {
 	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden")
 	var refused *types.SetupRefusedError
 	require.ErrorAs(t, err, &refused)
-	assert.EqualError(t, err, "magus queue describe: retry with magus --root "+root+
-		" queue describe --provider local.buzz --base main --app 'hidden:<id>': no id for hidden: https://example.invalid/apps/hidden")
+	assert.EqualError(t, err, fmt.Sprintf("magus queue describe: retry with magus --root %s queue describe --provider local.buzz --base main --app 'hidden:<id>': no id for hidden: https://example.invalid/apps/hidden", root))
 	_, err = f.run(t, "", "describe", "--status-context", "my gate", "--remote", "origin", "--vcs", "git", "--app", "unknown",
 		"--base", "main", "--provider", "local.buzz")
-	assert.EqualError(t, err, "magus queue describe: retry with magus --root "+root+
-		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>': no app is named unknown: https://example.invalid/apps")
+	assert.EqualError(t, err, fmt.Sprintf("magus queue describe: retry with magus --root %s queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>': no app is named unknown: https://example.invalid/apps", root))
 }
 
 // --app is the provider's to read: the queue hands it over exactly as given.
@@ -519,7 +518,7 @@ func TestQueueApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) 
 	for _, mode := range [][]string{{"--once"}, {"--interval", "10ms"}} {
 		args := append(append([]string{"apply", "--provider", "local.buzz", "--base", "main", "--facts", "true"}, mode...), "verdicts")
 		_, err = f.run(t, "", args...)
-		require.ErrorContains(t, err, "magus queue apply: "+filepath.Join(f.root, "verdicts")+" holds no plan.json", "%v", mode)
+		require.ErrorContains(t, err, fmt.Sprintf("magus queue apply: %s holds no plan.json", filepath.Join(f.root, "verdicts")), "%v", mode)
 	}
 }
 
@@ -541,18 +540,18 @@ func artifactRun(t *testing.T, artifacts map[string]string) string {
 	queueDownloads = srv.Client()
 	t.Cleanup(func() { queueDownloads = nil })
 	for name, dir := range artifacts {
-		p := "/" + strconv.Itoa(len(zips)) + ".zip"
+		p := fmt.Sprintf("/%s.zip", strconv.Itoa(len(zips)))
 		var buf bytes.Buffer
 		zw := zip.NewWriter(&buf)
 		require.NoError(t, zw.AddFS(os.DirFS(dir)))
 		require.NoError(t, zw.Close())
 		zips[p] = buf.Bytes()
-		rows = append(rows, `{"name": "`+name+`", "url": "`+srv.URL+p+`"}`)
+		rows = append(rows, fmt.Sprintf("{\"name\": \"%s\", \"url\": \"%s%s\"}", name, srv.URL, p))
 	}
 	if len(rows) == 0 {
 		return ""
 	}
-	return "[" + strings.Join(rows, ", ") + "]"
+	return fmt.Sprintf("[%s]", strings.Join(rows, ", "))
 }
 
 // The apply workflow's shape: apply reads the plan and the verdicts from a validation
@@ -641,8 +640,7 @@ func TestQueueApplyRefusesARunAPullRequestStarted(t *testing.T) {
 
 // Without --facts, plan asks the magus workspace at the checkout, loaded once in process.
 func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
-	changes := `[{"id": "1", "repo": "r", "head": "` + queueHead("1") + `", "base": "main", "method": "squash", "fork": false},
-	             {"id": "2", "repo": "r", "head": "` + queueHead("2") + `", "base": "main", "method": "squash", "fork": false}]`
+	changes := fmt.Sprintf("[{\"id\": \"1\", \"repo\": \"r\", \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false},\n\t             {\"id\": \"2\", \"repo\": \"r\", \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"), queueHead("2"))
 	f := newQueueFixture(t, changes, "")
 	for rel, body := range map[string]string{"magusfile.buzz": "", "app/magusfile.buzz": "", "lib/magusfile.buzz": "",
 		"app/a.txt": "x\n", "lib/b.txt": "x\n"} {
@@ -795,7 +793,7 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	assert.Equal(t, ".magus", cache)
 	setup, err := os.ReadFile(filepath.Join("..", "..", ".github", "actions", "setup-magus", "action.yml"))
 	require.NoError(t, err)
-	assert.Contains(t, string(setup), `MAGUS_HISTORY_PATH=$GITHUB_WORKSPACE/`+cache+`/`, "the gate writes its history where --cache lets it")
+	assert.Contains(t, string(setup), fmt.Sprintf("MAGUS_HISTORY_PATH=$GITHUB_WORKSPACE/%s/", cache), "the gate writes its history where --cache lets it")
 
 	cfg, err := config.LoadFile(filepath.Join("..", "..", "magus.yaml"), false)
 	require.NoError(t, err)

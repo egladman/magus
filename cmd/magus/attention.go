@@ -72,7 +72,7 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return exit.Usagef("magus session attention: takes no arguments (got %q); close one request with `"+hint.SessionDispose.With("<id>")+"`", rest[0])
+		return exit.Usagef("magus session attention: takes no arguments (got %q); close one request with `%s`", rest[0], hint.SessionDispose.With("<id>"))
 	}
 
 	dir, err := sessions.Dir(root)
@@ -119,7 +119,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 		// An empty queue is the good state, so this says how a request would get here
 		// rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no open attention requests in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "requests arrive through `"+hint.SessionNotify.String()+"`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `"+hint.SessionDispose.With("<id>")+"`")
+		fmt.Fprintln(os.Stdout, fmt.Sprintf("requests arrive through `%s`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `%s`", hint.SessionNotify.String(), hint.SessionDispose.With("<id>")))
 		return nil
 	}
 
@@ -140,7 +140,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `"+hint.SessionDispose.With("<id>", "-reason", "<text>")+"`. Nothing here closes on its own.\n", len(requests))
+	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `%s`. Nothing here closes on its own.\n", len(requests), hint.SessionDispose.With("<id>", "-reason", "<text>"))
 	return nil
 }
 
@@ -197,7 +197,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return exit.Usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
+		return exit.Usagef("magus session dispose: needs exactly one request id (got %d); run `%s` to list the open ids", len(rest), hint.SessionAttention.String())
 	}
 
 	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
@@ -258,11 +258,11 @@ func disposeError(err error, ref, dir string) error {
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s, run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s, run `%s` to list the open ids", ref, dir, hint.SessionAttention.String())
 	case errors.As(err, &ambiguous):
 		return fmt.Errorf("magus session dispose, name one of them or add enough characters to tell them apart: %w", ambiguous)
 	case errors.As(err, &disposed):
-		return fmt.Errorf("magus session dispose, a request closes once and stays closed so run `"+hint.SessionAttention.String()+"` to see what is still open: %w", disposed)
+		return fmt.Errorf("magus session dispose, a request closes once and stays closed so run `%s` to see what is still open: %w", hint.SessionAttention.String(), disposed)
 	}
 	return err
 }
@@ -369,7 +369,7 @@ func attentionWhere(where *types.EventLocation) string {
 		return ""
 	}
 	if where.Project != nil && where.Project.Path != "" && where.Project.Path != "." {
-		return where.Workspace.Value + " [" + where.Project.Path + "]"
+		return fmt.Sprintf("%s [%s]", where.Workspace.Value, where.Project.Path)
 	}
 	return where.Workspace.Value
 }
@@ -380,7 +380,7 @@ func attentionWhere(where *types.EventLocation) string {
 // silently never reached the queue is a block nobody will ever be shown, so it says
 // so rather than swallowing it.
 func noteAttentionOpenFailure(err error) {
-	slog.With(attr.Component("session notify")).Warn("the attention request was not recorded, so `"+hint.SessionAttention.String()+"` will not list it",
+	slog.With(attr.Component("session notify")).Warn(fmt.Sprintf("the attention request was not recorded, so `%s` will not list it", hint.SessionAttention.String()),
 		attr.Error(err))
 }
 

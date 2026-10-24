@@ -169,7 +169,7 @@ var errUnreadableNote = errors.New("exists but could not be read")
 type unreadableNoteError struct{ cause error }
 
 func (e unreadableNoteError) Error() string {
-	return errUnreadableNote.Error() + ": " + e.cause.Error()
+	return fmt.Sprintf("%s: %s", errUnreadableNote.Error(), e.cause.Error())
 }
 
 func (e unreadableNoteError) Unwrap() []error { return []error{errUnreadableNote, e.cause} }
@@ -346,7 +346,7 @@ func notesList(ctx context.Context, root string, args []string) error {
 		return notesIssuesError(issues, false)
 	}
 	if len(found) == 0 {
-		fmt.Println("No notes yet. Write the first one with `" + hint.NotesEdit.With("<name>") + "`.")
+		fmt.Println(fmt.Sprintf("No notes yet. Write the first one with `%s`.", hint.NotesEdit.With("<name>")))
 	} else {
 		finder := &notesFinder{root: root}
 		for _, n := range found {
@@ -740,7 +740,7 @@ func firstNonEmpty(a, b string) string {
 func notesAnchorSummary(n store.Note) string {
 	parts := make([]string, 0, len(n.Anchors))
 	for _, a := range n.Anchors {
-		parts = append(parts, string(a.Kind)+":"+a.Target)
+		parts = append(parts, fmt.Sprintf("%s:%s", string(a.Kind), a.Target))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1149,7 +1149,7 @@ func serverDiffReview(ctx context.Context) *types.DiffReview {
 	}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpAddrString()+"/api/v1/diff/session", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", mcpAddrString()), nil)
 	if err != nil {
 		return nil
 	}
@@ -1197,7 +1197,7 @@ func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+mcpAddrString()+"/api/v1/diff/review", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", mcpAddrString()), nil)
 	if err != nil {
 		return nil, "", false
 	}
@@ -1282,8 +1282,8 @@ func newRemarkLine(comments []types.ReviewComment) string {
 	if fresh == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `"+hint.Diff.String()+"` marks them new.",
-		fresh, plural(fresh, "", "s"))
+	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `%s` marks them new.",
+		fresh, plural(fresh, "", "s"), hint.Diff.String())
 }
 
 // tagList collects a repeatable --tag flag.

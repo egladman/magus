@@ -265,12 +265,13 @@ func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal
 	interactive.Hint(ctx, "")
 	interactive.Hint(ctx, "optional: start the server automatically on login")
 	interactive.Hint(ctx, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
-	slog.InfoContext(ctx, "\n"+
-		"  # start magus server on login (magus works fine without it)\n"+
-		"  if command -v magus >/dev/null 2>&1 && \\\n"+
-		"     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then\n"+
-		"    "+hint.ServerStart.String()+" &\n"+
-		"  fi\n", attr.Notice(""))
+	slog.InfoContext(ctx, fmt.Sprintf(`
+  # start magus server on login (magus works fine without it)
+  if command -v magus >/dev/null 2>&1 && \
+     ! %s >/dev/null 2>&1; then
+    %s &
+  fi
+`, hint.Status.With("--probe=liveness"), hint.ServerStart.String()), attr.Notice(""))
 	interactive.Hint(ctx, "stop with:  "+hint.ServerStop.String())
 
 	// Point users at the agent integration. A hint, not a step: connecting a client
@@ -278,8 +279,8 @@ func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal
 	// so it does not belong in repo bootstrap; init just says where to look.
 	interactive.Hint(ctx, "")
 	interactive.Hint(ctx, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
-	interactive.Hint(ctx, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
-	interactive.Hint(ctx, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
+	interactive.Hint(ctx, fmt.Sprintf("  %s  # Agent Skills; it also prints the AGENTS.md block to paste", hint.AgentInstall.With("<skills-dir>")))
+	interactive.Hint(ctx, fmt.Sprintf("  %s  # mint a token, then configure the client", hint.ConfigMCPConnectorCreate.With("--name", "<client>")))
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has
@@ -325,7 +326,7 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 		return nil
 	}
 	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
-		slog.With(attr.Component("init")).InfoContext(ctx, "no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
+		slog.With(attr.Component("init")).InfoContext(ctx, fmt.Sprintf("no projects declare Outputs and vcs.auto_resolve is empty; re-run `%s` after adding either to wire the merge driver", hint.Init.String()))
 		return nil
 	}
 
@@ -393,7 +394,7 @@ func installInitHooks(ctx context.Context, installer any, name, root string) err
 			return fmt.Errorf("init: install %s %s hooks: %w", name, s.kind, err)
 		}
 		if len(installed) > 0 {
-			log.InfoContext(ctx, "wrote the "+s.kind+" hooks; "+s.done, slog.String("hooks", strings.Join(installed, ", ")))
+			log.InfoContext(ctx, fmt.Sprintf("wrote the %s hooks; %s", s.kind, s.done), slog.String("hooks", strings.Join(installed, ", ")))
 		}
 	}
 	return nil

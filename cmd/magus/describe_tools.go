@@ -72,7 +72,7 @@ func describeTools(ctx context.Context, root string, args []string) error {
 		// cannot be fed back to `magus describe tools <project>`.
 		names := make([]string, 0, len(report.Tools))
 		for _, t := range report.Tools {
-			names = append(names, t.Project+"/"+t.Bin)
+			names = append(names, fmt.Sprintf("%s/%s", t.Project, t.Bin))
 		}
 		return emitNames(os.Stdout, names)
 	}
@@ -85,7 +85,7 @@ func describeTools(ctx context.Context, root string, args []string) error {
 		"PROJECT/TOOL", "INSTALLED", "WINDOW", "DECLARED BY", "VERDICT", "CYCLE", "EOL", "SUPPORT")
 	for _, t := range report.Tools {
 		fmt.Printf("  %-24s %-14s %-24s %-12s %-22s %-8s %-11s %s\n",
-			t.Project+"/"+t.Bin, installedCell(t), windowCell(t), declaredByCell(t), verdictCell(t),
+			fmt.Sprintf("%s/%s", t.Project, t.Bin), installedCell(t), windowCell(t), declaredByCell(t), verdictCell(t),
 			orDash(t.Cycle), orDash(t.EOL), supportCell(t, report.Lifecycle.State))
 	}
 	return nil
@@ -126,14 +126,14 @@ func braceJoin(urls []string) string {
 		}
 		tails = append(tails, tail)
 	}
-	return prefix + "{" + strings.Join(tails, ",") + "}"
+	return fmt.Sprintf("%s{%s}", prefix, strings.Join(tails, ","))
 }
 
 // supportCell qualifies an unknown with the reason the provider gave none, so an
 // unreachable host reads "unknown (unreached)" rather than a bare unknown.
 func supportCell(t types.ToolRow, state string) string {
 	if t.Support == string(spells.SupportUnknown) && (state == types.LifecycleOffline || state == types.LifecycleUnreached) {
-		return t.Support + " (" + state + ")"
+		return fmt.Sprintf("%s (%s)", t.Support, state)
 	}
 	return orDash(t.Support)
 }
@@ -155,7 +155,7 @@ func installedCell(t types.ToolRow) string {
 func verdictCell(t types.ToolRow) string {
 	v := strings.ReplaceAll(t.Verdict, "_", " ")
 	if t.DiagnosticCode != "" {
-		v += " (" + t.DiagnosticCode + ")"
+		v += fmt.Sprintf(" (%s)", t.DiagnosticCode)
 	}
 	return v
 }

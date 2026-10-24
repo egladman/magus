@@ -367,7 +367,7 @@ func renderCost(w io.Writer, c *sessionCost) {
 			for _, k := range d.ByClass {
 				parts = append(parts, fmt.Sprintf("%s %s", k.Name, chars(k.Count)))
 			}
-			text += " (" + strings.Join(parts, ", ") + ")"
+			text += fmt.Sprintf(" (%s)", strings.Join(parts, ", "))
 		}
 		line(costDelegable, text)
 	} else {

@@ -241,8 +241,8 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 
 	var out strings.Builder
 	printJobTree(&out, types.NewJobList(nil))
-	assert.Contains(t, out.String(), "`"+hint.JobFork.With("<job>")+"`")
-	assert.Contains(t, out.String(), "`"+hint.ToolClient.String()+"` MCP tool")
+	assert.Contains(t, out.String(), fmt.Sprintf("`%s`", hint.JobFork.With("<job>")))
+	assert.Contains(t, out.String(), fmt.Sprintf("`%s` MCP tool", hint.ToolClient.String()))
 }
 
 // TestPrintJobStatusFailedGateNamesHowToReadIt pins step 3 of the plan that added goals:
@@ -562,7 +562,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	assert.Contains(t, err.Error(), "scout names no write paths and is not read-only")
 	assert.Contains(t, err.Error(), "--read-only")
 	assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`)
-	assert.Contains(t, err.Error(), "`"+hint.Buzz.With("--record", "<probe>.buzz")+"`")
+	assert.Contains(t, err.Error(), fmt.Sprintf("`%s`", hint.Buzz.With("--record", "<probe>.buzz")))
 
 	require.NoError(t, fork("reader", "--read-only", "--criteria", "find the callers"))
 	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
@@ -779,7 +779,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 		name, magusfile, want string
 	}{
 		{"a wired host with a limit", "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n" + testTarget,
-			"the check `" + hint.Run.With("test", ".") + "` last ran 14m0s here, past the 10m0s a foreground call may wait"},
+			fmt.Sprintf("the check `%s` last ran 14m0s here, past the 10m0s a foreground call may wait", hint.Run.With("test", "."))},
 		{"no wired host", "import \"magus\";\n" + testTarget, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1171,7 +1171,7 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 	out := captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed", "--check", "test .", "--write-paths", "a.go"}))
 	})
-	assert.Contains(t, out, "\n  unknown, no symbol index answered; `"+hint.GraphBuild.String()+"` builds one\n")
+	assert.Contains(t, out, fmt.Sprintf("\n  unknown, no symbol index answered; `%s` builds one\n", hint.GraphBuild.String()))
 
 	prev := global.output
 	t.Cleanup(func() { global.output = prev })
@@ -1356,9 +1356,14 @@ func TestLsJobsPrintsTheChangesInFlight(t *testing.T) {
 	tail := "jobs without a change (1)\n  inflight-view\n"
 	refetch := "refetch: magus queue ls --provider github --base main\n"
 
-	assert.Equal(t, head+"needs me (2)\n"+kicked+"queued, in plan order (5)\n"+queued+tail+"others: 1 queued\n"+refetch, render(false))
-	assert.Equal(t, head+"needs the author (2)\n"+kicked+"queued, in plan order (6)\n"+queued+
-		"  #457  their change                                        pos 6  job their-work\n"+tail+refetch, render(true))
+	assert.Equal(t, fmt.Sprintf(`%sneeds me (2)
+%squeued, in plan order (5)
+%s%sothers: 1 queued
+%s`, head, kicked, queued, tail, refetch), render(false))
+	assert.Equal(t, fmt.Sprintf(`%sneeds the author (2)
+%squeued, in plan order (6)
+%s  #457  their change                                        pos 6  job their-work
+%s%s`, head, kicked, queued, tail, refetch), render(true))
 	assert.Equal(t, render(false), render(false), "one store and one snapshot render the same bytes")
 }
 
@@ -1476,7 +1481,7 @@ func TestJobHelpCarriesAPersonRunExample(t *testing.T) {
 		}
 		require.True(t, found, "`magus %s -h` carries no Example:\n%s", v.name, help)
 		line, _, _ := strings.Cut(example, "\n")
-		assert.True(t, strings.HasPrefix(line, "magus "+v.name+" "), "`magus %s -h` example runs something else: %q", v.name, line)
+		assert.True(t, strings.HasPrefix(line, fmt.Sprintf("magus %s ", v.name)), "`magus %s -h` example runs something else: %q", v.name, line)
 	}
 }
 
@@ -1562,12 +1567,14 @@ func guideBlock(t *testing.T, script, section string) string {
 	if run > 0 {
 		if in, ok := strings.CutPrefix(steps[run-1], "stdin $WORK/"); ok {
 			if body, archived := files[in]; archived {
-				return command + " <<'EOF'\n" + body + "EOF\n" + golden
+				return fmt.Sprintf(`%s <<'EOF'
+%sEOF
+%s`, command, body, golden)
 			}
 			command += " < " + in
 		}
 	}
-	return command + "\n" + golden
+	return fmt.Sprintf("%s\n%s", command, golden)
 }
 
 // A -run that leaves out a test of the write paths' package is refused at fork, listing

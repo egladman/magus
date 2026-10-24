@@ -632,14 +632,14 @@ func briefNextStep(rows []types.Job, row types.Job, unpushed *briefUnpushed) str
 	case types.StateDeclared:
 		if block, blocked := types.JobBlockedOn(rows, row); blocked {
 			if block.State == "" {
-				return "waits on " + block.On + ", which no job declares"
+				return fmt.Sprintf("waits on %s, which no job declares", block.On)
 			}
-			return "waits on " + block.On + " (" + string(block.State) + ")"
+			return fmt.Sprintf("waits on %s (%s)", block.On, string(block.State))
 		}
 		return "take it: " + hint.JobExec.With(row.ID)
 	case types.StatePass:
 		if unpushed != nil && unpushed.Count > 0 {
-			return "gate it in its checkout (" + hint.Affected.With("ci") + "), then push"
+			return fmt.Sprintf("gate it in its checkout (%s), then push", hint.Affected.With("ci"))
 		}
 	case types.StateFail, types.StateNoReturn:
 		return "read why: " + hint.DescribeJob.With(row.ID)
@@ -874,9 +874,9 @@ func (b sessionBrief) writePromptCache(s *strings.Builder) {
 	for _, p := range b.PromptCache.Providers {
 		for _, w := range p.Windows {
 			if w.Closed {
-				closed = append(closed, p.Provider+" "+w.Window)
+				closed = append(closed, fmt.Sprintf("%s %s", p.Provider, w.Window))
 			} else {
-				open = append(open, p.Provider+" "+w.Window)
+				open = append(open, fmt.Sprintf("%s %s", p.Provider, w.Window))
 			}
 		}
 	}
@@ -974,7 +974,7 @@ func (b sessionBrief) writeJobs(s *strings.Builder) {
 				case d.Satisfied:
 					deps[i] = d.ID + " (pass)"
 				default:
-					deps[i] = d.ID + " (" + d.State + ", unsatisfied)"
+					deps[i] = fmt.Sprintf("%s (%s, unsatisfied)", d.ID, d.State)
 				}
 			}
 			briefLine(s, "%s  depends on: %s", indent, strings.Join(deps, ", "))
@@ -1003,14 +1003,14 @@ func (b sessionBrief) jobPlace(j briefJob) string {
 	case j.Checkout == "":
 		return "no checkout yet"
 	case j.Gone:
-		return "checkout " + j.Checkout + " is gone"
+		return fmt.Sprintf("checkout %s is gone", j.Checkout)
 	}
 	where := "in " + j.Checkout
 	if filepath.Clean(j.Checkout) == filepath.Clean(b.Workspace) {
 		where = "in this checkout"
 	}
 	if j.Head != "" {
-		where = "on " + cmp.Or(j.Branch, "a detached head") + " at " + j.Head + " " + where
+		where = fmt.Sprintf("on %s at %s %s", cmp.Or(j.Branch, "a detached head"), j.Head, where)
 	}
 	if u := j.Unpushed; u != nil && u.Count > 0 {
 		at := ""
@@ -1060,7 +1060,7 @@ func attentionRule(r briefAttentionRow) string {
 	if r.Outcome == "" {
 		return orDash(r.Source)
 	}
-	return orDash(r.Source) + " (" + r.Outcome + ")"
+	return fmt.Sprintf("%s (%s)", orDash(r.Source), r.Outcome)
 }
 
 func (b sessionBrief) writeFailures(s *strings.Builder) {

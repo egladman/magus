@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func TestCLIMintsAreAudited(t *testing.T) {
 			assert.NotContains(t, string(blob), s)
 			assert.NotContains(t, e.Preview, s)
 		}
-		assert.Contains(t, string(blob), `"class":"`+string(minted.Kind)+`"`)
+		assert.Contains(t, string(blob), fmt.Sprintf("\"class\":\"%s\"", string(minted.Kind)))
 		assert.Contains(t, string(blob), `"class":"operator"`, "the minter is named")
 	}
 }

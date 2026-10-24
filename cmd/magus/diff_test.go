@@ -1451,7 +1451,9 @@ var adviceLocalExclusions = map[string]string{
 // naming it, never a quietly shorter list.
 func adviseScripts(t *testing.T, src, list string) []string {
 	t.Helper()
-	_, body, ok := strings.Cut(src, "\nfinal "+list+" = [\n")
+	_, body, ok := strings.Cut(src, fmt.Sprintf(`
+final %s = [
+`, list))
 	if !ok {
 		t.Fatalf("advise.buzz declares no %q list", list)
 	}
@@ -2152,7 +2154,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 
 	t.Run("shown", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			require.NoError(t, printDiffText(rev, true, func(p string) string { return "<" + p + ">" }, nil))
+			require.NoError(t, printDiffText(rev, true, func(p string) string { return fmt.Sprintf("<%s>", p) }, nil))
 		})
 
 		assert.Contains(t, out, "2 files to read, 1 generated shown")

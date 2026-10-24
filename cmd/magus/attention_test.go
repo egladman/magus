@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -237,7 +238,7 @@ func TestFileAttentionStoresTheLease(t *testing.T) {
 				bindCheckout(t, cacheDir, tc.bound)
 			}
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
 			}
 			require.NoError(t, fileBlock(root, blockedEvent("needs a decision")))
 

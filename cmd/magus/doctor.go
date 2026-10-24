@@ -245,7 +245,7 @@ func statusGlyph(status types.CheckStatus, color bool) string {
 		label, code = "[advice]", "33"
 	}
 	if color {
-		return "\x1b[" + code + "m" + label + "\x1b[0m"
+		return fmt.Sprintf("\x1b[%sm%s\x1b[0m", code, label)
 	}
 	return label
 }

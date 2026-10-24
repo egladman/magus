@@ -185,7 +185,7 @@ func TestAgentInstallReportsEachRemovalOnStdout(t *testing.T) {
 		require.NoError(t, agentInstallCmd(context.Background(), []string{dest, "--dir", dir, "--skill-form", "full", "--force"}))
 	})
 
-	assert.Equal(t, "removed skill this binary no longer ships: "+filepath.Join(dest, "magus-retired")+"\n", out)
+	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
 	assert.NoDirExists(t, retired)
 	assert.DirExists(t, handAuthored)
 }
