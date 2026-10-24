@@ -26,6 +26,9 @@ var autoClaimTree = map[string]string{
 	"internal/hint/gen/out.go":  "package gen\n\nimport \"example.com/m/internal/hint\"\n\nfunc Out() string { return hint.Render() }\n",
 	"internal/held/held.go":     "package held\n\nimport \"example.com/m/internal/hint\"\n\nfunc Held() string { return hint.Render() }\n",
 	"internal/capped/capped.go": "package capped\n\nimport \"example.com/m/internal/hint\"\n\nfunc Capped() string { return hint.Render() }\n",
+
+	"internal/lease/lease.go":      "package lease\n\nfunc Lease() int { return 1 }\n",
+	"internal/lease/lease_test.go": "package lease\n\nimport \"testing\"\n\nfunc TestLease(t *testing.T) { _ = Lease() }\n",
 }
 
 // autoClaimFixture checkpoints autoClaimTree for row, changes hint.Render, and seeds row
@@ -95,6 +98,21 @@ func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
 
 	assert.Equal(t, writeGrade{}, gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/guard/render.go")),
 		"the claimed path is the job's own")
+}
+
+func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
+	row := autoClaimRow()
+	row.WritePaths = append(row.WritePaths, "internal/lease/lease.go")
+	ctx, root, deps := autoClaimFixture(t, row)
+
+	got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/lease/lease_test.go"))
+	assert.Equal(t, writeGrade{Decision: "advise", Why: got.Why,
+		Context: "magus workspace: claimed internal/lease/lease_test.go for lease render-change by test:internal/lease/lease.go: internal/lease/lease_test.go tests internal/lease/lease.go: it names Lease.",
+	}, got)
+
+	stored, ok := leaseRow(ctx, hookLocation(ctx, deps), row.ID)
+	require.True(t, ok)
+	assert.Equal(t, []string{"internal/hint/render.go", "internal/lease/lease.go", "internal/lease/lease_test.go"}, stored.WritePaths)
 }
 
 func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {

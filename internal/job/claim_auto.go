@@ -37,13 +37,13 @@ type AutoClaim struct {
 	Appliable bool
 }
 
-// DecideAutoClaim decides whether magus claims rel for row without asking: a path one
-// graph edge from what the job changed (a reference to a declaration its diff changed,
-// or a test beside a file it changed), that is no generated output, magusfile or hub,
-// that no other live job holds, while the job is under its claim cap. projects are what
-// says which files targets generate; nil stops every claim. rows are every job.
-//
-// The cap is the row's own max_claims, which the fork held under jobs.max_claims.
+// DecideAutoClaim decides whether magus claims rel for row without asking. It claims a
+// path one graph edge from what the job changed: a reference to a declaration its diff
+// changed, a call to a function whose signature it changed, the declaration of a name a
+// changed file uses, or a test beside a file the job holds. It never claims a generated
+// output, magusfile, hub or path another live job holds, nor past the row's max_claims,
+// which the fork held under jobs.max_claims. projects say which files targets generate;
+// nil stops every claim. rows are every job.
 func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.Job, projects []*types.Project, fanIn fanInFunc) AutoClaim {
 	rel = path.Clean(rel)
 	req, proof, ok := ProposeClaim(row, rel, facts, nil)
@@ -51,7 +51,7 @@ func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.J
 		if err := checkClaimPath(row, rel, nil); err != nil {
 			return AutoClaim{Stop: err.Error()}
 		}
-		return AutoClaim{Stop: fmt.Sprintf("%s is more than one edge from what the job changed: it neither references a declaration the diff changed nor tests a file the job changed", rel)}
+		return AutoClaim{Stop: fmt.Sprintf("%s is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it", rel)}
 	}
 	d := AutoClaim{Request: req, Proof: proof, Proved: true, Appliable: true}
 	limit, err := claimCap(row, config.Jobs{})

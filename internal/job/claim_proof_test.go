@@ -16,6 +16,8 @@ import (
 // claimTree is the shape of the cli-ls-files job that found the gap: it deleted
 // hint.VCSAdd and changed cmd/magus/vcs.go and the registry config-generate reads, and the
 // guard sent it to its orchestrator for each caller, test and output that change reached.
+// It also changed the signature of Printer.Print and only the body of Printer.Flush, made
+// vcs.go use vcsutil.Quote and lsFlag, and holds internal/lease/held.go unchanged.
 func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 	t.Helper()
 	root := t.TempDir()
@@ -24,7 +26,19 @@ func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 		"internal/guard/shell.go":                   "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.VCSAdd\n",
 		"internal/guard/status.go":                  "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.VCSStatus\n",
 		"internal/guard/render.go":                  "package guard\n\nimport \"example.com/m/internal/hint\"\n\nvar _ = hint.Render()\n",
-		"cmd/magus/vcs.go":                          "package main\n\nconst lsFiles = \"ls-files\"\n\nfunc vcsLsFiles() string { return lsFiles }\n",
+		"cmd/magus/vcs.go":                          "package main\n\nimport \"example.com/m/internal/vcsutil\"\n\nconst lsFiles = \"ls-files\"\n\nfunc vcsLsFiles() string { return vcsutil.Quote(lsFiles) + lsFlag }\n",
+		"cmd/magus/flags.go":                        "package main\n\nconst lsFlag = \"-z\"\n",
+		"internal/vcsutil/quote.go":                 "package vcsutil\n\nfunc Quote(s string) string { return s }\n\nfunc Unused() {}\n",
+		"internal/other/quote.go":                   "package vcsutil\n\nfunc Quote(s string) string { return s }\n",
+		"internal/hint/printer.go":                  "package hint\n\ntype Printer struct{}\n\nfunc (Printer) Print(s string) string {\n\treturn s\n}\n\nfunc (Printer) Flush() {\n\tprintln()\n}\n",
+		"internal/guard/print.go":                   "package guard\n\nimport \"example.com/m/internal/hint\"\n\nfunc Show(p hint.Printer) string { return p.Print(\"x\") }\n",
+		"internal/guard/flush.go":                   "package guard\n\nimport \"example.com/m/internal/hint\"\n\nfunc Done(p hint.Printer) { p.Flush() }\n",
+		"cmd/tool/print.go":                         "package tool\n\nfunc Show(p interface{ Print(string) string }) string { return p.Print(\"x\") }\n",
+		"internal/lease/held.go":                    "package lease\n\nfunc Held() int { return 1 }\n",
+		"internal/lease/held_test.go":               "package lease\n\nimport \"testing\"\n\nfunc TestHeld(t *testing.T) { _ = Held() }\n",
+		"internal/lease/other_test.go":              "package lease\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n",
+		"internal/free/free.go":                     "package free\n\nfunc Free() int { return 1 }\n",
+		"internal/free/free_test.go":                "package free\n\nimport \"testing\"\n\nfunc TestFree(t *testing.T) { _ = Free() }\n",
 		"cmd/magus/vcs_test.go":                     "package main\n\nimport \"testing\"\n\nfunc TestLs(t *testing.T) { _ = vcsLsFiles() }\n",
 		"cmd/magus/other_test.go":                   "package main\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n",
 		"cmd/magus/testdata/script/guard_git.txtar": "exec magus vcs ls-files\n",
@@ -41,7 +55,7 @@ func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 	row := types.Job{
 		ID:         "cli-ls-files",
 		State:      types.StateRunning,
-		WritePaths: []string{"internal/hint/cli_command.go", "cmd/magus/vcs.go", "internal/commands/registry.go"},
+		WritePaths: []string{"internal/hint/cli_command.go", "internal/hint/printer.go", "cmd/magus/vcs.go", "internal/commands/registry.go", "internal/lease/held.go"},
 		DenyPaths:  []string{"internal/guard/shell_test.go"},
 		Registered: 100,
 	}
@@ -49,12 +63,14 @@ func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 		return types.RegionChange{File: types.FileChange{Path: file}, Side: side, Lines: lines, Declaration: decl, Driver: "golang"}
 	}
 	seen := Observed{
-		Changed:      []string{"cmd/magus/vcs.go", "internal/commands/registry.go", "internal/hint/cli_command.go"},
+		Changed:      []string{"cmd/magus/vcs.go", "internal/commands/registry.go", "internal/hint/cli_command.go", "internal/hint/printer.go"},
 		ChangedKnown: true,
 		Regions: []types.RegionChange{
 			region("internal/hint/cli_command.go", types.RegionOld, [2]int{3, 3}, "var VCSAdd = 0"),
 			region("internal/hint/cli_command.go", types.RegionNew, [2]int{6, 6}, "func Render() string {"),
-			region("cmd/magus/vcs.go", types.RegionNew, [2]int{3, 3}, ""),
+			region("internal/hint/printer.go", types.RegionNew, [2]int{5, 5}, ""),
+			region("internal/hint/printer.go", types.RegionNew, [2]int{10, 10}, "func (Printer) Flush() {"),
+			region("cmd/magus/vcs.go", types.RegionNew, [2]int{5, 5}, ""),
 		},
 		RegionsKnown: true,
 	}
@@ -77,13 +93,37 @@ func proofFacts(t *testing.T, asked ...string) (types.Job, claimFacts) {
 	return row, readClaimFacts(root, row, seen, asked, projects)
 }
 
+type proveCase struct {
+	path, because  string
+	proof, refused string
+}
+
+// proveEach proves each case's because against claimTree. The kind is taken as spelled,
+// so a kind types does not name yet is still proved.
+func proveEach(t *testing.T, cases map[string]proveCase) {
+	t.Helper()
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			row, facts := proofFacts(t, tc.path)
+			kind, subject, _ := strings.Cut(tc.because, ":")
+			proof, err := proveClaim(row, tc.path, types.ClaimEvidence{Kind: types.ClaimKind(kind), Subject: subject}, facts)
+			if tc.refused != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.refused)
+				return
+			}
+			require.NoError(t, err)
+			assert.Contains(t, proof, tc.proof)
+		})
+	}
+}
+
 func TestProveClaimEachKind(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range map[string]struct {
-		path, because  string
-		proof, refused string
-	}{
+	proveEach(t, map[string]proveCase{
 		"a caller of a symbol the diff deleted": {
 			path: "internal/guard/shell.go", because: "refs:hint.VCSAdd",
 			proof: "internal/guard/shell.go references hint.VCSAdd, which the job's diff removed from package hint",
@@ -118,7 +158,7 @@ func TestProveClaimEachKind(t *testing.T) {
 		},
 		"a test of a file the job did not change": {
 			path: "cmd/magus/vcs_test.go", because: "test:cmd/magus/main.go",
-			refused: "cmd/magus/main.go is not a file the job changed inside its write paths",
+			refused: "cmd/magus/main.go is not a file the job holds or claimed",
 		},
 		"an output of a target whose sources the job changed": {
 			path: "cmd/magus/gen/flags.go", because: "output:.:config-generate",
@@ -132,23 +172,62 @@ func TestProveClaimEachKind(t *testing.T) {
 			path: "internal/guard/shell.go", because: "released",
 			refused: "this attempt's holder never released internal/guard/shell.go",
 		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+	})
+}
 
-			row, facts := proofFacts(t, tc.path)
-			e, err := types.ParseClaimEvidence(tc.because)
-			require.NoError(t, err)
-			proof, err := proveClaim(row, tc.path, e, facts)
-			if tc.refused != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.refused)
-				return
-			}
-			require.NoError(t, err)
-			assert.Contains(t, proof, tc.proof)
-		})
-	}
+func TestProveClaimWiderKinds(t *testing.T) {
+	t.Parallel()
+
+	proveEach(t, map[string]proveCase{
+		"a test of a file the job holds and left alone": {
+			path: "internal/lease/held_test.go", because: "test:internal/lease/held.go",
+			proof: "internal/lease/held_test.go tests internal/lease/held.go: it names Held",
+		},
+		"a test beside a held file that names nothing it defines": {
+			path: "internal/lease/other_test.go", because: "test:internal/lease/held.go",
+			refused: "names nothing internal/lease/held.go defines",
+		},
+		"a test of a file the job does not hold": {
+			path: "internal/free/free_test.go", because: "test:internal/free/free.go",
+			refused: "internal/free/free.go is not a file the job holds or claimed",
+		},
+		"a caller of a method whose signature the diff changed": {
+			path: "internal/guard/print.go", because: "calls:Print",
+			proof: "internal/guard/print.go calls Print, whose signature the job's diff changes in internal/hint/printer.go",
+		},
+		"a caller of a method whose body alone the diff changed": {
+			path: "internal/guard/flush.go", because: "calls:Flush",
+			refused: "the job's diff changes no signature of Flush",
+		},
+		"a caller of the name in a package that imports none the job changed": {
+			path: "cmd/tool/print.go", because: "calls:Print",
+			refused: "the job's diff changes no signature of Print in a package cmd/tool/print.go sits in or imports",
+		},
+		"a file that calls nothing by the name": {
+			path: "internal/guard/status.go", because: "calls:Print",
+			refused: "internal/guard/status.go calls nothing named Print",
+		},
+		"the declaration of a name a changed file imports": {
+			path: "internal/vcsutil/quote.go", because: "defines:vcsutil.Quote",
+			proof: "internal/vcsutil/quote.go declares Quote, which cmd/magus/vcs.go, a file the job changed, uses",
+		},
+		"the declaration of a name a changed file uses from its own package": {
+			path: "cmd/magus/flags.go", because: "defines:lsFlag",
+			proof: "cmd/magus/flags.go declares lsFlag, which cmd/magus/vcs.go, a file the job changed, uses",
+		},
+		"a declaration no changed file uses": {
+			path: "internal/vcsutil/quote.go", because: "defines:vcsutil.Unused",
+			refused: "no Go file the job changed inside its write paths uses vcsutil.Unused",
+		},
+		"a same-named declaration in a package no changed file imports": {
+			path: "internal/other/quote.go", because: "defines:vcsutil.Quote",
+			refused: "no Go file the job changed inside its write paths uses vcsutil.Quote from internal/other/quote.go",
+		},
+		"a name the file does not declare": {
+			path: "internal/vcsutil/quote.go", because: "defines:vcsutil.Missing",
+			refused: "internal/vcsutil/quote.go declares no vcsutil.Missing",
+		},
+	})
 }
 
 // Nothing proves a refs or test kind on a diff nobody read: absent evidence is no proof.
@@ -169,13 +248,19 @@ func TestProposeClaimNamesTheFirstProofOrNone(t *testing.T) {
 		"internal/guard/shell.go":                   "refs:hint.VCSAdd",
 		"cmd/magus/testdata/script/guard_git.txtar": "test:cmd/magus/vcs.go",
 		"cmd/magus/gen/flags.go":                    "output:.:config-generate",
+		"internal/lease/held_test.go":               "test:internal/lease/held.go",
+		"internal/guard/print.go":                   "calls:Print",
+		"internal/vcsutil/quote.go":                 "defines:vcsutil.Quote",
+		"cmd/magus/flags.go":                        "defines:lsFlag",
 		"internal/guard/status.go":                  "",
+		"internal/guard/flush.go":                   "",
+		"internal/free/free_test.go":                "",
 		"internal/guard/shell_test.go":              "",
 	} {
 		row, facts := proofFacts(t, path)
 		req, proof, ok := ProposeClaim(row, path, facts, []types.Job{row})
-		if want == "" {
-			assert.False(t, ok, "%s has no proof, or a deny path covers it", path)
+		if kind, _, _ := strings.Cut(want, ":"); want == "" || !types.ClaimKind(kind).Valid() {
+			assert.False(t, ok, "%s has no proof the store records, or a deny path covers it", path)
 			continue
 		}
 		require.True(t, ok, path)

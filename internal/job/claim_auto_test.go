@@ -68,7 +68,7 @@ func TestDecideAutoClaimTakesOneEdgeAndNoHub(t *testing.T) {
 				"cmd/tool/use.go":        "package tool\n\nimport \"example.com/m/internal/guard\"\n\nvar _ = guard.Wrap()\n",
 			},
 			fanIn: leafFanIn,
-			want:  AutoClaim{Stop: "cmd/tool/use.go is more than one edge from what the job changed: it neither references a declaration the diff changed nor tests a file the job changed"},
+			want:  AutoClaim{Stop: "cmd/tool/use.go is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it"},
 		},
 		"a hub is proved and left to the holder": {
 			path:  autoCaller,
@@ -81,6 +81,91 @@ func TestDecideAutoClaimTakesOneEdgeAndNoHub(t *testing.T) {
 				return 0, errors.New("the symbol index holds no record of internal/guard/render.go")
 			},
 			want: provedCaller("the symbol index holds no record of internal/guard/render.go"),
+		},
+	})
+}
+
+// widerClaim is the decision for path proved by because: claimed once types names
+// because's kind, and until then unproved, since ProposeClaim skips a kind the store
+// cannot record.
+func widerClaim(path, because, proof string) AutoClaim {
+	if _, err := types.ParseClaimEvidence(because); err != nil {
+		return AutoClaim{Stop: path + " is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it"}
+	}
+	return AutoClaim{Request: types.JobClaimRequest{Path: path, Because: because}, Proof: proof, Proved: true, Appliable: true}
+}
+
+func TestDecideAutoClaimTakesTheWiderEdges(t *testing.T) {
+	t.Parallel()
+
+	decideEach(t, map[string]autoClaimCase{
+		"a test of a file the job holds and left alone": {
+			path: "internal/lease/held_test.go", fanIn: leafFanIn,
+			want: widerClaim("internal/lease/held_test.go", "test:internal/lease/held.go", "internal/lease/held_test.go tests internal/lease/held.go: it names Held"),
+		},
+		"a test of a file the job claimed": {
+			path: "internal/free/free_test.go", fanIn: leafFanIn,
+			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
+				row.WritePaths = append(row.WritePaths, "internal/free/free.go")
+				row.Claims = []types.JobClaim{{Path: "internal/free/free.go"}}
+			},
+			want: widerClaim("internal/free/free_test.go", "test:internal/free/free.go", "internal/free/free_test.go tests internal/free/free.go: it names Free"),
+		},
+		"a caller of a method whose signature the diff changed": {
+			path: "internal/guard/print.go", fanIn: leafFanIn,
+			want: widerClaim("internal/guard/print.go", "calls:Print", "internal/guard/print.go calls Print, whose signature the job's diff changes in internal/hint/printer.go"),
+		},
+		"the declaration of a name a changed file uses": {
+			path: "internal/vcsutil/quote.go", fanIn: leafFanIn,
+			want: widerClaim("internal/vcsutil/quote.go", "defines:vcsutil.Quote", "internal/vcsutil/quote.go declares Quote, which cmd/magus/vcs.go, a file the job changed, uses"),
+		},
+		"a caller of a method whose body alone the diff changed": {
+			path: "internal/guard/flush.go", fanIn: leafFanIn,
+			want: AutoClaim{Stop: "internal/guard/flush.go is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it"},
+		},
+		"a test of a file the job does not hold": {
+			path: "internal/free/free_test.go", fanIn: leafFanIn,
+			want: AutoClaim{Stop: "internal/free/free_test.go is more than one edge from what the job changed: no refs, calls, defines or test proof holds for it"},
+		},
+	})
+}
+
+// A wider edge stops where the first cut's do: a hub, a generated output, another job's
+// path and the cap.
+func TestDecideAutoClaimStopsTheWiderEdges(t *testing.T) {
+	t.Parallel()
+
+	const test = "internal/lease/held_test.go"
+	stopped := func(stop string, appliable bool) AutoClaim {
+		return AutoClaim{Request: types.JobClaimRequest{Path: test, Because: "test:internal/lease/held.go"},
+			Proof: "internal/lease/held_test.go tests internal/lease/held.go: it names Held", Proved: true, Appliable: appliable, Stop: stop}
+	}
+	decideEach(t, map[string]autoClaimCase{
+		"a hub": {
+			path: test, fanIn: func(string, []string) (int, error) { return hubFanIn, nil },
+			want: stopped("internal/lease/held_test.go is a hub: 25 files use what it declares, at or past 25", true),
+		},
+		"a generated output": {
+			path: test, fanIn: leafFanIn,
+			edit: func(_ *types.Job, _ *[]types.Job, projects *[]*types.Project) {
+				(*projects)[0].TargetOutputs["lease-generate"] = []types.OutputRef{{Glob: test}}
+			},
+			want: stopped("internal/lease/held_test.go is a generated output, which its target regenerates", true),
+		},
+		"a path another live job holds": {
+			path: test, fanIn: leafFanIn,
+			edit: func(_ *types.Job, rows *[]types.Job, _ *[]*types.Project) {
+				*rows = append(*rows, types.Job{ID: "leaser", State: types.StateRunning, WritePaths: []string{test}})
+			},
+			want: stopped("["+string(types.WritePathFileShared)+"] internal/lease/held_test.go is held by live job leaser, and a proof never takes a path another job holds", false),
+		},
+		"a job at its cap": {
+			path: test, fanIn: leafFanIn,
+			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
+				row.MaxClaims = 1
+				row.Claims = []types.JobClaim{{Path: "cmd/magus/vcs_test.go"}}
+			},
+			want: stopped("cli-ls-files holds 1 proved claim(s), its max_claims (max_claims on job cli-ls-files)", false),
 		},
 	})
 }
