@@ -272,11 +272,12 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	}
 	records := io.Writer(os.Stdout)
 	var recorded bytes.Buffer
-	if bf.Record {
+	// A test run is always recorded: a passing one is evidence a script check can cite.
+	if bf.Record || bf.Test {
 		scriptOut = io.MultiWriter(scriptOut, &recorded)
 		records = io.MultiWriter(records, &recorded)
 		started := time.Now()
-		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, recorded.Bytes(), started, retErr) }()
+		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr) }()
 	}
 	in, _ := pipeRecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
@@ -334,7 +335,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	}
 	var testErr error
 	if bf.Test {
-		testErr = runBuzzTests(ctx, sess, name)
+		testErr = runBuzzTests(ctx, sess, name, scriptOut)
 	} else if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
 		// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
 		// its top level has. Without it a script had to call its own main, which strict
@@ -373,10 +374,11 @@ func buzzRunKey(name, code string, args []string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// recordBuzzRun keeps what a --record run printed in the output store and prints its ref
+// recordBuzzRun keeps what a recorded run printed in the output store and prints its ref
 // on stderr, so a plan, a review or a job's notes can cite the run instead of describing it.
-// A store it cannot reach is reported and leaves the run's own outcome alone.
-func recordBuzzRun(ctx context.Context, root, name, code string, args []string, out []byte, started time.Time, runErr error) {
+// A test run is stored as `buzz -t <script>`, apart from the script's main. A store it
+// cannot reach is reported and leaves the run's own outcome alone.
+func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) {
 	if root == "" {
 		root = "."
 	}
@@ -385,9 +387,13 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 		slog.WarnContext(ctx, "--record: no output store here", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
 		return
 	}
+	target, key := "buzz "+name, buzzRunKey(name, code, args)
+	if test {
+		target, key = "buzz -t "+name, buzzRunKey(name, code, append([]string{"-t"}, args...))
+	}
 	d := cache.OutputDescriptor{
 		Project:     ".",
-		Target:      "buzz " + name,
+		Target:      target,
 		Failed:      runErr != nil,
 		TimestampMs: started.UnixMilli(),
 		DurationMs:  time.Since(started).Milliseconds(),
@@ -395,7 +401,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
 	}
-	stored, err := cache.NewOutputStore(dir).Persist(ctx, buzzRunKey(name, code, args), out, d)
+	stored, err := cache.NewOutputStore(dir).Persist(ctx, key, out, d)
 	if err != nil {
 		slog.WarnContext(ctx, "--record", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
 		return
@@ -431,12 +437,12 @@ func stdinIsTerminal() bool {
 }
 
 // runBuzzTests executes every `test "..." {}` block registered while executing the
-// file, printing one line per test and returning an error (non-zero exit) if any
+// file, printing one line per test to out and returning an error (non-zero exit) if any
 // failed. A test fails when its body raises, typically an unmet std.assert.
-func runBuzzTests(ctx context.Context, sess *buzz.Session, name string) error {
+func runBuzzTests(ctx context.Context, sess *buzz.Session, name string, out io.Writer) error {
 	tests := sess.Tests()
 	if len(tests) == 0 {
-		fmt.Printf("%s: no tests\n", name)
+		fmt.Fprintf(out, "%s: no tests\n", name)
 		return nil
 	}
 	failed := 0
@@ -444,18 +450,18 @@ func runBuzzTests(ctx context.Context, sess *buzz.Session, name string) error {
 	for _, tc := range tests {
 		_, err := sess.CallValue(ctx, tc.Fn, []vm.Value(nil))
 		if err == nil {
-			fmt.Printf("ok    test %q\n", tc.Name)
+			fmt.Fprintf(out, "ok    test %q\n", tc.Name)
 			continue
 		}
 		if reason, ok := buzzstd.SkipMessage(err); ok {
 			skipped++
-			fmt.Printf("skip  test %q%s\n", tc.Name, skipReason(reason))
+			fmt.Fprintf(out, "skip  test %q%s\n", tc.Name, skipReason(reason))
 			continue
 		}
 		failed++
-		fmt.Printf("FAIL  test %q\n      %v\n", tc.Name, err)
+		fmt.Fprintf(out, "FAIL  test %q\n      %v\n", tc.Name, err)
 	}
-	fmt.Printf("---\n%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
+	fmt.Fprintf(out, "---\n%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d tests failed", failed, len(tests))
 	}
@@ -736,7 +742,9 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line; it takes the --embedded rules, so no main")
-	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail")
+	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail; the run is")
+	fmt.Fprintln(os.Stderr, "              recorded as `buzz -t <file>` and its ref printed, as --record does")
+	fmt.Fprintln(os.Stderr, "  --record    keep what the run printed in the output store and print its ref")
 	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")
 	fmt.Fprintln(os.Stderr, "  --profile   print where compile and import time went, after the script runs")
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")

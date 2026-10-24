@@ -795,6 +795,29 @@ func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
 	scoped := gate
 	scoped.Check.Project = "cmd/magus"
 	require.ErrorContains(t, scoped.Validate(), "belongs to the workspace")
+
+	tested := gate
+	tested.Check.Test = true
+	require.NoError(t, tested.Validate())
+	assert.Equal(t, "magus buzz -t probes/key.buzz", tested.Check.String())
+}
+
+func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
+	t.Parallel()
+
+	target := Goal{ID: "unit", Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: ".", Test: true}}.Resolve()
+	require.ErrorContains(t, target.Validate(), `check target "test" sets test`)
+
+	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "fix-parser", Check: &LeaseCheck{Target: "test", Test: true}}
+	_, _, ps := rec.check()
+	require.Len(t, ps, 1)
+	assert.Equal(t, "check.test", ps[0].Field)
+
+	rec.Check = &LeaseCheck{Script: "probes/key.buzz", Test: true}
+	c, ok, ps := rec.check()
+	require.Empty(t, ps)
+	assert.True(t, ok)
+	assert.True(t, c.Test, "the record's test reaches the row's check")
 }
 
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {

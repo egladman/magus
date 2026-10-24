@@ -495,6 +495,23 @@ func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
 }
 
+// Passing tests and a passing main are different facts, so a test check binds to the
+// `buzz -t` run alone and a script check to the main run alone.
+func TestScriptTestCheckBindsOnlyToItsTestRun(t *testing.T) {
+	t.Parallel()
+
+	main := types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}
+	tests := types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/key.buzz"}
+	script := types.LeaseCheck{Script: "probes/key.buzz"}
+	tested := types.LeaseCheck{Script: "probes/key.buzz", Test: true}
+
+	assert.True(t, ranCheck(tested, tests, nil))
+	assert.False(t, ranCheck(tested, main, nil), "a main run is not evidence of passing tests")
+	assert.True(t, ranCheck(script, main, nil))
+	assert.False(t, ranCheck(script, tests, nil), "a test run is not evidence of a passing main")
+	assert.False(t, ranCheck(tested, types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/other.buzz"}, nil), "another script")
+}
+
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
 // invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
 // it are two runs; accepting either for the other made a drift gate satisfiable by the

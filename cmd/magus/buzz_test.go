@@ -1128,7 +1128,7 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
-	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, []byte("hello\n"), time.Now(), nil)
+	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil)
 
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
@@ -1142,4 +1142,39 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 
 	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", nil), buzzRunKey("probe.buzz", "code", []string{"--x"}),
 		"different arguments are a different probe")
+}
+
+// A -t run is evidence a script check cites, so it is recorded like --record, under its
+// own target, and the record holds every test line and the summary.
+func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
+	root := t.TempDir()
+	dir, err := magus.ResolveCacheDir(root)
+	require.NoError(t, err)
+	store := cache.NewOutputStore(dir)
+	for name, tc := range map[string]struct {
+		body   string
+		failed bool
+		lines  []string
+	}{
+		"passing": {"test \"adds\" { std\\assert(1 + 1 == 2, message: \"sum\"); }\n", false, []string{`ok    test "adds"`, "1 passed, 0 failed, 0 skipped"}},
+		"failing": {"test \"breaks\" { std\\assert(false, message: \"no\"); }\n", true, []string{`FAIL  test "breaks"`, "0 passed, 1 failed, 0 skipped"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			script := filepath.Join(root, name+".buzz")
+			code := "import \"std\";\n\n" + tc.body
+			require.NoError(t, os.WriteFile(script, []byte(code), 0o644))
+
+			var runErr error
+			captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-t", script}) })
+			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
+
+			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, []string{"-t"})))
+			require.NoError(t, err)
+			assert.Equal(t, "buzz -t "+script, d.Target)
+			assert.Equal(t, tc.failed, d.Failed)
+			for _, line := range tc.lines {
+				assert.Contains(t, string(out), line)
+			}
+		})
+	}
 }
