@@ -544,8 +544,6 @@ const (
 	// walkDepth bounds the walk back through upstream magus stages; a pipeline
 	// deeper than this is not one anybody types.
 	walkDepth = 16
-	// pollEvery paces a wait on upstream stages to end.
-	pollEvery = 100 * time.Millisecond
 )
 
 // Dir is the pipe dir of the workspace at root whose cache dir is cacheDir: where its
@@ -887,8 +885,6 @@ func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, n notic
 	defer stop()
 
 	var ended []stageOutcome
-	t := time.NewTicker(pollEvery)
-	defer t.Stop()
 	for {
 		running := pending[:0]
 		for _, u := range pending {
@@ -915,10 +911,15 @@ func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, n notic
 		if !slices.ContainsFunc(pending, func(u Stage) bool { return u.TakesLocks }) {
 			stop()
 		}
-		select {
-		case <-ctx.Done():
-			return stageOutcome{}, false, fmt.Errorf("pipe: gave up waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), ctx.Err())
-		case <-t.C:
+		pids := make([]int, 0, len(pending))
+		for _, u := range pending {
+			pids = append(pids, u.PID)
+		}
+		if err := awaitExit(ctx, pids); err != nil {
+			if ctx.Err() != nil {
+				return stageOutcome{}, false, fmt.Errorf("pipe: gave up waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), ctx.Err())
+			}
+			return stageOutcome{}, false, fmt.Errorf("pipe: waiting on pid %d (%s) upstream of this run: %w", pending[0].PID, pending[0].Command(), err)
 		}
 	}
 	red, found := firstRed(ended)
