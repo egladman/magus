@@ -1163,6 +1163,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				refuseWith(denyRuleGrantIsAPersons, d)
 			}
 		}
+		if verdict.Decision != decisionDeny {
+			if d := denyAgentWaive(input, shellD); d.refused() {
+				refuseWith(denyRuleWaiverIsAPersons, d)
+			}
+		}
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
@@ -1253,7 +1258,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover, commit, moved, replay := pushCoverage(ctx, deps, location, input, shellD, callDir)
+			cover, commit, moved, replay, waiver := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so its refusal names no orchestrator. A row that cannot be read
 			// stays a worker.
@@ -1275,6 +1280,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				verdict.Rule = string(denyRulePushUngated)
 			} else if replay.Inv != "" && !moved {
 				verdict.Context = fmt.Sprintf("magus workspace: %s is covered by `%s` at %s on the identical tree (%s).", commit, types.TargetCI, replay.Commit, gateRunRef(replay))
+			} else if cover == gateWaived && !moved {
+				verdict.Context = waiverNote(commit, waiver)
 			}
 		}
 		if preauth == "" {

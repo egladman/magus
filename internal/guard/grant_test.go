@@ -83,6 +83,12 @@ func TestAgentWaiveIsRefused(t *testing.T) {
 		d := denyAgentWaive(line, DialectBash)
 		assert.Equal(t, fmt.Sprintf("magus workspace: only a person runs `%s gate waive`; ask the person to type it.", hint.BinaryName()), d.Say, "%q", line)
 	}
+	granted, _ := grantRows()
+	ctx, _ := fleetFixture(t, granted)
+	for _, lease := range []string{"", granted.ID} {
+		v := Judge(ctx, Dependencies{}, Request{Input: "magus gate waive HEAD --reason ci-down", Lease: lease})
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWaiverIsAPersons)}, judgedAs(v), "under %q", lease)
+	}
 	for _, line := range []string{"magus gate", "echo magus gate waive HEAD", "magus job grant x hooks-off", "magus describe rules"} {
 		assert.False(t, denyAgentWaive(line, DialectBash).refused(), "%q", line)
 	}
@@ -112,6 +118,8 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 	v := waivedPush(t, "abc1234", waive)
 	assert.NotEqual(t, string(denyRulePushUngated), v.Rule, "the waived commit goes out: %s", v.Reason)
 	assert.NotEqual(t, decisionDeny, v.Decision)
+	assert.Contains(t, v.Context, "abc1234 goes out ungated under the waiver")
+	assert.Contains(t, v.Context, ": CI gates the release branch")
 
 	v = waivedPush(t, "fed9876", waive)
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUngated)}, judgedAs(v), "another commit is still refused")

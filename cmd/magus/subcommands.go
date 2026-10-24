@@ -61,6 +61,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return shellCmd(ctx, subArgs)
 	case "job":
 		return jobCmd(ctx, root, subArgs)
+	case "gate":
+		return gateCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
 	case "diff":
