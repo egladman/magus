@@ -87,7 +87,7 @@ func commandLine(name string, args []string) string {
 	parts = append(parts, name)
 	for _, a := range args {
 		if strings.ContainsAny(a, " \t\n") {
-			parts = append(parts, fmt.Sprintf(`"%s"`, a))
+			parts = append(parts, fmt.Sprintf("%c%s%c", '"', a, '"'))
 		} else {
 			parts = append(parts, a)
 		}
