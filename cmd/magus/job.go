@@ -2140,6 +2140,20 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	if err != nil {
 		return err
 	}
+	// A merge the driver settled by keeping one side of a generated file leaves the tree
+	// stale until the regeneration runs, so a grade read now would pass a tree nobody built.
+	owed, err := vcs.OwedRegenerations(ctx, checkout)
+	if err != nil {
+		return exit.Usagef("magus job wait: %s", err)
+	}
+	if len(owed) > 0 {
+		runs := make([]string, len(owed))
+		for i, o := range owed {
+			runs[i] = o.Target + " " + o.Project
+		}
+		return exit.Usagef("magus job wait: %s owes %d regeneration(s) a merge left: %s; run `%s`, commit what it stages, then wait again",
+			checkout, len(owed), strings.Join(runs, ", "), hint.VCSResolve.With())
+	}
 	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root, true))
 	if err != nil {
 		return exit.Usagef("magus job wait: %s", err)

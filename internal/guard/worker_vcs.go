@@ -285,6 +285,39 @@ var workerGitVerbs = []string{
 	"verify-tag", "version", "whatchanged",
 }
 
+// workerVCSMovesRefs reports a call that moves HEAD, a branch, a bookmark or the index: a
+// worker's own state only in its own checkout, and another checkout's state anywhere else.
+// A listing or a read moves nothing.
+func workerVCSMovesRefs(c hint.Invocation) bool {
+	sub, rest := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		switch sub {
+		case "switch", "checkout", "restore", "stash", "add", "rm", "mv":
+			return true
+		case "branch":
+			return positionals(rest) > 0 && !anyFlag(rest, "alrv", "--list", "--all", "--remotes",
+				"--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--show-current")
+		}
+	case "hg", "sl":
+		switch sub {
+		case "update", "up", "checkout", "co", "goto", "add", "addremove", "remove", "rm", "forget",
+			"rename", "mv", "move", "copy", "cp", "shelve", "unshelve":
+			return true
+		case "bookmark", "book", "branch":
+			return positionals(rest) > 0 && !anyFlag(rest, "l", "--list")
+		}
+	case "jj":
+		switch sub {
+		case "new", "edit", "next", "prev":
+			return true
+		case "bookmark", "b":
+			return firstWordIs(rest, "create", "c", "set", "s", "move", "m", "rename", "r", "delete", "d", "forget", "f", "track", "t", "untrack")
+		}
+	}
+	return false
+}
+
 func workerMayRunGit(sub string, rest []string) bool {
 	switch sub {
 	case "rm", "mv":

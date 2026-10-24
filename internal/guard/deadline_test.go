@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -349,6 +350,39 @@ func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	})
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v))
 	assert.Equal(t, unjudgedNote(), v.Context)
+}
+
+// A lapse passes a heredoc appended to a file outside every checkout and the workspace, such
+// as a plan in the host's own directory, with a note saying so. The same append into the
+// workspace, or beside a verb that changes state, is still denied.
+func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	workspace := hookLocation(ctx, Dependencies{}).workspace
+	require.NotEmpty(t, workspace)
+	outside := filepath.Join(t.TempDir(), "plans", "README.md")
+	nothing := func(context.Context) {}
+	appendTo := func(target string) string { return "cat >> " + target + " <<'EOF'\n\n## Decision\n\n- ship it\nEOF" }
+
+	for i, line := range []string{
+		appendTo(outside),
+		"cd " + filepath.Dir(outside) + " && " + appendTo("README.md"),
+		"tee -a " + outside + " <<'EOF' >/dev/null\nline\nEOF",
+		"echo done > " + outside,
+	} {
+		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "s1"}, nothing)
+		assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+		assert.Equal(t, unjudgedOutsideNote(), v.Context, line)
+	}
+
+	for i, line := range []string{
+		appendTo(filepath.Join(workspace, "notes.md")),
+		appendTo(outside) + " && touch " + outside + ".bak",
+		appendTo("relative.md"),
+		"cat >> $TARGET <<'EOF'\nline\nEOF",
+	} {
+		v := lapseNow(ctx, t, Dependencies{}, Request{Input: line, Host: "claude-code", Session: "deny-" + strconv.Itoa(i)}, nothing)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "line %d: %s", i, line)
+	}
 }
 
 // A workspace open that never answers does not hold a write's judgment past its deadline:

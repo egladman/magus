@@ -2442,12 +2442,16 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
-	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" }) {
+	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" || workerVCSMovesRefs(c) }) {
 		return ""
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok {
 		return ""
+	}
+	placed := workerLands
+	if me.Worktree.Standing() {
+		placed = func(c hint.Invocation) bool { return workerLands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
 	}
 	role := workerRole(me, deps.caller)
 	if role == "" {
@@ -2473,9 +2477,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 			}
 		}
 	}
-	matches := workerLands
+	matches := placed
 	if creates {
-		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" }
+		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" || placed(c) }
 	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
@@ -2757,6 +2761,9 @@ type vcsSite struct {
 // cannot be placed cannot be shown to be in the worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	op := workerVCSOp(inv)
+	if own := row.Worktree; op == "" && own.Standing() && workerVCSMovesRefs(inv) {
+		return refMoveRefusal(ctx, opts, own, inv, site, unlocated)
+	}
 	switch {
 	case op == "" || integrationMerge(inv, row):
 		return vcsRefusal{}
@@ -2769,14 +2776,58 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	}
 	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
-		why = fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
-		if base == "" {
-			why += "this checkout resolves no base branch, so only the revision its job was handed."
-		} else {
-			why += fmt.Sprintf("origin/%s, or the revision its job was handed.", path.Base(base))
-		}
+		why = mergeRefusal(operand, base, row)
 	}
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
+}
+
+// refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
+// checkout of the repository it moves that checkout's state, and a repository of its own
+// holds none of the job's.
+func refMoveRefusal(ctx context.Context, opts types.VCSOptions, own *types.JobWorktree, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	sub, rest := vcsSubcommand(inv)
+	moves := inv.Name + " " + sub
+	if unlocated != "" {
+		return vcsRefusal{op: moves, kind: vcsOpLands, why: unlocated}
+	}
+	if site.gitDir == "" && inOtherRepository(site, own.Root) {
+		return vcsRefusal{}
+	}
+	root, ok := siteCheckout(ctx, opts, inv.Name, site)
+	if ok && samePath(root, own.Root) {
+		return vcsRefusal{}
+	}
+	where := "a checkout that cannot be read"
+	if ok {
+		where = root
+	}
+	flag := map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}[inv.Name]
+	remedy := strings.Join(slices.Concat([]string{inv.Name, flag, own.Root, sub}, rest), " ")
+	return vcsRefusal{op: moves, kind: vcsOpLands, why: fmt.Sprintf(
+		"It moves a branch, HEAD or the index in %s, outside %s, the checkout the job's fork made; run `%s` instead.", where, own.Root, remedy)}
+}
+
+// mergeRefusal is why a worker may not merge operand, naming every revision mergesBase
+// accepts so the refusal serves the merge that would pass.
+func mergeRefusal(operand, base string, row types.Job) string {
+	why := fmt.Sprintf("It merges %s, and a worker merges only its base into its branch: ", operand)
+	var accepts []string
+	if base == "" {
+		why += "this checkout resolves no base branch, so only "
+	} else {
+		accepts = append(accepts, "origin/"+path.Base(base))
+	}
+	accepts = append(accepts, "the revision its job was handed")
+	if deps := slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" }); len(deps) > 0 {
+		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
+	}
+	switch len(accepts) {
+	case 1:
+		return why + accepts[0] + "."
+	case 2:
+		return why + accepts[0] + ", or " + accepts[1] + "."
+	}
+	return why + strings.Join(accepts[:len(accepts)-1], ", ") + ", or " + accepts[len(accepts)-1] + "."
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a

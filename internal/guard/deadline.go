@@ -4,11 +4,15 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
@@ -249,6 +253,89 @@ func unjudgedNote() string {
 		", so no rule judged this call; it ran because it only reads."
 }
 
+// unjudgedOutsideNote tells a session that a call went through with no rule judging it
+// because it writes only outside every checkout and the workspace.
+func unjudgedOutsideNote() string {
+	return "This guard check did not finish within " + hookBudget.String() +
+		", so no rule judged this call; it ran because it writes only outside every checkout and this workspace."
+}
+
+// writesOnlyOutside reports a line that only reads but for file redirects and tee's files,
+// each placed outside root and every git checkout; a target the line does not determine is
+// never outside. A lapse passes it: what stalls is the nested write judgment a heredoc
+// costs, and nothing a rule guards is written.
+func writesOnlyOutside(command string, d Dialect, start, root, home string) bool {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return false
+	}
+	dirs := stmtDirs(f, command, start, home)
+	outside := func(w *syntax.Word, s *syntax.Stmt) bool {
+		p, ok := placePath(placeableWord(command, w), dirs[s], home)
+		if !ok || (root != "" && within(p, root)) {
+			return false
+		}
+		_, _, inCheckout := gitCheckout(filepath.Dir(p))
+		return !inCheckout
+	}
+	wrote, ok := false, true
+	syntax.Walk(f, func(n syntax.Node) bool {
+		s, isStmt := n.(*syntax.Stmt)
+		if !ok || !isStmt {
+			return ok
+		}
+		var w bool
+		w, ok = stripOutsideWrites(command, s, outside)
+		wrote = wrote || w
+		return ok
+	})
+	if !ok || !wrote {
+		return false
+	}
+	var rest strings.Builder
+	if err := syntax.NewPrinter().Print(&rest, f); err != nil {
+		return false
+	}
+	return readOnlyLine(rest.String(), d)
+}
+
+// stripOutsideWrites removes s's file redirects and turns a tee into cat once outside
+// accepts every file they write, so what is left of s grades as a read. ok is false at the
+// first file outside refuses, and s is then left part-stripped.
+func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Word, *syntax.Stmt) bool) (wrote, ok bool) {
+	kept := s.Redirs[:0]
+	for _, r := range s.Redirs {
+		if !writesToFile(r.Op) || duplicatesDescriptor(r) || redirectWord(r) == "/dev/null" {
+			kept = append(kept, r)
+			continue
+		}
+		if !outside(r.Word, s) {
+			return wrote, false
+		}
+		wrote = true
+	}
+	s.Redirs = kept
+	call, isCall := s.Cmd.(*syntax.CallExpr)
+	if !isCall || len(call.Args) < 2 {
+		return wrote, true
+	}
+	if name, _ := plainWord(call.Args[0]); path.Base(name) != "tee" {
+		return wrote, true
+	}
+	for _, w := range call.Args[1:] {
+		if strings.HasPrefix(placeableWord(command, w), "-") {
+			continue
+		}
+		if !outside(w, s) {
+			return wrote, false
+		}
+		wrote = true
+	}
+	// With its files placed, tee is cat: it copies stdin to stdout.
+	call.Args = []*syntax.Word{{Parts: []syntax.WordPart{&syntax.Lit{Value: "cat"}}}}
+	return wrote, true
+}
+
 // unjudged is the verdict for a hook call whose judgment did not answer within the bound,
 // in the stance a lapsed workspace rule phase takes: a call that changes state is denied
 // and one that only reads passes with a note. A call with nothing to judge passes as it
@@ -292,7 +379,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	stalled, isStalled := log.stalled()
 	finished := log.finished()
 	tool := hookToolCommand
-	pushes := false
+	pushes, writesOutside := false, false
 	switch {
 	case isPath:
 		tool = hookToolWrite
@@ -304,6 +391,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease, req.Lease == "")
 		cmds, _ := ParseCommandsDialect(input, d)
 		pushes = slices.ContainsFunc(cmds, isPush)
+		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())
 	}
 	verdict := pass
 	verdict.Lease = req.Lease
@@ -312,6 +400,8 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	switch {
 	case builtins.Deny != "":
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
+	case writesOutside:
+		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
 	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.

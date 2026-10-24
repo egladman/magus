@@ -321,6 +321,30 @@ func TestGroundworkNamesTheMergeScript(t *testing.T) {
 	assert.NotContains(t, f.say, "hack/", "a commit is not a branch merge")
 }
 
+// A root folding a worker's commits with a reset or a rebase is refused, and the first line
+// names the integrator's path: an integration job or an integrate spawn in the job's
+// checkout, and the fold it runs there.
+func TestGroundworkNamesTheIntegratorForAReset(t *testing.T) {
+	t.Parallel()
+	deny := builtin.Setting{Decision: builtin.Deny}
+	call := func(line string) mainCall {
+		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: delegableIntegrate, line: line, root: t.TempDir()}
+	}
+	for _, line := range []string{"git reset --soft abc123", "git -C ../w reset HEAD~3", "git rebase -i origin/main"} {
+		f, ok := groundworkFinding(deny, call(line))
+		require.True(t, ok, line)
+		assert.True(t, f.deny, line)
+		first, _, _ := strings.Cut(f.say, "\n")
+		assert.Contains(t, first, `"integrates": ["<branch>"]`, line)
+		assert.Contains(t, first, "`<root>/integrate <job>`", line)
+		assert.Contains(t, first, "`git reset --soft <checkpoint>`, then one commit", line)
+	}
+	for _, line := range []string{"git commit -m x", "git merge job-branch"} {
+		f, _ := groundworkFinding(deny, call(line))
+		assert.NotContains(t, f.say, "<root>/integrate", line)
+	}
+}
+
 // Proof is the session's from its first bound spawn: its groundwork is refused from the
 // next call, its graph reads pass, and a subagent of the same session is never judged.
 func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {

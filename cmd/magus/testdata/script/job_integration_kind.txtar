@@ -70,6 +70,28 @@ stdout '^  pricing.txt$'
 exec magus job fork writer --read-only --criteria 'read the tests'
 ! stderr 'advice:'
 
+# A regeneration a merge left owed in the checkout refuses the integration's pass until
+# `magus vcs resolve` runs it once and its result is committed.
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" $WORK/evidence.tmpl.json > "$WORK/evidence.json"'
+cp $WORK/owed.json .git/magus-owed-regeneration.json
+stdin $WORK/evidence.json
+! exec magus job wait integrate --integration --stdin
+stderr 'owes 1 regeneration\(s\) a merge left: test \.'
+stderr 'run `magus vcs resolve`, commit what it stages, then wait again'
+exec magus vcs resolve
+stdout 'vcs resolve: ran magus run test:rw \.'
+! exists .git/magus-owed-regeneration.json
+stdin $WORK/evidence.json
+exec magus job wait integrate --integration --stdin
+stdout '^integration: integrate passes in '
+
+-- owed.json --
+{"schema_version": 1, "owed": [{"project": ".", "target": "test", "paths": ["pricing.txt"]}]}
+-- evidence.tmpl.json --
+{"schema_version": 2,
+ "changed_paths": [],
+ "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
 -- pricing-a --
 apples 2
 -- magusfile-b --
