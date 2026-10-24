@@ -44,11 +44,11 @@ proposed, the build runs with its declared inputs and outputs, and the second
 run is a cache hit.
 
 ```go
-reg := magus.NewWorkspaceRegistry()
-reg.RegisterProject("api", magus.WithSpell("guide-harness"))
+reg := NewWorkspaceRegistry()
+reg.RegisterProject("api", WithSpell("guide-harness"))
 
 ctx := context.Background()
-m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 if err != nil {
 	fmt.Println("open:", err)
 	return

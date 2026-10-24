@@ -1,10 +1,9 @@
-package magus_test
+package magus
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
-	magus "github.com/egladman/magus"
 	_ "github.com/egladman/magus/buzzengine"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -25,9 +24,9 @@ import (
 // The examples in this file are the code blocks of docs/guides/go-sdk.md, which shows
 // each one verbatim. Edit them together.
 
-// newWorkspace writes files, keyed by slash-separated workspace-relative path, into a
+// newGuideWorkspace writes files, keyed by slash-separated workspace-relative path, into a
 // new temporary directory and returns it with the function that removes it.
-func newWorkspace(files map[string]string) (root string, cleanup func()) {
+func newGuideWorkspace(files map[string]string) (root string, cleanup func()) {
 	root, err := os.MkdirTemp("", "magus-guide-*")
 	if err != nil {
 		panic(err)
@@ -51,6 +50,7 @@ func newWorkspace(files map[string]string) (root string, cleanup func()) {
 func registerCopySpell(name string, runs *int) (unregister func()) {
 	build := func(_ context.Context, req spells.InvokeRequest) (any, error) {
 		*runs++
+		var copied []string
 		inputs, err := filepath.Glob(filepath.Join(req.Dir, "*.txt"))
 		if err != nil {
 			return nil, err
@@ -66,8 +66,9 @@ func registerCopySpell(name string, runs *int) (unregister func()) {
 			if err := os.WriteFile(filepath.Join(req.Dir, "out", filepath.Base(in)), body, 0o644); err != nil {
 				return nil, err
 			}
+			copied = append(copied, filepath.Base(in))
 		}
-		return nil, nil
+		return copied, nil
 	}
 	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
 		spells.WithTargets("build"),
@@ -89,13 +90,13 @@ type targetResult struct {
 }
 
 // runRecorded runs targets on m and returns the per-target results the run recorded.
-func runRecorded(ctx context.Context, m *magus.Magus, targets []types.Target) ([]targetResult, error) {
+func runRecorded(ctx context.Context, m *Magus, targets []types.Target) ([]targetResult, error) {
 	var records bytes.Buffer
-	sink, err := magus.NewSink(output.JSONL, &records, io.Discard)
+	sink, err := NewSink(output.JSONL, &records, io.Discard)
 	if err != nil {
 		return nil, err
 	}
-	runErr := m.Run(ctx, targets, magus.WithSink(sink))
+	runErr := m.Run(ctx, targets, WithSink(sink))
 	if err := sink.Close(); err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func runRecorded(ctx context.Context, m *magus.Magus, targets []types.Target) ([
 // Example_openAWorkspace opens a workspace read-only and lists its projects. A
 // directory holding a magusfile.buzz is a project.
 func Example_openAWorkspace() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"web/magusfile.buzz": "",
@@ -124,7 +125,7 @@ func Example_openAWorkspace() {
 	defer cleanup()
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -141,7 +142,7 @@ func Example_openAWorkspace() {
 // Example_listProjectsAndTargets lists every target the workspace declares, here the
 // build target a spell attached in Go contributes, beside the canonical ci target.
 func Example_listProjectsAndTargets() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 	})
@@ -149,11 +150,11 @@ func Example_listProjectsAndTargets() {
 	var runs int
 	defer registerCopySpell("guide-list", &runs)()
 
-	reg := magus.NewWorkspaceRegistry()
-	reg.RegisterProject("api", magus.WithSpell("guide-list"))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell("guide-list"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -174,7 +175,7 @@ func Example_listProjectsAndTargets() {
 // Example_runATarget runs a target, reads its result from the run's records, and
 // reads the stored output its ref names.
 func Example_runATarget() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"api/greeting.txt":   "hello\n",
@@ -183,11 +184,11 @@ func Example_runATarget() {
 	var runs int
 	defer registerCopySpell("guide-run", &runs)()
 
-	reg := magus.NewWorkspaceRegistry()
-	reg.RegisterProject("api", magus.WithSpell("guide-run"))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell("guide-run"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -224,7 +225,7 @@ func Example_runATarget() {
 // Example_whatADiffAffects asks which projects a change to one file reaches. web
 // depends on api, so a change inside api affects both.
 func Example_whatADiffAffects() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"api/greeting.txt":   "hello\n",
@@ -232,11 +233,11 @@ func Example_whatADiffAffects() {
 	})
 	defer cleanup()
 
-	reg := magus.NewWorkspaceRegistry()
-	reg.RegisterProject("web", magus.WithDependsOn("api"))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("web", WithDependsOn("api"))
 
 	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("inspect:", err)
 		return
@@ -257,7 +258,7 @@ func Example_whatADiffAffects() {
 // context m.Context returns. The verdict says whether zero matches would mean absent or
 // unknown.
 func ExampleMagus_Context() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"web/magusfile.buzz": "",
@@ -265,7 +266,7 @@ func ExampleMagus_Context() {
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -308,14 +309,14 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // Example_judgeAToolCall asks the guard about two shell commands before either runs.
 // A deny is an answer with a nil error.
 func Example_judgeAToolCall() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     guardPolicy,
 		"api/magusfile.buzz": "",
 	})
 	defer cleanup()
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -341,7 +342,7 @@ func Example_judgeAToolCall() {
 // a target with declared inputs and outputs, and a second run of the same inputs is
 // answered from the cache without running the build again.
 func Example_aProgramThatIsItsOwnHarness() {
-	root, cleanup := newWorkspace(map[string]string{
+	root, cleanup := newGuideWorkspace(map[string]string{
 		"magusfile.buzz":     guardPolicy,
 		"api/magusfile.buzz": "",
 		"api/greeting.txt":   "hello\n",
@@ -350,11 +351,11 @@ func Example_aProgramThatIsItsOwnHarness() {
 	var runs int
 	defer registerCopySpell("guide-harness", &runs)()
 
-	reg := magus.NewWorkspaceRegistry()
-	reg.RegisterProject("api", magus.WithSpell("guide-harness"))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("api", WithSpell("guide-harness"))
 
 	ctx := context.Background()
-	m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
