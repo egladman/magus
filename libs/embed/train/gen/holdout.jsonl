@@ -38,6 +38,7 @@
 {"group":"file:changes/unreleased/approval-carry-over.md","path":"changes/unreleased/approval-carry-over.md"}
 {"group":"file:changes/unreleased/audit-rewalk.md","path":"changes/unreleased/audit-rewalk.md"}
 {"group":"file:changes/unreleased/bootstrap-takes-lease-first.md","path":"changes/unreleased/bootstrap-takes-lease-first.md"}
+{"group":"file:changes/unreleased/branch-scripts-local-branches.md","path":"changes/unreleased/branch-scripts-local-branches.md"}
 {"group":"file:changes/unreleased/breaking-cache-drops-ed25519-envelopes.md","path":"changes/unreleased/breaking-cache-drops-ed25519-envelopes.md"}
 {"group":"file:changes/unreleased/breaking-os-retry-options.md","path":"changes/unreleased/breaking-os-retry-options.md"}
 {"group":"file:changes/unreleased/breaking-queue-hooks-run-in-base-sandbox.md","path":"changes/unreleased/breaking-queue-hooks-run-in-base-sandbox.md"}

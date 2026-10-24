@@ -51,6 +51,7 @@ export object Step {
     head: str,
     cut: str,
     onto: str,
+    remote: bool = true,
 }
 
 // Ran is one command's result, what a stubbed Shell answers.
@@ -98,13 +99,13 @@ export fun parseMerged(body: str) > [Squashed] !> any {
     return acc;
 }
 
-export fun steps(branches: [str], heads: {str: str}, squashed: Squashed, base: str) > [Step] {
+export fun steps(branches: [str], heads: {str: str}, remotes: {str: bool}, squashed: Squashed, base: str) > [Step] {
     final found = mut [<Step>];
     var cut = squashed.head;
     var onto = base;
     foreach (branch in branches) {
         final head = heads[branch] ?? "";
-        found.append(Step{ branch = branch, head = head, cut = cut, onto = onto });
+        found.append(Step{ branch = branch, head = head, cut = cut, onto = onto, remote = remotes[branch] ?? false });
         cut = head;
         onto = branch;
     }
@@ -115,8 +116,12 @@ export fun rebaseArgv(onto: str, s: Step) > [str] {
     return ["rebase", "--onto", onto, s.cut, s.head];
 }
 
-// pushArgv refuses the push when the branch moved since its head was read.
+// pushArgv refuses the push when the branch moved since its head was read; a branch origin lacks
+// has no head to lease against, so it is pushed new.
 export fun pushArgv(s: Step) > [str] {
+    if (!s.remote) {
+        return ["push", "-u", "origin", "HEAD:refs/heads/{s.branch}"];
+    }
     return ["push", "--force-with-lease=refs/heads/{s.branch}:{s.head}", "origin", "HEAD:refs/heads/{s.branch}"];
 }
 
@@ -171,31 +176,36 @@ fun must(r: Ran, what: str) > str !> any {
     return r.stdout;
 }
 
-// gather reads each branch's head on origin, and the squash-merged pull request whose head
+// gather reads each branch's head on origin, or its local head when origin lacks the branch, and the squash-merged pull request whose head
 // the first branch carries.
 export fun gather(sh: Shell, branches: [str], base: str) > [Step] !> any {
     final fetch = mut ["fetch", "--no-tags", "--quiet", "origin"];
     if (base.startsWith("origin/")) {
         fetch.append(base.sub(7));
     }
+    final remotes = mut {<str: bool>};
     foreach (b in branches) {
-        fetch.append(b);
+        remotes[b] = lines(must(sh.git("", args: ["ls-remote", "--heads", "origin", b]), what: "git ls-remote --heads origin {b}")).len() > 0;
+        if (remotes[b] ?? false) {
+            fetch.append(b);
+        }
     }
     must(sh.git("", args: fetch), what: "git {fetch.join(" ")}");
     final heads = mut {<str: str>};
     foreach (b in branches) {
-        heads[b] = must(sh.git("", args: ["rev-parse", "origin/{b}"]), what: "git rev-parse origin/{b}").trim();
+        final ref = if (remotes[b] ?? false) "origin/{b}" else "refs/heads/{b}";
+        heads[b] = must(sh.git("", args: ["rev-parse", ref]), what: "git rev-parse {ref}").trim();
     }
     final merged = parseMerged(sh.gh(["pr", "list", "--state", "merged", "--limit", "{MERGED_LIMIT}", "--json", "number,headRefOid"]));
     final first = branches[0];
-    final exclusive = lines(must(sh.git("", args: ["rev-list", "{base}..{heads[first]!}"]), what: "git rev-list {base}..origin/{first}"));
+    final exclusive = lines(must(sh.git("", args: ["rev-list", "{base}..{heads[first]!}"]), what: "git rev-list {base}..{first}"));
     final squashed = squashedBase(exclusive, merged: merged);
     if (squashed == null) {
         throw "rebase-branches-onto-base: {first} carries no head of the last {MERGED_LIMIT} merged pull requests past {base}, so nothing below it squash-merged; "
             + "merge the base instead with `magus buzz hack/dev/merge-base-into-branches.buzz -- --branches {branches.join(",")}`";
     }
     std\print("{first} sits on #{squashed!.pr}, squash-merged at its head {squashed!.head}");
-    return steps(branches, heads: heads, squashed: squashed!, base: base);
+    return steps(branches, heads: heads, remotes: remotes, squashed: squashed!, base: base);
 }
 
 // writePaths are the files the branches' own commits touch, what the job row may write.
@@ -405,6 +415,8 @@ test "gh's merged list reads into squashed heads" {
 test "gather cuts the first branch at the squashed head and each later one at the branch below" {
     final calls = mut [<str>];
     final sh = fake({
+        "git ls-remote --heads origin guard-gaps": Ran{ stdout = "ba0b refs/heads/guard-gaps\n" },
+        "git ls-remote --heads origin top": Ran{ stdout = "t0p refs/heads/top\n" },
         "git rev-parse origin/guard-gaps": Ran{ stdout = "ba0b\n" },
         "git rev-parse origin/top": Ran{ stdout = "t0p\n" },
         "git rev-list origin/main..ba0b": Ran{ stdout = "ba0b\nc1\na606\nm1\n" },
@@ -412,11 +424,37 @@ test "gather cuts the first branch at the squashed head and each later one at th
     final got = gather(sh, branches: ["guard-gaps", "top"], base: "origin/main");
     assert\equal(got.map(fun (index: int, s: Step) > str => "{s.branch}:{s.cut}..{s.head}->{s.onto}"),
         want: ["guard-gaps:a606..ba0b->origin/main", "top:ba0b..t0p->guard-gaps"], message: "steps");
-    assert\equal(calls[0], want: "git fetch --no-tags --quiet origin main guard-gaps top", message: "fetch");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git fetch"))[0], want: "git fetch --no-tags --quiet origin main guard-gaps top", message: "fetch");
+}
+
+test "a branch origin lacks is read from its local ref, left out of the fetch and pushed new" {
+    final calls = mut [<str>];
+    final sh = fake({
+        "git rev-parse refs/heads/local": Ran{ stdout = "l0c\n" },
+        "git rev-list origin/main..l0c": Ran{ stdout = "l0c\na606\n" },
+    }, gh: MERGED, generated: [<str>], calls: calls);
+    final got = gather(sh, branches: ["local"], base: "origin/main");
+    assert\equal(got[0].remote, want: false, message: "local");
+    assert\equal(got[0].head, want: "l0c", message: "head");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git fetch"))[0], want: "git fetch --no-tags --quiet origin main", message: "fetch");
+    assert\equal(pushArgv(got[0]), want: ["push", "-u", "origin", "HEAD:refs/heads/local"], message: "push");
+    assert\equal(plan(got[0], base: "origin/main")[5], want: "git push -u origin HEAD:refs/heads/local", message: "plan");
+}
+
+test "a failed git call raises with its stderr, naming the call" {
+    final sh = fake({ "git ls-remote --heads origin b": Ran{ code = 128, stderr = "fatal: unable to access" } }, gh: MERGED, generated: [<str>], calls: mut [<str>]);
+    var why = "";
+    try {
+        gather(sh, branches: ["b"], base: "origin/main");
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why.indexOf("git ls-remote --heads origin b: exit 128: fatal: unable to access") != null, want: true, message: why);
 }
 
 test "a branch on no squashed head is refused, naming merge-base-into-branches" {
     final sh = fake({
+        "git ls-remote --heads origin b": Ran{ stdout = "h refs/heads/b\n" },
         "git rev-parse origin/b": Ran{ stdout = "h\n" },
         "git rev-list origin/main..h": Ran{ stdout = "h\nc1\n" },
     }, gh: MERGED, generated: [<str>], calls: mut [<str>]);
