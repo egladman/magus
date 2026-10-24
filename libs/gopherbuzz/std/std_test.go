@@ -279,12 +279,12 @@ func TestParity_CryptoHashAlgorithms(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.algo, func(t *testing.T) {
-			v := evalWithStd(t, `
+			v := evalWithStd(t, fmt.Sprintf(`
 import "buzz:crypto";
 
 fun probe() > str {
-    return crypto\hash(crypto\HashAlgorithm.`+tc.algo+`, data: "abc").hex();
-}`)
+    return crypto\hash(crypto\HashAlgorithm.%s, data: "abc").hex();
+}`, tc.algo))
 			assert.Equal(t, tc.want, v.AsString(), "the digest matches the published vector")
 		})
 	}
@@ -339,7 +339,9 @@ object Tracked {
 `
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			v := evalWithStd(t, decls+"\nfun probe() > int {"+tc.body+"\n}")
+			v := evalWithStd(t, fmt.Sprintf(`%s
+fun probe() > int {%s
+}`, decls, tc.body))
 			assert.Equal(t, int64(0), v.AsInt(), "a reachable object must not be collected")
 		})
 	}

@@ -1,6 +1,9 @@
 package buzz
 
-import "github.com/egladman/magus/libs/diagnostics"
+import (
+	"fmt"
+	"github.com/egladman/magus/libs/diagnostics"
+)
 
 // This file is gopherbuzz's own diagnostic-code namespace: the BZZ#### family. It uses the SAME shared
 // mechanism as magus (github.com/egladman/magus/libs/diagnostics) but declares an ENTIRELY SEPARATE catalog: no
@@ -17,7 +20,7 @@ import "github.com/egladman/magus/libs/diagnostics"
 const bzzDocsBase = "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/"
 
 // bzz is gopherbuzz's diagnostic domain: every BZZ code maps to a doc page under bzzDocsBase.
-var bzz = diagnostics.New(func(c diagnostics.Code) string { return bzzDocsBase + string(c) + ".md" })
+var bzz = diagnostics.New(func(c diagnostics.Code) string { return fmt.Sprintf("%s%s.md", bzzDocsBase, string(c)) })
 
 // BZZ diagnostic codes. Each names a distinct, documented buzz error kind. There is deliberately NO
 // catch-all code: a type error the checker has not classified carries NO code at all (just its message),

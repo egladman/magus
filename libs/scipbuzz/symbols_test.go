@@ -1,6 +1,7 @@
 package scipbuzz
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,8 +18,8 @@ func magusKey(t *testing.T, symbol string) string {
 	sym, err := scip.ParseSymbol(symbol)
 	require.NoError(t, err)
 	require.NotNil(t, sym.Package, "%s parses with no Package", symbol)
-	pkg := strings.TrimSpace(sym.Package.Manager + " " + sym.Package.Name)
-	return strings.TrimSpace(pkg + " " + scip.DescriptorOnlyFormatter.FormatSymbol(sym))
+	pkg := strings.TrimSpace(fmt.Sprintf("%s %s", sym.Package.Manager, sym.Package.Name))
+	return strings.TrimSpace(fmt.Sprintf("%s %s", pkg, scip.DescriptorOnlyFormatter.FormatSymbol(sym)))
 }
 
 func TestWorkspaceSymbolParsesWithAPackage(t *testing.T) {

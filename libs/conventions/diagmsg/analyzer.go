@@ -249,7 +249,7 @@ var slogMessages = func() map[string]int {
 	for _, level := range []string{"Debug", "Info", "Warn", "Error"} {
 		for _, owner := range []string{"log/slog.", "(*log/slog.Logger)."} {
 			m[owner+level] = 0
-			m[owner+level+"Context"] = 1
+			m[fmt.Sprintf("%s%sContext", owner, level)] = 1
 		}
 	}
 	return m

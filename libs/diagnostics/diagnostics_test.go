@@ -10,7 +10,7 @@ import (
 
 // testURL is a stand-in docs-URL layout for a fake "TST" domain, so the framework can be tested without
 // any consumer's real code catalog.
-func testURL(c Code) string { return "https://example/docs/" + string(c) + ".md" }
+func testURL(c Code) string { return fmt.Sprintf("https://example/docs/%s.md", string(c)) }
 
 func TestErrorRendering(t *testing.T) {
 	d := New(testURL)

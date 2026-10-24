@@ -288,7 +288,7 @@ func fieldPaths(prefix string, v any, depth int) []string {
 	switch node := v.(type) {
 	case map[string]any:
 		for _, k := range slices.Sorted(maps.Keys(node)) {
-			p := prefix + "." + k
+			p := fmt.Sprintf("%s.%s", prefix, k)
 			paths = append(paths, p)
 			if depth < maxFieldDepth {
 				paths = append(paths, fieldPaths(p, node[k], depth+1)...)
@@ -421,7 +421,7 @@ func typeLabel(rt reflect.Type) string {
 	case reflect.Slice, reflect.Array:
 		return "[]" + typeLabel(rt.Elem())
 	case reflect.Map:
-		return "map[" + typeLabel(rt.Key()) + "]" + typeLabel(rt.Elem())
+		return fmt.Sprintf("map[%s]%s", typeLabel(rt.Key()), typeLabel(rt.Elem()))
 	case reflect.Interface:
 		if rt.NumMethod() == 0 {
 			return "any"

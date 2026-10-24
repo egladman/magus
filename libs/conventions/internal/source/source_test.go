@@ -1,6 +1,7 @@
 package source
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -93,7 +94,7 @@ func TestRequireDirs(t *testing.T) {
 	}
 	for _, dir := range []string{"internal/que", "internal/job", "cmd/app/main.go"} {
 		err := RequireDirs("lint", "dirs", "/r", []string{dir}, files)
-		if err == nil || !strings.Contains(err.Error(), `lint: dirs entry "`+dir+`" holds no Go files`) {
+		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf(`lint: dirs entry "%s" holds no Go files`, dir)) {
 			t.Errorf("%s: got %v", dir, err)
 		}
 	}

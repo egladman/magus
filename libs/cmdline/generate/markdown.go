@@ -19,7 +19,7 @@ func Markdown(root cmdline.Command, source string) []Page {
 	pages = append(pages, Page{Name: root.Name + ".md", Content: renderMainMD(root, source)})
 	for _, command := range root.Children {
 		pages = append(pages, Page{
-			Name:    root.Name + "-" + command.Name + ".md",
+			Name:    fmt.Sprintf("%s-%s.md", root.Name, command.Name),
 			Content: renderCommandMD(root, command, source),
 		})
 	}
@@ -30,7 +30,7 @@ func renderMainMD(root cmdline.Command, source string) []byte {
 	var m mdBuf
 	m.frontmatter(root.Name+" command", root.Description, source, root.Tags)
 	m.h1(root.Name)
-	m.p(root.Name + " - " + mdEsc(root.Short))
+	m.p(fmt.Sprintf("%s - %s", root.Name, mdEsc(root.Short)))
 	m.h2("Synopsis")
 	m.p(synopsisMD(root.Usage))
 	m.h2("Description")
@@ -43,8 +43,8 @@ func renderMainMD(root cmdline.Command, source string) []byte {
 	}
 	m.h2("Subcommands")
 	for _, command := range root.Children {
-		ref := fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(root.Name+"-"+command.Name), root.Name, command.Name)
-		m.def(mdB(command.Name), mdEsc(command.Short)+". See "+ref+".")
+		ref := fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(fmt.Sprintf("%s-%s", root.Name, command.Name)), root.Name, command.Name)
+		m.def(mdB(command.Name), fmt.Sprintf("%s. See %s.", mdEsc(command.Short), ref))
 	}
 	writeEnvSectionMD(&m, root.Env)
 	writeFilesSectionMD(&m, root.Files)
@@ -60,10 +60,10 @@ func renderCommandMD(root, command cmdline.Command, source string) []byte {
 	}
 	tags := command.Tags
 	if len(tags) == 0 {
-		tags = []string{"cli", root.Name + " " + command.Name, command.Name}
+		tags = []string{"cli", fmt.Sprintf("%s %s", root.Name, command.Name), command.Name}
 	}
-	m.frontmatter(root.Name+" "+command.Name, desc, source, tags)
-	m.h1(root.Name + "-" + command.Name)
+	m.frontmatter(fmt.Sprintf("%s %s", root.Name, command.Name), desc, source, tags)
+	m.h1(fmt.Sprintf("%s-%s", root.Name, command.Name))
 	m.p(mdEsc(command.Short))
 	m.h2("Synopsis")
 	m.p(synopsisMD(command.Usage))
@@ -108,7 +108,7 @@ func renderCommandMD(root, command cmdline.Command, source string) []byte {
 
 func synopsisMD(usage string) string {
 	if sp := strings.Index(usage, " "); sp >= 0 {
-		return mdB(usage[:sp]) + " " + mdEsc(strings.TrimSpace(usage[sp:]))
+		return fmt.Sprintf("%s %s", mdB(usage[:sp]), mdEsc(strings.TrimSpace(usage[sp:])))
 	}
 	return mdB(usage)
 }
@@ -116,7 +116,7 @@ func synopsisMD(usage string) string {
 // writeChildFlagsMD emits an options block for every descendant declaring flags.
 func writeChildFlagsMD(m *mdBuf, path string, children []cmdline.Command) {
 	for _, child := range children {
-		sub := path + " " + child.Name
+		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
 			m.h3(sub + " options")
 			writeFlagListMD(m, child)
@@ -150,10 +150,10 @@ func writeEnvSectionMD(m *mdBuf, env []cmdline.Env) {
 	for _, e := range env {
 		body := mdEsc(e.Doc)
 		if e.Default != "" {
-			body += " (default: " + mdEsc(e.Default) + ")"
+			body += fmt.Sprintf(" (default: %s)", mdEsc(e.Default))
 		}
 		if e.Key != "" {
-			body += ". Config file key: " + mdB(e.Key) + "."
+			body += fmt.Sprintf(". Config file key: %s.", mdB(e.Key))
 		}
 		m.def(mdB(e.Name), body)
 	}
@@ -177,7 +177,7 @@ func writeSeeAlsoMD(m *mdBuf, root cmdline.Command, current string) {
 	}
 	for _, command := range root.Children {
 		if command.Name != current {
-			refs = append(refs, fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(root.Name+"-"+command.Name), root.Name, command.Name))
+			refs = append(refs, fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(fmt.Sprintf("%s-%s", root.Name, command.Name)), root.Name, command.Name))
 		}
 	}
 	m.p(strings.Join(refs, ", "))
@@ -190,7 +190,7 @@ func flagLabelMD(name, typeName, defValue string) string {
 		label += " " + mdI(typeName)
 	}
 	if defValue != "" && defValue != "false" && defValue != "0" && defValue != "0s" {
-		label += " (default: " + mdEsc(defValue) + ")"
+		label += fmt.Sprintf(" (default: %s)", mdEsc(defValue))
 	}
 	return label
 }
@@ -220,7 +220,7 @@ func yamlScalar(s string) string {
 	if !needsQuote {
 		return s
 	}
-	return "\"" + strings.ReplaceAll(s, "\"", "\\\"") + "\""
+	return fmt.Sprintf("\"%s\"", strings.ReplaceAll(s, "\"", "\\\""))
 }
 
 func (m *mdBuf) h1(s string) { fmt.Fprintf(&m.b, "# %s\n\n", s) }
@@ -253,5 +253,5 @@ var mdEscaper = strings.NewReplacer(
 )
 
 func mdEsc(s string) string { return mdEscaper.Replace(s) }
-func mdB(s string) string   { return "**" + mdEsc(s) + "**" }
-func mdI(s string) string   { return "*" + mdEsc(s) + "*" }
+func mdB(s string) string   { return fmt.Sprintf("**%s**", mdEsc(s)) }
+func mdI(s string) string   { return fmt.Sprintf("*%s*", mdEsc(s)) }

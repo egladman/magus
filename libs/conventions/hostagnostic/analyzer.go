@@ -91,8 +91,8 @@ func newMatcher(hosts, patterns []string) (matcher, error) {
 			quoted[i] = regexp.QuoteMeta(h)
 		}
 		alt := strings.Join(quoted, "|")
-		m.names = regexp.MustCompile(`(?i)\b(` + alt + `)\b`)
-		m.paths = regexp.MustCompile(`(?i)([./~][a-z0-9_.-]*\b(` + alt + `)\b[a-z0-9_.-]*)|("(` + alt + `)")`)
+		m.names = regexp.MustCompile(fmt.Sprintf(`(?i)\b(%s)\b`, alt))
+		m.paths = regexp.MustCompile(fmt.Sprintf(`(?i)([./~][a-z0-9_.-]*\b(%s)\b[a-z0-9_.-]*)|("(%s)")`, alt, alt))
 	}
 	for _, p := range patterns {
 		re, err := regexp.Compile(p)

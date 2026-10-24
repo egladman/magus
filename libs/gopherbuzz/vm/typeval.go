@@ -1,6 +1,9 @@
 package vm
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // typeObj is a Buzz TYPE used as a value: what `<[str]>` denotes and what
 // `typeof x` evaluates to. name is the canonical spelling of the type, and it is
@@ -96,7 +99,7 @@ func TypeShape(annot string) (base string, nullable bool) {
 			}
 		}
 		flush(len(inner))
-		return "obj{" + strings.Join(names, ",") + "}", nullable
+		return fmt.Sprintf("obj{%s}", strings.Join(names, ",")), nullable
 	case strings.HasPrefix(s, "["):
 		return "list", nullable
 	case strings.HasPrefix(s, "{"):

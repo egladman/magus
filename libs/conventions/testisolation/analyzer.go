@@ -63,7 +63,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	}
 	for _, c := range opts.Calls {
 		if pkg, fn, ok := strings.Cut(c, "."); !ok || pkg == "" || fn == "" {
-			return nil, errors.New("testisolation: call " + c + " is not pkg.Func")
+			return nil, errors.New(fmt.Sprintf("testisolation: call %s is not pkg.Func", c))
 		}
 	}
 	if err := source.InModule("testisolation", opts.Module, func(root string) error {
@@ -137,7 +137,7 @@ func isolates(dir string, calls []string) (bool, error) {
 			found := false
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if sel, ok := n.(*ast.SelectorExpr); ok {
-					if pkg, ok := sel.X.(*ast.Ident); ok && slices.Contains(calls, pkg.Name+"."+sel.Sel.Name) {
+					if pkg, ok := sel.X.(*ast.Ident); ok && slices.Contains(calls, fmt.Sprintf("%s.%s", pkg.Name, sel.Sel.Name)) {
 						found = true
 					}
 				}

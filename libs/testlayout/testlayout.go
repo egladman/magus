@@ -19,6 +19,7 @@
 package testlayout
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"os"
@@ -34,10 +35,7 @@ import (
 // compiles and passes: only a reader ever objects.
 func externalPackageMessage(pkg string) string {
 	inner := strings.TrimSuffix(pkg, "_test")
-	return "test file declares `package " + pkg + "`; put it in `package " + inner +
-		"` with the code it tests. If that closes an import cycle - the test needs a package " +
-		"that imports " + inner + " back - move the test to the package that already sits above " +
-		"both, or keep the external package with a //nolint:testlayout naming the cycle."
+	return fmt.Sprintf("test file declares `package %s`; put it in `package %s` with the code it tests. If that closes an import cycle - the test needs a package that imports %s back - move the test to the package that already sits above both, or keep the external package with a //nolint:testlayout naming the cycle.", pkg, inner, inner)
 }
 
 // isMainTestPackage reports whether name is the package clause of a test file
@@ -219,9 +217,7 @@ func unixSuffixMessage(name string) string {
 	stem := strings.TrimSuffix(strings.TrimSuffix(name, ".go"), "_test")
 	stem = stem[:strings.LastIndex(stem, "_unix")]
 
-	return name + " is named for unix, which a file name does not constrain; name the platforms " +
-		"it serves, " + stem + "_linux.go and " + stem + "_darwin.go, with " + stem +
-		"_other.go for the rest and " + stem + ".go for what they share"
+	return fmt.Sprintf("%s is named for unix, which a file name does not constrain; name the platforms it serves, %s_linux.go and %s_darwin.go, with %s_other.go for the rest and %s.go for what they share", name, stem, stem, stem, stem)
 }
 
 // trimBuildSuffixes removes every trailing segment the Go build system reads as a

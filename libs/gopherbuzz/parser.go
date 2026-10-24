@@ -2719,7 +2719,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 	// a non-empty Val is what identifies a backtick string here.
 	raw := t.Val != ""
 	// literal re-emits an interpolation as the source text it was written as.
-	literal := func(text string) { expr.Parts = append(expr.Parts, ast.InterpPart{Lit: "{" + text + "}"}) }
+	literal := func(text string) { expr.Parts = append(expr.Parts, ast.InterpPart{Lit: fmt.Sprintf("{%s}", text)}) }
 	for _, part := range t.Parts {
 		if !part.IsExpr {
 			expr.Parts = append(expr.Parts, ast.InterpPart{Lit: part.Text})
@@ -3218,7 +3218,7 @@ func qualifierText(n ast.Node) string {
 		return v.Name
 	case *ast.MemberExpr:
 		if outer := qualifierText(v.Object); outer != "" {
-			return outer + `\` + v.Name
+			return fmt.Sprintf(`%s\%s`, outer, v.Name)
 		}
 	}
 	return ""

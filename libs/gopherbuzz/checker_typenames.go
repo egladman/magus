@@ -1,6 +1,7 @@
 package buzz
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -95,7 +96,7 @@ func (w *typeNameWalk) annot(pos ast.Pos, annot string, generics map[string]bool
 		qual := quals[name]
 		spelled := name
 		if qual != "" {
-			spelled = qual + `\` + name
+			spelled = fmt.Sprintf(`%s\%s`, qual, name)
 		}
 		key := typeNameReport{pos, spelled}
 		if w.reported[key] {
@@ -103,7 +104,7 @@ func (w *typeNameWalk) annot(pos ast.Pos, annot string, generics map[string]bool
 		}
 		if w.c.unboundQualifier(qual) {
 			w.mark(key)
-			w.c.unimportedNamespace(pos, qual, `undefined type "`+spelled+`"`)
+			w.c.unimportedNamespace(pos, qual, fmt.Sprintf(`undefined type "%s"`, spelled))
 			return
 		}
 		if msg := w.c.undefinedTypeName(qual, name); msg != "" {
@@ -131,7 +132,7 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 			if t != nil {
 				return ""
 			}
-			return `undefined type "` + qual + `\` + name + `": ` + qual + " declares no type " + name
+			return fmt.Sprintf("undefined type \"%s\\%s\": %s declares no type %s", qual, name, qual, name)
 		}
 	}
 	if _, ok := c.namedType(name); ok {
@@ -149,9 +150,9 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 		}
 	}
 	if qual != "" {
-		name = qual + `\` + name
+		name = fmt.Sprintf(`%s\%s`, qual, name)
 	}
-	return `undefined type "` + name + `"`
+	return fmt.Sprintf(`undefined type "%s"`, name)
 }
 
 // unboundQualifier reports whether qual is a single namespace segment this chunk

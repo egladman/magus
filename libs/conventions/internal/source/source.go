@@ -195,7 +195,7 @@ func Hint(message, hint string) string {
 	if hint == "" {
 		return message
 	}
-	return message + "; " + hint
+	return fmt.Sprintf("%s; %s", message, hint)
 }
 
 // Root returns the directory whose go.mod declares module, searching up from
