@@ -1542,7 +1542,7 @@ func buzzCause(v any) (string, error) {
 			u, _ := t["url"].(string)
 			e := diagnostics.New(func(diagnostics.Code) string { return u }).
 				Errorf(diagnostics.Code(code), "%s", msg)
-			return "[" + code + "] " + msg, e
+			return fmt.Sprintf("[%s] %s", code, msg), e
 		case msg != "":
 			return msg, errors.New(msg)
 		}
@@ -2280,11 +2280,11 @@ func nestedResult(label string, full []string, res spawn.ExecResult, err error, 
 func recursiveMagusEnv(ctx context.Context) []string {
 	var env []string
 	if lease := types.JobLeaseFromContext(ctx); lease != "" {
-		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
+		env = append(env, fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease))
 	}
 	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
-			env = append(env, k+"="+v)
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
 			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
 				"magus socket injected into recursive magus invocation"), "var", k)
 		}

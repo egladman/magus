@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -686,7 +687,7 @@ func graphContext(t *testing.T) context.Context {
 	g.AddNode(types.KnowledgeNode{ID: graphSymbol, Kind: types.KindSymbol, Label: "Foo"})
 	for _, f := range []string{"a", "b", "c"} {
 		g.AddEdge(types.KnowledgeEdge{
-			Source: "file:pkg/" + f + ".go", Target: graphSymbol,
+			Source: fmt.Sprintf("file:pkg/%s.go", f), Target: graphSymbol,
 			Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1,
 			Provenance: "scip count=1 lines=3",
 		})

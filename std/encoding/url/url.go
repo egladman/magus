@@ -109,7 +109,7 @@ func URLBuild(_ context.Context, parts map[string]any) (string, error) {
 	}
 	host := strField("host")
 	if port := strField("port"); port != "" {
-		host = host + ":" + port
+		host = fmt.Sprintf("%s:%s", host, port)
 	}
 	u.Host = host
 	return u.String(), nil

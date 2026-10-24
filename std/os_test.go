@@ -867,7 +867,7 @@ func TestTypedMagusMembersAreDeclared(t *testing.T) {
 	}
 	for _, ns := range Magus.Namespaces {
 		for _, m := range ns.Methods {
-			declared[ns.Name+"."+CamelCase(m.Name)] = true
+			declared[fmt.Sprintf("%s.%s", ns.Name, CamelCase(m.Name))] = true
 		}
 	}
 	named := []string{"describe.project", "describe.target", "describe.evaluatedTarget", "affected", "impact"}

@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -375,14 +376,14 @@ func stdAPINames(t *testing.T) []string {
 			continue
 		}
 		for _, f := range m.Fields {
-			out = append(out, m.Name+"."+CamelCase(f.Name))
+			out = append(out, fmt.Sprintf("%s.%s", m.Name, CamelCase(f.Name)))
 		}
 		for _, meth := range m.Methods {
-			out = append(out, m.Name+"."+BuzzMethodName(meth))
+			out = append(out, fmt.Sprintf("%s.%s", m.Name, BuzzMethodName(meth)))
 		}
 		for _, ns := range m.Namespaces {
 			for _, meth := range ns.Methods {
-				out = append(out, m.Name+"."+ns.Name+"."+BuzzMethodName(meth))
+				out = append(out, fmt.Sprintf("%s.%s.%s", m.Name, ns.Name, BuzzMethodName(meth)))
 			}
 		}
 	}

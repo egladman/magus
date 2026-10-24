@@ -1,5 +1,7 @@
 package std
 
+import "fmt"
+
 // buzzStdlibEquiv maps host "module.method" entries (snake_case, as declared in
 // the std.Module descriptors) to the Buzz stdlib call that covers the same need.
 // Its purpose is informational: docs and `magus describe module` cross-reference
@@ -35,6 +37,6 @@ var buzzStdlibEquiv = map[string]string{
 // emitted; this is an informational pointer for authors who prefer Buzz's own
 // stdlib. Both names are the snake_case descriptor names.
 func BuzzStdlibEquiv(module, method string) (string, bool) {
-	e, ok := buzzStdlibEquiv[module+"."+method]
+	e, ok := buzzStdlibEquiv[fmt.Sprintf("%s.%s", module, method)]
 	return e, ok
 }
