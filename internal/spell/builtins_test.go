@@ -67,7 +67,7 @@ func TestShippedSpellsLoad(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"bash", "buf", "buzz", "cosign", "docker", "go", "markdown", "podman", "python", "rust", "typescript",
 	}, slices.Collect(maps.Keys(Builtins())))
-	assert.Equal(t, []string{"endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
+	assert.Equal(t, []string{"discover", "endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
 	assert.Equal(t, []string{"aws", "github", "gitlab", "harness"}, nesting)
 }
 
