@@ -28,7 +28,12 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("libs/diagnostics");
 }
 
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+}
 export fun lint(ctx: magus\Context, args: [str]) > void { go["go-vet"](ctx); }
 // The tree-wide conventions over this module, through .magus/custom-gcl. The root
 // install-linter builds it; this target does not, so a missing binary fails naming it.
