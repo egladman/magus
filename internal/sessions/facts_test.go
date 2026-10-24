@@ -3,6 +3,7 @@ package sessions
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -215,7 +216,7 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git", "worktrees", "feature"), 0o755))
 	linked := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
-		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "feature")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "feature"))), 0o644))
 
 	mainH := NewFactHandler(main, InvocationStart{Workspace: main, Command: "run build"})
 	require.NotNil(t, mainH)

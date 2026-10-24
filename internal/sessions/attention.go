@@ -131,7 +131,7 @@ type AttentionDispose struct {
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
 func RequestID(sourceID string, o AttentionOpen) string {
-	sum := sha256.Sum256([]byte(sourceID + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%s", sourceID, o.Source, o.Where, o.Message)))
 	return "att-" + hex.EncodeToString(sum[:])[:12]
 }
 
@@ -276,7 +276,7 @@ func SourceLabel(kind, sub string) string {
 	if sub == "" {
 		return kind
 	}
-	return kind + "/" + sub
+	return fmt.Sprintf("%s/%s", kind, sub)
 }
 
 // ErrNoRequest reports a request reference that names nothing in the store.
