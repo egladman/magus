@@ -312,7 +312,7 @@ lets the call run, or to `off`, with
 | [`raw-tool`](../../../reference/rules/raw-tool.md)                             | a toolchain command a spell already wraps                              |
 | [`read-navigation`](../../../reference/rules/read-navigation.md)               | a whole read of a long Go, Buzz or Markdown file                       |
 | [`read-paging`](../../../reference/rules/read-paging.md)                       | the third window of a mapped file, paged through by one caller         |
-| [`scripted-rewrite`](../../../reference/rules/scripted-rewrite.md)             | a scripted substitute-and-write                                        |
+| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)       | a scripted substitute-and-write                                        |
 | [`search-translation`](../../../reference/rules/search-translation.md)         | a text search a graph query provably answers                           |
 | [`sed-in-place`](../../../reference/rules/sed-in-place.md)                     | `sed -i`                                                               |
 | [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)             | a magus command relocated into another checkout                        |
