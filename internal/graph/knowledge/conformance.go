@@ -1093,7 +1093,7 @@ func conceptName(root, suffix string) string {
 		return ""
 	}
 	ext := path.Ext(root)
-	return strings.TrimSuffix(root, ext) + "_" + first + ext
+	return fmt.Sprintf("%s_%s%s", strings.TrimSuffix(root, ext), first, ext)
 }
 
 // itemPast reports whether it is past value in a row of m: by measure, or for file-split by

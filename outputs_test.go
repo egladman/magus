@@ -716,8 +716,7 @@ func TestFootprintDeclaredBothWaysIsRejected(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := writeWorkspace(t, map[string]string{
 				"go.mod": "module x\n",
-				"magusfile.buzz": "import \"magus\";\nexport fun tidy(ctx: magus\\Context, args: [str]) > void {\n    " +
-					tc.body + "\n}\n",
+				"magusfile.buzz": fmt.Sprintf("import \"magus\";\nexport fun tidy(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", tc.body),
 			})
 			_, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
 			require.Error(t, err)

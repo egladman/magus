@@ -184,7 +184,7 @@ func lintCacheUnscoped(root string) string {
 	if err == nil && filepath.IsLocal(rel) {
 		return ""
 	}
-	source := lintCacheEnv + "=" + dir
+	source := fmt.Sprintf("%s=%s", lintCacheEnv, dir)
 	if os.Getenv(lintCacheEnv) == "" {
 		source = fmt.Sprintf("%s is unset, so it is the shared user cache %s", lintCacheEnv, dir)
 	}

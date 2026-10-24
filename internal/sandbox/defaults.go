@@ -136,7 +136,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		return name == "TMPDIR" || exported
 	})
 	for _, name := range slices.Sorted(maps.Keys(exports)) {
-		kept = append(kept, name+"="+exports[name])
+		kept = append(kept, fmt.Sprintf("%s=%s", name, exports[name]))
 	}
 	if o.TempDir != "" {
 		kept = append(kept, "TMPDIR="+o.TempDir)

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,8 +14,8 @@ func TestToolCacheUnscoped(t *testing.T) {
 
 	denied := func(command, resolved, why string) ShellVerdict {
 		return ShellVerdict{
-			Deny: "magus guard denied `" + resolved + "`; [MGS2014] " + why +
-				"; run `magus run golangci-lint <project>`, which keeps the cache in /work/repo/.magus/golangci-lint",
+			Deny: fmt.Sprintf("magus guard denied `%s`; [MGS2014] %s; run `magus run golangci-lint <project>`, "+
+				"which keeps the cache in /work/repo/.magus/golangci-lint", resolved, why),
 			Why:  "A cache shared with other checkouts answers from their results and hides findings this checkout would report: one shared lint cache held 10,202 paths from 5 other checkouts.",
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolved},
 		}
@@ -44,7 +45,7 @@ func TestToolCacheUnscoped(t *testing.T) {
 	t.Run("scoped under the checkout passes", func(t *testing.T) {
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
 		assert.Equal(t, ShellVerdict{}, Evaluate(deps, scoped+"custom-gcl run ./..."))
-		assert.Equal(t, ShellVerdict{}, Evaluate(deps, "env "+scoped+"custom-gcl run"))
+		assert.Equal(t, ShellVerdict{}, Evaluate(deps, fmt.Sprintf("env %scustom-gcl run", scoped)))
 	})
 
 	t.Run("a relative cache resolves against the working directory", func(t *testing.T) {

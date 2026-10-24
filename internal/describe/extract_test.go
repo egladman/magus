@@ -1,6 +1,7 @@
 package describe
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -230,7 +231,7 @@ func TestFootprintRefusesTheRemovedForms(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			g := Extract("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    " + tc.body + "\n}\n")
+			g := Extract(fmt.Sprintf("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", tc.body))
 			build, _ := nodeByName(g, "build")
 			require.EqualError(t, build.FootprintErr, tc.want)
 		})
@@ -271,7 +272,7 @@ func TestFootprintComputedListOrFlagIsDynamic(t *testing.T) {
 		`final extra = "gen/**"; ctx.writesFiles(["dist/**", extra]);`,
 		`final edits = true; ctx.writesFiles(["go.mod"], editsExistingSource: edits);`,
 	} {
-		g := Extract("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    " + body + "\n}\n")
+		g := Extract(fmt.Sprintf("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {\n    %s\n}\n", body))
 		build, _ := nodeByName(g, "build")
 		assert.True(t, build.DynamicIO, "%s must flag DynamicIO", body)
 	}

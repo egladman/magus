@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -81,9 +82,9 @@ func TestLintCacheUnscoped(t *testing.T) {
 	assert.Equal(t, "", lintCacheUnscoped(root))
 
 	t.Setenv("GOLANGCI_LINT_CACHE", "/shared/lint")
-	want := "[MGS2014] the golangci-lint cache is outside the checkout " + root +
-		" (GOLANGCI_LINT_CACHE=/shared/lint), so results from other checkouts can answer for this one's; " +
-		"`magus run golangci-lint <project>` keeps it in " + filepath.Join(root, ".magus", "golangci-lint")
+	want := fmt.Sprintf("[MGS2014] the golangci-lint cache is outside the checkout %s (GOLANGCI_LINT_CACHE=/shared/lint), "+
+		"so results from other checkouts can answer for this one's; `magus run golangci-lint <project>` keeps it in %s",
+		root, filepath.Join(root, ".magus", "golangci-lint"))
 	assert.Equal(t, want, lintCacheUnscoped(root))
 
 	got := (&runner{ctx: context.Background(), root: root}).checkGoCacheBudget()

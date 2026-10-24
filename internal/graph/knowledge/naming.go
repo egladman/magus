@@ -527,7 +527,7 @@ func (collisionCheck) run(x *namingIndex) []finding {
 // target's function and the target are one entity, so the same name is not a collision.
 func definesTarget(file, id string) bool {
 	return path.Base(file) == "magusfile.buzz" &&
-		strings.HasPrefix(id, types.KindTarget+":"+path.Dir(file)+":")
+		strings.HasPrefix(id, fmt.Sprintf("%s:%s:", types.KindTarget, path.Dir(file)))
 }
 
 // nameWords splits an identifier into words: camelCase, PascalCase, snake_case, kebab-case and

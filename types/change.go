@@ -115,7 +115,7 @@ func NamesClaimedDeclaration(claimed, declaration string) bool {
 	}
 	return strings.HasPrefix(declaration, claimed+".") ||
 		strings.HasSuffix(declaration, "."+claimed) ||
-		strings.Contains(declaration, "."+claimed+".")
+		strings.Contains(declaration, fmt.Sprintf(".%s.", claimed))
 }
 
 // NamedDeclarations are the entries of all that claim names under [NamesClaimedDeclaration].
