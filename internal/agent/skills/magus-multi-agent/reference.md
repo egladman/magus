@@ -80,10 +80,14 @@ magus job exit <job> --stdin <<'EOF'
 {"schema_version": 2, "job": "<job>",
  "changed_paths": ["api/store.go", "api/store_test.go"],
  "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "gate_evidence": [{"gate_id": "go-test", "output_ref": "<ref>"}, {"gate_id": "lint", "output_ref": "<ref>"}],
  "descendants": [],
  "unresolved_risks": ["what is left, or what the worker could not verify"]}
 EOF
 ```
+
+`validation` carries one command. `gate_evidence` carries one `{gate_id, output_ref}` per gate
+the brief names, so each gate keeps its own ref.
 
 ## The root's role
 
