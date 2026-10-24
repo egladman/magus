@@ -216,10 +216,11 @@ footprint: where its diff since the checkpoint landed
 
 ```console
 $ magus job wait release-1.3/notes
-rejected release-1.3/notes, and its state is unchanged
+rejected release-1.3/notes
   job release-1.3/notes is not read-only and the result claims no changed paths at all
   nothing in the diff since 5f6b136f2721af3fb8a117fbf824b24a3a78b059 is inside its write paths (notes/1.3.md)
   goal "notes": nothing matching "notes/1.3.md" is in the tree, so this goal is unmet
+release-1.3/notes is running again and holds its write paths again for its rework
 goal notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
@@ -227,15 +228,17 @@ unresolved risks its holder reported
 ```
 
 Exit 1, every unmet rule named, and the risk repeated where the person deciding
-reads it. The board with its ended rows is the checklist:
+reads it. The rejected item is running again, holding its write paths for the rework;
+had another job taken one of them meanwhile, it would stay exited and the wait would
+name that job. The board is the checklist:
 
 <!-- golden: job_people_release.txtar ls-board.out -->
 
 ```console
 $ magus ls jobs --all
-JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass    standard  1      alone     -
-release-1.3/notes      notes      exited  standard  1      disjoint  -
+JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass     standard  1      alone     -
+release-1.3/notes      notes      running  standard  1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

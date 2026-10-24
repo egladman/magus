@@ -782,10 +782,15 @@ the refusal names each subject that failed rather than only that the goal
 failed:
 
 ```text
-rejected api/migrate, and its state is unchanged
+rejected api/migrate
   goal "migration": nothing matching "db/migrations/**" changed since
   4a1c0cc8, so this goal is unmet
+api/migrate is running again and holds its write paths again for its rework
 ```
+
+A rejected job that had exited goes back to running and re-claims its write paths
+under the rule a claim meets. When another job took one of them meanwhile, the job
+stays exited, holds nothing, and the wait names that job.
 
 The diff and the tree are read in the checkout that took the job, while it
 still exists, so an orchestrator can wait from its own tree before it
