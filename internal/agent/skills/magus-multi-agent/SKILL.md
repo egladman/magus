@@ -155,10 +155,7 @@ Assign the check from the pipeline the workspace composed, not from convention.
   where one exists. A go test check naming exactly the packages of the write paths
   (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
 - The integration job owns the full `go-test` and `lint`, and runs every check a merged
-  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the
-  whole composition.{{if .Full}} A worker hand-sequencing lint, format, and test is re-deriving an
-  order the magusfile already owns, and the step it forgets fails silently by
-  omission.{{end}}
+  worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands{{if .Full}}, which is what stops seven fanned-out workers from

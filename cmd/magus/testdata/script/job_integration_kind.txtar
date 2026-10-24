@@ -81,6 +81,9 @@ stderr 'run `magus vcs resolve`, commit what it stages, then wait again'
 exec magus vcs resolve
 stdout 'vcs resolve: ran magus run test:rw \.'
 ! exists .git/magus-owed-regeneration.json
+# The resolve ran test:rw on the same key, so its attempt is the ref's newest; the
+# evidence names a fresh run of the check.
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" $WORK/evidence.tmpl.json > "$WORK/evidence.json"'
 stdin $WORK/evidence.json
 exec magus job wait integrate --integration --stdin
 stdout '^integration: integrate passes in '

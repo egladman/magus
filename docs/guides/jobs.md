@@ -124,7 +124,7 @@ In `../shop-pricing` she takes the first job:
 
 ```console
 $ magus job exec refactor/pricing
-recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb, which is the checkpoint it was handed. Nothing to reconcile; carry on.
+recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d, which is the checkpoint it was handed. Nothing to reconcile; carry on.
 took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
 ```
 
