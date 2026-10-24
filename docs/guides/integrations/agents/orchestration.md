@@ -27,11 +27,11 @@ its own figure.
 
 <!--diagram:agent-orchestration-->
 
-| role         | who it is                                         | what it may do                                                          |
-| ------------ | ------------------------------------------------- | ----------------------------------------------------------------------- |
-| orchestrator | the root session                                  | fork rows, spawn, `magus job wait`, the final gate, push, open the PR   |
-| worker       | a subagent bound to one row                       | write its row's write paths, run its row's check, exit its row          |
-| integrator   | the subagent spawned `<parent>/integrate <job>`   | merge finished branches, build ./magus, regenerate, run the full checks |
+| role         | who it is                                       | what it may do                                                          |
+| ------------ | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| orchestrator | the root session                                | fork rows, spawn, `magus job wait`, the final gate, push, open the PR   |
+| worker       | a subagent bound to one row                     | write its row's write paths, run its row's check, exit its row          |
+| integrator   | the subagent spawned `<parent>/integrate <job>` | merge finished branches, build ./magus, regenerate, run the full checks |
 
 Above all three is the [human in the loop](../../../doctrine.md#human-in-the-loop).
 What lands, what is published and what a round may spend are that person's
@@ -97,12 +97,12 @@ is handed, and `magus describe job <job>` renders it the same way every time:
 `magus job fork` chooses where each job runs, cheapest first, and records the
 reason:
 
-| level | where the job runs                                        | chosen when                                                                 |
-| ----- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 1     | the forker's checkout                                     | a read-only job, or a disjoint writer at a high `risk_tolerance`            |
-| 2     | one scratch checkout its wave shares, with one ./magus    | a light writer, or one touching a file the workspace loads beside a peer   |
-| 3     | its own checkout, with the forker's ./magus placed in it  | a writer by default, a generator's output, or an overlap with no claim      |
-| 4     | its own checkout, where the holder builds ./magus         | a write path is a build input of `./cmd/magus`                              |
+| level | where the job runs                                       | chosen when                                                              |
+| ----- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1     | the forker's checkout                                    | a read-only job, or a disjoint writer at a high `risk_tolerance`         |
+| 2     | one scratch checkout its wave shares, with one ./magus   | a light writer, or one touching a file the workspace loads beside a peer |
+| 3     | its own checkout, with the forker's ./magus placed in it | a writer by default, a generator's output, or an overlap with no claim   |
+| 4     | its own checkout, where the holder builds ./magus        | a write path is a build input of `./cmd/magus`                           |
 
 A write path covering a magusfile, `magus.yaml` or a spell source a magusfile
 imports never shares a checkout with another writer: half-saved, it stops the
