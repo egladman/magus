@@ -14,12 +14,12 @@ import (
 )
 
 // The symbol index is a build artifact, never a source file: it lives under the magus
-// cache dir, not the working tree. A spell declares its indexer with
+// cache dir, not among the sources. A spell declares its indexer with
 // mgs_getSymbolIndexer (see spells.SymbolIndexer); when magus runs it, it hands the
 // indexer the destination via the IndexEnvVar environment variable, so the command
-// writes straight into the cache and the tree stays clean. The knowledge graph reads
-// the same path back. The run and ingestion agree by both calling IndexPath with the
-// same (cacheDir, projectAbsDir, op).
+// writes straight into the cache dir. The knowledge graph reads the same path back. The
+// run and ingestion agree by both calling IndexPath with the same (cacheDir,
+// projectPath, op).
 const (
 	// IndexEnvVar names the environment variable magus sets to the index's cache
 	// destination when running a declared symbol indexer, which writes its index there.
@@ -33,31 +33,21 @@ const (
 	indexFileName = "index.scip"
 )
 
-// IndexPath returns the absolute path of the SCIP index op writes for a project:
-// <cacheDir>/symbols/<hash>/<op>.scip, where <hash> is derived from the project's
-// absolute directory and op is the indexer op (spells.SymbolIndexer.OpName), so each
-// indexing op bound to one project has a file of its own. Keying on a hash of the abs dir
-// (rather than the workspace path) lets the op-run side (which knows only the project
-// dir) and the ingestion side (which joins root and the project path) compute an
-// identical location without either re-deriving the other's view. projectAbsDir is
-// cleaned first so trivially different spellings of the same dir map to one index.
-func IndexPath(cacheDir, projectAbsDir, op string) string {
-	// Canonicalize through EvalSymlinks so the op-run side (which learns the dir from the
-	// run context) and the ingestion side (which joins root and project.Path) hash the
-	// SAME bytes even when one spelling reaches here via a symlink (e.g. macOS /var ->
-	// /private/var); a mismatch would silently write the index where ingestion never
-	// looks. Best-effort: a not-yet-created dir falls back to a plain Clean.
-	dir := filepath.Clean(projectAbsDir)
-	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = resolved
-	}
-	sum := sha256.Sum256([]byte(dir))
+// IndexPath returns the path of the SCIP index op writes for a project:
+// <cacheDir>/symbols/<hash>/<op>.scip, where <hash> is derived from projectPath, the
+// project's workspace-relative directory ("." for the root), and op is the indexer op
+// (spells.SymbolIndexer.OpName), so each indexing op bound to one project has a file of
+// its own. Nothing in it names the checkout, so under a cache dir inside the workspace
+// the path relative to the root is the same in every checkout, and the cache entry that
+// records the index as an output replays it into any of them.
+func IndexPath(cacheDir, projectPath, op string) string {
+	sum := sha256.Sum256([]byte(filepath.ToSlash(filepath.Clean(projectPath))))
 	name := op + ".scip"
 	if op == spells.DefaultSymbolIndexOp {
 		// compat(until: the cache key schema next changes, which re-runs every index
-		// anyway): the default op's index keeps the file it had before a project could
-		// hold two, because every cached run stamps that path and a new one would re-run
-		// the indexer.
+		// anyway): the default op's index keeps the name it had before a project could
+		// hold two, because every cached run records that path as its output and a new
+		// one would re-run the indexer.
 		name = indexFileName
 	}
 	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), name)

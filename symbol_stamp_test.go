@@ -51,7 +51,7 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 	t.Cleanup(func() { _ = m.Close() })
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.DefaultSymbolIndexOp}}), "scip run")
-	index = symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)
+	index = symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), ".", spells.DefaultSymbolIndexOp)
 	probes.Store(0)
 	return m, src, index, probes
 }

@@ -486,7 +486,19 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 // writesTheIndex is a symbol indexer body that writes a fixed index where dispatch tells a
 // real indexer to, inside the run, so the entry the run files records it.
 func writesTheIndex(ctx context.Context, req spells.InvokeRequest) (any, error) {
-	index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir, req.Target)
+	root, err := filepath.EvalSymlinks(types.WorkspaceFromContext(ctx).Root())
+	if err != nil {
+		return nil, err
+	}
+	dir, err := filepath.EvalSymlinks(req.Dir)
+	if err != nil {
+		return nil, err
+	}
+	project, err := filepath.Rel(root, dir)
+	if err != nil {
+		return nil, err
+	}
+	index := symbols.IndexPath(cache.FromContext(ctx).Dir(), project, req.Target)
 	if err := os.MkdirAll(filepath.Dir(index), 0o755); err != nil {
 		return nil, err
 	}
@@ -1120,9 +1132,9 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
 }
 
-// The index lives in the cache dir, where no replay restores it, so an entry for sources
-// the tree went back to must not replay over an index built from the edit: `magus refs`
-// then answered with a line the source no longer held, and status called it up to date.
+// An entry for sources the tree went back to replays the index those sources built, never
+// leaving the edit's in place: `magus refs` once answered with a line the source no
+// longer held, and status called it up to date.
 func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 	runs := 0
 	spellName := register.Spell(t, "zzz-scip-replay-test-spell",
@@ -1135,7 +1147,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir, req.Target)
+			index := symbols.IndexPath(cache.FromContext(ctx).Dir(), ".", req.Target)
 			if err := os.MkdirAll(filepath.Dir(index), 0o755); err != nil {
 				return nil, err
 			}
@@ -1156,7 +1168,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
-	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)
+	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), ".", spells.DefaultSymbolIndexOp)
 
 	scip := func(source []byte) {
 		t.Helper()
@@ -1174,5 +1186,5 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	scip(edited)
 	scip(original)
-	assert.Equal(t, 3, runs, "reverting the edit reruns the indexer, since the entry for the original sources no longer describes the index")
+	assert.Equal(t, 2, runs, "reverting the edit replays the original sources' index over the edit's")
 }
