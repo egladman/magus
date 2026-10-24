@@ -931,8 +931,34 @@ func TestApplyRefusesStatusAnEndedJobAndAnUnboundedOne(t *testing.T) {
 
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateFail })
 	require.NoError(t, err)
-	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	_, err = Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorContains(t, err, "w already ended fail")
+}
+
+// An integration row that exited red on a file outside its paths took the widening and
+// stayed exited, so nobody could take it again; a widened ended row is handed back too.
+func TestApplyWideningAnExitedOrEndedRowDeclaresItAgain(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []types.JobState{types.StateExited, types.StateFail} {
+		s, _ := appliedRow(t, "a.go")
+		_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = state })
+		require.NoError(t, err)
+
+		got, err := Apply(t.Context(), s, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+		require.NoError(t, err, state)
+		assert.Equal(t, []string{"a.go", "b.go"}, got[0].Next.WritePaths, state)
+		rows, err := s.List()
+		require.NoError(t, err)
+		assert.Equal(t, types.StateDeclared, rows[0].State, "%s: the stored row is declared, not only the plan", state)
+	}
+
+	s, _ := appliedRow(t, "a.go")
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+	kept, err := Apply(t.Context(), s, []types.Declaration{spec("a.go")}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, kept[0].Next.State, "an exited row changed without widening stays its holder's")
 }
 
 // A new id is a fork: declared, with this checkout's checkpoint when the record names none.

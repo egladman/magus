@@ -1255,7 +1255,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: integrates: %s", err)
 		}
 		if len(paths) == 0 {
-			return exit.Usagef("magus job fork: integrates: %s change nothing since %s, so there is nothing to merge", strings.Join(row.Integrates, ", "), base)
+			if paths, err = unfinishedIntegration(ctx, root, store, row); err != nil {
+				return err
+			}
+			if len(paths) == 0 {
+				return exit.Usagef("magus job fork: integrates: %s change nothing since %s, so there is nothing to merge", strings.Join(row.Integrates, ", "), base)
+			}
+			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's goals are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
 		}
 		if row.Checkpoint == "" {
 			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with this checkout's revision %s, and the job starts there", base), attr.Notice("note"))
@@ -1272,6 +1278,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		case advice != "":
 			slog.InfoContext(ctx, advice, attr.Notice("advice"))
 		}
+	}
+	if row, err = forkCheckout(ctx, store, root, row); err != nil {
+		return err
 	}
 	// The reader loads the graph only when a gate names a symbol, or when the deletion
 	// candidates ask for it, and the two share one load.
@@ -1414,6 +1423,63 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			derived,
 		})
 	}
+}
+
+// forkCheckout settles the checkout row is taken in when it names none. A fork run inside a
+// checkout a job's fork made adopts that checkout, so the new row's holder is bound there and
+// not refused as a sibling. An integration row forked from any other linked checkout is
+// refused: its holder merges in a checkout of its own, and the forker's tree is not one.
+func forkCheckout(ctx context.Context, store *job.Store, root string, row types.Declaration) (types.Declaration, error) {
+	if row.Checkout != "" || root == "" {
+		return row, nil
+	}
+	here, err := filepath.Abs(root)
+	if err != nil {
+		return row, err
+	}
+	owned, err := store.OwnedCheckout(here)
+	if err != nil {
+		return row, err
+	}
+	if owned != "" {
+		slog.InfoContext(ctx, fmt.Sprintf("the fork runs inside %s, a checkout a job's fork made, so %s is taken there too", owned, row.ID), attr.Notice("note"))
+		row.Checkout = owned
+		return row, nil
+	}
+	if len(row.Integrates) == 0 {
+		return row, nil
+	}
+	linked, err := store.LinkedCheckout(ctx, here)
+	if err != nil {
+		return row, exit.Usagef("magus job fork: whether %s is a linked checkout cannot be read (%s), so the checkout %s merges in is unknown: pass --checkout <dir>", here, err, row.ID)
+	}
+	if linked {
+		return row, exit.Usagef("magus job fork: %s is an integration job forked from %s, the forker's own linked checkout, where its holder would be bound: pass --checkout <dir>, a new directory the fork makes or the linked checkout the integrator runs in", row.ID, here)
+	}
+	return row, nil
+}
+
+// unfinishedIntegration is the write paths a re-fork of integration row id holds when its
+// branches have nothing left to merge: the stored row's, while some goal of it is unmet, so
+// a follow-up fixing what the merge left red keeps the row. nil when there is no such row or
+// every goal is met.
+func unfinishedIntegration(ctx context.Context, root string, store *job.Store, row types.Declaration) ([]string, error) {
+	rows, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	if i < 0 || len(rows[i].Integrates) == 0 || len(rows[i].WritePaths) == 0 {
+		return nil, nil
+	}
+	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graphsByTree(root, newJobGraph(root, false), false)))
+	if err != nil {
+		return nil, exit.Usagef("magus job fork: %s's goals cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
+	}
+	if !slices.ContainsFunc(status.Gates, func(g types.GateStatus) bool { return !g.Verified }) {
+		return nil, nil
+	}
+	return slices.Clone(rows[i].WritePaths), nil
 }
 
 // printClaimNotes prints each of a fork's claim notes on a line of its own.
