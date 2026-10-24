@@ -2397,6 +2397,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if input == "" || location.cacheDir == "" {
 		return
 	}
+	stampHeartbeat(ctx, location.workspace, Heartbeat{Session: who.Session, Lease: lease, Transcript: who.Transcript, At: time.Now()})
 	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,

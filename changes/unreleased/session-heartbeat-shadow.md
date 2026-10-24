@@ -1,0 +1,1 @@
+`magus status` reports leased rows whose session has been silent for over 30 minutes and has no background command running. The guard stamps a last-seen time per session and lease, at most once a minute, into a JSON Lines store under the state dir. The report only measures: nothing is ended, released or granted.

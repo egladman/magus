@@ -19,7 +19,10 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -81,7 +84,8 @@ func status(ctx context.Context, args []string) error {
 
 	if f.Watch == 0 {
 		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
-		if err := printStatus(snapshot, opts, 0, f.Compact); err != nil {
+		silent, silentErr := loadSilentLeases(ctx, time.Now())
+		if err := printStatusWithSilent(os.Stdout, snapshot, silent, silentErr, opts, f.Compact); err != nil {
 			return err
 		}
 		if snapshot.Broker != nil && opts.Format == outputText && !f.Compact {
@@ -138,6 +142,74 @@ func status(ctx context.Context, args []string) error {
 		case <-queryTick.C:
 			snapshot = buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 		}
+	}
+}
+
+// statusReport is the snapshot with the leases whose session has gone silent. They sit
+// beside the snapshot, not in it, while the report is a shadow measurement.
+type statusReport struct {
+	types.StatusSnapshot `yaml:",inline"`
+	SilentLeases         []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
+	SilentLeasesError    string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
+}
+
+// loadSilentLeases reads the workspace's silent leased rows. Outside a workspace there are
+// none and no error: status runs anywhere.
+func loadSilentLeases(ctx context.Context, now time.Time) ([]guard.SilentLease, error) {
+	root, err := workspace.FindRoot("")
+	if err != nil {
+		return nil, nil
+	}
+	loc, err := jobPlace(root)
+	if err != nil {
+		return nil, err
+	}
+	loc.DryRun = true
+	rows, err := job.NewStore(loc).List()
+	if err != nil {
+		return nil, err
+	}
+	return guard.SilentLeases(root, loc.CacheDir, rows, now, guard.SilentLeaseAfter)
+}
+
+// printStatusWithSilent renders the snapshot, then the silent leases: appended to the text
+// form, a field of the structured ones.
+func printStatusWithSilent(w io.Writer, snapshot types.StatusSnapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		report := statusReport{StatusSnapshot: snapshot, SilentLeases: silent}
+		if silentErr != nil {
+			report.SilentLeasesError = silentErr.Error()
+		}
+		return emitFormatted(opts, report)
+	}
+	if err := writeStatus(w, snapshot, opts, 0, compact); err != nil {
+		return err
+	}
+	if compact {
+		return nil
+	}
+	printSilentLeases(w, silent, silentErr)
+	return nil
+}
+
+// printSilentLeases lists leased rows whose session is silent, each with how long and
+// where it was last seen. It prints nothing when there are none and no error.
+func printSilentLeases(w io.Writer, silent []guard.SilentLease, err error) {
+	if err != nil {
+		fmt.Fprintf(w, "\nsilent leases: not read: %v\n", err)
+		return
+	}
+	if len(silent) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nsilent leases (no judged call for over %s, no background command running; nothing was ended):\n", guard.SilentLeaseAfter)
+	for _, s := range silent {
+		line := fmt.Sprintf("  %s  session %s  silent %s", s.Lease, s.Session, formatDur(time.Duration(s.SilentSeconds)*time.Second))
+		if s.BackgroundNote != "" {
+			line = fmt.Sprintf("%s  (%s)", line, s.BackgroundNote)
+		}
+		fmt.Fprintln(w, line)
 	}
 }
 
