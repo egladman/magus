@@ -532,10 +532,11 @@ export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (di
     return git(dir, args: ["rev-parse", "HEAD"]);
 }
 
-// withTree runs body in a detached worktree of root at rev in a scratch checkout dir,
-// and removes the worktree however body ends.
-fun withTree(root: str, rev: str, body: fun (dir: str) > void !> any) > void !> any {
-    final dir = fs\scratchCheckoutDir("merge-job-branches");
+// withTree runs body in a detached worktree of root at rev made at dir, and removes the
+// worktree however body ends. dir comes from the caller because the scratch checkout dir
+// lives under XDG_CACHE_HOME, which a CI gate puts inside its own checkout, where the
+// buzz-test sandbox denies writes.
+fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > void !> any) > void !> any {
     try {
         git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
     } catch (e) {
@@ -818,7 +819,7 @@ export fun main(args: [str]) > void !> any {
     var regenerated = "";
     if (apply) {
         requireNewBranch(root, into: into);
-        withTree(root, rev: plan.base, body: fun (dir: str) > void !> any {
+        withTree(root, rev: plan.base, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > void !> any {
             result = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (!allMerged(result)) { return; }
             regenerated = commitRegenerated(dir, s: result, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
@@ -838,7 +839,7 @@ export fun main(args: [str]) > void !> any {
                 declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
         }
         result = stack\BranchStack{ schema = plan.schema, base = plan.base, layers = layers };
-        withTree(root, rev: into, body: fun (dir: str) > void !> any { verdicts = verifyLayers(dir, s: result); });
+        withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > void !> any { verdicts = verifyLayers(dir, s: result); });
     }
 
     final merged = allMerged(result);
@@ -1024,6 +1025,12 @@ fun fixtureRegenerate(dir: str) > void !> any {
     git(dir, args: ["add", "gen/list.txt"]);
 }
 
+// testTree is a dir for withTree that the test owns, outside every checkout the
+// buzz-test sandbox guards.
+fun testTree() > str !> any {
+    return fs\tempDir("merge-job-branches-tree-");
+}
+
 fun planStack(root: str, names: [str]) > stack\BranchStack !> any {
     final cands = mut [<Candidate>];
     foreach (n in names) {
@@ -1039,7 +1046,7 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
 
     final mainBefore = git(root, args: ["rev-parse", "main"]);
     var result = plan;
-    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+    withTree(root, rev: "main", dir: testTree(), body: fun (dir: str) > void !> any {
         result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
     });
     final statuses = mut [<str>];
@@ -1064,7 +1071,7 @@ test "a clean merge regenerates once and commits the output apart" {
     var dirty = [<str>];
     var subjects = [<str>];
     var regenerated = "";
-    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+    withTree(root, rev: "main", dir: testTree(), body: fun (dir: str) > void !> any {
         final result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         assert\equal(allMerged(result), want: true, message: "every layer merges");
         regenerated = commitRegenerated(dir, s: result, regenerate: fixtureRegenerate);
@@ -1096,7 +1103,7 @@ test "a split stack merged back yields the original change's tree" {
     ] });
     final plan = stack\orderLayers(stack\readStack(written));
     var tree = "";
-    withTree(root, rev: plan.base, body: fun (dir: str) > void !> any {
+    withTree(root, rev: plan.base, dir: testTree(), body: fun (dir: str) > void !> any {
         final result = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         assert\equal(allMerged(result), want: true, message: "every layer merges");
         commitRegenerated(dir, s: result, regenerate: fixtureRegenerate);
@@ -1112,10 +1119,10 @@ test "a layer settled by job claims says so, and only then does the merge owe a 
     final line = "{CLAIMS_SETTLED}src/a.txt by job claims: src/a.txt#A (job a) against src/a.txt#B (job b); every job passed";
     var plain = plan;
     var claimed = plan;
-    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+    withTree(root, rev: "main", dir: testTree(), body: fun (dir: str) > void !> any {
         plain = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
     });
-    withTree(root, rev: "main", body: fun (dir: str) > void !> any {
+    withTree(root, rev: "main", dir: testTree(), body: fun (dir: str) > void !> any {
         claimed = mergeLayers(dir, s: plan, into: "integration", settle: fun (d: str, branch: str) > [str] !> any {
             settleWithMagus(d, branch: branch);
             if (branch == "edit-a") { return [line]; }
@@ -1131,10 +1138,9 @@ test "a layer settled by job claims says so, and only then does the merge owe a 
 test "a failed readiness keeps the tree and names its path, target, ref and one cause line" {
     final root = fixtureRepo();
     final dump = `{"findings": [{"rule": "x"}, {"rule": "y"}]}` + "\n";
-    var kept = "";
+    final kept = testTree();
     final said = raisedBy(fun () > void !> any {
-        withTree(root, rev: "main", body: fun (dir: str) > void !> any {
-            kept = dir;
+        withTree(root, rev: "main", dir: kept, body: fun (dir: str) > void !> any {
             regenerateWithMagus("main", ready: fun (d: str) > [str] !> any {
                 throw "gate-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}";
             })(dir);
@@ -1152,13 +1158,16 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
 
 test "any other failure still removes the tree" {
     final root = fixtureRepo();
-    var gone = "";
-    raisedBy(fun () > void !> any {
-        withTree(root, rev: "main", body: fun (dir: str) > void !> any {
-            gone = dir;
+    final gone = testTree();
+    var ran = false;
+    final said = raisedBy(fun () > void !> any {
+        withTree(root, rev: "main", dir: gone, body: fun (dir: str) > void !> any {
+            ran = true;
             throw "boom";
         });
     });
+    assert\equal(ran, want: true, message: "the body ran: {said}");
+    assert\equal(said, want: "boom", message: "the body's error comes through");
     assert\equal(fs\isDir(gone), want: false, message: "the tree is gone");
     fs\removeAll(root);
 }
