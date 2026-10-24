@@ -7,7 +7,7 @@ import (
 
 // ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
@@ -15,8 +15,9 @@ const ProtocolVersion = 2
 const helloMagic = "magus-broker-v1"
 
 // Frame types. A request carries a non-zero ID and its reply echoes it, so one
-// connection carries any number of requests at once. A later wait frame for a queued
-// claim has room here: it would share the claim's ID and precede its reply.
+// connection carries any number of requests at once. A request the broker parks gets a
+// parked frame under its id at once, and its reply under the same id once the budget can
+// answer it.
 const (
 	// typeHandshake is the broker's first frame on every connection, with ID 0 and no
 	// body. It is sent only once the handshake file exists, so a client that reads the
@@ -32,6 +33,11 @@ const (
 	typeOverrunReply   = "overrun.reply"
 	typeReserve        = "reserve"
 	typeReserveReply   = "reserve.reply"
+	typeAwait          = "await"
+	typeAwaitReply     = "await.reply"
+	typeParked         = "parked"
+	typeCancel         = "cancel"
+	typeCancelReply    = "cancel.reply"
 	typeServiceAcquire = "service.acquire"
 	typeServiceRelease = "service.release"
 	typeServiceStopAll = "service.stopall"
@@ -92,14 +98,17 @@ type helloReply struct {
 }
 
 // claimRequest asks for a seat. Reassert records the claim without asking whether it
-// fits: its step is already running under a broker that has since died.
+// fits: its step is already running under a broker that has since died. Park holds a
+// claim kept out by its own run or its job tree's validation seat until a release makes
+// room; any other refusal answers at once.
 type claimRequest struct {
 	Claim    types.MachineClaim `json:"claim"`
 	Reassert bool               `json:"reassert,omitzero"`
+	Park     bool               `json:"park,omitzero"`
 }
 
-// claimReply is the verdict. It answers at once; a claim that does not fit is not
-// recorded, and whether to ask again is the client's call.
+// claimReply is the verdict; a claim that does not fit is not recorded. An unparked
+// claim is answered at once, and whether to ask again is the client's call.
 type claimReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
 	// Seat is set on a claim kept out by its job tree's validation cap: the run waits,
@@ -109,7 +118,8 @@ type claimReply struct {
 
 // reserveRequest asks for a seat held for another process, Reader, until its first
 // claim. It does not ride the asking connection: `status --wait` exits before the run
-// reading its output may start.
+// reading its output may start. A seat that fits the budget but not what it holds now
+// is parked until it does.
 type reserveRequest struct {
 	Claim  types.MachineClaim `json:"claim"`
 	Reader int                `json:"reader"`
@@ -118,6 +128,32 @@ type reserveRequest struct {
 // reserveReply is the verdict. Granted means the seat is held for the reader.
 type reserveReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
+}
+
+// awaitRequest waits, parked, until the budget would seat each of Claims beside what it
+// holds, taking nothing.
+type awaitRequest struct {
+	Claims []types.MachineClaim `json:"claims"`
+}
+
+// awaitReply is the verdict: Granted when the budget seats every claim, else Blocked
+// is the one it could not, and its Fits is false.
+type awaitReply struct {
+	Verdict types.MachineVerdict `json:"verdict"`
+	Blocked types.MachineClaim   `json:"blocked,omitzero"`
+}
+
+// parkedReply is the first answer to a request the broker parked: what keeps it out now.
+type parkedReply struct {
+	Verdict types.MachineVerdict `json:"verdict"`
+	Blocked types.MachineClaim   `json:"blocked,omitzero"`
+	Seat    *SeatWait            `json:"seat,omitempty"`
+}
+
+// cancelRequest drops this connection's parked request with id ID, which is then
+// answered with CodeCancelled. An id already answered is ignored.
+type cancelRequest struct {
+	ID uint64 `json:"id"`
 }
 
 // holdRequest registers a command a client runs under a deadline.
@@ -216,6 +252,8 @@ const (
 	// down: it seats nothing new while the runs it holds finish. The next run to find no
 	// broker starts another.
 	CodeDraining ErrorCode = "draining"
+	// CodeCancelled answers a parked request its client cancelled.
+	CodeCancelled ErrorCode = "cancelled"
 )
 
 // errorReply is the body of an error frame.

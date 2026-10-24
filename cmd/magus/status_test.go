@@ -375,6 +375,21 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	assert.Contains(t, lines[4], "service   -      postgres-15  running  deps 2  ports 5432")
 }
 
+// A request the broker holds parked shows as its own row, after the claims keeping it out.
+func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID:      48213,
+		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8},
+		Waiting: []types.MachineWaiter{
+			{Kind: "claim", Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
+		},
+	}, types.BrokerRequired, time.Now())
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, "waiting   41300  claim  slots 2  mem 2.0 GiB  docs lint  /tree/polish  magus run lint docs", lines[2])
+}
+
 // A claim says where its figure came from, since a measured one sits below what the
 // magusfile declares and a reader comparing the two would otherwise see a mismatch.
 func TestHolderMemTextNamesTheSizing(t *testing.T) {

@@ -219,7 +219,7 @@ func TestAReservationOutlivesItsAskerAndGoesToItsReader(t *testing.T) {
 	reader := startReader(t)
 
 	asker := dial(t, addr)
-	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid)
+	v, err := asker.Reserve(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, Command: "magus run go-test ."}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	require.NoError(t, asker.Close())
@@ -245,7 +245,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 	serve(t, addr, WithCapacity(0, 4))
 	reader := startReader(t)
 	c := dial(t, addr)
-	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid)
+	v, err := c.Reserve(t.Context(), types.MachineClaim{Slots: 4}, reader.Process.Pid, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -260,7 +260,7 @@ func TestAReservationDiesWithItsReader(t *testing.T) {
 func TestAReservationNamesItsReader(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 4))
-	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0)
+	_, err := dial(t, addr).Reserve(t.Context(), types.MachineClaim{Slots: 1}, 0, nil)
 	var refused *Error
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, CodeMalformed, refused.Code)

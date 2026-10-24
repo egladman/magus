@@ -207,6 +207,9 @@ type server struct {
 	inflight   int
 	closing    bool
 	draining   bool
+	// queue is the requests parked until the budget can answer them, in arrival order.
+	queue     []*parked
+	wakeTimer *time.Timer
 
 	stop     chan struct{}
 	stopOnce sync.Once
@@ -257,6 +260,9 @@ func (s *server) accept(ln net.Listener) error {
 func (s *server) closeConns() {
 	s.mu.Lock()
 	s.closing = true
+	s.mu.Unlock()
+	s.refuseParked(CodeDraining, "stopped")
+	s.mu.Lock()
 	for c := range s.conns {
 		_ = c.Close()
 	}
@@ -277,7 +283,7 @@ func (s *server) idleDuration(now time.Time) time.Duration {
 	holding := s.held() > 0
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if holding || s.inflight > 0 {
+	if holding || s.inflight > 0 || len(s.queue) > 0 {
 		s.lastActive = now
 		return 0
 	}
@@ -298,12 +304,13 @@ func (s *server) held() int {
 	return n
 }
 
-// startDrain turns away every new claim and service reference from here on, gives back
-// every reserved seat, and returns what is still held.
+// startDrain turns away every new claim and service reference from here on, refuses
+// every parked request, gives back every reserved seat, and returns what is still held.
 func (s *server) startDrain() int {
 	s.mu.Lock()
 	s.draining = true
 	s.mu.Unlock()
+	s.refuseParked(CodeDraining, "is shutting down and seats nothing new")
 	s.budget.DropReservations()
 	return s.held()
 }
@@ -314,11 +321,14 @@ func (s *server) isDraining() bool {
 	return s.draining
 }
 
+// noteRelease says room was freed: to a drain waiting for the last holder, and to the
+// requests parked for room. Callers do not hold s.mu.
 func (s *server) noteRelease() {
 	select {
 	case s.released <- struct{}{}:
 	default:
 	}
+	s.wake()
 }
 
 // drainingError is the refusal a draining broker gives, naming itself so the run's own
@@ -420,8 +430,11 @@ func (s *server) forget(conn net.Conn, sess *session) {
 		services, holds = sess.services, sess.holds
 		sess.claims, sess.services, sess.holds = map[string]int{}, map[string]int{}, map[string]*heldWork{}
 		s.unseatLocked(sess)
+		s.dropLocked(sess)
 	}
 	s.mu.Unlock()
+	// A seat or a parked request ahead of others frees room with no claim released.
+	defer s.wake()
 	for _, h := range holds {
 		// A broker that is stopping hung up itself: the client still runs, re-asserts
 		// its riders on the next broker, and enforces its own deadlines.
@@ -478,6 +491,10 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			return
 		}
 		c := s.attribute(sess, req.Claim)
+		if req.Park && !req.Reassert {
+			s.park(&parked{sess: sess, w: w, id: f.ID, kind: "claim", since: time.Now(), claim: c, try: s.claimTry(sess, c)})
+			return
+		}
 		var v types.MachineVerdict
 		// Held across the grant so a drain starting now cannot count holders between a
 		// claim being seated and being recorded against its connection.
@@ -509,21 +526,29 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 	case typeReserve:
 		var req reserveRequest
 		if err := decodeBody(f, &req); err != nil || req.Reader <= 0 {
-			fail(CodeMalformed, "broker: a reservation needs a claim and the pid of the process it is held for")
+			fail(CodeMalformed, "broker: a reservation needs a claim, and the pid of the process it is held for")
 			return
 		}
-		s.mu.Lock()
-		draining := s.draining
-		var v types.MachineVerdict
-		if !draining {
-			v = s.budget.Reserve(s.attribute(sess, req.Claim), req.Reader)
-		}
-		s.mu.Unlock()
-		if draining {
-			_ = w.write(typeError, f.ID, s.drainingError())
+		c := s.attribute(sess, req.Claim)
+		c.PID = req.Reader
+		s.park(&parked{sess: sess, w: w, id: f.ID, kind: "reserve", since: time.Now(), claim: c, try: s.reserveTry(c, req.Reader)})
+
+	case typeAwait:
+		var req awaitRequest
+		if err := decodeBody(f, &req); err != nil {
+			fail(CodeMalformed, "broker: decode await: %v", err)
 			return
 		}
-		_ = w.write(typeReserveReply, f.ID, reserveReply{Verdict: v})
+		s.park(&parked{sess: sess, w: w, id: f.ID, kind: "await", since: time.Now(), try: s.awaitTry(sess, req.Claims)})
+
+	case typeCancel:
+		var req cancelRequest
+		if err := decodeBody(f, &req); err != nil {
+			fail(CodeMalformed, "broker: decode cancel: %v", err)
+			return
+		}
+		s.cancel(sess, req.ID)
+		_ = w.write(typeCancelReply, f.ID, nil)
 
 	case typeRelease:
 		var req releaseRequest
@@ -691,5 +716,8 @@ func (s *server) status() types.StatusBroker {
 	if s.opts.services != nil {
 		st.Services = s.opts.services.Snapshot()
 	}
+	s.mu.Lock()
+	st.Waiting = s.waitingLocked(time.Now())
+	s.mu.Unlock()
 	return st
 }

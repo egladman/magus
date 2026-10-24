@@ -496,7 +496,8 @@ func printPipeWaitStatus(w io.Writer, waits []types.StatusPipeWait) {
 
 // printBrokerRows renders the broker one fact per row, record type first and pid second,
 // so awk and xargs work on it without a parser: the broker itself, its capacity and the
-// policy in force, every claim holding it, every service it hosts, and when it exits.
+// policy in force, every claim holding it, every request it holds until the budget can
+// answer it, every service it hosts, and when it exits.
 // Printed whenever a broker answered, held or idle, because "nothing holds it" is the
 // answer to the question people ask it.
 func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPolicy, now time.Time) {
@@ -513,6 +514,14 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			holderMemText(h),
 			holderProject(h.Project)+" "+h.Target,
 			h.Dir, h.Command, sinceText(h.Since)), "  "))
+	}
+	for _, wt := range st.Waiting {
+		fmt.Fprintf(tw, "waiting\t%d\t%s\n", wt.PID, strings.Join(nonEmpty(
+			wt.Kind,
+			fmt.Sprintf("slots %d", max(wt.Slots, 1)),
+			mbText("mem ", wt.MemoryMB),
+			holderProject(wt.Project)+" "+wt.Target,
+			wt.Dir, wt.Command, sinceText(wt.Since)), "  "))
 	}
 	for _, s := range st.Services {
 		label := s.Label

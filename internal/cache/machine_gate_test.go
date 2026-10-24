@@ -31,160 +31,145 @@ func TestMachineRefusalNamesTheOversizedClaimAndTheWaitForm(t *testing.T) {
 	assert.Contains(t, err.Error(), "Narrow the run")
 }
 
-func snapshotReader(b *MachineBudget) func(context.Context) (types.MachineSnapshot, error) {
-	return func(context.Context) (types.MachineSnapshot, error) { return b.Snapshot(), nil }
+// budgetWait answers an await over a budget a test writes, as the broker does: it holds
+// the ask until the budget seats each claim, waking on each release through release.
+type budgetWait struct {
+	mu    sync.Mutex
+	freed *sync.Cond
+	b     *MachineBudget
 }
 
-func fastAwait(t *testing.T) {
-	t.Helper()
-	prev := machineAwaitEvery
-	machineAwaitEvery = 10 * time.Millisecond
-	t.Cleanup(func() { machineAwaitEvery = prev })
+func newBudgetWait(b *MachineBudget) *budgetWait {
+	w := &budgetWait{b: b}
+	w.freed = sync.NewCond(&w.mu)
+	return w
 }
 
-func TestMachineGatePollIntervalScalesWithWeight(t *testing.T) {
-	for weight, want := range map[float64]time.Duration{
-		1:    50 * time.Millisecond,
-		0.5:  100 * time.Millisecond,
-		0.25: 200 * time.Millisecond,
-		0:    100 * time.Millisecond,
-	} {
-		assert.Equal(t, want, weighted(machinePollEvery, weight), "weight %v", weight)
+func (w *budgetWait) release(id string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.b.Release(id)
+	w.freed.Broadcast()
+}
+
+func (w *budgetWait) await(claims []types.MachineClaim) MachineWait {
+	return func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		stop := context.AfterFunc(ctx, func() {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.freed.Broadcast()
+		})
+		defer stop()
+		said := false
+		for {
+			blocked, v := AwaitVerdict(w.b.Snapshot(), claims)
+			if v.Granted || !v.Fits {
+				return blocked, v, nil
+			}
+			if !said {
+				parked(blocked, v)
+				said = true
+			}
+			if ctx.Err() != nil {
+				return types.MachineClaim{}, types.MachineVerdict{}, ctx.Err()
+			}
+			w.freed.Wait()
+		}
 	}
-	assert.Equal(t, 250*time.Millisecond, weighted(machineAwaitEvery, 1), "status --wait paces by the same rule")
 }
 
-func TestMachineGateAwaitReturnsAtOnceWhenTheBudgetSeatsIt(t *testing.T) {
+func TestAwaitMachineReturnsAtOnceWhenTheBudgetSeatsIt(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 4000, PID: 100})
 
 	var said []string
-	err := AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
+	err := AwaitMachine(t.Context(), newBudgetWait(b).await([]types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}}),
 		func(msg string) { said = append(said, msg) })
 	require.NoError(t, err)
 	assert.Empty(t, said, "a claim the budget seats now waits for nothing and says nothing")
 }
 
-func TestMachineGateAwaitReturnsWhenTheHolderReleases(t *testing.T) {
-	fastAwait(t)
+func TestAwaitMachineReturnsWhenTheHolderReleases(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
+	w := newBudgetWait(b)
 	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 100})
 
-	var said []string
+	said := make(chan string, 2)
 	done := make(chan error, 1)
 	go func() {
-		done <- AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}},
-			func(msg string) { said = append(said, msg) })
+		done <- AwaitMachine(t.Context(), w.await([]types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 6000}}),
+			func(msg string) { said <- msg })
 	}()
+	msg := <-said
+	assert.Contains(t, msg, "waiting for this machine's build budget to seat (root) test")
+	assert.Contains(t, msg, "pid 100 docs ci")
 	select {
 	case err := <-done:
 		t.Fatalf("returned (%v) while pid 100 held what the claim needs", err)
-	case <-time.After(200 * time.Millisecond):
+	default:
 	}
-	b.Release(id)
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("never returned after the holder released")
-	}
-	require.Len(t, said, 1, "the wait is announced once, not per poll")
-	assert.Contains(t, said[0], "waiting for this machine's build budget to seat (root) test")
-	assert.Contains(t, said[0], "pid 100 docs ci")
+	w.release(id)
+	require.NoError(t, <-done)
+	assert.Empty(t, said, "the wait is announced once")
 }
 
-// TestMachineGateAwaitWeighsEachClaimOnItsOwn: a run's steps wait on one another, so
-// two claims that only fit one at a time still admit the run.
-func TestMachineGateAwaitWeighsEachClaimOnItsOwn(t *testing.T) {
+// TestAwaitMachineWeighsEachClaimOnItsOwn: a run's steps wait on one another, so two
+// claims that only fit one at a time still admit the run.
+func TestAwaitMachineWeighsEachClaimOnItsOwn(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	claims := []types.MachineClaim{{Project: "a", Target: "test", MemoryMB: 6000}, {Project: "b", Target: "test", MemoryMB: 6000}}
-	require.NoError(t, AwaitMachine(t.Context(), snapshotReader(b), claims, nil))
+	require.NoError(t, AwaitMachine(t.Context(), newBudgetWait(b).await(claims), nil))
 }
 
-func TestMachineGateAwaitRefusesWhatCanNeverFit(t *testing.T) {
+func TestAwaitMachineRefusesWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	err := AwaitMachine(t.Context(), snapshotReader(b), []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 64_000}}, nil)
-	require.Error(t, err)
+	err := AwaitMachine(t.Context(), newBudgetWait(b).await([]types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 64_000}}), nil)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated)
 	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode(), "no wait admits it, so it is not EX_TEMPFAIL")
-	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
+	assert.ErrorIs(t, err, types.MachineBudgetExhausted)
 }
 
-func TestMachineGateAwaitWithoutABrokerWaitsForNothing(t *testing.T) {
-	gone := func(context.Context) (types.MachineSnapshot, error) {
-		return types.MachineSnapshot{}, errors.New("no broker")
+func TestAwaitMachineHandsTheWaitsErrorBack(t *testing.T) {
+	gone := errors.New("no broker")
+	wait := func(context.Context, func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		return types.MachineClaim{}, types.MachineVerdict{}, gone
 	}
-	require.NoError(t, AwaitMachine(t.Context(), gone, []types.MachineClaim{{Slots: 1}}, nil))
+	require.ErrorIs(t, AwaitMachine(t.Context(), wait, nil), gone, "the caller decides what no broker means")
 }
 
-func TestMachineGateAwaitStopsWithItsContext(t *testing.T) {
-	fastAwait(t)
+func TestAwaitMachineStopsWithItsContext(t *testing.T) {
 	b, _ := testBudget(t, 0, 1)
 	b.Assert(types.MachineClaim{Project: "docs", Target: "ci", PID: 100})
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
-	err := AwaitMachine(ctx, snapshotReader(b), []types.MachineClaim{{Slots: 1}}, nil)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
-func reserver(b *MachineBudget) func(context.Context, types.MachineClaim, int) (types.MachineVerdict, error) {
-	return func(_ context.Context, c types.MachineClaim, reader int) (types.MachineVerdict, error) {
-		return b.Reserve(c, reader), nil
-	}
-}
-
-// TestMachineGateReserveHoldsTheSeatItWaitedFor: once the wait returns, the seat is the
-// reader's, so a bare run asking first is refused and the reader's claim is granted.
-func TestMachineGateReserveHoldsTheSeatItWaitedFor(t *testing.T) {
-	fastAwait(t)
-	b, _ := testBudget(t, 0, 4)
-	liveReaders(b, 500)
-	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", Slots: 4, PID: 100})
-
+	ctx, cancel := context.WithCancel(t.Context())
+	said := make(chan string, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- ReserveMachine(t.Context(), reserver(b), []types.MachineClaim{{Project: ".", Target: "go-test", Slots: 4}}, 500, nil)
+		done <- AwaitMachine(ctx, newBudgetWait(b).await([]types.MachineClaim{{Target: "test", Slots: 1}}), func(msg string) { said <- msg })
 	}()
-	select {
-	case err := <-done:
-		t.Fatalf("returned (%v) while pid 100 held every slot", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-	b.Release(id)
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("never returned after the holder released")
-	}
-	assert.False(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted, "the seat is held for the reader")
-	assert.True(t, b.Request(types.MachineClaim{Target: "go-test", Slots: 4, PID: 500}).Granted)
+	<-said
+	cancel()
+	err := <-done
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "gave up waiting for (root) test")
 }
 
-func TestMachineGateReserveSeatsTheWidestClaim(t *testing.T) {
-	seat := widestSeat([]types.MachineClaim{
+func TestWidestSeatAdmitsEveryClaimOnItsOwn(t *testing.T) {
+	seat := WidestSeat([]types.MachineClaim{
 		{Project: "a", Target: "test", MemoryMB: 6000, Slots: 1},
 		{Project: "b", Target: "go-test", MemoryMB: 1000, Slots: 4},
 	})
 	assert.Equal(t, types.MachineClaim{Project: "a", Target: "test", MemoryMB: 6000, Slots: 4}, seat)
-	assert.Equal(t, 1, widestSeat(nil).Slots, "nothing to size still takes a slot")
-}
-
-func TestMachineGateReserveRefusesWhatCanNeverFit(t *testing.T) {
-	b, _ := testBudget(t, 0, 4)
-	liveReaders(b, 500)
-	err := ReserveMachine(t.Context(), reserver(b), []types.MachineClaim{{Target: "test", Slots: 8}}, 500, nil)
-	var stated interface{ ExitCode() int }
-	require.ErrorAs(t, err, &stated)
-	assert.Equal(t, ExitCodeMachineDeclaration, stated.ExitCode())
+	assert.Equal(t, 1, WidestSeat(nil).Slots, "nothing to size still takes a slot")
 }
 
 // refusingAdmitter answers every request with err.
 type refusingAdmitter struct{ err error }
 
-func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
+func (a refusingAdmitter) Claim(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
 	return types.MachineVerdict{}, a.err
 }
 

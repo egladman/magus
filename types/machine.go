@@ -90,6 +90,24 @@ type MachineVerdict struct {
 	HeldSlots   int               `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
 }
 
+// MachineWaiter is a request the broker holds until the budget can answer it: a claim kept
+// out by its own run or its job tree's validation seat, or a `status --wait`.
+type MachineWaiter struct {
+	// Kind is claim, reserve (a seat held for a piped reader) or await (takes nothing).
+	Kind    string `json:"kind" yaml:"kind"`
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
+	PID     int    `json:"pid,omitzero" yaml:"pid,omitempty"`
+	// MemoryMB and Slots are the claim it waits to seat.
+	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Since    time.Time `json:"since" yaml:"since"`
+	// WaitedMS is how long it had waited when the status was read.
+	WaitedMS int64 `json:"waited_ms" yaml:"waited_ms"`
+}
+
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the
 // claims spending it. It is what `magus status` reports and what the broker serves.
 type MachineSnapshot struct {

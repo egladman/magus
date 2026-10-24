@@ -249,6 +249,8 @@ type StatusBroker struct {
 	StartTime  time.Time `json:"start_time" yaml:"start_time"`
 	// Capacity is the whole budget, what is held, and every claim holding it.
 	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
+	// Waiting are the requests it holds until the budget can answer them, oldest first.
+	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
 	// Services are the shared services it hosts right now.
 	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
 	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,
