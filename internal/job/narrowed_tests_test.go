@@ -392,7 +392,7 @@ func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
 	store := &Store{storeConfig: storeConfig{root: root}}
 	refused := func(writePaths []string, args ...string) []string {
 		var out []string
-		for _, p := range unscopedNarrowedProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {
+		for _, p := range narrowedTestProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {
 			out = append(out, fmt.Sprintf("%s %s", p.Code, p.Field))
 		}
 		return out
