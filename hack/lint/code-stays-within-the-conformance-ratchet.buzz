@@ -84,10 +84,12 @@ export fun judge(report: {str: any}) > [Finding] !> any {
             final measure = std\toInt(v["measure"]);
             final home: str = v["home"] ?? "";
             final unshared: bool = v["unshared"] ?? false;
+            final rename: str = v["rename"] ?? "";
+            final concept = if (rename == "") "" else ", name the concept: {rename}";
             final past = if (metric == "file-split") "with {home} at or under the {origin} floor of {value}" else "past the {origin} ceiling of {value}";
             found.append(Finding{ path = at.path, line = at.line,
-                message = "{label}: {id} measures {measure}, {past}" + because(why, metric: metric, items: [id]),
-                fix = fixFor(metric, value: value, item: Item{ home = home, measure = measure, unshared = unshared }) });
+                message = "{label}: {id} measures {measure}, {past}{concept}" + because(why, metric: metric, items: [id]),
+                fix = fixFor(metric, value: value, item: Item{ file = at.path, home = home, measure = measure, unshared = unshared, rename = rename }) });
         }
     }
     final stale: [any] = report["stale"] ?? [<any>];
@@ -103,18 +105,24 @@ export fun judge(report: {str: any}) > [Finding] !> any {
     return found;
 }
 
-// Item is what fixFor reads of a violation: where the lens says it belongs ("" when it names
-// nowhere), its measure, and for file-split whether it shares nothing with its root.
+// Item is what fixFor reads of a violation: its file, where the lens says it belongs ("" when it
+// names nowhere), its measure, for file-split whether it shares nothing with its root, and the
+// concept its file names when it names one (rename, "" otherwise).
 export object Item {
+    file: str = "",
     home: str = "",
     measure: int = 0,
     unshared: bool = false,
+    rename: str = "",
 }
 
 // fixFor is how to clear a violation of metric past value.
 export fun fixFor(metric: str, value: int, item: Item) > str {
     final home = item.home;
     final known = "or add it to a known entry in " + RATCHET + " with a reason a reviewer can check.";
+    if (item.rename != "") {
+        return "Name the concept: `git mv {item.file} {item.rename}`, then fold {item.file} into it, or add it to a known entry in {RATCHET} with a reason a reviewer can check.";
+    }
     if (metric == "file-split" and item.unshared) {
         return "Rename it, it shares nothing with {home}: its name says it was split out of {home}, " + known;
     }
@@ -380,4 +388,16 @@ test "a file-split violation says to merge it, or to rename it when it shares no
     assert\equal(got[0].fix.indexOf("Put this in internal/guard/buzz.go, which would be 199 lines; a split starts past 1500") == 0,
         want: true, message: got[0].fix);
     assert\equal(got[1].fix.indexOf("Rename it, it shares nothing with internal/guard/background.go") == 0, want: true, message: got[1].fix);
+}
+
+test "a split file that names a concept is told to name it, with a git mv fix" {
+    final named: {str: any} = {"id": "cmd/magus/job_claim_callers.go#claim", "source": "cmd/magus/job_claim_callers.go:1",
+        "measure": 120.0, "home": "cmd/magus/job_claim.go", "rename": "cmd/magus/job_claim.go"};
+    final row: {str: any} = {"key": {"metric": "file-split", "population": "source"}, "value": 1500.0,
+        "source": "anchor", "violations": [named]};
+    final got = judge(report([fresh()], rows: [row], stale: [<any>]));
+    assert\equal(got.len(), want: 1, message: "the named split is enforced");
+    assert\equal(got[0].message.indexOf("name the concept: cmd/magus/job_claim.go") != null, want: true, message: got[0].message);
+    assert\equal(got[0].fix.indexOf("Name the concept: `git mv cmd/magus/job_claim_callers.go cmd/magus/job_claim.go`, then fold cmd/magus/job_claim_callers.go into it") == 0,
+        want: true, message: got[0].fix);
 }
