@@ -39,7 +39,7 @@ func couplingFiles() []string {
 // identifiers its body branches on, and the files that call it.
 func couplingFn(pkg, name, file string, start, end int, sig string, branches []string, callers ...string) types.KnowledgeSymbol {
 	s := types.KnowledgeSymbol{
-		Key: conformanceNS(pkg) + name + "().", Label: name, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
+		Key: fmt.Sprintf("%s%s().", conformanceNS(pkg), name), Label: name, Language: "go", Namespace: conformanceNS(pkg), Signature: sig,
 		Source: fmt.Sprintf("%s:%d", file, start), DefEndLine: end, Defs: []string{file}, BranchIdents: branches,
 	}
 	for _, c := range callers {
@@ -51,7 +51,7 @@ func couplingFn(pkg, name, file string, start, end int, sig string, branches []s
 // runField is a field of run.Options that the given files reference.
 func runField(name string, refs ...string) types.KnowledgeSymbol {
 	s := types.KnowledgeSymbol{
-		Key: conformanceNS(runPkg) + "Options#" + name + ".", Label: name, Language: "go", Namespace: conformanceNS(runPkg),
+		Key: fmt.Sprintf("%sOptions#%s.", conformanceNS(runPkg), name), Label: name, Language: "go", Namespace: conformanceNS(runPkg),
 		Source: "internal/proc/run/exec.go:75", Defs: []string{"internal/proc/run/exec.go"},
 	}
 	for _, r := range refs {

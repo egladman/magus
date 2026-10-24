@@ -90,7 +90,9 @@ type ClassifiedPath struct {
 }
 
 // Line is how verdicts name the path: `<path> (<tier>: <why>)`.
-func (c ClassifiedPath) Line() string { return c.Path + " (" + string(c.Tier) + ": " + c.Why + ")" }
+func (c ClassifiedPath) Line() string {
+	return fmt.Sprintf("%s (%s: %s)", c.Path, string(c.Tier), c.Why)
+}
 
 // CarryVerdict says whether the approval given at From still covers Head. From's own
 // delta is replayed onto Head's base; what Head holds beyond that replay is what changed
@@ -138,10 +140,10 @@ func (v *CarryVerdict) Decide(policy CarryPolicy) {
 	if len(refused) == 0 {
 		v.Carry, v.Tier, v.Refused = true, furthest(v.Changed), nil
 		if len(v.Changed) == 0 {
-			v.Reason = "head " + shortID(v.Head) + " is " + shortID(v.From) + " rebased with its diff unchanged"
+			v.Reason = fmt.Sprintf("head %s is %s rebased with its diff unchanged", shortID(v.Head), shortID(v.From))
 			return
 		}
-		v.Reason = "head " + shortID(v.Head) + " is " + shortID(v.From) + " rebased; changed since the approval: " + lines(v.Changed)
+		v.Reason = fmt.Sprintf("head %s is %s rebased; changed since the approval: %s", shortID(v.Head), shortID(v.From), lines(v.Changed))
 		return
 	}
 	v.Carry, v.Tier = false, furthest(refused)
@@ -149,7 +151,7 @@ func (v *CarryVerdict) Decide(policy CarryPolicy) {
 	for i, p := range refused {
 		v.Refused[i] = p.Path
 	}
-	v.Reason = "changed since the approval at " + shortID(v.From) + ": " + lines(refused)
+	v.Reason = fmt.Sprintf("changed since the approval at %s: %s", shortID(v.From), lines(refused))
 }
 
 func lines(paths []ClassifiedPath) string {

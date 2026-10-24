@@ -301,7 +301,7 @@ func shellQuote(p string) string {
 	if p != "" && strings.Trim(p, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+@:,") == "" {
 		return p
 	}
-	return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(p, "'", `'\''`))
 }
 
 // Path is the JSON Lines file this Store reads and writes, for a reader that has to name
@@ -1019,7 +1019,7 @@ func (s *Store) archive(f jobsFile) error {
 	if err != nil {
 		return err
 	}
-	name := "jobs-" + time.Now().UTC().Format("20060102T150405Z") + ".jsonl"
+	name := fmt.Sprintf("jobs-%s.jsonl", time.Now().UTC().Format("20060102T150405Z"))
 	return file.RewriteLines(filepath.Join(filepath.Dir(s.path), name), lines, 0o644)
 }
 

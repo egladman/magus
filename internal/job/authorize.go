@@ -152,7 +152,7 @@ func (e *RefusedError) Error() string {
 	if e.Remedy == "" {
 		return msg
 	}
-	return msg + ", " + e.Remedy
+	return fmt.Sprintf("%s, %s", msg, e.Remedy)
 }
 
 // refuse builds the refusal for actor's attempt to WRITE lease id.
@@ -227,7 +227,7 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 		case "reported_base":
 			// The registration, which is what a worker is asked for.
 		default:
-			return refuse(actor, id, "a worker may not change "+field+" on its own row")
+			return refuse(actor, id, fmt.Sprintf("a worker may not change %s on its own row", field))
 		}
 	}
 	return nil

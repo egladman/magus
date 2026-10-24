@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -138,7 +139,7 @@ func FileEvents(rows []types.Job, ts int64, paths []string) []FeedEvent {
 		e := FeedEvent{Ts: ts, Kind: FeedFile, Job: at.Job, WritePath: at.WritePath, Action: p, Outcome: trail.OutcomeOK}
 		if len(at.Ambiguous) > 0 {
 			e.Contested = at.Ambiguous
-			e.Note = "contested: " + strings.Join(at.Ambiguous, " and ") + " both declare this path"
+			e.Note = fmt.Sprintf("contested: %s both declare this path", strings.Join(at.Ambiguous, " and "))
 		}
 		out = append(out, e)
 	}
@@ -363,4 +364,4 @@ func (c *RunCursor) Next(rows []types.Job) []FeedEvent {
 	return out
 }
 
-func runKey(e FeedEvent) string { return e.Job + "\x00" + e.Ref + "\x00" + e.Note }
+func runKey(e FeedEvent) string { return fmt.Sprintf("%s\x00%s\x00%s", e.Job, e.Ref, e.Note) }

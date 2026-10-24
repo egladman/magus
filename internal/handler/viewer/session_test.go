@@ -42,7 +42,7 @@ func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1conn
 func loaded(session string, at int64, kind, text string, mutate ...func(*sessions.AgentEvent)) sessions.LoadEvent {
 	ev := sessions.AgentEvent{
 		Host: "claude-code", Kind: kind, Ref: fmt.Sprintf("ref-%d", at), AtMs: at, Text: text,
-		Transcript: "/home/u/.claude/projects/x/" + session + ".jsonl",
+		Transcript: fmt.Sprintf("/home/u/.claude/projects/x/%s.jsonl", session),
 	}
 	for _, m := range mutate {
 		m(&ev)

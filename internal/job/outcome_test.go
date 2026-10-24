@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,7 +24,7 @@ func outcomeStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Con
 	t.Helper()
 	root := execRepo(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
-	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("history_path: "+strconv.Quote(history)+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(fmt.Sprintf("history_path: %s\n", strconv.Quote(history))), 0o644))
 	loc := tempLocation(t, root)
 	loc.ModelTiers, loc.ModelTierMatrix, loc.DryRun = set, matrix, dryRun
 	return NewStore(loc), history

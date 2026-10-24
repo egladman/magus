@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -65,7 +66,7 @@ func definitions(in []types.KnowledgeEdge) []types.KnowledgeSymbolDefinition {
 			continue
 		}
 		file := strings.TrimPrefix(e.Source, types.KindFile+":")
-		defs = append(defs, types.KnowledgeSymbolDefinition{Source: file + ":" + line, Doc: e.Attrs[AttrDoc]})
+		defs = append(defs, types.KnowledgeSymbolDefinition{Source: fmt.Sprintf("%s:%s", file, line), Doc: e.Attrs[AttrDoc]})
 	}
 	return defs
 }

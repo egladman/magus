@@ -4,6 +4,7 @@ import (
 	"context"
 	stdjson "encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ var toolTokenRe = func() *regexp.Regexp {
 	for i, tn := range hint.AllToolNames {
 		names[i] = regexp.QuoteMeta(tn.String())
 	}
-	return regexp.MustCompile(`\b(?:` + strings.Join(names, "|") + `)\b`)
+	return regexp.MustCompile(fmt.Sprintf("\\b(?:%s)\\b", strings.Join(names, "|")))
 }()
 
 // fixtureMagus opens a real single-project workspace so a tool that needs a

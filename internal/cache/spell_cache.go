@@ -98,17 +98,17 @@ func NewSpellCacheKey(spell string, tools []string, locks map[string][]byte) Spe
 
 // String is the day-independent part of the key, for a log line.
 func (k SpellCacheKey) String() string {
-	return k.Spell + "-" + short(k.Tools) + "-" + short(k.Locks)
+	return fmt.Sprintf("%s-%s-%s", k.Spell, short(k.Tools), short(k.Locks))
 }
 
 func (k SpellCacheKey) remoteKey(day time.Time) string {
-	return k.String() + "-" + day.UTC().Format("20060102")
+	return fmt.Sprintf("%s-%s", k.String(), day.UTC().Format("20060102"))
 }
 
 // pointerKey names the day's bundle for these tools whatever the lockfiles, so a reader
 // whose lockfiles changed can still take what an older set saved.
 func (k SpellCacheKey) pointerKey(day time.Time) string {
-	return k.Spell + "-" + short(k.Tools) + "-" + day.UTC().Format("20060102")
+	return fmt.Sprintf("%s-%s-%s", k.Spell, short(k.Tools), day.UTC().Format("20060102"))
 }
 
 func short(digest string) string {
@@ -203,7 +203,7 @@ func collectSpellCacheFiles(ctx context.Context, roots []SpellCacheRoot, now tim
 			if err != nil {
 				return err
 			}
-			files = append(files, spellCacheFile{Path: root.Name + "/" + rel, Size: info.Size(), SHA256: sum, Mode: info.Mode().Perm()})
+			files = append(files, spellCacheFile{Path: fmt.Sprintf("%s/%s", root.Name, rel), Size: info.Size(), SHA256: sum, Mode: info.Mode().Perm()})
 			stats.Files++
 			stats.Bytes += info.Size()
 			return nil
@@ -622,7 +622,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		counted := &CountingReader{Reader: rc}
 		stats, err := readSpellCacheBundle(ctx, counted, c.verifier, want, roots, c.importLimit(), now)
 		if err != nil {
-			res.Refused = append(res.Refused, want.name+": "+err.Error())
+			res.Refused = append(res.Refused, fmt.Sprintf("%s: %s", want.name, err.Error()))
 			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", want.name), attr.Error(err))
 			return false, nil
 		}
@@ -647,7 +647,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 			continue
 		}
 		if err != nil {
-			res.Refused = append(res.Refused, pk+": "+err.Error())
+			res.Refused = append(res.Refused, fmt.Sprintf("%s: %s", pk, err.Error()))
 			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", pk), attr.Error(err))
 			continue
 		}
@@ -657,7 +657,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		if err == nil {
 			err = json.Unmarshal(data, &ptr)
 		}
-		if err != nil || !strings.HasPrefix(ptr.Key, key.Spell+"-"+short(key.Tools)+"-") {
+		if err != nil || !strings.HasPrefix(ptr.Key, fmt.Sprintf("%s-%s-", key.Spell, short(key.Tools))) {
 			continue
 		}
 		if _, done := tried[ptr.Key]; done {

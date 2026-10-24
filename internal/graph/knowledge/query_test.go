@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"maps"
 	"path"
 	"regexp"
@@ -569,8 +570,8 @@ func dirFixture() *Graph {
 		{"internal/httpx/a.go", "12", "internal/handler/mcp http"},
 		{"internal/httpx/b.go", "40", "internal/handler/mcp grpc"},
 	} {
-		id := "marker:" + site.file + ":" + site.line
-		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindMarker, Label: "magus:calls", Source: site.file + ":" + site.line, Attrs: map[string]string{
+		id := fmt.Sprintf("marker:%s:%s", site.file, site.line)
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindMarker, Label: "magus:calls", Source: fmt.Sprintf("%s:%s", site.file, site.line), Attrs: map[string]string{
 			types.AttrMarkerFamily: string(types.MarkerCalls), types.AttrMarkerVerb: string(types.MarkerPoint),
 			types.AttrMarkerArgs: site.args, types.AttrLine: site.line,
 		}})

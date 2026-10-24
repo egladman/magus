@@ -77,7 +77,7 @@ func (d descendant) String() string {
 	if len(work) == 0 {
 		return s
 	}
-	return s + ": " + strings.Join(work, "; ")
+	return fmt.Sprintf("%s: %s", s, strings.Join(work, "; "))
 }
 
 // heldCheckout is the checkout row's holder works in: the one its fork made, else the one
@@ -110,7 +110,7 @@ func uncommitted(ctx context.Context, root string, row types.Job) ([]string, str
 	}
 	dirty, err := drv.DirtyFiles(ctx, root, nil)
 	if err != nil {
-		return nil, "the status of " + root + " cannot be read: " + err.Error()
+		return nil, fmt.Sprintf("the status of %s cannot be read: %s", root, err.Error())
 	}
 	return slices.DeleteFunc(dirty, func(p string) bool {
 		return !slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, p) })
@@ -394,7 +394,7 @@ func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ..
 // why it stays: this call runs in it, a live job is held in it, or it holds work.
 func endCheckout(ctx context.Context, rows []types.Job, here string, row types.Job, wt types.JobWorktree, written WrittenPaths) string {
 	if here != "" && within(here, wt.Root) {
-		return "this call runs in it; `" + hint.JobWait.With(row.ID) + "` from another checkout removes it"
+		return fmt.Sprintf("this call runs in it; `%s` from another checkout removes it", hint.JobWait.With(row.ID))
 	}
 	for _, other := range rows {
 		if other.State.Live() && samePath(heldCheckout(other), wt.Root) {

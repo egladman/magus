@@ -2,6 +2,7 @@ package queue
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -40,11 +41,11 @@ func TestAReadKickIsWordedByTheQueue(t *testing.T) {
 		"a red gate": {
 			v: types.Verdict{Change: c, Code: types.CodeKickRed, Onto: head("o"), After: "7", Reason: hostile, Report: hostile},
 			want: types.Kick{Code: types.CodeKickRed, Claim: hostile,
-				Report: "The merge queue built this change at `" + c.Head[:12] + "` onto the candidate of #7 (`" + head("o")[:12] + "`), and the gate failed on it and passed without it.\n"},
+				Report: fmt.Sprintf("The merge queue built this change at `%s` onto the candidate of #7 (`%s`), and the gate failed on it and passed without it.\n", c.Head[:12], head("o")[:12])},
 		},
 		"a red gate naming nothing it was built onto": {
 			v:    types.Verdict{Change: c, Code: types.CodeKickRed, Reason: hostile, Report: hostile},
-			want: types.Kick{Code: types.CodeKickRed, Claim: hostile, Report: "The merge queue cannot merge this change at `" + c.Head[:12] + "`.\n"},
+			want: types.Kick{Code: types.CodeKickRed, Claim: hostile, Report: fmt.Sprintf("The merge queue cannot merge this change at `%s`.\n", c.Head[:12])},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -87,13 +88,13 @@ func TestReadChangesRefusesAnotherSchemaAndAChangeWithoutAHead(t *testing.T) {
 	require.ErrorContains(t, err, `want "mergequeue.changes/v1"`)
 	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main", "changes": [{"id": "1"}]}`))
 	require.ErrorContains(t, err, `changes[0]: #1: head "" is not a full commit id`)
-	got, err := ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main",
-		"changes": [{"id": "1", "head": "` + head("1") + `", "base": "main", "method": "squash", "affected": ["a"]},
-		            {"id": "2", "head": "` + head("2") + `", "base": "main", "method": "merge", "affected": null}]}`))
+	got, err := ReadChanges(strings.NewReader(fmt.Sprintf(`{"schema": "mergequeue.changes/v1", "base": "main",
+		"changes": [{"id": "1", "head": "%s", "base": "main", "method": "squash", "affected": ["a"]},
+		            {"id": "2", "head": "%s", "base": "main", "method": "merge", "affected": null}]}`, head("1"), head("2"))))
 	require.NoError(t, err)
 	assert.True(t, proven(got.Changes[0]))
 	assert.False(t, proven(got.Changes[1]), "null is unknown, not empty")
-	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main", "changes": [{"id": "1", "head": "` + head("1") + `", "base": "main"}]}`))
+	_, err = ReadChanges(strings.NewReader(fmt.Sprintf("{\"schema\": \"mergequeue.changes/v1\", \"base\": \"main\", \"changes\": [{\"id\": \"1\", \"head\": \"%s\", \"base\": \"main\"}]}", head("1"))))
 	require.ErrorContains(t, err, `#1: merge method "", want merge, squash or rebase`, "a provider default the queue cannot see is no method")
 	_, err = ReadChanges(strings.NewReader(`{not json`))
 	require.ErrorContains(t, err, "decode mergequeue.changes/v1")

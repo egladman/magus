@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -46,7 +47,7 @@ const (
 // report one of them; see assemblePackages, which keeps the lowest and flags the split
 // rather than letting the last writer win silently.
 func packageID(manager, name string) string {
-	return types.KindPackage + ":" + manager + " " + name
+	return fmt.Sprintf("%s:%s %s", types.KindPackage, manager, name)
 }
 
 // attrPackageVersionConflict marks a package two projects in one workspace pin to

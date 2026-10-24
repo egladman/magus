@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
 	"path"
 	"slices"
 	"strconv"
@@ -24,7 +25,7 @@ const (
 	attrDuplicate = "duplicate"
 )
 
-func figureID(id string) string { return types.KindFigure + ":" + id }
+func figureID(id string) string { return fmt.Sprintf("%s:%s", types.KindFigure, id) }
 
 // figureExtractor reads figure\of calls across the Buzz files of one shard, so a figure id
 // built twice is reported on the first node instead of merged away.
@@ -176,7 +177,7 @@ func (x *figureExtractor) appendFigures(s *Shard, rel string, d *ast.FunDecl, fi
 			if kept.Attrs == nil {
 				kept.Attrs = map[string]string{}
 			}
-			kept.Attrs[attrDuplicate] = strings.TrimPrefix(kept.Attrs[attrDuplicate]+","+node.Source, ",")
+			kept.Attrs[attrDuplicate] = strings.TrimPrefix(fmt.Sprintf("%s,%s", kept.Attrs[attrDuplicate], node.Source), ",")
 			continue
 		}
 		x.byID[node.ID] = len(s.Nodes)
@@ -223,7 +224,7 @@ func figureNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirU
 
 	nodeID := figureID(id)
 	if id == "" {
-		nodeID = figureID(rel + ":" + fn)
+		nodeID = figureID(fmt.Sprintf("%s:%s", rel, fn))
 	}
 	if eyebrow != "" {
 		attrs[attrEyebrow] = eyebrow
@@ -233,7 +234,7 @@ func figureNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirU
 	}
 	node := types.KnowledgeNode{
 		ID: nodeID, Kind: types.KindFigure, Label: cmp.Or(title, id), Doc: desc,
-		Source: rel + ":" + strconv.Itoa(ce.Line), Attrs: nilIfEmpty(attrs),
+		Source: fmt.Sprintf("%s:%s", rel, strconv.Itoa(ce.Line)), Attrs: nilIfEmpty(attrs),
 	}
-	return node, strings.TrimSpace(eyebrow + "\n" + desc)
+	return node, strings.TrimSpace(fmt.Sprintf("%s\n%s", eyebrow, desc))
 }

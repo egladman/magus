@@ -185,7 +185,7 @@ func listClaims(file string, all []string) string {
 		if len(namedDeclarations(word, all)) != 1 {
 			continue
 		}
-		claims = append(claims, "`"+file+"#"+word+"`")
+		claims = append(claims, fmt.Sprintf("`%s#%s`", file, word))
 	}
 	if len(claims) == 0 {
 		return fmt.Sprintf("`%s#<declaration>`", file)
@@ -221,9 +221,9 @@ func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDr
 // driverPattern is the .gitattributes pattern a driver for p would be declared under.
 func driverPattern(p string) string {
 	if ext := path.Ext(p); ext != "" {
-		return "`*" + ext + "`"
+		return fmt.Sprintf("`*%s`", ext)
 	}
-	return "`" + path.Base(p) + "`"
+	return fmt.Sprintf("`%s`", path.Base(p))
 }
 
 // unorderedFileShareProblems is every write path of row that would hand one claimable file
@@ -433,9 +433,9 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 	claims := func(words []string, id string) string {
 		quoted := make([]string, len(words))
 		for i, w := range words {
-			quoted[i] = "`" + file + "#" + w + "`"
+			quoted[i] = fmt.Sprintf("`%s#%s`", file, w)
 		}
-		return strings.Join(quoted, ", ") + " on " + id
+		return fmt.Sprintf("%s on %s", strings.Join(quoted, ", "), id)
 	}
 	switch {
 	case len(theirs) == 0 && len(mine) == 0:
@@ -499,7 +499,7 @@ func namedDeclarations(claim string, all []string) []string {
 // the guard and `job wait` would hold every one of them, not the one its author meant.
 func ambiguousClaim(file, claim string, matched, all []string) string {
 	message, fix := ambiguousClaimProblem(file, claim, matched, all)
-	return message + "; " + fix
+	return fmt.Sprintf("%s; %s", message, fix)
 }
 
 // ambiguousClaimProblem is ambiguousClaim as a problem's message and fix.
@@ -507,10 +507,10 @@ func ambiguousClaimProblem(file, claim string, matched, all []string) (message, 
 	shown := matched[:min(len(matched), 3)]
 	alternatives := make([]string, 0, len(shown))
 	for _, d := range shown {
-		alternatives = append(alternatives, "`"+claimWord(d, all)+"`")
+		alternatives = append(alternatives, fmt.Sprintf("`%s`", claimWord(d, all)))
 	}
 	message = fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one",
-		file+"#"+claim, len(matched), file, strings.TrimSpace(matched[0]))
+		fmt.Sprintf("%s#%s", file, claim), len(matched), file, strings.TrimSpace(matched[0]))
 	return message, "use a word only one of them has, such as " + strings.Join(alternatives, ", ")
 }
 
@@ -687,7 +687,7 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row t
 		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
 			continue
 		}
-		claims = appendUnique(claims, "`"+file+"#"+claimWord(d, all)+"`")
+		claims = appendUnique(claims, fmt.Sprintf("`%s#%s`", file, claimWord(d, all)))
 	}
 	if len(claims) == 0 {
 		return ""

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,64 +16,64 @@ import (
 // exactly the shard to load next (the routing key). No invented
 // vocabulary: kinds and separators only.
 
-func projectID(path string) string { return types.KindProject + ":" + path }
+func projectID(path string) string { return fmt.Sprintf("%s:%s", types.KindProject, path) }
 
 func targetID(projectPath, name string) string {
-	return types.KindTarget + ":" + projectPath + ":" + name
+	return fmt.Sprintf("%s:%s:%s", types.KindTarget, projectPath, name)
 }
 
-func spellID(name string) string { return types.KindSpell + ":" + name }
+func spellID(name string) string { return fmt.Sprintf("%s:%s", types.KindSpell, name) }
 
-func opID(spell, op string) string { return types.KindOp + ":" + spell + ":" + op }
+func opID(spell, op string) string { return fmt.Sprintf("%s:%s:%s", types.KindOp, spell, op) }
 
 // toolID keys the workspace-scoped node for a tool, the program an op runs (argv[0]
 // basename), shared by every op and spell that runs it, so `explain tool:go` lists
 // every op that runs go. A tool is an ENTITY (the program), distinct from an op (the
 // operation that runs it), hence its own kind.
-func toolID(tool string) string { return types.KindTool + ":" + tool }
+func toolID(tool string) string { return fmt.Sprintf("%s:%s", types.KindTool, tool) }
 
-func moduleID(name string) string { return types.KindModule + ":" + name }
+func moduleID(name string) string { return fmt.Sprintf("%s:%s", types.KindModule, name) }
 
 func methodID(module, method string) string {
-	return types.KindMethod + ":" + module + "." + method
+	return fmt.Sprintf("%s:%s.%s", types.KindMethod, module, method)
 }
 
-func diagnosticID(code string) string { return types.KindDiagnostic + ":" + code }
+func diagnosticID(code string) string { return fmt.Sprintf("%s:%s", types.KindDiagnostic, code) }
 
-func charmID(name string) string { return types.KindCharm + ":" + name }
+func charmID(name string) string { return fmt.Sprintf("%s:%s", types.KindCharm, name) }
 
-func docID(relPath string) string { return types.KindDoc + ":" + relPath }
+func docID(relPath string) string { return fmt.Sprintf("%s:%s", types.KindDoc, relPath) }
 
 // docSectionID names a heading inside a doc as "<rel>#<anchor>", the same shape a link into
 // that section takes, so a retrieval result IS a citable pointer to the rendered page.
 func docSectionID(relPath, anchor string) string {
-	return types.KindDocSection + ":" + relPath + "#" + anchor
+	return fmt.Sprintf("%s:%s#%s", types.KindDocSection, relPath, anchor)
 }
 
-func fileID(relPath string) string { return types.KindFile + ":" + relPath }
+func fileID(relPath string) string { return fmt.Sprintf("%s:%s", types.KindFile, relPath) }
 
-func dirID(relPath string) string { return types.KindDir + ":" + relPath }
+func dirID(relPath string) string { return fmt.Sprintf("%s:%s", types.KindDir, relPath) }
 
 func functionID(relPath, name string) string {
-	return types.KindFunction + ":" + relPath + ":" + name
+	return fmt.Sprintf("%s:%s:%s", types.KindFunction, relPath, name)
 }
 
-func importID(literal string) string { return types.KindImport + ":" + literal }
+func importID(literal string) string { return fmt.Sprintf("%s:%s", types.KindImport, literal) }
 
 func rationaleID(relPath string, line int) string {
-	return types.KindRationale + ":" + relPath + ":" + strconv.Itoa(line)
+	return fmt.Sprintf("%s:%s:%s", types.KindRationale, relPath, strconv.Itoa(line))
 }
 
 // markerID keys a folded begin/end block by its begin line.
 func markerID(relPath string, line int) string {
-	return types.KindMarker + ":" + relPath + ":" + strconv.Itoa(line)
+	return fmt.Sprintf("%s:%s:%s", types.KindMarker, relPath, strconv.Itoa(line))
 }
 
-func ownerID(name string) string { return types.KindOwner + ":" + name }
+func ownerID(name string) string { return fmt.Sprintf("%s:%s", types.KindOwner, name) }
 
-func authorID(name string) string { return types.KindAuthor + ":" + name }
+func authorID(name string) string { return fmt.Sprintf("%s:%s", types.KindAuthor, name) }
 
-func symbolID(key string) string { return types.KindSymbol + ":" + key }
+func symbolID(key string) string { return fmt.Sprintf("%s:%s", types.KindSymbol, key) }
 
 // noteID mints a note's node ID, namespaced by scope.
 //
@@ -84,9 +85,9 @@ func symbolID(key string) string { return types.KindSymbol + ":" + key }
 // assembly must not resolve it the other way in silence.
 func noteID(scope, name string) string {
 	if scope == ScopePrivate {
-		return types.KindNote + ":" + ScopePrivate + "/" + name
+		return fmt.Sprintf("%s:%s/%s", types.KindNote, ScopePrivate, name)
 	}
-	return types.KindNote + ":" + name
+	return fmt.Sprintf("%s:%s", types.KindNote, name)
 }
 
 // AnchorNodeID renders one note anchor as the node ID the graph mints for it, or "" for a

@@ -139,7 +139,7 @@ func (f *ArtifactFollower) sync(ctx context.Context) (bool, error) {
 				}
 				f.failed[a.Name] = true
 				f.rejected = append(f.rejected, types.RejectedVerdict{Change: change, Reason: err.Error()})
-				f.notice("rejected " + a.Name + ": " + err.Error())
+				f.notice(fmt.Sprintf("rejected %s: %s", a.Name, err.Error()))
 			}
 		}
 	}

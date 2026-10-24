@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ type cannedGraphs struct{}
 
 func (cannedGraphs) Graph(_ context.Context, flavor, _ string) (types.KnowledgeGraphOutput, error) {
 	return types.KnowledgeGraphOutput{
-		Definition:    "test graph (" + flavor + ")",
+		Definition:    fmt.Sprintf("test graph (%s)", flavor),
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Directed:      true,
 		NodeCount:     2,

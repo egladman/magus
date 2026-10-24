@@ -257,11 +257,11 @@ func nearest(ds []dirShape, name string) []string {
 	var out []string
 	for len(out) < 2 && (lo >= 0 || hi < len(ds)) {
 		if lo >= 0 {
-			out = append(out, "`"+ds[lo].dir+"`")
+			out = append(out, fmt.Sprintf("`%s`", ds[lo].dir))
 			lo--
 		}
 		if len(out) < 2 && hi < len(ds) {
-			out = append(out, "`"+ds[hi].dir+"`")
+			out = append(out, fmt.Sprintf("`%s`", ds[hi].dir))
 			hi++
 		}
 	}

@@ -90,7 +90,7 @@ func (callSeqCheck) run(x *namingIndex) []finding {
 				s.label, n, partner.Label, thresholdSource(src), limit, q.pop[i]),
 			details: []string{
 				"in order: " + strings.Join(order, ", "),
-				"partner: " + q.items[j] + " at " + partner.Source,
+				fmt.Sprintf("partner: %s at %s", q.items[j], partner.Source),
 				fmt.Sprintf("call-sequence %s: %d, the %s", q.pop[i], limit, thresholdSource(src)),
 				"share the sequence in one function, or record a known call-sequence entry with its reason",
 			},

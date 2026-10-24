@@ -82,15 +82,15 @@ func TestLayoutFlagsANewOneFileUntestedDigitNamedPackage(t *testing.T) {
 	assert.Equal(t, map[string][]types.Check{"internal/pkgb3": {
 		{
 			Name: types.CheckPackageFiles, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
-			Message: "`internal/pkgb3`: " + evidence + "; 6 of 6 Go directories beside it hold more than one, as `internal/pkgb` and `internal/pkgc` do",
+			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold more than one, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
 			Name: types.CheckPackageTests, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
-			Message: "`internal/pkgb3`: " + evidence + "; 6 of 6 Go directories beside it hold a test file, as `internal/pkgb` and `internal/pkgc` do",
+			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold a test file, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
 			Name: types.CheckPackageName, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
-			Message: "`internal/pkgb3`: " + evidence + "; 6 of 6 Go directories beside it carry no digit in their names, as `internal/pkgb` and `internal/pkgc` do",
+			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it carry no digit in their names, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 	}}, got)
 }

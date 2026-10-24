@@ -49,7 +49,7 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 		for _, p := range v.Waived {
 			line := fmt.Sprintf("  [%s] %s", p.Code, problemText(p))
 			if i := slices.IndexFunc(v.Job.Waivers, func(wv types.JobWaiver) bool { return wv.Waives(p) }); i >= 0 {
-				line += " (waived: " + v.Job.Waivers[i].Reason + ")"
+				line += fmt.Sprintf(" (waived: %s)", v.Job.Waivers[i].Reason)
 			}
 			fmt.Fprintln(w, line)
 		}
@@ -118,5 +118,5 @@ func problemText(p types.JobProblem) string {
 	if p.Field == "" {
 		return p.Message
 	}
-	return p.Field + ": " + p.Message
+	return fmt.Sprintf("%s: %s", p.Field, p.Message)
 }

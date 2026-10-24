@@ -318,7 +318,7 @@ func TestArtifactFollowerDownloadsOnlyOverHTTPS(t *testing.T) {
 func TestArtifactFollowerKeepsTheListingsHeadersFromAnotherHostAndOffHTTPS(t *testing.T) {
 	var seen []string
 	storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		seen = append(seen, req.Header.Get("Authorization")+"|"+req.Header.Get("Private-Token"))
+		seen = append(seen, fmt.Sprintf("%s|%s", req.Header.Get("Authorization"), req.Header.Get("Private-Token")))
 		_, _ = w.Write(buildZip(t, verdictFiles(t, "1")))
 	}))
 	t.Cleanup(storage.Close)

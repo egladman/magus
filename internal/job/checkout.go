@@ -186,7 +186,7 @@ func (s *Store) record(c Caller) string {
 	if s.err != nil || s.path == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(c.Host + "\x00" + c.Session + "\x00" + c.Agent))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s", c.Host, c.Session, c.Agent)))
 	return filepath.Join(filepath.Dir(s.path), agentRecordDir, hex.EncodeToString(sum[:12]))
 }
 
@@ -346,7 +346,7 @@ func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
 // record found to hold anything else is linked back, unless a newer bind already took its
 // place.
 func dropRecord(path string, b Binding) {
-	aside := path + "." + rand.Text() + ".sweep"
+	aside := fmt.Sprintf("%s.%s.sweep", path, rand.Text())
 	if os.Rename(path, aside) != nil {
 		return
 	}
@@ -503,11 +503,10 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 				named += fmt.Sprintf(", inside project %q", enclosingProject(store.root, dir))
 			}
 			ps = append(ps, types.JobProblem{
-				Code:  types.WritePathIsDirectory,
-				Field: fmt.Sprintf("write_paths[%d]", i),
-				Message: named + " is a directory, and a write path names files: a directory claims every file under it," +
-					" so the job would overlap every job editing anything there" + why,
-				Fix: "list the files the job will edit in its place, and name each file it creates by its path",
+				Code:    types.WritePathIsDirectory,
+				Field:   fmt.Sprintf("write_paths[%d]", i),
+				Message: fmt.Sprintf("%s is a directory, and a write path names files: a directory claims every file under it, so the job would overlap every job editing anything there%s", named, why),
+				Fix:     "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}
@@ -899,7 +898,7 @@ func (s *Store) IntegrationAdvice(ctx context.Context, limits config.Jobs) (advi
 	}
 	record, _ := json.Marshal(map[string]any{
 		"schema_version": types.JobSchemaVersion,
-		"id":             "integrate-" + strconv.Itoa(len(waiting)) + "-branches",
+		"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
 		"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
 		"integrates":     branches,
 		"check":          map[string]string{"target": "<target>", "project": "<project>"},

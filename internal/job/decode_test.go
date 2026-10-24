@@ -178,8 +178,11 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.NoError(t, err)
 	two := fmt.Sprintf(`{"schema_version":%d,"id":"b"}`, types.JobSchemaVersion)
 	for name, raw := range map[string]string{
-		"an array":     "[" + string(one) + "," + two + "]",
-		"one per line": string(one) + "\n\n" + two + "\n",
+		"an array": fmt.Sprintf("[%s,%s]", string(one), two),
+		"one per line": fmt.Sprintf(`%s
+
+%s
+`, string(one), two),
 	} {
 		rows, err := DecodeDeclarations(strings.NewReader(raw))
 		require.NoError(t, err, name)
@@ -190,10 +193,10 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	assert.Len(t, rows, 1)
 
 	bad := fmt.Sprintf(`{"schema_version":%d,"id":"c","confidence":"high"}`, types.JobSchemaVersion)
-	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + two + "\n" + bad))
+	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s\n%s", string(one), two, bad)))
 	require.ErrorContains(t, err, "record 3:")
 	assert.Contains(t, err.Error(), "confidence")
-	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + string(one)))
+	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s", string(one), string(one))))
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 

@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -345,7 +346,7 @@ func TestResolveSymbolGoalsFreezesSignatures(t *testing.T) {
 	}{
 		{"no reader", "Api", nil, "this door reads no symbol graph"},
 		{"an unreadable graph", "Cold", read, "the symbol graph could not be read"},
-		{"a symbol the index does not define", "Stub", read, "write the stub, run `" + hint.GraphBuild.String() + "`, and fork again"},
+		{"a symbol the index does not define", "Stub", read, fmt.Sprintf("write the stub, run `%s`, and fork again", hint.GraphBuild.String())},
 		{"a symbol with no indexed signature", "Bare", read, "holds none for it to record"},
 		{"an ambiguous name", "Twice", read, "resolves to 2 definitions"},
 	} {
@@ -729,7 +730,7 @@ func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 			require.ErrorIs(t, err, types.JobUngraded)
 			assert.Contains(t, err.Error(), "s names no write paths and is not read-only")
 			assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`, "the refusal names the check a scout passes by")
-			assert.Contains(t, err.Error(), "`"+hint.JobExit.With("s")+"`", "and how a scout without one ends")
+			assert.Contains(t, err.Error(), fmt.Sprintf("`%s`", hint.JobExit.With("s")), "and how a scout without one ends")
 		})
 	}
 }

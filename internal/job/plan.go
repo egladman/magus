@@ -287,7 +287,7 @@ func specChanges(prev, next types.Job) []string {
 // prefixed is ps with each message led by the record id it was found on.
 func prefixed(id string, ps types.JobProblems) types.JobProblems {
 	for i := range ps {
-		ps[i].Message = id + ": " + ps[i].Message
+		ps[i].Message = fmt.Sprintf("%s: %s", id, ps[i].Message)
 	}
 	return ps
 }
@@ -391,7 +391,7 @@ func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact Symbol
 			return ""
 		}
 	}
-	return file + "#" + word
+	return fmt.Sprintf("%s#%s", file, word)
 }
 
 // declarationWord is the run of a symbol's declaration line that names it alone, read off
@@ -416,11 +416,11 @@ func declarationWord(signature string) string {
 		if len(fields) == 0 || name == "" {
 			return ""
 		}
-		return strings.TrimPrefix(fields[len(fields)-1], "*") + ") " + name
+		return fmt.Sprintf("%s) %s", strings.TrimPrefix(fields[len(fields)-1], "*"), name)
 	case strings.HasPrefix(sig, "func "), strings.HasPrefix(sig, "type "), strings.HasPrefix(sig, "fun "):
 		keyword, rest, _ := strings.Cut(sig, " ")
 		if name := nameOf(rest); name != "" {
-			return keyword + " " + name
+			return fmt.Sprintf("%s %s", keyword, name)
 		}
 	}
 	return ""
@@ -625,7 +625,7 @@ func inheritGoals(row types.Job, rows []types.Job) types.Job {
 			if goal = goal.Resolve(); goal.Kind != types.GoalKindSymbol {
 				continue
 			}
-			goal.ID = ancestor.ID + "/" + goal.ID
+			goal.ID = fmt.Sprintf("%s/%s", ancestor.ID, goal.ID)
 			// Its dependencies name goals of the ancestor's this row does not carry.
 			goal.DependsOn = nil
 			inherited = append(inherited, goal)

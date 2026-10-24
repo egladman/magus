@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
@@ -133,7 +134,7 @@ func TestAssembleMarkers(t *testing.T) {
 	declared := map[string]types.KnowledgeEdge{}
 	for _, e := range g.Edges() {
 		if e.Confidence == types.ConfidenceDeclared {
-			declared[e.Source+" "+string(e.Relation)+" "+e.Target] = e
+			declared[fmt.Sprintf("%s %s %s", e.Source, string(e.Relation), e.Target)] = e
 		}
 	}
 	for _, k := range []string{

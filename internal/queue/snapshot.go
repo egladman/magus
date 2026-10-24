@@ -41,7 +41,7 @@ func snapshotDir(root string) (string, error) {
 	return vcs.StateDir(base, "queue", root)
 }
 
-func snapshotName(base string) string { return "changes-" + url.PathEscape(base) + ".json" }
+func snapshotName(base string) string { return fmt.Sprintf("changes-%s.json", url.PathEscape(base)) }
 
 // WriteSnapshot replaces the snapshot of s's base for the repository at root.
 func WriteSnapshot(root string, s Snapshot) error {

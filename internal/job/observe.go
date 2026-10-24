@@ -357,7 +357,7 @@ func compareFootprints(idA string, a footprint, idB string, b footprint) types.J
 		fp footprint
 	}{{idA, a}, {idB, b}} {
 		if !side.fp.known {
-			unknown = append(unknown, side.id+": "+side.fp.reason)
+			unknown = append(unknown, fmt.Sprintf("%s: %s", side.id, side.fp.reason))
 		}
 	}
 	if len(unknown) > 0 {
@@ -520,7 +520,7 @@ func namesSymbol(out types.KnowledgeRefsOutput, name string) bool {
 	}
 	id := strings.TrimRight(strings.TrimPrefix(out.Symbol, types.KindSymbol+":"), "().#:")
 	if pkg, rest, ok := packageQualified(name); ok {
-		return id == pkg+"/"+rest || id == pkg+" "+rest || strings.HasSuffix(id, "/"+pkg+"/"+rest) || strings.HasSuffix(id, "/"+pkg+" "+rest)
+		return id == fmt.Sprintf("%s/%s", pkg, rest) || id == fmt.Sprintf("%s %s", pkg, rest) || strings.HasSuffix(id, fmt.Sprintf("/%s/%s", pkg, rest)) || strings.HasSuffix(id, fmt.Sprintf("/%s %s", pkg, rest))
 	}
 	return id == name || strings.HasSuffix(id, "/"+name) || strings.HasSuffix(id, " "+name)
 }

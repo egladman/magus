@@ -28,7 +28,7 @@ func (c *Cache) Description() (tier, mode, dir string) {
 	case c.remote != nil:
 		tier = c.remote.name() + " + local"
 	case c.remoteDown != nil:
-		tier = "local (" + c.remoteDown.Error() + ")"
+		tier = fmt.Sprintf("local (%s)", c.remoteDown.Error())
 	default:
 		tier = "local"
 	}
@@ -108,7 +108,7 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, p MemoryPressure) {
 	if running := c.inflight.Running(); len(running) > 0 {
 		names := make([]string, 0, len(running))
 		for _, t := range running {
-			names = append(names, t.Project+":"+t.Target)
+			names = append(names, fmt.Sprintf("%s:%s", t.Project, t.Target))
 		}
 		attrs = append(attrs, slog.String("running", strings.Join(names, ", ")))
 		msg += "; running: " + strings.Join(names, ", ")

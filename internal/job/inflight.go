@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"slices"
 
 	qtypes "github.com/egladman/magus/internal/queue/types"
@@ -63,7 +64,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 		if ch.Branch != "" {
 			ch.Jobs = slices.Clone(byBranch[ch.Branch])
 		}
-		key := ch.ID + "@" + ch.Head
+		key := fmt.Sprintf("%s@%s", ch.ID, ch.Head)
 		if p, ok := places[key]; ok {
 			ch.Partition, ch.Position, ch.Below = p.partition, p.position, p.below
 		}
@@ -151,11 +152,11 @@ func planFacts(plan *qtypes.Plan) (map[string]planPlace, map[string]qtypes.Verdi
 	}
 	for i, part := range plan.Partitions {
 		for j, c := range part {
-			places[c.ID+"@"+c.Head] = planPlace{partition: i + 1, position: j + 1, below: c.Below}
+			places[fmt.Sprintf("%s@%s", c.ID, c.Head)] = planPlace{partition: i + 1, position: j + 1, below: c.Below}
 		}
 	}
 	for _, v := range plan.Verdicts {
-		verdicts[v.Change.ID+"@"+v.Change.Head] = v
+		verdicts[fmt.Sprintf("%s@%s", v.Change.ID, v.Change.Head)] = v
 	}
 	return places, verdicts
 }

@@ -259,7 +259,7 @@ func (s *sourceFacts) readUses(f *ast.File) {
 			}
 		case *ast.SelectorExpr:
 			if x, ok := n.X.(*ast.Ident); ok {
-				s.uses[x.Name+"."+n.Sel.Name] = true
+				s.uses[fmt.Sprintf("%s.%s", x.Name, n.Sel.Name)] = true
 			}
 		case *ast.Ident:
 			s.uses[n.Name] = true
@@ -596,7 +596,7 @@ func ProposeClaim(row types.Job, rel string, facts claimFacts, rows []types.Job)
 		tries = append(tries, types.ClaimEvidence{Kind: claimCalls, Subject: name})
 	}
 	for _, name := range slices.Sorted(maps.Keys(asked.decls)) {
-		tries = append(tries, types.ClaimEvidence{Kind: claimDefines, Subject: asked.pkg + "." + name}, types.ClaimEvidence{Kind: claimDefines, Subject: name})
+		tries = append(tries, types.ClaimEvidence{Kind: claimDefines, Subject: fmt.Sprintf("%s.%s", asked.pkg, name)}, types.ClaimEvidence{Kind: claimDefines, Subject: name})
 	}
 	for _, o := range facts.regenerated {
 		tries = append(tries, types.ClaimEvidence{Kind: types.ClaimOutput, Subject: o.Target})
@@ -620,7 +620,7 @@ func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	line := hint.JobApply.With("-f", "-") + " <<<" + shellQuote(string(record))
+	line := fmt.Sprintf("%s <<<%s", hint.JobApply.With("-f", "-"), shellQuote(string(record)))
 	return line, len(line) <= maxClaimCommand
 }
 

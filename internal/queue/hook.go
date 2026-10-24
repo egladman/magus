@@ -70,7 +70,7 @@ func ParseCommand(flag, line string) (Command, error) {
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX), syntax.KeepComments(true)).Parse(strings.NewReader(line), "")
 	switch {
 	case err != nil:
-		return refuse("it does not parse as sh words (" + err.Error() + ")")
+		return refuse(fmt.Sprintf("it does not parse as sh words (%s)", err.Error()))
 	case len(f.Stmts) == 0:
 		return refuse("it names no command")
 	case len(f.Stmts) != 1:
@@ -131,7 +131,7 @@ func shellSyntax(parts []syntax.WordPart, quoted bool) string {
 				return what
 			}
 		case *syntax.ParamExp:
-			return "$" + p.Param.Value + " is a variable"
+			return fmt.Sprintf("$%s is a variable", p.Param.Value)
 		case *syntax.CmdSubst:
 			return "$(...) is a command substitution"
 		case *syntax.ArithmExp:
@@ -379,7 +379,7 @@ func boxEnv(home, tmp, cache string) []string {
 		{"MISE_CONFIG_DIR", "XDG_CONFIG_HOME", ".config"},
 	} {
 		if dir := runnerMise(v.name, v.xdg, v.under); dir != "" {
-			env = append(env, v.name+"="+dir)
+			env = append(env, fmt.Sprintf("%s=%s", v.name, dir))
 		}
 	}
 	if v := os.Getenv("MISE_TRUSTED_CONFIG_PATHS"); v != "" {
@@ -470,7 +470,7 @@ func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 		code := exit.ExitCode()
 		switch {
 		case code < 0:
-			return res, changeFailure{why: "was killed (" + exit.String() + ")"}
+			return res, changeFailure{why: fmt.Sprintf("was killed (%s)", exit.String())}
 		case code != ExitTempFail:
 			return res, changeFailure{fmt.Sprintf("exited %d", code), code}
 		case attempt == attempts:
@@ -543,7 +543,7 @@ func spellCacheEnv(dir string, grants map[string]spells.Sandbox) ([]string, erro
 				return nil, fmt.Errorf("spells %s and %s both declare %s a cache, which a box can point at only one directory", other, spell, c.Env)
 			}
 			owner[c.Env] = spell
-			env = append(env, c.Env+"="+cache.SpellCacheDir(dir, spell, c.Env))
+			env = append(env, fmt.Sprintf("%s=%s", c.Env, cache.SpellCacheDir(dir, spell, c.Env)))
 		}
 	}
 	return env, nil
@@ -570,7 +570,7 @@ func (e HookEnv) Pass(names []string) (HookEnv, error) {
 			return e, fmt.Errorf("%s locates the box or its mode, which every gate is given as the queue gives it", name)
 		}
 		if v, ok := os.LookupEnv(name); ok {
-			fixed = append(fixed, name+"="+v)
+			fixed = append(fixed, fmt.Sprintf("%s=%s", name, v))
 		}
 	}
 	e.Fixed = fixed
@@ -630,7 +630,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	if cand.Change != "" {
 		of = "#" + cand.Change
 	}
-	out := g.log.Prefixed("[" + short(cand.Commit) + " " + of + "] ")
+	out := g.log.Prefixed(fmt.Sprintf("[%s %s] ", short(cand.Commit), of))
 	defer out.Close()
 	err := g.env.gate(ctx, g.cmd, units, cand, out, out)
 	var failed changeFailure
@@ -656,9 +656,9 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 		}
 		stdin, refused := pathLines(r.Paths)
 		if len(refused) > 0 {
-			return &types.RefusedError{Reason: "the regeneration reads one path per line, and " + joinPaths(refused) + " holds a line break", Paths: refused}
+			return &types.RefusedError{Reason: fmt.Sprintf("the regeneration reads one path per line, and %s holds a line break", joinPaths(refused)), Paths: refused}
 		}
-		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
+		out := log.Prefixed(fmt.Sprintf("[regenerate #%s] ", r.Change.ID))
 		defer out.Close()
 		_, err = runHook(ctx, hookCommand{
 			Command: cmd,
@@ -727,7 +727,7 @@ type commandFacts struct {
 }
 
 func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answer any) error {
-	stderr := f.log.Prefixed("[" + label + "] ")
+	stderr := f.log.Prefixed(fmt.Sprintf("[%s] ", label))
 	defer stderr.Close()
 	res, err := runHook(ctx, hookCommand{
 		Command: f.cmd,
@@ -755,7 +755,7 @@ func (f commandFacts) Affected(ctx context.Context, c types.Change, paths []stri
 	}
 	stdin, refused := pathLines(paths)
 	if len(refused) > 0 {
-		return nil, "the affected hook reads one path per line, and " + joinPaths(refused) + " holds a line break", nil
+		return nil, fmt.Sprintf("the affected hook reads one path per line, and %s holds a line break", joinPaths(refused)), nil
 	}
 	var ans struct {
 		Affected    []string `json:"affected"`
@@ -813,7 +813,7 @@ func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, mer
 	// A build tool that answers no auto_resolve settles nothing: the file stays the
 	// author's conflict, as it was before the query existed.
 	if err := f.ask(ctx, "auto_resolve", "auto_resolve", string(in), &ans); err != nil {
-		return path + ": the facts command answered no auto_resolve (" + err.Error() + ")", false, nil //nolint:nilerr // settles nothing, the safe side
+		return fmt.Sprintf("%s: the facts command answered no auto_resolve (%s)", path, err.Error()), false, nil //nolint:nilerr // settles nothing, the safe side
 	}
 	if ans.Verdict == "" {
 		ans.Verdict = path + ": the auto_resolve hook gave no verdict"
@@ -840,7 +840,7 @@ func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []
 	code := types.ClassifiedPath{Path: path, Tier: types.CarryCode}
 	// Code is the safe side: the path keeps an approval from carrying.
 	if err := f.ask(ctx, "classify_edit", "classify_edit", string(in), &ans); err != nil {
-		code.Why = "the facts command answered no classify_edit (" + err.Error() + ")"
+		code.Why = fmt.Sprintf("the facts command answered no classify_edit (%s)", err.Error())
 		return code, nil //nolint:nilerr // classified as code, the safe side
 	}
 	switch ans.Tier {

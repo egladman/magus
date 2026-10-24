@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -38,7 +39,7 @@ func readRecords(in string) ([]types.StoredOutput, error) {
 }
 
 func TestOutputImportReadsRecordsInOrder(t *testing.T) {
-	got, err := readRecords(outputRecordLine(t, nil) + "\n" + outputRecordLine(t, func(r map[string]any) { r["project"] = "libs/y" }))
+	got, err := readRecords(fmt.Sprintf("%s\n%s", outputRecordLine(t, nil), outputRecordLine(t, func(r map[string]any) { r["project"] = "libs/y" })))
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.Equal(t, "libs/x", got[0].Project)
@@ -76,7 +77,7 @@ func TestOutputImportMalformedLineNamesTheLine(t *testing.T) {
 }
 
 func TestOutputImportRefusesAJSONBomb(t *testing.T) {
-	_, err := readRecords(strings.Repeat("[", 100_000) + strings.Repeat("]", 100_000) + "\n")
+	_, err := readRecords(fmt.Sprintf("%s%s\n", strings.Repeat("[", 100_000), strings.Repeat("]", 100_000)))
 	assert.ErrorContains(t, err, "line 1: not an output record")
 
 	err = readOutputRecords(strings.NewReader(outputRecordLine(t, nil)+outputRecordLine(t, nil)),

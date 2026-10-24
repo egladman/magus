@@ -3,6 +3,7 @@ package knowledge
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -182,7 +183,7 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 				}
 			}
 			for _, m := range missing {
-				unknownTargets = append(unknownTargets, m+"@"+strconv.Itoa(bodyLine+r.line))
+				unknownTargets = append(unknownTargets, fmt.Sprintf("%s@%s", m, strconv.Itoa(bodyLine+r.line)))
 			}
 		}
 		if len(unknownTargets) > 0 {
@@ -207,7 +208,7 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 				ID:     sID,
 				Kind:   types.KindDocSection,
 				Label:  h.text,
-				Source: rel + "#" + h.anchor,
+				Source: fmt.Sprintf("%s#%s", rel, h.anchor),
 				Attrs:  map[string]string{attrAnchor: h.anchor, attrLevel: strconv.Itoa(h.level)},
 			})
 			for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
@@ -222,7 +223,7 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 		}
 
 		for _, name := range spellNames {
-			if strings.Contains(content, "`"+name+"`") {
+			if strings.Contains(content, fmt.Sprintf("`%s`", name)) {
 				s.Edges = append(s.Edges, inferredEdge(dID, spellID(name), types.RelationDocuments, rel, 0.5))
 			}
 		}
@@ -250,7 +251,7 @@ func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGr
 			if docPath == rel {
 				continue
 			}
-			if strings.Contains(content, "`"+cmd+"`") {
+			if strings.Contains(content, fmt.Sprintf("`%s`", cmd)) {
 				s.Edges = append(s.Edges, inferredEdge(dID, docID(docPath), types.RelationReferences, rel, 0.6))
 			}
 		}
@@ -540,7 +541,7 @@ func (ix runIndex) resolve(c runCommand) (ids, missing []string) {
 		case names[c.target]:
 			ids = append(ids, targetID(p, c.target))
 		default:
-			missing = append(missing, p+":"+c.target)
+			missing = append(missing, fmt.Sprintf("%s:%s", p, c.target))
 		}
 	}
 	return ids, missing

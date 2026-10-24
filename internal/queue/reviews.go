@@ -160,8 +160,7 @@ func classifyReviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, c
 		}
 		reason := verdict.Reason
 		if verdict.Carry && len(owed) > 0 {
-			reason += "; it stands once the base's regeneration reproduces the generated files of the merge of the base at " +
-				shorts(owed) + ", which apply proves before merging"
+			reason += fmt.Sprintf("; it stands once the base's regeneration reproduces the generated files of the merge of the base at %s, which apply proves before merging", shorts(owed))
 		}
 		out = append(out, types.ReviewVerdict{Reviewer: r.Reviewer, ReviewID: r.ID, Commit: r.Commit,
 			Carry: verdict.Carry, Tier: verdict.Tier, Changed: orEmpty(verdict.Changed), Reason: reason})
@@ -277,7 +276,7 @@ func WriteReviewLines(w io.Writer, r types.ReviewReport) error {
 
 // dismissMessage is what the reviewer reads on the dismissal.
 func dismissMessage(rv types.ReviewVerdict) string {
-	return claim("magus queue: " + rv.Reason + ". Review the head again.")
+	return claim(fmt.Sprintf("magus queue: %s. Review the head again.", rv.Reason))
 }
 
 // orEmpty keeps a report's changed list a list, never null, for a reader iterating it.

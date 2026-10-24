@@ -228,7 +228,7 @@ func targetFromArgs(args []string) string {
 // normalized name. It is what every state source must be joined on.
 type planKey struct{ project, target string }
 
-func (k planKey) id() string { return k.project + ":" + k.target }
+func (k planKey) id() string { return fmt.Sprintf("%s:%s", k.project, k.target) }
 
 // planTargets indexes the extracted graph by project path then target name, which is the
 // lookup the closure walk and the anchor check both need.

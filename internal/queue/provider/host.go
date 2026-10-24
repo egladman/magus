@@ -77,7 +77,7 @@ const typesModule = "mergequeue/types"
 func typesSource() string {
 	parts := make([]string, len(queueTypeFiles))
 	for i, name := range queueTypeFiles {
-		src, err := queueTypes.ReadFile("gen/types/" + name + ".buzz")
+		src, err := queueTypes.ReadFile(fmt.Sprintf("gen/types/%s.buzz", name))
 		if err != nil {
 			panic(fmt.Sprintf("queue provider: the generated mirror %s.buzz is not embedded: %v", name, err))
 		}

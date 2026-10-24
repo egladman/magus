@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"maps"
 	"path"
 	"path/filepath"
@@ -583,7 +584,7 @@ func assembleRegistry(in Inputs) Shard {
 			// The spell runs the tool too: conveys the spell<->tool relationship directly
 			// (spell:go uses tool:go), so `explain tool:go` shows its ops and its spell.
 			// Deduped per (spell, tool).
-			if key := sp.Name + "\x00" + toolName; !spellToolSeen[key] {
+			if key := fmt.Sprintf("%s\x00%s", sp.Name, toolName); !spellToolSeen[key] {
 				spellToolSeen[key] = true
 				s.Edges = append(s.Edges, extractedEdge(sID, tID, types.RelationUses, ""))
 			}
@@ -607,7 +608,7 @@ func assembleRegistry(in Inputs) Shard {
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{
 				ID:    methID,
 				Kind:  types.KindMethod,
-				Label: m.Name + "." + meth.Name,
+				Label: fmt.Sprintf("%s.%s", m.Name, meth.Name),
 				Doc:   meth.Doc,
 				Attrs: nilIfEmpty(attrs),
 			})
@@ -784,7 +785,7 @@ func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTi
 			continue
 		}
 		diag := diagnosticID(string(ev.Code))
-		key := unit + "\x00" + diag
+		key := fmt.Sprintf("%s\x00%s", unit, diag)
 		if seen[key] {
 			continue
 		}

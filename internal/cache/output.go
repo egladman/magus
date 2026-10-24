@@ -225,8 +225,8 @@ func PortableRef(cacheKey string) string {
 // and resolves exactly like a ref, and so pre-portable stores, whose file stems
 // were minted the same way, resolve unchanged.
 func (s *OutputStore) mintAttempt(cacheKey string) string {
-	nonce := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(s.seq.Add(1), 10)
-	sum := sha256.Sum256([]byte(cacheKey + "\x00" + nonce))
+	nonce := fmt.Sprintf("%s-%s", strconv.FormatInt(time.Now().UnixNano(), 10), strconv.FormatUint(s.seq.Add(1), 10))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", cacheKey, nonce)))
 	return RefPrefix + hex.EncodeToString(sum[:])[:attemptHexLen]
 }
 
@@ -427,7 +427,7 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 				continue
 			}
 			d.Target = bareTarget(d.Target)
-			key := d.Project + "\x00" + d.Target
+			key := fmt.Sprintf("%s\x00%s", d.Project, d.Target)
 			if cur, ok := latest[key]; ok && !newerDescriptor(d, cur) {
 				continue
 			}

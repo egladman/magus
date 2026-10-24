@@ -315,7 +315,7 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 	require.Len(t, admit.released, 1)
 	claim := admit.released[0]
 	assert.Equal(t, []string{
-		"hold " + pgid + ` (sh -c "echo $$") on ` + claim,
+		fmt.Sprintf("hold %s (sh -c \"echo $$\") on %s", pgid, claim),
 		"release hold-" + claim,
 	}, admit.events)
 

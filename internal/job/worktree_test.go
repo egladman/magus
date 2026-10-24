@@ -183,7 +183,7 @@ func TestForkWorktreePlacesABinaryWhoseInputsCannotBeListedOnlyAtItsCommit(t *te
 		},
 		"a build from uncommitted changes": {
 			build: types.MagusBuild{Version: "v0.5.0-1-gabc-dirty", Commit: built}, checkpoint: built,
-			want: "built from changes to " + built + " nobody committed",
+			want: fmt.Sprintf("built from changes to %s nobody committed", built),
 		},
 		"a build at a commit this repository lacks": {
 			build: types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: "0123456789abcdef0123456789abcdef01234567"}, checkpoint: built,

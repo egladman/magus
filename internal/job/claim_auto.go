@@ -72,7 +72,7 @@ func DecideAutoClaim(row types.Job, rel string, facts claimFacts, rows []types.J
 	case e.Kind == types.ClaimReleased:
 		d.Stop = "a path the holder released is no graph edge from what the job changed"
 	case projects == nil:
-		d.Stop = "no workspace answered for its targets' outputs, so " + rel + " may be generated"
+		d.Stop = fmt.Sprintf("no workspace answered for its targets' outputs, so %s may be generated", rel)
 	case generatedFile(projects, rel):
 		d.Stop = rel + " is a generated output, which its target regenerates"
 	case configName(rel):

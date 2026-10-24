@@ -115,7 +115,7 @@ func targetGraph(tg types.TargetGraphOutput, project string) (graph, bool) {
 		return graph{}, false
 	}
 	p := tg.Projects[i]
-	g := graph{id: KindTargets + ":" + p.Path, title: "Targets in " + p.Label(), claim: "flow"}
+	g := graph{id: fmt.Sprintf("%s:%s", KindTargets, p.Path), title: fmt.Sprintf("Targets in %s", p.Label()), claim: "flow"}
 	taken := ids{}
 	byName := map[string]string{}
 	for _, n := range p.Nodes {
@@ -221,7 +221,7 @@ func newRenderCache() *renderCache {
 }
 
 func renderKey(g graph, desc, anchorHref string) string {
-	return g.fingerprint() + "\x00" + desc + "\x00" + anchorHref
+	return fmt.Sprintf("%s\x00%s\x00%s", g.fingerprint(), desc, anchorHref)
 }
 
 // get returns the figure for key, calling compute at most once across concurrent callers of
@@ -334,7 +334,7 @@ func (s ids) unique(name string) string {
 	}
 	id := base
 	for n := 2; s[id]; n++ {
-		id = base + "-" + strconv.Itoa(n)
+		id = fmt.Sprintf("%s-%s", base, strconv.Itoa(n))
 	}
 	s[id] = true
 	return id
@@ -518,7 +518,7 @@ func actorNames(nodes []Node) map[string]string {
 	for _, n := range nodes {
 		out[n.ID] = n.Label
 		if count[n.Label] > 1 {
-			out[n.ID] = n.Label + " (" + n.Anchor + ")"
+			out[n.ID] = fmt.Sprintf("%s (%s)", n.Label, n.Anchor)
 		}
 	}
 	return out

@@ -211,8 +211,7 @@ func TestOutputStoreV2DescriptorResolvesWithEmptyRevision(t *testing.T) {
 	keyDir := filepath.Join(dir, "outputs", key)
 	require.NoError(t, os.MkdirAll(keyDir, 0o755))
 	const attempt = "out22222222" // shaped like a real attempt id
-	v2 := []byte(`{"ref":"` + PortableRef(key) + `","project":"pkg/a","target":"build","failed":false,"timestamp_ms":100,"duration_ms":5,` +
-		`"schema":2,"key":"` + key + `","key_version":1,"attempt":"` + attempt + `"}`)
+	v2 := []byte(fmt.Sprintf("{\"ref\":\"%s\",\"project\":\"pkg/a\",\"target\":\"build\",\"failed\":false,\"timestamp_ms\":100,\"duration_ms\":5,\"schema\":2,\"key\":\"%s\",\"key_version\":1,\"attempt\":\"%s\"}", PortableRef(key), key, attempt))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+outExt), []byte("v2 bytes\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+descExt), v2, 0o644))
 
@@ -670,7 +669,7 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 	rel, err := filepath.Rel(filepath.Join(dir, RunsDir, "inv"), filepath.Join(outside, "hosts"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(rel, ".."), "sanity: %q must climb out of the runs dir", rel)
-	traversal := "inv" + string(filepath.Separator) + rel
+	traversal := fmt.Sprintf("inv%s%s", string(filepath.Separator), rel)
 	// The refusal, not a missing file, is what has to stop this read: the id below joins onto
 	// a journal that exists and parses.
 	require.FileExists(t, filepath.Join(dir, RunsDir, traversal+runExt))

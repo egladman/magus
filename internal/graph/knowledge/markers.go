@@ -196,7 +196,7 @@ func foldMarkers(hits []markerHit) []foldedMarker {
 		case "end":
 			stack := open[h.family]
 			if len(stack) == 0 {
-				out = append(out, foldedMarker{markerHit: h, unresolved: "magus:" + h.family + ":end has no :begin above it"})
+				out = append(out, foldedMarker{markerHit: h, unresolved: fmt.Sprintf("magus:%s:end has no :begin above it", h.family)})
 				continue
 			}
 			out[stack[len(stack)-1]].endLine = h.line
@@ -207,7 +207,7 @@ func foldMarkers(hits []markerHit) []foldedMarker {
 	}
 	for family, stack := range open {
 		for _, i := range stack {
-			out[i].unresolved = "magus:" + family + ":begin has no :end below it"
+			out[i].unresolved = fmt.Sprintf("magus:%s:begin has no :end below it", family)
 		}
 	}
 	return out
@@ -299,7 +299,7 @@ func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages 
 		}
 		for _, m := range foldMarkers(fh.hits) {
 			id := markerID(fh.rel, m.line)
-			prov := fh.rel + ":" + strconv.Itoa(m.line)
+			prov := fmt.Sprintf("%s:%s", fh.rel, strconv.Itoa(m.line))
 			positional, stamps := parseMarkerArgs(m.args)
 			attrs := stamps
 			attrs[types.AttrMarkerFamily] = m.family
@@ -389,10 +389,10 @@ func resolveCall(root string, positional []string) (dst, transport, reason strin
 	}
 	dst = path.Clean(strings.TrimPrefix(positional[0], "./"))
 	if dst != "." && !workspaceContainsPath(dst) {
-		return "", "", "magus:calls destination " + positional[0] + " is outside the workspace"
+		return "", "", fmt.Sprintf("magus:calls destination %s is outside the workspace", positional[0])
 	}
 	if !isDir(root, dst) {
-		return "", "", "magus:calls destination " + positional[0] + " is not a directory"
+		return "", "", fmt.Sprintf("magus:calls destination %s is not a directory", positional[0])
 	}
 	return dst, positional[1], ""
 }
@@ -435,7 +435,7 @@ func figureEmbeds(root string, docPages []string, idx docIndex) map[string][]str
 					if h.start > offset {
 						break
 					}
-					if idx.sections[rel+"#"+h.anchor] {
+					if idx.sections[fmt.Sprintf("%s#%s", rel, h.anchor)] {
 						target = docSectionID(rel, h.anchor)
 					}
 				}

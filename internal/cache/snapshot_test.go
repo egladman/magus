@@ -131,7 +131,7 @@ func TestExportFDsBounded(t *testing.T) {
 	require.NoError(t, os.MkdirAll(outDir, 0o755))
 	var outputs []string
 	for i := 0; i < nFiles; i++ {
-		name := filepath.Join(outDir, filepath.FromSlash("out_"+string(rune('a'+i%26))+string(rune('0'+i/26))+".txt"))
+		name := filepath.Join(outDir, filepath.FromSlash(fmt.Sprintf("out_%s%s.txt", string(rune('a'+i%26)), string(rune('0'+i/26)))))
 		content := make([]byte, 256)
 		content[0] = byte(i) // unique content per file
 		require.NoError(t, os.WriteFile(name, content, 0o644))

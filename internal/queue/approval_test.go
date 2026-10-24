@@ -30,11 +30,11 @@ func TestAdmissionDecidesTheCodeOfEveryWaitAndKick(t *testing.T) {
 	}{
 		"admitted": {edit: func(*approvalResult, *types.Capabilities) {}},
 		"head moved": {edit: func(a *approvalResult, _ *types.Capabilities) { a.Head = head("2") },
-			wantCode: types.CodeWaitHeadMoved, wantWhy: "head moved to " + head("2")[:12] + " while listing; retried next run", wantHead: head("2")},
+			wantCode: types.CodeWaitHeadMoved, wantWhy: fmt.Sprintf("head moved to %s while listing; retried next run", head("2")[:12]), wantHead: head("2")},
 		"withdrawn": {edit: func(a *approvalResult, _ *types.Capabilities) { a.Queued = false },
 			wantCode: types.CodeWaitWithdrawn, wantWhy: "its merge intent was withdrawn while listing"},
 		"not approved": {edit: func(a *approvalResult, _ *types.Capabilities) { a.Approved, a.Reason = false, "changes requested" },
-			wantCode: types.CodeWaitNotApproved, wantWhy: "not approved at " + c.Head[:12] + ": changes requested"},
+			wantCode: types.CodeWaitNotApproved, wantWhy: fmt.Sprintf("not approved at %s: changes requested", c.Head[:12])},
 		"method not allowed": {edit: func(_ *approvalResult, caps *types.Capabilities) {
 			caps.Methods = []types.MergeMethod{types.MethodMerge}
 		},
@@ -51,7 +51,7 @@ func TestAdmissionDecidesTheCodeOfEveryWaitAndKick(t *testing.T) {
 			require.NotNil(t, v)
 			want := types.Verdict{Change: got, Decision: types.DecisionWait, Code: tc.wantCode, Reason: tc.wantWhy}
 			if tc.wantCode == types.CodeKickRefused {
-				want.Decision, want.Report = types.DecisionKick, "The merge queue cannot merge this change: "+tc.wantWhy+".\n"
+				want.Decision, want.Report = types.DecisionKick, fmt.Sprintf("The merge queue cannot merge this change: %s.\n", tc.wantWhy)
 			}
 			assert.Equal(t, want, *v)
 			require.NoError(t, v.Check())
@@ -182,50 +182,50 @@ func TestCarryApprovalByTier(t *testing.T) {
 		wantReason string
 	}{
 		"a rebase": {
-			want: types.CarryVerdict{Carry: true, Tier: types.CarryRebase, Reason: "head " + h + " is " + o + " rebased with its diff unchanged"},
+			want: types.CarryVerdict{Carry: true, Tier: types.CarryRebase, Reason: fmt.Sprintf("head %s is %s rebased with its diff unchanged", h, o)},
 		},
 		"a regenerated output": {
 			cc:        carryCase{edits: map[string]carryEdit{"gen/api.go": {goFile, changed}}},
 			generated: []string{"gen/api.go"},
 			want: types.CarryVerdict{Carry: true, Tier: types.CarryGenerated,
 				Changed: []types.ClassifiedPath{{Path: "gen/api.go", Tier: types.CarryGenerated, Why: "a declared output glob claims it"}},
-				Reason:  "head " + h + " is " + o + " rebased; changed since the approval: gen/api.go (generated: a declared output glob claims it)"},
+				Reason:  fmt.Sprintf("head %s is %s rebased; changed since the approval: gen/api.go (generated: a declared output glob claims it)", h, o)},
 		},
 		"a changelog fragment added": {
 			cc: carryCase{edits: map[string]carryEdit{"changes/unreleased/a.md": {nil, doc}}},
 			want: types.CarryVerdict{Carry: true, Tier: types.CarryProse,
 				Changed: []types.ClassifiedPath{{Path: "changes/unreleased/a.md", Tier: types.CarryProse, Why: proseWhy}},
-				Reason:  "head " + h + " is " + o + " rebased; changed since the approval: changes/unreleased/a.md (prose: " + proseWhy + ")"},
+				Reason:  fmt.Sprintf("head %s is %s rebased; changed since the approval: changes/unreleased/a.md (prose: %s)", h, o, proseWhy)},
 		},
 		"a comment": {
 			cc: carryCase{edits: map[string]carryEdit{"a.go": {goFile, commented}}},
 			want: types.CarryVerdict{Carry: true, Tier: types.CarryCommentOnly,
 				Changed: []types.ClassifiedPath{{Path: "a.go", Tier: types.CarryCommentOnly, Why: "only comments differ from the revision compared against"}},
-				Reason:  "head " + h + " is " + o + " rebased; changed since the approval: a.go (comment-only: only comments differ from the revision compared against)"},
+				Reason:  fmt.Sprintf("head %s is %s rebased; changed since the approval: a.go (comment-only: only comments differ from the revision compared against)", h, o)},
 		},
 		"code": {
 			cc: carryCase{edits: map[string]carryEdit{"a.go": {goFile, changed}}},
 			want: types.CarryVerdict{Tier: types.CarryCode,
 				Changed: []types.ClassifiedPath{{Path: "a.go", Tier: types.CarryCode, Why: codeWhy}},
 				Refused: []string{"a.go"},
-				Reason:  "changed since the approval at " + o + ": a.go (code: " + codeWhy + ")"},
-			wantReason: "no review; changed since the approval at " + o + ": a.go (code: " + codeWhy + ")",
+				Reason:  fmt.Sprintf("changed since the approval at %s: a.go (code: %s)", o, codeWhy)},
+			wantReason: fmt.Sprintf("no review; changed since the approval at %s: a.go (code: %s)", o, codeWhy),
 		},
 		"a file of nothing but comments added": {
 			cc: carryCase{edits: map[string]carryEdit{"b.go": {nil, []byte("// b\n")}}},
 			want: types.CarryVerdict{Tier: types.CarryCode,
 				Changed: []types.ClassifiedPath{{Path: "b.go", Tier: types.CarryCode, Why: "absent at the revision compared against"}},
 				Refused: []string{"b.go"},
-				Reason:  "changed since the approval at " + o + ": b.go (code: absent at the revision compared against)"},
-			wantReason: "no review; changed since the approval at " + o + ": b.go (code: absent at the revision compared against)",
+				Reason:  fmt.Sprintf("changed since the approval at %s: b.go (code: absent at the revision compared against)", o)},
+			wantReason: fmt.Sprintf("no review; changed since the approval at %s: b.go (code: absent at the revision compared against)", o),
 		},
 		"prose beside code": {
 			cc: carryCase{edits: map[string]carryEdit{"docs/a.md": {doc, []byte("# b\n")}, "a.go": {goFile, changed}}},
 			want: types.CarryVerdict{Tier: types.CarryCode,
 				Changed: []types.ClassifiedPath{{Path: "a.go", Tier: types.CarryCode, Why: codeWhy}, {Path: "docs/a.md", Tier: types.CarryProse, Why: proseWhy}},
 				Refused: []string{"a.go"},
-				Reason:  "changed since the approval at " + o + ": a.go (code: " + codeWhy + ")"},
-			wantReason: "no review; changed since the approval at " + o + ": a.go (code: " + codeWhy + ")",
+				Reason:  fmt.Sprintf("changed since the approval at %s: a.go (code: %s)", o, codeWhy)},
+			wantReason: fmt.Sprintf("no review; changed since the approval at %s: a.go (code: %s)", o, codeWhy),
 		},
 		"prose under a rebase-only policy": {
 			cc:     carryCase{edits: map[string]carryEdit{"docs/a.md": {doc, []byte("# b\n")}}},
@@ -233,14 +233,14 @@ func TestCarryApprovalByTier(t *testing.T) {
 			want: types.CarryVerdict{Tier: types.CarryProse,
 				Changed: []types.ClassifiedPath{{Path: "docs/a.md", Tier: types.CarryProse, Why: proseWhy}},
 				Refused: []string{"docs/a.md"},
-				Reason:  "changed since the approval at " + o + ": docs/a.md (prose: " + proseWhy + ")"},
-			wantReason: "no review; changed since the approval at " + o + ": docs/a.md (prose: " + proseWhy + ")",
+				Reason:  fmt.Sprintf("changed since the approval at %s: docs/a.md (prose: %s)", o, proseWhy)},
+			wantReason: fmt.Sprintf("no review; changed since the approval at %s: docs/a.md (prose: %s)", o, proseWhy),
 		},
 		"a replay that conflicts": {
 			cc: carryCase{conflicts: []string{"a.go", "b.go"}},
 			want: types.CarryVerdict{Tier: types.CarryCode, Refused: []string{"a.go", "b.go"},
-				Reason: "the approved " + o + "'s diff conflicts with " + carryNewBase[:12] + " in a.go, b.go"},
-			wantReason: "no review; the approved " + o + "'s diff conflicts with " + carryNewBase[:12] + " in a.go, b.go",
+				Reason: fmt.Sprintf("the approved %s's diff conflicts with %s in a.go, b.go", o, carryNewBase[:12])},
+			wantReason: fmt.Sprintf("no review; the approved %s's diff conflicts with %s in a.go, b.go", o, carryNewBase[:12]),
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -285,7 +285,7 @@ func TestCarryApprovalByTier(t *testing.T) {
 				Change:   held,
 				Decision: types.DecisionWait,
 				Code:     types.CodeWaitNotApproved,
-				Reason:   "not approved at " + h + ": " + tc.wantReason,
+				Reason:   fmt.Sprintf("not approved at %s: %s", h, tc.wantReason),
 			}, v)
 		})
 	}
@@ -339,12 +339,12 @@ func TestCarryApprovalFetchesTheBaseAndRefusesWhatIsNoCommit(t *testing.T) {
 	assert.Equal(t, types.CarryVerdict{From: carryOld, Head: c.Head, Tier: types.CarryProse,
 		Changed: []types.ClassifiedPath{{Path: "docs/a.md", Tier: types.CarryProse, Why: `matches "**/*.md" (built-in default)`}},
 		Refused: []string{"docs/a.md"},
-		Reason:  "changed since the approval at " + carryOld[:12] + `: docs/a.md (prose: matches "**/*.md" (built-in default))`}, got,
+		Reason:  fmt.Sprintf("changed since the approval at %s: docs/a.md (prose: matches \"**/*.md\" (built-in default))", carryOld[:12])}, got,
 		"the zero policy carries a rebase alone")
 
 	q.Approved = "v1.2"
 	_, err = CarryApproval(t.Context(), d.vcs, d.facts, clone, q, nil)
-	require.EqualError(t, err, `carry an approval from "v1.2" to "`+c.Head+`": both must be commit ids`)
+	require.EqualError(t, err, fmt.Sprintf("carry an approval from \"v1.2\" to \"%s\": both must be commit ids", c.Head))
 }
 
 func TestCarryBase(t *testing.T) {

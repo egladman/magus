@@ -12,7 +12,9 @@ import (
 )
 
 // conformanceNS is the key of package pkg ("" for the root) in module example.com/m.
-func conformanceNS(pkg string) string { return "gomod example.com/m `example.com/m" + pkg + "`/" }
+func conformanceNS(pkg string) string {
+	return fmt.Sprintf("gomod example.com/m `example.com/m%s`/", pkg)
+}
 
 // conformanceSym is one Go symbol record defined at file:start..end in package pkg.
 func conformanceSym(pkg, desc, file string, start, end, lines int, shape string, tokens int, refs ...string) types.KnowledgeSymbol {

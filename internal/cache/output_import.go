@@ -79,7 +79,7 @@ var (
 	revisionPattern    = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 	platformPattern    = regexp.MustCompile(`^[a-z0-9]+/[a-z0-9]+$`)
 	classLabelPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
-	classDigestPattern = regexp.MustCompile(`^[0-9a-f]{` + strconv.Itoa(classDigestHexLen) + `}$`)
+	classDigestPattern = regexp.MustCompile(fmt.Sprintf("^[0-9a-f]{%s}$", strconv.Itoa(classDigestHexLen)))
 )
 
 const maxFieldBytes = 512

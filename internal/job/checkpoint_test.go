@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,9 +73,9 @@ func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 	s := NewStore(tempLocation(t, repo.Root()))
 	digest := strings.Repeat("0123456789abcdef", 2)
 
-	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(older[:9]+"+"+digest), config.Jobs{}, nil)
+	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(fmt.Sprintf("%s+%s", older[:9], digest)), config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, older+"+"+digest, forked.Checkpoint)
+	assert.Equal(t, fmt.Sprintf("%s+%s", older, digest), forked.Checkpoint)
 
 	applied, err := Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", head[:9])}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
@@ -142,7 +143,7 @@ func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
 
 	root, head := committedRepo(t)
 	s := NewStore(tempLocation(t, root))
-	madeUp := head + "+" + strings.Repeat("0123456789abcdef", 2)
+	madeUp := fmt.Sprintf("%s+%s", head, strings.Repeat("0123456789abcdef", 2))
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUp), config.Jobs{}, nil)
 	require.Error(t, err, "a clean tree reproduces no digest")
@@ -181,7 +182,7 @@ func TestACheckpointDigestOfTheWrongShapeIsRefused(t *testing.T) {
 	root, head := committedRepo(t)
 	s := NewStore(tempLocation(t, root))
 	for _, digest := range []string{"xyz", strings.Repeat("ab", 8), strings.Repeat("AB", 16), ""} {
-		token := head + "+" + digest
+		token := fmt.Sprintf("%s+%s", head, digest)
 		_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(token), config.Jobs{}, nil)
 		require.Error(t, err, "digest %q", digest)
 		assert.Contains(t, err.Error(), token)

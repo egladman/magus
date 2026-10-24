@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -75,7 +76,7 @@ func (d doubles) gates(result func(id string) types.GateResult) *gated {
 	d.gate.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, cand types.Candidate, units []string) (types.GateResult, error) {
 			id := cmp.Or(cand.Change, "base")
-			run := id + "@" + cand.Commit
+			run := fmt.Sprintf("%s@%s", id, cand.Commit)
 			g.mu.Lock()
 			g.runs = append(g.runs, run)
 			g.units[run] = units
@@ -222,15 +223,14 @@ func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {
 
 			cand := candidateID(base, one.Head)
 			assert.Equal(t, 1, g.count("1"), "a resolution never skips the gate")
-			assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+cand+`"`)
+			assert.Contains(t, events.String(), fmt.Sprintf("\"kind\":\"resolved\",\"change\":\"1\",\"reason\":%s,\"commit\":\"%s\"", jsonString(t, chNote), cand))
 			got := recorded(t, dir)["1"]
 			want := types.Verdict{Change: one, Onto: base, CandidateCommit: cand, Method: one.Method, Depth: 1}
 			if !red {
 				want.Decision, want.Reason = types.DecisionMerge, chNote
 			} else {
 				want.Decision, want.Code, want.Reason = types.DecisionKick, types.CodeKickRed, "the gate exited 1"
-				want.Report = "The merge queue built this change at `" + short(one.Head) + "` onto `main` at `" + short(base) + "`, and the gate exited 1.\n" +
-					"\nBuilding the candidate " + chNote + "; the gate ran on that merge.\n"
+				want.Report = fmt.Sprintf("The merge queue built this change at `%s` onto `main` at `%s`, and the gate exited 1.\n\nBuilding the candidate %s; the gate ran on that merge.\n", short(one.Head), short(base), chNote)
 			}
 			assert.Equal(t, recordedAs(want, got), got)
 		})
@@ -258,7 +258,7 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 	assert.Equal(t, recordedAs(types.Verdict{
 		Change: two, After: "1", Onto: c1, CandidateCommit: candidateID(c1, two.Head), Method: two.Method, Depth: 2,
 		Decision: types.DecisionKick, Code: types.CodeKickRed, Reason: "the gate exited 1",
-		Report: "The merge queue built this change at `" + short(two.Head) + "` onto the candidate of #1 (`" + short(c1) + "`), and the gate exited 1.\n",
+		Report: fmt.Sprintf("The merge queue built this change at `%s` onto the candidate of #1 (`%s`), and the gate exited 1.\n", short(two.Head), short(c1)),
 		Gate:   `magus run ci`,
 	}, got["2"]), got["2"])
 	for id, vd := range got {
@@ -311,7 +311,7 @@ func TestARedBaseKicksNobodyBackAndIsGatedOnce(t *testing.T) {
 	for _, id := range []string{"1", "2"} {
 		assert.Equal(t, types.DecisionWait, got[id].Decision, id)
 		assert.Equal(t, types.CodeWaitBaseRed, got[id].Code, id)
-		assert.Equal(t, "the gate failed on it and on `main` at `"+short(base)+"` without it; retried once that is green", got[id].Reason, id)
+		assert.Equal(t, fmt.Sprintf("the gate failed on it and on `main` at `%s` without it; retried once that is green", short(base)), got[id].Reason, id)
 		assert.Empty(t, got[id].Report, "nothing is reported to an author who did nothing: %s", id)
 		assert.Equal(t, base, got[id].Onto, "rebuilt onto the base once the change beneath waited: %s", id)
 	}
@@ -399,7 +399,7 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 		Decision: types.DecisionKick, Code: types.CodeKickRefused,
 		Reason: "building its candidate failed: `make gen` exited 2",
 		Paths:  []string{"gen/x.go"},
-		Report: "The merge queue built this change at `" + short(one.Head) + "` onto `main` at `" + short(base) + "`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n",
+		Report: fmt.Sprintf("The merge queue built this change at `%s` onto `main` at `%s`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n", short(one.Head), short(base)),
 	}, got["1"]), got["1"])
 	assert.Equal(t, types.DecisionMerge, got["2"].Decision)
 	assert.Zero(t, g.count("base"), "a refusal is about the change, whatever the base does")
@@ -510,7 +510,7 @@ func TestAMachineFailureStopsItsPartitionAlone(t *testing.T) {
 	plan := newPlan([]types.Change{one}, []types.Change{two})
 	v, dir := validating(t, d, plan)
 	err := v.Run(t.Context(), plan)
-	require.ErrorContains(t, err, "build the candidate of #1 onto "+base[:12]+": disk full")
+	require.ErrorContains(t, err, fmt.Sprintf("build the candidate of #1 onto %s: disk full", base[:12]))
 	got := recorded(t, dir)
 	assert.NotContains(t, got, "1")
 	assert.Equal(t, types.DecisionMerge, got["2"].Decision)

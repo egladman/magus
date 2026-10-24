@@ -597,7 +597,7 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				{ID: "w/c", Parent: "w", State: types.StateDeclared, Updated: fresh},
 			},
 			ended: map[string]string{
-				"w":   "taken in " + gone + ", which no longer exists",
+				"w":   fmt.Sprintf("taken in %s, which no longer exists", gone),
 				"w/c": "parent w ended as no_return, and its tree ends with it",
 			},
 		},
@@ -704,7 +704,7 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				}
 				wantRow.State, wantRow.EndReason, wantRow.Updated = types.StateNoReturn, reason, now
 				assert.Equal(t, wantRow, row, "%s ends as no_return with its reason, and ending a row is its own transition", want.ID)
-				lines = append(lines, "ended "+want.ID+": "+reason)
+				lines = append(lines, fmt.Sprintf("ended %s: %s", want.ID, reason))
 			}
 			gotLines := strings.Split(strings.TrimSuffix(notices.String(), "\n"), "\n")
 			if len(lines) == 0 {
@@ -765,9 +765,9 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 		BaseVerdict:  taken.BaseVerdict,
 		Registered:   taken.Registered,
 		CheckoutRoot: abs,
-		EndReason:    "taken in " + abs + ", which no longer exists",
+		EndReason:    fmt.Sprintf("taken in %s, which no longer exists", abs),
 	}, rows["w"]), rows["w"], "a declaration carries the store's record forward")
-	assert.Equal(t, "ended w: taken in "+abs+", which no longer exists\n", notices.String())
+	assert.Equal(t, fmt.Sprintf("ended w: taken in %s, which no longer exists\n", abs), notices.String())
 }
 
 // The guard appends to unattributed every time somebody else writes inside a job's paths.
@@ -939,7 +939,7 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 		require.NoError(t, err, got[id].EndReason)
 		assert.True(t, strings.HasPrefix(squash, strings.TrimSuffix(base, ":")), "names the squash commit: %s", got[id].EndReason)
 		assert.True(t, strings.HasPrefix(head, short), "names the job's own HEAD: %s", got[id].EndReason)
-		assert.True(t, strings.HasSuffix(got[id].EndReason, " in "+dir+" read the same there"), got[id].EndReason)
+		assert.True(t, strings.HasSuffix(got[id].EndReason, fmt.Sprintf(" in %s read the same there", dir)), got[id].EndReason)
 	}
 	assert.Equal(t, types.StateExited, got["job-c"].State, "a commit the base never took")
 	assert.Equal(t, types.StateExited, got["job-d"].State, "HEAD reads as the checkpoint, so it says nothing of the change")
@@ -1674,7 +1674,7 @@ func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
 
 	var asked []string
 	current := func(_ context.Context, tree string, run types.JobAttempt) bool {
-		asked = append(asked, tree+" "+run.Ref)
+		asked = append(asked, fmt.Sprintf("%s %s", tree, run.Ref))
 		return true
 	}
 	claimed := observeClaim(j.result)

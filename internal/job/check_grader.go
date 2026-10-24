@@ -109,7 +109,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		verdict := grader(ctx, store.root, pending)
 		which := "check"
 		if goal.ID != types.PrimaryGoalID {
-			which = "goal " + goal.ID + "'s check"
+			which = fmt.Sprintf("goal %s's check", goal.ID)
 		}
 		if verdict.NotGraded != "" {
 			p := ungradedCheckProblem(row.ID, which, goal.Check, verdict.NotGraded)
@@ -153,10 +153,10 @@ func deniedCheckProblem(id, which string, check types.LeaseCheck, verdict CheckV
 	}
 	rule := ""
 	if verdict.Rule != "" {
-		rule = " (" + verdict.Rule + ")"
+		rule = fmt.Sprintf(" (%s)", verdict.Rule)
 	}
 	compiling := CompilingCheck()
-	recommended := compiling.Target + " " + compiling.Project
+	recommended := fmt.Sprintf("%s %s", compiling.Target, compiling.Project)
 	return types.JobProblem{
 		Code: types.JobCheckUnrunnable,
 		Message: fmt.Sprintf("%s's %s `%s` would be denied to its worker by the guard%s: %s,"+

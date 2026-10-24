@@ -410,5 +410,5 @@ func issueLine(iss store.Issue) string {
 	if iss.Path == "" {
 		return iss.Message
 	}
-	return filepath.Base(iss.Path) + ": " + iss.Message
+	return fmt.Sprintf("%s: %s", filepath.Base(iss.Path), iss.Message)
 }

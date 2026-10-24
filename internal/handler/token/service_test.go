@@ -2,6 +2,7 @@ package token
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -441,13 +442,13 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)
 		assert.Equal(t, op, e.Credential, "each record names the credential that acted")
-		subjects = append(subjects, e.Action+" "+e.Preview)
+		subjects = append(subjects, fmt.Sprintf("%s %s", e.Action, e.Preview))
 	}
 	until := " (laptop) console=write until " + exp.UTC().Format("2006-01-02")
 	assert.Equal(t, []string{
-		"CreateToken token " + secondID + until,
-		"RevokeToken token " + firstID + until,
-		"CreateToken token " + firstID + until,
+		fmt.Sprintf("CreateToken token %s%s", secondID, until),
+		fmt.Sprintf("RevokeToken token %s%s", firstID, until),
+		fmt.Sprintf("CreateToken token %s%s", firstID, until),
 	}, subjects, "newest first: each record names the id it acted on")
 
 	second, ok := auth.Verify(secondSecret)

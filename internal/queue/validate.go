@@ -80,7 +80,7 @@ func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
 		allUnits: sync.OnceValues(func() ([]string, error) { return v.facts.AllUnits(ctx) })}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), v.vcs, v.clone.Root, v.scratch); err != nil {
-			v.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + v.scratch + ": " + err.Error()})
+			v.Events.Emit(Event{Kind: EventNotice, Reason: fmt.Sprintf("remove checkouts under %s: %s", v.scratch, err.Error())})
 		}
 	}()
 	if v.Only != "" {
@@ -172,7 +172,7 @@ type stackHold struct {
 }
 
 func waitingBelow(id string) stackHold {
-	return stackHold{code: types.CodeWaitBelow, reason: "stacked on #" + id + ", which did not validate this run"}
+	return stackHold{code: types.CodeWaitBelow, reason: fmt.Sprintf("stacked on #%s, which did not validate this run", id)}
 }
 
 // pipeline runs one partition's speculative candidates. Up to Depth are in flight, each
@@ -463,7 +463,7 @@ func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (
 	if err != nil {
 		return false, err
 	}
-	key := onto + "\x00" + strings.Join(units, "\x00")
+	key := fmt.Sprintf("%s\x00%s", onto, strings.Join(units, "\x00"))
 	r.mu.Lock()
 	b, ok := r.bases[key]
 	if !ok {
@@ -477,7 +477,7 @@ func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (
 		}
 		defer r.release()
 		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Commit: onto,
-			Reason: "gating " + short(onto) + " without #" + c.ID + " to tell whether its red is its own"})
+			Reason: fmt.Sprintf("gating %s without #%s to tell whether its red is its own", short(onto), c.ID)})
 		cand, err := checkout(ctx, r.vcs, r.clone.Root, r.scratch, "base", onto)
 		if err != nil {
 			b.err = fmt.Errorf("check out %s: %w", short(onto), err)
@@ -504,7 +504,7 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		}
 		if !attributable {
 			v.Decision, v.Code, v.Paths = types.DecisionWait, types.CodeWaitBehind, nil
-			v.Reason = what + " on top of #" + f.after + ", which this run did not validate; retried once it is"
+			v.Reason = fmt.Sprintf("%s on top of #%s, which this run did not validate; retried once it is", what, f.after)
 			return v.Decision, r.decide(v)
 		}
 		if out.refused == nil {
@@ -514,12 +514,12 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 			}
 			if red {
 				v.Decision, v.Code = types.DecisionWait, types.CodeWaitBaseRed
-				v.Reason = "the gate failed on it and on " + ontoName(r.plan.Base, f.onto, f.after) + " without it; retried once that is green"
+				v.Reason = fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", ontoName(r.plan.Base, f.onto, f.after))
 				return v.Decision, r.decide(v)
 			}
 		}
 		v.Decision = types.DecisionKick
-		v.Reason = what + ": " + out.summary
+		v.Reason = fmt.Sprintf("%s: %s", what, out.summary)
 		remedy := ""
 		if out.refused != nil {
 			remedy = out.refused.Remedy
@@ -528,7 +528,9 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		}
 		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
 		if f.resolved != "" {
-			v.Report += "\nBuilding the candidate " + f.resolved + "; the gate ran on that merge.\n"
+			v.Report += fmt.Sprintf(`
+Building the candidate %s; the gate ran on that merge.
+`, f.resolved)
 		}
 		return v.Decision, r.decide(v)
 	}
@@ -569,7 +571,7 @@ func (r *validation) ground(ctx context.Context, f *flight) {
 
 func (r *validation) discard(ctx context.Context, cand types.Candidate) {
 	if err := discard(ctx, r.vcs, r.clone.Root, cand); err != nil {
-		r.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkout " + cand.Dir + ": " + err.Error()})
+		r.Events.Emit(Event{Kind: EventNotice, Reason: fmt.Sprintf("remove checkout %s: %s", cand.Dir, err.Error())})
 	}
 }
 
@@ -594,9 +596,9 @@ func (r *validation) decideWithBundle(v types.Verdict, bundle string) error {
 func conflictAhead(after string, conf sourceConflict) string {
 	with := "the commit it was merged onto"
 	if after != "" {
-		with = "#" + after + " ahead of it"
+		with = fmt.Sprintf("#%s ahead of it", after)
 	}
-	reason := "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
+	reason := fmt.Sprintf("conflicts with %s in %s; retried once it merges", with, joinPaths(conf.paths))
 	if note := declinedNote(conf.declined); note != "" {
 		reason += "; " + note
 	}
@@ -608,7 +610,7 @@ func conflictAhead(after string, conf sourceConflict) string {
 func failureReport(base, head, onto, after, failed, remedy string) string {
 	report := fmt.Sprintf("The merge queue built this change at `%s` onto %s, and %s.\n", short(head), ontoName(base, onto, after), failed)
 	if remedy != "" {
-		report += "\n" + remedy + "\n"
+		report += fmt.Sprintf("\n%s\n", remedy)
 	}
 	return report
 }
@@ -617,9 +619,9 @@ func failureReport(base, head, onto, after, failed, remedy string) string {
 // the change validated beneath it.
 func ontoName(base, onto, after string) string {
 	if after != "" {
-		return "the candidate of #" + after + " (`" + short(onto) + "`)"
+		return fmt.Sprintf("the candidate of #%s (`%s`)", after, short(onto))
 	}
-	return "`" + base + "` at `" + short(onto) + "`"
+	return fmt.Sprintf("`%s` at `%s`", base, short(onto))
 }
 
 // joinPaths names paths in a report, each a [types.CodeSpan]: a file name is the

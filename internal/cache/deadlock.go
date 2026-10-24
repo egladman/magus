@@ -130,7 +130,7 @@ func (l *Limiter) acquireWatched(ctx context.Context, n int, label string) (*slo
 // need only say what the work is within the step that started it.
 func (l *Limiter) Admit(ctx context.Context, label string) (context.Context, func(), error) {
 	if parent := admissionFrom(ctx).hold; parent != nil {
-		label = parent.label + " > " + label
+		label = fmt.Sprintf("%s > %s", parent.label, label)
 	}
 	hold, err := l.acquireWatched(ctx, 1, label)
 	if err != nil {

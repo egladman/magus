@@ -57,7 +57,7 @@ func DigestEnvValues(inputs []string) []string {
 			continue
 		}
 		sum := sha256.Sum256([]byte(value))
-		out[i] = "env:" + name + "=sha256:" + hex.EncodeToString(sum[:])[:envValueDigestLen]
+		out[i] = fmt.Sprintf("env:%s=sha256:%s", name, hex.EncodeToString(sum[:])[:envValueDigestLen])
 	}
 	return out
 }

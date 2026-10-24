@@ -383,7 +383,7 @@ func outputMatchesRecord(rec OutputRecord, dst string, hash func(path string) (s
 // stagingName reserves an unused path in dst's directory, so the rename that follows
 // stays on one filesystem and replaces dst in a single step.
 func stagingName(dst string) (string, error) {
-	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".replay.*")
+	f, err := os.CreateTemp(filepath.Dir(dst), fmt.Sprintf(".%s.replay.*", filepath.Base(dst)))
 	if err != nil {
 		return "", err
 	}

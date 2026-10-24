@@ -586,7 +586,7 @@ func (c *Cache) RunningTargets() []string {
 	running := c.inflight.Running()
 	out := make([]string, 0, len(running))
 	for _, t := range running {
-		out = append(out, t.Project+":"+t.Target)
+		out = append(out, fmt.Sprintf("%s:%s", t.Project, t.Target))
 	}
 	return out
 }
@@ -1067,7 +1067,7 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	}
 	read := hint.QueryOutput.With(d.Attempt)
 	if d.FailedNeedRef != "" {
-		read = hint.QueryOutput.With(d.FailedNeedRef) + " (" + d.FailedNeedTarget + ", the ctx.needs member that failed)"
+		read = fmt.Sprintf("%s (%s, the ctx.needs member that failed)", hint.QueryOutput.With(d.FailedNeedRef), d.FailedNeedTarget)
 	}
 	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
 		d.Attempt, msg, read))
@@ -1186,7 +1186,7 @@ func reproTarget(s Step) string {
 	if len(s.Charms) == 0 {
 		return s.Target
 	}
-	return s.Target + ":" + strings.Join(s.Charms, ",")
+	return fmt.Sprintf("%s:%s", s.Target, strings.Join(s.Charms, ","))
 }
 
 // stepSlots is the limiter weight one step takes: Step.Slots clamped to [1, budget], so
@@ -1362,7 +1362,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 
 // stepLabel names a step for a human reading a wait: the project as `magus status` spells
 // it, then the target.
-func stepLabel(s Step) string { return displayProject(s.ProjectPath) + " " + s.Target }
+func stepLabel(s Step) string { return fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target) }
 
 type sharedStepBaseKey struct{}
 
@@ -2171,7 +2171,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		for _, msg := range extractNotices(logPath) {
 			// Past the level gate, which -s raises to error: a notice is the one line a
 			// silent passing run prints, so it reaches the handler whatever the level.
-			r := slog.NewRecord(time.Now(), slog.LevelInfo, projectPath+": "+msg, 0)
+			r := slog.NewRecord(time.Now(), slog.LevelInfo, fmt.Sprintf("%s: %s", projectPath, msg), 0)
 			r.AddAttrs(attr.Notice("notice"))
 			if c.recordsOnly {
 				// The -o jsonl wire shape: readers match its "notice" attribute.

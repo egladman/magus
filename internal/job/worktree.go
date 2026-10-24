@@ -310,7 +310,7 @@ const CheckoutBootstrapScript = "hack/dev/bootstrap-checkout.buzz"
 // CheckoutBootstrap is the command that builds ./magus in dir, a checkout ForkWorktree made
 // at a commit no placed binary was built at.
 func CheckoutBootstrap(dir string) string {
-	return "./magus buzz " + CheckoutBootstrapScript + " -- --checkout " + dir
+	return fmt.Sprintf("./magus buzz %s -- --checkout %s", CheckoutBootstrapScript, dir)
 }
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then

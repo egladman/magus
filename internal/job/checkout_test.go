@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -497,7 +498,7 @@ func TestACallersRecordIsReadFromEveryWorktreeOfTheRepository(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	main, worktree := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"),
-		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n"), 0o644))
+		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "w"))), 0o644))
 	spawner := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(main, ".magus"), Root: main})
 	worker := NewStore(Location{StateBase: envStateBase(t), CacheDir: filepath.Join(worktree, ".magus"), Root: worktree})
 	child := Caller{Host: "claude-code", Session: "s1", Agent: "a1b2c3"}

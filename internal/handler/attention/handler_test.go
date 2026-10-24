@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,7 +128,7 @@ func TestAttentionHandler_DisposeClosesTheRequest(t *testing.T) {
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	w := postDispose(t, h, `{"id":"`+id+`","reason":"handed it over"}`)
+	w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\",\"reason\":\"handed it over\"}", id))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
 	}
@@ -153,7 +154,7 @@ func TestAttentionHandler_DisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	if w := postDispose(t, h, `{"id":"`+id[:8]+`"}`); w.Code != http.StatusOK {
+	if w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id[:8])); w.Code != http.StatusOK {
 		t.Fatalf("want 200 for an unambiguous prefix, got %d; body %s", w.Code, w.Body.String())
 	}
 }
@@ -167,7 +168,7 @@ func TestAttentionHandler_DisposeStampsTheConsoleAsTheDisposer(t *testing.T) {
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
+	if w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id)); w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
 	}
 
@@ -241,10 +242,10 @@ func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
+	if w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id)); w.Code != http.StatusOK {
 		t.Fatalf("want the first disposal to succeed, got %d", w.Code)
 	}
-	w := postDispose(t, h, `{"id":"`+id+`"}`)
+	w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id))
 	if w.Code != http.StatusConflict {
 		t.Errorf("want 409, got %d; body %s", w.Code, w.Body.String())
 	}
@@ -269,13 +270,13 @@ func TestAttentionHandler_DisposeRecordsTheWait(t *testing.T) {
 	).Once()
 	h := NewHandler(root, "v0.0.0-test", nil, rec)
 
-	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
+	if w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id)); w.Code != http.StatusOK {
 		t.Fatalf("want the disposal to succeed, got %d; body %s", w.Code, w.Body.String())
 	}
 
 	// A refused disposal closed nothing, so it must record nothing: the single expected
 	// call is already spent, and a second one fails the test.
-	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusConflict {
+	if w := postDispose(t, h, fmt.Sprintf("{\"id\":\"%s\"}", id)); w.Code != http.StatusConflict {
 		t.Fatalf("want 409 on the second disposal, got %d", w.Code)
 	}
 }
@@ -301,7 +302,7 @@ func TestAttentionHandler_OversizedBodyIsRefused(t *testing.T) {
 	root, _ := plantStore(t)
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 
-	huge := `{"id":"` + strings.Repeat("a", handler.MaxWireBodyBytes+1<<10) + `"}`
+	huge := fmt.Sprintf("{\"id\":\"%s\"}", strings.Repeat("a", handler.MaxWireBodyBytes+1<<10))
 	if w := postDispose(t, h, huge); w.Code != http.StatusBadRequest {
 		t.Errorf("want 400 for a body past the cap, got %d", w.Code)
 	}

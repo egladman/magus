@@ -250,7 +250,7 @@ func (g *Graph) rankText(ix *searchIndex, cq *compiledQuery, tokens, need []stri
 	exact := exactList(ix, cands, phrase, opts.Weights)
 	emb, skipped := embedList(ix, cands, tokens, opts)
 	if emb == nil {
-		ranking.Skipped = append(ranking.Skipped, listEmbed+": "+skipped)
+		ranking.Skipped = append(ranking.Skipped, fmt.Sprintf("%s: %s", listEmbed, skipped))
 	}
 	if graph == nil && exact == nil && emb == nil {
 		// One list fuses to its own order; the score is its reciprocal rank term.
