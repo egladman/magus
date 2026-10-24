@@ -181,7 +181,7 @@ func qualifiedOps(use types.TargetSpellUse) []string {
 	}
 	out := make([]string, 0, len(use.Ops))
 	for _, op := range use.Ops {
-		out = append(out, use.Spell+"["+op+"]")
+		out = append(out, fmt.Sprintf("%s[%s]", use.Spell, op))
 	}
 	return out
 }

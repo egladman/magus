@@ -163,7 +163,7 @@ func (*runner) checkCITarget(projects []*types.Project) types.Check {
 			hint.Run.With("ci"), hint.Affected.With("ci")),
 		Details: []string{
 			"define one in your magusfile, e.g.  " + hint.CITargetExample,
-			"run '" + hint.DescribeTargets.String() + "' to see the available stages to compose",
+			fmt.Sprintf("run '%s' to see the available stages to compose", hint.DescribeTargets.String()),
 			fmt.Sprintf("see %s: %s", types.NoCITarget, types.CodeURL(types.NoCITarget)),
 		},
 	}
@@ -180,7 +180,7 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) types.Check {
 	for _, s := range spells {
 		for _, t := range s.DocRequiredTargets() {
 			if s.TargetDoc(t) == "" {
-				undocumented = append(undocumented, s.Name()+":"+t)
+				undocumented = append(undocumented, fmt.Sprintf("%s:%s", s.Name(), t))
 			}
 		}
 	}
@@ -707,9 +707,9 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 		Status: types.CheckAdvice,
 		Message: fmt.Sprintf(
 			"%d target(s) name static analysis or formatting rather than a phase of their own; "+
-				"composing the op into lint (or format) lets `"+hint.Affected.With("ci")+"` cover it "+
+				"composing the op into lint (or format) lets `%s` cover it "+
 				"(docs/targets.md#the-target-name, see %s)",
-			len(found), types.CodeURL(types.BespokePhaseFragmentName)),
+			len(found), hint.Affected.With("ci"), types.CodeURL(types.BespokePhaseFragmentName)),
 		Details: found,
 	}
 }
@@ -914,7 +914,7 @@ func (r *runner) checkObservationKeyedAsVersion(projects []*types.Project) types
 				if !t.Key.IsZero() {
 					continue
 				}
-				id := sp.Name() + ":" + tool
+				id := fmt.Sprintf("%s:%s", sp.Name(), tool)
 				if seen[id] {
 					continue
 				}
@@ -957,7 +957,7 @@ func externalOpFinding(p *types.Project, sp *spells.Spell, op spells.Op, spellNa
 		if t, ok := sp.Tool(op.Bin); ok && t.HasObservationProbe() {
 			return ""
 		}
-		return where + ": the op's verdict comes from data outside this tree that no probe identifies; declare skip_cache with a reason, or declare an observe probe on tool " + op.Bin + " in the spell so the data's identity keys the cache"
+		return fmt.Sprintf("%s: the op's verdict comes from data outside this tree that no probe identifies; declare skip_cache with a reason, or declare an observe probe on tool %s in the spell so the data's identity keys the cache", where, op.Bin)
 	default:
 		return ""
 	}
@@ -1862,7 +1862,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			if skew, ok := interpreterSkew(r.runCtx(), found, r.ownVersion()); ok {
 				return skew
 			}
-			return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
+			return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("hook would run %s (from PATH; no ./magus built)", found)}
 		}
 		return types.Check{
 			Name:    name,
@@ -1884,7 +1884,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			Message: "./magus is older than the working tree, so guard verdicts come from stale rules",
 			Details: []string{
 				"binary:  " + info.ModTime().Format(time.RFC3339),
-				"newest:  " + newest.Format(time.RFC3339) + "  (" + newestPath + ")",
+				fmt.Sprintf("newest:  %s  (%s)", newest.Format(time.RFC3339), newestPath),
 				"rebuild: " + hint.Run.With("build", "."),
 			},
 		}
@@ -1948,7 +1948,7 @@ func (r *runner) checkObserverRecording() types.Check {
 				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
 				"the usual cause is a hook resolving a magus too old to accept --observe, which",
 				"rejects the flag into an `|| true` and records nothing with nothing saying so",
-				"check which binary the hook runs: " + hint.Doctor.String() + " (see the `guard binary` check)",
+				fmt.Sprintf("check which binary the hook runs: %s (see the `guard binary` check)", hint.Doctor.String()),
 				"re-stamp the hook templates: " + hint.AgentInstall.With("<dir>", "--force"),
 			},
 		}
@@ -2350,7 +2350,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Status:  types.CheckFail,
 			Message: "the guard probe did not return a deny",
 			Details: []string{
-				"command: printf 'git stash' | " + bin + " shell -o name",
+				fmt.Sprintf("command: printf 'git stash' | %s shell -o name", bin),
 				"stdout:  " + firstLine,
 				"exit:    " + exit,
 				"rebuild: " + hint.Run.With("build", "."),
@@ -2464,7 +2464,7 @@ func (r *runner) checkAgentSkills() types.Check {
 	var staleStatuses []agent.Status
 	var pastedStale bool
 	for _, st := range statuses {
-		details = append(details, st.Location+": "+st.Detail)
+		details = append(details, fmt.Sprintf("%s: %s", st.Location, st.Detail))
 		switch {
 		case !st.Stale:
 		case st.Location == agent.AgentsFile:

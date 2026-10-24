@@ -63,8 +63,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Details: []string{
 				"registered: " + registered,
 				"it said: " + firstLine(string(out)),
-				"point it at a magus that can read this tree: " + hint.Run.With("dogfood", ".") +
-					", then ./hack/install-dogfood.sh",
+				fmt.Sprintf("point it at a magus that can read this tree: %s, then ./hack/install-dogfood.sh", hint.Run.With("dogfood", ".")),
 			},
 		}
 	}
@@ -106,7 +105,7 @@ func (r *runner) installRemedy() string {
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return "no VCS resolved for this workspace (nothing claims it and none is named), so there is no backend to install them for"
 	}
-	return "install them with `" + hint.Init.With("--vcs", res.Name) + "`"
+	return fmt.Sprintf("install them with `%s`", hint.Init.With("--vcs", res.Name))
 }
 
 // driverExecutable pulls the program out of a registered driver command, unwrapping the
@@ -147,7 +146,7 @@ func (r *runner) checkOwedRegeneration() types.Check {
 		details = append(details, detail)
 	}
 	details = append(details,
-		"settle them with `"+hint.VCSResolve.String()+"`, which runs them, stages the result and clears the record",
+		fmt.Sprintf("settle them with `%s`, which runs them, stages the result and clears the record", hint.VCSResolve.String()),
 		"record: "+path)
 	return types.Check{
 		Name:    name,

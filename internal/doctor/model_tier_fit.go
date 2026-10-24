@@ -132,7 +132,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 	if len(fixes) == 0 {
 		return lead
 	}
-	return lead + "; " + strings.Join(fixes, "; ")
+	return fmt.Sprintf("%s; %s", lead, strings.Join(fixes, "; "))
 }
 
 // commonest is the key of counts held most often, the lexically first on a tie so the

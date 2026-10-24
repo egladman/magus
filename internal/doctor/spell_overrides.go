@@ -78,7 +78,7 @@ func describeFork(forkDir, rel, importPath, name, dir string) (string, bool) {
 // shortDigest keeps a digest's algorithm and first 12 hex characters.
 func shortDigest(d string) string {
 	if algo, hex, ok := strings.Cut(d, ":"); ok && len(hex) > 12 {
-		return algo + ":" + hex[:12]
+		return fmt.Sprintf("%s:%s", algo, hex[:12])
 	}
 	return d
 }

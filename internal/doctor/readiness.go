@@ -34,7 +34,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.Check {
 					continue
 				}
 				probe := t.Ready
-				key := s.Name() + "\x00" + tool
+				key := fmt.Sprintf("%s\x00%s", s.Name(), tool)
 				if seen[key] {
 					continue
 				}

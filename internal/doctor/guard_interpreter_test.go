@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,7 +107,7 @@ func onPath(t *testing.T) {
 
 // versionedMagus writes an executable magus into w that prints version as `magus version` does.
 func versionedMagus(w *testkit.Workspace, version string) string {
-	return w.WriteExecutable("magus", "#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n")
+	return w.WriteExecutable("magus", fmt.Sprintf("#!/bin/sh\necho 'magus %s (abc1234) built 2026-01-01'\n", version))
 }
 
 // A call from console/ or docs/, each with a magusfile.buzz and no binary, runs the root's
@@ -164,7 +165,7 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 			"its guard hooks judge with the magus on PATH, which may not load this tree",
 			"the main session builds one ./magus per base and places a copy here",
 			"place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>",
-			"on your own: build one with " + hint.Run.With("build", ".") + ", or bootstrap it with the command the guard prints",
+			fmt.Sprintf("on your own: build one with %s, or bootstrap it with the command the guard prints", hint.Run.With("build", ".")),
 		},
 	}, got)
 
