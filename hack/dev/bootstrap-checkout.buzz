@@ -3,7 +3,7 @@
 // Builds ./magus in a job's checkout at the checkout's own revision, for a fork made at a
 // checkpoint no built binary matches. It runs the go-run bootstrap inside the checkout, so
 // the binary carries the guard rules and spells of that revision, then checks that
-// `./magus version` names the checkout's HEAD.
+// `./magus version` names the checkout's HEAD, and installs every project's dependencies with it.
 //
 //	magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready]
 //
@@ -237,6 +237,33 @@ fun startDaemon(h: Host, dir: str) > str !> any {
     return "started the daemon";
 }
 
+// installDependencies runs every project's install with the checkout's ./magus: a fresh checkout
+// has no node_modules, and the TypeScript symbol index needs tsc. It raises naming the command.
+fun installDependencies(h: Host, dir: str) > str !> any {
+    final r = h.magus(dir, args: ["run", "install", "/"]);
+    if (r.code != 0) {
+        throw "bootstrap-checkout: {dir}/magus run install /: exit {r.code}: {r.stderr}{r.stdout}";
+    }
+    return "installed every project's dependencies";
+}
+
+// placeBinary builds ./magus in dir at its HEAD, then installs every project's dependencies with
+// it, and returns a line per thing it did. The daemon stops before the build; with restart it is
+// started on the new binary, which must then name HEAD.
+export fun placeBinary(h: Host, dir: str, restart: bool = false) > [str] !> any {
+    final did = mut [stopDaemon(h, dir: dir), h.build(dir)];
+    did.append(installDependencies(h, dir: dir));
+    if (restart) {
+        did.append(startDaemon(h, dir: dir));
+        final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
+        final stale = versionMismatch(h.magus(dir, args: ["version", "-o", "json"]).stdout, head: head);
+        if (stale != "") {
+            throw stale;
+        }
+    }
+    return did;
+}
+
 // gateReady makes the checkout at dir ready to gate, and returns a line per thing it did. A
 // ./magus built at another commit than the tree fails the gate's symbol index with MGS7003, so
 // it builds one at HEAD when the binary is not, stops the pool parents other builds left, removes
@@ -276,8 +303,7 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
             did.append("removed the stale untracked skill install {skill}");
         }
     }
-    must(h.magus(dir, args: ["run", "install", "/"]), what: "magus run install /");
-    did.append("installed the dependencies");
+    did.append(installDependencies(h, dir: dir));
     must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
     did.append("built the graph");
     must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
@@ -433,15 +459,8 @@ export fun main(args: [str]) > void !> any {
         }
         return;
     }
-    std\print(stopDaemon(h, dir: dir));
-    std\print(build(dir));
-    if (restart) {
-        std\print(startDaemon(h, dir: dir));
-        final head = vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
-        final stale = versionMismatch(h.magus(dir, args: ["version", "-o", "json"]).stdout, head: head);
-        if (stale != "") {
-            throw stale;
-        }
+    foreach (line in placeBinary(h, dir: dir, restart: restart)) {
+        std\print(line);
     }
 }
 
@@ -576,7 +595,7 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
         "placed /c/magus",
         "stopped the pool parents of other builds",
         "removed the stale untracked skill install .claude/skills/magus-run",
-        "installed the dependencies",
+        "installed every project's dependencies",
         "built the graph",
         "generated the symbol digest",
         "built the proofread binary",
@@ -585,6 +604,39 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
     assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
     assert\equal(calls.indexOf("magus run install /")! < calls.indexOf("magus graph build")!, want: true, message: "install before the graph build");
     assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
+}
+
+test "the build path stops the daemon, places the binary, then installs every project's dependencies with it" {
+    final calls = mut [<str>];
+    final h = stubHost({}, stamps: {}, calls: calls);
+    assert\equal(placeBinary(h, dir: "/c", restart: false), want: [
+        "stopped the daemon",
+        "placed /c/magus",
+        "installed every project's dependencies",
+    ], message: "did");
+    assert\equal(calls, want: ["magus server status", "magus server stop", "build /c", "magus run install /"], message: "order");
+}
+
+test "the build path with restart installs before it starts the daemon on the new binary" {
+    final calls = mut [<str>];
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
+    }, stamps: {}, calls: calls);
+    final did = placeBinary(h, dir: "/c", restart: true);
+    assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
+    assert\equal(calls.indexOf("magus run install /")! < calls.indexOf("magus server start")!, want: true, message: "install before the start");
+}
+
+test "a failed install stops the build path, naming the command" {
+    final h = stubHost({"magus run install /": Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
+    var why = "";
+    try {
+        placeBinary(h, dir: "/c", restart: false);
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why, want: "bootstrap-checkout: /c/magus run install /: exit 1: no pnpm", message: why);
 }
 
 test "gate-ready keeps a binary at HEAD and says so" {
