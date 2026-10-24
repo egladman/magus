@@ -40,6 +40,7 @@ func TestPluginsRegister(t *testing.T) {
 			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},
 			"allow": []any{map[string]any{"file": "cmd/app/main.go", "reason": "the display"}},
 		},
+		"stringjoin":    map[string]any{"min-operands": 3, "hint": "see docs"},
 		"stutter":       map[string]any{"min-package-len": 3},
 		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}, "hint": "see docs"},
 		"testloops":     map[string]any{"markers": []any{"Setpgid"}, "hint": "see docs"},
