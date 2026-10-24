@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -105,6 +106,51 @@ func TestRegeneratedProblemsLeaveADeniedOutputToJudgment(t *testing.T) {
 	assert.Equal(t, &types.JobEdit{AddWaiver: &types.JobWaiver{Code: types.OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: integratorRegenerates}},
 		ps[1].Edit, "an output with an exclusion no write path can spell is waived for the integrator")
 	assert.Nil(t, ps[2].Edit, "an output the record denies is its own decision")
+}
+
+// A Go job's fork meets the ci chain's test and build. The worker may run the test only
+// without default charms and never the build, so --fix adds the charmless test goal and the
+// build raises nothing: no waiver is left to write.
+func TestFixForkLeavesNoGateNeedingAWaiverForAGoJob(t *testing.T) {
+	t.Parallel()
+
+	s, projects := validateWorkspace(t)
+	top := projects[0]
+	top.MagusfileTargets = append(top.MagusfileTargets, "build", "unit", "vet")
+	top.TargetInputs["unit"] = []types.InputRef{{Glob: "**/*.go"}}
+	top.TargetInputs["build"] = []types.InputRef{{Glob: "**/*.go"}}
+	top.TargetChains["ci"] = []types.ChainStep{{Target: "lint"}, {Target: "unit"}, {Target: "build"}}
+	s.grader = func(_ context.Context, _ string, row types.Job) CheckVerdict {
+		c := row.Check
+		switch {
+		case c.Target == "build":
+			return CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
+		case c.Target == "unit" && !c.NoDefaultCharms:
+			return CheckVerdict{Denied: true, Rule: "lease-gate", Reason: "test needs --no-default-charms"}
+		}
+		return CheckVerdict{}
+	}
+	row := types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
+
+	before, err := ValidateFork(t.Context(), s, row.ID, fixMerge(row), config.Jobs{}, nil)
+	require.NoError(t, err)
+	var gates []string
+	for _, p := range before.Problems {
+		if p.Code == types.GateNotRun {
+			gates = append(gates, p.Subject)
+		}
+	}
+	assert.Equal(t, []string{"unit ."}, gates, "lint is added at fork and the build is the integrator's and asks for no goal or waiver")
+
+	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil, false)
+	require.NoError(t, err)
+	after, err := ValidateFork(t.Context(), s, fixed.ID, fixMerge(fixed), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.NotContains(t, codes(after.Problems), types.GateNotRun)
+	assert.NotContains(t, codes(after.Problems), types.JobCheckUnrunnable, "every goal --fix added is one the worker may run")
+	for _, w := range fixed.Waivers {
+		assert.NotEqual(t, types.GateNotRun, w.Code, "no gate needed a waiver")
+	}
 }
 
 func TestUnrunGateProblemsAddTheGoalLintRunsByWithoutCharms(t *testing.T) {

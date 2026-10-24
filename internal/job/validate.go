@@ -154,7 +154,7 @@ func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	}
 	var goals []types.Goal
 	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
-		if g.Target == lintTarget {
+		if g.Target == lintTarget && !g.IntegratorGates {
 			goal := g.Goal
 			goal.Check.NoDefaultCharms = true
 			goals = append(goals, goal)
@@ -307,7 +307,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		})
 	}
 	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
-	ps = append(ps, unrunGateProblems(UnrunGates(store.root, gated, ws.Projects, regenerated))...)
+	ps = append(ps, unrunGateProblems(unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged)))...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
 }
@@ -430,12 +430,15 @@ func regeneratedEdit(output string) *types.JobEdit {
 	return &types.JobEdit{AddWritePath: output}
 }
 
-// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. The goal a
-// lint gate's Edit adds skips default charms, as [lintGoals] adds it, so lint run by --fix
-// reports instead of rewriting the worker's tree.
+// unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. A gate no
+// worker may run is the integrator's and raises nothing. The goal a lint gate's Edit adds
+// skips default charms, as [lintGoals] adds it, so --fix lint reports and rewrites nothing.
 func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
+		if g.IntegratorGates {
+			continue
+		}
 		subject := g.Target + " " + g.Project
 		add := g.Goal
 		if g.Target == lintTarget {
