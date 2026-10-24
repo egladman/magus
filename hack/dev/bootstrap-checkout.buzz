@@ -90,6 +90,22 @@ export fun versionMismatch(versionJSON: str, head: str) > str !> any {
     return "";
 }
 
+// regeneratedRefusal is why a build from a clean checkout came out -dirty: the bootstrap's
+// generators rewrote tracked outputs the HEAD commit holds stale. It names each path and the
+// commit that records them, "" when porcelain lists none.
+export fun regeneratedRefusal(dir: str, porcelain: str) > str {
+    final paths = mut [<str>];
+    foreach (line in porcelain.split("\n")) {
+        if (line.trim() != "") {
+            paths.append(line.sub(3, len: line.len() - 3));
+        }
+    }
+    if (paths.len() == 0) {
+        return "";
+    }
+    return "bootstrap-checkout: the build regenerated {paths.len()} output(s) the commit holds stale ({paths.join(", ")}), so the binary is -dirty. Record them on the job's branch: git -C {dir} add {paths.join(" ")} && git -C {dir} commit -m '<msg>', then rerun the bootstrap";
+}
+
 // builtAt reports whether `magus version -o json` names head as the binary's commit. A -dirty
 // build at head counts: the gate's own go-build makes one from the tree it gates.
 export fun builtAt(versionJSON: str, head: str) > bool !> any {
@@ -292,6 +308,10 @@ fun build(dir: str) > str !> any {
     final bin = fs\join(dir, name: "magus");
     final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: {"quiet": true}).stdout, head: head);
     if (mismatch != "") {
+        final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: {"dir": dir, "quiet": true}).stdout);
+        if (regenerated != "" and mismatch.endsWith("uncommitted changes")) {
+            throw regenerated;
+        }
         throw mismatch;
     }
     return "placed {bin}, built at {head}";
@@ -492,6 +512,13 @@ test "a clean checkout is not refused" {
 test "a dirty checkout is refused, naming each change" {
     final why = dirtyRefusal("/w/c", porcelain: " M a.go\n?? b.go\n");
     assert\equal(why.indexOf("/w/c holds 2 uncommitted change(s) (M a.go, ?? b.go)") != null, want: true, message: why);
+}
+
+test "a regenerated output is named with the commit that records it" {
+    assert\equal(regeneratedRefusal("/w/c", porcelain: ""), want: "", message: "none");
+    final why = regeneratedRefusal("/w/c", porcelain: " M internal/a.go\n?? gen/b.go\n");
+    assert\equal(why.indexOf("regenerated 2 output(s)") != null, want: true, message: why);
+    assert\equal(why.indexOf("git -C /w/c add internal/a.go gen/b.go && git -C /w/c commit -m") != null, want: true, message: why);
 }
 
 test "the built binary must name the checkout's HEAD" {
