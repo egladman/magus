@@ -861,7 +861,7 @@ github.com/egladman/magus/types.BaseRevisionMatch const JobBaseVerdict = "revisi
 github.com/egladman/magus/types.BaseUnknown const JobBaseVerdict = "unknown"
 github.com/egladman/magus/types.BearerMissing const DiagnosticCode = "MGS9011"
 github.com/egladman/magus/types.BearerRejected const DiagnosticCode = "MGS9001"
-github.com/egladman/magus/types.BeforeKey func(p *Project, target string, lookup func(path string) *Project) []TargetRef
+github.com/egladman/magus/types.BeforeKey func(p *Project, target string, lookup func(path string) *Project, args ...string) []TargetRef
 github.com/egladman/magus/types.BespokePhaseFragmentName const DiagnosticCode = "MGS1003"
 github.com/egladman/magus/types.Binding type struct
 github.com/egladman/magus/types.Binding.Name field string
@@ -1017,12 +1017,14 @@ github.com/egladman/magus/types.ChainMemory.Profile field MemoryProfile
 github.com/egladman/magus/types.ChainMemory.Sizing field MemorySizing
 github.com/egladman/magus/types.ChainMemoryMB func(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string)
 github.com/egladman/magus/types.ChainSkipCacheOutputs func(p *Project, target string, lookup func(path string) *Project) []Glob
-github.com/egladman/magus/types.ChainSkipCacheSteps func(p *Project, target string, lookup func(path string) *Project) []ChainStep
+github.com/egladman/magus/types.ChainSkipCacheSteps func(p *Project, target string, lookup func(path string) *Project, args ...string) []ChainStep
 github.com/egladman/magus/types.ChainStep type struct
 github.com/egladman/magus/types.ChainStep.CallIndex field int "json:\"callIndex,omitzero\" yaml:\"callIndex,omitempty\""
 github.com/egladman/magus/types.ChainStep.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
 github.com/egladman/magus/types.ChainStep.Ref method func() string
+github.com/egladman/magus/types.ChainStep.Runs method func(args []string) bool
 github.com/egladman/magus/types.ChainStep.Target field string "json:\"target\"            yaml:\"target\""
+github.com/egladman/magus/types.ChainStep.WhenArgs field *bool "json:\"whenArgs,omitempty\" yaml:\"whenArgs,omitempty\""
 github.com/egladman/magus/types.ChainUpdates func(p *Project, target string, lookup func(path string) *Project) []Glob
 github.com/egladman/magus/types.ChainVisit type struct
 github.com/egladman/magus/types.ChainVisit.Depth field int
@@ -1112,6 +1114,7 @@ github.com/egladman/magus/types.CheckoutTamperedError.Error method(ptr) func() s
 github.com/egladman/magus/types.CheckoutTamperedError.File field string
 github.com/egladman/magus/types.ChurnReporter type interface
 github.com/egladman/magus/types.ChurnReporter.ChangesByCommit imethod func(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
+github.com/egladman/magus/types.ClaimDeadHolder const ClaimKind = "dead"
 github.com/egladman/magus/types.ClaimEvidence type struct
 github.com/egladman/magus/types.ClaimEvidence.Kind field ClaimKind "json:\"kind\"              yaml:\"kind\""
 github.com/egladman/magus/types.ClaimEvidence.String method func() string
@@ -1125,6 +1128,7 @@ github.com/egladman/magus/types.ClaimRefs const ClaimKind = "refs"
 github.com/egladman/magus/types.ClaimReleased const ClaimKind = "released"
 github.com/egladman/magus/types.ClaimTest const ClaimKind = "test"
 github.com/egladman/magus/types.ClaimsDisjoint const untyped string = "disjoint"
+github.com/egladman/magus/types.ClaimsMap func(claimed string, named []string) bool
 github.com/egladman/magus/types.ClaimsShared const untyped string = "shared"
 github.com/egladman/magus/types.ClassDigest type struct
 github.com/egladman/magus/types.ClassDigest.Class field string "json:\"class\""
@@ -1274,6 +1278,7 @@ github.com/egladman/magus/types.ConformanceItem type struct
 github.com/egladman/magus/types.ConformanceItem.Home field string "json:\"home,omitempty\"     yaml:\"home,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.ID field string "json:\"id\"                 yaml:\"id\""
 github.com/egladman/magus/types.ConformanceItem.Measure field int "json:\"measure\"            yaml:\"measure\""
+github.com/egladman/magus/types.ConformanceItem.Rename field string "json:\"rename,omitempty\"   yaml:\"rename,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.Source field string "json:\"source\"             yaml:\"source\""
 github.com/egladman/magus/types.ConformanceItem.Unshared field bool "json:\"unshared,omitempty\" yaml:\"unshared,omitempty\""
 github.com/egladman/magus/types.ConformanceKey type struct
@@ -2083,6 +2088,7 @@ github.com/egladman/magus/types.FlagParse.Unknown field []string
 github.com/egladman/magus/types.FlagParse.Values field map[string]string
 github.com/egladman/magus/types.FocusIn const untyped string = "in"
 github.com/egladman/magus/types.FocusOut const untyped string = "out"
+github.com/egladman/magus/types.FootprintDeclaredBothWays const DiagnosticCode = "MGS1053"
 github.com/egladman/magus/types.FootprintDisjoint const untyped string = "disjoint"
 github.com/egladman/magus/types.FootprintDropsOpGlobs const DiagnosticCode = "MGS1036"
 github.com/egladman/magus/types.FootprintShared const untyped string = "shared"
@@ -2091,13 +2097,24 @@ github.com/egladman/magus/types.FormatDiagnostic func(c DiagnosticCode, msg stri
 github.com/egladman/magus/types.GateEvidence type struct
 github.com/egladman/magus/types.GateEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
 github.com/egladman/magus/types.GateEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
+github.com/egladman/magus/types.GateEvidence.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
 github.com/egladman/magus/types.GateNotRun const DiagnosticCode = "MGS3045"
 github.com/egladman/magus/types.GateStatus type struct
 github.com/egladman/magus/types.GateStatus.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.GateStatus.OutputRef field string "json:\"output_ref,omitempty\" yaml:\"output_ref,omitempty\""
+github.com/egladman/magus/types.GateStatus.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.GateStatus.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
 github.com/egladman/magus/types.GateStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
 github.com/egladman/magus/types.GateStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.GateSuperseded const DiagnosticCode = "MGS3014"
+github.com/egladman/magus/types.GateWaiver type struct
+github.com/egladman/magus/types.GateWaiver.At field int64 "json:\"at\" yaml:\"at\""
+github.com/egladman/magus/types.GateWaiver.By field Origin "json:\"by\" yaml:\"by\""
+github.com/egladman/magus/types.GateWaiver.Commit field string "json:\"commit\" yaml:\"commit\""
+github.com/egladman/magus/types.GateWaiver.Covers method func(commit string) bool
+github.com/egladman/magus/types.GateWaiver.Key method func() string
+github.com/egladman/magus/types.GateWaiver.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
+github.com/egladman/magus/types.GateWaiver.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.GeneratedPathReporter type interface
 github.com/egladman/magus/types.GeneratedPathReporter.GeneratedPaths imethod func(ctx context.Context, root string, rev string, paths []string) (map[string]bool, error)
 github.com/egladman/magus/types.GeneratedSource func(lines [][]byte) bool
@@ -2538,7 +2555,11 @@ github.com/egladman/magus/types.Job.Model field string "json:\"model,omitempty\"
 github.com/egladman/magus/types.Job.ModelTier field *JobModelTier "json:\"model_tier,omitempty\" yaml:\"model_tier,omitempty\""
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.Parent field string "json:\"parent,omitempty\" yaml:\"parent,omitempty\""
+github.com/egladman/magus/types.Job.PauseReason field string "json:\"pause_reason,omitempty\" yaml:\"pause_reason,omitempty\""
 github.com/egladman/magus/types.Job.Paused field int64 "json:\"paused,omitzero\" yaml:\"paused,omitempty\""
+github.com/egladman/magus/types.Job.PausedAt method func(now int64) bool
+github.com/egladman/magus/types.Job.PausedBy field Origin "json:\"paused_by,omitzero\"    yaml:\"paused_by,omitempty\""
+github.com/egladman/magus/types.Job.PausedUntil field int64 "json:\"paused_until,omitzero\" yaml:\"paused_until,omitempty\""
 github.com/egladman/magus/types.Job.Prior field []PriorAttempt "json:\"prior,omitempty\"     yaml:\"prior,omitempty\""
 github.com/egladman/magus/types.Job.ReadOnly field bool "json:\"read_only,omitempty\" yaml:\"read_only,omitempty\""
 github.com/egladman/magus/types.Job.ReadPaths field []string "json:\"read_paths,omitempty\" yaml:\"read_paths,omitempty\""
@@ -2613,7 +2634,6 @@ github.com/egladman/magus/types.JobEdit.AddGoal field *Goal "json:\"add_goal,omi
 github.com/egladman/magus/types.JobEdit.AddWaiver field *JobWaiver "json:\"add_waiver,omitempty\""
 github.com/egladman/magus/types.JobEdit.AddWritePath field string "json:\"add_write_path,omitempty\""
 github.com/egladman/magus/types.JobEdit.Apply method func(d *Declaration) bool
-github.com/egladman/magus/types.JobEdit.RefreshCheckpoint field string "json:\"refresh_checkpoint,omitempty\""
 github.com/egladman/magus/types.JobEdit.String method func() string
 github.com/egladman/magus/types.JobEntry type struct
 github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\""
@@ -2761,10 +2781,12 @@ github.com/egladman/magus/types.JobRejection.ObservedGeneration field int "json:
 github.com/egladman/magus/types.JobRejection.Unmet field []GateStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
 github.com/egladman/magus/types.JobRejection.Violations field []string "json:\"violations,omitempty\"          yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.JobRelease type struct
+github.com/egladman/magus/types.JobRelease.DeadBecause field string "json:\"dead_because,omitempty\" yaml:\"dead_because,omitempty\""
 github.com/egladman/magus/types.JobRelease.Digest field string "json:\"digest\" yaml:\"digest\""
 github.com/egladman/magus/types.JobRelease.Path field string "json:\"path\"   yaml:\"path\""
 github.com/egladman/magus/types.JobRelease.ReleasedAt field int64 "json:\"released_at\" yaml:\"released_at\""
 github.com/egladman/magus/types.JobRelease.Revoked field bool "json:\"revoked,omitempty\" yaml:\"revoked,omitempty\""
+github.com/egladman/magus/types.JobRelease.TakenBy field string "json:\"taken_by,omitempty\"     yaml:\"taken_by,omitempty\""
 github.com/egladman/magus/types.JobResult type struct
 github.com/egladman/magus/types.JobResult.ChangedPaths field []string "json:\"changed_paths\" yaml:\"changed_paths\""
 github.com/egladman/magus/types.JobResult.Descendants field []string "json:\"descendants,omitempty\" yaml:\"descendants,omitempty\""
@@ -2780,6 +2802,7 @@ github.com/egladman/magus/types.JobResultSchemaVersion const untyped int = 2
 github.com/egladman/magus/types.JobResultValidation type struct
 github.com/egladman/magus/types.JobResultValidation.Command field string "json:\"command\" yaml:\"command\""
 github.com/egladman/magus/types.JobResultValidation.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
+github.com/egladman/magus/types.JobResultValidation.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
 github.com/egladman/magus/types.JobRun type struct
 github.com/egladman/magus/types.JobRun.BytesReclaimed field int64 "json:\"bytes_reclaimed,omitempty\" yaml:\"bytes_reclaimed,omitempty\""
 github.com/egladman/magus/types.JobRun.DurationMs field int64 "json:\"duration_ms,omitempty\" yaml:\"duration_ms,omitempty\""
@@ -3246,8 +3269,10 @@ github.com/egladman/magus/types.KnowledgeTermScore.Field field string "json:\"fi
 github.com/egladman/magus/types.KnowledgeTermScore.Score field float64 "json:\"score\" yaml:\"score\""
 github.com/egladman/magus/types.KnowledgeTermScore.Term field string "json:\"term\"  yaml:\"term\""
 github.com/egladman/magus/types.KnowledgeTextPresence type struct
-github.com/egladman/magus/types.KnowledgeTextPresence.Files field int "json:\"files\" yaml:\"files\""
-github.com/egladman/magus/types.KnowledgeTextPresence.Hits field int "json:\"hits\"  yaml:\"hits\""
+github.com/egladman/magus/types.KnowledgeTextPresence.Files field int "json:\"files\"           yaml:\"files\""
+github.com/egladman/magus/types.KnowledgeTextPresence.Hits field int "json:\"hits\"            yaml:\"hits\""
+github.com/egladman/magus/types.KnowledgeTextPresence.More field int "json:\"more,omitempty\"  yaml:\"more,omitempty\""
+github.com/egladman/magus/types.KnowledgeTextPresence.Sites field []string "json:\"sites,omitempty\" yaml:\"sites,omitempty\""
 github.com/egladman/magus/types.KnowledgeTiming type struct
 github.com/egladman/magus/types.KnowledgeTiming.HitRate field float64
 github.com/egladman/magus/types.KnowledgeTiming.HitRateSamples field int
@@ -3311,6 +3336,7 @@ github.com/egladman/magus/types.Limits type struct
 github.com/egladman/magus/types.Limits.ForegroundDefaultMs field int64 "json:\"foreground_default_ms,omitempty\""
 github.com/egladman/magus/types.Limits.ForegroundMaxMs field int64 "json:\"foreground_max_ms,omitempty\""
 github.com/egladman/magus/types.Limits.HookTimeoutMs field int64 "json:\"hook_timeout_ms,omitempty\""
+github.com/egladman/magus/types.Limits.ResumesOnBackgroundFrom field string "json:\"resumes_on_background_from,omitempty\""
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string
 github.com/egladman/magus/types.ListenerSocket const ListenerKind = "socket"
@@ -3387,6 +3413,7 @@ github.com/egladman/magus/types.MachineClaimant type struct
 github.com/egladman/magus/types.MachineClaimant.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
+github.com/egladman/magus/types.MachineClaimant.Owner field string "json:\"owner,omitempty\" yaml:\"owner,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.PID field int "json:\"pid,omitzero\" yaml:\"pid,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Profile field MemoryProfile "json:\"profile,omitzero\" yaml:\"profile,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Project field string "json:\"project\" yaml:\"project\""
@@ -3395,12 +3422,26 @@ github.com/egladman/magus/types.MachineClaimant.Since field time.Time "json:\"si
 github.com/egladman/magus/types.MachineClaimant.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Target field string "json:\"target\" yaml:\"target\""
+github.com/egladman/magus/types.MachineRefusal type struct
+github.com/egladman/magus/types.MachineRefusal.At field time.Time "json:\"at\" yaml:\"at\""
+github.com/egladman/magus/types.MachineRefusal.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.Fits field bool "json:\"fits\" yaml:\"fits\""
+github.com/egladman/magus/types.MachineRefusal.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.Owner field string "json:\"owner,omitempty\" yaml:\"owner,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.PID field int "json:\"pid\" yaml:\"pid\""
+github.com/egladman/magus/types.MachineRefusal.Project field string "json:\"project\" yaml:\"project\""
+github.com/egladman/magus/types.MachineRefusal.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
+github.com/egladman/magus/types.MachineRefusal.Target field string "json:\"target\" yaml:\"target\""
 github.com/egladman/magus/types.MachineSnapshot type struct
 github.com/egladman/magus/types.MachineSnapshot.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.HeldMB field int "json:\"held_mb,omitzero\" yaml:\"held_mb,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.HeldSlots field int "json:\"held_slots,omitzero\" yaml:\"held_slots,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
+github.com/egladman/magus/types.MachineSnapshot.Refused field []MachineRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.MachineSnapshot.Waiting field []MachineWaiter "json:\"waiting,omitempty\" yaml:\"waiting,omitempty\""
 github.com/egladman/magus/types.MachineVerdict type struct
 github.com/egladman/magus/types.MachineVerdict.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
@@ -3412,6 +3453,19 @@ github.com/egladman/magus/types.MachineVerdict.Holders field []MachineClaimant "
 github.com/egladman/magus/types.MachineVerdict.ID field string "json:\"id,omitempty\" yaml:\"id,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.OwnRun field bool "json:\"own_run,omitzero\" yaml:\"own_run,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.Packed field bool "json:\"packed,omitempty\" yaml:\"packed,omitempty\""
+github.com/egladman/magus/types.MachineWaiter type struct
+github.com/egladman/magus/types.MachineWaiter.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Kind field string "json:\"kind\" yaml:\"kind\""
+github.com/egladman/magus/types.MachineWaiter.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Owner field string "json:\"owner,omitempty\" yaml:\"owner,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.PID field int "json:\"pid,omitzero\" yaml:\"pid,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Since field time.Time "json:\"since\" yaml:\"since\""
+github.com/egladman/magus/types.MachineWaiter.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Target field string "json:\"target,omitempty\" yaml:\"target,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.Tree field string "json:\"tree,omitempty\" yaml:\"tree,omitempty\""
+github.com/egladman/magus/types.MachineWaiter.WaitedMS field int64 "json:\"waited_ms\" yaml:\"waited_ms\""
 github.com/egladman/magus/types.MagusBuild type struct
 github.com/egladman/magus/types.MagusBuild.Commit field string
 github.com/egladman/magus/types.MagusBuild.Date field string
@@ -3635,6 +3689,8 @@ github.com/egladman/magus/types.ModuleReport.Count field int "json:\"count\"    
 github.com/egladman/magus/types.ModuleReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModuleReport.Modules field []ModuleEntry "json:\"modules\"    yaml:\"modules\""
 github.com/egladman/magus/types.MustParseGlobs func(declared ...string) []Glob
+github.com/egladman/magus/types.NamedDeclarations func(claimed string, all []string) []string
+github.com/egladman/magus/types.NamesClaimedDeclaration func(claimed string, declaration string) bool
 github.com/egladman/magus/types.NamesDeclaration func(claimed string, declaration string) bool
 github.com/egladman/magus/types.NearCycle type struct
 github.com/egladman/magus/types.NearCycle.BackPath field []string
@@ -3776,6 +3832,8 @@ github.com/egladman/magus/types.OutputRefAmbiguous const DiagnosticCode = "MGS80
 github.com/egladman/magus/types.OutputRefForeignMachine const DiagnosticCode = "MGS8004"
 github.com/egladman/magus/types.OutputRefMalformed const DiagnosticCode = "MGS8003"
 github.com/egladman/magus/types.OutputRefMissing const DiagnosticCode = "MGS8001"
+github.com/egladman/magus/types.OutputReplayedFromAnotherCheckout const DiagnosticCode = "MGS8005"
+github.com/egladman/magus/types.OwedNoSeat const untyped string = "no seat"
 github.com/egladman/magus/types.OwnershipDefinition const untyped string = "Ownership shows author concentration: who touches each project most, how many distinct authors it has (bus factor), and whether it has gone quiet (abandonment risk)."
 github.com/egladman/magus/types.OwnershipEntry type struct
 github.com/egladman/magus/types.OwnershipEntry.Authors field int "json:\"authors\"                yaml:\"authors\""
@@ -3812,6 +3870,7 @@ github.com/egladman/magus/types.Path.Rebase method func(base string) Path
 github.com/egladman/magus/types.Path.Relativize method func(base string) (Path, error)
 github.com/egladman/magus/types.Path.Resolve method func() Path
 github.com/egladman/magus/types.Path.Value field string "json:\"value\""
+github.com/egladman/magus/types.PathHolders func(rows []Job) []Job
 github.com/egladman/magus/types.PathReadDenied const DiagnosticCode = "MGS2001"
 github.com/egladman/magus/types.PathShimSuspected const DiagnosticCode = "MGS2006"
 github.com/egladman/magus/types.PathWithin func(inner string, outer string) bool
@@ -4870,6 +4929,7 @@ github.com/egladman/magus/types.TermStyle.String method func() string
 github.com/egladman/magus/types.TermStyle.Valid method func() bool
 github.com/egladman/magus/types.TermStyle.Values method func() []string
 github.com/egladman/magus/types.TermYellow const TermStyle = "33"
+github.com/egladman/magus/types.TextPresenceSiteCap const untyped int = 10
 github.com/egladman/magus/types.ThreadInferred const ThreadSource = "inferred"
 github.com/egladman/magus/types.ThreadReported const ThreadSource = "reported"
 github.com/egladman/magus/types.ThreadSource type string
@@ -4897,6 +4957,7 @@ github.com/egladman/magus/types.TokenRequestInvalid const DiagnosticCode = "MGS9
 github.com/egladman/magus/types.TokenStoreTooNew const DiagnosticCode = "MGS9003"
 github.com/egladman/magus/types.TokenStoreTooOld const DiagnosticCode = "MGS9017"
 github.com/egladman/magus/types.ToolBoundKeys var []string
+github.com/egladman/magus/types.ToolCacheUnscoped const DiagnosticCode = "MGS2014"
 github.com/egladman/magus/types.ToolCapabilities func() []ToolCapability
 github.com/egladman/magus/types.ToolCapability type string
 github.com/egladman/magus/types.ToolCapability.String method func() string

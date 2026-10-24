@@ -209,6 +209,10 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
+	// gate waive: --reason
+	FlagGateWaiveReason = "reason"
+	// gate waive: --revoke
+	FlagGateWaiveRevoke = "revoke"
 	// graph build: --no-sessions
 	FlagGraphBuildNoSessions = "no-sessions"
 	// graph build: --no-symbols
@@ -333,6 +337,10 @@ const (
 	FlagJobGrantFor = "for"
 	// job grant: --revoke
 	FlagJobGrantRevoke = "revoke"
+	// job pause: --reason
+	FlagJobPauseReason = "reason"
+	// job pause: --until
+	FlagJobPauseUntil = "until"
 	// job prune: --all
 	FlagJobPruneAll = "all"
 	// job rm: --force
@@ -641,6 +649,8 @@ const (
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
+	// shell: --resumes-on-background-from
+	FlagShellResumesOnBackgroundFrom = "resumes-on-background-from"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --tool-rows
@@ -956,23 +966,24 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path                bool   // --path
-	Observe             bool   // --observe
-	Message             bool   // --message
-	Lease               string // --lease
-	AgentName           string // --agent-name
-	Transport           string // --transport
-	Session             string // --session
-	Agent               string // --agent
-	Transcript          string // --transcript
-	Event               string // --event
-	ObservesSkillLoads  bool   // --observes-skill-loads
-	ToolRows            string // --tool-rows
-	RendersAsk          bool   // --renders-ask
-	CallBackground      bool   // --call-background
-	CallTimeoutMs       int    // --call-timeout-ms
-	ForegroundDefaultMs int    // --foreground-default-ms
-	ForegroundMaxMs     int    // --foreground-max-ms
+	Path                    bool   // --path
+	Observe                 bool   // --observe
+	Message                 bool   // --message
+	Lease                   string // --lease
+	AgentName               string // --agent-name
+	Transport               string // --transport
+	Session                 string // --session
+	Agent                   string // --agent
+	Transcript              string // --transcript
+	Event                   string // --event
+	ObservesSkillLoads      bool   // --observes-skill-loads
+	ToolRows                string // --tool-rows
+	RendersAsk              bool   // --renders-ask
+	CallBackground          bool   // --call-background
+	CallTimeoutMs           int    // --call-timeout-ms
+	ForegroundDefaultMs     int    // --foreground-default-ms
+	ForegroundMaxMs         int    // --foreground-max-ms
+	ResumesOnBackgroundFrom string // --resumes-on-background-from
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -995,6 +1006,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
 	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
 	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
+	fs.StringVar(&f.ResumesOnBackgroundFrom, FlagShellResumesOnBackgroundFrom, "", "The first host version that resumes a stopped subagent when a background task it left running completes, declared by the wiring; without it a subagent's stop with a background task running is refused")
 	return &f
 }
 
@@ -1518,6 +1530,20 @@ func BindJobPrune(fs *flag.FlagSet) *JobPruneFlags {
 	return &f
 }
 
+// JobPauseFlags are the flags declared for `magus job pause`.
+type JobPauseFlags struct {
+	Reason string // --reason
+	Until  string // --until
+}
+
+// BindJobPause registers `magus job pause`'s flags on fs and returns the destination.
+func BindJobPause(fs *flag.FlagSet) *JobPauseFlags {
+	var f JobPauseFlags
+	fs.StringVar(&f.Reason, FlagJobPauseReason, "", "Why the job is paused, which the holder's refusal and the row show (required)")
+	fs.StringVar(&f.Until, FlagJobPauseUntil, "", "Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds until resumed")
+	return &f
+}
+
 // JobGrantFlags are the flags declared for `magus job grant`.
 type JobGrantFlags struct {
 	For    time.Duration // --for
@@ -1757,6 +1783,20 @@ func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
 	fs.StringVar(&f.Target, FlagQueueReviewsTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueReviewsRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueReviewsVCS, "git", "Version control `backend` of the checkout at --root")
+	return &f
+}
+
+// GateWaiveFlags are the flags declared for `magus gate waive`.
+type GateWaiveFlags struct {
+	Reason string // --reason
+	Revoke bool   // --revoke
+}
+
+// BindGateWaive registers `magus gate waive`'s flags on fs and returns the destination.
+func BindGateWaive(fs *flag.FlagSet) *GateWaiveFlags {
+	var f GateWaiveFlags
+	fs.StringVar(&f.Reason, FlagGateWaiveReason, "", "Why the gate was skipped, recorded with the waiver; required unless --revoke")
+	fs.BoolVar(&f.Revoke, FlagGateWaiveRevoke, false, "Remove the commit's waiver")
 	return &f
 }
 

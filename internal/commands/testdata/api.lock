@@ -238,6 +238,7 @@ flag shell/observe
 flag shell/observes-skill-loads
 flag shell/path
 flag shell/renders-ask
+flag shell/resumes-on-background-from
 flag shell/session
 flag shell/tool-rows
 flag shell/transcript
@@ -291,6 +292,7 @@ subcommand diff
 subcommand doctor
 subcommand events
 subcommand explain
+subcommand gate
 subcommand graph
 subcommand init
 subcommand job

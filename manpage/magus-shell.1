@@ -112,6 +112,9 @@ Judge the input as a file path an edit is about to write, not as a shell command
 \fB\-\-renders\-ask\fR
 This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 .TP
+\fB\-\-resumes\-on\-background\-from\fR \fIstring\fR
+The first host version that resumes a stopped subagent when a background task it left running completes, declared by the wiring; without it a subagent's stop with a background task running is refused
+.TP
 \fB\-\-session\fR \fIstring\fR
 The host's own session id for this invocation
 .TP
@@ -199,6 +202,7 @@ magus shell 'git add -A' -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

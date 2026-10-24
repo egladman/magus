@@ -180,6 +180,15 @@ Remove a row that already ended, destroying the record of what happened
 \fB\-\-all\fR
 Also end a job a holder took and nobody touched within jobs.stale_after
 .RE
+.SS job pause options
+.RS
+.TP
+\fB\-\-reason\fR \fIstring\fR
+Why the job is paused, which the holder's refusal and the row show (required)
+.TP
+\fB\-\-until\fR \fIstring\fR
+Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds until resumed
+.RE
 .SS job grant options
 .RS
 .TP
@@ -304,7 +313,7 @@ magus job prune --dry-run
 \fIHold a job's runs off the budget, then let them back\fR
 .PP
 .EX
-magus job pause session-load/core && magus job resume session-load/core
+magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core
 .EE
 .PP
 .SH SEE ALSO
@@ -327,6 +336,7 @@ magus job pause session-load/core && magus job resume session-load/core
 \fBmagus\-session\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

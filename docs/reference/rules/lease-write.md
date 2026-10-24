@@ -14,7 +14,7 @@ A leased write outside its write paths, or into a path it was denied or another 
 
 ## Why
 
-The boundary is the orchestrator's declaration in the job store; the guard reads it back for a file write and for a shell line, in the same words. A shell line's relative paths resolve from the directory it runs in. A remove or move (rm, rmdir, mv, git rm and mv, hg and sl remove and rename) is graded by every path it reaches: each operand, and everything a directory operand holds, must be inside the write paths and outside the deny paths. A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to.
+The boundary is the orchestrator's declaration in the job store; the guard reads it back for a file write and for a shell line, in the same words. A shell line's relative paths resolve from the directory it runs in. A remove or move (rm, rmdir, mv, git rm and mv, hg and sl remove and rename) is graded by every path it reaches: each operand, and everything a directory operand holds, must be inside the write paths and outside the deny paths. A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to. Only a declared or running lease owns its paths: one that filed its result holds nothing against another. A writer outside the owner's job tree can neither verify nor end the owner, so its refusal names the root of the owner's tree and files one attention row for that root, the same row however often the write is retried.
 
 ## Default and override
 

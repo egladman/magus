@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A reply that short reads in one screen, and a heading there splits it into a page the person has to navigate. Measured 2026-10-10 over the 400 replies: 64 carry a heading, and it fires on 17 (4.3%) whose prose runs under 300 words. It advises: a heading can still mark the one decision the person owes.
+A reply that short reads in one screen, and a heading there splits it into a page the person has to navigate. Measured 2026-10-10 over the 400 replies: 64 carry a heading, and it fires on 17 (a 4.3% firing rate) whose prose runs under 300 words. It advises: a heading can still mark the one decision the person owes.
 
 ## Default decision
 

@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-"Done and verified" asks the person to trust a run they cannot open; a backticked command, a magus output ref or a file beside the claim lets them check it. Measured 2026-10-10 over the 400 replies: it fires on 55 (13.8%), "Done", "Fixed" and "gate green" most. A negated or conditional claim ("not verified", "once it passes") is left alone. It advises: the person may have watched the run, and evidence may sit in another paragraph.
+"Done and verified" asks the person to trust a run they cannot open; a backticked command, a magus output ref or a file beside the claim lets them check it. Measured 2026-10-10 over the 400 replies: it fires on 55 (a 13.8% firing rate), "Done", "Fixed" and "gate green" most. A negated or conditional claim ("not verified", "once it passes") is left alone. It advises: the person may have watched the run, and evidence may sit in another paragraph.
 
 ## Default decision
 

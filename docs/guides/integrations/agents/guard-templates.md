@@ -166,6 +166,11 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //                    run_in_background and timeout read off the event, magus refuses a
 //                    leased worker's backgrounded magus run and advises a timeout that
 //                    covers it; without them that advice stands down
+//   -- --resumes-on-background-from <version>  the first host version that resumes a
+//                    stopped subagent when a background task it left running completes,
+//                    declared by the harness spell on the stop entries. At or past it a
+//                    subagent's stop with a task still running stands; without it the
+//                    stop is refused
 //
 // Override any of the variables below:
 //
@@ -250,7 +255,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // passes, leaves an ask to the person, and denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 32
+// magus-guard-template: 33
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -357,6 +362,11 @@ final AGENT_NAME_FLAG = "--agent-name";
 // facts, so a binary too old for it drops it and keeps the rest.
 final TOOL_ROWS_FLAG = "--tool-rows";
 
+// The first host version that resumes a stopped subagent when a background task it left
+// running completes, which the harness spell declares on the stop entries. Forwarded on a
+// stop only, with the call facts, so a binary too old for it drops it and keeps the rest.
+final RESUME_FLAG = "--resumes-on-background-from";
+
 
 // findUp returns the nearest ancestor of start holding relative, or "" when there is none.
 fun findUp(relative: str, start: str) > str {
@@ -457,7 +467,7 @@ fun shellFlags(args: [str]) > [str] {
         // "unsupported argument ;", and this line is the only remedy a misconfigured
         // reader is offered.
         warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
-            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>, {TOOL_ROWS_FLAG} <dir>. Fix the hook command in your host config.");
+            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>, {TOOL_ROWS_FLAG} <dir>, {RESUME_FLAG} <version>. Fix the hook command in your host config.");
     }
     final supported = mut [<str>];
     foreach (name in SUPPORTED_FLAGS) {
@@ -467,7 +477,7 @@ fun shellFlags(args: [str]) > [str] {
 }
 
 fun valuedFlags() > [str] {
-    final valued = mut [AGENT_NAME_FLAG, TOOL_ROWS_FLAG];
+    final valued = mut [AGENT_NAME_FLAG, TOOL_ROWS_FLAG, RESUME_FLAG];
     foreach (name in FOREGROUND_FLAGS) { valued.append(name); }
     return valued;
 }
@@ -475,11 +485,22 @@ fun valuedFlags() > [str] {
 // toolRowsFlags is the tool rows directory this entry declares, with its flag, and none
 // when the argv names none or does not parse: magus then knows no tool and says so.
 fun toolRowsFlags(args: [str]) > [str] {
+    return valuedFlag(args, name: TOOL_ROWS_FLAG);
+}
+
+// resumeFlags is the resume version this entry declares, with its flag, and none when the
+// argv names none or does not parse: magus then refuses a subagent's stop that leaves a
+// background task running.
+fun resumeFlags(args: [str]) > [str] {
+    return valuedFlag(args, name: RESUME_FLAG);
+}
+
+fun valuedFlag(args: [str], name: str) > [str] {
     final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
     if (parsed == null) { return [<str>]; }
-    final dir = parsed!.values[TOOL_ROWS_FLAG];
-    if (dir == null) { return [<str>]; }
-    return [TOOL_ROWS_FLAG, dir!];
+    final value = parsed!.values[name];
+    if (value == null) { return [<str>]; }
+    return [name, value!];
 }
 
 // foregroundFlags are the host's foreground limits this entry declares, each flag with its
@@ -807,6 +828,9 @@ fun main(args: [str]) > void {
         foreach (word in foregroundFlags(args)) { newest.append(word); }
     }
     foreach (word in toolRowsFlags(args)) { newest.append(word); }
+    if (eventName == "Stop" or eventName == "SubagentStop") {
+        foreach (word in resumeFlags(args)) { newest.append(word); }
+    }
     var result: proc\ExecResult? = null;
     if (newest.len() > 0) {
         final newer = mut [<str>];
@@ -916,7 +940,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 32
+// magus-guard-template: 33
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -1177,7 +1201,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1379,7 +1403,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1531,7 +1555,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1676,7 +1700,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -1931,7 +1955,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 import "io";
 import "fs";
@@ -2355,7 +2379,7 @@ not a call.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 32
+// magus-guard-template: 33
 
 import "io";
 import "flags";

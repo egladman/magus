@@ -40,6 +40,9 @@
         },
         "output_ref": {
           "type": "string"
+        },
+        "owed": {
+          "type": "string"
         }
       }
     },
@@ -54,6 +57,9 @@
             "type": "string"
           },
           "output_ref": {
+            "type": "string"
+          },
+          "owed": {
             "type": "string"
           }
         }

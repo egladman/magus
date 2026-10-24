@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Praise or agreement first answers the person's tone rather than their request, and pushes the result down. Measured 2026-10-10 over the 400 replies: it fires on 15 (3.8%), 10 of them "You're right" or "You were right". It advises: "You're right" can concede a correction the person needs to hear was taken.
+Praise or agreement first answers the person's tone rather than their request, and pushes the result down. Measured 2026-10-10 over the 400 replies: it fires on 15 (a 3.8% firing rate), 10 of them "You're right" or "You were right". It advises: "You're right" can concede a correction the person needs to hear was taken.
 
 ## Default decision
 

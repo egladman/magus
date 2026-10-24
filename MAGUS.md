@@ -73,7 +73,7 @@ magus graph export -o json  # the whole graph
 | rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
 | link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                                                             |
-| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                                                                      |
+| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                    |
 | figure     |      20+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |

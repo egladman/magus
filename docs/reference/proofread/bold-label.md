@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A label turns each point into a field of a form, so the person reads the labels and rebuilds the sentences. Measured 2026-10-10 over 400 end-of-turn replies sampled from one machine's coding-agent sessions (101 projects, median 266 words): it fires on 121 (30.3%). Judged as review-reply, bold labels were the largest share of the 85 denials in 200 replies. It reports the first label and counts the rest. It advises: a long reply may need a label to be scanned. Firings are counted, not labeled.
+A label turns each point into a field of a form, so the person reads the labels and rebuilds the sentences. Measured 2026-10-10 over 400 end-of-turn replies sampled from one machine's coding-agent sessions (101 projects, median 266 words): it fires on 121 of 400 (a 30.3% firing rate). Judged as review-reply, bold labels were the largest share of the 85 denials in 200 replies. It reports the first label and counts the rest. It advises: a long reply may need a label to be scanned. Firings are counted, not labeled.
 
 ## Default decision
 
