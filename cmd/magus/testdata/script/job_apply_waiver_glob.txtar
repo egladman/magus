@@ -1,0 +1,75 @@
+# A record's waiver keeps covering what it covered at fork through every apply. A `**`
+# waiver forked over cli/*.go still accepts every output the widened paths bring in, and
+# the stored list stays the one the record named, never one entry per regenerated output.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'registry and its generated pages'
+
+stdin $WORK/fork.json
+exec magus job fork --stdin
+stdout '^forked flags/glob, declared, with 1 write path\(s\)\.'
+exec magus describe job flags/glob -o 'template={{toJson .job.waivers}}'
+stdout '^\[\{"code":"MGS3044","reason":"the integrator regenerates every one","subject":"\*\*"\}\]$'
+
+stdin $WORK/widen.json
+exec magus job apply -f -
+stdout '^updated flags/glob, still declared:$'
+stdout '^  write_paths \+docs/rules/\*\.md \+docs/manpage/\*\.md$'
+exec magus describe job flags/glob -o 'template={{toJson .job.waivers}}'
+stdout '^\[\{"code":"MGS3044","reason":"the integrator regenerates every one","subject":"\*\*"\}\]$'
+
+-- fork.json --
+{"schema_version": 11, "id": "flags/glob", "write_paths": ["cli/*.go"],
+ "check": {"target": "test", "project": "."},
+ "waivers": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
+-- widen.json --
+{"schema_version": 11, "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+ "check": {"target": "test", "project": "."},
+ "waivers": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
+-- .gitignore --
+.magus/
+coverage/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// man_generate writes the API lock from the flag registry.
+export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("cli/**/*.go");
+    ctx.writesFiles("cli/testdata/api.lock");
+    proc\exec("sh", ["-c", "cat cli/*.go > cli/testdata/api.lock"]);
+}
+
+// test writes coverage git never sees.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("cli/**/*.go");
+    ctx.writesFiles("coverage/*.out");
+    proc\exec("sh", ["-c", "mkdir -p coverage && touch coverage/cli.out"]);
+}
+-- cli/registry.go --
+package cli
+-- cli/testdata/api.lock --
+package cli
+-- docs/magusfile.buzz --
+import "magus";
+import "proc";
+import "project/.." as ws;
+
+// content_generate renders the manpage and the rules pages from the flag registry.
+export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(ws\file("cli/registry.go"));
+    ctx.writesFiles("manpage/*.md", "rules/*.md");
+    proc\exec("sh", ["-c", "true"]);
+}
+-- docs/manpage/magus-shell.md --
+# magus shell
+-- docs/rules/guard.md --
+# guard

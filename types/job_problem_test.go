@@ -105,6 +105,20 @@ func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
 	assert.False(t, JobEdit{}.Apply(&d))
 }
 
+func TestDoubleStarWaivesEveryRegeneratedOutputSubject(t *testing.T) {
+	w := JobWaiver{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
+	for _, subject := range []string{
+		"**/gen/*test/*.go",
+		"internal/interp/bindings/gen/*.go !internal/interp/bindings/gen/*_test.go !internal/interp/bindings/gen/boundary_*.go",
+		"docs/gen/**",
+		"benchmarks/agent/reports/**/*.md",
+		"MAGUS.md",
+		"manpage/*.1",
+	} {
+		assert.Truef(t, w.Waives(JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
+	}
+}
+
 func TestJobEditRoundTripsThroughJSON(t *testing.T) {
 	p := JobProblem{Code: GateNotRun, Message: "m", Fix: "f", Edit: &JobEdit{AddGoal: &Goal{ID: "lint", Kind: GoalKindCheck, Check: LeaseCheck{Target: "lint", Project: "."}}}}
 
