@@ -1054,31 +1054,62 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 func noSkew() string { return "" }
 
-// A ./magus built at another commit than the checkout writes an index the probe never reads
-// back: the error names the skew and the remedy that clears it, not another graph build alone.
+func inputsChanged(paths ...string) func() ([]string, error) {
+	return func() ([]string, error) { return paths, nil }
+}
+
+// A ./magus built from other build inputs than the checkout writes an index the probe never
+// reads back: the error names the skew and the remedy that clears it, not another graph build
+// alone.
 func TestFreshenIndexesNamesTheBinaryTreeSkew(t *testing.T) {
 	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
-	skew := func() string { return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa") }
+	skew := func() string {
+		return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa", inputsChanged("symbol.go"))
+	}
 
 	err := freshenIndexes(idxs, w.probe, w.build, true, skew)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "the cache recorded no run for the index it wrote: "+
-		"this magus was built at 6bd59e30c1a5 and the checkout is at 794bb6820376")
+		"this magus was built at 6bd59e30c1a5 and the checkout is at 794bb6820376, and symbol.go changed between them")
 	assert.Contains(t, err.Error(), "build ./magus at the checkout's HEAD, stop the pool parents of other builds "+
 		"with `magus server stop --pools`, then `magus graph build`")
-	assert.Contains(t, types.DiagnosticRationale(err), "built at another commit")
+	assert.Contains(t, types.DiagnosticRationale(err), "built from other build inputs")
+}
+
+// A binary one commit behind HEAD whose build inputs are all unchanged is the binary HEAD
+// builds, so the error never sends its reader to rebuild it.
+func TestFreshenIndexesNamesNoRebuildWhenNoBuildInputChanged(t *testing.T) {
+	idxs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
+	skew := func() string {
+		return binaryTreeSkew(ownGoMod, "6bd59e30c1a53eeb", "794bb6820376a9fa", inputsChanged())
+	}
+
+	err := freshenIndexes(idxs, w.probe, w.build, true, skew)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.NotContains(t, err.Error(), "build ./magus")
+	assert.NotContains(t, err.Error(), "this magus was built at")
+	assert.NotContains(t, types.DiagnosticRationale(err), "build inputs")
 }
 
 var ownGoMod = []byte("module " + ownModule + "\n")
 
 func TestBinaryTreeSkew(t *testing.T) {
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30c1a5", "6bd59e30c1a53eeb2cfb"), "an abbreviated match is no skew")
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "unknown", "6bd59e30"), "an unstamped build says nothing")
-	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30", ""), "no HEAD says nothing")
-	assert.Empty(t, binaryTreeSkew([]byte("module example.com/other\n"), "abc", "def"), "another workspace's HEAD is not a magus commit")
-	assert.Equal(t, "this magus was built at abc and the checkout is at def", binaryTreeSkew(ownGoMod, "abc", "def"))
+	unread := func() ([]string, error) { return nil, errors.New("go list failed") }
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30c1a5", "6bd59e30c1a53eeb2cfb", unread), "an abbreviated match is no skew")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "unknown", "6bd59e30", unread), "an unstamped build says nothing")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "6bd59e30", "", unread), "no HEAD says nothing")
+	assert.Empty(t, binaryTreeSkew([]byte("module example.com/other\n"), "abc", "def", unread), "another workspace's HEAD is not a magus commit")
+	assert.Empty(t, binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged()), "no changed build input is no skew")
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, and go.mod changed between them",
+		binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged("go.mod")))
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, and go.mod and 2 more build inputs changed between them",
+		binaryTreeSkew(ownGoMod, "abc", "def", inputsChanged("go.mod", "run.go", "symbol.go")))
+	assert.Equal(t, "this magus was built at abc and the checkout is at def, whose build inputs could not be compared: go list failed",
+		binaryTreeSkew(ownGoMod, "abc", "def", unread), "inputs that cannot be listed are never read as unchanged")
 }
 
 // A missing scip-buzz must not cost the root project its review: while the Go index's
